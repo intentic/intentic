@@ -1,7 +1,7 @@
 import type { EngineEvent } from "@intentic/engine";
 import { afterEach, expect, test } from "vitest";
 import { loadConfig } from "../env.config.js";
-import { createOutput, createRedactor } from "./output.js";
+import { columns, createOutput, createRedactor } from "./output.js";
 
 const sink = () => {
     const chunks: string[] = [];
@@ -40,23 +40,40 @@ test("text mode renders prune/orphan and apply progress events as human strings;
     out.onEvent({ kind: "node", phase: "plan", state: "start", id: "host", type: "host" }); // plan prints its own table
     out.onEvent({ kind: "iteration", n: 1, converged: true }); // stream-only
     const logLine = "provider says hi";
-    const summaryLine = "converged in 1 iteration(s)";
+    const summaryLine = "converged in 1 iteration";
     out.log(logLine);
     out.text(summaryLine);
     out.result({ converged: true }); // text already printed; result is a no-op
 
     const rendered = s.chunks.join("");
-    expect(rendered).toContain(`"${pruneDeleted.id}"`);
-    expect(rendered).toContain(`"${pruneDeleted.type}"`);
-    expect(rendered).toContain(`"${nodeStart.id}"`);
-    expect(rendered).toContain(applied.action!);
-    expect(rendered).toContain(applied.reason!);
-    expect(rendered).toContain(`"${waiting.id}"`);
-    expect(rendered).toContain(waiting.url);
-    expect(rendered).toContain(`"${ready.id}"`);
+    expect(rendered).toContain(`deleted ${pruneDeleted.id} (${pruneDeleted.type})`);
+    expect(rendered).toContain(`applying ${nodeStart.id}`);
+    expect(rendered).toContain(`applied ${nodeStart.id}: ${applied.action!} (${applied.reason!})`);
+    expect(rendered).toContain(`waiting for ${waiting.id} at ${waiting.url}`);
+    expect(rendered).toContain(`${ready.id} ready`);
     expect(rendered).toContain(logLine);
     expect(rendered).toContain(summaryLine);
     expect(s.chunks).toHaveLength(7);
+});
+
+// `nodeStart` has id === type ("host"), so the type is dropped; a node whose type differs keeps it.
+test("an event names a resource by id, adding its type only when the two differ", () => {
+    const s = sink();
+    const out = createOutput(s, "text");
+    out.onEvent({ kind: "node", phase: "apply", state: "start", id: "app-dns", type: "cf-route" });
+    out.onEvent(nodeStart);
+    expect(s.chunks).toEqual(["applying app-dns (cf-route)\n", "applying host\n"]);
+});
+
+test("columns pads every cell but the last, so equal-width cells share a start column", () => {
+    expect(columns([["noop", "app-dns", "cloudflare-record"], ["create", "host-1", "host"]])).toEqual([
+        "noop    app-dns  cloudflare-record",
+        "create  host-1   host",
+    ]);
+});
+
+test("columns leaves no trailing space when the last cell is empty", () => {
+    expect(columns([["create", "host-1", ""]])).toEqual(["create  host-1"]);
 });
 
 test("ndjson mode emits one timestamped JSON object per event, log, and a terminal result", () => {

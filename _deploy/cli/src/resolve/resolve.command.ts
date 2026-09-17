@@ -1,5 +1,6 @@
 import { existsSync } from "node:fs";
 import { dirname, join } from "node:path";
+import { plural } from "@intentic/base/format";
 import { resolveState } from "@intentic/state-resolver";
 import { buildCommand, type CommandContext } from "@stricli/core";
 import { loadConfig } from "../env.config.js";
@@ -50,7 +51,7 @@ export const resolveCommand = buildCommand<ResolveFlags>({
         const graph = resolveState(intent, zone);
         await writeArtifact(artifactOut, graph);
         const count = Object.keys(graph.resources).length;
-        out.text(`resolved desired state (${count} resources) → ${artifactOut}`);
+        out.text(`resolved desired state (${plural(count, "resource")}) → ${artifactOut}`);
         if (zone !== undefined) {
             out.text(
                 intent.cloudflare?.input.zone !== undefined

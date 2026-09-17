@@ -37,8 +37,19 @@ export {
 export const CONFIG_PATH = join(INTENT_DIR, CONFIG_FILE);
 export const ARTIFACT_PATH = join(TARGET_DIR, ARTIFACT_FILE);
 
+// Every command but `init`/`resolve` starts here, so running one before `resolve` is the commonest first mistake with
+// this CLI, and a bare ENOENT for a path the user never typed is the least it could say about it.
 export const readArtifact = async (path: string): Promise<DesiredStateGraph> => {
-    const graph = JSON.parse(await readFile(path, "utf8")) as DesiredStateGraph;
+    if (!existsSync(path)) {
+        throw new Error(`no desired-state artifact at ${path}: run \`intentic deploy resolve\` to write it (or \`intentic deploy init\` first)`);
+    }
+    const raw = await readFile(path, "utf8");
+    let graph: DesiredStateGraph;
+    try {
+        graph = JSON.parse(raw) as DesiredStateGraph;
+    } catch {
+        throw new Error(`${path} is not valid JSON: re-run \`intentic deploy resolve\` to rewrite it`);
+    }
     if (graph.version !== 1) {
         throw new Error(`${path} is not a desired-state artifact (expected version 1)`);
     }

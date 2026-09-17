@@ -252,7 +252,7 @@ describe.skipIf(!tier.runs)(tier.title, () => {
 
     it("adopt is idempotent", async () => {
         const output = await intentic("deploy", "adopt", "--artifact", artifactPath, "--baseUrl", forgejoBaseUrl());
-        expect(output).toContain("secret(s)");
+        expect(output).toMatch(/set \d+ secrets? on /);
     }, 60_000);
 
     it("a readiness-gate failure self-explains with the SSH diagnostic sweep", async () => {

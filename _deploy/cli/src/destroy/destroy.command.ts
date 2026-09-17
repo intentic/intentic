@@ -1,5 +1,6 @@
 import { rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
+import { plural } from "@intentic/base/format";
 import { createStore, prune, resolveInputs } from "@intentic/engine";
 import type { DesiredStateGraph, ResourceNode } from "@intentic/graph";
 import { collectSecretUsage, linearize } from "@intentic/graph";
@@ -11,6 +12,7 @@ import { ARTIFACT_PATH, LAST_APPLIED_FILE, loadEnvFile, readArtifact } from "../
 import { createKnownHostsStore } from "../lib/known-hosts.js";
 import { createOutput, createRedactor } from "../lib/output.js";
 import { withRunLog } from "../lib/run-log.js";
+import { teardownTable } from "../lib/tables.js";
 import { ensureGeneratedSecrets } from "../secrets/generated-secrets.js";
 import { generatedSecretStore } from "../secrets/secret-store.js";
 import { collectSecrets } from "../secrets/secrets.js";
@@ -46,16 +48,11 @@ export const destroy = buildCommand<DestroyFlags>({
             .map((id) => graph.resources[id])
             .filter((node): node is ResourceNode => node !== undefined);
         if (!flags.yes) {
-            for (const node of order) {
-                out.text(node.inputs["protect"] === true ? `keep\t${node.type}\t${node.id}\t(protected)` : `delete\t${node.type}\t${node.id}`);
+            const steps = order.map((node) => ({ id: node.id, type: node.type, protected: node.inputs["protect"] === true }));
+            for (const line of teardownTable(steps)) {
+                out.text(line);
             }
-            out.text(
-                `destroy is destructive: re-run with --yes to tear down these ${order.filter((node) => node.inputs["protect"] !== true).length} resource(s)`,
-            );
-            out.result({
-                steps: order.map((node) => ({ id: node.id, type: node.type, protected: node.inputs["protect"] === true })),
-                executed: false,
-            });
+            out.result({ steps, executed: false });
             return;
         }
         const ssh = createSshExecutor(createKnownHostsStore(dir));
@@ -76,7 +73,9 @@ export const destroy = buildCommand<DestroyFlags>({
             const pruned = await prune(graph, EMPTY, { providers: createProviders({ ssh }), log: out.log, onEvent: out.onEvent, env: process.env });
             // Nothing is applied anymore, a later apply must not prune against this stale baseline.
             await rm(join(dir, LAST_APPLIED_FILE), { force: true });
-            out.text(`destroyed ${pruned.deleted.length} resource(s)${pruned.skipped.length > 0 ? `, ${pruned.skipped.length} left in place` : ""}`);
+            out.text(
+                `destroyed ${plural(pruned.deleted.length, "resource")}${pruned.skipped.length > 0 ? `, ${pruned.skipped.length} left in place` : ""}`,
+            );
             out.result({ ...pruned, executed: true });
         } finally {
             process.removeListener("SIGINT", onSignal);

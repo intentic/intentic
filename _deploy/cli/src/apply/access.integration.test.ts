@@ -27,19 +27,16 @@ const outputs = {
     host: { internalIp: "10.0.0.1" },
 };
 
-// The generated Forgejo password resolved into the environment (as ensureGeneratedSecrets would have set it).
-const secretsEnv = { FORGEJO_ADMIN_PASSWORD: "fj-generated-value" };
-
 describe("collectAccess", () => {
-    it("carries generated passwords (with value) and env passwords (key only); apps are URL-only", () => {
-        const entries = collectAccess(graph, outputs, secretsEnv);
+    it("carries password references only; apps are URL-only", () => {
+        const entries = collectAccess(graph, outputs);
 
         expect(entries).toContainEqual({
             id: "host-git",
             label: "Forgejo (git)",
             url: "https://git.example.com",
             username: "intentic",
-            password: { source: "generated", key: "FORGEJO_ADMIN_PASSWORD", value: "fj-generated-value" },
+            password: { source: "generated", key: "FORGEJO_ADMIN_PASSWORD" },
         });
         expect(entries).toContainEqual({
             id: "host-deploy",
@@ -53,22 +50,21 @@ describe("collectAccess", () => {
     });
 
     it("skips a service whose url output is absent", () => {
-        const entries = collectAccess(graph, { "host-git": {}, "host-deploy": {}, "my-app.production": {}, host: {} }, secretsEnv);
+        const entries = collectAccess(graph, { "host-git": {}, "host-deploy": {}, "my-app.production": {}, host: {} });
         expect(entries).toEqual([]);
     });
 });
 
 describe("formatAccessSummary", () => {
-    it("shows the generated value and the env reference", () => {
-        const entries = collectAccess(graph, outputs, secretsEnv);
+    // The generated value used to print here and the run's own redactor masked it, so the line read `«redacted»`.
+    it("names the store for a generated password and the reference for an env one", () => {
+        const entries = collectAccess(graph, outputs);
         const summary = formatAccessSummary(entries);
-        const forgejo = entries.find((entry) => entry.id === "host-git")!;
-        const komodo = entries.find((entry) => entry.id === "host-deploy")!;
-        const app = entries.find((entry) => entry.id === "my-app.production")!;
-        expect(summary).toContain(forgejo.username!);
-        expect(summary).toContain(forgejo.password!.value!);
-        expect(summary).toContain(`$${komodo.password!.key}`);
-        expect(summary).toContain(app.url);
+
+        expect(summary).toContain("user: intentic");
+        expect(summary).toContain("password: FORGEJO_ADMIN_PASSWORD in .secrets.json");
+        expect(summary).toContain("password: $KOMODO_ADMIN_PASSWORD");
+        expect(summary).toContain("https://app.example.com");
     });
 });
 
@@ -76,11 +72,10 @@ describe("writeAccessFile", () => {
     it("never writes a generated value into the committed file", async () => {
         const dir = await mkdtemp(join(tmpdir(), "intentic-access-"));
         const path = join(dir, "access.md");
-        await writeAccessFile(path, collectAccess(graph, outputs, secretsEnv));
+        await writeAccessFile(path, collectAccess(graph, outputs));
 
         const markdown = await readFile(path, "utf8");
         expect(markdown).toContain("generated (see `.secrets.json`)");
         expect(markdown).toContain("`$KOMODO_ADMIN_PASSWORD`");
-        expect(markdown).not.toContain("fj-generated-value");
     });
 });

@@ -1,3 +1,4 @@
+import { plural } from "@intentic/base/format";
 import { type DesiredStateGraph, secretRef, type SecretSource } from "@intentic/graph";
 import { type ForgejoApi, forgejoApi } from "@intentic/providers";
 import { ARTIFACT_FILE, CONFIG_FILE, INTENT_DIR, TARGET_DIR } from "../lib/artifact.js";
@@ -98,7 +99,7 @@ export const syncControlPlaneSecrets = async (args: {
         }
         await setRepoSecrets({ api, baseUrl: `https://${domain}`, user, password: args.password, owner: user, name: TARGET_DIR, secrets });
         args.log(
-            `sync-control-plane: pushed ${addedGenerated.length} new generated secret(s) to ${user}/${TARGET_DIR}: ${addedGenerated.join(", ")}`,
+            `sync-control-plane: pushed ${plural(addedGenerated.length, "new generated secret")} to ${user}/${TARGET_DIR}: ${addedGenerated.join(", ")}`,
         );
     }
 
@@ -118,7 +119,7 @@ export const syncControlPlaneSecrets = async (args: {
 
     if (newEnv.length > 0) {
         args.log(
-            `sync-control-plane: set these user secret(s) in the app's Secrets page (or \`intentic deploy secrets push\` after setting .env), apply fails until they reach ${user}/${TARGET_DIR}: ${newEnv.join(", ")}`,
+            `sync-control-plane: set ${plural(newEnv.length, "user secret")} in the app's Secrets page (or \`intentic deploy secrets push\` after setting .env), apply fails until they reach ${user}/${TARGET_DIR}: ${newEnv.join(", ")}`,
         );
     }
     return { pushed: addedGenerated, newEnv };

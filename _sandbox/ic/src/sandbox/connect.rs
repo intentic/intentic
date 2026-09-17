@@ -8,6 +8,7 @@ use crate::platform;
 use crate::sandbox::{container_status, doctor, list_slugs, remove, CONTAINER_PREFIX};
 use crate::tty;
 use crate::ui;
+use crate::util;
 use crate::util::{bail, kv_lines, slug_from_token, step, Result};
 
 /* Run the AI-agent workspace sandbox on THIS machine and expose it to the browser — connect.sh/.ps1's post-Docker half. */
@@ -200,8 +201,8 @@ fn connect(
             // after, or the spinner repaints straight over what the user is being asked to read.
             ui::suspend();
             println!(
-                "\nintentic: you already have {} other sandbox(es) on this machine:",
-                others.len()
+                "\nintentic: you already have {} on this machine:",
+                util::plural(others.len(), "other sandbox")
             );
             for other in &others {
                 println!("  {:<9} {other}", container_status(other));

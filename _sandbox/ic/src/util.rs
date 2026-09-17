@@ -27,6 +27,19 @@ pub fn step(phase: &str, message: &str) {
     crate::ui::step(phase, message);
 }
 
+/// "1 sandbox" / "3 sandboxes"; sibilant endings (s, x, z, ch, sh) take -es. Mirrors `plural` in
+/// @intentic/base/format, so the Rust and TypeScript tools count the same things the same way. `(s)` is not a
+/// number a person reads, and the one place it appeared most was a permanent-delete confirmation.
+pub fn plural(count: usize, one: &str) -> String {
+    if count == 1 {
+        return format!("{count} {one}");
+    }
+    let sibilant = ["s", "x", "z", "ch", "sh"]
+        .iter()
+        .any(|ending| one.ends_with(ending));
+    format!("{count} {one}{}", if sibilant { "es" } else { "s" })
+}
+
 pub fn sha256_hex(bytes: &[u8]) -> String {
     let mut hasher = Sha256::new();
     hasher.update(bytes);
@@ -207,6 +220,18 @@ mod tests {
         assert_eq!(base64(b"foo"), "Zm9v");
         assert_eq!(base64(b"foobar"), "Zm9vYmFy");
         assert_eq!(base64(b"schemaVersion = 1\n"), "c2NoZW1hVmVyc2lvbiA9IDEK");
+    }
+
+    /// The same rule as `plural` in @intentic/base/format: one tool's count must not read differently from
+    /// another's for the same number.
+    #[test]
+    fn plural_agrees_with_the_typescript_helper() {
+        assert_eq!(plural(1, "sandbox"), "1 sandbox");
+        assert_eq!(plural(0, "sandbox"), "0 sandboxes");
+        assert_eq!(plural(3, "sandbox"), "3 sandboxes");
+        assert_eq!(plural(2, "other sandbox"), "2 other sandboxes");
+        assert_eq!(plural(2, "network"), "2 networks");
+        assert_eq!(plural(2, "patch"), "2 patches");
     }
 
     #[cfg(unix)]

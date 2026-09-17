@@ -4,6 +4,7 @@ import { createWriteStream, existsSync, type WriteStream } from "node:fs";
 import { chmod, mkdir, rename, rm, stat } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { errorMessage } from "@intentic/base/errors";
+import { plural } from "@intentic/base/format";
 import { STATE_DIR, WORKSPACE_ROOT } from "@intentic/constants";
 import type { DeviceConflict, DeviceConflictChange, DeviceConflictNature } from "@intentic/sandbox-contract";
 import {
@@ -438,7 +439,7 @@ const readyForReplacement = async (mutagen: string, spec: SyncSessionSpec, log: 
             : await clearConflictResidue({ root: spec.localDir, conflicts: held.conflicts, ignores: held.ignores, log });
     if (cleared.standing > 0) {
         log(
-            `${spec.name}: ${cleared.standing} conflict(s) are still standing, so this session keeps the rules it was created with rather than being recreated on top of them — a fresh session has no record of what the two ends last agreed on, which would turn every one of those into a collision neither side can win. Settle them and this converges by itself.`,
+            `${spec.name}: ${plural(cleared.standing, "conflict")} still standing, so this session keeps the rules it was created with rather than being recreated on top of them — a fresh session has no record of what the two ends last agreed on, which would turn every one of those into a collision neither side can win. Settle them and this converges by itself.`,
         );
         return false;
     }
@@ -533,12 +534,12 @@ export const retireOrphanSessions = (mutagen: string, pairings: readonly Pairing
     );
     if (sessions.length > 0) {
         spawnSync(mutagen, ["sync", "terminate", ...sessions], { stdio: "ignore", windowsHide: true });
-        log(`retired ${sessions.length} file-sync session(s) belonging to sandboxes this machine no longer pairs.`);
+        log(`retired ${plural(sessions.length, "file-sync session")} belonging to sandboxes this machine no longer pairs.`);
     }
     const forwards = orphanForwardSessions(mutagen, ids);
     if (forwards.length > 0) {
         spawnSync(mutagen, ["forward", "terminate", ...forwards], { stdio: "ignore", windowsHide: true });
-        log(`released ${forwards.length} port forward(s) left holding localhost for sandboxes this machine no longer pairs.`);
+        log(`released ${plural(forwards.length, "port forward")} left holding localhost for sandboxes this machine no longer pairs.`);
     }
 };
 

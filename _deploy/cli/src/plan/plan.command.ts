@@ -9,6 +9,7 @@ import { createEventsFileSink } from "../lib/events-file.js";
 import { createKnownHostsStore } from "../lib/known-hosts.js";
 import { createOutput, createRedactor, teeOutput } from "../lib/output.js";
 import { withRunLog } from "../lib/run-log.js";
+import { planSummary, planTable } from "../lib/tables.js";
 import { ensureGeneratedSecrets } from "../secrets/generated-secrets.js";
 import { generatedSecretStore } from "../secrets/secret-store.js";
 import { collectSecrets } from "../secrets/secrets.js";
@@ -71,18 +72,19 @@ export const planCommand = buildCommand<PlanFlags>({
             redactor.add(collectSecretUsage(graph).map((usage) => process.env[usage.key]));
             const engineConfig = { providers: createProviders({ ssh }), log, onEvent };
             const outcome = await plan(graph, engineConfig);
-            for (const step of outcome.steps) {
-                out.text(`${step.action}\t${step.type}\t${step.id}${step.reason !== undefined ? `\t(${step.reason})` : ""}`);
+            for (const line of planTable(outcome.steps)) {
+                out.text(line);
             }
             // Collection scan: strips delete-input secrets to (id, type); skipped for a subgraph (false orphans).
             let orphans: { id: string; type: string }[] = [];
             if (targets === undefined) {
                 orphans = (await collectOrphans(graph, engineConfig)).map(({ id, type }) => ({ id, type }));
-                for (const orphan of orphans) {
-                    out.text(`orphan\t${orphan.type}\t${orphan.id}`);
-                }
             } else {
-                out.text("targeted plan: orphan scan skipped");
+                out.text("");
+                out.text("A targeted plan reads only the named resources, so the orphan scan was skipped.");
+            }
+            for (const line of planSummary(outcome.steps, orphans)) {
+                out.text(line);
             }
             out.result({ steps: outcome.steps, orphans });
         };

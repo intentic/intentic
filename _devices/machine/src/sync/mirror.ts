@@ -3,6 +3,7 @@ import { writeFile } from "node:fs/promises";
 import net from "node:net";
 import { setTimeout as sleep } from "node:timers/promises";
 import { errorMessage } from "@intentic/base/errors";
+import { plural } from "@intentic/base/format";
 import type { Log } from "@intentic/local-agent";
 import { type PortSummary, PortsListSchema } from "@intentic/sandbox-contract";
 import {
@@ -235,7 +236,7 @@ const servePairing = async (
         // serving those ports.
         if (baseline.length > 0 || (pairing.skippedPorts ?? []).length > 0) {
             await retirePairingMirror(mutagen, pairing.sandboxId);
-            log(`  ${pairing.sandboxId}: port mirroring is off on this device; took ${baseline.length} port(s) off localhost.`);
+            log(`  ${pairing.sandboxId}: port mirroring is off on this device; took ${plural(baseline.length, "port")} off localhost.`);
         }
         return [];
     }
@@ -408,7 +409,7 @@ export const runMirrorWatch = async (log: Log): Promise<void> => {
         }
     }
     await guard(log, "retiring orphaned sessions", () => retireOrphanSessions(mutagen, initial.pairings, log));
-    log(`sync started; polling ${initial.pairings.length} paired sandbox(es) every ${POLL_MS / 1000}s`);
+    log(`sync started; polling ${plural(initial.pairings.length, "paired sandbox")} every ${POLL_MS / 1000}s`);
 
     // Per-pairing state keyed by sandbox id; entries come and go with the pairing.
     const rejectedPolls = new Map<string, number>();
@@ -553,5 +554,5 @@ export const retirePairingMirror = async (mutagen: string, sandboxId: string): P
 // loop; Mutagen's daemon holds forwards regardless.
 export const teardownAllForwards = async (mutagen: string, log: Log): Promise<void> => {
     const forwards = await teardownForwards(mutagen);
-    log(forwards === 0 ? "port mirroring stopped." : `port mirroring stopped; tore down ${forwards} forward(s).`);
+    log(forwards === 0 ? "port mirroring stopped." : `port mirroring stopped; tore down ${plural(forwards, "forward")}.`);
 };

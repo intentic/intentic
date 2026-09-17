@@ -1,4 +1,5 @@
 import { dirname, join } from "node:path";
+import { plural } from "@intentic/base/format";
 import { FORGEJO_HTTP_PORT, forgejoApi, overSsh, sshExecutor } from "@intentic/providers";
 import { secretDigest, writeSyncState } from "@intentic/scaffold";
 import { buildCommand, type CommandContext } from "@stricli/core";
@@ -125,7 +126,7 @@ export const adopt = buildCommand<{ artifact?: string; baseUrl?: string }>({
             Object.fromEntries(Object.entries(desiredStateSecrets).map(([key, value]) => [key, { digest: secretDigest(value), pushedAt }])),
         );
         out.text(
-            `set ${Object.keys(intentSecrets).length} secret(s) on ${user}/${INTENT_DIR}, ${Object.keys(desiredStateSecrets).length} on ${user}/${TARGET_DIR}`,
+            `set ${plural(Object.keys(intentSecrets).length, "secret")} on ${user}/${INTENT_DIR}, ${Object.keys(desiredStateSecrets).length} on ${user}/${TARGET_DIR}`,
         );
         out.result({
             repos,

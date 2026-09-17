@@ -151,9 +151,9 @@ enum SandboxCommand {
     },
     /// List the sandboxes on this machine
     List,
-    /// Remove sandbox(es): containers, named /work volumes, networks — asks which, confirms, deletes data
+    /// Remove sandboxes: containers, named /work volumes, networks — asks which, confirms, deletes data
     Remove {
-        /// The sandbox(es) to remove; none = pick interactively
+        /// Which sandboxes to remove; none = pick interactively
         slugs: Vec<String>,
         /// Remove EVERY sandbox on this machine
         #[arg(short = 'a', long)]

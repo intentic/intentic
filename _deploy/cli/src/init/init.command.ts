@@ -1,6 +1,7 @@
+import { join } from "node:path";
 import { buildCommand, type CommandContext } from "@stricli/core";
 import { loadConfig } from "../env.config.js";
-import { CONFIG_FILE } from "../lib/artifact.js";
+import { CONFIG_FILE, ENV_FILE } from "../lib/artifact.js";
 import { createOutput } from "../lib/output.js";
 import { version } from "../lib/version.js";
 import { scaffold } from "./init.js";
@@ -42,12 +43,22 @@ export const init = buildCommand<{ dir?: string; link: boolean; app?: string; se
             flags.zone,
             flags.minimal,
         );
-        if (appDir === undefined) {
-            out.text(`initialized ${intentDir} (with ${CONFIG_FILE}) and ${targetDir}`);
-            out.result({ intentDir, targetDir });
-            return;
+        out.text(
+            appDir === undefined
+                ? `initialized ${intentDir} (with ${CONFIG_FILE}) and ${targetDir}`
+                : `initialized ${intentDir} (with ${CONFIG_FILE}), ${targetDir}, and ${appDir}`,
+        );
+        // A scaffold command's most useful line is the next one. Without it the only route from here to a deployment
+        // was the docs, for a command whose whole job is to start somebody off.
+        out.text("");
+        out.text("Next:");
+        for (const step of [
+            `1. declare what you want in ${join(intentDir, CONFIG_FILE)}`,
+            `2. \`intentic deploy resolve\` to turn it into ${targetDir}'s artifact, which names the secrets it needs`,
+            `3. put those in ${join(targetDir, ENV_FILE)}, then \`intentic deploy plan\` to preview and \`intentic deploy apply\` to execute`,
+        ]) {
+            out.text(`  ${step}`);
         }
-        out.text(`initialized ${intentDir} (with ${CONFIG_FILE}), ${targetDir}, and ${appDir}`);
-        out.result({ intentDir, targetDir, appDir });
+        out.result({ intentDir, targetDir, ...(appDir === undefined ? {} : { appDir }) });
     },
 });

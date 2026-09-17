@@ -41,19 +41,19 @@ describe("the local resolve → write → read → apply pipeline", () => {
     it("derives access info from the real resolved graph and writes a secret-free access.md", async () => {
         const graph = resolveState(await loadIntent(example), "example.com");
         const { providers } = createFakeProviders();
-        // A distinctive password value so the no-leak assertion below is meaningful (vs the "k" stubs).
+        // A distinctive password value so the no-leak assertions below are meaningful (vs the "k" stubs).
         const sentinel = "S3NTINEL_DO_NOT_LEAK";
         const env = { ...fullEnv, FORGEJO_ADMIN_PASSWORD: sentinel };
         const result = await reconcile(graph, { providers, env, probe: async () => true, log: () => {} }, { maxIterations: 5 });
 
-        const access = collectAccess(graph, result.outcome.outputs, env);
+        const access = collectAccess(graph, result.outcome.outputs);
         // The field names access.ts reads (adminUser/adminPassword, url) must match what the resolver emits,
         // and the platform passwords must come through as generated secrets.
         expect(access).toContainEqual(
             expect.objectContaining({
                 label: "Forgejo (git)",
                 username: "intentic",
-                password: { source: "generated", key: "FORGEJO_ADMIN_PASSWORD", value: sentinel },
+                password: { source: "generated", key: "FORGEJO_ADMIN_PASSWORD" },
             }),
         );
         expect(access).toContainEqual(
@@ -66,8 +66,11 @@ describe("the local resolve → write → read → apply pipeline", () => {
         // App environments are surfaced URL-only (no login).
         expect(access).toContainEqual(expect.objectContaining({ id: "my-app.production", url: expect.any(String) }));
 
-        // stdout reveals the generated value (so the user can log in); the committed file never does.
-        expect(formatAccessSummary(access)).toContain(sentinel);
+        // Neither stdout nor the committed file carries a value: the summary names the store, apply's own redactor
+        // would have masked a printed value anyway, and the same stdout is teed into a run log on disk.
+        const summary = formatAccessSummary(access);
+        expect(summary).not.toContain(sentinel);
+        expect(summary).toContain("password: FORGEJO_ADMIN_PASSWORD in .secrets.json");
 
         const dir = await mkdtemp(join(tmpdir(), "intentic-access-"));
         const path = join(dir, "access.md");

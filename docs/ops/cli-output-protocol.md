@@ -182,6 +182,30 @@ actionable.
 A finished run ends with exactly one address and one instruction, then footnotes. The old ending gave seven
 lines equal weight, which put *go back to your browser* third.
 
+### Counts
+
+`plural(n, "resource")` — [`@intentic/base/format`](../../_tools/base/src/format.ts) for the TypeScript tools,
+`util::plural` for `ic` — never `resource(s)`. The parenthesis is not a number a person reads, and the place it
+appeared most was `ic`'s permanent-delete confirmation, where the difference between one sandbox and all of them
+is the whole decision.
+
+An action covering every row is `12 resources, all to create`, not `12 resources: 12 to create`: the total and
+that action's count are the same number said twice.
+
+### Rows of data
+
+A table is space-aligned to its own widest cell
+([`columns`](../../_deploy/cli/src/lib/output.ts)), with an uppercase header row, and no column is printed when
+nothing fills it. A tab is not alignment: it puts each row's next cell on whichever 8-column stop the cell
+before it happened to cross, so `plan`'s resource ids used to land in three different places down one screen.
+
+### Empty is a sentence, not a zero
+
+A section header over nothing is a question the output raises and does not answer: `Ports (0):` reads as a fault
+on a machine nobody asked to mirror ports. An empty section is absent, and one sentence says what the tool
+found and what to do about it (`intentic-machine status` on an unconnected machine, `secrets gates` with nothing
+gated). A count of zero is for `--json`, which has a reader that wants the shape.
+
 ---
 
 ## 5. Adding a phase

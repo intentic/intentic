@@ -17,6 +17,28 @@ interface RestoreFlags {
     readonly only?: string;
 }
 
+const SCOPES = ["forgejo", "komodo", "all"] as const;
+
+const restoreScope = (only: string | undefined): RestoreScope => {
+    const scope = only ?? "all";
+    if (!SCOPES.includes(scope as RestoreScope)) {
+        throw new Error(`--only must be one of ${SCOPES.join("|")}, got "${scope}"`);
+    }
+    return scope as RestoreScope;
+};
+
+// What was restored, in the words the flag uses, so the ending line and `--only` cannot drift apart.
+const scopeLabel = (scope: RestoreScope): string => (scope === "all" ? "Forgejo and Komodo" : scope);
+
+// restic's backend credentials, scalars only: a non-string value in the resolved block is a config error the
+// restore cannot act on, and passing it through would reach restic as "undefined".
+const stringCredentials = (raw: unknown): Record<string, string> => {
+    if (typeof raw !== "object" || raw === null) {
+        return {};
+    }
+    return Object.fromEntries(Object.entries(raw).filter((entry): entry is [string, string] => typeof entry[1] === "string"));
+};
+
 export const restore = buildCommand<RestoreFlags>({
     docs: { brief: "Restore Forgejo/Komodo from a restic backup snapshot, then re-apply (one-shot recovery)" },
     parameters: {
@@ -41,10 +63,7 @@ export const restore = buildCommand<RestoreFlags>({
             if (backupNode === undefined) {
                 throw new Error("no backup resource in the artifact: declare one with i.have.backup and apply it first");
             }
-            const scope = flags.only ?? "all";
-            if (scope !== "forgejo" && scope !== "komodo" && scope !== "all") {
-                throw new Error(`--only must be one of forgejo|komodo|all, got "${scope}"`);
-            }
+            const scope = restoreScope(flags.only);
             // Resolve the backup node's inputs (substituting its repo password + backend cred secrets from the
             // loaded env); the same resolved block carries the host SSH creds hostTarget needs.
             const resolved = resolveInputs(backupNode.inputs, createStore(), process.env, { lenient: false });
@@ -54,27 +73,23 @@ export const restore = buildCommand<RestoreFlags>({
             if (typeof repo !== "string" || typeof password !== "string" || typeof image !== "string") {
                 throw new Error("backup resource is missing its repo/password/image inputs");
             }
-            const credsRaw = resolved["credentials"];
-            const credentials: Record<string, string> = {};
-            if (typeof credsRaw === "object" && credsRaw !== null) {
-                for (const [key, value] of Object.entries(credsRaw)) {
-                    if (typeof value === "string") {
-                        credentials[key] = value;
-                    }
-                }
-            }
             await restoreBackup({
                 target: hostTarget(resolved),
                 image,
                 repo,
                 password,
-                credentials,
+                credentials: stringCredentials(resolved["credentials"]),
                 snapshot: flags.snapshot ?? "latest",
-                scope: scope as RestoreScope,
+                scope,
                 log: out.log,
                 executor: ssh,
             });
-            out.result({ snapshot: flags.snapshot ?? "latest", scope });
+            const snapshot = flags.snapshot ?? "latest";
+            // The brief calls this "then re-apply", and it does not: a recovery that ended on restic's own last line
+            // left a person with no statement that it worked and no idea a second command was owed.
+            out.text(`restored ${scopeLabel(scope)} from snapshot ${snapshot}.`);
+            out.text("Run `intentic deploy apply` to reconcile the restored state back to the artifact.");
+            out.result({ snapshot, scope });
         } finally {
             // Tear down the executor's cloudflared forwarders, a live forwarder child holds the event loop
             // open forever after the result (cli.ts has no process.exit), hanging the caller.

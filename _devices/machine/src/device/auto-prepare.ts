@@ -1,4 +1,5 @@
 import { errorMessage } from "@intentic/base/errors";
+import { plural } from "@intentic/base/format";
 import type { Log } from "@intentic/local-agent";
 import type { DeviceSandbox } from "@intentic/sandbox-contract";
 import { readPrepareUpdates } from "./config.js";
@@ -66,7 +67,7 @@ const prepareOne = async (
     state.failures.set(slug, failures);
     state.waits.set(slug, ticksToSkip(failures));
     log(
-        `auto-prepare ${slug}: failed (attempt ${failures}, retrying after ${ticksToSkip(failures)} tick(s)) — ${lastLine(run.output) ?? "no output"}`,
+        `auto-prepare ${slug}: failed (attempt ${failures}, retrying after ${plural(ticksToSkip(failures), "tick")}) — ${lastLine(run.output) ?? "no output"}`,
     );
 };
 

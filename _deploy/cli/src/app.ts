@@ -30,6 +30,11 @@ const formatException = (exc: unknown): string => {
     return message;
 };
 
+// stricli's own wording is "Command failed, <message>", which prefixes a sentence that already names the problem and
+// its fix. FAIL is the word every other intentic tool settles a bad verdict with (docs/ops/cli-output-protocol.md §4),
+// and it is what the eye finds at the end of a long apply in a pane.
+const failed = (exc: unknown): string => `FAILED: ${formatException(exc)}`;
+
 // Grouping routes doesn't rename leaf commands; each emits its own command name in run-log/events output.
 const tunnel = buildRouteMap({
     routes: {
@@ -80,6 +85,8 @@ export const app = buildApplication(
         name: "intentic",
         versionInfo: { currentVersion: version },
         scanner: { caseStyle: "allow-kebab-for-camel" },
-        localization: { loadText: (locale) => (locale.startsWith("en") ? { ...text_en, formatException } : undefined) },
+        localization: {
+            loadText: (locale) => (locale.startsWith("en") ? { ...text_en, formatException, exceptionWhileRunningCommand: failed } : undefined),
+        },
     },
 );

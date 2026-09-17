@@ -2,6 +2,7 @@ import { existsSync } from "node:fs";
 import { readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
+import { plural } from "@intentic/base/format";
 import {
     applyMoves,
     collectOrphans,
@@ -23,6 +24,7 @@ import { ACCESS_FILE, ARTIFACT_PATH, LAST_APPLIED_FILE, loadEnvFile, readArtifac
 import { createKnownHostsStore } from "../lib/known-hosts.js";
 import { createOutput, createRedactor, teeOutput } from "../lib/output.js";
 import { withRunLog } from "../lib/run-log.js";
+import { resourceTable } from "../lib/tables.js";
 import { ensureGeneratedSecrets } from "../secrets/generated-secrets.js";
 import { generatedSecretStore } from "../secrets/secret-store.js";
 import { collectSecrets } from "../secrets/secrets.js";
@@ -156,21 +158,20 @@ export const apply = buildCommand<ApplyFlags>({
                 }
                 throw error;
             }
-            const access = collectAccess(graph, result.outcome.outputs, process.env);
-            // status.json is committed: access entries stay value-free (refs only); the web reveals values via a gate.
+            const access = collectAccess(graph, result.outcome.outputs);
+            // status.json is committed; access entries carry no value by construction (access.ts), so it is safe to
+            // write whole. The web reveals values through its own gate.
             await writeStatus(join(dir, STATUS_FILE), {
                 converged: result.converged,
                 iterations: result.iterations,
                 steps: result.outcome.steps,
-                access: access.map((entry) =>
-                    entry.password === undefined ? entry : { ...entry, password: { source: entry.password.source, key: entry.password.key } },
-                ),
+                access,
             });
             // Prunes only after convergence (a failed apply never deletes); a baseline diff and scan feed it.
             let pruned: PruneOutcome = { deleted: [], skipped: [] };
             if (targetIds !== undefined) {
                 // A targeted apply reconciles only a slice; baseline diff and collection scan need the full graph.
-                out.text("targeted apply: prune and orphan scan skipped");
+                out.text("A targeted apply reconciles only the named resources, so prune and the orphan scan were skipped.");
             } else {
                 const pruneConfig = { providers: createProviders({ ssh }), log: out.log, onEvent: out.onEvent, env: process.env };
                 const baseline = previous !== undefined ? rewriteGraphForMoves(previous, movedApplied) : undefined;
@@ -183,10 +184,11 @@ export const apply = buildCommand<ApplyFlags>({
                     ...orphans.filter((orphan) => orphan.protected !== true),
                 ];
                 if (pending.length > 0 && !flags.yes) {
-                    for (const entry of pending) {
-                        out.text(`pending delete\t${entry.type}\t${entry.id}`);
+                    out.text("");
+                    for (const line of resourceTable("delete", pending)) {
+                        out.text(line);
                     }
-                    out.text(`${pending.length} deletion(s) pending: re-run \`intentic deploy apply --yes\` to prune`);
+                    out.text(`${plural(pending.length, "deletion")} pending, nothing was deleted. Re-run \`intentic deploy apply --yes\` to prune.`);
                 } else {
                     if (pending.length > 0) {
                         // Renews the lock before deleting, then verifies it's still held (aborts if taken over).
@@ -200,14 +202,14 @@ export const apply = buildCommand<ApplyFlags>({
                     pruned = { deleted: [...pruned.deleted, ...orphaned.deleted], skipped: [...pruned.skipped, ...orphaned.skipped] };
                     if (pruned.deleted.length > 0 || pruned.skipped.length > 0) {
                         out.text(
-                            `pruned ${pruned.deleted.length} resource(s)${pruned.skipped.length > 0 ? `, ${pruned.skipped.length} left in place` : ""}`,
+                            `pruned ${plural(pruned.deleted.length, "resource")}${pruned.skipped.length > 0 ? `, ${pruned.skipped.length} left in place` : ""}`,
                         );
                     }
                     // Snapshots the baseline only after prune ran, so a pending removal isn't silently dropped from it.
                     await writeFile(join(dir, LAST_APPLIED_FILE), await readFile(artifact, "utf8"));
                 }
             }
-            out.text(`${result.converged ? "converged" : "did not converge"} in ${result.iterations} iteration(s)`);
+            out.text(`${result.converged ? "converged" : "did not converge"} in ${plural(result.iterations, "iteration")}`);
             if (access.length > 0) {
                 await writeAccessFile(join(dir, ACCESS_FILE), access);
                 out.text(formatAccessSummary(access));
@@ -227,9 +229,9 @@ export const apply = buildCommand<ApplyFlags>({
                 const updates = result.outcome.steps.filter((s) => s.action === "update").length;
                 const noops = result.outcome.steps.filter((s) => s.action === "noop").length;
                 const summary = [
-                    `**intentic deploy apply**, ${result.converged ? "✅ converged" : "⚠️ did not converge"} in ${result.iterations} iteration(s)`,
-                    `📊 ${result.outcome.steps.length} resources: ${creates} created, ${updates} updated, ${noops} unchanged`,
-                    ...(pruned.deleted.length > 0 ? [`🗑️ ${pruned.deleted.length} resource(s) pruned`] : []),
+                    `**intentic deploy apply**, ${result.converged ? "✅ converged" : "⚠️ did not converge"} in ${plural(result.iterations, "iteration")}`,
+                    `📊 ${plural(result.outcome.steps.length, "resource")}: ${creates} created, ${updates} updated, ${noops} unchanged`,
+                    ...(pruned.deleted.length > 0 ? [`🗑️ ${plural(pruned.deleted.length, "resource")} pruned`] : []),
                 ].join("\n");
                 try {
                     await fetch(reconcileWebhook, {

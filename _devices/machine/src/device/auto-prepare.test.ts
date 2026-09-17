@@ -87,7 +87,7 @@ test("a prepare that THROWS (no ic on this machine) is a failure with backoff, n
     const state = newState();
     const lines: string[] = [];
     await runTick(state, [box("work")], () => Promise.reject(new Error("This device has no `ic` command")), (line) => lines.push(line), new Set());
-    expect(lines).toEqual(["auto-prepare work: failed (attempt 1, retrying after 1 tick(s)) — This device has no `ic` command"]);
+    expect(lines).toEqual(["auto-prepare work: failed (attempt 1, retrying after 1 tick) — This device has no `ic` command"]);
     // …and the sit-out is honoured on the next tick.
     const ran: string[] = [];
     await runTick(state, [box("work")], recording(ran), quiet, new Set());

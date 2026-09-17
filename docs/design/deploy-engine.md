@@ -48,6 +48,11 @@ intentic deploy init
 ```
 ```text
 initialized intent (with deploy.config.ts) and desired-state
+
+Next:
+  1. declare what you want in intent/deploy.config.ts
+  2. `intentic deploy resolve` to turn it into desired-state's artifact, which names the secrets it needs
+  3. put those in desired-state/.env, then `intentic deploy plan` to preview and `intentic deploy apply` to execute
 ```
 
 Put your secrets in `desired-state/.env` (with no authored `zone` on `i.have.cloudflare`, the Cloudflare token is read first, to discover your zone), then:
@@ -66,31 +71,34 @@ generated these (stored in .secrets.json): FORGEJO_ADMIN_PASSWORD, KOMODO_ADMIN_
 intentic deploy plan          # read-only preview of what apply will do
 ```
 ```text
-create   host            host
-create   cloudflare      cf
-create   forgejo         host-git
-create   forgejo-runner  host-git-runner
-create   komodo          host-deploy
-create   tunnel          host-tunnel
-create   cf-route        cf-git-example-com
-create   cf-route        cf-deploy-example-com
-create   cf-route        cf-app-example-com
-create   repo            my-app-repo
-create   ci              my-app.production-ci
-create   deployment      my-app.production
+ACTION  RESOURCE               TYPE
+create  host                   host
+create  cf                     cloudflare
+create  host-git               forgejo
+create  host-git-runner        forgejo-runner
+create  host-deploy            komodo
+create  host-tunnel            tunnel
+create  cf-git-example-com     cf-route
+create  cf-deploy-example-com  cf-route
+create  cf-app-example-com     cf-route
+create  my-app-repo            repo
+create  my-app.production-ci   ci
+create  my-app.production      deployment
+
+12 resources, all to create. Run `intentic deploy apply` to execute.
 ```
 
 ```sh
 intentic deploy apply         # execute until state reads true
 ```
 ```text
-converged in 2 iteration(s)
+converged in 2 iterations
 
 Access:
   Forgejo (git)  https://git.example.com
-    user: intentic   password: (generated — see .secrets.json)
+    user: intentic   password: FORGEJO_ADMIN_PASSWORD in .secrets.json
   Komodo (deploys)  https://deploy.example.com
-    user: intentic   password: (generated — see .secrets.json)
+    user: intentic   password: KOMODO_ADMIN_PASSWORD in .secrets.json
   my-app.production  https://app.example.com
 ```
 

@@ -3,6 +3,7 @@ import { setTimeout as sleep } from "node:timers/promises";
 import { mkdir } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
+import { plural } from "@intentic/base/format";
 import { createUi, type Log, type PlanStep, type Ui } from "@intentic/local-agent";
 import { sandboxIdFromUrl } from "@intentic/sandbox-contract";
 import { buildCommand, buildRouteMap, type CommandContext } from "@stricli/core";
@@ -439,7 +440,7 @@ const clean = buildCommand<SandboxFlags>({
             // Not called "real disagreements" — most are, but the count also holds anything that failed the check on
             // disk, and overstating what it knows is how a reader learns to distrust the rest.
             out(
-                `${standing} conflict(s) are still standing and are not this command's to settle: two copies somebody wrote is a choice only a person makes. \`intentic-machine status\` lists the paths.`,
+                `${plural(standing, "conflict")} still standing, and not this command's to settle: two copies somebody wrote is a choice only a person makes. \`intentic-machine status\` lists the paths.`,
             );
         }
     },
@@ -514,7 +515,7 @@ export const syncUninstall = async (out: Log, sandbox?: string): Promise<void> =
         // alone too.
         await writeManagedSshConfig(pairingSshConfig(remaining));
         await startResidentIfStopped(out);
-        out(`Still syncing ${remaining.length} sandbox(es): ${remaining.map((pairing) => pairing.sandboxId).join(", ")}`);
+        out(`Still syncing ${plural(remaining.length, "sandbox")}: ${remaining.map((pairing) => pairing.sandboxId).join(", ")}`);
         return;
     }
 

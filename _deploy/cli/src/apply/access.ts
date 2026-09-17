@@ -19,16 +19,16 @@ export interface AccessEntry {
     readonly label: string;
     readonly url: string;
     readonly username?: string;
-    // Login password source; `value` is set only for generated secrets, env secrets keep just the `$KEY` reference.
-    readonly password?: { readonly source: SecretSource; readonly key: string; readonly value?: string };
+    // Where the login password lives, by reference. No surface reads a value from here: the summary names the store,
+    // the committed access.md names the ref, and the web reveals through its own gate.
+    readonly password?: { readonly source: SecretSource; readonly key: string };
 }
 
 // Where the user logs into what they provisioned: each service (login) and app (URL only), from the artifact's
-// inputs and apply outputs. `env` supplies resolved values for generated passwords.
+// inputs and apply outputs.
 export const collectAccess = (
     graph: DesiredStateGraph,
     outputs: Readonly<Record<string, Readonly<Record<string, unknown>>>>,
-    env: Readonly<Record<string, string | undefined>>,
 ): AccessEntry[] => {
     const entries: AccessEntry[] = [];
     for (const node of Object.values(graph.resources)) {
@@ -41,8 +41,7 @@ export const collectAccess = (
         }
         const username = node.inputs["adminUser"];
         const ref = secretRef(node.inputs["adminPassword"]);
-        const value = ref?.source === "generated" ? env[ref.key] : undefined;
-        const password = ref === undefined ? undefined : { source: ref.source, key: ref.key, ...(value !== undefined ? { value } : {}) };
+        const password = ref === undefined ? undefined : { source: ref.source, key: ref.key };
         entries.push({
             id: node.id,
             label: SERVICE_LABELS[node.type] ?? node.id,
@@ -54,17 +53,14 @@ export const collectAccess = (
     return entries;
 };
 
-// stdout: generated passwords show the actual value, env passwords a `$KEY` reference.
+// Where the password is, never the password. Printing the value was self-defeating: apply hands every resolved secret
+// to its own redactor, so the one line meant to carry it rendered `«redacted»`, which reads as a bug rather than as a
+// policy. The same stdout is teed into a run log on disk, which is no place for an admin password either.
 const summaryPassword = (password: AccessEntry["password"]): string => {
     if (password === undefined) {
         return "";
     }
-    if (password.source === "generated") {
-        return password.value !== undefined
-            ? `   password: ${password.value}  (saved in .secrets.json)`
-            : "   password: (generated, see .secrets.json)";
-    }
-    return `   password: $${password.key}`;
+    return password.source === "generated" ? `   password: ${password.key} in .secrets.json` : `   password: $${password.key}`;
 };
 
 export const formatAccessSummary = (entries: readonly AccessEntry[]): string => {

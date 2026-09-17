@@ -1,11 +1,12 @@
 import { dirname } from "node:path";
 import { createStore, resolveInputs } from "@intentic/engine";
+import type { ResourceNode } from "@intentic/graph";
 import { createSshExecutor, sshSchema, sshTarget } from "@intentic/providers";
 import { buildCommand, type CommandContext, numberParser } from "@stricli/core";
 import { loadConfig } from "../env.config.js";
 import { ARTIFACT_PATH, loadEnvFile, readArtifact } from "../lib/artifact.js";
 import { createKnownHostsStore } from "../lib/known-hosts.js";
-import { createOutput } from "../lib/output.js";
+import { columns, createOutput } from "../lib/output.js";
 import { withRunLog } from "../lib/run-log.js";
 
 const DEFAULT_TAIL = 200;
@@ -31,6 +32,19 @@ interface LogsFlags {
     readonly tail?: number;
 }
 
+// What a bare `intentic deploy logs` answers. Komodo is named on both branches: somebody who came here looking for
+// their app's logs and found it absent needs to be told where they are, not only that they are not here.
+const loggableList = (loggable: readonly ResourceNode[]): string[] => [
+    ...(loggable.length === 0
+        ? ["Nothing in the artifact keeps logs on a host of its own."]
+        : [
+              ...columns([["RESOURCE", "TYPE"], ...loggable.map((node) => [node.id, node.type])]),
+              "",
+              "`intentic deploy logs <id>` fetches one resource's container logs from its host.",
+          ]),
+    "App deployments log in Komodo instead; `intentic deploy deployments` links to each one.",
+];
+
 export const logsCommand = buildCommand({
     docs: { brief: "Fetch a deployed resource's container logs from its host over SSH" },
     parameters: {
@@ -52,12 +66,9 @@ export const logsCommand = buildCommand({
         // Has host logs iff deployed over SSH (ssh block in inputs); Komodo-managed deployments log in Komodo instead.
         const loggable = Object.values(graph.resources).filter((node) => node.inputs["address"] !== undefined && node.inputs["sshKey"] !== undefined);
         if (id === undefined) {
-            for (const node of loggable) {
-                out.text(`${node.id} (type "${node.type}")`);
+            for (const line of loggableList(loggable)) {
+                out.text(line);
             }
-            out.text(
-                `\nintentic deploy logs <id> fetches that resource's container logs; app deployments live in Komodo (intentic deploy deployments).`,
-            );
             out.result({ resources: loggable.map((node) => ({ id: node.id, type: node.type })) });
             return;
         }

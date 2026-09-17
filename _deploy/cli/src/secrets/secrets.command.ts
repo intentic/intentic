@@ -1,11 +1,12 @@
 import { dirname } from "node:path";
+import { plural } from "@intentic/base/format";
 import { type ForgejoApi, forgejoApi } from "@intentic/providers";
 import type { SecretInventoryEntry } from "@intentic/sandbox-contract";
 import { collectSecretInventory, readSyncState, secretDigest, writeSyncState } from "@intentic/scaffold";
 import { buildCommand, buildRouteMap, type CommandContext } from "@stricli/core";
 import { loadConfig } from "../env.config.js";
 import { ARTIFACT_FILE, ARTIFACT_PATH, CONFIG_FILE, INTENT_DIR, loadEnvFile, readArtifact, TARGET_DIR } from "../lib/artifact.js";
-import { createOutput, type Output } from "../lib/output.js";
+import { columns, createOutput, type Output } from "../lib/output.js";
 import { version } from "../lib/version.js";
 import {
     APPLY_WORKFLOW_PATH,
@@ -18,11 +19,29 @@ import {
 import { forgejoIdentity } from "../pipelines/control-plane-sync.js";
 import { readGeneratedSecrets } from "../secrets/generated-secrets.js";
 
-const entryLine = (entry: SecretInventoryEntry): string => {
-    const requiredBy = entry.requiredBy.length > 0 ? `  → required by ${entry.requiredBy.map((r) => r.resourceId).join(", ")}` : "";
-    const ci = entry.ci === undefined ? "" : `  [CI: ${entry.ci.synced ? "synced" : "out of date"}]`;
-    return `${entry.key}  ${entry.status}  (${entry.kind}, ${entry.storedAt})${requiredBy}${ci}`;
+// CI sync is Forgejo Actions only and only after adopt, so an entry without it has nothing to say rather than
+// something to report as unsynced.
+const ciCell = (entry: SecretInventoryEntry): string => {
+    if (entry.ci === undefined) {
+        return "";
+    }
+    return entry.ci.synced ? "synced" : "out of date";
 };
+
+// A column per fact. Written inline, the keys' own differing lengths pushed every status to a different place on
+// screen, which is the one thing a reader scans this list for.
+const inventoryTable = (entries: readonly SecretInventoryEntry[]): string[] =>
+    columns([
+        ["KEY", "STATUS", "KIND", "STORED AT", "CI", "REQUIRED BY"],
+        ...entries.map((entry) => [
+            entry.key,
+            entry.status,
+            entry.kind,
+            entry.storedAt,
+            ciCell(entry),
+            entry.requiredBy.map((required) => required.resourceId).join(", "),
+        ]),
+    ]);
 
 const list = buildCommand<{ artifact?: string }>({
     docs: { brief: "List every secret the workspace knows about, status, consumers, and CI sync state (never values)" },
@@ -32,8 +51,20 @@ const list = buildCommand<{ artifact?: string }>({
     async func(this: CommandContext, flags: { artifact?: string }) {
         const out = createOutput(this.process.stdout, loadConfig().intenticOutput);
         const entries = await collectSecretInventory(dirname(flags.artifact ?? ARTIFACT_PATH));
-        for (const entry of entries) {
-            out.text(entryLine(entry));
+        if (entries.length === 0) {
+            out.text("This workspace has no secrets: nothing declares one, and nothing is connected that needs one.");
+            out.result({ entries });
+            return;
+        }
+        for (const line of inventoryTable(entries)) {
+            out.text(line);
+        }
+        const missing = entries.filter((entry) => entry.status === "missing");
+        if (missing.length > 0) {
+            out.text("");
+            out.text(
+                `${plural(missing.length, "secret")} still unset, and apply fails until each has a value: ${missing.map((entry) => entry.key).join(", ")}`,
+            );
         }
         out.result({ entries });
     },
@@ -108,7 +139,7 @@ export const pushSecrets = async (out: Output, artifact: string, api: ForgejoApi
     const skipped = Object.keys(current)
         .filter((key) => !pushed.includes(key))
         .toSorted();
-    out.text(pushed.length > 0 ? `pushed ${pushed.length} secret(s) to ${user}/${TARGET_DIR}: ${pushed.join(", ")}` : "CI secrets already in sync");
+    out.text(pushed.length > 0 ? `pushed ${plural(pushed.length, "secret")} to ${user}/${TARGET_DIR}: ${pushed.join(", ")}` : "CI secrets already in sync");
     out.result({ pushed, skipped });
 };
 

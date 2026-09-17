@@ -1,5 +1,6 @@
 import { rm } from "node:fs/promises";
 import { setTimeout as sleep } from "node:timers/promises";
+import { plural } from "@intentic/base/format";
 import {
     type CliLauncher,
     cliLauncher,
@@ -175,7 +176,7 @@ export const runForeground = async (log: Log): Promise<void> => {
     process.on("SIGINT", shutdown);
 
     if (links.length > 0) {
-        log(`serving ${links.length} linked sandbox(es)`);
+        log(`serving ${plural(links.length, "linked sandbox")}`);
     }
     const halves: Promise<void>[] = connections.map((connection) => connection.done);
     if (state.pairings.length > 0) {

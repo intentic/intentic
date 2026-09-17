@@ -1,5 +1,6 @@
 import { rm } from "node:fs/promises";
 import { join } from "node:path";
+import { plural } from "@intentic/base/format";
 import { createStore, resolveInputs } from "@intentic/engine";
 import type { DesiredStateGraph, ResourceNode } from "@intentic/graph";
 import {
@@ -121,7 +122,7 @@ const migrateHost = async (move: HostMove, args: MigrateArgs): Promise<void> => 
                 args.log(`old host ${move.oldAddress} has no intentic-managed containers; nothing to migrate for "${move.id}"`);
                 return;
             }
-            args.log(`migrating host "${move.id}" ${move.oldAddress} → ${move.newAddress} (${managed.length} managed container(s))`);
+            args.log(`migrating host ${move.id} ${move.oldAddress} → ${move.newAddress} (${plural(managed.length, "managed container")})`);
             await quiesceHost(oldSession);
             await snapshotNow(oldSession, args.log);
             await oldSession.exec("docker stop intentic-backup 2>/dev/null || true");

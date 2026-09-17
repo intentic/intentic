@@ -73,6 +73,19 @@ export const createRedactor = (): {
     };
 };
 
+// Cells as space-aligned columns, one line per row. A tab writes the same row ragged, since the id lands on whichever
+// 8-column stop the type before it happened to cross. The last column is never padded, so no line carries trailing
+// space into a log.
+export const columns = (rows: readonly (readonly string[])[]): string[] => {
+    const widths: number[] = [];
+    for (const row of rows) {
+        for (const [at, cell] of row.entries()) {
+            widths[at] = Math.max(widths[at] ?? 0, [...cell].length);
+        }
+    }
+    return rows.map((row) => row.map((cell, at) => (at === row.length - 1 ? cell : cell.padEnd(widths[at] ?? 0))).join("  ").trimEnd());
+};
+
 // The seam every command renders through: `onEvent`/`log` feed engine events and free-form logs, `text` is a human
 // summary, `result` is the final payload. Behavior depends on mode; failures propagate to stricli's stderr/exit code.
 export interface Output {
@@ -83,26 +96,31 @@ export interface Output {
     readonly result: (result: Record<string, unknown>) => void;
 }
 
+// A resource as one line names it. The type is dropped when it repeats the id, which is every control-plane node
+// (`forgejo`, `komodo`, `signoz`), and quotes are dropped everywhere: an id is one word and a stream of them reads
+// better unquoted.
+const named = (id: string, type: string): string => (id === type ? id : `${id} (${type})`);
+
 // Renders lifecycle events as text. Apply-phase node/readiness events print live progress (else the terminal sits blank
 // for minutes); plan-phase stays silent, plan.command prints its own table.
 const eventText = (event: EngineEvent): string | undefined => {
     if (event.kind === "node" && event.phase === "apply") {
         if (event.state === "start") {
-            return `applying "${event.id}" (type "${event.type}")`;
+            return `applying ${named(event.id, event.type)}`;
         }
         const reason = event.reason === undefined ? "" : ` (${event.reason})`;
-        return `applied "${event.id}" (type "${event.type}"): ${event.action ?? "done"}${reason}`;
+        return `applied ${named(event.id, event.type)}: ${event.action ?? "done"}${reason}`;
     }
     if (event.kind === "readiness") {
-        return event.state === "waiting" ? `waiting for "${event.id}" at ${event.url}` : `"${event.id}" ready`;
+        return event.state === "waiting" ? `waiting for ${event.id} at ${event.url}` : `${event.id} ready`;
     }
     if (event.kind === "prune") {
         return event.state === "deleted"
-            ? `prune: deleted "${event.id}" (type "${event.type}")`
-            : `prune: "${event.id}" (type "${event.type}") removed from desired state but its provider has no delete, left in place`;
+            ? `deleted ${named(event.id, event.type)}`
+            : `left ${named(event.id, event.type)} in place: removed from desired state, but its provider has no delete`;
     }
     if (event.kind === "orphan") {
-        return `orphan: "${event.id}" (type "${event.type}") exists but is not in the desired graph`;
+        return `orphan ${named(event.id, event.type)}: exists on the host but is not in the desired graph`;
     }
     return undefined;
 };

@@ -1,7 +1,7 @@
 use crate::docker;
 use crate::sandbox::{container_status, list_slugs, CONTAINER_PREFIX, DIND_PREFIX, TUNNEL_PREFIX};
 use crate::tty;
-use crate::util::{bail, Result};
+use crate::util::{bail, plural, Result};
 
 /* Remove sandboxes' Docker footprint on THIS machine, INCLUDING the named /work volumes — cleanup.sh's flow. */
 
@@ -56,7 +56,7 @@ pub fn run(args: Args) -> Result<()> {
             bail!("no terminal for interactive selection — nothing removed.\nRe-run with a SLUG, or --all to remove every sandbox (add -y to skip prompts).");
         }
         let Some(reply) = tty::ask(
-            "Select sandbox(es) to remove — numbers (e.g. \"1 3\"), \"a\" = all, \"q\" = cancel: ",
+            "Select which to remove — numbers (e.g. \"1 3\"), \"a\" = all, \"q\" = cancel: ",
         ) else {
             println!("intentic: cancelled — nothing removed.");
             return Ok(());
@@ -84,7 +84,12 @@ pub fn run(args: Args) -> Result<()> {
         return Ok(());
     }
 
-    println!("intentic: about to PERMANENTLY DELETE these sandbox(es) and their data (/work + /history):");
+    // The count is spelled out at the one prompt where a person has to read carefully: "these sandbox(es)" is not
+    // a number, and the difference between one and all of them is the whole decision.
+    println!(
+        "intentic: about to PERMANENTLY DELETE {} and their data (/work + /history):",
+        plural(selected.len(), "sandbox")
+    );
     for slug in &selected {
         println!("    {slug}");
     }
@@ -176,7 +181,7 @@ fn remove_all() {
             docker::quiet(&["volume", "rm", &volume]);
         }
     }
-    println!("intentic: removing sandbox network(s)…");
+    println!("intentic: removing sandbox networks…");
     if let Some(networks) = docker::try_capture(&[
         "network",
         "ls",
