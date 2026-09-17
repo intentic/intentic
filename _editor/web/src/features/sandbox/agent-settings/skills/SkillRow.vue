@@ -7,10 +7,13 @@ import SkillForm from "./SkillForm.vue";
 import type { SkillSources } from "./skillVisual";
 import { skillVisual } from "./skillVisual";
 import { provenanceOf } from "./skillWords";
+import { useT } from "@intentic/ui/i18n";
 
 // A skill's row expands in place on click, no menu, using <DisclosureRow> for the chevron, ARIA and open wash.
 // Delete sits under the fold, confirmed before it fires. Both views, reading another skill and editing your own,
 // render on <MarkdownDocument> rather than a raw source block.
+
+const t = useT();
 
 const { skill, expanded, body, bodyError, sources, disabled } = defineProps<{
     skill: SkillSummary;
@@ -64,17 +67,17 @@ watch(
         <!-- Shown truncated only while closed; the open view states it in full below. -->
         <template v-if="!expanded" #description>
             <span class="block truncate" :class="skill.description === `` ? `italic text-subtle` : ``">
-                {{ skill.description === `` ? `No description, the agent rarely picks a skill without one.` : skill.description }}
+                {{ skill.description === `` ? t(`sandbox.skillRow.noDescriptionAgentRarely`) : skill.description }}
             </span>
         </template>
 
-<!-- Never dimmed, unlike the rest of an off row: it's the one control that still works. -->
+        <!-- Never dimmed, unlike the rest of an off row: it's the one control that still works. -->
         <template v-if="skill.switchable" #control>
             <ToggleSwitch
                 class="ui-switch-sm shrink-0"
                 :model-value="skill.enabled"
                 :disabled="disabled"
-                :aria-label="`Enable ${skill.name}`"
+                :aria-label="t(`sandbox.skillRow.enable`, { name: skill.name })"
                 @update:model-value="(value: boolean) => emit(`enable`, value)"
             />
         </template>
@@ -83,23 +86,23 @@ watch(
             <p v-if="bodyError !== undefined" class="text-2xs text-danger">{{ bodyError }}</p>
             <p v-else-if="body === undefined" class="flex items-center gap-2 text-2xs text-subtle">
                 <Icon name="spinner" spin class="text-xs" />
-                Reading…
+                {{ t(`sandbox.skillRow.reading`) }}
             </p>
             <template v-else>
                 <!-- The reader's own skill: the form is how they read it too. -->
                 <SkillForm v-if="editing !== undefined" :skill="editing" :disabled="disabled" @save="emit(`save`, $event)" @cancel="emit(`toggle`)" />
                 <div v-else class="flex flex-col gap-3">
                     <div class="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
-<!-- States the trigger line in full since the closed row had to cut it; an empty one explains why the agent rarely picks this skill. -->
+                        <!-- States the trigger line in full since the closed row had to cut it; an empty one explains why the agent rarely picks this skill. -->
                         <p class="min-w-0 flex-1 text-2xs" :class="skill.description === `` ? `italic text-subtle` : `text-muted`">
-                            {{ skill.description === `` ? `No description, the agent rarely picks a skill without one.` : skill.description }}
+                            {{ skill.description === `` ? t(`sandbox.skillRow.noDescriptionAgentRarely`) : skill.description }}
                         </p>
-                        <CopyButton :text="body" label="Copy" v-tooltip.top="'The file exactly as its author wrote it'" />
+                        <CopyButton :text="body" :label="t(`ui.action.copy`)" v-tooltip.top="t(`sandbox.skillRow.fileExactlyAuthorWrote`)" />
                     </div>
-<!-- Read-only rendering, no Read/Source toggle: the markup is already in the DOM, hidden until a caret enters it. -->
+                    <!-- Read-only rendering, no Read/Source toggle: the markup is already in the DOM, hidden until a caret enters it. -->
                     <MarkdownDocument
                         :model-value="body"
-                        :label="`${skill.name} instructions`"
+                        :label="t(`sandbox.skillRow.instructions`, { name: skill.name })"
                         class="max-h-96 overflow-auto"
                         style="--prose-measure: 76ch"
                     />
@@ -112,14 +115,14 @@ watch(
                         size="small"
                         severity="danger"
                         text
-                        label="Delete this skill"
+                        :label="t(`sandbox.skillRow.deleteSkill`)"
                         :disabled="disabled"
                         @click="confirmRemove = true"
                     />
                     <template v-else>
-                        <span class="text-2xs text-muted">Delete "{{ skill.name }}"? The agent stops being handed it.</span>
-                        <Button size="small" severity="danger" label="Delete" :disabled="disabled" @click="emit(`remove`)" />
-                        <Button size="small" severity="secondary" text label="Keep it" @click="confirmRemove = false" />
+                        <span class="text-2xs text-muted">{{ t(`sandbox.skillRow.deleteAgentStopsBeing`, { name: skill.name }) }}</span>
+                        <Button size="small" severity="danger" :label="t(`ui.action.delete`)" :disabled="disabled" @click="emit(`remove`)" />
+                        <Button size="small" severity="secondary" text :label="t(`sandbox.skillRow.keep`)" @click="confirmRemove = false" />
                     </template>
                 </div>
             </template>

@@ -1,5 +1,6 @@
 import type { StatusVariant } from "@intentic/ui";
 import { isBlocked, type ConnectionState } from "../live/connection";
+import { t } from "@intentic/ui/i18n";
 
 // `reachable` is the exact request-layer answer (may a daemon call be made now); this projection is the calmer UI
 // answer (no workspace yet, warming, briefly stale, or a wait long enough to explain). Keeps every surface from
@@ -27,20 +28,20 @@ export const sandboxAvailabilityVisual = (availability: SandboxAvailability): Sa
     switch (availability) {
         case "live":
         case "stale":
-            return { label: "online", variant: "success", dotClass: "bg-success" };
+            return { label: t(`sandbox.availability.online`), variant: "success", dotClass: "bg-success" };
         case "busy":
-            return { label: "busy, catching up", variant: "neutral", dotClass: "bg-info" };
+            return { label: t(`sandbox.availability.busyCatchingUp`), variant: "neutral", dotClass: "bg-info" };
         case "warming":
         case "starting":
-            return { label: "starting", variant: "neutral", dotClass: "bg-subtle" };
+            return { label: t(`sandbox.availability.starting`), variant: "neutral", dotClass: "bg-subtle" };
         // Off, not broken: its machine is asleep or its container is stopped, and it says so rather than pretending
         // to be on its way up, which is what "starting" did for as long as anyone left the tab open.
         case "detached":
-            return { label: "not connected", variant: "neutral", dotClass: "bg-subtle" };
+            return { label: t(`sandbox.availability.notConnected`), variant: "neutral", dotClass: "bg-subtle" };
         case "removed":
-            return { label: "removed", variant: "warning", dotClass: "bg-warning" };
+            return { label: t(`sandbox.availability.removed`), variant: "warning", dotClass: "bg-warning" };
         case "blocked":
-            return { label: "needs attention", variant: "warning", dotClass: "bg-warning" };
+            return { label: t(`sandbox.availability.needsAttention`), variant: "warning", dotClass: "bg-warning" };
     }
 };
 
@@ -56,7 +57,13 @@ const settledAvailability = (state: ConnectionState, removed: boolean): SandboxA
     return state.failure !== undefined && isBlocked(state.failure) ? `blocked` : undefined;
 };
 
-export const sandboxAvailability = (state: ConnectionState, ready: boolean, established: boolean, now: number, removed = false): SandboxAvailability => {
+export const sandboxAvailability = (
+    state: ConnectionState,
+    ready: boolean,
+    established: boolean,
+    now: number,
+    removed = false,
+): SandboxAvailability => {
     const settled = settledAvailability(state, removed);
     if (settled !== undefined) {
         return settled;

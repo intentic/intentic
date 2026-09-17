@@ -66,7 +66,7 @@ watch(
             idle ? `opacity-50 grayscale` : ``,
             // Both belong to the badge shape only: a flush mark is inside a border that is already drawn.
             flush ? `` : [`border border-line`, size >= 28 ? `rounded-lg` : `rounded-md`],
-/* Two independent questions, and they stay independent: `flush` decides the OUTLINE (whose border and whose corners). */
+            /* Two independent questions, and they stay independent: `flush` decides the OUTLINE (whose border and whose corners). */
             drawing !== undefined ? `` : brand === undefined ? `bg-content/5 text-muted` : `brand-plate`,
         ]"
         :style="{
@@ -87,7 +87,7 @@ watch(
         }"
         aria-hidden="true"
     >
-<!-- `object-cover`, not `contain`: this is a tile, not a framed picture, so it should meet the rounded corners like an app icon. -->
+        <!-- `object-cover`, not `contain`: this is a tile, not a framed picture, so it should meet the rounded corners like an app icon. -->
         <img v-if="drawing !== undefined" :src="drawing" alt="" class="h-full w-full object-cover" draggable="false" />
         <template v-else-if="brand === undefined">
             <Icon v-if="glyph !== undefined" :name="glyph" :style="{ fontSize: `${size * 0.5}px` }" />
@@ -95,7 +95,7 @@ watch(
                 {{ initials }}
             </span>
         </template>
-<!-- The fetched SVG is masked with the configured brand colour. -->
+        <!-- The fetched SVG is masked with the configured brand colour. -->
         <span
             v-else
             class="brand-mark absolute"

@@ -2,6 +2,7 @@ import type { CommandRun } from "@intentic/sandbox-contract";
 import { jsonBody } from "../../sandbox/client/jsonBody";
 import { sandboxJson } from "../../sandbox/client/sandboxClient";
 import { createRunWatcher, type RunWatcher } from "./runWatcher";
+import { t } from "@intentic/ui/i18n";
 
 /* Browser-side pre-push checks run through the shared watcher. */
 
@@ -14,7 +15,7 @@ const watcher: RunWatcher<CommandRun, readonly string[]> = createRunWatcher<Comm
     start: (repos) => sandboxJson(`/prepush/run`, jsonBody(`POST`, { repos })),
     state: () => sandboxJson<CommandRun>(`/prepush/state`),
     cancel: () => sandboxJson(`/prepush/cancel`, { method: `POST` }),
-    reveal: (run) => ({ title: `Running your pre-push check`, detail: run.command }),
+    reveal: (run) => ({ title: t(`workspace.usePrepush.runningPrePushCheck`), detail: run.command }),
     subject: `checks`,
 });
 

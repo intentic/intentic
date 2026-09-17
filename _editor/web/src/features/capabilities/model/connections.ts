@@ -2,6 +2,7 @@ import type { CapabilitySummary } from "@intentic/api-contract";
 import { capabilityEffects } from "@intentic/capability-catalog";
 import type { CapabilityKind, CapabilityState, VpnLink } from "@intentic/sandbox-contract";
 import type { StatusVariant } from "@intentic/ui";
+import { t } from "@intentic/ui/i18n";
 
 // A live connection read the way its owner reads it: both the Connected slice and a card's own list read state
 // through here, so a Reddit account can't be "needs sign-in" in one and "pending" in the other.
@@ -53,12 +54,12 @@ export interface ConnectionState {
 // State in the reader's words, since the daemon's active/pending/error/inactive answers the wrong question (whether
 // there's still something to do, not what to call it). Rank follows the same judgement: unfinished or broken sorts
 // above merely working.
-const CONNECTION_STATES: Readonly<Record<CapabilityState, ConnectionState>> = {
+const connectionStates = (): Readonly<Record<CapabilityState, ConnectionState>> => ({
     error: { label: `error`, tone: `danger`, rank: 0 },
-    pending: { label: `needs setup`, tone: `warning`, rank: 1 },
+    pending: { label: t(`capabilities.connections.needsSetup`), tone: `warning`, rank: 1 },
     inactive: { label: `off`, tone: `neutral`, rank: 2 },
     active: { label: `ready`, tone: `success`, rank: 3 },
-};
+});
 
 const NEEDS_SIGN_IN: ConnectionState = { label: `needs sign-in`, tone: `warning`, rank: 1 };
 const ONLINE: ConnectionState = { label: `online`, tone: `success`, rank: 3 };
@@ -75,9 +76,7 @@ export const machineGrants = (instance: CapabilitySummary | undefined): string =
     if (instance?.kind !== `host`) {
         return `read files`;
     }
-    const machine = capabilityEffects({ kind: instance.kind, id: instance.id, config: instance.config }).find(
-        (effect) => effect.kind === `machine`,
-    );
+    const machine = capabilityEffects({ kind: instance.kind, id: instance.id, config: instance.config }).find((effect) => effect.kind === `machine`);
     return machine === undefined ? `read files` : machine.grants.join(`, `);
 };
 
@@ -95,5 +94,5 @@ export const connectionState = (kind: CapabilityKind, instance: CapabilitySummar
     if (kind === `host` && instance.status.state === `active`) {
         return hostOnline === true ? ONLINE : OFFLINE;
     }
-    return CONNECTION_STATES[instance.status.state];
+    return connectionStates()[instance.status.state];
 };

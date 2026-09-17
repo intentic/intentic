@@ -27,16 +27,19 @@ import { grantablesFrom, omittedNotesOf, type PersonaGrantable, personaSlug, pow
 import { usePersonas } from "./usePersonas";
 import { useSandboxOutline } from "../overview/useSandboxOutline";
 import { useSandboxSettings } from "../overview/useSandboxSettings";
+import { useT } from "@intentic/ui/i18n";
 
 // The personas this sandbox wears when it acts outside: which accounts it speaks through, what it may do, where it
 // works. Not per-site: one card spans every platform under that name. Lives here, not on /capabilities, since it's a
 // property of the box; under "Reach", not "Configuration", since it's who acts, not what pays.
 
+const t = useT();
+
 const { personas, connected, isConnected, error, isLoading, save, remove } = usePersonas();
 const outline = useSandboxOutline(isLoading);
 // The list query reports a bare message; this page names what the user came here to read.
 const listNotice = computed<NoticeModel | undefined>(() =>
-    error.value === undefined ? undefined : { tone: `danger`, title: `Couldn't read your personas.`, detail: error.value },
+    error.value === undefined ? undefined : { tone: `danger`, title: t(`sandbox.sandboxPersonas.couldntReadPersonas`), detail: error.value },
 );
 // Logged-in browser profiles, each carrying its site's brand; one capability per account, so a twice-connected site
 // appears twice.
@@ -211,15 +214,17 @@ onBeforeUnmount(() => clearTimeout(pending));
 
 // Writes the whole card (an upsert), reading from the open draft if there is one so a rename doesn't clobber a switch
 // flipped a moment ago. The edit state is the row's own, inside its <InlineRename>; this is only where the name goes.
-const renameOf = (persona: Persona) => async (name: string): Promise<void> => {
-    const open = draft.value?.original === persona.id ? draft.value : undefined;
-    await save.mutateAsync(open !== undefined ? { ...cardFrom(open), label: name } : { ...persona, label: name });
-    if (open !== undefined) {
-        quietly(() => {
-            open.label = name;
-        });
-    }
-};
+const renameOf =
+    (persona: Persona) =>
+    async (name: string): Promise<void> => {
+        const open = draft.value?.original === persona.id ? draft.value : undefined;
+        await save.mutateAsync(open !== undefined ? { ...cardFrom(open), label: name } : { ...persona, label: name });
+        if (open !== undefined) {
+            quietly(() => {
+                open.label = name;
+            });
+        }
+    };
 
 // Whether a new chat is matched to a persona from its first message (settings.personaRouting; daemon's
 // persona-router.ts reads it). Lives here, not with the model lists, since a decision about it needs the cards it would
@@ -243,15 +248,11 @@ const confirmRemove = async (): Promise<void> => {
 
 <template>
     <div>
-        <RowGroup v-if="settings !== undefined && personas.length > 0" label="New chats" class="mb-5">
+        <RowGroup v-if="settings !== undefined && personas.length > 0" :label="t(`sandbox.sandboxPersonas.newChats`)" class="mb-5">
             <Row
                 icon="users"
-                title="Match new chats to a persona"
-                :description="
-                    personaRouting
-                        ? `The first message is read when you send it, and the chat says which persona it landed on.`
-                        : `Nothing is read: a chat acts as the persona you pick, or as everyone.`
-                "
+                :title="t(`sandbox.sandboxPersonas.matchNewChatsTo`)"
+                :description="personaRouting ? t(`sandbox.sandboxPersonas.firstMessageReadSend`) : t(`sandbox.sandboxPersonas.nothingReadChatActs`)"
             >
                 <template #control>
                     <ToggleSwitch :model-value="personaRouting" @update:model-value="setPersonaRouting" />
@@ -263,9 +264,9 @@ const confirmRemove = async (): Promise<void> => {
         <!-- The real empty state must not show before we know whether personas exist; the list's shape stands in while loading. -->
         <!-- The outline is a <RowGroup> like the list itself, so it lands on the same tier as what it stands in for. -->
         <template v-if="isLoading">
-            <RowGroup v-if="outline" label="Your personas">
+            <RowGroup v-if="outline" :label="t(`sandbox.sandboxPersonas.personas`)">
                 <div role="status" aria-busy="true">
-                    <span class="sr-only">Reading your sandbox's personas…</span>
+                    <span class="sr-only">{{ t(`sandbox.sandboxPersonas.readingSandboxsPersonas`) }}</span>
                     <SkeletonRows :rows="2" description control />
                 </div>
             </RowGroup>
@@ -278,22 +279,22 @@ const confirmRemove = async (): Promise<void> => {
             <div v-if="personas.length === 0 && newName === undefined" :class="ui.emptyState('flex flex-col items-center gap-3 py-8')">
                 <Avatar :size="40" />
                 <div class="flex flex-col gap-1">
-                    <span class="text-sm font-medium text-content">No personas yet</span>
+                    <span class="text-sm font-medium text-content">{{ t(`sandbox.sandboxPersonas.noPersonasYet`) }}</span>
                     <span class="max-w-md text-xs text-muted">
-                        Until there is one, an automation you schedule can't post anywhere, and a chat reaches every account you've connected.
+                        {{ t(`sandbox.sandboxPersonas.untilOneAutomationSchedule`) }}
                     </span>
                 </div>
                 <!-- Never disabled for having no accounts: a card with none still bounds where an agent works. -->
-                <Button label="Add a persona" size="small" @click="startAdd">
+                <Button :label="t(`sandbox.sandboxPersonas.addPersona`)" size="small" @click="startAdd">
                     <template #icon><Icon name="plus" /></template>
                 </Button>
             </div>
 
-            <RowGroup v-else label="Your personas">
+            <RowGroup v-else :label="t(`sandbox.sandboxPersonas.personas`)">
                 <template #actions>
                     <Button
                         v-if="personas.length > 0 && newName === undefined"
-                        label="Add a persona"
+                        :label="t(`sandbox.sandboxPersonas.addPersona`)"
                         size="small"
                         severity="secondary"
                         @click="startAdd"
@@ -321,8 +322,8 @@ const confirmRemove = async (): Promise<void> => {
                         <InlineRename
                             :value="persona.label ?? persona.id"
                             :write="renameOf(persona)"
-                            label="Persona name"
-                            action="Rename persona"
+                            :label="t(`sandbox.sandboxPersonas.personaName`)"
+                            :action="t(`sandbox.sandboxPersonas.renamePersona`)"
                             failure="Couldn't rename this persona."
                             class="font-medium"
                         />
@@ -349,7 +350,7 @@ const confirmRemove = async (): Promise<void> => {
                         <!-- A bounded card says so on its row; which shelf is off is the form's business, this is just whether any are. -->
                         <StatusBadge v-if="persona.powers !== undefined" variant="neutral" size="xs">{{ personaBounds(persona) }}</StatusBadge>
                         <StatusBadge v-if="persona.capabilities.length > 0 && !ready(persona)" variant="neutral" size="xs" dot>
-                            Not signed in
+                            {{ t(`sandbox.sandboxPersonas.notSignedIn`) }}
                         </StatusBadge>
                     </template>
 
@@ -359,7 +360,7 @@ const confirmRemove = async (): Promise<void> => {
                         <button
                             type="button"
                             :class="ui.iconButton('hover:text-danger')"
-                            aria-label="Remove this persona"
+                            :aria-label="t(`sandbox.sandboxPersonas.removePersona`)"
                             @click.stop="removing = persona"
                         >
                             <Icon name="trash" class="text-xs" />
@@ -382,17 +383,25 @@ const confirmRemove = async (): Promise<void> => {
                             <input
                                 v-model="newName"
                                 :class="ui.input('min-w-0 max-w-xs flex-1 font-medium')"
-                                placeholder="Name it: Work, Studio, Reddit Writer…"
-                                aria-label="Name this persona"
+                                :placeholder="t(`sandbox.sandboxPersonas.nameWorkStudioReddit`)"
+                                :aria-label="t(`sandbox.sandboxPersonas.namePersona`)"
                                 autofocus
                                 @keyup.enter="submit"
                             />
-                            <Button label="Create" size="small" :loading="save.isPending.value" :disabled="!newValid" @click="submit" />
-                            <button type="button" :class="ui.linkButton('text-xs text-muted hover:text-content')" @click="cancelAdd">Cancel</button>
+                            <Button
+                                :label="t(`ui.action.create`)"
+                                size="small"
+                                :loading="save.isPending.value"
+                                :disabled="!newValid"
+                                @click="submit"
+                            />
+                            <button type="button" :class="ui.linkButton('text-xs text-muted hover:text-content')" @click="cancelAdd">
+                                {{ t(`ui.action.cancel`) }}
+                            </button>
                         </div>
                         <span v-if="nameHint !== undefined" class="text-xs text-warning">{{ nameHint }}</span>
                         <span v-else class="text-xs text-subtle">
-                            It starts with the full toolbox, the whole workspace and the sandbox's own prompt. Change any of that once it opens.
+                            {{ t(`sandbox.sandboxPersonas.startsFullToolboxWhole`) }}
                         </span>
                         <Notice v-if="saveError !== undefined" :of="saveError" />
                     </div>
@@ -403,15 +412,14 @@ const confirmRemove = async (): Promise<void> => {
         <!-- Removing a persona, never an account, worth saying since only one of those is undoable by clicking again. -->
         <ConfirmDialog
             :open="removing !== undefined"
-            :header="`Remove ${removing?.label ?? removing?.id}?`"
-            confirm-label="Remove persona"
+            :header="t(`sandbox.sandboxPersonas.remove`, { id: removing?.label ?? removing?.id })"
+            :confirm-label="t(`sandbox.sandboxPersonas.removePersona2`)"
             confirm-icon="trash"
             :loading="remove.isPending.value"
             @cancel="removing = undefined"
             @confirm="confirmRemove"
         >
-            The accounts it speaks through stay connected and signed in. Any automation pinned to this persona stops posting until you give it another
-            one.
+            {{ t(`sandbox.sandboxPersonas.accountsSpeaksThroughStay`) }}
         </ConfirmDialog>
     </div>
 </template>

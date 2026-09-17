@@ -3,6 +3,7 @@ import { ui, DisclosureRow, formatTime, formatTimestamp, Icon, type IconName, St
 import { computed, ref } from "vue";
 import { type Episode, sourceLabel, typeLabel } from "./episodes";
 import { host } from "./host";
+import { t } from "./i18n.js";
 
 // One thing that happened, one line collapsed; expanded shows the daemon's raw events and the transcript link. A
 // `<DisclosureRow>`: lead glyph, title, description, trailing `#meta` facts, and the expanded block are its slots.
@@ -76,7 +77,7 @@ const facts = computed(() =>
 
         <!-- How it ran: trailing and tabular, so times and costs line up down the list. -->
         <template #meta>
-            <StatusBadge v-if="episode.failed" variant="danger" label="failed" size="xs" dot />
+            <StatusBadge v-if="episode.failed" variant="danger" :label="t(`episodeRow.failed`)" size="xs" dot />
             <span v-if="duration">{{ duration }}</span>
             <span v-if="cost">{{ cost }}</span>
             <span :title="formatTimestamp(episode.at)">{{ timeAgo(episode.at) }}</span>
@@ -93,8 +94,8 @@ const facts = computed(() =>
                     <span v-if="entry.outcome === `error`" class="text-danger">{{ entry.error ?? `error` }}</span>
                 </div>
                 <div class="flex flex-wrap items-center gap-x-3 font-mono text-2xs text-subtle/70">
-                    <span v-if="episode.sessionId">session {{ episode.sessionId }}</span>
-                    <span>source {{ sourceLabel(episode.sourceKey) }}</span>
+                    <span v-if="episode.sessionId">{{ t(`episodeRow.session`, { sessionId: episode.sessionId }) }}</span>
+                    <span>{{ t(`episodeRow.source`, { sourceKey: sourceLabel(episode.sourceKey) }) }}</span>
                 </div>
                 <button
                     v-if="episode.sessionId"
@@ -102,7 +103,7 @@ const facts = computed(() =>
                     :class="ui.linkButton('gap-1 text-2xs')"
                     @click="api.chat.openSession(episode.sessionId)"
                 >
-                    <Icon name="external-link" class="shrink-0" /> Open transcript
+                    <Icon name="external-link" class="shrink-0" /> {{ t(`episodeRow.openTranscript`) }}
                 </button>
             </div>
         </template>

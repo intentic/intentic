@@ -2,9 +2,12 @@
 import { AnchoredOverlay, ui } from "@intentic/ui";
 import { computed, ref } from "vue";
 import { type BackgroundProcessRow, useBackgroundProcesses, viewProcessLogs } from "./useBackgroundProcesses";
+import { useT } from "@intentic/ui/i18n";
 
 // Background-processes control for managed processes, extension gateways, dockerd: status, read-only logs,
 // explicit start/stop, not killable terminal tabs. Hidden until there is anything to show.
+
+const t = useT();
 
 const { rows, busy, start, stop } = useBackgroundProcesses();
 // Must open and be measured against the floating window when the terminal is popped out there, not the main
@@ -28,8 +31,8 @@ const openLogs = (row: BackgroundProcessRow): void => {
         :class="ui.iconButton(`relative`)"
         :aria-expanded="open"
         @click="open = !open"
-        v-tooltip.top="'Background processes'"
-        aria-label="Background processes"
+        v-tooltip.top="t(`terminal.backgroundProcesses.backgroundProcesses`)"
+        :aria-label="t(`terminal.backgroundProcesses.backgroundProcesses`)"
     >
         <Icon name="cog" class="text-xs" />
         <span v-if="runningCount > 0" class="absolute right-0.5 top-0.5 h-1.5 w-1.5 rounded-full bg-success"></span>
@@ -37,7 +40,9 @@ const openLogs = (row: BackgroundProcessRow): void => {
 
     <AnchoredOverlay v-model="open" :anchor="trigger ?? undefined" side="bottom" cross="end">
         <div class="flex w-80 flex-col p-1">
-            <div class="px-2 py-1.5 text-2xs font-medium uppercase tracking-wide text-muted">Background processes</div>
+            <div class="px-2 py-1.5 text-2xs font-medium uppercase tracking-wide text-muted">
+                {{ t(`terminal.backgroundProcesses.backgroundProcesses`) }}
+            </div>
             <div v-for="row in rows" :key="row.id" class="flex items-center gap-2.5 rounded-md px-2 py-1.5 hover:bg-overlay">
                 <span class="h-1.5 w-1.5 shrink-0 rounded-full" :class="row.running ? 'bg-success' : 'bg-content/25'"></span>
                 <div class="min-w-0 flex-1">
@@ -49,8 +54,8 @@ const openLogs = (row: BackgroundProcessRow): void => {
                     type="button"
                     :class="ui.iconButton(`hover:bg-content/10`)"
                     @click="openLogs(row)"
-                    v-tooltip.top="'View logs (read-only)'"
-                    aria-label="View logs"
+                    v-tooltip.top="t(`terminal.backgroundProcesses.viewLogsReadOnly`)"
+                    :aria-label="t(`terminal.backgroundProcesses.viewLogs`)"
                 >
                     <Icon name="align-left" class="text-2xs" />
                 </button>
@@ -60,8 +65,8 @@ const openLogs = (row: BackgroundProcessRow): void => {
                     :class="ui.iconButton(`hover:bg-content/10`)"
                     :disabled="busy === row.id"
                     @click="start(row)"
-                    v-tooltip.top="'Start'"
-                    aria-label="Start"
+                    v-tooltip.top="t(`ui.action.start`)"
+                    :aria-label="t(`ui.action.start`)"
                 >
                     <Icon name="play" class="text-2xs" />
                 </button>
@@ -71,8 +76,8 @@ const openLogs = (row: BackgroundProcessRow): void => {
                     :class="ui.iconButton(`hover:bg-content/10`)"
                     :disabled="busy === row.id"
                     @click="start(row)"
-                    v-tooltip.top="'Restart'"
-                    aria-label="Restart"
+                    v-tooltip.top="t(`terminal.backgroundProcesses.restart`)"
+                    :aria-label="t(`terminal.backgroundProcesses.restart`)"
                 >
                     <Icon name="refresh" class="text-2xs" />
                 </button>
@@ -82,8 +87,8 @@ const openLogs = (row: BackgroundProcessRow): void => {
                     :class="ui.iconButton(`hover:bg-content/10 hover:text-danger`)"
                     :disabled="busy === row.id"
                     @click="stop(row)"
-                    v-tooltip.top="'Stop'"
-                    aria-label="Stop"
+                    v-tooltip.top="t(`ui.action.stop`)"
+                    :aria-label="t(`ui.action.stop`)"
                 >
                     <Icon name="stop" class="text-2xs" />
                 </button>

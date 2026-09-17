@@ -1,5 +1,6 @@
 import type { HostedPlanState, HostedPlanUsage } from "@intentic/api-contract";
 import type { StatusVariant } from "@intentic/ui";
+import { t } from "@intentic/ui/i18n";
 
 // Sentences derived from hosted-plan state so Billing, the account badge, Overview and the chat strip cannot disagree.
 // Pure functions, tested rather than screenshotted.
@@ -74,19 +75,31 @@ export interface PlanBadge {
 // A subscriber's chip: the comp, the cancellation, the trial, or the plain plan and the date it renews.
 const subscriberBadge = (state: HostedPlanState): PlanBadge => {
     if (state.comped) {
-        return { label: `complimentary`, variant: `info`, detail: `Hosted plan, on the house. No card, no renewal.` };
+        return { label: t(`settings.hostedHours.complimentary`), variant: `info`, detail: t(`settings.hostedHours.hostedPlanOnHouse`) };
     }
     if (state.renewsAt === undefined) {
-        return { label: `hosted`, variant: `primary`, detail: `On the hosted plan.` };
+        return { label: t(`settings.hostedHours.hosted`), variant: `primary`, detail: t(`settings.hostedHours.onHostedPlan`) };
     }
     // Stripe keeps status active until period end; without this a cancelled subscriber would read as renewing.
     if (state.cancelAtPeriodEnd) {
-        return { label: `ending`, variant: `warning`, detail: `Hosted plan ends ${formatDayShort(state.renewsAt)}. After that, the free lane.` };
+        return {
+            label: t(`settings.hostedHours.ending`),
+            variant: `warning`,
+            detail: t(`settings.hostedHours.hostedPlanEndsAfter`, { renewsAt: formatDayShort(state.renewsAt) }),
+        };
     }
     if (state.status === `trialing`) {
-        return { label: `trial`, variant: `info`, detail: `Hosted plan trial, ends ${formatDayShort(state.renewsAt)}.` };
+        return {
+            label: t(`settings.hostedHours.trial`),
+            variant: `info`,
+            detail: t(`settings.hostedHours.hostedPlanTrialEnds`, { renewsAt: formatDayShort(state.renewsAt) }),
+        };
     }
-    return { label: `hosted`, variant: `primary`, detail: `Hosted plan, renews ${formatDayShort(state.renewsAt)}.` };
+    return {
+        label: t(`settings.hostedHours.hosted`),
+        variant: `primary`,
+        detail: t(`settings.hostedHours.hostedPlanRenews`, { renewsAt: formatDayShort(state.renewsAt) }),
+    };
 };
 
 export const planBadge = (state: HostedPlanState | undefined): PlanBadge | undefined => {
@@ -98,10 +111,10 @@ export const planBadge = (state: HostedPlanState | undefined): PlanBadge | undef
     }
     // A lapsed subscriber lands here, not in subscriberBadge, since `onPlan` is false while Stripe retries payment.
     if (state.status !== undefined && RECOVERABLE.has(state.status)) {
-        return { label: `payment failed`, variant: `danger`, detail: `Your card was declined. The hosted plan ends unless it is fixed.` };
+        return { label: t(`settings.hostedHours.paymentFailed`), variant: `danger`, detail: t(`settings.hostedHours.cardDeclinedHostedPlan`) };
     }
     // Free lane gets a chip too, since a chip has no trouble stating "not on the plan" even with no hour ceiling.
-    return { label: `free`, variant: `neutral`, detail: `Free lane. This account is not on the hosted plan.` };
+    return { label: t(`settings.hostedHours.free`), variant: `neutral`, detail: t(`settings.hostedHours.freeLaneAccountNot`) };
 };
 
 // Statuses where Stripe is retrying a live subscription, not a sale: `past_due`, `unpaid`, `incomplete`.

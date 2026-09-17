@@ -2,6 +2,7 @@ import type { ExtensionContext, IntenticApi } from "@intentic/extension-api";
 import { startRunAttention, workflowsBadge } from "./attention";
 import { bindHost } from "./host";
 import { workflowRunsQuery } from "./runsQuery";
+import { t } from "./i18n.js";
 
 // Binds the host, starts the badge's background poll, then registers the Workflows rail view. Detects unconditionally,
 // since workflows are native to every sandbox with no capability to enable; whether the rail actually seats it is
@@ -13,9 +14,9 @@ export const activate = (api: IntenticApi, context: ExtensionContext): void => {
     context.subscriptions.push(
         api.views.register({
             id: `workflows`,
-            label: `Workflows`,
+            label: t(`extension.workflows`),
             surface: `rail`,
-            detect: () => [{ key: `workflows`, title: `Workflows`, icon: `sitemap` }],
+            detect: () => [{ key: `workflows`, title: t(`extension.workflows`), icon: `sitemap` }],
             // Runs in flight; not a count of saved designs or of everything that ever failed.
             badge: () => workflowsBadge(),
             // Same query the badge already reads and the page opens on, warmed so a mid-run arrival skips the spinner.

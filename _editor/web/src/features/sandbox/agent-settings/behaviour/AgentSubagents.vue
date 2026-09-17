@@ -4,12 +4,15 @@ import { ui, Picker, Row, RowGroup } from "@intentic/ui";
 import { computed } from "vue";
 import { useSandboxSettings } from "../../overview/useSandboxSettings";
 import { commitCount } from "../models/numberInputs";
-import { type Posture, postureOf, POSTURES, withPosture } from "../safety/spawnPosture";
+import { type Posture, postureOf, postures, withPosture } from "../safety/spawnPosture";
 import SubagentsInfo from "./SubagentsInfo.vue";
+import { useT } from "@intentic/ui/i18n";
 
 // Four rows over one activity: whether it may delegate at all, how wide one fan-out is, the lifetime budget per
 // conversation, and how deep delegation nests. Raising only the width just hits the per-conversation ceiling
 // later. Bounds mirror SandboxSettingsSchema so the box never accepts a number the save would reject.
+const t = useT();
+
 const { settings, patch } = useSandboxSettings();
 
 const AT_ONCE = { min: 1, max: 200 };
@@ -27,34 +30,34 @@ const spawnDenied = computed(() => posture.value === `deny`);
 </script>
 
 <template>
-    <RowGroup label="Subagents">
+    <RowGroup :label="t(`sandbox.agentSubagents.subagents`)">
         <template #info><SubagentsInfo /></template>
 
         <!-- Leads the group: narrows from "may it delegate" to "how far", the natural reading order. -->
-        <Row icon="robot" title="Start agents of its own" description="A child agent spends the same connected accounts this one does.">
+        <Row icon="robot" :title="t(`sandbox.agentSubagents.startAgentsOwn`)" :description="t(`sandbox.agentSubagents.childAgentSpendsSame`)">
             <template #control>
                 <Picker
                     :model-value="posture"
-                    :options="POSTURES"
+                    :options="postures()"
                     :disabled="settings === undefined"
                     class="w-36 justify-between text-xs"
-                    aria-label="Start agents of its own"
-                    header="Start agents of its own"
+                    :aria-label="t(`sandbox.agentSubagents.startAgentsOwn`)"
+                    :header="t(`sandbox.agentSubagents.startAgentsOwn`)"
                     @update:model-value="(next: Posture | undefined) => next !== undefined && setPosture(next)"
                 />
             </template>
             <template v-if="spawnDenied" #below>
                 <p class="text-2xs text-muted">
-                    Delegation is refused outright, so the three limits below bound nothing until this is changed.
+                    {{ t(`sandbox.agentSubagents.delegationRefusedOutrightThree`) }}
                 </p>
             </template>
         </Row>
 
-<!-- First ceiling a fan-out hits; the assistant stops rather than retries here, so a low number serializes work instead of failing it. -->
+        <!-- First ceiling a fan-out hits; the assistant stops rather than retries here, so a low number serializes work instead of failing it. -->
         <Row
             icon="users"
-            title="Subagents at once"
-            description="Maximum delegated agents running in parallel."
+            :title="t(`sandbox.agentSubagents.subagentsAtOnce`)"
+            :description="t(`sandbox.agentSubagents.maximumDelegatedAgentsRunning`)"
         >
             <template #control>
                 <input
@@ -63,7 +66,7 @@ const spawnDenied = computed(() => posture.value === `deny`);
                     :max="AT_ONCE.max"
                     :value="settings?.subagentsAtOnce ?? 20"
                     :disabled="settings === undefined"
-                    aria-label="Subagents at once"
+                    :aria-label="t(`sandbox.agentSubagents.subagentsAtOnce`)"
                     :class="ui.inputSm('w-20 text-right')"
                     @change="
                         (event: Event) =>
@@ -73,11 +76,11 @@ const spawnDenied = computed(() => posture.value === `deny`);
             </template>
         </Row>
 
-<!-- Bounds a long conversation's total rather than one burst: twenty rounds of five reach the same count as one round of a hundred. -->
+        <!-- Bounds a long conversation's total rather than one burst: twenty rounds of five reach the same count as one round of a hundred. -->
         <Row
             icon="clone"
-            title="Subagents per conversation"
-            description="Total delegated agents allowed per conversation."
+            :title="t(`sandbox.agentSubagents.subagentsPerConversation`)"
+            :description="t(`sandbox.agentSubagents.totalDelegatedAgentsAllowed`)"
         >
             <template #control>
                 <input
@@ -86,7 +89,7 @@ const spawnDenied = computed(() => posture.value === `deny`);
                     :max="PER_TURN.max"
                     :value="settings?.subagentsPerTurn ?? 200"
                     :disabled="settings === undefined"
-                    aria-label="Subagents per conversation"
+                    :aria-label="t(`sandbox.agentSubagents.subagentsPerConversation`)"
                     :class="ui.inputSm('w-20 text-right')"
                     @change="
                         (event: Event) =>
@@ -97,11 +100,7 @@ const spawnDenied = computed(() => posture.value === `deny`);
         </Row>
 
         <!-- The only one of the three whose runaway case multiplies rather than widens. -->
-        <Row
-            icon="sitemap"
-            title="Nesting depth"
-            description="Maximum delegation depth."
-        >
+        <Row icon="sitemap" :title="t(`sandbox.agentSubagents.nestingDepth`)" :description="t(`sandbox.agentSubagents.maximumDelegationDepth`)">
             <template #control>
                 <input
                     type="number"
@@ -109,7 +108,7 @@ const spawnDenied = computed(() => posture.value === `deny`);
                     :max="DEPTH.max"
                     :value="settings?.subagentDepth ?? 3"
                     :disabled="settings === undefined"
-                    aria-label="Nesting depth"
+                    :aria-label="t(`sandbox.agentSubagents.nestingDepth`)"
                     :class="ui.inputSm('w-20 text-right')"
                     @change="
                         (event: Event) => commitCount(event, settings?.subagentDepth ?? 3, DEPTH, (subagentDepth: number) => patch({ subagentDepth }))

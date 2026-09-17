@@ -8,9 +8,12 @@ import { registerCommand } from "./commands/useCommands";
 import { useAuth } from "../features/auth/useAuth";
 import { useHostedPlan } from "../features/settings/hosted-plan/useHostedPlan";
 import { environment } from "../app/environments/environment";
+import { useT } from "@intentic/ui/i18n";
 
 // The rail's bottom account control: an avatar opening a popover with account identity (email, name,
 // plan) and actions (Settings, Sign out). The sandbox switcher lives above; theme lives on /settings.
+
+const t = useT();
 
 const { user, signOut } = useAuth();
 const route = useRoute();
@@ -53,7 +56,14 @@ const logout = async (): Promise<void> => {
 let command: Disposable | undefined;
 
 onMounted(() => {
-    command = registerCommand({ owner: `builtin`, command: `account.signOut`, title: `Sign Out`, category: ACCOUNT, icon: `sign-out`, handler: logout });
+    command = registerCommand({
+        owner: `builtin`,
+        command: `account.signOut`,
+        title: t(`shell.accountPanel.signOut2`),
+        category: ACCOUNT,
+        icon: `sign-out`,
+        handler: logout,
+    });
 });
 
 onUnmounted(() => {
@@ -64,7 +74,7 @@ onUnmounted(() => {
 
 <template>
     <!-- The dot sits outside the avatar's clip circle; the wrapper positions it, the button keeps overflow-hidden. -->
-<!-- The active plate is a sibling so the avatar image remains undecorated. -->
+    <!-- The active plate is a sibling so the avatar image remains undecorated. -->
     <div class="account-control relative mt-auto shrink-0">
         <span v-if="onSettings" class="pointer-events-none absolute -inset-1 rounded-lg bg-primary-600/15" aria-hidden="true"></span>
         <button
@@ -118,7 +128,7 @@ onUnmounted(() => {
                 @click="dismiss"
             >
                 <span class="flex h-5 w-5 shrink-0 items-center justify-center"><Icon name="cog" class="text-base text-muted" /></span>
-                Settings
+                {{ t(`shell.accountPanel.settings`) }}
             </RouterLink>
             <button
                 type="button"
@@ -126,7 +136,7 @@ onUnmounted(() => {
                 v-action="logout"
             >
                 <span class="flex h-5 w-5 shrink-0 items-center justify-center"><Icon name="sign-out" class="text-base text-muted" /></span>
-                Sign out
+                {{ t(`shell.accountPanel.signOut`) }}
             </button>
         </div>
     </AnchoredOverlay>

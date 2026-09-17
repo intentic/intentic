@@ -1,5 +1,6 @@
 import type { PickerGroup } from "@intentic/ui";
 import { storedValue, storeValue } from "../../lib/browserStorage";
+import { t } from "@intentic/ui/i18n";
 
 // The phones the preview can stand in for. Sizes are the CSS viewport each device reports to a page in portrait — the
 // numbers a media query sees, not physical pixels — so a layout framed here breaks where it would break on the device.
@@ -26,34 +27,82 @@ export interface PhoneModel {
     readonly chin?: number;
 }
 
-export const PHONE_MODELS: readonly PhoneModel[] = [
-    { id: `iphone-se`, label: `iPhone SE`, brand: `Apple`, width: 375, height: 667, radius: 4, cutout: `none`, bezel: 12, chin: 56 },
-    { id: `iphone-13-mini`, label: `iPhone 13 mini`, brand: `Apple`, width: 375, height: 812, radius: 42, cutout: `notch`, bezel: 11 },
-    { id: `iphone-15`, label: `iPhone 15`, brand: `Apple`, width: 393, height: 852, radius: 47, cutout: `island`, bezel: 11 },
-    { id: `iphone-15-pro-max`, label: `iPhone 15 Pro Max`, brand: `Apple`, width: 430, height: 932, radius: 53, cutout: `island`, bezel: 11 },
-    { id: `pixel-7`, label: `Pixel 7`, brand: `Google`, width: 412, height: 915, radius: 28, cutout: `punch`, bezel: 10 },
-    { id: `pixel-8-pro`, label: `Pixel 8 Pro`, brand: `Google`, width: 448, height: 998, radius: 32, cutout: `punch`, bezel: 10 },
-    { id: `galaxy-s24`, label: `Galaxy S24`, brand: `Samsung`, width: 360, height: 780, radius: 26, cutout: `punch`, bezel: 9 },
-    { id: `galaxy-s24-ultra`, label: `Galaxy S24 Ultra`, brand: `Samsung`, width: 384, height: 824, radius: 14, cutout: `punch`, bezel: 9 },
+export const phoneModels = (): readonly PhoneModel[] => [
+    {
+        id: `iphone-se`,
+        label: t(`preview.phoneModels.iphoneSe`),
+        brand: `Apple`,
+        width: 375,
+        height: 667,
+        radius: 4,
+        cutout: `none`,
+        bezel: 12,
+        chin: 56,
+    },
+    {
+        id: `iphone-13-mini`,
+        label: t(`preview.phoneModels.iphone13Mini`),
+        brand: `Apple`,
+        width: 375,
+        height: 812,
+        radius: 42,
+        cutout: `notch`,
+        bezel: 11,
+    },
+    { id: `iphone-15`, label: t(`preview.phoneModels.iphone15`), brand: `Apple`, width: 393, height: 852, radius: 47, cutout: `island`, bezel: 11 },
+    {
+        id: `iphone-15-pro-max`,
+        label: t(`preview.phoneModels.iphone15ProMax`),
+        brand: `Apple`,
+        width: 430,
+        height: 932,
+        radius: 53,
+        cutout: `island`,
+        bezel: 11,
+    },
+    { id: `pixel-7`, label: t(`preview.phoneModels.pixel7`), brand: `Google`, width: 412, height: 915, radius: 28, cutout: `punch`, bezel: 10 },
+    {
+        id: `pixel-8-pro`,
+        label: t(`preview.phoneModels.pixel8Pro`),
+        brand: `Google`,
+        width: 448,
+        height: 998,
+        radius: 32,
+        cutout: `punch`,
+        bezel: 10,
+    },
+    { id: `galaxy-s24`, label: t(`preview.phoneModels.galaxyS24`), brand: `Samsung`, width: 360, height: 780, radius: 26, cutout: `punch`, bezel: 9 },
+    {
+        id: `galaxy-s24-ultra`,
+        label: t(`preview.phoneModels.galaxyS24Ultra`),
+        brand: `Samsung`,
+        width: 384,
+        height: 824,
+        radius: 14,
+        cutout: `punch`,
+        bezel: 9,
+    },
 ];
 
 // Mid-range current iPhone: the size most phone traffic is within a few px of.
 export const DEFAULT_PHONE_ID = `iphone-15`;
 
-const fallback = PHONE_MODELS.find((phone) => phone.id === DEFAULT_PHONE_ID) ?? PHONE_MODELS[0]!;
+const fallback = (): PhoneModel => phoneModels().find((phone) => phone.id === DEFAULT_PHONE_ID) ?? phoneModels()[0]!;
 
 /** An unknown id (a dropped model, a hand-edited store) resolves to the default rather than an empty stage. */
-export const phoneById = (id: string | undefined): PhoneModel => PHONE_MODELS.find((phone) => phone.id === id) ?? fallback;
+export const phoneById = (id: string | undefined): PhoneModel => phoneModels().find((phone) => phone.id === id) ?? fallback();
 
 export const phonePickerGroups = (): readonly PickerGroup[] => {
-    const brands = [...new Set(PHONE_MODELS.map((phone) => phone.brand))];
+    const brands = [...new Set(phoneModels().map((phone) => phone.brand))];
     return brands.map((brand) => ({
         label: brand,
-        options: PHONE_MODELS.filter((phone) => phone.brand === brand).map((phone) => ({
-            value: phone.id,
-            label: phone.label,
-            description: `${phone.width} × ${phone.height}`,
-        })),
+        options: phoneModels()
+            .filter((phone) => phone.brand === brand)
+            .map((phone) => ({
+                value: phone.id,
+                label: phone.label,
+                description: `${phone.width} × ${phone.height}`,
+            })),
     }));
 };
 

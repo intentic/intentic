@@ -1,3 +1,5 @@
+import { t } from "../i18n/index.js";
+
 // Shared "how far back" vocabulary (1h/24h/7d/All): the millisecond cutoffs and the words to describe them. `all`
 // is the absence of a bound (-Infinity), not a very large one, so it still compares correctly against a
 // clock-skewed future timestamp.
@@ -11,11 +13,11 @@ const WINDOW_MS: Readonly<Record<Exclude<TimeWindow, `all`>, number>> = {
 };
 
 /** Ready to spread into <SegmentedControl :options>, so the four pills cannot drift apart between two views. */
-export const TIME_WINDOWS: readonly { label: string; value: TimeWindow }[] = [
+export const timeWindows = (): readonly { label: string; value: TimeWindow }[] => [
     { label: `1h`, value: `1h` },
     { label: `24h`, value: `24h` },
     { label: `7d`, value: `7d` },
-    { label: `All`, value: `all` },
+    { label: t(`ui.timeWindow.all`), value: `all` },
 ];
 
 /** The cutoff a window means, as an epoch-ms lower bound. */

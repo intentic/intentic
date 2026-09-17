@@ -21,10 +21,13 @@ import { viewersOfSession } from "../../../shell/presence/usePresence";
 import PresenceAvatars from "../../../shell/presence/PresenceAvatars.vue";
 import ChatTabList from "./ChatTabList.vue";
 import PastChatList from "../panel/PastChatList.vue";
+import { useT } from "@intentic/ui/i18n";
 
 // The chat panel's own bar: names the active conversation and drops the full list (ChatTabList) on click.
 // Docked it's a header over a sheet; floating it's a rail with the list always open. Reads the conversation
 // list from useChat and emits select/close/open rather than writing it.
+
+const t = useT();
 
 const emit = defineEmits<{
     select: [id: string];
@@ -165,12 +168,12 @@ onBeforeUnmount(() => clearTimeout(searchTimer));
 const barMenu = ref<{ show: (event: Event) => void } | undefined>();
 const barMenuItems = computed<MenuItem[]>(() => [
     {
-        label: `Close Finished`,
+        label: t(`chat.chatTabs.closeFinished`),
         disabled: tabsInLane(`finished`).size === 0,
         shortcut: commandShortcut(`chat.closeFinishedTabs`),
         command: () => emit(`close`, tabsInLane(`finished`)),
     },
-    { label: `Close All`, shortcut: commandShortcut(`chat.closeAllTabs`), command: () => emit(`close`, allTabs()) },
+    { label: t(`chat.chatTabs.closeAll`), shortcut: commandShortcut(`chat.closeAllTabs`), command: () => emit(`close`, allTabs()) },
     { separator: true },
     // The chat's other two homes, in the header buttons' own order: move within this window, then leave it.
     {
@@ -224,7 +227,7 @@ onMounted(() => {
     const entries: Omit<CommandRegistration, `owner`>[] = [
         {
             command: `chat.rename`,
-            title: `Rename…`,
+            title: t(`chat.chatTabs.rename`),
             icon: `pencil`,
             keybinding: `F2`,
             when: `tabSurface == 'chat'`,
@@ -242,7 +245,7 @@ onMounted(() => {
         },
         {
             command: `chat.closeTab`,
-            title: `Close`,
+            title: t(`ui.action.close`),
             icon: `times`,
             keybinding: `Ctrl+Shift+X`,
             when: `tabSurface == 'chat'`,
@@ -250,7 +253,7 @@ onMounted(() => {
         },
         {
             command: `chat.closeOtherTabs`,
-            title: `Close Others`,
+            title: t(`chat.chatTabs.closeOthers`),
             icon: `times`,
             keybinding: `Ctrl+Shift+,`,
             when: `tabSurface == 'chat'`,
@@ -263,7 +266,7 @@ onMounted(() => {
         },
         {
             command: `chat.closeTabsToRight`,
-            title: `Close to the Right`,
+            title: t(`chat.chatTabs.closeToRight`),
             icon: `times`,
             keybinding: `Ctrl+Shift+.`,
             when: `tabSurface == 'chat'`,
@@ -278,7 +281,7 @@ onMounted(() => {
             // Unbound by default, no file-tab equivalent for "finished"; still reachable via the palette and
             // Keybindings.
             command: `chat.closeFinishedTabs`,
-            title: `Close Finished`,
+            title: t(`chat.chatTabs.closeFinished`),
             icon: `times`,
             when: `tabSurface == 'chat'`,
             handler: (): void => {
@@ -290,18 +293,24 @@ onMounted(() => {
         },
         {
             command: `chat.closeAllTabs`,
-            title: `Close All`,
+            title: t(`chat.chatTabs.closeAll`),
             icon: `times`,
             keybinding: `Ctrl+Shift+Backspace`,
             when: `tabSurface == 'chat'`,
             handler: () => emit(`close`, allTabs()),
         },
-        { command: `chat.nextTab`, title: `Next`, keybinding: `Alt+PageDown`, when: `tabSurface == 'chat'`, handler: () => cycleTab(1) },
-        { command: `chat.previousTab`, title: `Previous`, keybinding: `Alt+PageUp`, when: `tabSurface == 'chat'`, handler: () => cycleTab(-1) },
+        { command: `chat.nextTab`, title: t(`ui.action.next`), keybinding: `Alt+PageDown`, when: `tabSurface == 'chat'`, handler: () => cycleTab(1) },
+        {
+            command: `chat.previousTab`,
+            title: t(`chat.chatTabs.previous`),
+            keybinding: `Alt+PageUp`,
+            when: `tabSurface == 'chat'`,
+            handler: () => cycleTab(-1),
+        },
         {
             // VSCode's split chord for a different chat, not a second view: a chat carries its own composer.
             command: `chat.splitView`,
-            title: `Open Next Beside`,
+            title: t(`chat.chatTabs.openNextBeside`),
             keybinding: `Mod+\\`,
             when: `tabSurface == 'chat'`,
             handler: () => splitBeside(),
@@ -309,14 +318,14 @@ onMounted(() => {
         {
             // Unbound, like Close Finished, reachable from the row menu; takes back the column, the chat stays open.
             command: `chat.closePane`,
-            title: `Close Pane`,
+            title: t(`chat.chatTabs.closePane`),
             when: `tabSurface == 'chat'`,
             handler: () => closePane(activeId.value),
         },
         {
             // Unbound: every free chord here is already spent, and the header is one click away regardless.
             command: `chat.switchTab`,
-            title: `Switch…`,
+            title: t(`chat.chatTabs.switch`),
             icon: `comments`,
             when: `tabSurface == 'chat'`,
             handler: (): void => {
@@ -349,23 +358,23 @@ const openHistory = (event: Event): void => {
 </script>
 
 <template>
-<!-- Docked: one line across the column top, with the list on a sheet below it. -->
-<!-- The rail form isn't drawn here: RailColumn is the shared column shell every agent list stands in, keeping this rail and /subagents' in step. -->
+    <!-- Docked: one line across the column top, with the list on a sheet below it. -->
+    <!-- The rail form isn't drawn here: RailColumn is the shared column shell every agent list stands in, keeping this rail and /subagents' in step. -->
     <component
         :is="vertical ? RailColumn : 'header'"
         :ref="setBar"
         :class="vertical ? undefined : 'view-header relative flex items-center gap-1 border-b border-line px-1.5'"
         @contextmenu="onBarContextMenu"
     >
-<!-- The switcher, docked only — the rail below already is the list. -->
+        <!-- The switcher, docked only — the rail below already is the list. -->
         <template v-if="!vertical">
             <input
                 v-if="edit.editing && renaming"
                 v-model="edit.draft"
                 type="text"
                 maxlength="80"
-                aria-label="Chat title"
-                :placeholder="active.isolated.value ? 'New agent' : 'New chat'"
+                :aria-label="t(`chat.chatTabs.chatTitle`)"
+                :placeholder="active.isolated.value ? t(`chat.chatTabs.newAgent`) : t(`chat.chatTabs.newChat`)"
                 class="ui-field-box ui-field-inline h-7 min-w-0 flex-1 select-text px-2 text-2xs"
                 @keydown.enter.stop.prevent="edit.commit()"
                 @keydown.esc.stop.prevent="edit.cancel()"
@@ -380,7 +389,7 @@ const openHistory = (event: Event): void => {
                 :class="{ 'chat-tab-on': listOpen }"
                 :aria-expanded="listOpen"
                 aria-haspopup="dialog"
-                :aria-label="`Switch chat: ${conversations.length} open`"
+                :aria-label="t(`chat.chatTabs.switchChatOpen`, { count: conversations.length })"
                 @click="listOpen = !listOpen"
                 @dblclick.prevent.stop="beginRename()"
             >
@@ -389,10 +398,10 @@ const openHistory = (event: Event): void => {
                 <!-- Came in from outside (a Discord mention, a visitor, a webhook) rather than from you. -->
                 <OriginMark :origin="originOf(active)" compact />
                 <!-- Off the board but still open; the box glyph is the same one the cards wear. -->
-                <span v-if="isArchived(active)" class="flex shrink-0 items-center" aria-label="Archived">
+                <span v-if="isArchived(active)" class="flex shrink-0 items-center" :aria-label="t(`chat.chatTabs.archived`)">
                     <Icon name="box" class="text-2xs text-subtle" />
                 </span>
-<!-- Italic while this chat is only being looked at (Conversation.peek), the same mark the rail cards and the workspace preview tab wear. -->
+                <!-- Italic while this chat is only being looked at (Conversation.peek), the same mark the rail cards and the workspace preview tab wear. -->
                 <span
                     class="min-w-0 flex-1 truncate text-left font-medium"
                     :class="[statusTabClass(active.status.value), { italic: active.peek.value }]"
@@ -403,22 +412,22 @@ const openHistory = (event: Event): void => {
                 <PresenceAvatars
                     v-if="active.session.value !== undefined"
                     :members="viewersOfSession(active.session.value.id)"
-                    label="in this chat"
+                    :label="t(`chat.chatTabs.inChat`)"
                 />
                 <!-- The other sessions (running, attention) as two compact marks instead of a truncated title. -->
                 <span
                     v-if="runningCount > 0"
                     class="flex shrink-0 items-center gap-1 text-subtle"
-                    :aria-label="`${runningCount} running`"
-                    v-tooltip.bottom="`${runningCount} running`"
+                    :aria-label="t(`chat.chatTabs.running`, { runningCount })"
+                    v-tooltip.bottom="t(`chat.chatTabs.running`, { runningCount })"
                 >
                     <Icon name="spinner" spin class="text-2xs" />{{ runningCount }}
                 </span>
                 <span
                     v-if="attentionCount > 0"
                     class="ui-status-pill flex shrink-0 items-center gap-1 bg-warning/15 font-semibold text-warning"
-                    :aria-label="`${attentionCount} need you`"
-                    v-tooltip.bottom="`${attentionCount} waiting for you`"
+                    :aria-label="t(`chat.chatTabs.need`, { attentionCount })"
+                    v-tooltip.bottom="t(`chat.chatTabs.waiting`, { attentionCount })"
                 >
                     <Icon name="exclamation-circle" class="text-2xs" />{{ attentionCount }}
                 </span>
@@ -436,23 +445,35 @@ const openHistory = (event: Event): void => {
             @open="emit('open', $event)"
         />
 
-<!-- The docked toolbar orders creation, history, docking, and pop-out actions. -->
+        <!-- The docked toolbar orders creation, history, docking, and pop-out actions. -->
         <div v-if="!vertical" class="flex shrink-0 items-center gap-1">
-<!-- Shown only while there's something to keep: the docked column has no card of its own to carry the rail's pin. -->
+            <!-- Shown only while there's something to keep: the docked column has no card of its own to carry the rail's pin. -->
             <button
                 v-if="active.peek.value"
                 type="button"
                 class="composer-ghost h-7 w-7 shrink-0"
                 @click="keepChat(active.conversationId)"
-                v-tooltip.bottom="'Keep open, otherwise this chat closes when you open another'"
-                aria-label="Keep this chat open"
+                v-tooltip.bottom="t(`chat.chatTabs.keepOpenOtherwiseChat`)"
+                :aria-label="t(`chat.chatTabs.keepChatOpen`)"
             >
                 <Icon name="pin" class="text-sm" />
             </button>
-            <button type="button" class="composer-ghost h-7 w-7 shrink-0" @click="startAgent()" v-tooltip.bottom="'New agent'" aria-label="New agent">
+            <button
+                type="button"
+                class="composer-ghost h-7 w-7 shrink-0"
+                @click="startAgent()"
+                v-tooltip.bottom="t(`chat.chatTabs.newAgent`)"
+                :aria-label="t(`chat.chatTabs.newAgent`)"
+            >
                 <Icon name="plus" class="text-sm" />
             </button>
-            <button type="button" class="composer-ghost h-7 w-7 shrink-0" @click="openHistory" v-tooltip.bottom="'History'" aria-label="Chat history">
+            <button
+                type="button"
+                class="composer-ghost h-7 w-7 shrink-0"
+                @click="openHistory"
+                v-tooltip.bottom="t(`chat.chatTabs.history`)"
+                :aria-label="t(`chat.chatTabs.chatHistory`)"
+            >
                 <Icon name="history" class="text-sm" />
             </button>
             <button
@@ -476,16 +497,16 @@ const openHistory = (event: Event): void => {
             </button>
         </div>
 
-<!-- Foot of the rail: New agent (the fleet board's own wording) and Past chats, labelled and sized to match, no ellipsis (there's no chooser to promise). -->
+        <!-- Foot of the rail: New agent (the fleet board's own wording) and Past chats, labelled and sized to match, no ellipsis (there's no chooser to promise). -->
         <div v-else class="flex shrink-0 flex-wrap items-center justify-center gap-2 pb-2.5 pt-3">
-            <Button size="small" @click="startAgent()"> <Icon name="plus" />New agent </Button>
+            <Button size="small" @click="startAgent()"> <Icon name="plus" />{{ t(`chat.chatTabs.newAgent`) }} </Button>
             <button type="button" class="composer-ghost h-7 gap-1.5 px-2 text-2xs" @click="openHistory">
                 <Icon name="history" class="text-2xs" />
-                <span>Past chats</span>
+                <span>{{ t(`chat.chatTabs.pastChats`) }}</span>
             </button>
         </div>
 
-<!-- Pinned to the column's width, capped so the transcript is never fully covered. -->
+        <!-- Pinned to the column's width, capped so the transcript is never fully covered. -->
         <div
             v-if="listOpen && !vertical"
             class="ground-canvas absolute inset-x-1.5 top-full z-30 mt-1 flex max-h-[60vh] flex-col overflow-hidden rounded-xl border border-line-strong bg-canvas p-1.5 shadow-lg"
@@ -493,7 +514,7 @@ const openHistory = (event: Event): void => {
             <ChatTabList class="min-h-0 flex-1" @select="pick" @close="emit('close', $event)" @open="pickNotOpen" />
         </div>
 
-<!-- Anchored to whichever button was pressed; AnchoredOverlay caps it to that button's own window. -->
+        <!-- Anchored to whichever button was pressed; AnchoredOverlay caps it to that button's own window. -->
         <AnchoredOverlay v-model="historyOpen" :anchor="historyAnchor" side="bottom">
             <div class="flex min-h-0 w-72 flex-col">
                 <SearchBar
@@ -501,8 +522,8 @@ const openHistory = (event: Event): void => {
                     v-model="query"
                     variant="field"
                     clearable
-                    aria-label="Search chats"
-                    placeholder="Search chats…"
+                    :aria-label="t(`chat.chatTabs.searchChats`)"
+                    :placeholder="t(`chat.chatTabs.searchChats2`)"
                     class="m-1 shrink-0"
                 />
                 <div class="flex min-h-0 max-h-80 flex-col gap-0.5 overflow-auto p-1 pt-0">

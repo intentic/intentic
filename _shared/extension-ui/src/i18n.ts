@@ -1,4 +1,4 @@
-import { activeLocale as active, type Locale, useT } from "@intentic/ui/i18n";
+import { activeLocale as active, type Locale, type MessageTree, registerCatalog, useT } from "@intentic/ui/i18n";
 import type { Ref } from "vue";
 
 // The kit's translator, reachable without the component barrel: `index.ts` pulls in every .vue component, which breaks
@@ -13,8 +13,11 @@ import type { Ref } from "vue";
 /**
  * Translating an extension's own keys. A plain string rather than a checked union: an extension's catalog belongs to
  * its own package, and no schema on this side has ever seen it.
+ *
+ * `plural` picks between the forms a message separates with `|` — `t("rounds", { count }, count)` — and is the count
+ * the message interpolates, so English's two forms and Polish's three come out of the same call.
  */
-export type ExtensionT = (key: string, values?: Record<string, unknown>) => string;
+export type ExtensionT = (key: string, values?: Record<string, unknown>, plural?: number) => string;
 
 /**
  * One extension's translator, bound to the slice of the message tree the host mounted its catalog under. Keys are its
@@ -32,6 +35,21 @@ export type ExtensionT = (key: string, values?: Record<string, unknown>) => stri
  * the reader's language before it calls `activate`.
  */
 export const extensionT = (extensionId: string): ExtensionT => useT(`ext.${extensionId}`);
+
+/**
+ * Mounts an extension's own messages under its slice of the tree — what the HOST does before it calls `activate`, and
+ * what a test that calls `activate` itself has to do instead, or every label it asserts on reads as a dotted key.
+ *
+ * ```ts
+ * await registerExtensionMessages(extensionIdOf(manifest), messages);
+ * ```
+ *
+ * `base` (English) is live the moment this returns; the promise resolves once the reader's actual language is in hand.
+ */
+export const registerExtensionMessages = (
+    extensionId: string,
+    messages: { readonly base: MessageTree; readonly load: (locale: string) => Promise<{ readonly default: MessageTree }> },
+): Promise<void> => registerCatalog({ namespace: `ext.${extensionId}`, base: messages.base, load: (locale: string) => messages.load(locale) });
 
 /** The language on screen, for the rare contribution that formats something itself. Read-only: change it with nothing. */
 export const activeLocale: Readonly<Ref<Locale>> = active;

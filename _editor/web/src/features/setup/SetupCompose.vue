@@ -3,6 +3,9 @@ import { Code, useDevice } from "@intentic/ui";
 import { computed } from "vue";
 import type { ComposeArgs } from "./setupCompose";
 import { composeBootstrap, composeFile } from "./setupCompose";
+import { useT } from "@intentic/ui/i18n";
+
+const t = useT();
 
 /* The "Docker Compose" tab of setup's Run step: the same sandbox + tunnel connect.sh starts. */
 
@@ -17,28 +20,27 @@ const bootstrap = computed(() => composeBootstrap(props.args));
 
 <template>
     <div class="flex flex-col gap-3">
-<!-- What this tab is actually FOR, said before the YAML rather than left to be inferred from it. -->
+        <!-- What this tab is actually FOR, said before the YAML rather than left to be inferred from it. -->
         <p class="flex items-start gap-2 text-xs text-muted">
             <Icon name="eye" class="mt-0.5 shrink-0 text-subtle" />
-            <span class="min-w-0">No script runs on your machine: you read the file below in full, then start it yourself.</span>
+            <span class="min-w-0">{{ t(`setup.setupCompose.noScriptRunsOn`) }}</span>
         </p>
-        <Code :code="yaml" lang="yaml" label="1. Add these services to your docker-compose.yml" :wrap="false" :clamp-lines="mobile ? 8 : undefined" />
-        <Code :code="bootstrap" lang="bash" label="2. In the same folder: claim your .env, then start" :wrap="true" />
+        <Code :code="yaml" lang="yaml" :label="t(`setup.setupCompose.n1AddServicesTo`)" :wrap="false" :clamp-lines="mobile ? 8 : undefined" />
+        <Code :code="bootstrap" lang="bash" :label="t(`setup.setupCompose.n2InSameFolder`)" :wrap="true" />
         <p class="text-xs text-muted">
-            The first command redeems your setup code into a <code>.env</code> compose reads. Run it once; after that the sandbox is yours to manage
-            with <code>docker compose</code> (<code>up -d</code>, <code>down</code>, <code>logs</code>). Your workspace lives in the named volumes, so
-            <code>down</code>/<code>up</code> keeps it.
+            {{ t(`setup.setupCompose.firstCommandRedeemsSetup`) }} <code>.env</code> {{ t(`setup.setupCompose.composeReadsRunOnce`) }}
+            <code>docker compose</code> (<code>up -d</code>, <code>down</code>, <code>logs</code>{{ t(`setup.setupCompose.workspaceLivesInNamed`) }}
+            <code>down</code>/<code>up</code> {{ t(`setup.setupCompose.keeps`) }}
         </p>
         <p class="text-xs text-muted">
-            Desktop sync isn't part of the compose path. Once your workspace opens, enable it from its <b>Desktop sync</b> card.
+            {{ t(`setup.setupCompose.desktopSyncIsntPart`) }} <b>{{ t(`setup.setupCompose.desktopSync`) }}</b> {{ t(`setup.setupCompose.card`) }}
         </p>
         <p v-if="args.platformUrl" class="flex items-start gap-2 text-xs text-warning">
             <Icon name="box" class="mt-0.5 shrink-0" />
-<!-- min-w-0 + break-words: the image reference is one unbreakable token wider than a phone, and a flex child defaults to min-content width. -->
+            <!-- min-w-0 + break-words: the image reference is one unbreakable token wider than a phone, and a flex child defaults to min-content width. -->
             <span class="min-w-0 break-words"
-                >Local dev: compose pulls the <b>published</b> <code>{{ args.image }}</code> (not your local checkout, which compose can't rebuild),
-                and its <code>PLATFORM_URL</code> points at your machine, so run it here on the same machine as your dev platform. To deploy to a real
-                environment, generate this from that environment's platform instead.</span
+                >{{ t(`setup.setupCompose.localDevComposePulls`) }} <b>{{ t(`setup.setupCompose.published`) }}</b> <code>{{ args.image }}</code>
+                {{ t(`setup.setupCompose.notLocalCheckoutCompose`) }} <code>PLATFORM_URL</code> {{ t(`setup.setupCompose.pointsAtMachineRun`) }}</span
             >
         </p>
     </div>

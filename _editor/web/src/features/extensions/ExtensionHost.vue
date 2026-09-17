@@ -7,6 +7,9 @@ import { useExtensions } from "./useExtensions";
 import { usePanels } from "./usePanels";
 import { detectActivations } from "../../core-views/registry";
 import ExtensionView from "../../core-views/ExtensionView.vue";
+import { useT } from "@intentic/ui/i18n";
+
+const t = useT();
 
 /* Hosts one extension activation (/ext/:ext/:key?): re-runs the registry's detection over the live repo facts and capability manifest. */
 
@@ -33,10 +36,10 @@ const found = computed(() => {
 <template>
     <ExtensionView v-if="found" :extension="found.extension" :activation="found.activation" />
     <div v-else-if="disabledOwner" class="flex h-full flex-col items-center justify-center gap-2 text-center text-sm text-muted">
-        <p>{{ extensionIdOf(disabledOwner.manifest) }} is switched off.</p>
-        <RouterLink to="/sandbox/extensions" class="text-link hover:underline">Turn it back on in Sandbox → Extensions</RouterLink>
+        <p>{{ t(`extensions.extensionHost.switchedOff`, { manifest: extensionIdOf(disabledOwner.manifest) }) }}</p>
+        <RouterLink to="/sandbox/extensions" class="text-link hover:underline">{{ t(`extensions.extensionHost.turnBackOnIn`) }}</RouterLink>
     </div>
     <div v-else-if="!isLoading" class="flex h-full flex-col items-center justify-center gap-2 text-center text-sm text-muted">
-        <p>Nothing here: this view's content is no longer in the workspace.</p>
+        <p>{{ t(`extensions.extensionHost.nothingHereViewsContent`) }}</p>
     </div>
 </template>

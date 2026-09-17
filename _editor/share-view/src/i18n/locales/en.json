@@ -1,0 +1,15 @@
+{
+    "payload": {
+        "nothingSharedToAddress": "Nothing has been shared to this address.",
+        "pageMissingConversation": "This page is missing its conversation.",
+        "pagesConversationCouldNot": "This page's conversation could not be read."
+    },
+    "shareApp": {
+        "agentsWork": "with the agent's work",
+        "messagesOnly": "messages only",
+        "nothingToShow": "Nothing to show",
+        "runOwnAgents": ": run your own agents →",
+        "shared": "Shared from",
+        "thinking": "Thinking"
+    }
+}

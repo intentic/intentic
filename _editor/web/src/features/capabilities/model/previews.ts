@@ -1,4 +1,5 @@
 import { localModelMemory } from "@intentic/capability-catalog";
+import { t } from "@intentic/ui/i18n";
 
 // Computes a live summary sentence for form values whose consequences aren't obvious: wallet numbers
 // into a spending policy, a computer's switches into a grant, local model choices into a RAM bill.
@@ -48,27 +49,27 @@ export interface HostPreset {
 
 // Even "Full control" leaves destructive off: no preset hands over the machine's own files, only the sandboxes
 // on it, which `sandboxes` covers to the point of deleting them.
-export const HOST_PRESETS: readonly HostPreset[] = [
+export const hostPresets = (): readonly HostPreset[] => [
     {
         key: `observe`,
-        label: `Observe`,
+        label: t(`capabilities.previews.observe`),
         grants: { shell: `off`, write: `off`, screen: `on`, control: `off`, sandboxes: `off`, destructive: `off` },
     },
     {
         key: `operate`,
-        label: `Operate`,
+        label: t(`capabilities.previews.operate`),
         grants: { shell: `on`, write: `off`, screen: `on`, control: `off`, sandboxes: `off`, destructive: `off` },
     },
     {
         key: `full`,
-        label: `Full control`,
+        label: t(`capabilities.previews.fullControl`),
         grants: { shell: `on`, write: `on`, screen: `on`, control: `on`, sandboxes: `on`, destructive: `off` },
     },
 ];
 
 /** The preset the switches currently spell, or undefined when they are a hand-tuned mix. */
 export const matchHostPreset = (values: Readonly<Record<string, string>>): string | undefined =>
-    HOST_PRESETS.find((preset) => HOST_SWITCHES.every((key) => (values[key] ?? `off`) === preset.grants[key]))?.key;
+    hostPresets().find((preset) => HOST_SWITCHES.every((key) => (values[key] ?? `off`) === preset.grants[key]))?.key;
 
 // States only what is allowed, never what is blocked: listing every denied switch runs to several
 // lines and buries what's granted.

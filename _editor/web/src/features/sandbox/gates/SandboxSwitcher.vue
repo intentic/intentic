@@ -9,7 +9,7 @@ import {
     commandLang,
     ConfirmDialog,
     Notice,
-    OS_OPTIONS,
+    osOptions,
     SegmentedControl,
     useOsPreference,
 } from "@intentic/ui";
@@ -32,10 +32,13 @@ import { useSandbox } from "../client/useSandbox";
 import { useWorkspaceTree } from "../../workspace/explorer/useWorkspaceTree";
 import { manageDeviceSandbox, useHostRunning } from "../devices/useDevices";
 import { bashCommand, psCommand } from "../../../app/environments/scriptCommand";
+import { useT } from "@intentic/ui/i18n";
 
 // Rail control to switch between the user's sandboxes or add another; selecting one re-points every sandbox-backed
 // view and the liveness probe at the chosen daemon. Settings, access and everything else about the active sandbox
 // live on the tabbed /sandbox hub, opened from here.
+
+const t = useT();
 
 const sandbox = useSandbox();
 const { hasSnapshot } = useWorkspaceTree();
@@ -252,14 +255,14 @@ const confirmRemove = async (): Promise<void> => {
 </script>
 
 <template>
-<!-- The rail's top control: a live chip for the active sandbox, click to switch. -->
+    <!-- The rail's top control: a live chip for the active sandbox, click to switch. -->
     <span class="relative flex">
         <button
             ref="trigger"
             type="button"
             class="sandbox-switcher flex items-center justify-center overflow-hidden rounded-lg border border-line transition-colors hover:border-line-strong hover:bg-overlay hover:text-content"
             :class="route.path.startsWith('/sandbox') ? 'bg-primary-600/15 text-link' : 'bg-card text-muted'"
-            :aria-label="`Switch sandbox: ${switcherLabel}`"
+            :aria-label="t(`sandbox.sandboxSwitcher.switchSandbox`, { switcherLabel })"
             v-tooltip.right="switcherLabel"
             :aria-expanded="open"
             @click="open = !open"
@@ -274,7 +277,7 @@ const confirmRemove = async (): Promise<void> => {
         <!-- Inside the tile, on the same corner and at the same size as every badge on the rail below it: this is
              the same object saying the same kind of thing, and hanging it outside made it look like a different one. -->
         <ViewBadgeChip :badge="attentionBadge" class="sandbox-switcher-mark pointer-events-none absolute right-0.5 top-0.5" aria-hidden="true" />
-<!-- The rail's running mark, in the one corner this tile has spare: its bottom right is the connection dot, which is
+        <!-- The rail's running mark, in the one corner this tile has spare: its bottom right is the connection dot, which is
      a different kind of thing and the one thing here that must never be crowded. The sentence rides the control's own
      label, since a tooltip on a mark inside a tooltipped button nests inside it. -->
         <TileMark
@@ -294,7 +297,7 @@ const confirmRemove = async (): Promise<void> => {
         <div class="flex w-60 flex-col gap-0.5 p-1">
             <!-- The badge's detail: one row per pending item, routing to the hub tab that resolves it. -->
             <template v-if="attention.length > 0">
-                <div class="px-2 py-1.5 text-2xs font-semibold uppercase tracking-wide text-subtle">Needs you</div>
+                <div class="px-2 py-1.5 text-2xs font-semibold uppercase tracking-wide text-subtle">{{ t(`sandbox.sandboxSwitcher.needs`) }}</div>
                 <RouterLink
                     v-for="item in attention"
                     :key="item.message"
@@ -313,7 +316,9 @@ const confirmRemove = async (): Promise<void> => {
 
             <!-- Things simply true (a contended port, a newer image): found on arrival, not advertised by the badge. -->
             <template v-if="attentionNotes.length > 0">
-                <div class="px-2 py-1.5 text-2xs font-semibold uppercase tracking-wide text-subtle">Worth knowing</div>
+                <div class="px-2 py-1.5 text-2xs font-semibold uppercase tracking-wide text-subtle">
+                    {{ t(`sandbox.sandboxSwitcher.worthKnowing`) }}
+                </div>
                 <RouterLink
                     v-for="item in attentionNotes"
                     :key="item.message"
@@ -330,7 +335,7 @@ const confirmRemove = async (): Promise<void> => {
                 <div class="my-1 border-t border-line"></div>
             </template>
 
-            <div class="px-2 py-1.5 text-2xs font-semibold uppercase tracking-wide text-subtle">Sandboxes</div>
+            <div class="px-2 py-1.5 text-2xs font-semibold uppercase tracking-wide text-subtle">{{ t(`sandbox.sandboxSwitcher.sandboxes`) }}</div>
 
             <button
                 v-for="(option, at) in switchable"
@@ -357,17 +362,19 @@ const confirmRemove = async (): Promise<void> => {
                 <span
                     v-else-if="answered(option) && attentionFor(option)! > 0"
                     class="ui-status-pill shrink-0 bg-warning/15 text-2xs font-semibold leading-4 text-warning"
-                    v-tooltip.top="`${attentionFor(option)} waiting for you in ${option.name}`"
+                    v-tooltip.top="t(`sandbox.sandboxSwitcher.waitingIn`, { option: attentionFor(option), name: option.name })"
                     >{{ attentionFor(option) }}</span
                 >
                 <span
                     v-else-if="!answered(option)"
                     class="shrink-0 px-1 text-2xs leading-4 text-subtle"
-                    v-tooltip.top="`${option.name} isn't answering, so what's waiting there isn't known`"
-                    aria-label="Not answering"
+                    v-tooltip.top="t(`sandbox.sandboxSwitcher.isntAnsweringWhatsWaiting`, { name: option.name })"
+                    :aria-label="t(`sandbox.sandboxSwitcher.notAnswering`)"
                     >&ndash;</span
                 >
-                <span v-if="option.role !== 'owner'" class="ui-status-pill shrink-0 bg-content/10 text-2xs font-medium text-subtle">Shared</span>
+                <span v-if="option.role !== 'owner'" class="ui-status-pill shrink-0 bg-content/10 text-2xs font-medium text-subtle">{{
+                    t(`sandbox.sandboxSwitcher.shared`)
+                }}</span>
                 <!-- Which digit this row is, the only place the chord can be learned; fades under the trash icon's hover. -->
                 <kbd
                     v-if="slotChord(at)"
@@ -377,7 +384,7 @@ const confirmRemove = async (): Promise<void> => {
                 <Icon
                     name="trash"
                     @click.stop="askRemove(option)"
-                    v-tooltip.top="option.role === 'owner' ? 'Remove from account' : 'Leave'"
+                    v-tooltip.top="option.role === 'owner' ? t(`sandbox.sandboxSwitcher.removeAccount`) : t(`sandbox.sandboxSwitcher.leave`)"
                     class="shrink-0 text-xs opacity-0 transition-opacity hover:text-danger group-hover:opacity-60"
                 />
             </button>
@@ -390,13 +397,15 @@ const confirmRemove = async (): Promise<void> => {
                 <span class="flex h-5 w-5 shrink-0 items-center justify-center">
                     <Icon name="plus" class="text-xs text-muted" />
                 </span>
-                Add sandbox
+                {{ t(`sandbox.sandboxSwitcher.addSandbox`) }}
             </RouterLink>
 
-<!-- Setups that were never finished, as their own section below Add sandbox, since they're errands, not places to go. -->
+            <!-- Setups that were never finished, as their own section below Add sandbox, since they're errands, not places to go. -->
             <template v-if="unfinished.length > 0">
                 <div class="my-1 border-t border-line"></div>
-                <div class="px-2 py-1.5 text-2xs font-semibold uppercase tracking-wide text-subtle">Unfinished setup</div>
+                <div class="px-2 py-1.5 text-2xs font-semibold uppercase tracking-wide text-subtle">
+                    {{ t(`sandbox.sandboxSwitcher.unfinishedSetup`) }}
+                </div>
                 <RouterLink
                     v-for="option in unfinished"
                     :key="option.id"
@@ -407,13 +416,13 @@ const confirmRemove = async (): Promise<void> => {
                     <span class="flex h-5 w-5 shrink-0 items-center justify-center text-subtle">
                         <Icon name="wrench" class="text-xs" />
                     </span>
-                    <span class="min-w-0 flex-1 truncate text-muted">Finish setting up {{ option.name }}</span>
+                    <span class="min-w-0 flex-1 truncate text-muted">{{ t(`sandbox.sandboxSwitcher.finishSettingUp`, { name: option.name }) }}</span>
                     <Icon name="chevron-right" class="shrink-0 text-2xs text-subtle transition-opacity group-hover:opacity-0" />
                     <!-- In flow, not overlaid, so hovering never shifts the text; `.prevent` stops the anchor firing too. -->
                     <Icon
                         name="trash"
                         @click.prevent.stop="askRemove(option)"
-                        v-tooltip.top="option.role === 'owner' ? 'Remove from account' : 'Leave'"
+                        v-tooltip.top="option.role === 'owner' ? t(`sandbox.sandboxSwitcher.removeAccount`) : t(`sandbox.sandboxSwitcher.leave`)"
                         class="shrink-0 text-xs opacity-0 transition-opacity hover:text-danger group-hover:opacity-60"
                     />
                 </RouterLink>
@@ -430,15 +439,15 @@ const confirmRemove = async (): Promise<void> => {
                 <span class="flex h-5 w-5 shrink-0 items-center justify-center">
                     <Icon name="cog" class="text-xs text-muted" />
                 </span>
-                Sandbox settings
+                {{ t(`sandbox.sandboxSwitcher.sandboxSettings`) }}
             </RouterLink>
         </div>
     </AnchoredOverlay>
 
     <ConfirmDialog
         :open="pending !== undefined"
-        :header="pending?.role === 'owner' ? 'Remove from account?' : 'Leave sandbox?'"
-        :confirm-label="pending?.role === 'owner' ? 'Remove' : 'Leave'"
+        :header="pending?.role === 'owner' ? t(`sandbox.sandboxSwitcher.removeAccount2`) : t(`sandbox.sandboxSwitcher.leaveSandbox`)"
+        :confirm-label="pending?.role === 'owner' ? t(`ui.action.remove`) : t(`sandbox.sandboxSwitcher.leave`)"
         confirm-icon="trash"
         :loading="deletingThere"
         @cancel="pending = undefined"
@@ -448,29 +457,35 @@ const confirmRemove = async (): Promise<void> => {
             {{
                 pending.role === "owner"
                     ? pending.hosted !== null
-                        ? `Remove "${pending.name}"? Its hosted machine is destroyed with it: everything on it, including its files, is gone for good.`
-                        : `Remove "${pending.name}" from your account? Everyone loses access here; the sandbox itself keeps running wherever it is.`
-                    : `Leave "${pending.name}"? You lose access; the sandbox keeps running.`
+                        ? t(`sandbox.sandboxSwitcher.removeHostedMachineDestroyed`, { name: pending.name })
+                        : t(`sandbox.sandboxSwitcher.removeAccountEveryoneLoses`, { name: pending.name })
+                    : t(`sandbox.sandboxSwitcher.leaveLoseAccessSandbox`, { name: pending.name })
             }}
         </p>
         <!-- The hosted lane is the only removal that destroys a machine; no cleanup command, since nothing else exists. -->
         <template v-if="pending?.role === 'owner' && pending.hosted === null && cleanupCommand !== undefined">
-<!-- The machine is one of the owner's connected devices, so this is a tick box rather than a command: the same removal the Devices tab's own button runs. -->
+            <!-- The machine is one of the owner's connected devices, so this is a tick box rather than a command: the same removal the Devices tab's own button runs. -->
             <template v-if="cleanupHost !== undefined">
                 <label class="mt-3 flex items-start gap-2 text-sm text-muted">
                     <!-- Same plain box the extension cards use; the kit has no checkbox component, on purpose. -->
                     <input v-model="alsoDeleteThere" type="checkbox" :disabled="deletingThere" class="mt-0.5" />
                     <span>
-                        Also delete it from <span class="font-medium text-content">{{ cleanupHost }}</span> — the container, its files and its history
-                        there are gone for good.
+                        {{ t(`sandbox.sandboxSwitcher.alsoDelete`) }} <span class="font-medium text-content">{{ cleanupHost }}</span>
+                        {{ t(`sandbox.sandboxSwitcher.containerFilesHistoryGone`) }}
                     </span>
                 </label>
                 <Notice v-if="thereFailed" tone="danger" class="mt-2 text-2xs">{{ thereFailed }}</Notice>
             </template>
             <template v-else>
-                <p class="mt-3 text-sm text-muted">To also remove it from the machine hosting it: including its files, run there:</p>
-                <SegmentedControl class="mt-2" v-model="cmdOs" :options="OS_OPTIONS" />
-                <Code class="mt-1.5" :code="cleanupCommand" :lang="commandLang(cmdOs)" label="Cleanup command" :wrap="true" />
+                <p class="mt-3 text-sm text-muted">{{ t(`sandbox.sandboxSwitcher.toAlsoRemoveMachine`) }}</p>
+                <SegmentedControl class="mt-2" v-model="cmdOs" :options="osOptions()" />
+                <Code
+                    class="mt-1.5"
+                    :code="cleanupCommand"
+                    :lang="commandLang(cmdOs)"
+                    :label="t(`sandbox.sandboxSwitcher.cleanupCommand`)"
+                    :wrap="true"
+                />
             </template>
         </template>
     </ConfirmDialog>

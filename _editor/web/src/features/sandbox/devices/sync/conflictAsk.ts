@@ -1,5 +1,6 @@
 import { clearableOnDevice, type DeviceConflict, HOST_NATIVE_ENVIRONMENT, hostCardOf, hostEnvironmentOf } from "@intentic/sandbox-contract";
 import { composeAsk } from "@intentic/sandbox-contract/chores";
+import { t } from "@intentic/ui/i18n";
 
 // Builds the turn prompt for resolving a stuck file-sync conflict: per-file judgement a switch cannot make,
 // offered because an agent here can reach both ends (the sandbox's copy directly, the device's through its own
@@ -103,7 +104,7 @@ export const conflictAsk = ({ machine, hostId, localDir, conflicts, conflictedPa
                       : []),
               ].join(`\n`);
     return {
-        hint: `Start an agent on it: it reads both copies of each stuck file and makes the two ends agree.`,
+        hint: t(`sandbox.conflictAsk.startAgentOnReads`),
         prompt: composeAsk({
             subject: `Resolve the ${conflicts === 1 ? `file-sync conflict` : `${conflicts} file-sync conflicts`} between this sandbox and "${machine}", the owner's own computer.`,
             why:

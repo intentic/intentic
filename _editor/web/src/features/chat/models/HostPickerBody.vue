@@ -10,6 +10,9 @@ import { usePickerRunSettings } from "./pickerRunSettings";
 import ModelPicker from "./ModelPicker.vue";
 import PickerAccounts from "../accounts/PickerAccounts.vue";
 import PickerRunSettings from "./PickerRunSettings.vue";
+import { useT } from "@intentic/ui/i18n";
+
+const t = useT();
 
 /* The shell picker contains choices, run settings, and its commit action. */
 
@@ -79,11 +82,8 @@ const choose = (entry: PickerEntry): void => {
         @close="dismissModelPick()"
     >
         <template #footer>
-<!-- Picker and composer share the footer metrics. -->
-            <div
-                v-if="footerVisible"
-                class="flex min-h-0 shrink flex-col gap-2 overflow-y-auto border-t border-line bg-canvas px-3 py-2"
-            >
+            <!-- Picker and composer share the footer metrics. -->
+            <div v-if="footerVisible" class="flex min-h-0 shrink flex-col gap-2 overflow-y-auto border-t border-line bg-canvas px-3 py-2">
                 <PickerAccounts
                     v-if="hasContent"
                     :provider="request.provider"
@@ -108,33 +108,33 @@ const choose = (entry: PickerEntry): void => {
             </div>
         </template>
 
-<!-- THE END OF THE PANEL, and the whole reason it now has one. -->
+        <!-- THE END OF THE PANEL, and the whole reason it now has one. -->
         <template #commit>
             <div class="sticky bottom-0 z-10 flex shrink-0 flex-col gap-1.5 border-t border-line bg-canvas px-3 py-2">
                 <span class="truncate text-2xs" :class="chosen ? `text-subtle` : `text-muted`">{{ spend }}</span>
-<!-- OVER AN ATTEMPT, THE BAR IS ABOUT THE ATTEMPT (hostModelPicker.ts, AttemptOnOffer): the line names it and the verbs say what the press does to it. -->
+                <!-- OVER AN ATTEMPT, THE BAR IS ABOUT THE ATTEMPT (hostModelPicker.ts, AttemptOnOffer): the line names it and the verbs say what the press does to it. -->
                 <template v-if="request.attempt">
                     <p class="truncate text-2xs text-muted" :title="request.attempt.summary">{{ request.attempt.summary }}</p>
                     <div class="flex gap-1.5">
                         <Button
                             v-if="request.attempt.continuable"
-                            label="Continue"
+                            :label="t(`ui.action.continue`)"
                             class="flex-1"
                             :disabled="!chosen"
-                            v-tooltip.top="`Carries on in the same conversation, on the model above — ⌘/Ctrl + Enter`"
+                            v-tooltip.top="t(`chat.hostPickerBody.carriesOnInSame`)"
                             @click="commitModelPick(`continue`)"
                         >
                             <template #icon><Icon name="play" /></template>
                         </Button>
                         <Button
-                            label="Start over"
+                            :label="t(`chat.hostPickerBody.startOver`)"
                             class="flex-1"
                             :severity="request.attempt.continuable ? `secondary` : undefined"
                             :disabled="!chosen"
                             v-tooltip.top="
                                 request.attempt.continuable
-                                    ? `Files that attempt away and opens a fresh conversation on a clean worktree; nothing is carried over`
-                                    : `Stops and files that attempt away, then opens a fresh conversation on a clean worktree — ⌘/Ctrl + Enter`
+                                    ? t(`chat.hostPickerBody.filesAttemptAwayOpens`)
+                                    : t(`chat.hostPickerBody.stopsFilesAttemptAway`)
                             "
                             @click="commitModelPick(`start-over`)"
                         >
@@ -147,7 +147,7 @@ const choose = (entry: PickerEntry): void => {
                     :label="request.action"
                     class="w-full"
                     :disabled="!chosen"
-                    v-tooltip.top="`${request.action} — ⌘/Ctrl + Enter`"
+                    v-tooltip.top="t(`chat.hostPickerBody.ctrlEnter`, { action: request.action })"
                     @click="commitModelPick()"
                 >
                     <template #icon><Icon name="play" /></template>

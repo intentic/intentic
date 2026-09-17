@@ -7,6 +7,9 @@ import { apiClient } from "../../lib/useApi";
 import { useAuth } from "../auth/useAuth";
 import { useSandbox } from "../sandbox/client/useSandbox";
 import { useHubWork } from "../../shell/hub/hubWork";
+import { useT } from "@intentic/ui/i18n";
+
+const t = useT();
 
 /* Data & privacy: GDPR self-service: export everything the platform stores about the account, or delete it. */
 
@@ -56,26 +59,39 @@ const confirmDelete = async (): Promise<void> => {
 
 <template>
     <div class="flex flex-col gap-6">
-        <RowGroup label="Data &amp; privacy">
-            <Row icon="download" title="Export my data">
+        <RowGroup :label="t(`settings.settingsData.dataPrivacy`)">
+            <Row icon="download" :title="t(`settings.settingsData.exportMyData`)">
                 <template #control>
-                    <Button label="Export" severity="secondary" size="small" :loading="exporting" @click="exportData" />
+                    <Button :label="t(`settings.settingsData.export`)" severity="secondary" size="small" :loading="exporting" @click="exportData" />
                 </template>
             </Row>
             <Row
                 icon="trash"
                 tone="danger"
-                title="Delete account"
-                description="Permanently removes your account, shared access, and any hosted plan: the subscription is cancelled with it."
+                :title="t(`settings.settingsData.deleteAccount`)"
+                :description="t(`settings.settingsData.permanentlyRemovesAccountShared`)"
             >
                 <template #control>
-                    <Button v-if="!confirmingDelete" label="Delete" severity="danger" size="small" @click="confirmingDelete = true" />
+                    <Button v-if="!confirmingDelete" :label="t(`ui.action.delete`)" severity="danger" size="small" @click="confirmingDelete = true" />
                 </template>
                 <template v-if="confirmingDelete || deleteError" #below>
                     <div v-if="confirmingDelete" class="flex items-center justify-end gap-2">
-                        <span class="mr-auto text-2xs text-subtle">Are you sure? Access is revoked before anything is deleted.</span>
-                        <Button label="Cancel" severity="secondary" text size="small" :disabled="deleting" @click="confirmingDelete = false" />
-                        <Button label="Delete my account" severity="danger" size="small" :loading="deleting" @click="confirmDelete" />
+                        <span class="mr-auto text-2xs text-subtle">{{ t(`settings.settingsData.sureAccessRevokedBefore`) }}</span>
+                        <Button
+                            :label="t(`ui.action.cancel`)"
+                            severity="secondary"
+                            text
+                            size="small"
+                            :disabled="deleting"
+                            @click="confirmingDelete = false"
+                        />
+                        <Button
+                            :label="t(`settings.settingsData.deleteMyAccount`)"
+                            severity="danger"
+                            size="small"
+                            :loading="deleting"
+                            @click="confirmDelete"
+                        />
                     </div>
                     <p v-if="deleteError" class="mt-2 text-2xs text-danger">{{ deleteError }}</p>
                 </template>

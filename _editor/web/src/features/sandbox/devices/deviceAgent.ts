@@ -7,10 +7,11 @@ import {
     type AgentNote,
     type AgentPanel,
     agentSkewNote,
-    RESTART_AGENT,
+    restartAgent,
 } from "@intentic/ui/device-agent";
 import { agentBehind, deviceReconnecting } from "./deviceFacts";
 import type { DeviceRow } from "./deviceRows";
+import { t } from "@intentic/ui/i18n";
 
 // What this sandbox's device registry knows about one machine's agent, folded into the kit's AgentPanel —
 // the shape <DeviceAgentGroup> draws on both this tab and the desktop app's manager window. The wording every
@@ -29,15 +30,15 @@ export type DeviceAgentPanel = AgentPanel<DeviceAgentOp>;
 // Worded for a current agent as much as a stale one, since it is offered on both: "the newest there is",
 // never "the newest we know of", because the device resolves that for itself when it downloads. This hint is
 // where the panel keeps what it no longer says out loud — what an update touches, and what it leaves alone.
-const UPGRADE: AgentAction<DeviceAgentOp> = {
+const upgrade = (): AgentAction<DeviceAgentOp> => ({
     op: `upgrade`,
-    label: `Update agent`,
-    hint: `Fetches the newest agent onto this device, installs it, and restarts its loop — the one process this sandbox reaches the device through. Safe on an agent that is already current; its folders, pairings and mirrored ports are untouched either way.`,
-};
+    label: t(`sandbox.deviceAgent.updateAgent`),
+    hint: t(`sandbox.deviceAgent.fetchesNewestAgentOnto`),
+});
 
 // Update leads: it is the errand people come to this group for, and it restarts the loop on its way past,
 // which makes Restart the narrower of the two rather than the first thing to try.
-const ACTIONS: readonly AgentAction<DeviceAgentOp>[] = [UPGRADE, RESTART_AGENT];
+const ACTIONS: readonly AgentAction<DeviceAgentOp>[] = [upgrade(), restartAgent()];
 
 // Every verb here travels over the device's own outbound socket, so a machine not holding one gets the
 // sentence without the controls. Wider than the container verbs' `commandable`, by one case: a device
@@ -49,43 +50,43 @@ const reachable = (device: Device): boolean =>
 
 // Why this machine has no buttons, as the shortest true clause plus the long form on hover. Each gap the
 // concerns strip also covers is named here in a few words rather than restated in full.
-const GAP_BLOCKED: Record<NonNullable<Device[`gap`]>, AgentNote> = {
+const gapBlocked = (): Record<NonNullable<Device[`gap`]>, AgentNote> => ({
     offline: { text: `Not answering — nothing can run on it.`, icon: `moon` },
     "scope-off": {
         text: `"Run commands" is off.`,
         icon: `lock`,
-        hint: `Running anything on this device needs "Run commands" on its capability card, and that switch is off.`,
+        hint: t(`sandbox.deviceAgent.runningAnythingOnDevice`),
     },
-    "no-agent": { text: `No agent to update.`, icon: `lock`, hint: `Its capability card hands out the command that installs one.` },
+    "no-agent": { text: `No agent to update.`, icon: `lock`, hint: t(`sandbox.deviceAgent.capabilityCardHandsOut`) },
     // Never reached: an unreported device keeps its buttons (see `reachable`). Present so the map stays total.
-    unreported: { text: `Hasn't reported yet.`, icon: `moon`, hint: `Nothing here knows what this device's agent is.` },
-};
+    unreported: { text: `Hasn't reported yet.`, icon: `moon`, hint: t(`sandbox.deviceAgent.nothingHereKnowsWhat`) },
+});
 
-const SYNC_ONLY: AgentNote = {
+const syncOnly = (): AgentNote => ({
     text: `Enrolled for syncing only.`,
     icon: `lock`,
-    hint: `Updating its agent runs a command on it, which needs the machine connected as a device, not just syncing folders and ports.`,
-};
+    hint: t(`sandbox.deviceAgent.updatingAgentRunsCommand`),
+});
 
 // The one case with no errand in it, and the only line on screen while it holds: the concerns strip stands down
 // for a socket this young (deviceAttention.ts), so this is what explains the missing buttons.
-const RECONNECTING: AgentNote = {
+const reconnecting = (): AgentNote => ({
     text: `Reconnecting — its buttons come back with it.`,
     icon: `sync`,
-    hint: `Its socket dropped a moment ago, which is what restarting an agent does. A fresh loop dials back in by itself, and nothing can be run on the machine until it has.`,
-};
+    hint: t(`sandbox.deviceAgent.socketDroppedMomentAgo`),
+});
 
 const blockedWhy = (device: Device, readAt: number): AgentNote | undefined => {
     if (reachable(device)) {
         return undefined;
     }
     if (device.hostId === undefined) {
-        return SYNC_ONLY;
+        return syncOnly();
     }
     if (deviceReconnecting(device, readAt)) {
-        return RECONNECTING;
+        return reconnecting();
     }
-    return device.gap === undefined ? GAP_BLOCKED.offline : GAP_BLOCKED[device.gap];
+    return device.gap === undefined ? gapBlocked().offline : gapBlocked()[device.gap];
 };
 
 // Two states only a registry can be in, ahead of the loop's own three (agentLoopState).
@@ -110,7 +111,7 @@ const publishedNote = (row: DeviceRow, latest: string): AgentNote => {
     return {
         text: held === undefined ? `Agent ${latest} has been published.` : `Agent ${latest} has been published; this device has ${held}.`,
         tone: `info`,
-        hint: `Update agent fetches it, installs it, and restarts the loop on that device.`,
+        hint: t(`sandbox.deviceAgent.updateAgentFetchesInstalls`),
     };
 };
 

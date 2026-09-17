@@ -1,19 +1,25 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import Icon from "../primitives/Icon.vue";
+import { useT } from "../../i18n/index.js";
 
 // The open project as a chip, and the way out of it: one control for every surface the project scope narrows (the
 // file tree, the agents board, an extension's rows), so the shell says "web · 3 hidden" the same way everywhere.
 // Draws nothing while no project is open, which needs no marker. `hidden` is what THIS surface put out of sight,
 // counted in its own rows; `noun` names them for the tooltip. Clearing is the caller's, since the scope is the shell's.
 
-const { project, hidden = 0, noun = `rows`, compact = false } = defineProps<{ project?: string | undefined; hidden?: number; noun?: string; compact?: boolean }>();
+const t = useT();
+
+const {
+    project,
+    hidden = 0,
+    noun = `rows`,
+    compact = false,
+} = defineProps<{ project?: string | undefined; hidden?: number; noun?: string; compact?: boolean }>();
 const emit = defineEmits<{ clear: [] }>();
 
 const hint = computed(() =>
-    project === undefined
-        ? ``
-        : `Showing ${noun} on ${project} only${hidden > 0 ? `, ${hidden} elsewhere` : ``}. Click to show every project's.`,
+    project === undefined ? `` : `Showing ${noun} on ${project} only${hidden > 0 ? `, ${hidden} elsewhere` : ``}. Click to show every project's.`,
 );
 </script>
 
@@ -29,7 +35,7 @@ const hint = computed(() =>
         <Icon name="folder-open" class="shrink-0 text-[0.7rem]" />
         <!-- `compact` drops the name on a narrow bar; the tooltip and the rail tile still say which project. -->
         <span class="max-w-32 truncate" :class="{ 'max-lg:hidden': compact }">{{ project }}</span>
-        <span v-if="hidden > 0" class="text-subtle" :class="{ 'max-lg:hidden': compact }">· {{ hidden }} hidden</span>
+        <span v-if="hidden > 0" class="text-subtle" :class="{ 'max-lg:hidden': compact }">{{ t(`ui.projectChip.hidden`, { hidden }) }}</span>
         <Icon name="times" class="shrink-0 text-[0.6rem] opacity-70" />
     </button>
 </template>

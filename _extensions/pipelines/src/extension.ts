@@ -2,6 +2,7 @@ import type { ExtensionContext, IntenticApi } from "@intentic/extension-api";
 import { ciBadge, startCiAttention } from "./ciAttention";
 import { ciRunsQuery } from "./ciRunsQuery";
 import { bindHost } from "./host";
+import { t } from "./i18n.js";
 
 // Binds the host, starts the badge poll, then registers the Pipelines rail view; shown when a github/gitlab capability
 // is present, not tied to specific repos.
@@ -12,7 +13,7 @@ export const activate = (api: IntenticApi, context: ExtensionContext): void => {
     context.subscriptions.push(
         api.views.register({
             id: `pipelines`,
-            label: `Pipelines`,
+            label: t(`extension.pipelines`),
             surface: `rail`,
             detect: (_repos, capabilities) =>
                 capabilities.some(
@@ -24,7 +25,7 @@ export const activate = (api: IntenticApi, context: ExtensionContext): void => {
                        * a silhouette in a 44px column is worse than either being slightly less apt (the argument
                        * ext-maintenance already made against `list-check`). A bolt says "this fires on its own and
                        * either lands or doesn't", which is the whole of what the tile reports. */
-                      [{ key: `pipelines`, title: `Pipelines`, icon: `bolt` }]
+                      [{ key: `pipelines`, title: t(`extension.pipelines`), icon: `bolt` }]
                     : [],
             // Counts branches whose last commit is red; viewing the board does not clear it.
             badge: () => ciBadge(),

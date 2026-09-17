@@ -1,4 +1,5 @@
 import type { IconName } from "@intentic/ui";
+import { t } from "@intentic/ui/i18n";
 
 // The sandbox hub's index, as a table rather than markup: the hub draws these rows with their live badges, and the
 // command palette turns the same rows into "Sandbox: …" destinations. One source, so a section added here cannot be
@@ -23,50 +24,58 @@ export interface SandboxSectionGroup {
 export const SANDBOX_DEFAULT_SECTION = `overview`;
 
 // No live-status row or badge; Devices' contended-port count is the only thing here anyone looks for.
-export const SANDBOX_SECTION_GROUPS: readonly SandboxSectionGroup[] = [
+export const sandboxSectionGroups = (): readonly SandboxSectionGroup[] => [
     {
         key: `box`,
-        label: `This box`,
+        label: t(`sandbox.sandboxNav.box`),
         items: [
-            { slug: `overview`, label: `Overview`, icon: `info-circle` },
+            { slug: `overview`, label: t(`sandbox.sandboxNav.overview`), icon: `info-circle` },
             // Clock, not a bank card: plan allowances and reopen time; billing itself lives in Settings ▸ Billing.
-            { slug: `usage`, label: `Usage`, icon: `clock`, maintainer: true },
+            { slug: `usage`, label: t(`sandbox.sandboxNav.usage`), icon: `clock`, maintainer: true },
         ],
     },
     {
         key: `configuration`,
-        label: `Configuration`,
+        label: t(`sandbox.sandboxNav.configuration`),
         items: [
-            { slug: `environment`, label: `Environment`, icon: `box` },
-            { slug: `secrets`, label: `Secrets`, icon: `key`, maintainer: true },
-            { slug: `agent`, label: `Agent`, icon: `sparkles`, maintainer: true },
+            { slug: `environment`, label: t(`sandbox.sandboxNav.environment`), icon: `box` },
+            { slug: `secrets`, label: t(`sandbox.sandboxNav.secrets`), icon: `key`, maintainer: true },
+            { slug: `agent`, label: t(`sandbox.sandboxNav.agent`), icon: `sparkles`, maintainer: true },
             // Finding, installing, managing and disabling as one.
-            { slug: `extensions`, label: `Extensions`, icon: `sliders-h` },
+            { slug: `extensions`, label: t(`sandbox.sandboxNav.extensions`), icon: `sliders-h` },
         ],
     },
     {
         key: `reach`,
-        label: `Reach`,
+        label: t(`sandbox.sandboxNav.reach`),
         items: [
             // Who may use this box: members, invites, roles. `shield`, not `users` (Personas' glyph, one row below).
             // Access stays below maintainer: revoking your own grant is anyone's.
-            { slug: `access`, label: `Access`, icon: `shield` },
+            { slug: `access`, label: t(`sandbox.sandboxNav.access`), icon: `shield` },
             // Who this box acts as outward; not beside `agent` in Configuration, easy to conflate, opposite in stakes.
-            { slug: `personas`, label: `Personas`, icon: `user`, maintainer: true },
+            { slug: `personas`, label: t(`sandbox.sandboxNav.personas`), icon: `user`, maintainer: true },
             // "Devices", not "Sync": a machine is the thing that has folders, ports and sandboxes on it, and the
             // enrollment this tab used to be named after is one property of one of them.
-            { slug: `devices`, label: `Devices`, icon: `desktop`, maintainer: true },
+            { slug: `devices`, label: t(`sandbox.sandboxNav.devices`), icon: `desktop`, maintainer: true },
         ],
     },
 ];
 
-/** Every built-in slug, derived from the rows themselves so adding a section cannot forget to guard its name. */
-export const SANDBOX_BUILT_IN_SLUGS: ReadonlySet<string> = new Set(
-    SANDBOX_SECTION_GROUPS.flatMap((group) => group.items).map((section) => section.slug),
-);
+/**
+ * Every built-in slug, derived from the rows themselves so adding a section cannot forget to guard its name. A
+ * function, not a constant: the rows carry words now, and at import time no catalog is registered to read them from.
+ */
+export const sandboxBuiltInSlugs = (): ReadonlySet<string> =>
+    new Set(
+        sandboxSectionGroups()
+            .flatMap((group) => group.items)
+            .map((section) => section.slug),
+    );
 
 /** The sections this reader can actually open; anything else would land on a row the hub redirects away from. */
 export const sandboxSections = (canShip: boolean): readonly SandboxSection[] =>
-    SANDBOX_SECTION_GROUPS.flatMap((group) => group.items).filter((section) => canShip || section.maintainer !== true);
+    sandboxSectionGroups()
+        .flatMap((group) => group.items)
+        .filter((section) => canShip || section.maintainer !== true);
 
 export const sandboxSectionPath = (slug: string): string => (slug === SANDBOX_DEFAULT_SECTION ? `/sandbox` : `/sandbox/${slug}`);

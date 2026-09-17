@@ -16,7 +16,7 @@ const tip = (item: BarItem): string => item.display ?? item.value.toLocaleString
 </script>
 
 <template>
-<!-- The vertical margin belongs to a figure standing in PROSE. -->
+    <!-- The vertical margin belongs to a figure standing in PROSE. -->
     <figure class="flex flex-col gap-2" :class="title !== undefined ? `my-4` : ``">
         <!-- The title names what is plotted, which is what lets a single-series figure skip a legend box. -->
         <figcaption v-if="title !== undefined" class="text-xs font-medium text-content">{{ title }}</figcaption>
@@ -35,13 +35,13 @@ const tip = (item: BarItem): string => item.display ?? item.value.toLocaleString
                     >{{ item.label }}</span
                 >
                 <div class="min-w-0">
-<!-- 10px thick, 4px rounded data-end, square at the baseline it grows from. -->
+                    <!-- 10px thick, 4px rounded data-end, square at the baseline it grows from. -->
                     <div
                         class="h-2.5 min-w-px rounded-r-xs"
                         :style="{ width: `${(item.value / max) * 100}%`, background: seriesColor(item.accent) }"
                     />
                 </div>
-<!-- tabular-nums here and NOT on a stat tile's value: this is a column of numbers that must align vertically. -->
+                <!-- tabular-nums here and NOT on a stat tile's value: this is a column of numbers that must align vertically. -->
                 <span class="justify-self-end text-2xs tabular-nums text-muted">{{ tip(item) }}</span>
             </li>
         </ul>

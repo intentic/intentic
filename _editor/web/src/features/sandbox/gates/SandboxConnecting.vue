@@ -9,10 +9,13 @@ import { useSandbox } from "../client/useSandbox";
 import { useGoogleIdentity } from "../../auth/useGoogleIdentity";
 import { restartExpected } from "../live/sandboxRestart";
 import { connectionNotice } from "./connectionNotice";
+import { useT } from "@intentic/ui/i18n";
 
 // Shown whenever the active sandbox's daemon isn't reachable. What it says is a pure function of the classified
 // failure (connectionNotice), so setup, sign-in and account-mismatch causes each get their own words and action.
 // Flips to the real views the moment the daemon answers.
+
+const t = useT();
 
 const { active, connection, activeWakeRefused } = useSandbox();
 const { clearCredential } = useGoogleIdentity();
@@ -66,7 +69,7 @@ const signIn = async (): Promise<void> => {
 </script>
 
 <template>
-<!-- The spinner follows what the notice says is still expected, not whether there's a button. -->
+    <!-- The spinner follows what the notice says is still expected, not whether there's a button. -->
     <GateCard icon="box" :title="notice.title" :spinner="notice.waiting">
         <p class="text-sm text-muted">{{ notice.body }}</p>
         <template #actions>
@@ -80,13 +83,7 @@ const signIn = async (): Promise<void> => {
             >
                 <template #icon><Icon name="arrow-right" /></template>
             </Button>
-            <Button
-                v-else-if="notice.action?.kind === `signin`"
-                :label="notice.action.label"
-                icon-pos="right"
-                severity="secondary"
-                @click="signIn"
-            >
+            <Button v-else-if="notice.action?.kind === `signin`" :label="notice.action.label" icon-pos="right" severity="secondary" @click="signIn">
                 <template #icon><Icon name="arrow-right" /></template>
             </Button>
             <!-- The plan and the free alternative, side by side; the free option must never read as lesser. -->
@@ -94,7 +91,7 @@ const signIn = async (): Promise<void> => {
                 <Button :as="RouterLink" to="/settings/billing" :label="notice.action.label" icon-pos="right" class="ui-button-loud">
                     <template #icon><Icon name="arrow-right" /></template>
                 </Button>
-                <Button :as="RouterLink" :to="setupTo" label="Run it on my computer" severity="secondary" />
+                <Button :as="RouterLink" :to="setupTo" :label="t(`sandbox.sandboxConnecting.runOnMyComputer`)" severity="secondary" />
             </template>
         </template>
     </GateCard>

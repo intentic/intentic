@@ -1,12 +1,12 @@
 import { expect, test } from "vitest";
 import { reactive, ref, shallowRef } from "vue";
-import { WORKFLOW_TEMPLATES } from "./templates";
+import { workflowTemplates } from "./templates";
 import { editableCopy } from "./workflowDraft";
 
 // Pins the fix for `structuredClone` throwing `DataCloneError` on a Vue reactive proxy, which crashed `setup()`. Values
 // here are put through real Vue refs, since pure-data tests never caught it.
 
-const template = () => WORKFLOW_TEMPLATES[0]?.workflow ?? (undefined as never);
+const template = () => workflowTemplates()[0]?.workflow ?? (undefined as never);
 
 test("a draft can be taken from a value held in a deep ref: what the parent used to hand over", () => {
     const held = ref(template());
@@ -43,7 +43,7 @@ test("the copy is detached: editing a draft must not write through to the saved 
 });
 
 test("every template survives the round trip unchanged: the copy is not allowed to quietly drop a field", () => {
-    for (const { workflow } of WORKFLOW_TEMPLATES) {
+    for (const { workflow } of workflowTemplates()) {
         expect(editableCopy(reactive(workflow)), workflow.id).toEqual(workflow);
     }
 });

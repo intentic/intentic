@@ -6,10 +6,13 @@ import { WORKSPACE_TREE } from "../../../lib/queryKeys";
 import { sandboxJson } from "../client/sandboxClient";
 import { useSandboxOutline } from "../overview/useSandboxOutline";
 import { useSandboxQuery } from "../client/useSandboxQuery";
+import { useT } from "@intentic/ui/i18n";
 
 // Folder picker as a tree, not a text field, so a typo can't fence a persona to a nonexistent folder.
 // Directories only; ignored ones (node_modules, .git, gitignored) are excluded. Shows what is stored, not what
 // resolves — an absent folder keeps its chip — and keeps its own expansion state, separate from the explorer's.
+
+const t = useT();
 
 const {
     multiple = false,
@@ -140,7 +143,7 @@ const remove = (path: string): void => {
                 :key="path"
                 type="button"
                 class="ui-chip ui-chip-on group py-0.5 pl-1.5 pr-1 text-xs hover:border-danger"
-                :aria-label="`Remove ${path}`"
+                :aria-label="t(`sandbox.folderPicker.remove`, { path })"
                 @click="remove(path)"
             >
                 <Icon name="folder" class="shrink-0 text-2xs text-muted" />
@@ -157,21 +160,21 @@ const remove = (path: string): void => {
                 @click="open = !open"
             >
                 <Icon name="folder-open" class="text-2xs" />
-                {{ picked.length === 0 ? `Choose` : multiple ? `Add` : `Change` }}
+                {{ picked.length === 0 ? t(`sandbox.folderPicker.choose`) : multiple ? t(`ui.action.add`) : t(`sandbox.folderPicker.change`) }}
             </button>
         </div>
 
-<!-- Opens downward rather than the overlay's own default (above), which would land the tree over the field's own section heading. -->
-        <ResponsiveOverlay v-model="open" :anchor="anchor" side="bottom" header="Choose a folder" panel-class="w-80 p-1">
+        <!-- Opens downward rather than the overlay's own default (above), which would land the tree over the field's own section heading. -->
+        <ResponsiveOverlay v-model="open" :anchor="anchor" side="bottom" :header="t(`sandbox.folderPicker.chooseFolder`)" panel-class="w-80 p-1">
             <!-- Holds the panel's height steady while the tree loads, rather than jumping once rows arrive. -->
             <div v-if="query.isPending.value" role="status" aria-busy="true">
-                <span class="sr-only">Reading your workspace…</span>
+                <span class="sr-only">{{ t(`sandbox.folderPicker.readingWorkspace`) }}</span>
                 <SkeletonRows v-if="outline" :rows="5" density="dense" :control="false" />
             </div>
-            <div v-else-if="rows.length === 0" :class="ui.emptyState('py-4 text-xs')">No folders in this workspace yet.</div>
+            <div v-else-if="rows.length === 0" :class="ui.emptyState('py-4 text-xs')">{{ t(`sandbox.folderPicker.noFoldersInWorkspace`) }}</div>
             <div v-else class="flex max-h-72 flex-col overflow-y-auto">
                 <div v-for="row in rows" :key="row.entry.path" class="flex items-center" :style="{ paddingLeft: `${row.depth * 0.75}rem` }">
-<!-- Opening and choosing are different intents, so different targets; a leaf keeps the same indent from a spacer so names stay in one column. -->
+                    <!-- Opening and choosing are different intents, so different targets; a leaf keeps the same indent from a spacer so names stay in one column. -->
                     <button
                         v-if="openable(row.entry)"
                         type="button"

@@ -3,6 +3,7 @@ import { Button, Icon, vAction } from "@intentic/extension-ui";
 import { formatDuration } from "@intentic/extension-ui/format";
 import { computed, onBeforeUnmount, ref, watch } from "vue";
 import { seekTargets, SPEEDS } from "./mediaControls";
+import { t } from "./i18n.js";
 
 // Audio and video share one component, always a `<video>` element; layout follows `videoWidth > 0` once metadata loads.
 // `src` streams via range reads, not a blob; unplayable containers surface through the element's own `error` event.
@@ -115,8 +116,7 @@ const togglePictureInPicture = async (): Promise<void> => {
     // Best-effort; a browser without the API or refusing outside a user gesture stays inline.
     try {
         await (document.pictureInPictureElement === node ? document.exitPictureInPicture() : node.requestPictureInPicture());
-    } catch {
-    }
+    } catch {}
 };
 
 const toggleFullscreen = async (): Promise<void> => {
@@ -127,8 +127,7 @@ const toggleFullscreen = async (): Promise<void> => {
     // Fullscreens the stage element, not the video, to avoid the browser's native chrome.
     try {
         await (document.fullscreenElement === null ? box.requestFullscreen() : document.exitFullscreen());
-    } catch {
-    }
+    } catch {}
 };
 
 // Element event handlers; source of truth for the state above.
@@ -318,7 +317,7 @@ watch(
         :class="hasVideo ? `bg-black` : `bg-canvas`"
         tabindex="0"
         role="group"
-        :aria-label="`${filename}: space to play, arrows to seek, F for fullscreen`"
+        :aria-label="t(`mediaViewer.spaceToPlayArrows`, { filename })"
         @keydown="onKeyDown"
         @pointermove="wake"
     >
@@ -348,8 +347,8 @@ watch(
         <!-- Unsupported containers (Matroska, AVI, WMV) fall back to a download link. -->
         <div v-if="failed" class="flex flex-1 flex-col items-center justify-center gap-3 px-6 text-center">
             <Icon name="exclamation-triangle" class="text-3xl text-subtle" />
-            <p class="max-w-sm text-xs text-muted">This format can't be played in the browser. Download it to open in a media player.</p>
-            <Button severity="secondary" @click="emit(`download`)"> <Icon name="download" class="text-xs" /> Download </Button>
+            <p class="max-w-sm text-xs text-muted">{{ t(`mediaViewer.formatCantPlayedIn`) }}</p>
+            <Button severity="secondary" @click="emit(`download`)"> <Icon name="download" class="text-xs" /> {{ t(`mediaViewer.download`) }} </Button>
         </div>
 
         <!-- Audio files get a centered filename card instead of a picture. -->
@@ -370,7 +369,7 @@ watch(
             v-if="hasVideo && !playing && !waiting && !failed"
             type="button"
             class="absolute inset-0 flex items-center justify-center"
-            aria-label="Play"
+            :aria-label="t(`mediaViewer.play`)"
             @click="togglePlay"
         >
             <span
@@ -403,7 +402,7 @@ watch(
                 :aria-valuemin="0"
                 :aria-valuemax="Math.round(duration)"
                 :aria-valuenow="Math.round(displayTime)"
-                :aria-label="`Seek: ${formatDuration(displayTime)} of ${formatDuration(duration)}`"
+                :aria-label="t(`mediaViewer.seek`, { displayTime: formatDuration(displayTime), duration: formatDuration(duration) })"
                 tabindex="-1"
                 @pointerdown="onTimelineDown"
                 @pointermove="onTimelineMove"
@@ -443,22 +442,40 @@ watch(
                 <button
                     type="button"
                     class="media-btn"
-                    :aria-label="playing ? `Pause` : `Play`"
-                    v-tooltip.top="playing ? 'Pause (K)' : 'Play (K)'"
+                    :aria-label="playing ? t(`mediaViewer.pause`) : t(`mediaViewer.play`)"
+                    v-tooltip.top="playing ? t(`mediaViewer.pauseK`) : t(`mediaViewer.playK`)"
                     @click="togglePlay"
                 >
                     <Icon :name="playing ? `pause` : `play`" />
                 </button>
-                <button type="button" class="media-btn" aria-label="Back 10 seconds" v-tooltip.top="'Back 10s (J)'" @click="skip(-10)">
+                <button
+                    type="button"
+                    class="media-btn"
+                    :aria-label="t(`mediaViewer.back10Seconds`)"
+                    v-tooltip.top="t(`mediaViewer.back10sJ`)"
+                    @click="skip(-10)"
+                >
                     <Icon name="backward" />
                 </button>
-                <button type="button" class="media-btn" aria-label="Forward 10 seconds" v-tooltip.top="'Forward 10s (L)'" @click="skip(10)">
+                <button
+                    type="button"
+                    class="media-btn"
+                    :aria-label="t(`mediaViewer.forward10Seconds`)"
+                    v-tooltip.top="t(`mediaViewer.forward10sL`)"
+                    @click="skip(10)"
+                >
                     <Icon name="forward" />
                 </button>
 
                 <!-- Volume slider widens on hover; collapsed otherwise to save row space. -->
                 <div class="group/bar flex items-center">
-                    <button type="button" class="media-btn" :aria-label="muted ? `Unmute` : `Mute`" v-tooltip.top="'Mute (M)'" @click="toggleMute">
+                    <button
+                        type="button"
+                        class="media-btn"
+                        :aria-label="muted ? t(`mediaViewer.unmute`) : t(`mediaViewer.mute`)"
+                        v-tooltip.top="t(`mediaViewer.muteM`)"
+                        @click="toggleMute"
+                    >
                         <Icon :name="muted || volume === 0 ? `volume-off` : `volume-up`" />
                     </button>
                     <input
@@ -467,7 +484,7 @@ watch(
                         max="1"
                         step="0.01"
                         :value="muted ? 0 : volume"
-                        aria-label="Volume"
+                        :aria-label="t(`mediaViewer.volume`)"
                         class="media-range w-0 opacity-0 transition-all group-hover/bar:w-16 group-hover/bar:opacity-100 focus:w-16 focus:opacity-100"
                         @input="setVolume(Number(($event.target as HTMLInputElement).value))"
                     />
@@ -484,8 +501,8 @@ watch(
                     <button
                         type="button"
                         class="media-btn w-auto px-1.5 text-2xs tabular-nums"
-                        aria-label="Playback speed"
-                        v-tooltip.top="'Playback speed (, and .)'"
+                        :aria-label="t(`mediaViewer.playbackSpeed`)"
+                        v-tooltip.top="t(`mediaViewer.playbackSpeed2`)"
                         @click="speedOpen = !speedOpen"
                     >
                         {{ rate }}×
@@ -510,8 +527,8 @@ watch(
                     type="button"
                     class="media-btn"
                     :class="{ 'text-primary-500': looping }"
-                    aria-label="Loop"
-                    v-tooltip.top="'Loop'"
+                    :aria-label="t(`mediaViewer.loop`)"
+                    v-tooltip.top="t(`mediaViewer.loop`)"
                     @click="toggleLoop"
                 >
                     <Icon name="repeat" />
@@ -521,21 +538,27 @@ watch(
                     type="button"
                     class="media-btn"
                     :class="{ 'text-primary-500': pictureInPicture }"
-                    aria-label="Picture in picture"
-                    v-tooltip.top="'Picture in picture (P)'"
+                    :aria-label="t(`mediaViewer.pictureInPicture`)"
+                    v-tooltip.top="t(`mediaViewer.pictureInPictureP`)"
                     v-action="togglePictureInPicture"
                 >
                     <Icon name="picture-in-picture" />
                 </button>
-                <button type="button" class="media-btn" aria-label="Download" v-tooltip.top="'Download'" @click="emit(`download`)">
+                <button
+                    type="button"
+                    class="media-btn"
+                    :aria-label="t(`mediaViewer.download`)"
+                    v-tooltip.top="t(`mediaViewer.download`)"
+                    @click="emit(`download`)"
+                >
                     <Icon name="download" />
                 </button>
                 <button
                     v-if="hasVideo"
                     type="button"
                     class="media-btn"
-                    :aria-label="fullscreen ? `Exit full screen` : `Full screen`"
-                    v-tooltip.top="'Full screen (F)'"
+                    :aria-label="fullscreen ? t(`mediaViewer.exitFullScreen`) : t(`mediaViewer.fullScreen`)"
+                    v-tooltip.top="t(`mediaViewer.fullScreenF`)"
                     v-action="toggleFullscreen"
                 >
                     <Icon :name="fullscreen ? `compress` : `expand`" />

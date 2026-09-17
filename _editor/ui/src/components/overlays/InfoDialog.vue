@@ -19,7 +19,7 @@ const open = ref(false);
     >
         <Icon name="info-circle" />
     </button>
-<!-- The dialog body switches to two columns when its container is wide enough. -->
+    <!-- The dialog body switches to two columns when its container is wide enough. -->
     <Modal v-model:open="open" size="md" :header="title">
         <div class="@container"><slot /></div>
     </Modal>

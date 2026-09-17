@@ -4,6 +4,9 @@ import { computed } from "vue";
 import { hostCard } from "./deviceFacts";
 import { deviceSyncingSandbox } from "./deviceRows";
 import { useDevices } from "./useDevices";
+import { useT } from "@intentic/ui/i18n";
+
+const t = useT();
 
 const props = defineProps<{
     /** This sandbox's container slug; the pairing is matched against it. */
@@ -22,10 +25,10 @@ const card = computed(() => (machine.value === undefined ? undefined : hostCard(
     <p v-if="machine && card" class="text-2xs text-subtle">
         <!-- Use the device name because the user may have multiple machines. -->
         <span class="font-mono">{{ machine.label }}</span>
-        syncs this sandbox but is not connected as a device.
+        {{ t(`sandbox.connectDeviceHint.syncsSandboxNotConnected`) }}
         <RouterLink :to="{ name: `capabilities`, params: { card }, query: { device: machine.label } }" class="text-link hover:underline">
-            Connect it
+            {{ t(`sandbox.connectDeviceHint.connect`) }}
         </RouterLink>
-        and {{ gains }}
+        {{ t(`sandbox.connectDeviceHint.and`) }} {{ gains }}
     </p>
 </template>

@@ -1,6 +1,7 @@
 import type { IconName } from "@intentic/ui";
 import type { LandConflict, LandConflictReason } from "@intentic/sandbox-contract";
-import { ERRANDS, errandPrompt } from "../../chat/run/errands";
+import { errands, errandPrompt } from "../../chat/run/errands";
+import { t } from "@intentic/ui/i18n";
 
 // Land conflict causes, and who can clear each:
 // - diverged: main moved under the agent; the agent rebases and resolves in its own worktree
@@ -33,29 +34,29 @@ export const userBlockers = (blockers: readonly Blocker[]): readonly Blocker[] =
 // - title: plural group heading
 // - fix: button-ladder text
 // - row: same message alone, no count line or buttons
-export const REASON_COPY: Record<LandConflictReason, { icon: IconName; mark: string; title: string; fix: string; row: string }> = {
+export const reasonCopy = (): Record<LandConflictReason, { icon: IconName; mark: string; title: string; fix: string; row: string }> => ({
     diverged: {
         icon: `sync`,
         mark: `moved`,
-        title: `your workspace moved on since the agent branched`,
+        title: t(`agents.conflictResolution.workspaceMovedOnSince`),
         fix: `The agent can rebase onto it and merge these itself.`,
         row: `Your workspace moved on since the agent branched, the agent can rebase onto it and merge this itself.`,
     },
     workspace: {
         icon: `user`,
         mark: `yours`,
-        title: `you have uncommitted edits to these`,
+        title: t(`agents.conflictResolution.uncommittedEditsTo`),
         fix: `Only you can clear this, git cannot merge through unstaged work, and the agent's checkout cannot see it.`,
         row: `You have uncommitted edits to this file, only you can clear it, by committing or stashing them.`,
     },
     binary: {
         icon: `image`,
         mark: `binary`,
-        title: `binary files, which have no automatic merge`,
+        title: t(`agents.conflictResolution.binaryFilesNoAutomatic`),
         fix: `The agent can re-create them against the current file, or pick a side.`,
         row: `A binary file has no automatic merge, the agent can re-create it against the current file, or pick a side.`,
     },
-};
+});
 
 // Why each path is blocked, addressed to the agent; distinct from REASON_COPY, which speaks to the user.
 const REASON_BRIEF: Record<LandConflictReason, string> = {
@@ -101,7 +102,7 @@ export const resolvePrompt = (conflicts: readonly LandConflict[] | undefined): s
     const mine = agentBlockers(blockers);
     const theirs = userBlockers(blockers);
     const main = sharedMainBranch(conflicts);
-    return errandPrompt(ERRANDS.landConflict, [
+    return errandPrompt(errands().landConflict, [
         [
             `1. \`git add -A && git commit\`: a rebase refuses to start on a dirty tree.`,
             main === undefined

@@ -6,10 +6,13 @@ import { useAuth } from "../../auth/useAuth";
 import { useGoogleIdentity } from "../../auth/useGoogleIdentity";
 import { useSandboxSession } from "../client/sandboxSession";
 import { useSandbox } from "../client/useSandbox";
+import { useT } from "@intentic/ui/i18n";
 
 // Shown when the daemon is up but rejects the signed-in Google account with 403: neither owner nor a granted
 // member. No spinner and no 'Open setup', since waiting won't fix an account mismatch; the liveness loop keeps
 // retrying, so a grant clears this screen by itself.
+
+const t = useT();
 
 const { active } = useSandbox();
 const { user } = useAuth();
@@ -38,17 +41,17 @@ const switchAccount = async (): Promise<void> => {
 <template>
     <GateCard icon="lock" :title="title">
         <p v-if="wrongGoogleAccount" class="text-sm text-muted">
-            You're signed into Google as <span class="font-medium text-content">{{ presentedEmail }}</span
-            >, but your intentic account is <span class="font-medium text-content">{{ user?.email }}</span
-            >. Sign in with <span class="font-medium text-content">{{ user?.email }}</span> to open this sandbox.
+            {{ t(`sandbox.sandboxUnauthorized.youreSignedIntoGoogle`) }} <span class="font-medium text-content">{{ presentedEmail }}</span
+            >{{ t(`sandbox.sandboxUnauthorized.intenticAccount`) }} <span class="font-medium text-content">{{ user?.email }}</span
+            >. Sign in with <span class="font-medium text-content">{{ user?.email }}</span> {{ t(`sandbox.sandboxUnauthorized.toOpenSandbox`) }}
         </p>
         <p v-else class="text-sm text-muted">
-            This sandbox belongs to another account and hasn't shared access with
+            {{ t(`sandbox.sandboxUnauthorized.sandboxBelongsToAnother`) }}
             <span class="font-medium text-content">{{ presentedEmail }}</span
             >. Ask its owner to grant you access: this clears automatically the moment it's granted.
         </p>
         <template #actions>
-            <Button label="Switch Google account" severity="secondary" @click="switchAccount">
+            <Button :label="t(`sandbox.sandboxUnauthorized.switchGoogleAccount`)" severity="secondary" @click="switchAccount">
                 <template #icon><Icon name="user" /></template>
             </Button>
         </template>

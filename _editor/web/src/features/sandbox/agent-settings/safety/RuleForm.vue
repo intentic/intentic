@@ -3,10 +3,13 @@ import type { Rule, RuleMoment } from "@intentic/api-contract";
 import { Button, ui, Icon, Picker, ProseField, SegmentedControl } from "@intentic/ui";
 import { computed, ref } from "vue";
 import { useRepos } from "../../../workspace/explorer/useRepos";
-import { ACTIONS, ANYWHERE, type Choice, globsOf, MOMENTS, momentOf, nameOf, repoLabel, type RuleDraft } from "./ruleWords";
+import { actions, ANYWHERE, type Choice, globsOf, moments, momentOf, nameOf, repoLabel, type RuleDraft } from "./ruleWords";
+import { useT } from "@intentic/ui/i18n";
 
 // One form for creating a rule and for editing one already saved, ordered as the sentence it writes: when, only if,
 // then. The name is derived from what's typed (see nameOf) unless overwritten below.
+
+const t = useT();
 
 const { rule, disabled = false } = defineProps<{
     /** The rule being changed. Absent ⇒ writing a new one. */
@@ -49,14 +52,14 @@ const { options: repoOptions } = useRepos();
 // Each option carries a glyph like the moment picker's above it: two stacked pickers where only one has a mark leave
 // the chosen values on two different left edges, which reads as a misalignment rather than a distinction.
 const repoChoices = computed(() => [
-    { value: ANYWHERE, label: `Anywhere in the workspace`, icon: `sitemap` as const },
+    { value: ANYWHERE, label: t(`sandbox.ruleForm.anywhereInWorkspace`), icon: `sitemap` as const },
     ...repoOptions.value.map((id) => ({ value: id, label: repoLabel(id), icon: `folder` as const })),
 ]);
 
 const chosenMoment = computed(() => momentOf(moment.value));
-const momentOptions = computed(() => MOMENTS.map(({ value, label: name, icon, cost }) => ({ value, label: name, icon, description: cost })));
-const actionOptions = computed(() => ACTIONS[moment.value].map(({ value, label: name }) => ({ value, label: name })));
-const chosenAction = computed(() => ACTIONS[moment.value].find((entry) => entry.value === action.value));
+const momentOptions = computed(() => moments().map(({ value, label: name, icon, cost }) => ({ value, label: name, icon, description: cost })));
+const actionOptions = computed(() => actions()[moment.value].map(({ value, label: name }) => ({ value, label: name })));
+const chosenAction = computed(() => actions()[moment.value].find((entry) => entry.value === action.value));
 
 // If the new moment doesn't offer the current action, switch to its first action rather than leave an invalid pair.
 const pickMoment = (next: RuleMoment | undefined): void => {
@@ -64,7 +67,7 @@ const pickMoment = (next: RuleMoment | undefined): void => {
         return;
     }
     moment.value = next;
-    const offered = ACTIONS[next];
+    const offered = actions()[next];
     if (!offered.some((entry) => entry.value === action.value)) {
         action.value = offered[0].value;
     }
@@ -171,47 +174,47 @@ const save = (): void => {
     <div class="flex flex-col gap-4">
         <!-- Each option shows what it costs, since the moments aren't interchangeable. -->
         <div class="flex flex-col gap-1.5">
-            <span :class="ui.sectionLabel(`text-2xs`)">When</span>
+            <span :class="ui.sectionLabel(`text-2xs`)">{{ t(`sandbox.ruleForm.when`) }}</span>
             <Picker
                 :model-value="moment"
                 :options="momentOptions"
                 :disabled="disabled"
                 class="w-full py-1.5 text-xs"
-                aria-label="When this rule runs"
-                header="When this rule runs"
+                :aria-label="t(`sandbox.ruleForm.ruleRuns`)"
+                :header="t(`sandbox.ruleForm.ruleRuns`)"
                 @update:model-value="pickMoment"
             />
         </div>
 
-<!-- Repository selection determines where the command runs before path narrowing. -->
+        <!-- Repository selection determines where the command runs before path narrowing. -->
         <div v-if="repoChoices.length > 2" class="flex flex-col gap-1.5">
-            <span :class="ui.sectionLabel(`text-2xs`)">Where</span>
+            <span :class="ui.sectionLabel(`text-2xs`)">{{ t(`sandbox.ruleForm.where`) }}</span>
             <Picker
                 v-model="repo"
                 :options="repoChoices"
                 :disabled="disabled"
                 class="w-full py-1.5 text-xs"
-                aria-label="Which repository this rule is about"
-                header="Which repository"
+                :aria-label="t(`sandbox.ruleForm.repositoryRuleAbout`)"
+                :header="t(`sandbox.ruleForm.repository`)"
             />
             <p v-if="repo !== ANYWHERE && action === `command`" class="text-2xs text-muted">
-                Runs in <span class="font-mono text-content">{{ repo === `root` ? `the workspace root` : repo }}</span
-                >, so write the command as you would in a terminal there.
+                {{ t(`sandbox.ruleForm.runsIn`) }}
+                <span class="font-mono text-content">{{ repo === `root` ? t(`sandbox.ruleForm.workspaceRoot`) : repo }}</span
+                >{{ t(`sandbox.ruleForm.writeCommandWouldIn`) }}
             </p>
         </div>
 
         <!-- Collapsed states the default in words; expanded shows the paths as removable chips. -->
         <div v-if="!narrowing" class="flex flex-wrap items-center gap-x-2 text-2xs text-subtle">
-            <span>Applies to every change.</span>
-            <button type="button" :class="ui.linkButton(`text-2xs`)" :disabled="disabled" @click="narrowing = true">Only when it touches…</button>
+            <span>{{ t(`sandbox.ruleForm.appliesToEveryChange`) }}</span>
+            <button type="button" :class="ui.linkButton(`text-2xs`)" :disabled="disabled" @click="narrowing = true">
+                {{ t(`sandbox.ruleForm.onlyTouches`) }}
+            </button>
         </div>
         <div v-else class="flex flex-col gap-1.5">
-            <span :class="ui.sectionLabel(`text-2xs`)">Only if it touches</span>
+            <span :class="ui.sectionLabel(`text-2xs`)">{{ t(`sandbox.ruleForm.onlyTouches2`) }}</span>
             <div class="flex items-start gap-1">
-                <div
-                    class="ui-field-shell flex min-w-0 flex-1 flex-wrap items-center gap-1.5 px-2 py-1.5"
-                    :class="{ 'opacity-50': disabled }"
-                >
+                <div class="ui-field-shell flex min-w-0 flex-1 flex-wrap items-center gap-1.5 px-2 py-1.5" :class="{ 'opacity-50': disabled }">
                     <span
                         v-for="glob in globs"
                         :key="glob"
@@ -221,7 +224,7 @@ const save = (): void => {
                         <button
                             type="button"
                             class="cursor-pointer text-subtle transition-colors hover:text-content"
-                            :aria-label="`Remove ${glob}`"
+                            :aria-label="t(`sandbox.ruleForm.remove`, { glob })"
                             @click="removeGlob(glob)"
                         >
                             <Icon name="times" class="text-[0.6rem]" />
@@ -230,11 +233,11 @@ const save = (): void => {
                     <input
                         :value="globDraft"
                         type="text"
-                        :placeholder="globs.length === 0 ? `docs/**` : `add another…`"
+                        :placeholder="globs.length === 0 ? t(`sandbox.ruleForm.docs`) : t(`sandbox.ruleForm.addAnother`)"
                         spellcheck="false"
                         autocapitalize="off"
                         autocorrect="off"
-                        aria-label="Paths"
+                        :aria-label="t(`sandbox.ruleForm.paths`)"
                         :disabled="disabled"
                         class="field-bare min-w-24 flex-1 font-mono md:text-xs"
                         @input="onGlobInput"
@@ -243,7 +246,7 @@ const save = (): void => {
                         @blur="commitDraft"
                     />
                 </div>
-                <button type="button" :class="ui.iconButton(`mt-1`)" aria-label="Apply to every change" @click="stopNarrowing">
+                <button type="button" :class="ui.iconButton(`mt-1`)" :aria-label="t(`sandbox.ruleForm.applyToEveryChange`)" @click="stopNarrowing">
                     <Icon name="times" class="text-xs" />
                 </button>
             </div>
@@ -251,38 +254,30 @@ const save = (): void => {
 
         <!-- Shown only when the moment offers more than one action to choose from. -->
         <div class="flex flex-col gap-1.5">
-            <span :class="ui.sectionLabel(`text-2xs`)">Then</span>
+            <span :class="ui.sectionLabel(`text-2xs`)">{{ t(`sandbox.ruleForm.then`) }}</span>
             <!-- Compact rather than full width, so it doesn't outweigh the moment picker above it. -->
             <SegmentedControl v-if="actionOptions.length > 1" v-model="action" :options="actionOptions" class="-mt-0.5 mb-0.5" />
 
-            <div
-                v-if="action === `command`"
-                class="ui-field-shell flex items-center gap-2 px-2.5 py-1.5"
-                :class="{ 'opacity-50': disabled }"
-            >
+            <div v-if="action === `command`" class="ui-field-shell flex items-center gap-2 px-2.5 py-1.5" :class="{ 'opacity-50': disabled }">
                 <span class="select-none font-mono text-xs text-subtle" aria-hidden="true">$</span>
                 <input
                     v-model="command"
                     type="text"
-                    placeholder="pnpm lint"
+                    :placeholder="t(`sandbox.ruleForm.pnpmLint`)"
                     spellcheck="false"
                     autocapitalize="off"
                     autocorrect="off"
-                    aria-label="Command to run"
+                    :aria-label="t(`sandbox.ruleForm.commandToRun`)"
                     :disabled="disabled"
                     class="field-bare min-w-0 flex-1 font-mono md:text-xs"
                 />
             </div>
             <!-- Kept boxed like the command field beside it, unlike a bare ProseField elsewhere; it grows with the text. -->
-            <div
-                v-else-if="action === `instruct`"
-                class="ui-field-shell px-0.5 py-1"
-                :class="{ 'opacity-50': disabled }"
-            >
+            <div v-else-if="action === `instruct`" class="ui-field-shell px-0.5 py-1" :class="{ 'opacity-50': disabled }">
                 <ProseField
                     v-model="text"
-                    placeholder="Update the changelog before you finish."
-                    aria-label="What to tell the assistant"
+                    :placeholder="t(`sandbox.ruleForm.updateChangelogBeforeFinish`)"
+                    :aria-label="t(`sandbox.ruleForm.whatToTellAssistant`)"
                     :disabled="disabled"
                     class="min-h-8"
                 />
@@ -294,12 +289,12 @@ const save = (): void => {
         <!-- Name and save controls sit below the hairline, entered after the rule itself is decided. -->
         <div class="mt-3 flex flex-col gap-2">
             <label class="flex items-center gap-2">
-                <span :class="ui.sectionLabel(`shrink-0 text-2xs`)">Called</span>
+                <span :class="ui.sectionLabel(`shrink-0 text-2xs`)">{{ t(`sandbox.ruleForm.called`) }}</span>
                 <input
                     v-model="label"
                     type="text"
                     :placeholder="autoName"
-                    aria-label="Rule name"
+                    :aria-label="t(`sandbox.ruleForm.ruleName`)"
                     :disabled="disabled"
                     :class="ui.inputSm(`min-w-0 flex-1`)"
                 />
@@ -307,11 +302,11 @@ const save = (): void => {
             <div class="flex flex-wrap items-center gap-x-3 gap-y-1">
                 <Button
                     size="small"
-                    :label="rule === undefined ? `Add rule` : `Save changes`"
+                    :label="rule === undefined ? t(`sandbox.ruleForm.addRule`) : t(`sandbox.ruleForm.saveChanges`)"
                     :disabled="missing !== undefined || disabled"
                     @click="save"
                 />
-                <Button size="small" text label="Cancel" @click="emit(`cancel`)" />
+                <Button size="small" text :label="t(`ui.action.cancel`)" @click="emit(`cancel`)" />
                 <span v-if="missing !== undefined" class="text-2xs text-subtle">{{ missing }}</span>
             </div>
         </div>

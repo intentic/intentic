@@ -6,10 +6,13 @@ import type { VpnLink } from "@intentic/sandbox-contract";
 import type { MenuItem } from "primevue/menuitem";
 import { computed, reactive, ref } from "vue";
 import { useVpn } from "../features/sandbox/devices/useVpn";
+import { useT } from "@intentic/ui/i18n";
 
 // Per-tunnel connections list: address, routes and connect/disconnect controls, not just a status dot. Rows
 // come from the capability list, not /vpn, which can lag or fail on its own, so a row exists before any live
 // link arrives. Shares CapabilityInstanceRow's overflow menu; dialing streams progress and can prompt for a code.
+
+const t = useT();
 
 const props = defineProps<{
     /** The vpn-kind capabilities on this card: what exists, and what each is called. */
@@ -23,7 +26,7 @@ const emit = defineEmits<{ edit: [id: string]; rename: [id: string]; remove: [id
 const { links, connect, disconnect, error: listError } = useVpn();
 // The list query reports a bare message; this card knows the user came to see their VPN links.
 const listNotice = computed<NoticeModel | undefined>(() =>
-    listError.value === undefined ? undefined : { tone: `danger`, title: `Couldn't read what your tunnels are doing.`, detail: listError.value },
+    listError.value === undefined ? undefined : { tone: `danger`, title: t(`common.vpnConnections.couldntReadWhatTunnels`), detail: listError.value },
 );
 
 // Per-tunnel local state, keyed by id, so one failing tunnel never blanks another's row.
@@ -159,9 +162,9 @@ const openMenu = (id: string, event: Event): void => {
 const items = computed<MenuItem[]>(() => {
     const id = menuFor.value ?? ``;
     return [
-        { label: `Settings…`, icon: `cog`, command: () => emit(`edit`, id) },
-        { label: `Rename…`, icon: `pencil`, command: () => emit(`rename`, id) },
-        { label: `Remove`, icon: `trash`, danger: true, command: () => emit(`remove`, id) },
+        { label: t(`common.vpnConnections.settings`), icon: `cog`, command: () => emit(`edit`, id) },
+        { label: t(`common.vpnConnections.rename`), icon: `pencil`, command: () => emit(`rename`, id) },
+        { label: t(`ui.action.remove`), icon: `trash`, danger: true, command: () => emit(`remove`, id) },
     ];
 });
 
@@ -174,11 +177,11 @@ const caption = computed(() =>
 </script>
 
 <template>
-    <RowGroup label="Your connections" :count="rows.length" :caption="caption">
+    <RowGroup :label="t(`common.vpnConnections.connections`)" :count="rows.length" :caption="caption">
         <!-- The tunnels stay listed: this says the live half is missing, not the connections. -->
         <Notice v-if="listNotice" :of="listNotice" class="m-4" />
         <Row v-for="row in rows" :key="row.id" :icon="row.link?.state === 'connected' ? 'shield' : 'globe'" :selected="editingId === row.id">
-<!-- Status rides the name, as elsewhere in the app, not beside the controls, which have the least space to spare. -->
+            <!-- Status rides the name, as elsewhere in the app, not beside the controls, which have the least space to spare. -->
             <template #title>
                 <span class="flex flex-wrap items-center gap-2">
                     <span class="truncate">{{ row.id }}</span>
@@ -193,21 +196,21 @@ const caption = computed(() =>
                 </span>
             </template>
             <template #description>
-<!-- `block truncate`: an inline span can't ellipsise, so three routes would wrap under the row's button instead. -->
+                <!-- `block truncate`: an inline span can't ellipsise, so three routes would wrap under the row's button instead. -->
                 <span v-if="row.facts" class="block truncate font-mono" :title="row.facts">{{ row.facts }}</span>
-<!-- Wraps rather than truncates: the tail here is the way out of the state, not text an ellipsis should hide. -->
+                <!-- Wraps rather than truncates: the tail here is the way out of the state, not text an ellipsis should hide. -->
                 <span v-if="row.note === 'rebuild'" class="block text-warning">
-                    Needs a sandbox rebuild to install its client:
-                    <RouterLink to="/sandbox/environment" class="text-link hover:underline">finish setup →</RouterLink>
+                    {{ t(`common.vpnConnections.needsSandboxRebuildTo`) }}
+                    <RouterLink to="/sandbox/environment" class="text-link hover:underline">{{ t(`common.vpnConnections.finishSetup`) }}</RouterLink>
                 </span>
-                <span v-else-if="row.note === 'auto'" class="block">Connects automatically after a sandbox restart.</span>
+                <span v-else-if="row.note === 'auto'" class="block">{{ t(`common.vpnConnections.connectsAutomaticallyAfterSandbox`) }}</span>
             </template>
             <template #control>
-<!-- No dial until the link arrives; guessing Connect vs Disconnect from stored config risks the wrong tunnel. -->
+                <!-- No dial until the link arrives; guessing Connect vs Disconnect from stored config risks the wrong tunnel. -->
                 <div class="flex shrink-0 items-center gap-1">
                     <Button
                         v-if="row.link?.state === 'connected' || row.link?.state === 'connecting'"
-                        label="Disconnect"
+                        :label="t(`ui.action.disconnect`)"
                         size="small"
                         :text="true"
                         :loading="busy.has(row.id)"
@@ -215,14 +218,19 @@ const caption = computed(() =>
                     />
                     <Button
                         v-else-if="row.link"
-                        label="Connect"
+                        :label="t(`ui.action.connect`)"
                         size="small"
                         :text="true"
                         :disabled="row.link.state === 'unavailable'"
                         :loading="busy.has(row.id)"
                         @click="onConnect(row.id)"
                     />
-                    <button type="button" :class="ui.iconButton()" aria-label="More actions" @click="openMenu(row.id, $event)">
+                    <button
+                        type="button"
+                        :class="ui.iconButton()"
+                        :aria-label="t(`common.vpnConnections.moreActions`)"
+                        @click="openMenu(row.id, $event)"
+                    >
                         <Icon name="ellipsis" />
                     </button>
                 </div>
@@ -236,7 +244,7 @@ const caption = computed(() =>
                         class="max-h-32 overflow-auto whitespace-pre-wrap rounded-md border border-danger/40 bg-danger/10 px-3 py-2 font-mono text-2xs text-danger"
                         >{{ failures[row.id] }}</pre>
                     <div v-if="otpFor === row.id" class="flex items-center gap-2">
-<!-- Prevents on keydown, not keyup: this list sits inside the card's form, so a bare Enter would submit it. -->
+                        <!-- Prevents on keydown, not keyup: this list sits inside the card's form, so a bare Enter would submit it. -->
                         <input
                             v-model="otp"
                             :class="ui.input('w-32 font-mono')"
@@ -245,8 +253,8 @@ const caption = computed(() =>
                             autocomplete="one-time-code"
                             @keydown.enter.prevent="onConnect(row.id)"
                         />
-                        <Button label="Connect with code" size="small" :loading="busy.has(row.id)" @click="onConnect(row.id)" />
-                        <Button label="Cancel" size="small" severity="secondary" :text="true" @click="otpFor = undefined" />
+                        <Button :label="t(`common.vpnConnections.connectCode`)" size="small" :loading="busy.has(row.id)" @click="onConnect(row.id)" />
+                        <Button :label="t(`ui.action.cancel`)" size="small" severity="secondary" :text="true" @click="otpFor = undefined" />
                     </div>
                     <button
                         v-else-if="wantsCode(row.id)"
@@ -257,7 +265,7 @@ const caption = computed(() =>
                             otp = ``;
                         "
                     >
-                        <Icon name="key" /> Enter a one-time code
+                        <Icon name="key" /> {{ t(`common.vpnConnections.enterOneTimeCode`) }}
                     </button>
                 </div>
             </template>

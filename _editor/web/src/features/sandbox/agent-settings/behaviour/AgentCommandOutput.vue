@@ -5,13 +5,16 @@ import { computed } from "vue";
 import { relativeTime } from "../../../chat/models/catalog";
 import { useSavings } from "../../usage/useSavings";
 import { useSandboxSettings } from "../../overview/useSandboxSettings";
-import { ALL_CLEANER_IDS, CLEANER_OPTIONS, savedByCleaner } from "../../usage/savingsChart";
+import { allCleanerIds, cleanerOptions, savedByCleaner } from "../../usage/savingsChart";
 import { asPercent } from "../models/numberInputs";
 import CommandOutputInfo from "./CommandOutputInfo.vue";
 import MeasurementPanel, { type PanelReading } from "../models/MeasurementPanel.vue";
+import { useT } from "@intentic/ui/i18n";
 
 // Shell-output filter: master toggle, per-cleaner checklist, measurement holdout, and realized savings, as one
 // grouped section rather than a card per toggle.
+
+const t = useT();
 
 const { settings, patch } = useSandboxSettings();
 const { savings } = useSavings({});
@@ -32,20 +35,20 @@ const enabledCleaners = computed<Set<string>>(() => {
     const tokens = spec
         .split(`,`)
         .map((token) => token.trim())
-        .filter((token) => token !== `` && ALL_CLEANER_IDS.includes(token.replace(/^-/, ``)));
+        .filter((token) => token !== `` && allCleanerIds().includes(token.replace(/^-/, ``)));
     if (tokens.length === 0) {
-        return new Set(ALL_CLEANER_IDS);
+        return new Set(allCleanerIds());
     }
     if (tokens.some((token) => !token.startsWith(`-`))) {
         return new Set(tokens.filter((token) => !token.startsWith(`-`)));
     }
     const disabled = new Set(tokens.map((token) => token.slice(1)));
-    return new Set(ALL_CLEANER_IDS.filter((id) => !disabled.has(id)));
+    return new Set(allCleanerIds().filter((id) => !disabled.has(id)));
 });
 
 // Emits the shortest spec for `enabled`: `` (all), an allow-list, or a default-minus form.
 const specFromEnabled = (enabled: Set<string>): string => {
-    const disabled = ALL_CLEANER_IDS.filter((id) => !enabled.has(id));
+    const disabled = allCleanerIds().filter((id) => !enabled.has(id));
     if (disabled.length === 0) {
         return ``;
     }
@@ -82,7 +85,7 @@ const cleanerReadings = computed<PanelReading[]>(() => {
                 unit: `of command output removed`,
                 // Only the measured figure earns `success`; the estimate above it stays muted.
                 tone: holdout.measuredSavedPct > 0 ? `success` : `muted`,
-                detail: `cleaned commands against the raw ones the holdout kept`,
+                detail: t(`sandbox.agentCommandOutput.cleanedCommandsAgainstRaw`),
             },
             on: holdout.cleaned,
             off: holdout.heldOut,
@@ -99,7 +102,7 @@ const savingsVerdict = computed(() => {
             value: `Nothing yet`,
             unit: `no commands cleaned so far`,
             tone: `muted`,
-            detail: `The ledger fills as the assistant runs shell commands, one row per command.`,
+            detail: t(`sandbox.agentCommandOutput.ledgerFillsAssistantRuns`),
             evidence: ``,
         } as const;
     }
@@ -120,13 +123,13 @@ const savedTokens = computed(() => savedByCleaner(savings.value?.input));
 </script>
 
 <template>
-    <RowGroup label="Command output">
+    <RowGroup :label="t(`sandbox.agentCommandOutput.commandOutput`)">
         <template #info><CommandOutputInfo /></template>
         <Row
             spine
             icon="bolt"
-            title="Clean command output"
-            description="Trim noisy shell output before it reaches the assistant."
+            :title="t(`sandbox.agentCommandOutput.cleanCommandOutput`)"
+            :description="t(`sandbox.agentCommandOutput.trimNoisyShellOutput`)"
         >
             <template #control>
                 <ToggleSwitch
@@ -139,12 +142,12 @@ const savedTokens = computed(() => savedByCleaner(savings.value?.input));
             <template v-if="settings !== undefined && cleaningOn" #below>
                 <div class="flex flex-col gap-2">
                     <div class="flex items-baseline justify-between gap-2">
-                        <p class="text-2xs font-medium uppercase tracking-wide text-subtle">Cleaners</p>
+                        <p class="text-2xs font-medium uppercase tracking-wide text-subtle">{{ t(`sandbox.agentCommandOutput.cleaners`) }}</p>
                         <!-- Per-switch savings turn sixteen identical toggles into a list you can prune by impact. -->
-                        <p class="text-2xs text-subtle">tokens saved, all time</p>
+                        <p class="text-2xs text-subtle">{{ t(`sandbox.agentCommandOutput.tokensSavedAllTime`) }}</p>
                     </div>
                     <div class="grid grid-cols-2 gap-x-4 gap-y-1.5">
-                        <label v-for="cleaner in CLEANER_OPTIONS" :key="cleaner.id" class="flex items-center justify-between gap-2">
+                        <label v-for="cleaner in cleanerOptions()" :key="cleaner.id" class="flex items-center justify-between gap-2">
                             <span class="flex min-w-0 items-baseline gap-1.5">
                                 <span class="truncate text-xs text-content">{{ cleaner.label }}</span>
                                 <!-- Absent means not yet measured, a different claim from zero. -->
@@ -165,7 +168,7 @@ const savedTokens = computed(() => savedByCleaner(savings.value?.input));
                         class="mt-3"
                         :percent="holdoutPercent"
                         :readings="cleanerReadings"
-                        note="Leaves this share of commands uncleaned, as a control."
+                        :note="t(`sandbox.agentCommandOutput.leavesShareCommandsUncleaned`)"
                         on-label="cleaned"
                         off-label="raw"
                         @commit="(outputHoldout: number) => patch({ outputHoldout })"
@@ -174,8 +177,8 @@ const savedTokens = computed(() => savedByCleaner(savings.value?.input));
             </template>
         </Row>
 
-<!-- Hero figure with freshness and context under it, not run-on prose; the per-mechanism breakdown lives on the Usage tab. -->
-        <Row spine icon="wave-pulse" title="Output savings">
+        <!-- Hero figure with freshness and context under it, not run-on prose; the per-mechanism breakdown lives on the Usage tab. -->
+        <Row spine icon="wave-pulse" :title="t(`sandbox.agentCommandOutput.outputSavings`)">
             <template #below>
                 <div class="flex flex-col gap-3">
                     <Verdict
@@ -188,8 +191,10 @@ const savedTokens = computed(() => savedByCleaner(savings.value?.input));
                     <!-- Savings are grouped by command and ranked by total. -->
                     <div v-if="savings !== undefined && savings.input.gaps.length > 0" class="flex flex-col gap-1">
                         <div class="flex items-baseline justify-between gap-2">
-                            <p class="text-2xs font-medium uppercase tracking-wide text-subtle">Un-cleaned (add a handler)</p>
-                            <p class="text-2xs text-subtle">tokens still reaching the assistant</p>
+                            <p class="text-2xs font-medium uppercase tracking-wide text-subtle">
+                                {{ t(`sandbox.agentCommandOutput.unCleanedAddHandler`) }}
+                            </p>
+                            <p class="text-2xs text-subtle">{{ t(`sandbox.agentCommandOutput.tokensStillReachingAssistant`) }}</p>
                         </div>
                         <p v-for="gap in savings.input.gaps.slice(0, 5)" :key="gap.command" class="flex items-baseline gap-1.5 text-2xs">
                             <span class="shrink-0 tabular-nums text-muted">~{{ formatTokens(gap.tokens) }}</span>

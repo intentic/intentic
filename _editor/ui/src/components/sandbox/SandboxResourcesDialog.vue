@@ -82,14 +82,23 @@ const setCap = (field: `memoryGib` | `cpus`, event: Event): void => {
 
 // What an empty field means, said in the field: a measured engine can name the default; an unmeasured one names the
 // rule.
-const memoryPlaceholder = computed(() => (memory.value.max === undefined ? `default` : `default: ${memory.value.max}`));
-const cpuPlaceholder = computed(() => (cpus.value.max === undefined ? `all` : `all ${cpus.value.max}`));
+const memoryPlaceholder = computed(() =>
+    memory.value.max === undefined ? t(`ui.sandboxResourcesDialog.default`) : t(`ui.sandboxResourcesDialog.defaultMax`, { max: memory.value.max }),
+);
+const cpuPlaceholder = computed(() =>
+    cpus.value.max === undefined ? t(`ui.sandboxResourcesDialog.all`) : t(`ui.sandboxResourcesDialog.allMax`, { max: cpus.value.max }),
+);
+
+// The bounds as one phrase inside the sentence that reports them, rather than three fragments the markup joins: an
+// unmeasured engine has no ceiling to name, and a translator needs the whole sentence to move its words around.
+const bounds = (measured: { min: number; max?: number }): string =>
+    measured.max === undefined ? String(measured.min) : t(`ui.sandboxResourcesDialog.range`, { min: measured.min, max: measured.max });
 
 const uid = useId();
 </script>
 
 <template>
-    <Modal :open="open" size="md" :header="`Resources for ${name}`" @update:open="emit(`cancel`)">
+    <Modal :open="open" size="md" :header="t(`ui.sandboxResourcesDialog.resources`, { name })" @update:open="emit(`cancel`)">
         <div v-if="current !== undefined" class="flex flex-col gap-4">
             <!-- The four rows share one bordered box (the shape <ExportBundleDialog> settled on) rather than <Row>'s own padding. -->
             <div class="flex flex-col overflow-hidden rounded-lg border border-line divide-y divide-line-subtle">
@@ -98,14 +107,11 @@ const uid = useId();
                     flush
                     density="compact"
                     icon="server"
-                    title="Memory"
+                    :title="t(`ui.sandboxResourcesDialog.memory`)"
                     class="px-3.5 py-3"
                     :tone="problems.memory === undefined ? `default` : `warning`"
                 >
-                    <template #description>
-                        Whole GiB, {{ memory.min }}<template v-if="memory.max !== undefined"> to {{ memory.max }}</template> on this computer. Empty
-                        is the default: everything it has beyond what it keeps for itself.
-                    </template>
+                    <template #description>{{ t(`ui.sandboxResourcesDialog.memoryWhole`, { bounds: bounds(memory) }) }}</template>
                     <template #control>
                         <!-- The unit sits in a fixed, right-aligned span rather than loose text, so the two cap fields' numbers line up. -->
                         <label class="flex items-center gap-2 text-xs text-muted">
@@ -117,11 +123,11 @@ const uid = useId();
                                 step="1"
                                 :value="form.memoryGib ?? ``"
                                 :placeholder="memoryPlaceholder"
-                                aria-label="Memory cap in GiB"
+                                :aria-label="t(`ui.sandboxResourcesDialog.memoryCapInGib`)"
                                 :class="ui.inputSm(`w-28 text-right`)"
                                 @input="setCap(`memoryGib`, $event)"
                             />
-                            <span class="w-10 text-right">GiB</span>
+                            <span class="w-10 text-right">{{ t(`ui.sandboxResourcesDialog.gib`) }}</span>
                         </label>
                     </template>
                     <template v-if="problems.memory !== undefined" #below>
@@ -130,11 +136,15 @@ const uid = useId();
                 </Row>
 
                 <!-- CPUs default to no ceiling at all (every core), the opposite kind of default from memory's. -->
-                <Row flush density="compact" icon="cpu" title="CPUs" class="px-3.5 py-3" :tone="problems.cpus === undefined ? `default` : `warning`">
-                    <template #description>
-                        Whole CPUs, {{ cpus.min }}<template v-if="cpus.max !== undefined"> to {{ cpus.max }}</template> on this computer. Empty is no
-                        limit: every core it has.
-                    </template>
+                <Row
+                    flush
+                    density="compact"
+                    icon="cpu"
+                    :title="t(`ui.sandboxResourcesDialog.cpus`)"
+                    class="px-3.5 py-3"
+                    :tone="problems.cpus === undefined ? `default` : `warning`"
+                >
+                    <template #description>{{ t(`ui.sandboxResourcesDialog.cpusWhole`, { bounds: bounds(cpus) }) }}</template>
                     <template #control>
                         <label class="flex items-center gap-2 text-xs text-muted">
                             <input
@@ -145,11 +155,11 @@ const uid = useId();
                                 step="1"
                                 :value="form.cpus ?? ``"
                                 :placeholder="cpuPlaceholder"
-                                aria-label="CPU cap in cores"
+                                :aria-label="t(`ui.sandboxResourcesDialog.cpuCapInCores`)"
                                 :class="ui.inputSm(`w-28 text-right`)"
                                 @input="setCap(`cpus`, $event)"
                             />
-                            <span class="w-10 text-right">cores</span>
+                            <span class="w-10 text-right">{{ t(`ui.sandboxResourcesDialog.cores`) }}</span>
                         </label>
                     </template>
                     <template v-if="problems.cpus !== undefined" #below>
@@ -158,16 +168,22 @@ const uid = useId();
                 </Row>
 
                 <!-- Locked, with the reason, when the approved environment demands it: a reshape can add to what it asks but never withdraw it. -->
-                <Row flush density="compact" icon="shield" title="Privileged" class="px-3.5 py-3" :tone="form.privileged ? `warning` : `default`">
+                <Row
+                    flush
+                    density="compact"
+                    icon="shield"
+                    :title="t(`ui.sandboxResourcesDialog.privileged`)"
+                    class="px-3.5 py-3"
+                    :tone="form.privileged ? `warning` : `default`"
+                >
                     <template #description>
-                        Full access to this computer's devices and kernel, the way a nested Docker engine needs. Only for a tool that cannot run
-                        without it.
+                        {{ t(`ui.sandboxResourcesDialog.fullAccessToComputers`) }}
                     </template>
                     <template #control>
                         <ToggleSwitch
                             :model-value="form.privileged"
                             :disabled="locks.privileged !== undefined"
-                            aria-label="Run privileged"
+                            :aria-label="t(`ui.sandboxResourcesDialog.runPrivileged`)"
                             @update:model-value="(value: boolean) => (form = { ...form, privileged: value })"
                         />
                     </template>
@@ -177,20 +193,20 @@ const uid = useId();
                 </Row>
 
                 <!-- The one switch whose ask and answer can disagree: a host without the NVIDIA runtime drops the flag and the sandbox starts without it. -->
-                <Row flush density="compact" icon="bolt" title="GPU" class="px-3.5 py-3">
-                    <template #description>Pass this computer's NVIDIA GPUs into the sandbox: the driver rides in with them.</template>
+                <Row flush density="compact" icon="bolt" :title="t(`ui.sandboxResourcesDialog.gpu`)" class="px-3.5 py-3">
+                    <template #description>{{ t(`ui.sandboxResourcesDialog.passComputersNvidiaGpus`) }}</template>
                     <template #control>
                         <ToggleSwitch
                             :model-value="form.gpu"
                             :disabled="locks.gpu !== undefined"
-                            aria-label="Pass the GPU through"
+                            :aria-label="t(`ui.sandboxResourcesDialog.passGpuThrough`)"
                             @update:model-value="(value: boolean) => (form = { ...form, gpu: value })"
                         />
                     </template>
                     <template v-if="locks.gpu !== undefined || dropped" #below>
                         <p v-if="locks.gpu !== undefined" class="text-2xs text-muted">{{ locks.gpu }}</p>
                         <p v-if="dropped" class="text-2xs text-warning">
-                            Asked for, but this computer has no NVIDIA container runtime, so the sandbox runs without it.
+                            {{ t(`ui.sandboxResourcesDialog.askedComputerNoNvidia`) }}
                         </p>
                     </template>
                 </Row>
@@ -198,18 +214,17 @@ const uid = useId();
 
             <!-- What applying costs, beside the button that commits it; every sentence keeps the sandbox, not the computer, as its subject. -->
             <p class="text-xs text-muted">
-                Applying restarts the sandbox onto the same image, about a minute, and interrupts whoever is working in it. Its files (in /work) are
-                kept, and the new share survives every later update, rollback and rebuild.
+                {{ t(`ui.sandboxResourcesDialog.applyingRestartsSandboxOnto`) }}
             </p>
             <p v-if="selfWarning" class="text-xs text-warning">
-                This is the sandbox you are using right now: this page will lose it until it is back.
+                {{ t(`ui.sandboxResourcesDialog.sandboxUsingRightNow`) }}
             </p>
         </div>
 
         <template #footer>
             <Button :label="t(`ui.action.cancel`)" severity="secondary" :text="true" @click="emit(`cancel`)" />
             <!-- Disabled rather than refused: nothing changed, or a cap outside the rails, leaves nothing for the machine to accept. -->
-            <Button label="Apply" :disabled="!ready" @click="ask !== undefined && emit(`apply`, ask)">
+            <Button :label="t(`ui.action.apply`)" :disabled="!ready" @click="ask !== undefined && emit(`apply`, ask)">
                 <template #icon><Icon name="bolt" /></template>
             </Button>
         </template>

@@ -20,6 +20,7 @@ import { host } from "./host";
 import { useCiDelivery } from "./useCiDelivery";
 import { useSenders } from "./useAutomations";
 import { type AutomationFormState, type SenderRuleDraft, splitIds, type TriggerKind } from "./useAutomationForm";
+import { t } from "./i18n.js";
 
 // Every field of an automation, rendered once by both the composer that creates one and the row that edits one; the
 // shared state lives in useAutomationForm. Three full-width steps (When, Then, Runs as) in a label rail, each sized to
@@ -77,11 +78,11 @@ const personas = computed<readonly PickerOption[]>(() =>
 // whose card is gone still gets a face, greyed, not a glyph, so it reads as gone, not unpinned.
 const personaOptions = computed<readonly PickerOption[]>(() => [
     isFrontDesk.value
-        ? { value: ``, label: `Front desk`, description: `read-only`, icon: `globe` as const }
-        : { value: ``, label: `Nobody`, description: `no accounts`, icon: `circle` as const },
+        ? { value: ``, label: t(`automationFields.frontDesk`), description: `read-only`, icon: `globe` as const }
+        : { value: ``, label: t(`automationFields.nobody`), description: t(`automationFields.noAccounts`), icon: `circle` as const },
     ...personas.value,
     ...(form.actsAs !== `` && !personas.value.some((persona) => persona.value === form.actsAs)
-        ? [{ value: form.actsAs, label: form.actsAs, description: `no longer exists`, face: { id: form.actsAs }, disabled: true }]
+        ? [{ value: form.actsAs, label: form.actsAs, description: t(`automationFields.noLongerExists`), face: { id: form.actsAs }, disabled: true }]
         : []),
 ]);
 
@@ -91,9 +92,9 @@ const rulePersonaOptions = computed<readonly PickerOption[]>(() => {
     const known = new Set(personas.value.map((persona) => persona.value));
     const orphans = [...new Set(form.senderRules.map((rule) => rule.actsAs).filter((id) => id !== `` && !known.has(id)))];
     return [
-        { value: ``, label: `No persona`, description: `full toolbox, no accounts`, icon: `circle` as const },
+        { value: ``, label: t(`automationFields.noPersona`), description: t(`automationFields.fullToolboxNoAccounts`), icon: `circle` as const },
         ...personas.value,
-        ...orphans.map((id) => ({ value: id, label: id, description: `no longer exists`, face: { id }, disabled: true })),
+        ...orphans.map((id) => ({ value: id, label: id, description: t(`automationFields.noLongerExists`), face: { id }, disabled: true })),
     ];
 });
 
@@ -119,12 +120,15 @@ const knownNames = (rule: SenderRuleDraft): string[] =>
         const person = seen.value.find((candidate) => candidate.id === id);
         return person === undefined ? [] : [person.name];
     });
-const OTHERS_OPTIONS = [
-    { value: `ignore`, label: `Ignore` },
-    { value: `hold`, label: `Hold for me` },
-    { value: `allow`, label: `Answer` },
-] as const;
-const OTHERS_CAPTION: Record<(typeof OTHERS_OPTIONS)[number][`value`], string> = {
+const OTHERS_OPTIONS = computed(
+    () =>
+        [
+            { value: `ignore`, label: t(`automationFields.ignore`) },
+            { value: `hold`, label: t(`automationFields.holdMe`) },
+            { value: `allow`, label: t(`automationFields.answer`) },
+        ] as const,
+);
+const OTHERS_CAPTION: Record<(typeof OTHERS_OPTIONS.value)[number][`value`], string> = {
     ignore: `Anyone not named gets no answer. They still show up under “seen recently”, so naming them later is a click.`,
     hold: `Anyone not named waits in Approvals for you, and runs as the persona above once you say so.`,
     allow: `Anyone not named is answered as the persona above, which is what this automation did before it had rules.`,
@@ -157,11 +161,13 @@ defineExpose({ nameInput, promptInput });
 // The app's segmented control, not four hand-drawn cards, so the loudest thing in the form isn't the trigger-kind
 // question. Each keeps its glyph, the same one the list outside this form uses for the row.
 const TRIGGER_TABS = computed<readonly { value: TriggerKind; label: string; icon: IconName }[]>(() => [
-    { value: `schedule`, label: `Schedule`, icon: `clock` },
-    { value: `event`, label: `Webhook`, icon: `bolt` },
+    { value: `schedule`, label: t(`automationFields.schedule`), icon: `clock` },
+    { value: `event`, label: t(`automationFields.webhook`), icon: `bolt` },
     // Needs a connected gateway; an already-Live automation keeps it listed so its editor can't re-point it.
-    ...(liveSources.value.length > 0 || form.kind === `listener` ? [{ value: `listener` as const, label: `Live`, icon: `wifi` as const }] : []),
-    { value: `workspace`, label: `Workspace`, icon: `eye` },
+    ...(liveSources.value.length > 0 || form.kind === `listener`
+        ? [{ value: `listener` as const, label: t(`automationFields.live`), icon: `wifi` as const }]
+        : []),
+    { value: `workspace`, label: t(`automationFields.workspace`), icon: `eye` },
 ]);
 
 // One caption sentence per trigger kind, shown under the picker instead of a label with its own gloss.
@@ -193,44 +199,59 @@ const kind = computed<TriggerKind>({
     },
 });
 
-const FREQ_OPTIONS = [
-    { value: `minutes`, label: `Minutes` },
-    { value: `hourly`, label: `Hourly` },
-    { value: `daily`, label: `Daily` },
-    { value: `weekly`, label: `Weekly` },
-    { value: `monthly`, label: `Monthly` },
-    { value: `custom`, label: `Custom` },
-] as const;
-const DAY_OPTIONS = [
-    { value: 1, label: `Mon` },
-    { value: 2, label: `Tue` },
-    { value: 3, label: `Wed` },
-    { value: 4, label: `Thu` },
-    { value: 5, label: `Fri` },
-    { value: 6, label: `Sat` },
-    { value: 0, label: `Sun` },
-] as const;
-const ACCESS_OPTIONS = [
-    { value: `public`, label: `Anyone` },
-    { value: `google`, label: `Google sign-in` },
-] as const;
-const ANTI_BOT_OPTIONS = [
-    { value: `pow`, label: `Built-in check` },
-    { value: `turnstile`, label: `Cloudflare Turnstile` },
-    { value: `off`, label: `Off` },
-] as const;
+const FREQ_OPTIONS = computed(
+    () =>
+        [
+            { value: `minutes`, label: t(`automationFields.minutes2`) },
+            { value: `hourly`, label: t(`automationFields.hourly`) },
+            { value: `daily`, label: t(`automationFields.daily`) },
+            { value: `weekly`, label: t(`automationFields.weekly`) },
+            { value: `monthly`, label: t(`automationFields.monthly`) },
+            { value: `custom`, label: t(`automationFields.custom`) },
+        ] as const,
+);
+const DAY_OPTIONS = computed(
+    () =>
+        [
+            { value: 1, label: t(`automationFields.mon`) },
+            { value: 2, label: t(`automationFields.tue`) },
+            { value: 3, label: t(`automationFields.wed`) },
+            { value: 4, label: t(`automationFields.thu`) },
+            { value: 5, label: t(`automationFields.fri`) },
+            { value: 6, label: t(`automationFields.sat`) },
+            { value: 0, label: t(`automationFields.sun`) },
+        ] as const,
+);
+const ACCESS_OPTIONS = computed(
+    () =>
+        [
+            { value: `public`, label: t(`automationFields.anyone`) },
+            { value: `google`, label: t(`automationFields.googleSignIn`) },
+        ] as const,
+);
+const ANTI_BOT_OPTIONS = computed(
+    () =>
+        [
+            { value: `pow`, label: t(`automationFields.builtInCheck`) },
+            { value: `turnstile`, label: t(`automationFields.cloudflareTurnstile`) },
+            { value: `off`, label: t(`automationFields.off`) },
+        ] as const,
+);
 
 // Worded as the moment, not the wire event id, since two ids can fire on the same turn and read as one.
-const WORKSPACE_EVENTS = [
-    { value: `turn.settled`, label: `A turn settles`, hint: `After every isolated agent turn, including the ones that errored or conflicted.` },
-    { value: `agent.landed`, label: `Work lands`, hint: `Only when an agent's work actually reaches your workspace.` },
-    {
-        value: `deps.broken`,
-        label: `Checks break`,
-        hint: `A landed change drifted the dependencies, and the reinstalled tree failed its own checks.`,
-    },
-    { value: `deps.fixed`, label: `Checks recover`, hint: `A later land turned those failing checks green again.` },
-] as const;
+const WORKSPACE_EVENTS = computed(
+    () =>
+        [
+            { value: `turn.settled`, label: t(`automationFields.turnSettles`), hint: t(`automationFields.afterEveryIsolatedAgent`) },
+            { value: `agent.landed`, label: t(`automationFields.workLands`), hint: t(`automationFields.onlyAgentsWorkActually`) },
+            {
+                value: `deps.broken`,
+                label: t(`automationFields.checksBreak`),
+                hint: t(`automationFields.landedChangeDriftedDependencies`),
+            },
+            { value: `deps.fixed`, label: t(`automationFields.checksRecover`), hint: t(`automationFields.laterLandTurnedThose`) },
+        ] as const,
+);
 
 // An ordered ladder of picks, walked at fire time; row 1 is preferred, the rest catch it when that account has nothing
 // left. No longer defaultable: `modelsError` requires at least one.
@@ -360,8 +381,8 @@ const setProvider = (provider: string): void => {
         <!-- The name is the daemon's upsert key; retyping it while editing would fork a new automation, not rename this one. -->
         <section v-if="!nameLocked" class="flex flex-col gap-2 pb-4 @2xl:flex-row @2xl:gap-6">
             <div class="flex flex-col gap-0.5 @2xl:w-48 @2xl:shrink-0">
-                <span :class="ui.sectionLabel()">Name</span>
-                <span class="text-2xs text-subtle">How you'll find it later.</span>
+                <span :class="ui.sectionLabel()">{{ t(`automationFields.name`) }}</span>
+                <span class="text-2xs text-subtle">{{ t(`automationFields.howYoullFindLater`) }}</span>
             </div>
             <label class="ui-field min-w-0 max-w-sm flex-1">
                 <input
@@ -381,8 +402,8 @@ const setProvider = (provider: string): void => {
         <!-- WHEN -->
         <section class="flex flex-col gap-3 py-4 first:pt-0 @2xl:flex-row @2xl:gap-6">
             <div class="flex flex-col gap-0.5 @2xl:w-48 @2xl:shrink-0">
-                <span :class="ui.sectionLabel()">When</span>
-                <span class="text-2xs text-subtle">What wakes the agent.</span>
+                <span :class="ui.sectionLabel()">{{ t(`automationFields.when`) }}</span>
+                <span class="text-2xs text-subtle">{{ t(`automationFields.whatWakesAgent`) }}</span>
             </div>
             <div class="flex min-w-0 flex-1 flex-col gap-3">
                 <!-- Cap the tabs at `max-w-2xl` so one-word choices do not become wide slabs. -->
@@ -392,7 +413,7 @@ const setProvider = (provider: string): void => {
                 <!-- The trigger selects the event and optional repository to watch. -->
                 <template v-if="form.kind === 'workspace'">
                     <div class="ui-field">
-                        <span class="ui-field-label">Wake when</span>
+                        <span class="ui-field-label">{{ t(`automationFields.wake`) }}</span>
                         <div class="flex flex-wrap gap-1.5">
                             <button
                                 v-for="option in WORKSPACE_EVENTS"
@@ -411,15 +432,20 @@ const setProvider = (provider: string): void => {
                         </span>
                     </div>
                     <label class="ui-field max-w-sm">
-                        <span class="ui-field-label">Only this repo (optional)</span>
-                        <input v-model="form.repo" placeholder="every repo the change touched" class="font-mono" :class="ui.input()" />
+                        <span class="ui-field-label">{{ t(`automationFields.onlyRepoOptional`) }}</span>
+                        <input
+                            v-model="form.repo"
+                            :placeholder="t(`automationFields.everyRepoChangeTouched`)"
+                            class="font-mono"
+                            :class="ui.input()"
+                        />
                     </label>
                 </template>
 
                 <template v-if="form.kind === 'listener'">
                     <!-- Chips identify choices compactly and wrap when needed. -->
                     <div class="ui-field">
-                        <span class="ui-field-label">Source</span>
+                        <span class="ui-field-label">{{ t(`automationFields.source`) }}</span>
                         <div class="flex flex-wrap gap-1.5">
                             <button
                                 v-for="source in visibleSources"
@@ -434,7 +460,7 @@ const setProvider = (provider: string): void => {
                                 <img v-if="source.logo" :src="`https://cdn.simpleicons.org/${source.logo}`" class="h-3.5 w-3.5" alt="" />
                                 <Icon v-else :name="glyph(source.icon) ?? 'bolt'" class="text-2xs" />
                                 {{ source.label }}
-                                <span v-if="!source.available" class="text-warning">unavailable</span>
+                                <span v-if="!source.available" class="text-warning">{{ t(`automationFields.unavailable`) }}</span>
                             </button>
                         </div>
                     </div>
@@ -442,7 +468,7 @@ const setProvider = (provider: string): void => {
                     <!-- Front Desk settings describe its embed location and audience. -->
                     <div v-if="isFrontDesk" class="grid gap-3 @2xl:grid-cols-2">
                         <label class="ui-field @2xl:col-span-2">
-                            <span class="ui-field-label">Allowed sites</span>
+                            <span class="ui-field-label">{{ t(`automationFields.allowedSites`) }}</span>
                             <textarea
                                 v-model="form.origins"
                                 rows="2"
@@ -455,10 +481,10 @@ const setProvider = (provider: string): void => {
                                 <Icon name="exclamation-triangle" class="text-2xs" />
                                 {{ originsError }}
                             </span>
-                            <p v-else class="text-2xs text-subtle">One per line, scheme and host only. www and the bare domain count separately.</p>
+                            <p v-else class="text-2xs text-subtle">{{ t(`automationFields.onePerLineScheme`) }}</p>
                         </label>
                         <div class="ui-field">
-                            <span class="ui-field-label">Who can chat</span>
+                            <span class="ui-field-label">{{ t(`automationFields.whoChat`) }}</span>
                             <div class="flex flex-wrap gap-1.5">
                                 <button
                                     v-for="option in ACCESS_OPTIONS"
@@ -474,7 +500,7 @@ const setProvider = (provider: string): void => {
                             </div>
                         </div>
                         <div class="ui-field">
-                            <span class="ui-field-label">Bot check</span>
+                            <span class="ui-field-label">{{ t(`automationFields.botCheck`) }}</span>
                             <div class="flex flex-wrap gap-1.5">
                                 <button
                                     v-for="option in ANTI_BOT_OPTIONS"
@@ -489,38 +515,49 @@ const setProvider = (provider: string): void => {
                                 </button>
                             </div>
                             <p class="text-2xs text-subtle">
-                                <template v-if="form.antiBot === 'pow'">About a second of each visitor's browser time. No keys.</template>
-                                <template v-else-if="form.antiBot === 'turnstile'">Invisible for most visitors. Needs a Cloudflare widget.</template>
-                                <template v-else>Only the allowed sites and the daily limit are left.</template>
+                                <template v-if="form.antiBot === 'pow'">{{ t(`automationFields.aboutSecondEachVisitors`) }}</template>
+                                <template v-else-if="form.antiBot === 'turnstile'">{{ t(`automationFields.invisibleMostVisitorsNeeds`) }}</template>
+                                <template v-else>{{ t(`automationFields.onlyAllowedSitesDaily`) }}</template>
                             </p>
                         </div>
                         <label v-if="form.access === 'google'" class="ui-field">
-                            <span class="ui-field-label">Google client ID</span>
+                            <span class="ui-field-label">{{ t(`automationFields.googleClientId`) }}</span>
                             <input
                                 v-model="form.googleClientId"
                                 placeholder="1234-abc.apps.googleusercontent.com"
                                 class="font-mono"
                                 :class="ui.input()"
                             />
-                            <p class="text-2xs text-subtle">Your site's own OAuth client. Add each allowed site to it as an authorized origin.</p>
+                            <p class="text-2xs text-subtle">{{ t(`automationFields.sitesOwnOauthClient`) }}</p>
                         </label>
                         <template v-if="form.antiBot === 'turnstile'">
                             <label class="ui-field">
-                                <span class="ui-field-label">Turnstile site key</span>
-                                <input v-model="form.turnstileSiteKey" placeholder="0x4AAA…" class="font-mono" :class="ui.input()" />
+                                <span class="ui-field-label">{{ t(`automationFields.turnstileSiteKey`) }}</span>
+                                <input
+                                    v-model="form.turnstileSiteKey"
+                                    :placeholder="t(`automationFields.n0x4aaa`)"
+                                    class="font-mono"
+                                    :class="ui.input()"
+                                />
                             </label>
                             <label class="ui-field">
-                                <span class="ui-field-label">Turnstile secret key</span>
-                                <input v-model="form.turnstileSecret" type="password" placeholder="0x4AAA…" class="font-mono" :class="ui.input()" />
-                                <p class="text-2xs text-subtle">Stays in your sandbox: only the site key is ever sent to a visitor's browser.</p>
+                                <span class="ui-field-label">{{ t(`automationFields.turnstileSecretKey`) }}</span>
+                                <input
+                                    v-model="form.turnstileSecret"
+                                    type="password"
+                                    :placeholder="t(`automationFields.n0x4aaa`)"
+                                    class="font-mono"
+                                    :class="ui.input()"
+                                />
+                                <p class="text-2xs text-subtle">{{ t(`automationFields.staysInSandboxOnly`) }}</p>
                             </label>
                         </template>
                         <label class="ui-field">
-                            <span class="ui-field-label">Greeting (optional)</span>
-                            <input v-model="form.greeting" placeholder="Hi! Ask me anything." :class="ui.input()" />
+                            <span class="ui-field-label">{{ t(`automationFields.greetingOptional`) }}</span>
+                            <input v-model="form.greeting" :placeholder="t(`automationFields.hiAskMeAnything`)" :class="ui.input()" />
                         </label>
                         <label class="ui-field">
-                            <span class="ui-field-label">Daily message limit</span>
+                            <span class="ui-field-label">{{ t(`automationFields.dailyMessageLimit`) }}</span>
                             <input
                                 v-model="form.dailyMessageMax"
                                 type="number"
@@ -529,14 +566,14 @@ const setProvider = (provider: string): void => {
                                 :class="ui.input()"
                             />
                             <p class="text-2xs text-subtle">
-                                Each message runs an agent turn on your account. Blank means {{ WEBCHAT_DAILY_MAX_DEFAULT }} a day.
+                                {{ t(`automationFields.eachMessageRunsAgent`, { webchat_daily_max_default: WEBCHAT_DAILY_MAX_DEFAULT }) }}
                             </p>
                         </label>
                     </div>
 
                     <div v-else class="grid gap-3 @2xl:grid-cols-2">
                         <div class="ui-field @2xl:col-span-2">
-                            <span class="ui-field-label">Events</span>
+                            <span class="ui-field-label">{{ t(`automationFields.events`) }}</span>
                             <div class="flex flex-wrap gap-1.5">
                                 <button
                                     type="button"
@@ -545,7 +582,7 @@ const setProvider = (provider: string): void => {
                                     :aria-pressed="form.eventType === undefined"
                                     @click="form.eventType = undefined"
                                 >
-                                    Any
+                                    {{ t(`automationFields.any`) }}
                                 </button>
                                 <button
                                     v-for="eventOption in listenerSource.events"
@@ -582,7 +619,7 @@ const setProvider = (provider: string): void => {
 
                 <template v-if="form.kind === 'schedule'">
                     <div class="ui-field">
-                        <span class="ui-field-label">Repeats</span>
+                        <span class="ui-field-label">{{ t(`automationFields.repeats`) }}</span>
                         <div class="flex flex-wrap gap-1.5">
                             <button
                                 v-for="option in FREQ_OPTIONS"
@@ -613,45 +650,51 @@ const setProvider = (provider: string): void => {
                             </button>
                         </div>
                         <label v-if="schedule.freq === 'minutes'" class="flex items-center gap-2 text-xs text-muted">
-                            Every
-                            <input v-model.number="schedule.everyMinutes" type="number" min="1" max="59" class="w-20" :class="ui.input()" /> minutes
+                            {{ t(`automationFields.every`) }}
+                            <input v-model.number="schedule.everyMinutes" type="number" min="1" max="59" class="w-20" :class="ui.input()" />
+                            {{ t(`automationFields.minutes`) }}
                         </label>
                         <label v-if="schedule.freq === 'monthly'" class="flex items-center gap-2 text-xs text-muted">
-                            On day <input v-model.number="schedule.dayOfMonth" type="number" min="1" max="31" class="w-20" :class="ui.input()" />
+                            {{ t(`automationFields.onDay`) }}
+                            <input v-model.number="schedule.dayOfMonth" type="number" min="1" max="31" class="w-20" :class="ui.input()" />
                         </label>
                         <label
                             v-if="schedule.freq === 'daily' || schedule.freq === 'weekly' || schedule.freq === 'monthly'"
                             class="flex items-center gap-2 text-xs text-muted"
                         >
                             <!-- Wide enough for a 12-hour locale: `w-28` clipped the AM/PM suffix in en-US browsers. -->
-                            At <input v-model="schedule.time" type="time" class="w-36" :class="ui.input()" />
+                            {{ t(`automationFields.at`) }} <input v-model="schedule.time" type="time" class="w-36" :class="ui.input()" />
                         </label>
                         <label v-if="schedule.freq === 'custom'" class="flex min-w-0 flex-col gap-1">
                             <input v-model="schedule.cron" placeholder="0 9 * * 1-5" class="w-48" :class="ui.input('font-mono')" />
-                            <span class="text-2xs text-subtle">Standard 5-field cron: minute hour day month weekday.</span>
+                            <span class="text-2xs text-subtle">{{ t(`automationFields.standard5FieldCron`) }}</span>
                         </label>
                     </div>
-                    <p v-if="schedule.freq === 'weekly' && schedule.days.length === 0" class="text-xs text-danger">Pick at least one day.</p>
+                    <p v-if="schedule.freq === 'weekly' && schedule.days.length === 0" class="text-xs text-danger">
+                        {{ t(`automationFields.pickAtLeastOne`) }}
+                    </p>
                     <!-- Proof the cron does what it says: shows when it will actually fire next. -->
                     <p v-if="cronPreview" class="text-xs" :class="'error' in cronPreview ? 'text-danger' : 'text-muted'">
-                        <template v-if="'runs' in cronPreview">Next runs: {{ cronPreview.runs.map(formatDateTime).join(" · ") }}</template>
+                        <template v-if="'runs' in cronPreview">{{
+                            t(`automationFields.nextRuns`, { runs: cronPreview.runs.map(formatDateTime).join(" · ") })
+                        }}</template>
                         <template v-else>{{ cronPreview.error }}</template>
                     </p>
                     <!-- Gates use sessions since the last wake, not elapsed time. -->
                     <label class="flex flex-wrap items-center gap-2 text-xs text-muted">
-                        Only once
+                        {{ t(`automationFields.onlyOnce`) }}
                         <input
                             v-model.number="form.afterSessions"
                             type="number"
                             min="0"
                             class="w-20 font-mono"
                             :class="ui.input()"
-                            aria-label="New sessions required since the last wake before a due run fires"
+                            :aria-label="t(`automationFields.newSessionsRequiredSince`)"
                         />
-                        new sessions have run since it last woke
+                        {{ t(`automationFields.newSessionsRunSince`) }}
                     </label>
                     <p class="text-2xs text-subtle">
-                        0 fires on every occurrence. Short of the bar, a due run is recorded as skipped and says how far off it is.
+                        {{ t(`automationFields.n0FiresOnEvery`) }}
                     </p>
                 </template>
 
@@ -669,20 +712,20 @@ const setProvider = (provider: string): void => {
         <!-- THEN -->
         <section class="flex flex-col gap-3 py-4 @2xl:flex-row @2xl:gap-6">
             <div class="flex flex-col gap-0.5 @2xl:w-48 @2xl:shrink-0">
-                <span :class="ui.sectionLabel()">Then</span>
-                <span class="text-2xs text-subtle">What it wakes with.</span>
+                <span :class="ui.sectionLabel()">{{ t(`automationFields.then`) }}</span>
+                <span class="text-2xs text-subtle">{{ t(`automationFields.whatWakes`) }}</span>
                 <!-- Validation must agree with the trigger's payload shape. -->
-                <span v-if="recipeNote" class="mt-1 text-2xs text-subtle">Starter from {{ recipeNote }}.</span>
+                <span v-if="recipeNote" class="mt-1 text-2xs text-subtle">{{ t(`automationFields.starter`, { recipeNote }) }}</span>
                 <span v-else-if="starterPrompt && form.prompt === starterPrompt" class="mt-1 text-2xs text-subtle">
-                    {{ listenerSource.label }}'s starter, yours to rewrite.
-                </span>
+                    {{ t(`automationFields.sStarterYoursTo`, { label: listenerSource.label }) }}</span
+                >
             </div>
             <label class="ui-field min-w-0 flex-1 cursor-text">
                 <!-- Use the story editor's borderless prose field for this writing surface. -->
                 <ProseField
                     ref="promptField"
                     v-model="form.prompt"
-                    placeholder="Check the inbox and summarize anything urgent."
+                    :placeholder="t(`automationFields.checkInboxSummarizeAnything`)"
                     class="-mx-2 min-h-24"
                     @blur="markTouched('prompt')"
                 />
@@ -693,8 +736,10 @@ const setProvider = (provider: string): void => {
                 <!-- A starter left over from a different source; not the form's to rewrite, but worth flagging with a way to swap it. -->
                 <p v-else-if="staleStarter" class="flex flex-wrap items-baseline gap-x-1.5 text-2xs text-warning">
                     <Icon name="exclamation-triangle" class="text-2xs" />
-                    <span>This is {{ staleStarter.label }}'s starter, but {{ listenerSource.label }} sends a different payload.</span>
-                    <button type="button" :class="ui.textAction()" @click="applyStarter">Use the {{ listenerSource.label }} starter</button>
+                    <span>{{ t(`automationFields.sStarterSendsDifferent`, { label: staleStarter.label, label2: listenerSource.label }) }}</span>
+                    <button type="button" :class="ui.textAction()" @click="applyStarter">
+                        {{ t(`automationFields.useStarter`, { label: listenerSource.label }) }}
+                    </button>
                 </p>
             </label>
         </section>
@@ -704,15 +749,15 @@ const setProvider = (provider: string): void => {
         <section class="flex flex-col gap-3 pt-4 @2xl:flex-row @2xl:gap-6">
             <!-- “How” distinguishes the agent's behavior from where it runs. -->
             <div class="flex flex-col gap-0.5 @2xl:w-48 @2xl:shrink-0">
-                <span :class="ui.sectionLabel()">How</span>
-                <span class="text-2xs text-subtle">Who it runs as, and what pays for it.</span>
+                <span :class="ui.sectionLabel()">{{ t(`automationFields.how`) }}</span>
+                <span class="text-2xs text-subtle">{{ t(`automationFields.whoRunsWhatPays`) }}</span>
             </div>
             <div class="flex min-w-0 flex-1 flex-col gap-3">
                 <!-- Keep the same-shaped behavior and runtime pickers side by side. -->
                 <div class="grid gap-3 @xl:grid-cols-2">
                     <!-- Preserve the daemon's preference order so fallback remains predictable. -->
                     <div class="ui-field min-w-0">
-                        <span class="ui-field-label">Runs on</span>
+                        <span class="ui-field-label">{{ t(`automationFields.runsOn`) }}</span>
                         <div class="flex min-w-0 flex-col gap-1.5">
                             <div v-for="(label, index) in rungs" :key="index" class="flex min-w-0 items-center gap-1.5">
                                 <!-- The number is the row's whole meaning: order matters here, so it has to be shown. -->
@@ -721,7 +766,7 @@ const setProvider = (provider: string): void => {
                                     :ref="(el) => bindRung(index, el)"
                                     type="button"
                                     class="flex min-w-0 flex-1 cursor-pointer items-center gap-2 rounded-md border border-line bg-canvas px-3 py-2 text-left text-sm text-content transition-colors hover:border-line-strong"
-                                    :aria-label="`Model ${index + 1} for this automation: ${label}. Change it`"
+                                    :aria-label="t(`automationFields.modelAutomationChange`, { index: index + 1, label })"
                                     @click="editRung(index)"
                                 >
                                     <Icon name="sparkles" class="shrink-0 text-subtle" />
@@ -731,21 +776,21 @@ const setProvider = (provider: string): void => {
                                 <!-- Keep the first-row spacer so its chip aligns with later rows. -->
                                 <button
                                     type="button"
-                                    v-tooltip.top="`Try this one earlier`"
+                                    v-tooltip.top="t(`automationFields.tryOneEarlier`)"
                                     :class="ui.iconButton(index === 0 ? `invisible` : ``)"
                                     :disabled="index === 0"
                                     :aria-hidden="index === 0"
                                     :tabindex="index === 0 ? -1 : undefined"
-                                    :aria-label="`Move model ${index + 1} up`"
+                                    :aria-label="t(`automationFields.moveModelUp`, { index: index + 1 })"
                                     @click="moveRung(index, -1)"
                                 >
                                     <Icon name="chevron-up" />
                                 </button>
                                 <button
                                     type="button"
-                                    v-tooltip.top="`Remove this model`"
+                                    v-tooltip.top="t(`automationFields.removeModel`)"
                                     :class="ui.iconButton()"
-                                    :aria-label="`Remove model ${index + 1}`"
+                                    :aria-label="t(`automationFields.removeModel2`, { index: index + 1 })"
                                     @click="removeRung(index)"
                                 >
                                     <Icon name="times" />
@@ -758,30 +803,39 @@ const setProvider = (provider: string): void => {
                                 @click="addRung"
                             >
                                 <Icon name="plus" />
-                                {{ form.models.length === 0 ? `Pick a model` : `Add a fallback` }}
+                                {{ form.models.length === 0 ? t(`automationFields.pickModel`) : t(`automationFields.addFallback`) }}
                             </button>
                         </div>
                         <!-- Its error is about spending, not syntax, so it's shown here, not only on the disabled save button. -->
                         <p v-if="modelsError !== undefined && touched.has(`models`)" class="text-2xs text-danger">{{ modelsError }}</p>
                     </div>
                     <div class="ui-field min-w-0">
-                        <span class="ui-field-label">Persona</span>
-                        <Picker v-model="form.actsAs" :options="personaOptions" aria-label="Persona this automation runs as" class="w-full" />
+                        <span class="ui-field-label">{{ t(`automationFields.persona`) }}</span>
+                        <Picker
+                            v-model="form.actsAs"
+                            :options="personaOptions"
+                            :aria-label="t(`automationFields.personaAutomationRuns`)"
+                            class="w-full"
+                        />
                     </div>
                 </div>
                 <!-- A blank Front Desk uses the saved read-only persona's boundary. -->
                 <p v-if="isFrontDesk && form.actsAs === ``" class="-mt-1 text-2xs text-subtle">
-                    Strangers write these prompts, so saving adds a read-only front desk to your personas.
+                    {{ t(`automationFields.strangersWritePromptsSaving`) }}
                 </p>
 
                 <!-- WHO IT ANSWERS: drawn only where the source vouches for who is writing; the Front Desk keeps its own access above. -->
                 <div v-if="sendersOffered" class="flex flex-col gap-3 border-t border-line-subtle pt-3">
                     <label class="flex items-center gap-2 text-xs text-content">
-                        <ToggleSwitch v-model="form.senders" aria-label="Decide per person who it answers" />
-                        Decide per person who it answers, and as whom
+                        <ToggleSwitch v-model="form.senders" :aria-label="t(`automationFields.decidePerPersonWho`)" />
+                        {{ t(`automationFields.decidePerPersonWho2`) }}
                     </label>
                     <template v-if="form.senders">
-                        <div v-for="(rule, index) in form.senderRules" :key="index" class="flex flex-col gap-2 rounded-md border border-line-subtle p-3">
+                        <div
+                            v-for="(rule, index) in form.senderRules"
+                            :key="index"
+                            class="flex flex-col gap-2 rounded-md border border-line-subtle p-3"
+                        >
                             <div class="flex items-start gap-2">
                                 <div class="grid min-w-0 flex-1 gap-3" :class="listenerSource.senderGroup ? `@xl:grid-cols-2` : ``">
                                     <label class="ui-field min-w-0">
@@ -790,12 +844,16 @@ const setProvider = (provider: string): void => {
                                             v-model="rule.ids"
                                             :class="ui.input(`font-mono`)"
                                             :placeholder="listenerSource.sender?.placeholder"
-                                            :aria-label="`People rule ${index + 1} names`"
+                                            :aria-label="t(`automationFields.peopleRuleNames`, { index: index + 1 })"
                                             @blur="markTouched(`senders`)"
                                         />
                                         <!-- The roster's names for the ids typed, when it has heard from them; else where to find an id. -->
-                                        <span v-if="knownNames(rule).length > 0" class="text-2xs text-subtle">{{ knownNames(rule).join(` · `) }}</span>
-                                        <span v-else-if="listenerSource.sender?.hint" class="text-2xs text-subtle">{{ listenerSource.sender.hint }}</span>
+                                        <span v-if="knownNames(rule).length > 0" class="text-2xs text-subtle">{{
+                                            knownNames(rule).join(` · `)
+                                        }}</span>
+                                        <span v-else-if="listenerSource.sender?.hint" class="text-2xs text-subtle">{{
+                                            listenerSource.sender.hint
+                                        }}</span>
                                     </label>
                                     <label v-if="listenerSource.senderGroup" class="ui-field min-w-0">
                                         <span class="ui-field-label">{{ listenerSource.senderGroup.label }}</span>
@@ -803,17 +861,19 @@ const setProvider = (provider: string): void => {
                                             v-model="rule.groups"
                                             :class="ui.input(`font-mono`)"
                                             :placeholder="listenerSource.senderGroup.placeholder"
-                                            :aria-label="`Groups rule ${index + 1} names`"
+                                            :aria-label="t(`automationFields.groupsRuleNames`, { index: index + 1 })"
                                             @blur="markTouched(`senders`)"
                                         />
-                                        <span v-if="listenerSource.senderGroup.hint" class="text-2xs text-subtle">{{ listenerSource.senderGroup.hint }}</span>
+                                        <span v-if="listenerSource.senderGroup.hint" class="text-2xs text-subtle">{{
+                                            listenerSource.senderGroup.hint
+                                        }}</span>
                                     </label>
                                 </div>
                                 <button
                                     type="button"
                                     :class="ui.iconButton()"
-                                    :aria-label="`Remove rule ${index + 1}`"
-                                    v-tooltip.top="`Remove this rule`"
+                                    :aria-label="t(`automationFields.removeRule`, { index: index + 1 })"
+                                    v-tooltip.top="t(`automationFields.removeRule2`)"
                                     @click="removeSenderRule(index)"
                                 >
                                     <Icon name="times" />
@@ -821,7 +881,7 @@ const setProvider = (provider: string): void => {
                             </div>
                             <!-- Seen recently: whoever has written, by name; a click stores the id the service vouches for. -->
                             <div v-if="unnamed(rule).length > 0" class="flex flex-wrap items-center gap-x-2 gap-y-1 text-2xs text-subtle">
-                                <span>Seen recently:</span>
+                                <span>{{ t(`automationFields.seenRecently`) }}</span>
                                 <button
                                     v-for="person in unnamed(rule)"
                                     :key="person.id"
@@ -835,22 +895,30 @@ const setProvider = (provider: string): void => {
                             </div>
                             <div class="flex flex-wrap items-center gap-x-6 gap-y-2">
                                 <div class="ui-field w-full min-w-0 max-w-xs">
-                                    <span class="ui-field-label">They talk to</span>
-                                    <Picker v-model="rule.actsAs" :options="rulePersonaOptions" :aria-label="`Persona rule ${index + 1} answers as`" class="w-full" />
+                                    <span class="ui-field-label">{{ t(`automationFields.theyTalkTo`) }}</span>
+                                    <Picker
+                                        v-model="rule.actsAs"
+                                        :options="rulePersonaOptions"
+                                        :aria-label="t(`automationFields.personaRuleAnswers`, { index: index + 1 })"
+                                        class="w-full"
+                                    />
                                 </div>
                                 <label class="flex items-center gap-2 text-xs text-content">
-                                    <ToggleSwitch v-model="rule.requireApproval" :aria-label="`Hold messages from rule ${index + 1} for approval`" />
-                                    Hold their messages for me
+                                    <ToggleSwitch
+                                        v-model="rule.requireApproval"
+                                        :aria-label="t(`automationFields.holdMessagesRuleApproval`, { index: index + 1 })"
+                                    />
+                                    {{ t(`automationFields.holdMessagesMe`) }}
                                 </label>
                             </div>
                         </div>
                         <button type="button" :class="ui.addTile(`self-start px-3 py-2`)" @click="addSenderRule">
                             <Icon name="plus" />
-                            {{ form.senderRules.length === 0 ? `Name who it answers` : `Add more people` }}
+                            {{ form.senderRules.length === 0 ? t(`automationFields.nameWhoAnswers`) : t(`automationFields.addMorePeople`) }}
                         </button>
                         <p v-if="sendersError !== undefined && touched.has(`senders`)" class="text-2xs text-danger">{{ sendersError }}</p>
                         <div class="flex flex-wrap items-center gap-3 text-xs text-content">
-                            <span>Everyone else</span>
+                            <span>{{ t(`automationFields.everyoneElse`) }}</span>
                             <SegmentedControl v-model="form.senderOthers" :options="OTHERS_OPTIONS" />
                         </div>
                         <p class="-mt-1 text-2xs text-subtle">{{ OTHERS_CAPTION[form.senderOthers] }}</p>
@@ -860,12 +928,12 @@ const setProvider = (provider: string): void => {
                 <!-- One line, since they compose: approval holds every fire for a click, the countdown holds it and starts by itself. -->
                 <div class="flex flex-wrap items-center gap-x-6 gap-y-2 border-t border-line-subtle pt-3">
                     <label class="flex items-center gap-2 text-xs text-content">
-                        <ToggleSwitch v-model="form.requireApproval" aria-label="Require my approval before running" />
-                        Require my approval before it runs
+                        <ToggleSwitch v-model="form.requireApproval" :aria-label="t(`automationFields.requireMyApprovalBefore`)" />
+                        {{ t(`automationFields.requireMyApprovalBefore2`) }}
                     </label>
                     <!-- Approval always beats the hold; disabled, the field enforces that itself instead of a warning you had to read. -->
                     <label class="flex items-center gap-2 text-xs" :class="form.requireApproval ? `text-subtle` : `text-content`">
-                        Hold each run for
+                        {{ t(`automationFields.holdEachRun`) }}
                         <input
                             v-model.number="form.holdForSeconds"
                             type="number"
@@ -874,27 +942,27 @@ const setProvider = (provider: string): void => {
                             class="w-20 font-mono"
                             :class="ui.input()"
                             :disabled="form.requireApproval"
-                            aria-label="Seconds to hold each run before it starts"
+                            :aria-label="t(`automationFields.secondsToHoldEach`)"
                         />
-                        seconds
+                        {{ t(`automationFields.seconds`) }}
                     </label>
                 </div>
                 <!-- Said here, not just in the docs, since "require my approval" doesn't sound like a chat that never answers. -->
                 <p v-if="form.requireApproval && isFrontDesk" class="-mt-1 text-2xs text-warning">
-                    Visitors get no answer in the widget: approved replies land in your chat instead.
+                    {{ t(`automationFields.visitorsGetNoAnswer`) }}
                 </p>
 
                 <!-- Keep the extra job restriction folded because it is uncommon. -->
                 <details v-if="form.actsAs !== ``" class="text-xs">
-                    <summary class="cursor-pointer text-muted hover:text-content">Narrow this one job further</summary>
+                    <summary class="cursor-pointer text-muted hover:text-content">{{ t(`automationFields.narrowOneJobFurther`) }}</summary>
                     <div class="ui-field mt-2 max-w-sm">
                         <input
                             v-model="form.allowedTools"
                             :class="ui.input()"
-                            placeholder="Read, Grep, Glob"
-                            aria-label="Tool names this job may call"
+                            :placeholder="t(`automationFields.readGrepGlob`)"
+                            :aria-label="t(`automationFields.toolNamesJobMay`)"
                         />
-                        <p class="text-2xs text-subtle">Tool names, comma-separated. Empty leaves the persona's own list alone.</p>
+                        <p class="text-2xs text-subtle">{{ t(`automationFields.toolNamesCommaSeparated`) }}</p>
                     </div>
                 </details>
             </div>

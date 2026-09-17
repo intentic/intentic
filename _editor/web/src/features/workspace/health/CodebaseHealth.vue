@@ -5,12 +5,15 @@ import { startAgent } from "../../agents/fleet/agentActions";
 import { useCodebaseHealth } from "./useCodebaseHealth";
 import { useRepos } from "../explorer/useRepos";
 import { useWorkspaceTabs } from "../tabs/useWorkspaceTabs";
-import { type ChurnWindow, CHURN_WINDOWS, formatCount, hotspotRows, moduleRows, perFile } from "./codebaseHealth";
+import { type ChurnWindow, churnWindows, formatCount, hotspotRows, moduleRows, perFile } from "./codebaseHealth";
+import { useT } from "@intentic/ui/i18n";
 
 // A repository's Health tab in the management panel, and the workspace root's own health tab; answers where the risk
 // sits, via hotspots (churn x complexity) and map (PageRank over imports). Every number is a count a reader can
 // recount, never a grade, so a row opens a file, not a score. Its action hands that file to an agent, using the row's
 // own numbers.
+
+const t = useT();
 
 const { repo } = defineProps<{ repo: string }>();
 // Opens through the tab store rather than an emit: the management panel mounts this view through ExtensionView, which
@@ -43,19 +46,19 @@ const ROW_CLASS = `grid grid-cols-[1.25rem_minmax(0,1fr)_8rem_3.5rem_4rem] items
                 :options="options.map((option) => ({ value: option, label: option }))"
                 variant="ghost"
                 class="max-w-48"
-                aria-label="Repository"
+                :aria-label="t(`workspace.codebaseHealth.repository`)"
                 @update:model-value="(value: string | undefined) => value !== undefined && openHealth(value)"
             />
             <span v-else class="text-xs font-medium text-content">{{ repo }}</span>
             <span class="flex-1"></span>
             <!-- The window narrows churn only; complexity reflects the file as it stands today and doesn't move with it. -->
-            <span class="shrink-0 text-2xs text-subtle">Commits from</span>
-            <SegmentedControl v-model="churnWindow" size="xs" :options="CHURN_WINDOWS" />
+            <span class="shrink-0 text-2xs text-subtle">{{ t(`workspace.codebaseHealth.commits`) }}</span>
+            <SegmentedControl v-model="churnWindow" size="xs" :options="churnWindows()" />
             <button
                 type="button"
                 class="flex shrink-0 items-center rounded-md px-1 py-0.5 text-muted transition-colors hover:text-content"
-                v-tooltip.bottom="'Recompute from the current index'"
-                aria-label="Refresh codebase health"
+                v-tooltip.bottom="t(`workspace.codebaseHealth.recomputeCurrentIndex`)"
+                :aria-label="t(`workspace.codebaseHealth.refreshCodebaseHealth`)"
                 @click="refresh()"
             >
                 <Icon name="refresh" class="text-2xs" />
@@ -66,50 +69,53 @@ const ROW_CLASS = `grid grid-cols-[1.25rem_minmax(0,1fr)_8rem_3.5rem_4rem] items
         <p v-if="error" class="shrink-0 truncate px-3 py-1 text-2xs text-danger" v-tooltip.bottom.overflow="error">{{ error }}</p>
 
         <div class="min-h-0 flex-1 overflow-auto px-3 py-3">
-            <p v-if="totals === undefined" class="py-3 text-2xs text-subtle">{{ loading ? "Reading the index…" : "No report yet." }}</p>
+            <p v-if="totals === undefined" class="py-3 text-2xs text-subtle">
+                {{ loading ? t(`workspace.codebaseHealth.readingIndex`) : t(`workspace.codebaseHealth.noReportYet`) }}
+            </p>
             <template v-else>
                 <p v-if="building" class="mb-3 flex items-center gap-1.5 text-2xs text-warning">
                     <Icon name="exclamation-triangle" class="shrink-0 text-[0.65rem]" />
-                    The index is still building: these figures cover only what has been read so far.
+                    {{ t(`workspace.codebaseHealth.indexStillBuildingFigures`) }}
                 </p>
 
                 <dl class="grid grid-cols-2 gap-2 @xl:grid-cols-4">
                     <div class="min-w-0 rounded-md border border-line bg-card px-3 py-2">
-                        <dt class="text-2xs text-muted">Files</dt>
+                        <dt class="text-2xs text-muted">{{ t(`workspace.codebaseHealth.files`) }}</dt>
                         <dd class="mt-0.5 truncate text-lg font-semibold leading-none text-content">{{ formatCount(totals.files) }}</dd>
-                        <p class="mt-1 text-2xs text-subtle">indexed, ignoring build output</p>
+                        <p class="mt-1 text-2xs text-subtle">{{ t(`workspace.codebaseHealth.indexedIgnoringBuildOutput`) }}</p>
                     </div>
                     <div class="min-w-0 rounded-md border border-line bg-card px-3 py-2">
-                        <dt class="text-2xs text-muted">Symbols</dt>
+                        <dt class="text-2xs text-muted">{{ t(`workspace.codebaseHealth.symbols`) }}</dt>
                         <dd class="mt-0.5 truncate text-lg font-semibold leading-none text-content">{{ formatCount(totals.symbols) }}</dd>
-                        <p class="mt-1 text-2xs text-subtle">functions, types, classes</p>
+                        <p class="mt-1 text-2xs text-subtle">{{ t(`workspace.codebaseHealth.functionsTypesClasses`) }}</p>
                     </div>
                     <div class="min-w-0 rounded-md border border-line bg-card px-3 py-2">
-                        <dt class="text-2xs text-muted">Branch points</dt>
+                        <dt class="text-2xs text-muted">{{ t(`workspace.codebaseHealth.branchPoints`) }}</dt>
                         <dd class="mt-0.5 truncate text-lg font-semibold leading-none text-content">{{ formatCount(totals.complexity) }}</dd>
-                        <p class="mt-1 text-2xs text-subtle">{{ perFile(totals.complexity, totals.files) }} per file</p>
+                        <p class="mt-1 text-2xs text-subtle">
+                            {{ t(`workspace.codebaseHealth.perFile`, { files: perFile(totals.complexity, totals.files) }) }}
+                        </p>
                     </div>
                     <div class="min-w-0 rounded-md border border-line bg-card px-3 py-2">
-                        <dt class="text-2xs text-muted">Hotspots</dt>
+                        <dt class="text-2xs text-muted">{{ t(`workspace.codebaseHealth.hotspots`) }}</dt>
                         <dd class="mt-0.5 truncate text-lg font-semibold leading-none text-content">{{ formatCount(totals.hotspots) }}</dd>
-                        <p class="mt-1 text-2xs text-subtle">files with both churn and branching</p>
+                        <p class="mt-1 text-2xs text-subtle">{{ t(`workspace.codebaseHealth.filesBothChurnBranching`) }}</p>
                     </div>
                 </dl>
 
                 <section class="mt-4">
                     <h2 class="text-2xs font-medium uppercase tracking-wide text-subtle">
-                        Hotspots<span v-if="totals.hotspots > rows.length" class="ml-1 normal-case tracking-normal">
-                            · top {{ rows.length }} of {{ formatCount(totals.hotspots) }}</span
-                        >
+                        {{ t(`workspace.codebaseHealth.hotspots`)
+                        }}<span v-if="totals.hotspots > rows.length" class="ml-1 normal-case tracking-normal">{{
+                            t(`workspace.codebaseHealth.top`, { count: rows.length, hotspots: formatCount(totals.hotspots) })
+                        }}</span>
                     </h2>
                     <p class="mt-0.5 text-2xs text-subtle">
-                        Commits × branch points. Neither alone is a warning: a churning config file is trivial, and a tangled file nobody touches
-                        costs nobody anything. Open a row to read the file, or
-                        <Icon name="sparkles" class="text-[0.65rem]" aria-hidden="true" /> to start an agent refactoring it.
+                        {{ t(`workspace.codebaseHealth.commitsBranchPointsNeither`) }}
+                        <Icon name="sparkles" class="text-[0.65rem]" aria-hidden="true" /> {{ t(`workspace.codebaseHealth.toStartAgentRefactoring`) }}
                     </p>
                     <p v-if="rows.length === 0" class="py-3 text-2xs text-subtle">
-                        No file here has both commits and branch points: a repository with no history yet, or one holding only markup and config,
-                        ranks nothing.
+                        {{ t(`workspace.codebaseHealth.noFileHereBoth`) }}
                     </p>
                     <template v-else>
                         <!-- Track kept open in the header too, so columns don't shift when a row's action fades in on hover. -->
@@ -117,9 +123,9 @@ const ROW_CLASS = `grid grid-cols-[1.25rem_minmax(0,1fr)_8rem_3.5rem_4rem] items
                             <div :class="`${ROW_CLASS} min-w-0 flex-1`">
                                 <span></span>
                                 <span></span>
-                                <span>risk</span>
-                                <span class="text-right">commits</span>
-                                <span class="text-right">branches</span>
+                                <span>{{ t(`workspace.codebaseHealth.risk`) }}</span>
+                                <span class="text-right">{{ t(`workspace.codebaseHealth.commits2`) }}</span>
+                                <span class="text-right">{{ t(`workspace.codebaseHealth.branches`) }}</span>
                             </div>
                             <span class="w-4 shrink-0"></span>
                         </div>
@@ -152,7 +158,7 @@ const ROW_CLASS = `grid grid-cols-[1.25rem_minmax(0,1fr)_8rem_3.5rem_4rem] items
                                     class="shrink-0 cursor-pointer transition-colors md:opacity-0 md:group-hover/row:opacity-100 md:focus-visible:opacity-100"
                                     :class="row.ask.dormant ? 'text-subtle hover:text-muted' : 'text-muted hover:text-link'"
                                     v-tooltip.top="row.ask.hint"
-                                    :aria-label="`Refactor ${row.name}`"
+                                    :aria-label="t(`workspace.codebaseHealth.refactor`, { name: row.name })"
                                     @click="startAgent(row.ask.prompt)"
                                 >
                                     <Icon name="sparkles" class="w-4 text-2xs" />
@@ -163,12 +169,13 @@ const ROW_CLASS = `grid grid-cols-[1.25rem_minmax(0,1fr)_8rem_3.5rem_4rem] items
                 </section>
 
                 <section class="mt-5">
-                    <h2 class="text-2xs font-medium uppercase tracking-wide text-subtle">Key modules</h2>
+                    <h2 class="text-2xs font-medium uppercase tracking-wide text-subtle">{{ t(`workspace.codebaseHealth.keyModules`) }}</h2>
                     <p class="mt-0.5 text-2xs text-subtle">
-                        Ranked by PageRank over the import graph: what the rest of this repository leans on, which is rarely what the file tree puts
-                        first.
+                        {{ t(`workspace.codebaseHealth.rankedByPagerankOver`) }}
                     </p>
-                    <p v-if="modules.length === 0" class="py-3 text-2xs text-subtle">Nothing in this repository exports a symbol the index reads.</p>
+                    <p v-if="modules.length === 0" class="py-3 text-2xs text-subtle">
+                        {{ t(`workspace.codebaseHealth.nothingInRepositoryExports`) }}
+                    </p>
                     <!-- No bar here; rank is the claim, not the export count. -->
                     <ul v-else class="mt-2 flex flex-col">
                         <li
@@ -182,7 +189,9 @@ const ROW_CLASS = `grid grid-cols-[1.25rem_minmax(0,1fr)_8rem_3.5rem_4rem] items
                                     <span class="truncate text-subtle" v-tooltip.top.overflow="module.dir">{{ module.dir }}</span>
                                     <span class="shrink-0 text-content">{{ module.name }}</span>
                                 </span>
-                                <span class="shrink-0 text-2xs tabular-nums text-muted">{{ formatCount(module.exports) }} exports</span>
+                                <span class="shrink-0 text-2xs tabular-nums text-muted">{{
+                                    t(`workspace.codebaseHealth.exports`, { exports: formatCount(module.exports) })
+                                }}</span>
                             </button>
                             <!-- Shown only when the module itself is the finding; a healthy chokepoint keeps no action, just a pointer. -->
                             <button
@@ -190,7 +199,7 @@ const ROW_CLASS = `grid grid-cols-[1.25rem_minmax(0,1fr)_8rem_3.5rem_4rem] items
                                 type="button"
                                 class="shrink-0 cursor-pointer text-muted transition-colors hover:text-link md:opacity-0 md:group-hover/row:opacity-100 md:focus-visible:opacity-100"
                                 v-tooltip.top="module.ask.hint"
-                                :aria-label="`Refactor ${module.name}`"
+                                :aria-label="t(`workspace.codebaseHealth.refactor`, { name: module.name })"
                                 @click="startAgent(module.ask.prompt)"
                             >
                                 <Icon name="sparkles" class="w-4 text-2xs" />

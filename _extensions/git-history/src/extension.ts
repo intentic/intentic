@@ -1,5 +1,6 @@
 import type { ExtensionContext, IntenticApi } from "@intentic/extension-api";
 import { bindHost } from "./host.js";
+import { t } from "./i18n.js";
 
 // Registers git history as a repository's own tab in the management panel, beside Docs and Health, rather than a
 // second icon on its tree row. Wide, so it fills an editor tab, mirroring VSCode's separate SCM list and Git Graph tab.
@@ -9,12 +10,12 @@ export const activate = (api: IntenticApi, context: ExtensionContext): void => {
     context.subscriptions.push(
         api.views.register({
             id: `git-history-repo`,
-            label: `Git`,
+            label: t(`extension.git`),
             surface: `directory`,
             // Auxiliary: every repo has a history, so claiming them would starve views that only serve unclaimed repos.
             auxiliary: true,
             // From the host's live repo facts (a ref, no poll), so the tab is there the moment a repo is cloned.
-            detect: (repos) => repos.map((repo) => ({ key: repo.repo, title: `Git`, repo: repo.repo, props: { path: repo.repo } })),
+            detect: (repos) => repos.map((repo) => ({ key: repo.repo, title: t(`extension.git`), repo: repo.repo, props: { path: repo.repo } })),
             view: async () => (await import(`./GitHistoryTab.vue`)).default,
         }),
     );
@@ -24,7 +25,7 @@ export const activate = (api: IntenticApi, context: ExtensionContext): void => {
     context.subscriptions.push(
         api.documents.register({
             id: `git-history`,
-            detect: (path) => (path === `` ? { icon: `sitemap`, tooltip: `Open git history`, title: `History` } : undefined),
+            detect: (path) => (path === `` ? { icon: `sitemap`, tooltip: t(`extension.openGitHistory`), title: t(`extension.history`) } : undefined),
             view: async () => (await import(`./GitHistoryTab.vue`)).default,
         }),
     );

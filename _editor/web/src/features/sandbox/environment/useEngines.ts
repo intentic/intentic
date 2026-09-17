@@ -6,6 +6,7 @@ import { queryClient } from "../../../lib/queryPersistence";
 import { jsonBody } from "../client/jsonBody";
 import { sandboxJson } from "../client/sandboxClient";
 import { useSandboxQuery } from "../client/useSandboxQuery";
+import { t } from "@intentic/ui/i18n";
 
 // The agent engines this sandbox runs (Claude Code, codex, Cursor SDK, opencode, ...) and which version each is on,
 // read from the daemon's /engines route. In-flight update/revert/channel state lives at module scope, so switching tabs
@@ -37,16 +38,13 @@ const postAction = async (path: string, body: object, fallbackMessage: string): 
         const message = err instanceof Error ? err.message : fallbackMessage;
         actionNotice.value =
             message === `not a sandbox maintainer`
-                ? { tone: `warning`, title: `Only a sandbox maintainer can change which agent engines this sandbox runs.` }
+                ? { tone: `warning`, title: t(`sandbox.useEngines.onlySandboxMaintainerChange`) }
                 : { tone: `danger`, title: message };
         throw err;
     }
 };
 
-export const setEngineChannel = async (
-    engine: EngineRow,
-    kind: "blessed" | "latest" | "pinned" | "image",
-): Promise<void> => {
+export const setEngineChannel = async (engine: EngineRow, kind: "blessed" | "latest" | "pinned" | "image"): Promise<void> => {
     setInFlight(engine.id, "channel");
     actionNotice.value = undefined;
     try {
@@ -158,14 +156,11 @@ export function useEngines() {
     });
 
     const isEngineUpdating = (engine: EngineRow): boolean =>
-        engine.installing === true ||
-        inFlight.value.get(engine.id) === "update" ||
-        (updatingAll.value && engine.offered !== undefined);
+        engine.installing === true || inFlight.value.get(engine.id) === "update" || (updatingAll.value && engine.offered !== undefined);
 
     const isEngineReverting = (engine: EngineRow): boolean => inFlight.value.get(engine.id) === "revert";
 
-    const isEngineBusy = (engine: EngineRow): boolean =>
-        isEngineUpdating(engine) || isEngineReverting(engine) || inFlight.value.has(engine.id);
+    const isEngineBusy = (engine: EngineRow): boolean => isEngineUpdating(engine) || isEngineReverting(engine) || inFlight.value.has(engine.id);
 
     const isAnyBusy = computed<boolean>(
         () => isFetching.value || inFlight.value.size > 0 || updatingAll.value || engines.value.some((e: EngineRow) => e.installing),
@@ -190,4 +185,3 @@ export function useEngines() {
         updateAll: updateAllEngines,
     };
 }
-

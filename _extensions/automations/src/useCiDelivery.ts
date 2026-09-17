@@ -2,6 +2,7 @@ import { CI_POLL_INTERVAL_MS, type CiRepo, CiRunsResponseSchema } from "@intenti
 import { useQuery } from "@tanstack/vue-query";
 import { computed, type Ref } from "vue";
 import { host } from "./host";
+import { t } from "./i18n.js";
 
 // How a `ci` trigger actually gets events: it needs a workspace repo mapped to a connected account and a webhook the
 // daemon could register; either missing still reads as armed. State comes from GET /ci/runs's hookWarning:
@@ -34,7 +35,7 @@ const describe = (repos: readonly CiRepo[], repoFilter: string): CiDelivery => {
     }
     const unwired = scoped.filter((repo) => repo.hookWarning !== undefined);
     if (unwired.length === 0) {
-        return { state: `ok`, summary: `Fires within seconds, the provider delivers each finished pipeline straight to this sandbox.` };
+        return { state: `ok`, summary: t(`useCiDelivery.firesWithinSecondsProvider`) };
     }
     const names = unwired.map((repo) => repo.repo).join(`, `);
     const first = unwired[0]?.hookWarning;

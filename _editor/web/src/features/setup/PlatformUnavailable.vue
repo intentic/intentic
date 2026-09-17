@@ -2,6 +2,9 @@
 import { Button } from "@intentic/ui";
 import { computed } from "vue";
 import { useRoute, useRouter } from "vue-router";
+import { useT } from "@intentic/ui/i18n";
+
+const t = useT();
 
 const route = useRoute();
 const router = useRouter();
@@ -15,10 +18,10 @@ const returnTo = computed(() => (typeof route.query[`returnTo`] === `string` ? r
                 <Icon name="cloud" class="text-lg" />
             </span>
             <div>
-                <h1 class="text-lg font-semibold">Intentic isn't reachable</h1>
-                <p class="mt-1 text-xs text-muted">Your sign-in has not been changed. Check your connection and try again.</p>
+                <h1 class="text-lg font-semibold">{{ t(`setup.platformUnavailable.intenticIsntReachable`) }}</h1>
+                <p class="mt-1 text-xs text-muted">{{ t(`setup.platformUnavailable.signInNotChanged`) }}</p>
             </div>
-            <Button label="Try again" severity="secondary" @click="void router.replace(returnTo)" />
+            <Button :label="t(`ui.action.tryAgain`)" severity="secondary" @click="void router.replace(returnTo)" />
         </section>
     </main>
 </template>

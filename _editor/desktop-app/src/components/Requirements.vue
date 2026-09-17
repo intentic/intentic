@@ -2,6 +2,7 @@
 import { Button, ui } from "@intentic/ui";
 import { computed, ref } from "vue";
 import type { Requirement, RequirementAction, RequirementProgress, SessionEnd } from "../desktop";
+import { useT } from "@intentic/ui/i18n";
 
 // Requirements render as actionable rows — what's missing, what will happen, one button — not a raw error box.
 // The install's first pass changes nothing and only reports; rows this app can't fix (like firmware
@@ -9,6 +10,8 @@ import type { Requirement, RequirementAction, RequirementProgress, SessionEnd } 
 //
 // Nothing here is said twice: a single row is its own heading, its badge only earns its place while several rows
 // are being scanned, and the remedy is only printed where it says something the button under it does not.
+
+const t = useT();
 
 const props = defineProps<{
     requirements: Requirement[];
@@ -111,7 +114,7 @@ const sessionNote = computed(() => {
 <template>
     <div class="flex flex-col gap-4">
         <p v-if="stuck || many" class="text-sm text-content">
-            {{ stuck ? `This device can't run a sandbox yet:` : `Before your sandbox can run here:` }}
+            {{ stuck ? t(`desktop.requirements.deviceCantRunSandbox`) : t(`desktop.requirements.beforeSandboxRunHere`) }}
         </p>
 
         <ul class="flex flex-col gap-2.5">
@@ -149,7 +152,7 @@ const sessionNote = computed(() => {
                         </p>
                         <p v-else-if="remedyOf(requirement)" class="text-xs leading-relaxed text-subtle">{{ remedyOf(requirement) }}</p>
                         <button v-if="requirement.detail" type="button" :class="ui.linkButton()" @click="toggle(requirement.id)">
-                            {{ opened[requirement.id] ? `Hide the steps` : `Show me how` }}
+                            {{ opened[requirement.id] ? t(`desktop.requirements.hideSteps`) : t(`desktop.requirements.showMeHow`) }}
                         </button>
                     </div>
                 </div>
@@ -163,7 +166,7 @@ const sessionNote = computed(() => {
 
         <!-- Shown before the click, so an expected elevation prompt doesn't read as something going wrong. -->
         <!-- Hidden once busy: the prompt has already happened or is happening by then. -->
-        <p v-if="needsAdmin && ours && !busy" class="text-xs text-subtle">Windows will ask for permission once.</p>
+        <p v-if="needsAdmin && ours && !busy" class="text-xs text-subtle">{{ t(`desktop.requirements.windowsAskPermissionOnce`) }}</p>
 
         <!-- Buttons hide once busy: progress lives in the rows above, not in a disabled button beside them. -->
         <!-- The hosted alternative rides the same row, right-aligned: it is the other answer to this question, not a footnote under it. -->
@@ -171,20 +174,20 @@ const sessionNote = computed(() => {
             <Button v-if="ours" :label="doLabel" @click="emit(`install`)">
                 <template #icon><Icon name="bolt" /></template>
             </Button>
-            <Button v-if="restarting || signOutAgain" label="Restart now" @click="emit(`restart`)">
+            <Button v-if="restarting || signOutAgain" :label="t(`desktop.requirements.restartNow`)" @click="emit(`restart`)">
                 <template #icon><Icon name="refresh" /></template>
             </Button>
-            <Button v-else-if="signingOut && !signOutExhausted" label="Sign out now" @click="emit(`signout`)">
+            <Button v-else-if="signingOut && !signOutExhausted" :label="t(`desktop.requirements.signOutNow`)" @click="emit(`signout`)">
                 <template #icon><Icon name="refresh" /></template>
             </Button>
             <!-- The only control when nothing here can act: primary, so a screen with one honest move shows it as one. -->
-            <Button :severity="stuck ? undefined : `secondary`" :text="!stuck" label="Check again" @click="emit(`recheck`)">
+            <Button :severity="stuck ? undefined : `secondary`" :text="!stuck" :label="t(`desktop.requirements.checkAgain`)" @click="emit(`recheck`)">
                 <template #icon><Icon name="refresh" /></template>
             </Button>
             <!-- The one escape hatch: run in a hosted browser instead, when this device can't meet the requirements. -->
             <button type="button" :class="ui.textAction()" @click="emit(`elsewhere`)">
                 <Icon name="server" class="shrink-0" />
-                <span>Run it on a machine we host</span>
+                <span>{{ t(`desktop.requirements.runOnMachineWe`) }}</span>
             </button>
         </div>
         <p v-if="sessionNote && !busy" class="text-xs leading-relaxed text-subtle">{{ sessionNote }}</p>

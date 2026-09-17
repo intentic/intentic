@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { Icon } from "@intentic/extension-ui";
+import { t } from "./i18n";
 import { stepSubtitle, toneFor, type WorkflowNode } from "./workflowDag";
 
 // Interior of a workflow-step node, shared by the designer's canvas and the run view's graph so a step looks identical
@@ -22,7 +23,9 @@ const { node } = defineProps<{ node: WorkflowNode }>();
         <span class="truncate pl-4 text-2xs leading-tight text-subtle">{{ stepSubtitle(node.step) }}</span>
         <span v-if="node.run !== undefined && node.run.state !== `pending`" class="truncate pl-4 text-2xs leading-tight" :class="toneFor(node).text">
             {{ toneFor(node).label
-            }}<template v-if="node.run.iterations > 0"> · {{ node.run.iterations }} round{{ node.run.iterations === 1 ? `` : `s` }}</template>
+            }}<template v-if="node.run.iterations > 0">
+                · {{ t(`workflowNodeCard.rounds`, { count: node.run.iterations }, node.run.iterations) }}</template
+            >
         </span>
     </span>
 </template>

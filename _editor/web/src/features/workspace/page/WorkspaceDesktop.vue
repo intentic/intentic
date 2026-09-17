@@ -36,7 +36,7 @@ import { useUploadQueue } from "../files/upload/useUploadQueue";
 import { useWorkspaceRoute } from "../health/useWorkspaceRoute";
 import { useExplorerSearch } from "../search/useExplorerSearch";
 import type { SearchScope } from "../search/useWorkspaceSearch";
-import { MATCH_TOGGLES } from "../search/useSearchOptions";
+import { matchToggles } from "../search/useSearchOptions";
 import { useWorkspaceTabs } from "../tabs/useWorkspaceTabs";
 import { useWorkspaceTree } from "../explorer/useWorkspaceTree";
 import { opensAsFolder } from "../files/archiveEntries";
@@ -57,10 +57,13 @@ import WorkspaceTree from "../explorer/WorkspaceTree.vue";
 import { type RowAction, rowActionsFor } from "../explorer/rowActions";
 import { paneOf } from "../tabs/workspaceTabs";
 import { HOISTED_CONTEXT } from "../files/viewerChrome";
+import { useT } from "@intentic/ui/i18n";
 
 // Full-height explorer + viewer of the /work filesystem the agent sees, read directly from the sandbox daemon.
 // Read-only: editing happens via the agent in chat. The bottom terminal panel belongs to the shell
 // (sandbox-global); this view owns no control for it.
+
+const t = useT();
 
 const layout = useLayout();
 const { maker } = useAudience();
@@ -129,7 +132,7 @@ const changesMark = computed(() => {
 const sidebarMode = computed<SidebarPanel>({ get: () => layout.sidebarPanel.value, set: (value) => layout.setSidebarPanel(value) });
 const sidebarModeOptions = computed(() => [
     // No hint on Files/Changes, the label already says it; Changes gets one only while the mark shows.
-    { label: `Files`, value: `files` as const },
+    { label: t(`workspace.workspaceDesktop.files`), value: `files` as const },
     // Both audiences get the panel, since the rail badges this count at both and a badge with nowhere to press is
     // only a nag; what differs is the panel behind it (SavePanel has no index and writes its own message).
     { label: words.value.changes, value: `changes` as const, badge: changes.count.value, ...changesMark.value },
@@ -348,9 +351,13 @@ const personaLensItems = computed<MenuItem[]>(() =>
         ? []
         : [
               {
-                  label: `Viewing as`,
+                  label: t(`workspace.workspaceDesktop.viewing`),
                   items: [
-                      { label: `Nobody`, checked: lensPersonaId.value === undefined, command: () => (lensPersonaId.value = undefined) },
+                      {
+                          label: t(`workspace.workspaceDesktop.nobody`),
+                          checked: lensPersonaId.value === undefined,
+                          command: () => (lensPersonaId.value = undefined),
+                      },
                       ...personas.value.map((persona) => ({
                           label: persona.label ?? persona.id,
                           checked: lensPersonaId.value === persona.id,
@@ -366,15 +373,23 @@ const filterMenuItems = computed<MenuItem[]>(() =>
     contentMode.value
         ? [
               {
-                  label: `Search ignored files`,
+                  label: t(`workspace.workspaceDesktop.searchIgnoredFiles`),
                   checked: search.includeIgnored.value,
                   command: () => (search.includeIgnored.value = !search.includeIgnored.value),
               },
           ]
         : [
-              { label: `Show ignored files`, checked: layout.showIgnored.value, command: () => layout.toggleShowIgnored() },
-              { label: `Hide tests`, checked: layout.hideTests.value, command: () => layout.toggleHideTests() },
-              { label: `Hide technical files`, checked: layout.hideTechnical.value, command: () => layout.toggleHideTechnical() },
+              {
+                  label: t(`workspace.workspaceDesktop.showIgnoredFiles`),
+                  checked: layout.showIgnored.value,
+                  command: () => layout.toggleShowIgnored(),
+              },
+              { label: t(`workspace.workspaceDesktop.hideTests`), checked: layout.hideTests.value, command: () => layout.toggleHideTests() },
+              {
+                  label: t(`workspace.workspaceDesktop.hideTechnicalFiles`),
+                  checked: layout.hideTechnical.value,
+                  command: () => layout.toggleHideTechnical(),
+              },
               ...personaLensItems.value,
           ],
 );
@@ -438,14 +453,20 @@ const stripItems = computed<MenuItem[]>(() => [
         ? []
         : [
               {
-                  label: `Close All`,
+                  label: t(`workspace.workspaceDesktop.closeAll`),
                   shortcut: commandShortcut(`workspace.closeAllTabs`),
                   command: () => requestClose(new Set(allTabs.value.map((tab) => tab.id))),
               },
           ]),
     ...(closedTabs.value.length === 0
         ? []
-        : [{ label: `Reopen Closed Tab`, shortcut: commandShortcut(`workspace.reopenClosedTab`), command: () => reopenClosedTab() }]),
+        : [
+              {
+                  label: t(`workspace.workspaceDesktop.reopenClosedTab`),
+                  shortcut: commandShortcut(`workspace.reopenClosedTab`),
+                  command: () => reopenClosedTab(),
+              },
+          ]),
 ]);
 
 const tabMenuItems = computed<MenuItem[]>(() => {
@@ -465,7 +486,9 @@ const tabMenuItems = computed<MenuItem[]>(() => {
     const toRight = new Set(paneTabs.slice(index + 1).map((tab) => tab.id));
     return [
         // Promotes the preview tab, mirroring the double-click that does the same thing.
-        ...(id === strip.value[home].preview ? [{ label: `Keep Open`, command: () => keepTab(id) }, { separator: true }] : []),
+        ...(id === strip.value[home].preview
+            ? [{ label: t(`workspace.workspaceDesktop.keepOpen`), command: () => keepTab(id) }, { separator: true }]
+            : []),
         // The way into a split for pairings nothing can guess: a README beside its code, a test beside its subject.
         ...(canSplit.value
             ? [
@@ -478,15 +501,15 @@ const tabMenuItems = computed<MenuItem[]>(() => {
                   { separator: true },
               ]
             : []),
-        { label: `Close`, icon: `times`, shortcut: commandShortcut(`workspace.closeTab`), command: () => closeTab(id) },
+        { label: t(`ui.action.close`), icon: `times`, shortcut: commandShortcut(`workspace.closeTab`), command: () => closeTab(id) },
         {
-            label: `Close Others`,
+            label: t(`workspace.workspaceDesktop.closeOthers`),
             disabled: others.size === 0,
             shortcut: commandShortcut(`workspace.closeOtherTabs`),
             command: () => requestClose(others),
         },
         {
-            label: `Close to the Right`,
+            label: t(`workspace.workspaceDesktop.closeToRight`),
             disabled: toRight.size === 0,
             shortcut: commandShortcut(`workspace.closeTabsToRight`),
             command: () => requestClose(toRight),
@@ -498,7 +521,7 @@ const tabMenuItems = computed<MenuItem[]>(() => {
             ? [
                   { separator: true },
                   {
-                      label: `Copy Path`,
+                      label: t(`workspace.workspaceDesktop.copyPath`),
                       icon: `copy`,
                       command: () =>
                           void clipboardOf(rootEl.value)
@@ -589,52 +612,85 @@ const cycleTab = (delta: number): void => {
         selectTab(next.id);
     }
 };
-const WORKSPACE_COMMANDS: readonly Omit<CommandRegistration, `owner`>[] = [
-    { command: `workspace.search`, title: `Search…`, icon: `search`, handler: () => focusSearch() },
+const WORKSPACE_COMMANDS = computed((): readonly Omit<CommandRegistration, `owner`>[] => [
+    { command: `workspace.search`, title: t(`workspace.workspaceDesktop.search`), icon: `search`, handler: () => focusSearch() },
     {
         command: `workspace.searchContent`,
-        title: `Search in Files…`,
+        title: t(`workspace.workspaceDesktop.searchInFiles2`),
         icon: `search`,
         keybinding: `Mod+Shift+F`,
         handler: () => focusSearch(`text`),
     },
-    { command: `workspace.showChanges`, title: `Show Changes`, icon: `check-square`, keybinding: `Ctrl+Shift+D`, handler: openReview },
-    { command: `workspace.showFiles`, title: `Show Files`, icon: `folder`, handler: () => focusSearch() },
+    {
+        command: `workspace.showChanges`,
+        title: t(`workspace.workspaceDesktop.showChanges`),
+        icon: `check-square`,
+        keybinding: `Ctrl+Shift+D`,
+        handler: openReview,
+    },
+    { command: `workspace.showFiles`, title: t(`workspace.workspaceDesktop.showFiles`), icon: `folder`, handler: () => focusSearch() },
     {
         command: `workspace.showHistory`,
-        title: `Show ${words.value.restorePoints}`,
+        title: t(`workspace.workspaceDesktop.show`, { restorePoints: words.value.restorePoints }),
         icon: `history`,
         handler: () => layout.setSidebarPanel(`history`),
     },
     // The root repo's health report: the palette route to what a nested repo opens from its own tree row.
-    { command: `workspace.codebaseHealth`, title: `Show Codebase Health`, icon: `wave-pulse`, handler: () => openHealth(`root`) },
-    { command: `workspace.showDesk`, title: `Show Desk`, icon: `th-large`, handler: showDesk },
-    { command: `workspace.toggleSidebar`, title: `Toggle Explorer`, icon: `bars`, keybinding: `Ctrl+Shift+B`, handler: () => toggleSidebar() },
+    {
+        command: `workspace.codebaseHealth`,
+        title: t(`workspace.workspaceDesktop.showCodebaseHealth`),
+        icon: `wave-pulse`,
+        handler: () => openHealth(`root`),
+    },
+    { command: `workspace.showDesk`, title: t(`workspace.workspaceDesktop.showDesk2`), icon: `th-large`, handler: showDesk },
+    {
+        command: `workspace.toggleSidebar`,
+        title: t(`workspace.workspaceDesktop.toggleExplorer2`),
+        icon: `bars`,
+        keybinding: `Ctrl+Shift+B`,
+        handler: () => toggleSidebar(),
+    },
     // One chord toggles both directions; Ctrl+Shift+\ avoids bare Ctrl+\, which is SIGQUIT in a focused terminal.
     {
         command: `workspace.splitEditor`,
-        title: `Open Tab to the Side`,
+        title: t(`workspace.workspaceDesktop.openTabToSide`),
         icon: `split-columns`,
         keybinding: `Ctrl+Shift+\\`,
         when: `tabSurface == 'workspace'`,
         handler: () => openToSide(),
     },
-    { command: `workspace.unsplitEditor`, title: `Close Split`, icon: `split-columns`, handler: () => collapseSplit() },
+    { command: `workspace.unsplitEditor`, title: t(`workspace.workspaceDesktop.closeSplit`), icon: `split-columns`, handler: () => collapseSplit() },
     // The explorer's two filters, reachable from the palette when the sidebar is collapsed and off-screen.
-    { command: `workspace.toggleIgnored`, title: `Toggle Ignored Files`, icon: `eye`, handler: () => layout.toggleShowIgnored() },
-    { command: `workspace.toggleTests`, title: `Toggle Test Files`, icon: `filter`, handler: () => layout.toggleHideTests() },
+    {
+        command: `workspace.toggleIgnored`,
+        title: t(`workspace.workspaceDesktop.toggleIgnoredFiles`),
+        icon: `eye`,
+        handler: () => layout.toggleShowIgnored(),
+    },
+    {
+        command: `workspace.toggleTests`,
+        title: t(`workspace.workspaceDesktop.toggleTestFiles`),
+        icon: `filter`,
+        handler: () => layout.toggleHideTests(),
+    },
     // Shared tab family with chat/terminal (tabSurface.ts resolves by focus); workspace is the fallback surface.
-    { command: `workspace.nextTab`, title: `Next Tab`, keybinding: `Alt+PageDown`, when: `tabSurface == 'workspace'`, handler: () => cycleTab(1) },
+    {
+        command: `workspace.nextTab`,
+        title: t(`workspace.workspaceDesktop.nextTab`),
+        keybinding: `Alt+PageDown`,
+        when: `tabSurface == 'workspace'`,
+        handler: () => cycleTab(1),
+    },
     {
         command: `workspace.previousTab`,
-        title: `Previous Tab`,
+        title: t(`workspace.workspaceDesktop.previousTab`),
         keybinding: `Alt+PageUp`,
         when: `tabSurface == 'workspace'`,
         handler: () => cycleTab(-1),
     },
     {
         command: `workspace.closeTab`,
-        title: `Close Tab`,
+        title: t(`workspace.workspaceDesktop.closeTab`),
         icon: `times`,
         keybinding: `Ctrl+Shift+X`,
         when: `tabSurface == 'workspace'`,
@@ -642,7 +698,7 @@ const WORKSPACE_COMMANDS: readonly Omit<CommandRegistration, `owner`>[] = [
     },
     {
         command: `workspace.closeOtherTabs`,
-        title: `Close Other Tabs`,
+        title: t(`workspace.workspaceDesktop.closeOtherTabs`),
         icon: `times`,
         keybinding: `Ctrl+Shift+,`,
         when: `tabSurface == 'workspace'`,
@@ -650,7 +706,7 @@ const WORKSPACE_COMMANDS: readonly Omit<CommandRegistration, `owner`>[] = [
     },
     {
         command: `workspace.closeTabsToRight`,
-        title: `Close Tabs to the Right`,
+        title: t(`workspace.workspaceDesktop.closeTabsToRight`),
         icon: `times`,
         keybinding: `Ctrl+Shift+.`,
         when: `tabSurface == 'workspace'`,
@@ -658,7 +714,7 @@ const WORKSPACE_COMMANDS: readonly Omit<CommandRegistration, `owner`>[] = [
     },
     {
         command: `workspace.closeAllTabs`,
-        title: `Close All Tabs`,
+        title: t(`workspace.workspaceDesktop.closeAllTabs`),
         icon: `times`,
         keybinding: `Ctrl+Shift+Backspace`,
         when: `tabSurface == 'workspace'`,
@@ -667,14 +723,14 @@ const WORKSPACE_COMMANDS: readonly Omit<CommandRegistration, `owner`>[] = [
     // Ctrl+Shift+O ("reOpen"), not VSCode's Ctrl+Shift+T: that reopens the browser's own tab and isn't cancellable.
     {
         command: `workspace.reopenClosedTab`,
-        title: `Reopen Closed Tab`,
+        title: t(`workspace.workspaceDesktop.reopenClosedTab`),
         icon: `undo`,
         keybinding: `Ctrl+Shift+O`,
         when: `tabSurface == 'workspace'`,
         handler: reopenClosedTab,
     },
-    { command: `workspace.refresh`, title: `Refresh Files`, icon: `refresh`, handler: () => refetch() },
-];
+    { command: `workspace.refresh`, title: t(`workspace.workspaceDesktop.refreshFiles`), icon: `refresh`, handler: () => refetch() },
+]);
 let workspaceCommandDisposables: readonly Disposable[] = [];
 
 // Root-level upload: OS files dropped on the explorer background or the browse button land at /work root; directories
@@ -725,7 +781,7 @@ onMounted(() => {
     // Loads Monaco (+ Shiki bridge) while browsing the tree, so the first file open isn't cold.
     void useMonaco().ensureMonaco();
     // One family for the whole list, stated here rather than on every entry.
-    workspaceCommandDisposables = WORKSPACE_COMMANDS.map((spec) => registerCommand({ owner: `builtin`, category: WORKSPACE, ...spec }));
+    workspaceCommandDisposables = WORKSPACE_COMMANDS.value.map((spec) => registerCommand({ owner: `builtin`, category: WORKSPACE, ...spec }));
 });
 onBeforeUnmount(() => {
     unwatchDragSource?.();
@@ -810,8 +866,12 @@ const deskTooltip = computed(() => tooltipWithChord(`Show desk · your tabs stay
                             type="button"
                             :class="ui.iconButton()"
                             @click="changes.refresh()"
-                            v-tooltip.bottom="changes.landing.value === undefined ? 'Refresh' : `${changes.landing.value}: the tree is being written`"
-                            aria-label="Refresh changes"
+                            v-tooltip.bottom="
+                                changes.landing.value === undefined
+                                    ? t(`ui.action.refresh`)
+                                    : t(`workspace.workspaceDesktop.treeBeingWritten`, { landing: changes.landing.value })
+                            "
+                            :aria-label="t(`workspace.workspaceDesktop.refreshChanges`)"
                             :disabled="changes.actionBusy.value || changes.fetching.value || changes.landing.value !== undefined"
                         >
                             <Icon name="refresh" class="text-xs" :spin="changes.fetching.value || changes.actionBusy.value" />
@@ -836,7 +896,7 @@ const deskTooltip = computed(() => tooltipWithChord(`Show desk · your tabs stay
                             ref="filterInput"
                             v-model="filter"
                             type="text"
-                            :placeholder="contentMode ? `Search in files…` : `Filter files…`"
+                            :placeholder="contentMode ? t(`workspace.workspaceDesktop.searchInFiles`) : t(`workspace.workspaceDesktop.filterFiles`)"
                             class="ui-field-box ui-field-sm w-full min-w-0 pl-7"
                             :class="textMode ? `pr-[4.75rem]` : `pr-7`"
                             @keydown.esc="clearFilter"
@@ -845,7 +905,7 @@ const deskTooltip = computed(() => tooltipWithChord(`Show desk · your tabs stay
                             <!-- Same three switches, same order, as the editor this models. -->
                             <template v-if="textMode">
                                 <button
-                                    v-for="toggle in MATCH_TOGGLES"
+                                    v-for="toggle in matchToggles()"
                                     :key="toggle.label"
                                     type="button"
                                     :class="
@@ -867,8 +927,8 @@ const deskTooltip = computed(() => tooltipWithChord(`Show desk · your tabs stay
                                 v-if="filter"
                                 type="button"
                                 class="flex items-center rounded text-2xs text-subtle transition-colors hover:text-content"
-                                v-tooltip.bottom="'Clear (Esc)'"
-                                aria-label="Clear filter"
+                                v-tooltip.bottom="t(`workspace.workspaceDesktop.clearEsc`)"
+                                :aria-label="t(`workspace.workspaceDesktop.clearFilter`)"
                                 @click="clearFilter"
                             >
                                 <Icon name="times" />
@@ -885,12 +945,10 @@ const deskTooltip = computed(() => tooltipWithChord(`Show desk · your tabs stay
                         <input
                             v-model="search.include.value"
                             type="text"
-                            placeholder="Files to include, e.g. package.json"
+                            :placeholder="t(`workspace.workspaceDesktop.filesToIncludeE`)"
                             class="ui-field-box ui-field-sm w-full min-w-0 pr-2 pl-7"
-                            aria-label="Files to include"
-                            v-tooltip.bottom="
-                                'Files to include, comma-separated: a name (package.json, src) matches anywhere, ./ anchors it to the workspace root, and ! excludes'
-                            "
+                            :aria-label="t(`workspace.workspaceDesktop.filesToInclude`)"
+                            v-tooltip.bottom="t(`workspace.workspaceDesktop.filesToIncludeComma`)"
                             @keydown.esc="search.include.value = ``"
                         />
                     </div>
@@ -911,8 +969,8 @@ const deskTooltip = computed(() => tooltipWithChord(`Show desk · your tabs stay
                             class="flex shrink-0 items-center rounded-md px-1.5 py-0.5 transition-colors"
                             :class="filtersActive ? 'bg-primary-600/15 text-link' : 'text-muted hover:text-content'"
                             aria-haspopup="menu"
-                            aria-label="Filter what the explorer lists"
-                            v-tooltip.bottom="lensLine ?? 'Filter'"
+                            :aria-label="t(`workspace.workspaceDesktop.filterWhatExplorerLists`)"
+                            v-tooltip.bottom="lensLine ?? t(`workspace.workspaceDesktop.filter`)"
                             @click="filterMenu?.show($event)"
                         >
                             <Icon name="filter" class="text-xs" />
@@ -922,7 +980,7 @@ const deskTooltip = computed(() => tooltipWithChord(`Show desk · your tabs stay
                             type="button"
                             class="flex shrink-0 items-center rounded-md px-1.5 py-0.5 text-muted transition-colors hover:text-content"
                             v-tooltip.bottom="rootHealthTooltip"
-                            aria-label="Open codebase health of the workspace root"
+                            :aria-label="t(`workspace.workspaceDesktop.openCodebaseHealthWorkspace`)"
                             @click="openHealth('root')"
                         >
                             <Icon name="wave-pulse" class="text-xs" />
@@ -933,8 +991,8 @@ const deskTooltip = computed(() => tooltipWithChord(`Show desk · your tabs stay
                             type="button"
                             :class="ui.iconButton(`h-auto w-auto shrink-0 rounded-md px-1.5 py-0.5 hover:bg-transparent`)"
                             :disabled="filter.trim() !== '' || expanded.size === 0"
-                            v-tooltip.bottom="'Collapse all folders'"
-                            aria-label="Collapse all folders"
+                            v-tooltip.bottom="t(`workspace.workspaceDesktop.collapseAllFolders`)"
+                            :aria-label="t(`workspace.workspaceDesktop.collapseAllFolders`)"
                             @click="collapseAll"
                         >
                             <Icon name="collapse-all" class="text-xs" />
@@ -991,7 +1049,7 @@ const deskTooltip = computed(() => tooltipWithChord(`Show desk · your tabs stay
                 :min="toScreenPx(MIN_SIDEBAR_WIDTH)"
                 :max="toScreenPx(MAX_SIDEBAR_WIDTH)"
                 :reset="toScreenPx(defaultSidebarWidth())"
-                title="Drag to resize · double-click to reset"
+                :title="t(`workspace.workspaceDesktop.dragToResizeDouble`)"
             />
 
             <!-- Dismisses the drawer by clicking the file it covers, the only affordance the toggle doesn't already provide. -->
@@ -1016,7 +1074,7 @@ const deskTooltip = computed(() => tooltipWithChord(`Show desk · your tabs stay
                             :class="ui.iconButton(`relative mx-1 h-7 w-7 self-center`)"
                             @click="toggleSidebar()"
                             v-tooltip.bottom="explorerTooltip"
-                            aria-label="Toggle explorer"
+                            :aria-label="t(`workspace.workspaceDesktop.toggleExplorer`)"
                         >
                             <Icon name="bars" class="text-sm" />
                             <span
@@ -1033,7 +1091,7 @@ const deskTooltip = computed(() => tooltipWithChord(`Show desk · your tabs stay
                             :class="ui.iconButton(`mr-1 h-7 w-7 self-center`)"
                             @click="showDesk"
                             v-tooltip.bottom="deskTooltip"
-                            aria-label="Show desk"
+                            :aria-label="t(`workspace.workspaceDesktop.showDesk`)"
                         >
                             <Icon name="th-large" class="text-sm" />
                         </button>
@@ -1047,7 +1105,13 @@ const deskTooltip = computed(() => tooltipWithChord(`Show desk · your tabs stay
                                 >{{ actionError.title }}</span
                             >
                             <!-- The one remaining status: a single spinner for both a running file action and a tree (re)load. -->
-                            <Icon name="spinner" v-if="busy || isLoading" class="text-sm text-muted" spin aria-label="Working" />
+                            <Icon
+                                name="spinner"
+                                v-if="busy || isLoading"
+                                class="text-sm text-muted"
+                                spin
+                                :aria-label="t(`workspace.workspaceDesktop.working`)"
+                            />
                             <!-- Suppressed while the scope itself is broken, since the pane below already says so at full size. -->
                             <span v-if="error && !scopeBroken" class="max-w-64 truncate text-2xs text-danger" v-tooltip.bottom.overflow="error">{{
                                 error
@@ -1082,7 +1146,7 @@ const deskTooltip = computed(() => tooltipWithChord(`Show desk · your tabs stay
                     class="pointer-events-none absolute inset-2 z-10 flex flex-col items-center justify-center gap-2 rounded-sm border-2 border-dashed border-primary-500/60 bg-primary-500/6 text-primary-500"
                 >
                     <Icon name="upload" class="text-2xl" />
-                    <span class="text-xs font-medium">Drop files to add to workspace root</span>
+                    <span class="text-xs font-medium">{{ t(`workspace.workspaceDesktop.dropFilesToAdd`) }}</span>
                 </div>
             </div>
         </div>
@@ -1095,8 +1159,12 @@ const deskTooltip = computed(() => tooltipWithChord(`Show desk · your tabs stay
         <ContextMenu ref="filterMenu" :model="filterMenuItems" :min-width="11" />
         <ConfirmDialog
             :open="pendingClose !== undefined"
-            :header="pendingCloseDirty.length === 1 ? 'Discard unsaved changes?' : `Discard unsaved changes in ${pendingCloseDirty.length} files?`"
-            confirm-label="Close anyway"
+            :header="
+                pendingCloseDirty.length === 1
+                    ? t(`workspace.workspaceDesktop.discardUnsavedChanges`)
+                    : t(`workspace.workspaceDesktop.discardUnsavedChangesIn`, { count: pendingCloseDirty.length })
+            "
+            :confirm-label="t(`workspace.workspaceDesktop.closeAnyway`)"
             confirm-icon="times"
             :items="pendingCloseDirty"
             @cancel="pendingClose = undefined"
@@ -1106,7 +1174,7 @@ const deskTooltip = computed(() => tooltipWithChord(`Show desk · your tabs stay
                 <Icon name="circle-fill" class="shrink-0 text-[0.4rem] text-warning" />
                 <span class="truncate text-content">{{ item }}</span>
             </template>
-            <p class="mt-3 text-xs text-muted">Closing these tabs discards their unsaved edits. This can't be undone.</p>
+            <p class="mt-3 text-xs text-muted">{{ t(`workspace.workspaceDesktop.closingTabsDiscardsUnsaved`) }}</p>
         </ConfirmDialog>
         <!-- Opened by a directory row's person icon: who works there, and how to add one. Mounted here, not the tree. -->
         <DirectoryPersonas v-model="personaDir" />

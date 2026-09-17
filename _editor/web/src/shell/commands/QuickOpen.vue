@@ -13,12 +13,15 @@ import { useFuzzyFiles } from "../../features/workspace/search/useFuzzyFiles";
 import { useWorkspaceTabs } from "../../features/workspace/tabs/useWorkspaceTabs";
 import { iconForEntry, type IconName, Modal } from "@intentic/ui";
 import { basename, parentDir } from "@intentic/ui/path";
+import { useT } from "@intentic/ui/i18n";
 
 // Quick Open (Ctrl/Cmd+P): ranks /work files by name client-side over the cached tree (useFuzzyFiles),
 // so results land in the same frame as the keystroke; the daemon's search only backs the truncated-tree
 // fallback. Below the search floor it lists open tabs; a `>` prefix flips to command mode (useCommands),
 // which opens on what was run recently and ranks the rest by name (commandSearch.ts) — the same two-block
 // shape as the file half, for a registry now long enough that reading it top to bottom is not an answer.
+
+const t = useT();
 
 const { isOpen, mode } = useQuickOpen();
 const router = useRouter();
@@ -142,8 +145,8 @@ const onShow = async (): Promise<void> => {
 
 <template>
     <Modal v-model:open="isOpen" size="md" :chrome="false" :scroll="false" position="top" @show="onShow">
-        <div role="combobox" aria-haspopup="listbox" aria-expanded="true" aria-label="Go to file">
-<!-- field-bare: the search is the panel's top band, not a boxed field — the panel border and this divider are already its frame. -->
+        <div role="combobox" aria-haspopup="listbox" aria-expanded="true" :aria-label="t(`shell.quickOpen.goToFile`)">
+            <!-- field-bare: the search is the panel's top band, not a boxed field — the panel border and this divider are already its frame. -->
             <div class="ui-search-row relative border-b border-line">
                 <Icon
                     class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-subtle"
@@ -155,7 +158,7 @@ const onShow = async (): Promise<void> => {
                     ref="input"
                     v-model="query"
                     type="text"
-                    placeholder="Go to file, or paste a session id… (> for commands)"
+                    :placeholder="t(`shell.quickOpen.goToFilePaste`)"
                     class="field-bare w-full min-w-0 py-2.5 pl-9 pr-3"
                     role="searchbox"
                     aria-controls="quick-open-list"
@@ -166,17 +169,23 @@ const onShow = async (): Promise<void> => {
                     @keydown.esc="isOpen = false"
                 />
             </div>
-            <div v-if="commandMode" id="quick-open-list" class="max-h-80 overflow-auto py-1" role="listbox" aria-label="Commands">
+            <div
+                v-if="commandMode"
+                id="quick-open-list"
+                class="max-h-80 overflow-auto py-1"
+                role="listbox"
+                :aria-label="t(`shell.quickOpen.commands`)"
+            >
                 <template v-for="(entry, index) in commandRows" :key="entry.command">
                     <!-- Two headings at most, and only over an unfiltered list: with a query typed there is one run, ranked. -->
                     <p v-if="recentRows.length > 0 && index === 0" class="px-3 pb-1 pt-0.5 text-2xs font-medium uppercase tracking-wide text-subtle">
-                        Recently used
+                        {{ t(`shell.quickOpen.recentlyUsed`) }}
                     </p>
                     <p
                         v-else-if="recentRows.length > 0 && index === recentRows.length"
                         class="px-3 pb-1 pt-1.5 text-2xs font-medium uppercase tracking-wide text-subtle"
                     >
-                        All commands
+                        {{ t(`shell.quickOpen.allCommands`) }}
                     </p>
                     <button
                         :id="`quick-open-opt-${index}`"
@@ -195,12 +204,14 @@ const onShow = async (): Promise<void> => {
                             <span v-if="entry.category" class="text-muted">{{ entry.category }}: </span>{{ entry.title }}
                         </span>
                         <span class="min-w-0 flex-1 truncate text-2xs text-subtle">{{ entry.command }}</span>
-                        <kbd v-if="chordFor(entry)" class="shrink-0 rounded border border-line bg-overlay px-1.5 py-0.5 font-mono text-2xs text-muted">{{
-                            formatChord(chordFor(entry)!, isMac)
-                        }}</kbd>
+                        <kbd
+                            v-if="chordFor(entry)"
+                            class="shrink-0 rounded border border-line bg-overlay px-1.5 py-0.5 font-mono text-2xs text-muted"
+                            >{{ formatChord(chordFor(entry)!, isMac) }}</kbd
+                        >
                     </button>
                 </template>
-                <p v-if="commandRows.length === 0" class="px-3 py-3 text-center text-2xs text-subtle">No commands match.</p>
+                <p v-if="commandRows.length === 0" class="px-3 py-3 text-center text-2xs text-subtle">{{ t(`shell.quickOpen.noCommandsMatch`) }}</p>
             </div>
             <!-- One offer, since a session name means one thing; the id is echoed so the reader can verify the match. -->
             <div
@@ -208,7 +219,7 @@ const onShow = async (): Promise<void> => {
                 id="quick-open-list"
                 class="max-h-80 overflow-auto py-1"
                 role="listbox"
-                aria-label="Agent"
+                :aria-label="t(`shell.quickOpen.agent`)"
             >
                 <button
                     id="quick-open-opt-0"
@@ -219,19 +230,19 @@ const onShow = async (): Promise<void> => {
                     @click="openAgent(sessionRef)"
                 >
                     <Icon name="robot" class="shrink-0 text-2xs text-muted" />
-                    <span class="min-w-0 truncate text-sm text-content">{{ sessionAgent?.title ?? `Open this agent` }}</span>
+                    <span class="min-w-0 truncate text-sm text-content">{{ sessionAgent?.title ?? t(`shell.quickOpen.openAgent`) }}</span>
                     <span class="min-w-0 flex-1 truncate font-mono text-2xs text-subtle">{{ sessionRef }}</span>
                 </button>
             </div>
-            <div v-else id="quick-open-list" class="max-h-80 overflow-auto py-1" role="listbox" aria-label="Files">
+            <div v-else id="quick-open-list" class="max-h-80 overflow-auto py-1" role="listbox" :aria-label="t(`shell.quickOpen.files`)">
                 <p v-if="showingRecents && rows.length > 0" class="px-3 pb-1 pt-0.5 text-2xs font-medium uppercase tracking-wide text-subtle">
-                    Recently opened
+                    {{ t(`shell.quickOpen.recentlyOpened`) }}
                 </p>
                 <p
                     v-if="truncated"
                     class="mx-1.5 mb-1 inline-flex items-center gap-1 rounded border border-warning/40 bg-warning/10 px-2 py-0.5 text-2xs text-warning"
                 >
-                    <Icon name="exclamation-triangle" class="text-[0.6rem]" /> Showing first matches only.
+                    <Icon name="exclamation-triangle" class="text-[0.6rem]" /> {{ t(`shell.quickOpen.showingFirstMatchesOnly`) }}
                 </p>
                 <button
                     v-for="(path, index) in rows"
@@ -252,12 +263,12 @@ const onShow = async (): Promise<void> => {
                 </button>
                 <p v-if="error" class="px-3 py-3 text-center text-2xs text-danger">{{ error }}</p>
                 <p v-else-if="rows.length === 0 && showingRecents" class="px-3 py-3 text-center text-2xs text-subtle">
-                    {{ floor > 1 ? `Type at least ${floor} characters to search files.` : `Type to search files.` }}
+                    {{ floor > 1 ? t(`shell.quickOpen.typeAtLeastCharacters`, { floor }) : t(`shell.quickOpen.typeToSearchFiles`) }}
                 </p>
                 <p v-else-if="rows.length === 0 && (searching || pending)" class="px-3 py-3 text-center text-2xs text-subtle">
                     <Icon name="spinner" spin />
                 </p>
-                <p v-else-if="rows.length === 0" class="px-3 py-3 text-center text-2xs text-subtle">No files match.</p>
+                <p v-else-if="rows.length === 0" class="px-3 py-3 text-center text-2xs text-subtle">{{ t(`shell.quickOpen.noFilesMatch`) }}</p>
             </div>
         </div>
     </Modal>

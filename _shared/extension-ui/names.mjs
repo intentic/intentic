@@ -82,7 +82,7 @@ export const extensionUiNames = [
     "StatusBadge",
     "StatusTally",
     "StepSection",
-    "TIME_WINDOWS",
+    "timeWindows",
     "timeAgo",
     "timeWindowWords",
     "ToggleSwitch",

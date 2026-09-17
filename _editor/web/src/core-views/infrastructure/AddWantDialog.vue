@@ -8,6 +8,7 @@ import { useInventory } from "../../features/extensions/useInventory";
 import { useWorkspaceApps } from "../../features/extensions/useWorkspaceApps";
 import CloudflareConnect from "./CloudflareConnect.vue";
 import ConnectHost from "./ConnectHost.vue";
+import { useT } from "@intentic/ui/i18n";
 
 // Add-a-want dialog. Step 1: catalog of workspace apps (i.want.app) and INVENTORY_SERVICES (i.want.service).
 // Step 2: name plus zone-aware domain; host/Cloudflare bindings are derived, asked only when more than one
@@ -15,6 +16,8 @@ import ConnectHost from "./ConnectHost.vue";
 
 // A DNS label: the 63 is the protocol's, not a preference, and without it an over-long name fails at Cloudflare
 // instead of here.
+const t = useT();
+
 const SUBDOMAIN_RE = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/i;
 const SUBDOMAIN_MAX = 63;
 // Repairs a name into a DNS label the same way `inventoryIdentifier` repairs one into a binding.
@@ -74,7 +77,7 @@ const useRepairedName = (): void => {
 // Apps in workspace monorepos; fetched only while the dialog is open, live against the repo list.
 const { apps: workspaceApps, error: appsError } = useWorkspaceApps(visible);
 const appsNotice = computed<NoticeModel | undefined>(() =>
-    appsError.value === undefined ? undefined : { tone: `danger`, title: `Couldn't list the apps in this workspace.`, detail: appsError.value },
+    appsError.value === undefined ? undefined : { tone: `danger`, title: t(`views.addWantDialog.couldntListAppsIn`), detail: appsError.value },
 );
 
 // Apps already declared in intent (by entry name); shown as added instead of addable.
@@ -178,11 +181,11 @@ const submit = async (): Promise<void> => {
 </script>
 
 <template>
-    <Modal v-model:open="visible" size="md" header="Add" @hide="reset">
+    <Modal v-model:open="visible" size="md" :header="t(`ui.action.add`)" @hide="reset">
         <!-- STEP 2: the picked want's form. -->
         <template v-if="selected">
             <button type="button" :class="ui.textAction(`mb-3 gap-1`)" @click="selected = undefined">
-                <Icon name="arrow-left" class="text-2xs" /> Back
+                <Icon name="arrow-left" class="text-2xs" /> {{ t(`ui.action.back`) }}
             </button>
 
             <div class="mb-4 flex items-center gap-3">
@@ -197,7 +200,9 @@ const submit = async (): Promise<void> => {
                 <div class="min-w-0">
                     <div class="font-medium text-content">{{ selected.kind === `service` ? selected.service.label : selected.app }}</div>
                     <div class="text-xs text-muted">
-                        {{ selected.kind === `service` ? selected.service.description : `Your app from the ${selected.repo} monorepo.` }}
+                        {{
+                            selected.kind === `service` ? selected.service.description : t(`views.addWantDialog.appMonorepo`, { repo: selected.repo })
+                        }}
                     </div>
                 </div>
             </div>
@@ -209,36 +214,36 @@ const submit = async (): Promise<void> => {
             <!-- A want needs Cloudflare and a server; both are collected inline rather than sending the user elsewhere. -->
             <CloudflareConnect v-if="cloudflareEntries.length === 0" />
             <ConnectHost v-else-if="hostOptions.length === 0">
-                <template #reason>What you want needs a server to run on.</template>
+                <template #reason>{{ t(`views.addWantDialog.whatWantNeedsServer`) }}</template>
             </ConnectHost>
             <form v-else class="flex flex-col gap-3" @submit.prevent="submit">
                 <label class="ui-field">
-                    <span class="ui-field-label">Name</span>
+                    <span class="ui-field-label">{{ t(`views.addWantDialog.name`) }}</span>
                     <input v-model="name" :placeholder="selected.kind === `service` ? selected.service.service : selected.app" :class="ui.input()" />
                     <!-- Names the rule and offers the repair, rather than leaving Add greyed out with nothing said. -->
                     <span v-if="nameError" class="text-xs text-warning">
                         {{ nameError }}
                         <button v-if="inventoryIdentifier(name)" type="button" :class="ui.textAction(`text-xs`)" @click="useRepairedName">
-                            Use {{ inventoryIdentifier(name) }}
+                            {{ t(`views.addWantDialog.use`, { name: inventoryIdentifier(name) }) }}
                         </button>
                     </span>
                 </label>
                 <!-- Domain is zone-aware whenever the cloudflare entry recorded its zone: a subdomain under it. -->
                 <label v-if="zone !== undefined" class="ui-field">
-                    <span class="ui-field-label">Domain</span>
+                    <span class="ui-field-label">{{ t(`views.addWantDialog.domain`) }}</span>
                     <div class="flex items-center gap-2">
                         <input v-model="subdomain" :placeholder="name" :class="ui.input('flex-1')" />
                         <span class="whitespace-nowrap font-mono text-sm text-subtle">.{{ zone }}</span>
                     </div>
                     <span v-if="subdomain.trim().length > 0 && !subdomainValid" class="text-xs text-warning">{{
-                        subdomainError ?? `Use letters, numbers and hyphens only.`
+                        subdomainError ?? t(`views.addWantDialog.useLettersNumbersHyphens`)
                     }}</span>
                     <span v-else-if="subdomainValid" class="text-xs text-success"
-                        >✓ Reachable at <span class="font-mono">{{ subdomain.trim() }}.{{ zone }}</span></span
+                        >{{ t(`views.addWantDialog.reachableAt`) }} <span class="font-mono">{{ subdomain.trim() }}.{{ zone }}</span></span
                     >
                 </label>
                 <label v-else class="ui-field">
-                    <span class="ui-field-label">Domain</span>
+                    <span class="ui-field-label">{{ t(`views.addWantDialog.domain`) }}</span>
                     <input v-model="values['domain']" :placeholder="`${name}.example.com`" :class="ui.input()" />
                 </label>
                 <template v-for="field in serviceFields" :key="field.key">
@@ -249,19 +254,19 @@ const submit = async (): Promise<void> => {
                 </template>
                 <!-- Placement is derived (single host, single Cloudflare); only a genuine choice is asked. -->
                 <label v-if="hostOptions.length > 1" class="ui-field">
-                    <span class="ui-field-label">Server</span>
-<!-- `on` holds `` for "none yet" (Picker's empty state), never undefined: explicit binding, not v-model. -->
+                    <span class="ui-field-label">{{ t(`views.addWantDialog.server`) }}</span>
+                    <!-- `on` holds `` for "none yet" (Picker's empty state), never undefined: explicit binding, not v-model. -->
                     <Picker
                         :model-value="on === `` ? undefined : on"
                         :options="hostPickerOptions"
-                        placeholder="Pick a server"
+                        :placeholder="t(`views.addWantDialog.pickServer`)"
                         class="w-full"
-                        aria-label="Server"
+                        :aria-label="t(`views.addWantDialog.server`)"
                         @update:model-value="(value: string | undefined) => (on = value ?? ``)"
                     />
                 </label>
                 <div class="flex justify-end">
-                    <Button type="submit" label="Add" :disabled="!canSubmit || submitting" :loading="submitting">
+                    <Button type="submit" :label="t(`ui.action.add`)" :disabled="!canSubmit || submitting" :loading="submitting">
                         <template #icon><Icon name="check" /></template>
                     </Button>
                 </div>
@@ -271,12 +276,12 @@ const submit = async (): Promise<void> => {
         <!-- STEP 1: the catalog, your apps, then the self-hosted services. -->
         <template v-else>
             <p class="mb-4 text-sm text-muted">
-                Pick what you want to run on your own server. It's declared in your intent (<span class="font-mono text-xs">deploy.config.ts</span>)
-                and deployed on the next apply: the platform stores nothing.
+                {{ t(`views.addWantDialog.pickWhatWantTo`) }}<span class="font-mono text-xs">deploy.config.ts</span
+                >{{ t(`views.addWantDialog.deployedOnNextApply`) }}
             </p>
 
             <template v-if="workspaceApps.length > 0 || appsError">
-                <span :class="ui.sectionLabel('mb-2 block')">Your apps</span>
+                <span :class="ui.sectionLabel('mb-2 block')">{{ t(`views.addWantDialog.apps`) }}</span>
                 <Notice v-if="appsNotice" :of="appsNotice" class="mb-3" />
                 <div class="mb-4 grid grid-cols-2 gap-3">
                     <button
@@ -299,7 +304,7 @@ const submit = async (): Promise<void> => {
                         </div>
                     </button>
                 </div>
-                <span :class="ui.sectionLabel('mb-2 block')">Self-hosted services</span>
+                <span :class="ui.sectionLabel('mb-2 block')">{{ t(`views.addWantDialog.selfHostedServices`) }}</span>
             </template>
 
             <div class="grid grid-cols-2 gap-3">

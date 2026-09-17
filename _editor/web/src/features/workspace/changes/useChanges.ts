@@ -28,6 +28,7 @@ import { truncatedTotal } from "./truncation";
 import { resetEditBuffers } from "../files/useEditBuffers";
 import { usePushRun } from "../push/usePushRun";
 import { AGENT_DIFF, GIT_CHANGES, GIT_LOG, HISTORY_SNAPSHOTS, WORKSPACE_TREE } from "../../../lib/queryKeys";
+import { t } from "@intentic/ui/i18n";
 
 // VSCode's SCM model over real repos: `staged` is index-vs-HEAD, `unstaged` is worktree-vs-index; a path can be on
 // both.
@@ -112,7 +113,7 @@ const runBatch = async (tasks: readonly ScopedTask[], settle: () => Promise<unkn
             ...failures.value,
             ...tasks.map((task): [string, ActionFailure] => [
                 task.scope,
-                { action: task.action, detail: `Your access to this sandbox is read-only: this needs maintainer access.` },
+                { action: task.action, detail: t(`workspace.useChanges.accessToSandboxRead`) },
             ]),
         ]);
         return;

@@ -3,6 +3,7 @@ import type { CapabilityField } from "@intentic/extension-manifest";
 import type { RemoteRef, RemoteRefs } from "@intentic/sandbox-contract";
 import type { PickerGroup } from "@intentic/ui";
 import { isCommitSha } from "./form";
+import { t } from "@intentic/ui/i18n";
 
 // The one field the picker stands in for: an extension's `ref`, the only answer on this form that must be a commit and
 // can never be a name. Everything else stays a plain box.
@@ -87,12 +88,17 @@ export const refGroups = (refs: RemoteRefs): readonly PickerGroup[] => {
     return [
         ...(tags.length === 0
             ? []
-            : [{ label: `Releases`, options: tags.map((tag) => ({ value: refKey(tag), label: tag.name, description: shortSha(tag.sha), icon: `box` as const })) }]),
+            : [
+                  {
+                      label: t(`capabilities.refs.releases`),
+                      options: tags.map((tag) => ({ value: refKey(tag), label: tag.name, description: shortSha(tag.sha), icon: `box` as const })),
+                  },
+              ]),
         ...(branches.length === 0
             ? []
             : [
                   {
-                      label: `Branches`,
+                      label: t(`capabilities.refs.branches`),
                       options: branches.map((branch) => ({
                           value: refKey(branch),
                           label: branch.name,
@@ -101,7 +107,7 @@ export const refGroups = (refs: RemoteRefs): readonly PickerGroup[] => {
                       })),
                   },
               ]),
-        { options: [{ value: MANUAL_KEY, label: `A commit sha…`, icon: `code` as const }] },
+        { options: [{ value: MANUAL_KEY, label: t(`capabilities.refs.commitSha`), icon: `code` as const }] },
     ];
 };
 

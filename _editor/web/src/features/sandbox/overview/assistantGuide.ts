@@ -1,4 +1,5 @@
 import type { AssistantSource } from "@intentic/api-contract";
+import { t } from "@intentic/ui/i18n";
 
 // Per-tool instructions for migrating setup to another device, as data (testable, keeps the card about layout).
 // One tool, one command, its output location named, and the three common failure modes each answered in place.
@@ -43,18 +44,18 @@ export interface HelpTopic {
 // folded shut so the two-step case never has to read past them.
 export const helpTopics = (guide: SourceGuide): HelpTopic[] => [
     {
-        title: `It runs on a server, not on this device`,
-        body: `Usual case. Run the command over SSH on the server, then bring the file down to the device you are reading this on, replace the parts in capitals with yours.`,
+        title: t(`sandbox.assistantGuide.runsOnServerNot`),
+        body: t(`sandbox.assistantGuide.usualCaseRunCommand`),
         command: `scp YOU@YOUR-SERVER:~/${guide.folder === `.hermes` ? `hermes` : `openclaw`}-setup.tar.gz ~/Downloads/`,
     },
     {
-        title: `I can't find the folder`,
-        body: `This prints where it is, including the case where it was moved somewhere custom. Pack whatever folder it names, any folder name works, since we find the setup by its settings file rather than by its name.`,
+        title: t(`sandbox.assistantGuide.iCantFindFolder`),
+        body: t(`sandbox.assistantGuide.printsWhereIncludingCase`),
         command: `ls -d ~/${guide.folder} 2>/dev/null; echo "$HERMES_HOME $OPENCLAW_STATE_DIR"`,
     },
     {
-        title: `It runs in a container`,
-        body: `Then the folder lives inside the container, not on the machine. Copy it out first, then pack the copy, replace NAME with your container's name.`,
+        title: t(`sandbox.assistantGuide.runsInContainer`),
+        body: t(`sandbox.assistantGuide.folderLivesInsideContainer`),
         command: `docker cp NAME:/root/${guide.folder} ./setup && tar czf ~/setup.tar.gz -C . setup`,
     },
 ];

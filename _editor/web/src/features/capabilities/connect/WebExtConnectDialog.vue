@@ -4,6 +4,7 @@ import { Button, Code, Modal } from "@intentic/ui";
 import { computed, onBeforeUnmount, ref, watch } from "vue";
 import { usePeerConnect, WEBEXT_DOOR } from "../../sandbox/devices/usePeerConnect";
 import { useSandbox } from "../../sandbox/client/useSandbox";
+import { useT } from "@intentic/ui/i18n";
 
 // "Connect this browser" for a webext-kind capability: hands over a code to paste into a browser this tab may not
 // run in. Site access stays a separate, per-site decision made later in the extension. The code also posts on this
@@ -11,6 +12,8 @@ import { useSandbox } from "../../sandbox/client/useSandbox";
 
 // `install` is empty when the card named no store listing (unlisted build, hand-added family); the link is then
 // omitted.
+const t = useT();
+
 const props = defineProps<{ visible: boolean; id: string; install: string; permissions: string }>();
 const emit = defineEmits<{ (event: "update:visible", value: boolean): void; (event: "connected"): void }>();
 
@@ -84,48 +87,50 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-    <Modal :open="visible" size="lg" :header="`Connect ${id}`" @update:open="emit(`update:visible`, $event)">
+    <Modal :open="visible" size="lg" :header="t(`capabilities.webExtConnectDialog.connect`, { id })" @update:open="emit(`update:visible`, $event)">
         <div class="flex flex-col gap-4">
             <p class="text-sm text-content">
-                Install the Intentic extension in the browser you want to connect, then give it the code below. The extension keeps one outbound
-                connection open to this sandbox while that browser is running. Nothing is opened on your network, and nothing is copied out of your
-                browser.
+                {{ t(`capabilities.webExtConnectDialog.installIntenticExtensionIn`) }}
             </p>
 
             <div v-if="online" class="rounded-md border border-success/40 bg-success/10 px-3 py-2 text-sm text-content">
-                <b>{{ id }}</b> is connected. Allow it on a site in the extension, and the agent can work there from its next turn.
+                <b>{{ id }}</b> {{ t(`capabilities.webExtConnectDialog.connectedAllowOnSite`) }}
             </div>
 
             <div v-else-if="error" class="rounded-md border border-danger/40 bg-danger/10 px-3 py-2 text-sm text-content">{{ error }}</div>
 
-            <div v-else-if="minting || code === ``" class="text-sm text-muted">Preparing a one-time connection code…</div>
+            <div v-else-if="minting || code === ``" class="text-sm text-muted">
+                {{ t(`capabilities.webExtConnectDialog.preparingOneTimeConnection`) }}
+            </div>
 
             <template v-else>
-<!-- Extension in this browser already has the code: nothing to copy, so say so instead of risking a second paste. -->
+                <!-- Extension in this browser already has the code: nothing to copy, so say so instead of risking a second paste. -->
                 <div v-if="extensionHere === true" class="rounded-md border border-subtle px-3 py-2 text-sm text-content">
-                    Your extension has the code. Open it (the toolbar icon is showing <b>!</b>) and press <b>Connect</b>.
+                    {{ t(`capabilities.webExtConnectDialog.extensionCodeOpenToolbar`) }} <b>!</b>{{ t(`capabilities.webExtConnectDialog.press`) }}
+                    <b>{{ t(`ui.action.connect`) }}</b
+                    >.
                 </div>
                 <template v-else>
-                    <a v-if="install !== ``" :href="install" target="_blank" rel="noreferrer" class="text-sm underline">Install the extension →</a>
+                    <a v-if="install !== ``" :href="install" target="_blank" rel="noreferrer" class="text-sm underline">{{
+                        t(`capabilities.webExtConnectDialog.installExtension`)
+                    }}</a>
                     <Code :code="code" :wrap="true" />
                     <p class="text-2xs text-subtle">
-                        Paste it into the extension's popup. The code works once and expires in about ten minutes. This window updates by itself when
-                        the browser connects.
+                        {{ t(`capabilities.webExtConnectDialog.pasteIntoExtensionsPopup`) }}
                     </p>
                 </template>
             </template>
 
             <div class="rounded-md border border-subtle px-3 py-2">
                 <p class="text-2xs text-muted">
-                    Once connected, the agent may: <b>{{ permissions }}</b
-                    >, and only on the sites you allow one at a time in the extension — your browser enforces that part, not this sandbox. Pause it
-                    from the extension, or Revoke here, and it stops immediately.
+                    {{ t(`capabilities.webExtConnectDialog.onceConnectedAgentMay`) }} <b>{{ permissions }}</b
+                    >{{ t(`capabilities.webExtConnectDialog.onlyOnSitesAllow`) }}
                 </p>
             </div>
         </div>
 
         <template #footer>
-            <Button :label="online ? `Done` : `Close`" size="small" @click="emit(`update:visible`, false)" />
+            <Button :label="online ? t(`ui.action.done`) : t(`ui.action.close`)" size="small" @click="emit(`update:visible`, false)" />
         </template>
     </Modal>
 </template>

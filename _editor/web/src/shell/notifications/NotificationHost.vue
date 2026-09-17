@@ -2,10 +2,13 @@
 import { Button, Icon, type IconName, InfoHint, ui, useDevice } from "@intentic/ui";
 import { onBeforeUnmount, ref, watch } from "vue";
 import { type Notification, type NotificationAction, type NotificationTone, useNotifications } from "./notifications";
+import { useT } from "@intentic/ui/i18n";
 
 // The one place the app floats anything over itself: the store decides what and why, this file is the lane
 // (layout, card shape, timing). The wrapper is inert; only the cards catch pointer events. It grows upward from
 // the bottom-right, last item anchored, so receipts (frequent) come first and questions (fixed point) last.
+
+const t = useT();
 
 const { notifications, receipt, dismissReceipt } = useNotifications();
 const { mobile } = useDevice();
@@ -78,13 +81,13 @@ const press = (entry: Notification, action: NotificationAction): void => {
 </script>
 
 <template>
-<!-- Viewport clipping retires overflowing receipts while keeping fixed questions reachable. -->
+    <!-- Viewport clipping retires overflowing receipts while keeping fixed questions reachable. -->
     <div
         class="pointer-events-none fixed inset-x-3 z-50 flex max-h-[calc(100dvh-1.5rem)] flex-col items-end justify-end gap-2 overflow-hidden sm:left-auto sm:right-3 sm:max-w-[calc(100vw-1.5rem)]"
         :class="mobile ? `bottom-[calc(4.25rem+env(safe-area-inset-bottom))]` : `bottom-3`"
     >
         <Transition v-for="entry in notifications" :key="entry.id" name="lane">
-<!-- Two columns, not an icon beside a stack: the glyph is a grid item in the title's row (`self-center`). -->
+            <!-- Two columns, not an icon beside a stack: the glyph is a grid item in the title's row (`self-center`). -->
             <div
                 class="pointer-events-auto grid max-w-full grid-cols-[auto_minmax(0,1fr)] gap-x-2 rounded-lg border border-line-strong bg-card p-3 shadow-lg"
                 :class="widthOf(entry)"
@@ -123,7 +126,7 @@ const press = (entry: Notification, action: NotificationAction): void => {
                         v-if="entry.dismiss"
                         type="button"
                         :class="ui.iconButton(`-my-1`)"
-                        aria-label="Dismiss"
+                        :aria-label="t(`ui.action.dismiss`)"
                         @click="entry.dismiss()"
                     >
                         <Icon name="times" class="text-xs" />

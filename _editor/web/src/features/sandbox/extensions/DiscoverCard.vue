@@ -2,10 +2,13 @@
 import { BrandMark, StatusBadge } from "@intentic/ui";
 import { computed } from "vue";
 import { checksOk, checksProblem, type DiscoverListing, splitListingName } from "./discoverListing";
+import { useT } from "@intentic/ui/i18n";
 
 // One published extension, drawn as the same tile the catalog uses, at the same density: for names nobody knows yet,
 // the description is the row's content, not a truncated afterthought. The publisher gets its own line (a separate trust
 // fact from the name), and the button always states its own state rather than sitting dead or lying.
+
+const t = useT();
 
 const { listing } = defineProps<{ listing: DiscoverListing }>();
 
@@ -41,11 +44,8 @@ const dim = computed(() => listing.state.kind === `blocked` || listing.state.kin
                         v-if="listing.entry.trust === `verified`"
                         name="shield"
                         class="shrink-0 text-success"
-                        v-tooltip.top="
-                            listing.entry.trustReason ??
-                            `The deterministic scan and agent audit passed, and someone also read the source at the listed commit`
-                        "
-                        aria-label="Verified"
+                        v-tooltip.top="listing.entry.trustReason ?? t(`sandbox.discoverCard.deterministicScanAgentAudit`)"
+                        :aria-label="t(`sandbox.discoverCard.verified`)"
                     />
                 </div>
                 <div v-if="name.publisher !== ``" class="truncate text-2xs text-subtle">{{ name.publisher }}</div>
@@ -54,19 +54,19 @@ const dim = computed(() => listing.state.kind === `blocked` || listing.state.kin
 
         <!-- Clamped to two lines: the tile is a quarter of a pane, and one author's paragraph can't inflate the row. -->
         <p v-if="listing.entry.description" class="line-clamp-2 text-2xs leading-relaxed text-muted">{{ listing.entry.description }}</p>
-        <p v-else class="text-2xs text-subtle italic">No description published.</p>
+        <p v-else class="text-2xs text-subtle italic">{{ t(`sandbox.discoverCard.noDescriptionPublished`) }}</p>
 
         <!-- Silent where there's nothing to say: an absent scan isn't a warning, and no stars just means a new listing. -->
         <div class="mt-auto flex w-full flex-wrap items-center gap-x-2.5 gap-y-1 pt-0.5">
             <span
                 v-if="loads"
                 class="inline-flex shrink-0 items-center gap-0.5 text-2xs text-success"
-                v-tooltip.top="`Re-checked at this exact commit by the registry's nightly scan`"
+                v-tooltip.top="t(`sandbox.discoverCard.reCheckedAtExact`)"
             >
-                <Icon name="check" />loads
+                <Icon name="check" />{{ t(`sandbox.discoverCard.loads`) }}
             </span>
             <span v-else-if="problem" class="inline-flex shrink-0 items-center gap-0.5 text-2xs text-warning" v-tooltip.top="problem">
-                <Icon name="exclamation-triangle" />won't load
+                <Icon name="exclamation-triangle" />{{ t(`sandbox.discoverCard.wontLoad`) }}
             </span>
             <span v-if="listing.entry.stars !== undefined" class="inline-flex shrink-0 items-center gap-0.5 text-2xs text-subtle">
                 <Icon name="star" />{{ listing.entry.stars }}
@@ -75,13 +75,19 @@ const dim = computed(() => listing.state.kind === `blocked` || listing.state.kin
 
             <!-- Right-aligned and always last: the one thing a reader scanning unfamiliar names is looking for. -->
             <span class="ml-auto shrink-0">
-                <StatusBadge v-if="listing.state.kind === `installed`" size="xs" variant="success" :dot="true" label="installed" />
-                <StatusBadge v-else-if="listing.state.kind === `update`" size="xs" variant="info" label="update" />
-                <StatusBadge v-else-if="listing.state.kind === `blocked`" size="xs" variant="danger" label="blocked" />
+                <StatusBadge
+                    v-if="listing.state.kind === `installed`"
+                    size="xs"
+                    variant="success"
+                    :dot="true"
+                    :label="t(`sandbox.discoverCard.installed`)"
+                />
+                <StatusBadge v-else-if="listing.state.kind === `update`" size="xs" variant="info" :label="t(`sandbox.discoverCard.update`)" />
+                <StatusBadge v-else-if="listing.state.kind === `blocked`" size="xs" variant="danger" :label="t(`sandbox.discoverCard.blocked`)" />
                 <span v-else-if="listing.state.kind === `unavailable`" class="text-2xs text-subtle" v-tooltip.top="listing.state.reason">
-                    can't install
+                    {{ t(`sandbox.discoverCard.cantInstall`) }}
                 </span>
-                <span v-else class="text-2xs font-medium text-link">Install →</span>
+                <span v-else class="text-2xs font-medium text-link">{{ t(`sandbox.discoverCard.install`) }}</span>
             </span>
         </div>
     </button>

@@ -14,10 +14,15 @@ import { useSandbox } from "../features/sandbox/client/useSandbox";
 import { setupRedirect } from "./setupGate";
 import { signInAt } from "./signIn";
 import { isStaleChunkError, recoverStaleChunk } from "./staleChunk";
+import { t } from "@intentic/ui/i18n";
 
 declare module "vue-router" {
     interface RouteMeta {
-        title?: string;
+        /**
+         * The tab title, as a function rather than a string: the route table is built once, while this module is
+         * still being imported, and `t` has no catalog to read yet. Called on every navigation instead (below).
+         */
+        title?: () => string;
     }
 }
 
@@ -93,13 +98,13 @@ const routes: RouteRecordRaw[] = [
     {
         path: `/login`,
         name: `login`,
-        meta: { title: `Login` },
+        meta: { title: () => t(`router.index.login`) },
         component: () => import(`../features/auth/Login.vue`),
     },
     {
         path: `/platform-unavailable`,
         name: `platform-unavailable`,
-        meta: { title: `Can't reach Intentic` },
+        meta: { title: () => t(`router.index.cantReachIntentic`) },
         component: () => import(`../features/setup/PlatformUnavailable.vue`),
     },
     {
@@ -107,7 +112,7 @@ const routes: RouteRecordRaw[] = [
         // Deliberately unguarded, since that browser is often not signed in as this app's user.
         path: `/desktop-auth`,
         name: `desktop-auth`,
-        meta: { title: `Sign in to Intentic` },
+        meta: { title: () => t(`router.index.signInToIntentic`) },
         beforeEnter: [startGoogleMint],
         component: () => import(`../features/auth/DesktopAuth.vue`),
     },
@@ -116,7 +121,7 @@ const routes: RouteRecordRaw[] = [
         // Unguarded on purpose, there is no session here yet.
         path: `/desktop-auth/complete`,
         name: `desktop-auth-complete`,
-        meta: { title: `Signing in…` },
+        meta: { title: () => t(`router.index.signingIn`) },
         component: () => import(`../features/auth/DesktopAuthComplete.vue`),
     },
     {
@@ -124,7 +129,7 @@ const routes: RouteRecordRaw[] = [
         // sandbox is connected (redirectIfReady).
         path: `/setup`,
         name: `setup`,
-        meta: { title: `Setup` },
+        meta: { title: () => t(`router.index.setup`) },
         beforeEnter: [requireAuth],
         // Wrapped although it is outside the shell: "Add sandbox" reaches it from the shell, and that click deserves
         // the same instant flip as any other. Full-screen wizard, so no outline to promise.
@@ -149,14 +154,15 @@ const routes: RouteRecordRaw[] = [
             // chat is already docked: the file tree, or a maker's Project page once that extension has registered.
             {
                 path: ``,
-                redirect: () => (useDevice().mobile.value ? `/agents` : homeViewId() === PROJECTS_VIEW_ID ? `/ext/${PROJECTS_VIEW_ID}` : `/workspace`),
+                redirect: () =>
+                    useDevice().mobile.value ? `/agents` : homeViewId() === PROJECTS_VIEW_ID ? `/ext/${PROJECTS_VIEW_ID}` : `/workspace`,
             },
             // Full-screen chat: the rail-docked chat's own surface, expanded. A route rather than a layout switch, so
             // the rail, back button and reload already know how to enter and leave it. On a phone, the Chat tab.
             {
                 path: `chat`,
                 name: `chat`,
-                meta: { title: `Chat` },
+                meta: { title: () => t(`router.index.chat`) },
                 beforeEnter: [chatEntry],
                 component: asyncView(() => import(`../features/chat/panel/ChatArea.vue`)),
             },
@@ -165,32 +171,42 @@ const routes: RouteRecordRaw[] = [
             {
                 path: `preview`,
                 name: `preview`,
-                meta: { title: `Preview` },
+                meta: { title: () => t(`router.index.preview`) },
                 beforeEnter: [desktopOnly],
                 component: asyncView(() => import(`../features/preview/PreviewArea.vue`)),
             },
-            { path: `agents`, name: `agents`, meta: { title: `Agents` }, component: asyncView(() => import(`../features/agents/fleet/Agents.vue`)) },
+            {
+                path: `agents`,
+                name: `agents`,
+                meta: { title: () => t(`router.index.agents`) },
+                component: asyncView(() => import(`../features/agents/fleet/Agents.vue`)),
+            },
             // Drill-in for one agent: full-screen chat plus isolated diff review; an agent's conversation is its chat
             // surface.
-            { path: `agents/:id`, name: `agent`, meta: { title: `Agent` }, component: asyncView(() => import(`../features/agents/review/AgentDetail.vue`)) },
+            {
+                path: `agents/:id`,
+                name: `agent`,
+                meta: { title: () => t(`router.index.agent`) },
+                component: asyncView(() => import(`../features/agents/review/AgentDetail.vue`)),
+            },
             {
                 path: `menu`,
                 name: `menu`,
-                meta: { title: `Menu` },
+                meta: { title: () => t(`router.index.menu`) },
                 beforeEnter: [mobileOnly],
                 component: asyncView(() => import(`../shell/MobileMenu.vue`)),
             },
             {
                 path: `terminal`,
                 name: `terminal`,
-                meta: { title: `Terminal` },
+                meta: { title: () => t(`router.index.terminal`) },
                 beforeEnter: [mobileOnly],
                 component: asyncView(() => import(`../features/terminal/MobileTerminal.vue`)),
             },
             {
                 path: `capabilities/:card?`,
                 name: `capabilities`,
-                meta: { title: `Capabilities` },
+                meta: { title: () => t(`router.index.capabilities`) },
                 // Title and description mirror the page's own copy, so the outline wears the real heading immediately.
                 component: asyncView(
                     () => import(`../features/capabilities/Capabilities.vue`),
@@ -204,7 +220,7 @@ const routes: RouteRecordRaw[] = [
             {
                 path: `sandbox/:tab?`,
                 name: `sandbox`,
-                meta: { title: `Sandbox` },
+                meta: { title: () => t(`router.index.sandbox`) },
                 // The hub retitles itself with the active sandbox's name once mounted; the outline just says what the
                 // page is.
                 component: asyncView(() => import(`../features/sandbox/SandboxHub.vue`), hubOutline(`Sandbox`, ``, 7)),
@@ -214,7 +230,7 @@ const routes: RouteRecordRaw[] = [
             {
                 path: `workspace/:path(.*)*`,
                 name: `workspace`,
-                meta: { title: `Workspace` },
+                meta: { title: () => t(`router.index.workspace`) },
                 component: asyncView(() => import(`../features/workspace/page/Workspace.vue`)),
             },
             // The session is in the URL so a reload reopens the same browser; optional, since the rail tile links to
@@ -222,17 +238,22 @@ const routes: RouteRecordRaw[] = [
             {
                 path: `browsers/:session?`,
                 name: `browsers`,
-                meta: { title: `Browsers` },
+                meta: { title: () => t(`router.index.browsers`) },
                 component: asyncView(() => import(`../features/browsers/Browsers.vue`)),
             },
             // The id is in the URL so a reload or a chat card's link reopens the same agent; the bare path shows
             // whichever is most recently active.
-            { path: `subagents/:id?`, name: `subagents`, meta: { title: `Subagents` }, component: asyncView(() => import(`../features/chat/subagents/Subagents.vue`)) },
+            {
+                path: `subagents/:id?`,
+                name: `subagents`,
+                meta: { title: () => t(`router.index.subagents`) },
+                component: asyncView(() => import(`../features/chat/subagents/Subagents.vue`)),
+            },
             { path: `ext/:ext/:key?`, name: `extension`, component: asyncView(() => import(`../features/extensions/ExtensionHost.vue`)) },
             {
                 path: `settings/:tab?`,
                 name: `settings`,
-                meta: { title: `Settings` },
+                meta: { title: () => t(`router.index.settings`) },
                 // Mirrors the page's own heading (pages/SettingsHub.vue).
                 component: asyncView(() => import(`../features/settings/SettingsHub.vue`), hubOutline(`Settings`, ``, 5)),
             },
@@ -243,14 +264,21 @@ const routes: RouteRecordRaw[] = [
         // Google account; the page drives sign-in as the invited address, then flips the pending grant.
         path: `/invite/:token`,
         name: `invite`,
-        meta: { title: `Accept invite` },
+        meta: { title: () => t(`router.index.acceptInvite`) },
         component: () => import(`../features/setup/AcceptInvite.vue`),
     },
 
     // Every component variant on one page, dev only, unguarded since it needs no session, sandbox or repository.
     // `import.meta.env.DEV` is compile-time, so this route and its whole graph vanish from a production build.
     ...(import.meta.env.DEV
-        ? [{ path: `/kit`, name: `kit`, meta: { title: `Design kit` }, component: () => import(`../features/settings/DesignKit.vue`) } satisfies RouteRecordRaw]
+        ? [
+              {
+                  path: `/kit`,
+                  name: `kit`,
+                  meta: { title: () => t(`router.index.designKit`) },
+                  component: () => import(`../features/settings/DesignKit.vue`),
+              } satisfies RouteRecordRaw,
+          ]
         : []),
     { path: `/:pathMatch(.*)*`, redirect: `/` },
 ];
@@ -283,7 +311,8 @@ router.onError((error, to) => {
 // health, so clearing here risks a reload loop on a broken deploy.
 
 // Sets the tab title to `<Page> / intentic` from the route's `title`, falling back to the bare brand when none is
-// declared.
+// declared. Asked for per navigation, so it is in the reader's language even when they changed it after boot.
 router.afterEach((to) => {
-    document.title = to.meta.title ? `${to.meta.title} / intentic` : `intentic`;
+    const title = to.meta.title?.();
+    document.title = title === undefined ? `intentic` : `${title} / intentic`;
 });

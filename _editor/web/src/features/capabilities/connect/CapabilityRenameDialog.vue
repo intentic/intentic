@@ -3,6 +3,9 @@
 import { Button, ui, Modal, Notice, type NoticeModel } from "@intentic/ui";
 import { computed, ref, watch } from "vue";
 import { cleanName, nameError } from "../model/form";
+import { useT } from "@intentic/ui/i18n";
+
+const t = useT();
 
 const props = defineProps<{ visible: boolean; id: string; busy?: boolean; error?: NoticeModel | undefined }>();
 const emit = defineEmits<{ (event: "update:visible", value: boolean): void; (event: "rename", to: string): void }>();
@@ -32,11 +35,16 @@ const unchanged = computed(() => renamed.value === props.id);
 </script>
 
 <template>
-    <Modal :open="visible" size="sm" header="Rename connection" @update:open="emit(`update:visible`, $event)">
+    <Modal
+        :open="visible"
+        size="sm"
+        :header="t(`capabilities.capabilityRenameDialog.renameConnection`)"
+        @update:open="emit(`update:visible`, $event)"
+    >
         <form class="flex flex-col gap-3" @submit.prevent="!problem && !unchanged && emit(`rename`, renamed)">
             <Notice v-if="error" :of="error" />
             <label class="ui-field">
-                <span class="ui-field-label">Name</span>
+                <span class="ui-field-label">{{ t(`capabilities.capabilityRenameDialog.name`) }}</span>
                 <!-- Autofocused: the dialog exists to change one field, so the caret starts in it. -->
                 <input
                     v-model="name"
@@ -51,17 +59,22 @@ const unchanged = computed(() => renamed.value === props.id);
                 <!-- The preview states the exact name the button will apply. -->
                 <span v-else-if="preview" class="mt-1 flex items-center gap-1 text-2xs text-muted">
                     <Icon name="check" class="text-2xs text-success" />
-                    Renamed to <span class="font-mono text-content">{{ preview }}</span>
+                    {{ t(`capabilities.capabilityRenameDialog.renamedTo`) }} <span class="font-mono text-content">{{ preview }}</span>
                 </span>
             </label>
             <p class="text-2xs text-muted">
-                This is the name your agent knows the connection by, so its skill and tools are renamed with it. Everything else is kept: a signed-in
-                browser stays signed in, a connected device stays paired, and anything pointing at this connection is updated to follow it.
+                {{ t(`capabilities.capabilityRenameDialog.nameAgentKnowsConnection`) }}
             </p>
         </form>
         <template #footer>
-            <Button label="Cancel" size="small" severity="secondary" text @click="emit(`update:visible`, false)" />
-            <Button label="Rename" size="small" :loading="busy" :disabled="problem !== undefined || unchanged" @click="emit(`rename`, renamed)" />
+            <Button :label="t(`ui.action.cancel`)" size="small" severity="secondary" text @click="emit(`update:visible`, false)" />
+            <Button
+                :label="t(`ui.action.rename`)"
+                size="small"
+                :loading="busy"
+                :disabled="problem !== undefined || unchanged"
+                @click="emit(`rename`, renamed)"
+            />
         </template>
     </Modal>
 </template>

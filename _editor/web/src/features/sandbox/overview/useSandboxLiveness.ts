@@ -17,6 +17,7 @@ import { resetDaemonRoutes } from "./useDaemonRoutes";
 import { useEndpoint } from "../secrets/useEndpoint";
 import { signalConnection, useSandbox } from "../client/useSandbox";
 import { uuid } from "../../../lib/uuid";
+import { t } from "@intentic/ui/i18n";
 
 // Holds one long-lived `/events` stream to the active sandbox daemon and reconnects on failure; transition rules
 // live in connection.ts, frame routing in systemEvents.ts. The stream is a typed oRPC event iterator, not
@@ -77,7 +78,7 @@ const failureOf = (error: unknown): ConnectionFailure => {
     // detached sandbox, not a slow one.
     const edge = lastEdgeVerdict(activeSandboxId.value);
     if (watchdogTripped) {
-        return classifyFailure({ watchdog: true, edge, message: `The sandbox stopped responding.` });
+        return classifyFailure({ watchdog: true, edge, message: t(`sandbox.useSandboxLiveness.sandboxStoppedResponding`) });
     }
     return classifyFailure({ status: daemonErrorStatus(error), edge, message: daemonErrorMessage(error) });
 };
@@ -142,7 +143,7 @@ const attempt = async (): Promise<void> => {
     if (sandboxId === undefined) {
         signalConnection({
             kind: `failed`,
-            failure: classifyFailure({ unaddressed: true, message: `No sandbox is selected.` }),
+            failure: classifyFailure({ unaddressed: true, message: t(`sandbox.useSandboxLiveness.noSandboxSelected`) }),
             at: Date.now(),
         });
         return;
@@ -152,7 +153,7 @@ const attempt = async (): Promise<void> => {
     if (daemonUrl.value === undefined) {
         signalConnection({
             kind: `failed`,
-            failure: classifyFailure({ unaddressed: true, message: `This sandbox has never reported an address.` }),
+            failure: classifyFailure({ unaddressed: true, message: t(`sandbox.useSandboxLiveness.sandboxNeverReportedAddress`) }),
             at: Date.now(),
         });
         return;
@@ -176,7 +177,11 @@ const attempt = async (): Promise<void> => {
         // hot-looping.
         signalConnection({
             kind: `failed`,
-            failure: classifyFailure({ closed: true, edge: lastEdgeVerdict(sandboxId), message: `The sandbox closed the connection.` }),
+            failure: classifyFailure({
+                closed: true,
+                edge: lastEdgeVerdict(sandboxId),
+                message: t(`sandbox.useSandboxLiveness.sandboxClosedConnection`),
+            }),
             at: Date.now(),
         });
     } catch (error) {

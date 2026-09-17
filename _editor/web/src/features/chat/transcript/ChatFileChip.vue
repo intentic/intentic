@@ -6,6 +6,9 @@ import { type FilePeek, peekLead, peekLines, peekOmitted } from "../drafts/fileP
 import ChatImageThumb from "./ChatImageThumb.vue";
 import { useClippedName } from "./clippedName";
 import { useChatSurface } from "../tools/chatToolSurface";
+import { useT } from "@intentic/ui/i18n";
+
+const t = useT();
 
 /* One attached file, at three depths: the tile says what it is (glyph, name, size, its own first lines), hovering it reads the head and the tail. */
 
@@ -170,7 +173,7 @@ onBeforeUnmount(() => clearTimeout(timer));
 
 <template>
     <div ref="root" class="group relative flex" :class="frame" @pointerenter="onEnter" @pointerleave="onLeave">
-<!-- The target, drawn only on approach. -->
+        <!-- The target, drawn only on approach. -->
         <div
             v-if="!framed && openable"
             class="pointer-events-none absolute -inset-1.5 rounded-lg bg-overlay/50 opacity-0 transition-opacity group-hover:opacity-100"
@@ -180,7 +183,7 @@ onBeforeUnmount(() => clearTimeout(timer));
             :type="openable ? `button` : undefined"
             class="relative flex min-w-0 flex-1 flex-col gap-1 text-left"
             :class="[framed ? `px-2 py-1.5` : ``, openable ? `cursor-pointer` : ``]"
-            :aria-label="openable ? `Open ${name} in the workspace` : undefined"
+            :aria-label="openable ? t(`chat.chatFileChip.openInWorkspace`, { name }) : undefined"
             @click="openable && open()"
             @focus="onFocus"
             @blur="onBlur"
@@ -190,7 +193,7 @@ onBeforeUnmount(() => clearTimeout(timer));
                 <!-- A picture stands in for its own glyph; everything else gets its category's. -->
                 <ChatImageThumb v-if="previewUrl" :src="previewUrl" :alt="name" size="h-8 w-8" />
                 <Icon v-else :name="icon" class="shrink-0 text-xs" :class="iconColor" />
-<!-- Preserve the capture identifier at narrow widths. -->
+                <!-- Preserve the capture identifier at narrow widths. -->
                 <span class="flex min-w-0 items-center text-xs text-content">
                     <!-- Softened at the cut, so a half-drawn glyph reads as the name running into its mark. -->
                     <span
@@ -205,7 +208,7 @@ onBeforeUnmount(() => clearTimeout(timer));
                 <Icon v-if="progress !== undefined" name="spinner" spin class="shrink-0 text-2xs text-link" />
                 <Icon v-else-if="error !== undefined" name="exclamation-circle" class="shrink-0 text-2xs text-danger" v-tooltip.top="error" />
             </span>
-<!-- The text equivalent of a thumbnail, and framed for the same reason the screenshot is: this is the file itself, not a label for it. -->
+            <!-- The text equivalent of a thumbnail, and framed for the same reason the screenshot is: this is the file itself, not a label for it. -->
             <span v-if="leadLines.length" class="block overflow-hidden rounded-md border border-line bg-canvas/40 px-2 py-1">
                 <!-- The fade masks the LINES, never the box: masking the box would dissolve its border mid-curve. -->
                 <span class="flex flex-col" :class="truncated ? `mask-b-from-70%` : ``">
@@ -220,7 +223,7 @@ onBeforeUnmount(() => clearTimeout(timer));
             v-if="removable"
             type="button"
             class="composer-ghost relative m-1 h-5 w-5 shrink-0 self-center"
-            aria-label="Remove attachment"
+            :aria-label="t(`chat.chatFileChip.removeAttachment`)"
             @click="emit(`remove`)"
         >
             <Icon name="times" class="text-2xs" />
@@ -232,7 +235,7 @@ onBeforeUnmount(() => clearTimeout(timer));
             :style="{ width: `${Math.round(progress * 100)}%` }"
         ></div>
 
-<!-- The peek, teleported out of this chip by the overlay. -->
+        <!-- The peek, teleported out of this chip by the overlay. -->
         <AnchoredOverlay v-model="peeking" :anchor="root" :side="side" cross="start" :gap="GAP">
             <div class="flex max-h-[min(32rem,70vh)] w-[min(34rem,80vw)] flex-col" @pointerenter="onCardEnter" @pointerleave="onLeave">
                 <div class="flex shrink-0 items-start gap-2 border-b border-line px-3 py-2">
@@ -250,7 +253,7 @@ onBeforeUnmount(() => clearTimeout(timer));
                         <!-- Never a bare gap: the reader has to know the two halves aren't continuous. -->
                         <p v-if="omitted > 0" class="my-2 flex items-center gap-2 text-2xs whitespace-nowrap text-subtle">
                             <span class="h-px flex-1 bg-line"></span>
-                            {{ formatBytes(omitted) }} not shown
+                            {{ formatBytes(omitted) }} {{ t(`chat.chatFileChip.notShown`) }}
                             <span class="h-px flex-1 bg-line"></span>
                         </p>
                         <pre v-if="peek?.tail" class="font-mono text-2xs leading-relaxed whitespace-pre text-muted">{{ peek.tail }}</pre>
@@ -259,7 +262,7 @@ onBeforeUnmount(() => clearTimeout(timer));
                 <div v-if="openable" class="shrink-0 border-t border-line px-3 py-1">
                     <Button type="button" size="small" :text="true" class="w-full" @click="open">
                         <Icon name="external-link" />
-                        Open in the workspace
+                        {{ t(`chat.chatFileChip.openInWorkspace2`) }}
                     </Button>
                 </div>
             </div>

@@ -1,4 +1,5 @@
 import type { ExtensionManifest } from "@intentic/extension-manifest";
+import { t } from "@intentic/ui/i18n";
 
 // Manifest `contributes` entries in the reader's words, not raw schema keys: a facet names where a contribution shows
 // up (e.g. `rail tile`) and carries the real names for the row's breakdown. `take()` marks every kind known; anything
@@ -79,7 +80,12 @@ export const facetsOf = (manifest: ExtensionManifest): ExtensionFacet[] => {
     ]);
     // Provider rides the label; event types are the detail underneath, not part of the name.
     take(`listener`, (listener) => [
-        { kind: `listener`, label: `${listener.provider} listener`, names: listener.events.map((event) => event.type), surface: true },
+        {
+            kind: `listener`,
+            label: t(`extensions.extensionFacets.listener`, { provider: listener.provider }),
+            names: listener.events.map((event) => event.type),
+            surface: true,
+        },
     ]);
     take(`processes`, (processes) => [
         {
@@ -90,17 +96,31 @@ export const facetsOf = (manifest: ExtensionManifest): ExtensionFacet[] => {
         },
     ]);
     take(`agent`, () => [
-        { kind: `agent`, label: `agent plugin`, names: [`skills, subagents, hooks and MCP servers, loaded each turn`], surface: true },
+        {
+            kind: `agent`,
+            label: t(`extensions.extensionFacets.agentPlugin`),
+            names: [`skills, subagents, hooks and MCP servers, loaded each turn`],
+            surface: true,
+        },
     ]);
-    take(`bin`, (bin) => [{ kind: `bin`, label: `agent CLI`, names: [`executables from ${bin}/, on the agent's PATH`], surface: true }]);
+    take(`bin`, (bin) => [
+        { kind: `bin`, label: t(`extensions.extensionFacets.agentCli`), names: [`executables from ${bin}/, on the agent's PATH`], surface: true },
+    ]);
     take(`environment`, (environment) => [
-        { kind: `environment`, label: `image layer`, names: [`${environment.fragment}, applied at the next environment rebuild`], surface: true },
+        {
+            kind: `environment`,
+            label: t(`extensions.extensionFacets.imageLayer`),
+            names: [`${environment.fragment}, applied at the next environment rebuild`],
+            surface: true,
+        },
     ]);
     take(`settings`, (settings) => [
         { kind: `settings`, label: counted(settings.length, `setting`), names: settings.map((setting) => setting.title), surface: true },
     ]);
     // Not a place; explains why a view refreshes without polling. Worth stating once the row is open, not on it.
-    take(`files`, (files) => [{ kind: `files`, label: `watched files`, names: files.map((file) => file.path), surface: false }]);
+    take(`files`, (files) => [
+        { kind: `files`, label: t(`extensions.extensionFacets.watchedFiles`), names: files.map((file) => file.path), surface: false },
+    ]);
 
     for (const [kind, value] of Object.entries(contributes)) {
         if (taught.has(kind) || value === undefined) {

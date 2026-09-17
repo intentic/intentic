@@ -4,6 +4,9 @@ import { computed, ref } from "vue";
 import type { Conversation } from "../session/conversation";
 import { modelLabelFor } from "../accounts/providerCatalog";
 import ProviderLogo from "../accounts/ProviderLogo.vue";
+import { useT } from "@intentic/ui/i18n";
+
+const t = useT();
 
 const {
     conversation,
@@ -37,7 +40,7 @@ defineExpose({ el, label: modelLabelText });
         class="composer-ghost h-8 min-w-0 gap-1.5 px-2.5 text-2xs font-medium max-md:h-11"
         :disabled="disabled"
         :aria-expanded="expanded"
-        :aria-label="ariaLabel ?? `Model: ${modelLabelText}`"
+        :aria-label="ariaLabel ?? t(`chat.composerModelPill.model`, { modelLabelText })"
     >
         <ProviderLogo :provider="provider" class="shrink-0 text-2xs text-link" />
         <span class="truncate" :class="labelClass">{{ modelLabelText }}</span>

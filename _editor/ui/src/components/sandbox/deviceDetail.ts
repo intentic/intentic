@@ -1,3 +1,5 @@
+import { t } from "../../i18n/index.js";
+
 // Derivations behind DeviceDetail.vue: what one device is doing for a sandbox, arranged the way it's read.
 // The report arrives as two flat lists tagged by sandbox id; folded here into one block per sandbox so
 // grouping doesn't fall to the template. Shapes are structural: a DeviceReport satisfies these by shape.
@@ -102,8 +104,7 @@ export interface DeviceSandboxGroup {
 
 // A port that never reached localhost sorts to the bottom; within a group, number order is how people
 // look one up.
-const byOutcomeThenNumber = (a: DevicePortRow, b: DevicePortRow): number =>
-    a.state === b.state ? a.port - b.port : a.state === `mirrored` ? -1 : 1;
+const byOutcomeThenNumber = (a: DevicePortRow, b: DevicePortRow): number => (a.state === b.state ? a.port - b.port : a.state === `mirrored` ? -1 : 1);
 
 // IPv4 and IPv6 binds of the same server are one port to the reader; folded here since the outcome
 // (which both rows agree on) is what survives.
@@ -194,8 +195,7 @@ export const folderState = (folder: DeviceFolderRow): string | undefined => {
 
 // Whether this pairing has a file-sync session at all. Not the same question as `mode === "sync"`: a pairing
 // whose sandbox was unreachable when its session was due keeps the mode and has nothing running.
-export const syncSessionLive = (folder: DeviceFolderRow | undefined): boolean =>
-    folder?.mode === `sync` && folder.mutagenStatus !== undefined;
+export const syncSessionLive = (folder: DeviceFolderRow | undefined): boolean => folder?.mode === `sync` && folder.mutagenStatus !== undefined;
 
 // Whether this sandbox's state is kept anywhere else; the one row where an absence must be louder than
 // any word Mutagen could return. Undefined for a mirror or a paused pairing: neither is a backup that failed.
@@ -317,7 +317,7 @@ export const folderConflicts = (folder: DeviceFolderRow | undefined): FolderConf
         lead,
         rows,
         more: count - rows.length,
-        ...(rows.length === 0 ? { note: `This device's agent doesn't report which paths they are. Updating it lists them here.` } : {}),
+        ...(rows.length === 0 ? { note: t(`ui.sandboxDeviceDetail.devicesAgentDoesntReport`) } : {}),
         clearable,
         disputed,
     };

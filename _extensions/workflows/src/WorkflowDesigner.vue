@@ -8,6 +8,7 @@ import WorkflowCanvas from "./WorkflowCanvas.vue";
 import { addStep, connectSteps, disconnectSteps, removeStep, toggleHandoff, updateStep } from "./workflowEdit";
 import { editableCopy } from "./workflowDraft";
 import { useWorkflows } from "./useWorkflows";
+import { t } from "./i18n.js";
 
 // Full-page designer, not a modal, since a graph needs horizontal room a dialog can't give. A mode of the workflows
 // view via `?edit=<id>`, not its own route. Dependencies live on the canvas, handoff on the edge, prose in the
@@ -124,31 +125,33 @@ const commit = async (): Promise<void> => {
     <!-- The page does not scroll; the canvas fills it and the inspector scrolls itself. -->
     <div class="flex h-full min-h-0 flex-col">
         <header class="flex shrink-0 flex-wrap items-center gap-2 border-b border-line-subtle px-4 py-2.5">
-            <button type="button" :class="ui.iconButton()" aria-label="Back to workflows" @click="emit(`close`)"><Icon name="arrow-left" /></button>
+            <button type="button" :class="ui.iconButton()" :aria-label="t(`workflowDesigner.backToWorkflows`)" @click="emit(`close`)">
+                <Icon name="arrow-left" />
+            </button>
             <input
                 :value="draft.name"
                 :class="[ui.input(), `min-w-48 max-w-96 flex-1 font-medium`]"
-                aria-label="Workflow name"
-                placeholder="Name this workflow"
+                :aria-label="t(`workflowDesigner.workflowName`)"
+                :placeholder="t(`workflowDesigner.nameWorkflow`)"
                 @input="patch({ name: ($event.target as HTMLInputElement).value })"
             />
             <!-- Discoverable add: the node handle's `+` and drag-to-add are faster but hidden until hover. -->
-            <Button label="Add step" size="small" severity="secondary" @click="onAdd(selectedId ?? draft.steps.at(-1)?.id)">
+            <Button :label="t(`workflowDesigner.addStep`)" size="small" severity="secondary" @click="onAdd(selectedId ?? draft.steps.at(-1)?.id)">
                 <template #icon><Icon name="plus" /></template>
             </Button>
             <span ref="settingsAnchor">
-                <Button label="Run settings" size="small" severity="secondary" :text="true" @click="settings?.toggle($event)">
+                <Button :label="t(`workflowDesigner.runSettings`)" size="small" severity="secondary" :text="true" @click="settings?.toggle($event)">
                     <template #icon><Icon name="sliders-h" /></template>
                 </Button>
             </span>
             <!-- Property of the whole design, like Run settings; the icon tints when a gate is declared. -->
-            <Button label="CI gate" size="small" severity="secondary" :text="true" @click="gatePanel?.toggle($event)">
+            <Button :label="t(`workflowDesigner.ciGate`)" size="small" severity="secondary" :text="true" @click="gatePanel?.toggle($event)">
                 <template #icon><Icon name="shield" :class="draft.gate !== undefined ? `text-link` : ``" /></template>
             </Button>
             <span class="flex-1"></span>
             <span v-if="faults.length > 0" class="truncate text-2xs text-warning">{{ faults[0] }}</span>
-            <button type="button" :class="ui.linkButton()" @click="emit(`close`)">Cancel</button>
-            <Button label="Save" size="small" :disabled="!ready || save.isPending.value" @click="commit()">
+            <button type="button" :class="ui.linkButton()" @click="emit(`close`)">{{ t(`workflowDesigner.cancel`) }}</button>
+            <Button :label="t(`workflowDesigner.save`)" size="small" :disabled="!ready || save.isPending.value" @click="commit()">
                 <template #icon><Icon name="save" /></template>
             </Button>
         </header>
@@ -168,8 +171,8 @@ const commit = async (): Promise<void> => {
 
                 <!-- Empty state sits directly on the canvas, where the first step will go. -->
                 <div v-if="draft.steps.length === 0" class="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-2">
-                    <p class="text-xs text-subtle">Nothing here yet.</p>
-                    <Button class="pointer-events-auto" label="Add the first step" size="small" @click="onAdd()">
+                    <p class="text-xs text-subtle">{{ t(`workflowDesigner.nothingHereYet`) }}</p>
+                    <Button class="pointer-events-auto" :label="t(`workflowDesigner.addFirstStep`)" size="small" @click="onAdd()">
                         <template #icon><Icon name="plus" /></template>
                     </Button>
                 </div>
@@ -186,18 +189,21 @@ const commit = async (): Promise<void> => {
                     <button
                         type="button"
                         v-tooltip.top="
-                            pickedStep.needs.length === 1
-                                ? `A new session knows only what the step before it declared: the only honest way to review work. Carrying on keeps the agent, its thread and its working tree.`
-                                : `Only a step with exactly one predecessor can carry a session on.`
+                            pickedStep.needs.length === 1 ? t(`workflowDesigner.newSessionKnowsOnly`) : t(`workflowDesigner.onlyStepExactlyOne`)
                         "
                         class="ui-chip"
                         :class="pickedStep.handoff === `continue` ? `ui-chip-on` : ``"
                         :disabled="pickedStep.needs.length !== 1"
                         @click="flipHandoff()"
                     >
-                        {{ pickedStep.handoff === `continue` ? `Same agent` : `New agent` }}
+                        {{ pickedStep.handoff === `continue` ? t(`workflowDesigner.sameAgent`) : t(`workflowDesigner.newAgent`) }}
                     </button>
-                    <button type="button" :class="ui.iconButton(`text-danger`)" aria-label="Remove this dependency" @click="dropEdge()">
+                    <button
+                        type="button"
+                        :class="ui.iconButton(`text-danger`)"
+                        :aria-label="t(`workflowDesigner.removeDependency`)"
+                        @click="dropEdge()"
+                    >
                         <Icon name="times" />
                     </button>
                 </div>
@@ -220,7 +226,7 @@ const commit = async (): Promise<void> => {
         <Popover ref="settings">
             <div class="flex w-80 flex-col gap-3 p-1">
                 <label class="flex flex-col gap-1">
-                    <span :class="ui.sectionLabel()">At once</span>
+                    <span :class="ui.sectionLabel()">{{ t(`workflowDesigner.atOnce`) }}</span>
                     <input
                         :value="draft.maxParallel"
                         type="number"
@@ -229,14 +235,14 @@ const commit = async (): Promise<void> => {
                         :class="[ui.input(), `w-20`]"
                         @input="patch({ maxParallel: Number(($event.target as HTMLInputElement).value) })"
                     />
-                    <span class="text-2xs text-subtle">How many steps may run side by side. Every one of them works in a worktree of its own.</span>
+                    <span class="text-2xs text-subtle">{{ t(`workflowDesigner.howManyStepsMay`) }}</span>
                 </label>
                 <label class="flex flex-col gap-1">
-                    <span :class="ui.sectionLabel()">What it is for</span>
+                    <span :class="ui.sectionLabel()">{{ t(`workflowDesigner.what`) }}</span>
                     <input
                         :value="draft.description ?? ``"
                         :class="ui.input()"
-                        placeholder="optional"
+                        :placeholder="t(`workflowDesigner.optional`)"
                         @input="patch({ description: ($event.target as HTMLInputElement).value })"
                     />
                 </label>

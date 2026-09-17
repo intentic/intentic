@@ -10,11 +10,14 @@ import { useAuth } from "./useAuth";
 import { useGoogleIdentity } from "./useGoogleIdentity";
 import { desktopAuthLink, signInThroughBrowser } from "../../app/environments/desktop";
 import { arrivingProfile } from "../../app/useProfile";
+import { useT } from "@intentic/ui/i18n";
 
 // Runs in the user's real browser, not the app's webview (Google refuses OAuth there; see environments/desktop.ts).
 // Session handling is this page's own job, not a route guard's: bouncing a signed-out window to /login would sign
 // in the wrong browser while the app that asked stays stuck. Only the handoff row's id crosses to the app, never
 // the credentials; `state` is the app's nonce, echoed back to match.
+
+const t = useT();
 
 const route = useRoute();
 const { user, refresh, signInWithGoogle, signInWithGoogleCredential } = useAuth();
@@ -162,26 +165,38 @@ onMounted(() => void hand());
 
             <p class="entry-eyebrow">
                 <span class="entry-lozenge"></span>
-                <span>The desktop app</span>
+                <span>{{ t(`auth.desktopAuth.desktopApp`) }}</span>
                 <span class="entry-lozenge"></span>
             </p>
 
             <!-- Turns over on arrival: the same two beats end the sentence the page opened with. -->
             <h1 class="headline">
                 <template v-if="stage === `done` && !error">
-                    <span class="beat"><span class="entry-display">Signed in</span><span class="entry-stop">.</span></span>
-                    <span class="beat"><span class="entry-display">Back to the app</span><span class="entry-stop">.</span></span>
+                    <span class="beat"
+                        ><span class="entry-display">{{ t(`auth.desktopAuth.signedIn`) }}</span
+                        ><span class="entry-stop">.</span></span
+                    >
+                    <span class="beat"
+                        ><span class="entry-display">{{ t(`auth.desktopAuth.backToApp`) }}</span
+                        ><span class="entry-stop">.</span></span
+                    >
                 </template>
                 <template v-else>
-                    <span class="beat"><span class="entry-display">Finish here</span><span class="entry-stop">.</span></span>
-                    <span class="beat"><span class="entry-display">The app is waiting</span><span class="entry-stop">.</span></span>
+                    <span class="beat"
+                        ><span class="entry-display">{{ t(`auth.desktopAuth.finishHere`) }}</span
+                        ><span class="entry-stop">.</span></span
+                    >
+                    <span class="beat"
+                        ><span class="entry-display">{{ t(`auth.desktopAuth.appWaiting`) }}</span
+                        ><span class="entry-stop">.</span></span
+                    >
                 </template>
             </h1>
 
             <!-- The reason this tab exists, at the size that answers it; it used to be the smallest print on the page. -->
             <p class="hero-sub">
-                <template v-if="stage === `done` && !error">The app has what it needs. You're done here.</template>
-                <template v-else>The app can't show Google's sign-in in its own window, so it opened this tab.</template>
+                <template v-if="stage === `done` && !error">{{ t(`auth.desktopAuth.appWhatNeedsYoure`) }}</template>
+                <template v-else>{{ t(`auth.desktopAuth.appCantShowGoogles`) }}</template>
             </p>
 
             <!-- The one framed object, as on /login: whichever single thing this moment asks of the reader. -->
@@ -194,7 +209,7 @@ onMounted(() => void hand());
 
                 <!-- Shown only once there's an account; a browser that was never signed in gets one from the credential below. -->
                 <p v-if="user" class="whom">
-                    <span class="whom-label">Signing in as</span>
+                    <span class="whom-label">{{ t(`auth.desktopAuth.signingIn`) }}</span>
                     <span class="whom-mail">{{ user.email }}</span>
                 </p>
 
@@ -202,10 +217,10 @@ onMounted(() => void hand());
                     <!-- The shared failure box, squared and set left: every other edge inside this frame is a straight rule. -->
                     <Notice :of="error" class="rounded-none text-left" />
                     <div class="gate-actions">
-                        <Button label="Try again" severity="secondary" :loading="working" @click="hand" />
+                        <Button :label="t(`ui.action.tryAgain`)" severity="secondary" :loading="working" @click="hand" />
                     </div>
                     <!-- Offered with the retry, since retrying alone repeats what just failed (often the platform refusing the token). -->
-                    <button type="button" class="escape" v-action="useGooglesOwnPage">Use Google's own page.</button>
+                    <button type="button" class="escape" v-action="useGooglesOwnPage">{{ t(`auth.desktopAuth.useGooglesOwnPage`) }}</button>
                 </template>
 
                 <!-- The seal is this page's one moving part: it turns while the handoff runs and locks when it lands. -->
@@ -214,10 +229,10 @@ onMounted(() => void hand());
                         <span class="entry-seal-ring"></span>
                         <AppBrand shape="mark" class="entry-seal-mark" />
                     </div>
-                    <p class="gate-say" role="status">You can close this tab.</p>
-                    <p class="gate-aside">If the app didn't come forward, make sure Intentic is running and send it again.</p>
+                    <p class="gate-say" role="status">{{ t(`auth.desktopAuth.closeTab`) }}</p>
+                    <p class="gate-aside">{{ t(`auth.desktopAuth.appDidntComeForward`) }}</p>
                     <div class="gate-actions">
-                        <Button label="Send it again" severity="secondary" :loading="working" @click="hand" />
+                        <Button :label="t(`auth.desktopAuth.sendAgain`)" severity="secondary" :loading="working" @click="hand" />
                     </div>
                 </template>
 
@@ -228,31 +243,33 @@ onMounted(() => void hand());
                         <AppBrand shape="mark" class="entry-seal-mark" />
                     </div>
                     <p class="gate-say" role="status">
-                        <template v-if="stage === `handing`">Handing your sign-in to the app…</template>
-                        <template v-else>Checking what this browser is already signed in to…</template>
+                        <template v-if="stage === `handing`">{{ t(`auth.desktopAuth.handingSignInTo`) }}</template>
+                        <template v-else>{{ t(`auth.desktopAuth.checkingWhatBrowserAlready`) }}</template>
                     </p>
                 </template>
 
                 <!-- Google may resolve this silently, or need this button; it's on screen from the start either way. -->
                 <template v-else>
                     <p class="gate-say">
-                        <template v-if="googleReady">Continue with Google. The app takes it from there.</template>
-                        <template v-else>This page has to run in your browser: Google won't sign you in inside an app window.</template>
+                        <template v-if="googleReady">{{ t(`auth.desktopAuth.continueGoogleAppTakes`) }}</template>
+                        <template v-else>{{ t(`auth.desktopAuth.pageToRunIn`) }}</template>
                     </p>
                     <div v-show="googleReady" class="entry-socket">
                         <div ref="googleButton" class="entry-socket-slot"></div>
                     </div>
                     <div v-if="!googleReady" class="gate-actions">
-                        <Button label="Open this in your browser" class="w-full justify-center" @click="signInThroughBrowser">
+                        <Button :label="t(`auth.desktopAuth.openInBrowser`)" class="w-full justify-center" @click="signInThroughBrowser">
                             <template #icon><Icon name="external-link" /></template>
                         </Button>
                     </div>
 
                     <!-- The button is always rendered because blocked frames are indistinguishable. -->
-                    <button v-if="googleReady" type="button" class="escape" v-action="useGooglesOwnPage">Trouble signing in? Use Google's own page.</button>
+                    <button v-if="googleReady" type="button" class="escape" v-action="useGooglesOwnPage">
+                        {{ t(`auth.desktopAuth.troubleSigningInUse`) }}
+                    </button>
                 </template>
 
-                <p class="fine">Only this one sign-in crosses to the app. Nothing else does.</p>
+                <p class="fine">{{ t(`auth.desktopAuth.onlyOneSignIn`) }}</p>
             </section>
 
             <!-- /login's rail of stations, made live: the same three stops, lit as this page passes them. -->

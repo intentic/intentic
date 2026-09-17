@@ -3,11 +3,14 @@
 import { twMerge } from "tailwind-merge";
 import { computed, ref, useAttrs } from "vue";
 import Icon from "../primitives/Icon.vue";
+import { useT } from "../../i18n/index.js";
+
+const t = useT();
 
 defineOptions({ inheritAttrs: false });
 
 const {
-    placeholder = `Filter…`,
+    placeholder,
     variant = `panel`,
     clearable = false,
     busy = false,
@@ -88,7 +91,7 @@ const clear = (): void => {
             v-bind="passAttrs"
             v-model="query"
             type="text"
-            :placeholder="placeholder"
+            :placeholder="placeholder ?? t(`ui.searchBar.filter`)"
             :class="inputClass"
             role="searchbox"
             :aria-label="ariaLabel"
@@ -97,26 +100,26 @@ const clear = (): void => {
             @keydown.esc="clearable && clear()"
         />
         <div class="absolute top-1/2 flex -translate-y-1/2 items-center gap-0.5" :class="variant === `panel` ? `right-2` : `right-1.5`">
-<!-- `mousedown` is suppressed so a press keeps the caret in the field rather than stealing it; click still fires for keyboard activation. -->
+            <!-- `mousedown` is suppressed so a press keeps the caret in the field rather than stealing it; click still fires for keyboard activation. -->
             <button
                 v-if="matchCase !== undefined"
                 type="button"
                 class="touch-target flex h-4 w-4 items-center justify-center rounded font-mono text-3xs leading-none text-subtle transition-colors hover:bg-overlay hover:text-content"
                 :class="{ 'bg-primary-600/20 text-link': matchCase }"
                 :aria-pressed="matchCase"
-                v-tooltip.bottom="'Match case'"
-                aria-label="Match case"
+                v-tooltip.bottom="t(`ui.searchBar.matchCase`)"
+                :aria-label="t(`ui.searchBar.matchCase`)"
                 @mousedown.prevent
                 @click="matchCase = !matchCase"
             >
-                Aa
+                {{ t(`ui.searchBar.aa`) }}
             </button>
             <button
                 v-if="clearable && query !== ``"
                 type="button"
                 class="touch-target flex items-center rounded text-2xs text-subtle transition-colors hover:text-content"
-                v-tooltip.bottom="'Clear (Esc)'"
-                aria-label="Clear filter"
+                v-tooltip.bottom="t(`ui.searchBar.clearEsc`)"
+                :aria-label="t(`ui.searchBar.clearFilter`)"
                 @click="clear"
             >
                 <Icon name="times" />

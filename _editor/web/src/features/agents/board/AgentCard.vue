@@ -54,6 +54,7 @@ import { useAgents } from "../fleet/useAgents";
 import { canArchive, type FleetAgent } from "../fleet/useAgents-fleet";
 import { relativeTime } from "../../chat/models/catalog";
 import { modelLabelFor } from "../../chat/accounts/providerCatalog";
+import { useT } from "@intentic/ui/i18n";
 
 // One fleet agent: identity tile + title + status chip, a model/session line, and a closing summary line (stats,
 // drill-in, and either the running elapsed or the settled date).
@@ -61,6 +62,8 @@ import { modelLabelFor } from "../../chat/accounts/providerCatalog";
 // div-button (not <button>) so the nested rename input stays valid HTML.
 // `dense` is the same card as a row, for stacked lanes: identical DOM and facts, just wrapped onto one line instead of
 // stacked, so a lane fits more cards.
+
+const t = useT();
 
 const props = defineProps<{
     agent: FleetAgent;
@@ -184,8 +187,7 @@ const shipping = computed(() => props.agent.archivedAt === undefined && props.ag
 const receipt = computed(
     () =>
         lane.value === `finished` &&
-        (props.agent.archivedAt !== undefined ||
-            (props.agent.status !== `ready` && props.agent.status !== `landing` && away.value === undefined)),
+        (props.agent.archivedAt !== undefined || (props.agent.status !== `ready` && props.agent.status !== `landing` && away.value === undefined)),
 );
 // Statuses whose ink is already quiet (`idle`, `resumed`, `stopped`) keep it: flattening those to `muted` would make
 // a receipt LOUDER than it is today, which is the opposite of the errand.
@@ -282,9 +284,7 @@ const watch = computed(() => (working.value ? undefined : watchLine(props.agent,
 const limitBackAt = computed(() => limitCountdown(props.agent, now.value));
 // Shares that same corner, and yields it: a reset clock and a watch are each a firmer promise about the card than a
 // cache that only makes answering cheaper, so this speaks when the corner is otherwise free.
-const cooling = computed(() =>
-    watch.value !== undefined || limitBackAt.value !== undefined ? undefined : cacheCooling(props.agent, now.value),
-);
+const cooling = computed(() => (watch.value !== undefined || limitBackAt.value !== undefined ? undefined : cacheCooling(props.agent, now.value)));
 // Re-runs the exact held turn (useAgents.resumeHeldTurn), not a new message; a local flag, since `pending` names drop
 // actions and this is neither.
 // Cleared in `finally`, not only on success, since a roster frame is about to replace the card either way.
@@ -396,12 +396,12 @@ const grab = (event: PointerEvent): void => {
     <div
         role="button"
         tabindex="0"
-        :aria-label="`Focus agent: ${displayTitle}`"
+        :aria-label="t(`agents.agentCard.focusAgent`, { displayTitle })"
         class="session-card group flex w-full select-none flex-col rounded-xl border text-left outline-none focus-visible:ring-2 focus-visible:ring-primary-500/25"
         :class="[
-/* A LIVE CARD IS A BIGGER CARD (see `live`): the two lanes about work in flight get 16px of padding and a 14px title, the ledger keeps 14 and 12. */
+            /* A LIVE CARD IS A BIGGER CARD (see `live`): the two lanes about work in flight get 16px of padding and a 14px title, the ledger keeps 14 and 12. */
             live ? 'gap-2.5 p-4' : 'gap-2 p-3.5',
-/* TWO STATES, TWO CHANNELS, AND NEITHER IS DRAWN HERE. */
+            /* TWO STATES, TWO CHANNELS, AND NEITHER IS DRAWN HERE. */
             lane === 'attention' ? 'session-card-attention' : '',
             selected ? 'session-card-on' : '',
             dragging ? 'opacity-40' : '',
@@ -415,13 +415,13 @@ const grab = (event: PointerEvent): void => {
         @keydown.space.self.prevent="openCard()"
     >
         <div class="flex items-center gap-2.5">
-<!-- Kind-of-work glyph tinted by the title's category (sessionCategory: audit=blue magnifier, redesign=purple arrows, new=green plus, fix=red wrench). -->
+            <!-- Kind-of-work glyph tinted by the title's category (sessionCategory: audit=blue magnifier, redesign=purple arrows, new=green plus, fix=red wrench). -->
             <span
                 v-tooltip.top="tileHint"
                 class="relative flex h-7 w-7 shrink-0 items-center justify-center rounded-full"
                 :class="rim === undefined ? 'ring-(length:--ring-track) ring-inset ring-content/12' : ''"
             >
-<!-- Ticks for a checklist, an arc for a context window; `tileRim` picks, and both draw at the same size and weight. -->
+                <!-- Ticks for a checklist, an arc for a context window; `tileRim` picks, and both draw at the same size and weight. -->
                 <SegmentRing
                     v-if="rim?.kind === `steps`"
                     :segments="rim.segments"
@@ -446,7 +446,7 @@ const grab = (event: PointerEvent): void => {
                 v-model="edit.draft"
                 type="text"
                 maxlength="80"
-                aria-label="Agent title"
+                :aria-label="t(`agents.agentCard.agentTitle`)"
                 class="ui-field-box ui-field-inline min-w-0 flex-1 select-text px-1 font-semibold"
                 :class="live ? 'text-sm' : 'text-xs'"
                 @click.stop
@@ -456,7 +456,7 @@ const grab = (event: PointerEvent): void => {
                 @vue:mounted="edit.focusInput"
             />
             <template v-else>
-<!-- A LIVE CARD'S TITLE WRAPS, a receipt's clips. -->
+                <!-- A LIVE CARD'S TITLE WRAPS, a receipt's clips. -->
                 <span
                     class="min-w-0 flex-1 font-semibold text-content"
                     :class="[live ? 'line-clamp-2 break-words text-sm leading-snug' : 'truncate text-xs', peek ? 'italic' : '']"
@@ -464,15 +464,15 @@ const grab = (event: PointerEvent): void => {
                     <span v-for="(run, at) in titleRuns" :key="at" :class="run.hit ? 'rounded-sm bg-primary-600/30 text-content' : ''">{{
                         run.text
                     }}</span>
-<!-- Italic is invisible to a screen reader, so the peek state rides along as text, not an aria-label with no role. -->
-                    <span v-if="peek" class="sr-only">, temporary</span>
+                    <!-- Italic is invisible to a screen reader, so the peek state rides along as text, not an aria-label with no role. -->
+                    <span v-if="peek" class="sr-only">{{ t(`agents.agentCard.temporary`) }}</span>
                 </span>
-<!-- Keeps a peeked chat open; leads the affordance row since it's the one press with a deadline (the tab closes on the next click elsewhere). -->
+                <!-- Keeps a peeked chat open; leads the affordance row since it's the one press with a deadline (the tab closes on the next click elsewhere). -->
                 <button
                     v-if="peek"
                     type="button"
-                    aria-label="Keep this chat open"
-                    v-tooltip.top="'Keep open, otherwise this chat closes when you open another'"
+                    :aria-label="t(`agents.agentCard.keepChatOpen`)"
+                    v-tooltip.top="t(`agents.agentCard.keepOpenOtherwiseChat`)"
                     :class="[HOVER_ACTION, mobile ? 'opacity-60' : 'opacity-0 focus-visible:opacity-100 group-hover:opacity-100']"
                     @click.stop="emit(`keep`)"
                 >
@@ -481,8 +481,8 @@ const grab = (event: PointerEvent): void => {
                 <button
                     v-if="localOnly"
                     type="button"
-                    aria-label="Rename agent"
-                    v-tooltip.top="'Rename'"
+                    :aria-label="t(`agents.agentCard.renameAgent`)"
+                    v-tooltip.top="t(`ui.action.rename`)"
                     :class="[HOVER_ACTION, mobile ? 'opacity-60' : 'opacity-0 focus-visible:opacity-100 group-hover:opacity-100']"
                     @click.stop="edit.begin()"
                 >
@@ -491,9 +491,11 @@ const grab = (event: PointerEvent): void => {
                 <button
                     v-if="archivable"
                     type="button"
-                    aria-label="Archive agent"
+                    :aria-label="t(`agents.agentCard.archiveAgent`)"
                     v-tooltip.top="
-                        agent.branch === undefined ? 'Archive, the conversation is kept' : 'Archive, the branch, diff and conversation are kept'
+                        agent.branch === undefined
+                            ? t(`agents.agentCard.archiveConversationKept`)
+                            : t(`agents.agentCard.archiveBranchDiffConversation`)
                     "
                     :class="[HOVER_ACTION, mobile ? 'opacity-60' : 'opacity-0 focus-visible:opacity-100 group-hover:opacity-100']"
                     @click.stop="emit(`archive`)"
@@ -503,7 +505,7 @@ const grab = (event: PointerEvent): void => {
                 <button
                     v-if="closable"
                     type="button"
-                    aria-label="Close agent"
+                    :aria-label="t(`agents.agentCard.closeAgent`)"
                     v-tooltip.top="closeHint"
                     :class="[HOVER_ACTION, mobile ? 'opacity-60' : 'opacity-0 focus-visible:opacity-100 group-hover:opacity-100']"
                     @click.stop="emit(`close`)"
@@ -513,14 +515,14 @@ const grab = (event: PointerEvent): void => {
                 <button
                     v-if="agent.archivedAt !== undefined"
                     type="button"
-                    aria-label="Restore agent"
-                    v-tooltip.top="'Put this agent back on the board'"
+                    :aria-label="t(`agents.agentCard.restoreAgent`)"
+                    v-tooltip.top="t(`agents.agentCard.putAgentBackOn`)"
                     :class="[HOVER_ACTION, mobile ? 'opacity-60' : 'opacity-0 focus-visible:opacity-100 group-hover:opacity-100']"
                     @click.stop="emit(`restore`)"
                 >
                     <Icon name="undo" class="text-sm" />
                 </button>
-<!-- An icon, not a spelled-out link, so it costs no space at rest; the words move to the tooltip. -->
+                <!-- An icon, not a spelled-out link, so it costs no space at rest; the words move to the tooltip. -->
                 <button
                     v-if="review !== undefined && lane !== 'attention'"
                     type="button"
@@ -533,12 +535,12 @@ const grab = (event: PointerEvent): void => {
                 </button>
             </template>
             <Icon v-if="pending !== undefined" name="spinner" spin class="shrink-0 text-sm text-link" />
-<!-- Same pill, same tones, same precedence as a rail row's corner (RailCard): one standing, one reading. -->
+            <!-- Same pill, same tones, same precedence as a rail row's corner (RailCard): one standing, one reading. -->
             <span v-else-if="chip !== undefined" v-tooltip.top="chipHint" class="ui-status-pill shrink-0 text-2xs font-semibold" :class="chip.tone">{{
                 chip.label
             }}</span>
-<!-- The resting standing for a card with no reason or unread mark; carries meta.label as a word in its hover, not just a glyph. -->
-<!-- What the last turn left open is the tile rim's to say (tileRim): the checklist it drew here twice was one fact with two marks. -->
+            <!-- The resting standing for a card with no reason or unread mark; carries meta.label as a word in its hover, not just a glyph. -->
+            <!-- What the last turn left open is the tile rim's to say (tileRim): the checklist it drew here twice was one fact with two marks. -->
             <Icon
                 v-else
                 :name="statusMeta.icon"
@@ -552,49 +554,53 @@ const grab = (event: PointerEvent): void => {
         </div>
         <p v-if="edit.error !== undefined" class="text-2xs text-danger">{{ edit.error }}</p>
 
-<!-- Card body, column or row depending on `dense`: column stacks one block per row; row wraps the same blocks along one line. -->
+        <!-- Card body, column or row depending on `dense`: column stacks one block per row; row wraps the same blocks along one line. -->
         <div :class="dense ? 'flex flex-wrap items-center gap-x-3.5 gap-y-1.5' : 'flex flex-col gap-2'">
-<!-- Why this card matched the filter; leads the body while a filter is active. -->
+            <!-- Why this card matched the filter; leads the body while a filter is active. -->
             <p v-if="match !== undefined" class="flex min-w-0 items-start gap-2 text-2xs text-muted" :class="dense ? 'w-full' : ''">
                 <Icon name="search" class="mt-px shrink-0 text-2xs text-subtle" />
                 <MatchLine :snippet="match" :needle="needle" :match-case="matchCase" class="line-clamp-2 min-w-0 flex-1 leading-4" />
             </p>
 
-<!-- `failure` is present only while the card reads as failed, so no extra status check is needed here. -->
+            <!-- `failure` is present only while the card reads as failed, so no extra status check is needed here. -->
             <p v-if="agent.failure && !limited(agent)" class="flex min-w-0 items-start gap-2 text-2xs text-danger" v-tooltip.top="agent.failure">
                 <Icon name="exclamation-circle" class="mt-px shrink-0 text-2xs" />
                 <span class="line-clamp-2 min-w-0 flex-1 leading-4">{{ agent.failure }}</span>
             </p>
 
-<!-- Provenance, ahead of the model/branch line: for an agent the user didn't start, who asked for it outranks what it runs on. -->
+            <!-- Provenance, ahead of the model/branch line: for an agent the user didn't start, who asked for it outranks what it runs on. -->
             <OriginMark :origin="agent.origin" />
             <StartedByMark :started-by="agent.startedBy" />
             <WorkflowMark :workflow="agent.workflow" />
 
-<!-- WRAPS, which is what lets the unsent mark ride this line instead of taking one of its own. -->
+            <!-- WRAPS, which is what lets the unsent mark ride this line instead of taking one of its own. -->
             <div
                 v-if="agent.unsent || box !== undefined || model !== undefined || agent.branch !== undefined || account !== undefined"
                 class="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-2xs text-subtle"
             >
                 <!-- Shape, wording and hover live in UnsentMark, shared with the rail row. -->
                 <UnsentMark v-if="agent.unsent" :preview="agent.preview" :at="agent.draftAt" :now="now" />
-<!-- Which sandbox this agent is in, shown only when it isn't the reader's own; leads the line since it changes what every other number means. -->
+                <!-- Which sandbox this agent is in, shown only when it isn't the reader's own; leads the line since it changes what every other number means. -->
                 <span
                     v-if="box !== undefined"
                     class="flex min-w-0 shrink-0 items-center gap-1 truncate rounded bg-content/10 px-2.5 py-1 text-muted"
-                    v-tooltip.top="`In ${box.name}, not in the sandbox you're in`"
+                    v-tooltip.top="t(`agents.agentCard.inNotInSandbox`, { name: box.name })"
                 >
                     <img v-if="box.image !== undefined" :src="box.image" alt="" class="h-3 w-3 shrink-0 rounded-sm object-cover" />
                     <Icon v-else name="server" class="shrink-0 text-2xs" />
                     <span class="truncate">{{ box.name }}</span>
                 </span>
                 <span v-if="model !== undefined" class="truncate">{{ model }}</span>
-<!-- Where it's running, shown only when that's somewhere other than here: the fleet spreads work across machines without a per-agent choice. -->
-                <span v-if="agent.runner !== undefined && !maker" class="flex shrink-0 items-center gap-1 truncate" :title="`Runs on ${agent.runner}`">
+                <!-- Where it's running, shown only when that's somewhere other than here: the fleet spreads work across machines without a per-agent choice. -->
+                <span
+                    v-if="agent.runner !== undefined && !maker"
+                    class="flex shrink-0 items-center gap-1 truncate"
+                    :title="t(`agents.agentCard.runsOn`, { runner: agent.runner })"
+                >
                     <Icon name="desktop" class="text-2xs" />
                     {{ agent.runner }}
                 </span>
-<!-- Abbreviated on the card, full string on hover; a label, not a control (copy is on the right-click menu). -->
+                <!-- Abbreviated on the card, full string on hover; a label, not a control (copy is on the right-click menu). -->
                 <!-- Clipped on the card, full identity on hover; nothing renders if the sandbox can't name the account. -->
                 <span v-if="agent.branch !== undefined && !maker" class="inline-flex min-w-0 items-center gap-1.5">
                     <span v-if="model !== undefined">·</span>
@@ -609,21 +615,23 @@ const grab = (event: PointerEvent): void => {
                 </span>
             </div>
 
-<!-- Never replaces the live readout below: this says what the loop is working toward, that says what it's doing right now. -->
+            <!-- Never replaces the live readout below: this says what the loop is working toward, that says what it's doing right now. -->
             <p v-if="agent.loop !== undefined" class="flex min-w-0 items-center gap-1.5 text-2xs" :class="loopLine?.class">
                 <Icon name="repeat" :spin="loopLine?.spin" class="shrink-0 text-2xs" />
                 <span class="truncate">{{ loopLine?.text }}</span>
             </p>
 
-<!-- The one board state that's a decision, not a report: the agent redoes the merge in its own worktree, so a wrong answer costs nothing. -->
+            <!-- The one board state that's a decision, not a report: the agent redoes the merge in its own worktree, so a wrong answer costs nothing. -->
             <div v-if="resolvable" class="flex min-w-0 flex-col gap-1">
                 <Button size="small" class="self-start whitespace-nowrap" @click.stop="emit('resolve')">
-                    <Icon :name="handingOver ? 'spinner' : 'sparkles'" :spin="handingOver" />{{ handingOver ? "Handing it over…" : words.resolveConflict }}
+                    <Icon :name="handingOver ? 'spinner' : 'sparkles'" :spin="handingOver" />{{
+                        handingOver ? t(`agents.agentCard.handingOver`) : words.resolveConflict
+                    }}
                 </Button>
                 <span class="text-2xs leading-snug text-subtle">{{ words.resolveConflictHint }}</span>
             </div>
 
-<!-- Same seat, the refusals the agent cannot touch: the press goes to the Changes panel, where the user's own edits are. -->
+            <!-- Same seat, the refusals the agent cannot touch: the press goes to the Changes panel, where the user's own edits are. -->
             <div v-else-if="yoursToClear" class="flex min-w-0 flex-col gap-1">
                 <Button size="small" class="self-start whitespace-nowrap" @click.stop="openChanges()">
                     <Icon name="file-edit" />{{ words.clearYours }}
@@ -631,7 +639,7 @@ const grab = (event: PointerEvent): void => {
                 <span class="text-2xs leading-snug text-subtle">{{ words.clearYoursHint }}</span>
             </div>
 
-<!-- One row (fact left, press right), not a stack: this is a fact the card owes the reader regardless of action, unlike the decision blocks above. -->
+            <!-- One row (fact left, press right), not a stack: this is a fact the card owes the reader regardless of action, unlike the decision blocks above. -->
             <div v-if="away !== undefined" class="flex min-w-0 flex-wrap items-center justify-between gap-x-2 gap-y-0.5">
                 <span v-tooltip.top="away.title" class="inline-flex shrink-0 items-start gap-1.5 text-2xs leading-snug text-warning">
                     <Icon :name="away.icon" class="mt-0.5 shrink-0 text-2xs" /><span class="min-w-0"
@@ -641,61 +649,73 @@ const grab = (event: PointerEvent): void => {
                         ></span
                     >
                 </span>
-<!-- No resting glyph: the line above it already leads with this exact icon, and a repeat would read as a stutter. -->
+                <!-- No resting glyph: the line above it already leads with this exact icon, and a repeat would read as a stutter. -->
                 <Button size="small" severity="secondary" :text="true" class="shrink-0 whitespace-nowrap" @click.stop="emit('reland')">
                     <Icon v-if="relanding" name="spinner" spin class="text-2xs" />{{ relanding ? words.landing : words.landAgain }}
                 </Button>
             </div>
 
-<!-- Success-styled with the check glyph, matching the review panel's own Land now: the same action on the same work must read as such. -->
+            <!-- Success-styled with the check glyph, matching the review panel's own Land now: the same action on the same work must read as such. -->
             <div v-if="(landable || shipping) && canShip" class="flex min-w-0 flex-col gap-1">
                 <!-- The standing ask leads the button it's about, so a maintainer meets the reason before the press. -->
                 <p v-if="landAsk" class="flex min-w-0 items-start gap-1.5 text-2xs leading-snug text-warning">
                     <Icon name="clock" class="mt-0.5 shrink-0 text-2xs" /><span class="min-w-0">{{ landAsk }}</span>
                 </p>
                 <!-- Disabled while the land runs: the daemon refuses a second one outright (agents.routes CONFLICT). -->
-                <Button size="small" severity="success" :disabled="landing" class="ui-button-thumb self-start whitespace-nowrap" @click.stop="emit('land')">
+                <Button
+                    size="small"
+                    severity="success"
+                    :disabled="landing"
+                    class="ui-button-thumb self-start whitespace-nowrap"
+                    @click.stop="emit('land')"
+                >
                     <Icon :name="landing ? 'spinner' : 'check'" :spin="landing" />{{ landing ? words.landing : words.land }}
                 </Button>
             </div>
 
-<!-- The same Ready card for a collaborator: land is a maintainer's press, so this offers the ask instead, same spot and size but quieter chrome. -->
+            <!-- The same Ready card for a collaborator: land is a maintainer's press, so this offers the ask instead, same spot and size but quieter chrome. -->
             <div v-else-if="landable && canDrive" class="flex min-w-0 flex-col gap-1">
                 <p v-if="landAsk" class="flex min-w-0 items-start gap-1.5 text-2xs leading-snug text-muted">
-                    <Icon name="clock" class="mt-0.5 shrink-0 text-2xs" /><span class="min-w-0">{{ landAsk }}: waiting for a maintainer</span>
+                    <Icon name="clock" class="mt-0.5 shrink-0 text-2xs" /><span class="min-w-0">{{
+                        t(`agents.agentCard.waitingMaintainer`, { landAsk })
+                    }}</span>
                 </p>
                 <template v-else>
                     <Button size="small" severity="secondary" class="self-start whitespace-nowrap" @click.stop="requestLand">
-                        <Icon :name="requesting ? 'spinner' : 'send'" :spin="requesting" />{{ requesting ? "Asking…" : words.requestLand }}
+                        <Icon :name="requesting ? 'spinner' : 'send'" :spin="requesting" />{{
+                            requesting ? t(`agents.agentCard.asking`) : words.requestLand
+                        }}
                     </Button>
                     <span class="text-2xs leading-snug text-subtle">{{ words.requestLandHint }}.</span>
                 </template>
             </div>
 
-<!-- The closing summary line: counted stats, then the drill-in and time held to the line's right (see `summary`). -->
+            <!-- The closing summary line: counted stats, then the drill-in and time held to the line's right (see `summary`). -->
             <div
                 v-if="summary"
                 class="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1.5 text-2xs text-muted"
                 :class="dense ? 'min-w-32 flex-1' : ''"
             >
-<!-- No hover labels: a stat you can't name from its icon doesn't belong in this row. -->
+                <!-- No hover labels: a stat you can't name from its icon doesn't belong in this row. -->
 
-<!-- Red and green only while the diff is a live signal. -->
+                <!-- Red and green only while the diff is a live signal. -->
                 <span v-if="agent.diff !== undefined && (agent.diff.insertions > 0 || agent.diff.deletions > 0)" class="font-mono">
                     <span :class="receipt ? '' : 'text-success'">+{{ agent.diff.insertions }}</span>
                     <span :class="receipt ? '' : 'text-danger'"> −{{ agent.diff.deletions }}</span>
                 </span>
-<!-- Lifetime cost total, read-only here. -->
+                <!-- Lifetime cost total, read-only here. -->
                 <span v-if="agent.costUsd !== undefined">{{ formatCost(agent.costUsd) }}</span>
-<!-- Counts this agent's own children, live-of-total while any are running and settling to the lifetime total once none are. -->
-<!-- A real link (underlines on hover, tints live), so Ctrl/Cmd-click opens the list in its own tab. -->
+                <!-- Counts this agent's own children, live-of-total while any are running and settling to the lifetime total once none are. -->
+                <!-- A real link (underlines on hover, tints live), so Ctrl/Cmd-click opens the list in its own tab. -->
                 <RouterLink
                     v-if="agent.subagents !== undefined"
                     :to="{ name: `subagents`, query: { agent: agent.id } }"
                     class="touch-target cursor-pointer transition-colors hover:text-content hover:underline"
                     :class="{ 'text-link': agent.subagents.running > 0 }"
                     v-tooltip.top="
-                        agent.subagents.running > 0 ? `${agent.subagents.running} of ${agent.subagents.total} still working` : 'Agents it started'
+                        agent.subagents.running > 0
+                            ? t(`agents.agentCard.stillWorking`, { running: agent.subagents.running, total: agent.subagents.total })
+                            : t(`agents.agentCard.agentsStarted`)
                     "
                     @click.stop
                 >
@@ -704,19 +724,19 @@ const grab = (event: PointerEvent): void => {
                     }}
                 </RouterLink>
 
-<!-- Standing and clock pinned right by margin, not a spacer, so wrapping doesn't strand them on an empty line. -->
+                <!-- Standing and clock pinned right by margin, not a spacer, so wrapping doesn't strand them on an empty line. -->
                 <span class="ml-auto inline-flex min-w-0 items-center gap-2 text-subtle">
-<!-- Waiting agents show their instruction when the card has room. -->
-<!-- Stranded turns expose the held instruction as the action. -->
+                    <!-- Waiting agents show their instruction when the card has room. -->
+                    <!-- Stranded turns expose the held instruction as the action. -->
                     <button
                         v-if="limited(agent) && agent.limitHeld === true"
                         type="button"
                         :class="ui.linkButton('inline-flex shrink-0 gap-1 font-medium')"
                         :disabled="resending"
-                        v-tooltip.top="'Send this turn again. It is the same request as before, not a new message.'"
+                        v-tooltip.top="t(`agents.agentCard.sendTurnAgainSame`)"
                         @click.stop="sendAgain"
                     >
-                        {{ resending ? "Sending…" : "Send again" }}<Icon name="arrow-right" class="text-2xs" />
+                        {{ resending ? t(`agents.agentCard.sending`) : t(`agents.agentCard.sendAgain`) }}<Icon name="arrow-right" class="text-2xs" />
                     </button>
                     <button
                         v-else-if="review !== undefined && lane === 'attention'"
@@ -727,20 +747,22 @@ const grab = (event: PointerEvent): void => {
                         {{ review }}<Icon name="arrow-right" class="text-2xs" />
                     </button>
                     <span v-else-if="review === undefined && completed" class="inline-flex shrink-0 items-center gap-1">
-                        <Icon name="check" class="text-2xs" />Completed
+                        <Icon name="check" class="text-2xs" />{{ t(`agents.agentCard.completed`) }}
                     </span>
-<!-- Archived card dates itself by when it left the board, the same "when" slot a running card's elapsed uses. -->
-                    <span v-if="agent.archivedAt !== undefined" class="shrink-0"> Archived {{ relativeTime(agent.archivedAt) }} </span>
-<!-- Takes the date's slot: "back at X" tells the reader something to plan around, unlike "last active". -->
+                    <!-- Archived card dates itself by when it left the board, the same "when" slot a running card's elapsed uses. -->
+                    <span v-if="agent.archivedAt !== undefined" class="shrink-0"
+                        >{{ t(`agents.agentCard.archived`, { archivedAt: relativeTime(agent.archivedAt) }) }}
+                    </span>
+                    <!-- Takes the date's slot: "back at X" tells the reader something to plan around, unlike "last active". -->
                     <span
                         v-else-if="limitBackAt !== undefined"
                         class="inline-flex shrink-0 items-center gap-1"
-                        v-tooltip.top="agent.failure ?? 'The provider refused this turn: its usage limit is spent.'"
+                        v-tooltip.top="agent.failure ?? t(`agents.agentCard.providerRefusedTurnUsage`)"
                     >
                         <Icon name="clock" class="shrink-0 text-2xs" />
-                        <span class="tabular-nums">back {{ limitBackAt }}</span>
+                        <span class="tabular-nums">{{ t(`agents.agentCard.back`, { limitBackAt }) }}</span>
                     </span>
-<!-- Borrows the date's slot for the last fifth of the cache's life: for that minute or twelve, "answering now is cheap" is worth more than "4m ago", and it hands the slot straight back. -->
+                    <!-- Borrows the date's slot for the last fifth of the cache's life: for that minute or twelve, "answering now is cheap" is worth more than "4m ago", and it hands the slot straight back. -->
                     <span
                         v-else-if="cooling !== undefined"
                         class="inline-flex shrink-0 items-center gap-1"
@@ -754,34 +776,34 @@ const grab = (event: PointerEvent): void => {
                         relativeTime(agent.updatedAt)
                     }}</span>
 
-<!-- Same slot and grammar as the running tool and the settled date: a card is only ever one of those three things at a time. -->
+                    <!-- Same slot and grammar as the running tool and the settled date: a card is only ever one of those three things at a time. -->
                     <span v-if="watch !== undefined" class="inline-flex min-w-0 items-center gap-1.5">
-<!-- Readout and its hint wrap together, separately from the press beside them. -->
+                        <!-- Readout and its hint wrap together, separately from the press beside them. -->
                         <span class="inline-flex min-w-0 items-center gap-1.5 font-medium text-link" v-tooltip.top="watch.hint">
                             <Icon name="eye" class="shrink-0 text-2xs" />
                             <span class="min-w-0 truncate">{{ watch.text }}</span>
                             <span class="shrink-0 tabular-nums">{{ watch.countdown }}</span>
                         </span>
-<!-- The one visible way to disarm a watch; previously only a right-click menu or a drag, neither discoverable from the readout that announces it. -->
+                        <!-- The one visible way to disarm a watch; previously only a right-click menu or a drag, neither discoverable from the readout that announces it. -->
                         <Button
                             size="small"
                             severity="secondary"
                             :text="true"
                             class="shrink-0"
-                            aria-label="Stop watching"
-                            v-tooltip.top="'Stop watching, this conversation stays put'"
+                            :aria-label="t(`agents.agentCard.stopWatching`)"
+                            v-tooltip.top="t(`agents.agentCard.stopWatchingConversationStays`)"
                             :class="mobile ? 'opacity-60' : 'opacity-0 focus-visible:opacity-100 group-hover:opacity-100'"
                             @click.stop="emit(`unwatch`)"
                         >
-                            Stop
+                            {{ t(`ui.action.stop`) }}
                         </Button>
                     </span>
 
-<!-- Same corner as the settled card's date, so the eye finds one readout per card instead of two at different heights. -->
+                    <!-- Same corner as the settled card's date, so the eye finds one readout per card instead of two at different heights. -->
                     <span v-if="working" class="inline-flex min-w-0 items-center gap-1.5 font-medium text-link">
-<!-- Glyph follows whichever fact leads: running children if any, else the tool the agent itself is using. -->
+                        <!-- Glyph follows whichever fact leads: running children if any, else the tool the agent itself is using. -->
                         <Icon :name="(agent.subagents?.running ?? 0) > 0 ? 'users' : activityIcon(agent.activity?.tool)" class="shrink-0 text-2xs" />
-                        <span class="min-w-0 truncate">{{ activityText ?? "Working…" }}</span>
+                        <span class="min-w-0 truncate">{{ activityText ?? t(`agents.agentCard.working`) }}</span>
                         <span v-if="agent.startedAt !== undefined" class="shrink-0 tabular-nums">{{ formatElapsed(agent.startedAt, now) }}</span>
                     </span>
                 </span>

@@ -3,6 +3,9 @@
 import { computed, ref } from "vue";
 import type { CatalogOption } from "@intentic/sandbox-contract";
 import { ResponsiveOverlay, useDevice } from "@intentic/ui";
+import { useT } from "@intentic/ui/i18n";
+
+const t = useT();
 
 const emit = defineEmits<{ pick: [string] }>();
 const {
@@ -47,7 +50,7 @@ const pick = (value: string): void => {
 </script>
 
 <template>
-    <div v-if="efforts.length > 0" class="flex shrink-0 items-center gap-1.5" role="group" aria-label="Reasoning effort">
+    <div v-if="efforts.length > 0" class="flex shrink-0 items-center gap-1.5" role="group" :aria-label="t(`chat.effortMeter.reasoningEffort`)">
         <!-- Touch: the ladder is inert ink inside one button; the button says the whole state in words. -->
         <template v-if="coarse">
             <button
@@ -55,7 +58,7 @@ const pick = (value: string): void => {
                 type="button"
                 class="flex min-h-11 shrink-0 items-center gap-1.5 rounded-md px-1 transition-colors active:bg-overlay"
                 :disabled="disabled"
-                :aria-label="`Reasoning effort: ${effortLabel}`"
+                :aria-label="t(`chat.effortMeter.reasoningEffort2`, { effortLabel })"
                 @click="sheetOpen = true"
             >
                 <span class="flex items-center" aria-hidden="true">
@@ -66,15 +69,26 @@ const pick = (value: string): void => {
                         :style="index <= effortIndex ? { backgroundColor: effortFill(index) } : undefined"
                     ></span>
                 </span>
-<!-- Outer span carries labelClass (hides the word in a narrow composer); the width-reserving grid lives one level in. -->
+                <!-- Outer span carries labelClass (hides the word in a narrow composer); the width-reserving grid lives one level in. -->
                 <span class="text-2xs text-subtle" :class="labelClass">
                     <span class="grid">
-                        <span v-for="word in labelWidths" :key="word" class="invisible col-start-1 row-start-1 whitespace-nowrap" aria-hidden="true">{{ word }}</span>
+                        <span
+                            v-for="word in labelWidths"
+                            :key="word"
+                            class="invisible col-start-1 row-start-1 whitespace-nowrap"
+                            aria-hidden="true"
+                            >{{ word }}</span
+                        >
                         <span class="col-start-1 row-start-1 whitespace-nowrap">{{ effortLabel }}</span>
                     </span>
                 </span>
             </button>
-            <ResponsiveOverlay v-model="sheetOpen" :anchor="trigger ?? undefined" header="Reasoning effort" panel-class="w-56 p-1">
+            <ResponsiveOverlay
+                v-model="sheetOpen"
+                :anchor="trigger ?? undefined"
+                :header="t(`chat.effortMeter.reasoningEffort`)"
+                panel-class="w-56 p-1"
+            >
                 <div class="flex flex-col gap-0.5">
                     <button
                         v-for="(option, index) in efforts"
@@ -117,7 +131,9 @@ const pick = (value: string): void => {
                 ></button>
             </div>
             <span class="grid text-2xs text-subtle" :class="labelClass">
-                <span v-for="word in labelWidths" :key="word" class="invisible col-start-1 row-start-1 whitespace-nowrap" aria-hidden="true">{{ word }}</span>
+                <span v-for="word in labelWidths" :key="word" class="invisible col-start-1 row-start-1 whitespace-nowrap" aria-hidden="true">{{
+                    word
+                }}</span>
                 <span class="col-start-1 row-start-1 whitespace-nowrap">{{ effortLabel }}</span>
             </span>
         </template>

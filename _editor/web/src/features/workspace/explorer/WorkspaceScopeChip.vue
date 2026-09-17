@@ -7,6 +7,9 @@ import { useAgents } from "../../agents/fleet/useAgents";
 import { useScopeTitle } from "../health/scopeTitle";
 import { useWorkspaceTree } from "./useWorkspaceTree";
 import { workspaceAgent } from "../health/workspaceScope";
+import { useT } from "@intentic/ui/i18n";
+
+const t = useT();
 
 // Shows whose workspace is open; the scope is otherwise invisible (tree and files look the same for every agent).
 // A chip in the existing bar rather than a banner, since the scope is a persistent mode, not a one-off alert.
@@ -33,7 +36,7 @@ const hint = computed(() =>
 
 const items = computed<MenuItem[]>(() => [
     {
-        label: `Shared workspace`,
+        label: t(`workspace.workspaceScopeChip.sharedWorkspace`),
         icon: `folder`,
         checked: workspaceAgent.value === undefined,
         command: () => (workspaceAgent.value = undefined),
@@ -51,7 +54,10 @@ const items = computed<MenuItem[]>(() => [
     // A link, not a command, so it carries its address via useMenuLink.
     ...(workspaceAgent.value === undefined
         ? []
-        : [{ separator: true }, { label: `See its changes`, icon: `check-square`, ...link(`/agents/${workspaceAgent.value}`) }]),
+        : [
+              { separator: true },
+              { label: t(`workspace.workspaceScopeChip.seeChanges`), icon: `check-square`, ...link(`/agents/${workspaceAgent.value}`) },
+          ]),
 ]);
 </script>
 

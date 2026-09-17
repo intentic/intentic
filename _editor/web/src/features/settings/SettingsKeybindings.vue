@@ -5,10 +5,13 @@ import { commandLabel, commands } from "../../shell/commands/useCommands";
 import { rankCommands } from "../../shell/commands/commandSearch";
 import { chordFromEvent, formatChord, isApplePlatform } from "../../shell/commands/keybindings";
 import { effectiveKeybinding, keymapOverrides, useKeymap } from "../../shell/commands/useKeymap";
+import { useT } from "@intentic/ui/i18n";
 
 // Lists every command (builtins and extensions share one registry) with its effective chord; lets the user record,
 // reset, or unbind a shortcut, live everywhere via the keymap store. Recording captures one keystroke in the capture
 // phase, so the shell's dispatcher never fires the old shortcut mid-capture.
+
+const t = useT();
 
 const isMac = isApplePlatform();
 const { setKeybinding, unbindKeybinding, resetKeybinding, resetKeymap } = useKeymap();
@@ -108,27 +111,39 @@ onUnmounted(stopRecording);
 <template>
     <div class="flex flex-col gap-3">
         <div v-if="hasAnyOverride" class="flex justify-end">
-            <Button size="small" severity="secondary" class="shrink-0" @click="resetKeymap()"> Reset all </Button>
+            <Button size="small" severity="secondary" class="shrink-0" @click="resetKeymap()">
+                {{ t(`settings.settingsKeybindings.resetAll`) }}
+            </Button>
         </div>
 
-        <FilterBar v-model="query" placeholder="Filter commands…" :count="rows.length" />
+        <FilterBar v-model="query" :placeholder="t(`settings.settingsKeybindings.filterCommands`)" :count="rows.length" />
 
         <!-- Compact tier: a long list of commands read by scanning. -->
         <RowGroup>
             <Row v-for="row in rows" :key="row.command" :title="row.label" :description="row.command">
                 <template #title>
                     <span class="flex items-center gap-2">
-                        <span class="truncate"><span v-if="row.category" class="text-muted">{{ row.category }}: </span>{{ row.title }}</span>
-                        <span v-if="row.owner !== 'builtin'" class="shrink-0 rounded bg-overlay px-1 text-2xs font-normal text-subtle">ext</span>
+                        <span class="truncate"
+                            ><span v-if="row.category" class="text-muted">{{ row.category }}: </span>{{ row.title }}</span
+                        >
+                        <span v-if="row.owner !== 'builtin'" class="shrink-0 rounded bg-overlay px-1 text-2xs font-normal text-subtle">{{
+                            t(`settings.settingsKeybindings.ext`)
+                        }}</span>
                     </span>
                 </template>
 
                 <!-- Chord is a fact (#meta, right-aligned); the buttons that change it are actions (#control), at a fixed width. -->
                 <template #meta>
                     <span class="flex w-40 items-center justify-end gap-1.5">
-                        <span v-if="recording === row.command" class="italic text-primary-500">Press keys… (Esc)</span>
+                        <span v-if="recording === row.command" class="italic text-primary-500">{{
+                            t(`settings.settingsKeybindings.pressKeysEsc`)
+                        }}</span>
                         <template v-else>
-                            <span v-if="conflicting(row.chord)" v-tooltip.top="'Another command uses this shortcut'" class="text-warning">
+                            <span
+                                v-if="conflicting(row.chord)"
+                                v-tooltip.top="t(`settings.settingsKeybindings.anotherCommandUsesShortcut`)"
+                                class="text-warning"
+                            >
                                 <Icon name="exclamation-triangle" />
                             </span>
                             <kbd
@@ -137,7 +152,7 @@ onUnmounted(stopRecording);
                                 :class="{ 'border-warning/50': conflicting(row.chord) }"
                                 >{{ formatChord(row.chord, isMac) }}</kbd
                             >
-                            <span v-else>Unbound</span>
+                            <span v-else>{{ t(`settings.settingsKeybindings.unbound`) }}</span>
                         </template>
                     </span>
                 </template>
@@ -146,8 +161,12 @@ onUnmounted(stopRecording);
                     <button
                         type="button"
                         :class="ui.iconButton()"
-                        v-tooltip.top="recording === row.command ? 'Cancel' : 'Record shortcut'"
-                        :aria-label="recording === row.command ? 'Cancel recording' : `Record shortcut for ${row.label}`"
+                        v-tooltip.top="recording === row.command ? t(`ui.action.cancel`) : t(`settings.settingsKeybindings.recordShortcut`)"
+                        :aria-label="
+                            recording === row.command
+                                ? t(`settings.settingsKeybindings.cancelRecording`)
+                                : t(`settings.settingsKeybindings.recordShortcut2`, { label: row.label })
+                        "
                         @click="recording === row.command ? stopRecording() : startRecording(row.command)"
                     >
                         <Icon :name="recording === row.command ? 'times' : 'pencil'" />
@@ -156,8 +175,8 @@ onUnmounted(stopRecording);
                         v-if="row.chord && recording !== row.command"
                         type="button"
                         :class="ui.iconButton()"
-                        v-tooltip.top="'Unbind'"
-                        :aria-label="`Unbind ${row.label}`"
+                        v-tooltip.top="t(`settings.settingsKeybindings.unbind`)"
+                        :aria-label="t(`settings.settingsKeybindings.unbind2`, { label: row.label })"
                         @click="unbindKeybinding(row.command)"
                     >
                         <Icon name="trash" />
@@ -166,8 +185,8 @@ onUnmounted(stopRecording);
                         v-if="row.overridden && recording !== row.command"
                         type="button"
                         :class="ui.iconButton()"
-                        v-tooltip.top="'Reset to default'"
-                        :aria-label="`Reset ${row.label} to default`"
+                        v-tooltip.top="t(`settings.settingsKeybindings.resetToDefault`)"
+                        :aria-label="t(`settings.settingsKeybindings.resetToDefault2`, { label: row.label })"
                         @click="resetKeybinding(row.command)"
                     >
                         <Icon name="undo" />
@@ -175,7 +194,7 @@ onUnmounted(stopRecording);
                 </template>
             </Row>
 
-            <RowNote v-if="rows.length === 0" variant="empty">No commands match "{{ query }}".</RowNote>
+            <RowNote v-if="rows.length === 0" variant="empty">{{ t(`settings.settingsKeybindings.noCommandsMatch`, { query }) }}</RowNote>
         </RowGroup>
     </div>
 </template>

@@ -33,6 +33,7 @@ import PipelineGraph from "./PipelineGraph.vue";
 import { pipelineStages } from "./pipelineDag";
 import { formatDuration, STATUS_TONE, triggerLabel } from "./statusVisual";
 import { useRunJobs } from "./useRunJobs";
+import { t } from "./i18n.js";
 
 // One pipeline run row: fetches its own jobs on mount so the stage circles are readable without a click, and expands
 // into the full job DAG. Stages are derived once here and handed to both renderers; the parent owns the action
@@ -283,10 +284,10 @@ const openStartOver = (): void => {
                     target="_blank"
                     rel="noopener"
                     class="touch-target inline-flex shrink-0 items-center gap-1 rounded border border-line px-2.5 py-1 text-2xs font-medium text-subtle hover:text-link"
-                    v-tooltip.top="`${run.branch} went green again in this run: open it to check the job that failed here even ran`"
+                    v-tooltip.top="t(`pipelineRunRow.wentGreenAgainIn`, { branch: run.branch })"
                 >
                     <Icon name="check-circle" class="text-2xs text-success" />
-                    superseded by
+                    {{ t(`pipelineRunRow.supersededBy`) }}
                     <span class="font-mono">{{ superseded.sha.slice(0, 7) }}</span>
                 </a>
                 <!-- Only unusual origins earn a chip; a plain push is every repo's default. -->
@@ -312,10 +313,10 @@ const openStartOver = (): void => {
         </template>
 
         <template #control>
-<!-- Stages and actions both wrap, or two buttons that refuse to shrink squeeze the circles the row exists to show. -->
+            <!-- Stages and actions both wrap, or two buttons that refuse to shrink squeeze the circles the row exists to show. -->
             <div class="ml-auto flex min-w-0 flex-wrap items-center justify-end gap-x-3 gap-y-2">
                 <!-- `basis-0` with a ~3-circle floor: the graph is the one element here that can give ground, but not below legibility. -->
-<!-- Padding is `hover:scale-110`'s headroom: without it, a scaled circle overflows the box's exact-fit size and flashes both scrollbars. -->
+                <!-- Padding is `hover:scale-110`'s headroom: without it, a scaled circle overflows the box's exact-fit size and flashes both scrollbars. -->
                 <div class="flex max-w-max min-w-24 flex-1 basis-0 items-center overflow-x-auto p-1">
                     <PipelineGraph v-if="stages.length > 0" :stages="stages" :recurring="recurring" />
                     <!-- Same circles-and-connectors geometry as the real graph, so the row doesn't re-flow once jobs land. -->
@@ -339,10 +340,10 @@ const openStartOver = (): void => {
                             v-bind="branchState.link"
                             class="touch-target inline-flex shrink-0 items-center gap-1 rounded border border-line px-2 py-1 text-xs font-medium text-subtle hover:bg-overlay hover:text-content"
                             v-tooltip.top="demoted"
-                            :aria-label="`An agent is already working on ${run.branch}, started from run #${branchState.run.runId} — open it`"
+                            :aria-label="t(`pipelineRunRow.agentAlreadyWorkingOn`, { branch: run.branch, runId: branchState.run.runId })"
                         >
                             <Icon :name="branchState.stance.icon" :spin="branchState.stance.spin" class="text-2xs" />
-                            Agent on branch
+                            {{ t(`pipelineRunRow.agentOnBranch`) }}
                         </a>
                         <!-- One slot for the agent, whichever half of its life applies (fixStance.ts owns the words). -->
                         <a
@@ -370,14 +371,14 @@ const openStartOver = (): void => {
                         <Button
                             v-if="fixState !== undefined && fixState.ongoing && run.status === `failed`"
                             ref="startOver"
-                            label="Start over"
+                            :label="t(`pipelineRunRow.startOver`)"
                             size="small"
                             severity="secondary"
                             text
                             icon-pos="right"
                             :loading="busy === actionKey"
                             :disabled="busy !== undefined"
-                            v-tooltip.top="`Set this attempt aside and start a fresh one — opens the picker first`"
+                            v-tooltip.top="t(`pipelineRunRow.setAttemptAsideStart`)"
                             @click="openStartOver"
                         >
                             <template #icon><Icon name="chevron-down" class="text-2xs" /></template>
@@ -385,7 +386,7 @@ const openStartOver = (): void => {
                         <!-- Only an unassigned branch failure gets the primary action. -->
                         <AgentRunButton
                             v-else-if="run.status === `failed`"
-                            :label="fixState?.retry === true ? `Continue` : `Fix with agent`"
+                            :label="fixState?.retry === true ? t(`pipelineRunRow.continue`) : t(`pipelineRunRow.fixAgent`)"
                             :picker="fixModel"
                             :severity="loud ? undefined : `secondary`"
                             :text="!loud"
@@ -397,7 +398,7 @@ const openStartOver = (): void => {
                         <!-- Queued runs also expose cancellation while waiting for a runner. -->
                         <Button
                             v-if="inFlight"
-                            label="Cancel"
+                            :label="t(`pipelineRunRow.cancel`)"
                             size="small"
                             severity="secondary"
                             text
@@ -405,16 +406,16 @@ const openStartOver = (): void => {
                             :disabled="busy !== undefined"
                             @click="emit(`cancel`, run)"
                         />
-<!-- Last rung: fix, review, land, prove it. -->
+                        <!-- Last rung: fix, review, land, prove it. -->
                         <Button
                             v-else
-                            label="Re-run"
+                            :label="t(`pipelineRunRow.reRun`)"
                             size="small"
                             :severity="proven ? undefined : `secondary`"
                             :text="!proven"
                             :loading="busy === actionKey"
                             :disabled="busy !== undefined"
-                            :title="proven ? `The fix is in your workspace: run the pipeline again to prove it` : undefined"
+                            :title="proven ? t(`pipelineRunRow.fixInWorkspaceRun`) : undefined"
                             @click="emit(`rerun`, run)"
                         />
                     </div>
@@ -424,7 +425,7 @@ const openStartOver = (): void => {
 
         <!-- Expanded shows only the job graph: the agent facts it once repeated here now live entirely on the header chip. -->
         <template #below>
-            <div v-if="jobsLoading" class="flex flex-col gap-2" role="status" aria-busy="true" aria-label="Loading jobs">
+            <div v-if="jobsLoading" class="flex flex-col gap-2" role="status" aria-busy="true" :aria-label="t(`pipelineRunRow.loadingJobs`)">
                 <div class="flex h-36 items-center gap-3 overflow-hidden rounded-lg border border-line bg-canvas px-4">
                     <template v-for="i in 3" :key="i">
                         <span v-if="i > 1" class="h-px w-6 shrink-0 bg-line"></span>
@@ -436,7 +437,7 @@ const openStartOver = (): void => {
             <PipelineDagGraph v-else-if="stages.length > 0" :stages="stages" :recurring="recurring" @expand="fullscreen = true" />
 
             <div v-else-if="run.failedJobs?.length">
-                <div class="mb-2 text-2xs font-semibold uppercase tracking-wide text-subtle">Failed jobs</div>
+                <div class="mb-2 text-2xs font-semibold uppercase tracking-wide text-subtle">{{ t(`pipelineRunRow.failedJobs`) }}</div>
                 <div class="flex flex-wrap gap-1.5">
                     <span
                         v-for="job in run.failedJobs"
@@ -449,10 +450,10 @@ const openStartOver = (): void => {
                 </div>
             </div>
 
-            <p v-else class="py-2 text-xs text-muted">No job details available for this run.</p>
+            <p v-else class="py-2 text-xs text-muted">{{ t(`pipelineRunRow.noJobDetailsAvailable`) }}</p>
 
             <!-- Same graph, given the window: worth reading whole exactly when panning inside the row would be needed. -->
-            <Modal v-model:open="fullscreen" size="full" :scroll="false" :header="`${headline}: job graph`">
+            <Modal v-model:open="fullscreen" size="full" :scroll="false" :header="t(`pipelineRunRow.jobGraph`, { headline })">
                 <PipelineDagGraph :stages="stages" :recurring="recurring" fill />
             </Modal>
         </template>

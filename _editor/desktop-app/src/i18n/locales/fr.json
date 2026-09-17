@@ -1,0 +1,82 @@
+{
+    "app": {
+        "backToWorkspace": "Back to your workspace",
+        "chooseFolderToKeep": "Choose the folder to keep in sync with {what}",
+        "closingWindowDoesntStop": "Closing this window doesn't stop it — your workspace shows the same progress.",
+        "connectingFolderTo": "Connecting a folder to {sandbox}",
+        "copy": "Copy it",
+        "device": "This device",
+        "dockerDidntDescribeSandboxs": "Docker didn't describe this sandbox's share of this computer. Refresh and try again.",
+        "dockerIsntReachableNothing": "Docker isn't reachable, so there is nothing to show yet. Start Docker, or set a sandbox up from your workspace.",
+        "downloadingIntentic": "Downloading Intentic {version}… {percent}%",
+        "getFreshCode": "Get a fresh code",
+        "getLatestVersion": "Get the latest version",
+        "gettingComputerReadyStarting": "We're getting this computer ready and starting your sandbox. It usually takes a few minutes, and your workspace opens by itself when it's done.",
+        "hideLog": "Hide the log",
+        "installingSyncAgentStarting": "Installing the sync agent and starting the first sync.",
+        "intenticDownloadedInstallsQuit": "Intentic {version} is downloaded. It installs when you quit, or now:",
+        "keepFolderInSync": "Keep this folder in sync with {what}?",
+        "mirroringPortsFrom": "Mirroring ports from {sandbox} to this device",
+        "noSandboxesHereYet": "No sandboxes here yet. Set one up from your workspace: this screen is where you manage it afterwards.",
+        "nothingOnComputerChanges": "Nothing on this computer changes until you say so.",
+        "onComputer": "On this computer",
+        "openFolder": "Open its folder",
+        "openWorkspace": "Open workspace",
+        "pickingUpWhereRestart": "Picking up where the restart left off. Nothing needs doing: this window carries on by itself.",
+        "runningOnDeviceKeeps": "Running on this device: it keeps going even if you close this window.",
+        "sandbox": "your sandbox",
+        "sandboxRunsInDocker": "Your sandbox runs in Docker, which isn't running yet. This checks what your PC needs first, and asks before changing anything.",
+        "sandboxRunsInDocker2": "Your sandbox runs in Docker, which isn't running yet. Setup installs it first, so your system asks for your password once.",
+        "sandboxesOnDevice": "Sandboxes on this device",
+        "saysPairingAlreadyUsed": "If it says the pairing was already used or expired, regenerate it in your workspace.",
+        "seeAllDevices": "See all your devices",
+        "settingUp": "Setting up",
+        "setupCodeRanOut": "Your setup code ran out while this device was away. Everything the restart was for is already done; it just needs a fresh code to carry on.",
+        "showLog": "Show the log",
+        "startingOnDevice": "Starting on this device…",
+        "stoppedInstallNothingElse": "You stopped this install. Nothing else is running on this device.",
+        "stopping": "Stopping…",
+        "updateRestart": "Update and restart",
+        "yourSandbox": "your sandbox"
+    },
+    "closeConfirm": {
+        "alwaysDoDontAsk": "Always do this: don't ask again",
+        "closeIntentic": "Close Intentic?",
+        "closesCompletelyStartAgain": "Closes it completely. Start it again whenever you need it.",
+        "keepIntenticInTray": "Keep Intentic in the tray",
+        "keepsRunningInBackground": "Keeps running in the background: reopening is instant, still signed in.",
+        "lookIconByClock": "Look for its icon by the clock, or behind the ^ arrow next to it.",
+        "quitIntentic": "Quit Intentic",
+        "sandboxesKeepRunningEither": "Your sandboxes keep running either way: they live in Docker, not in this window."
+    },
+    "deviceAgent": {
+        "whetherNewerAgentPublished": "Whether a newer agent has been published is a question for your workspace, which can reach the release registry; this window only knows what is on this computer."
+    },
+    "requirements": {
+        "beforeSandboxRunHere": "Before your sandbox can run here:",
+        "checkAgain": "Check again",
+        "deviceCantRunSandbox": "This device can't run a sandbox yet:",
+        "hideSteps": "Hide the steps",
+        "restartNow": "Restart now",
+        "runOnMachineWe": "Run it on a machine we host",
+        "showMeHow": "Show me how",
+        "signOutNow": "Sign out now",
+        "windowsAskPermissionOnce": "Windows will ask for permission once."
+    },
+    "setupPlan": {
+        "checkAnswers": "Check it answers",
+        "checkDevice": "Check this device",
+        "connectDevice": "Connect this device",
+        "downloadSandboxImage": "Download the sandbox image",
+        "fetchInstaller": "Fetch the installer",
+        "redeemSetupCode": "Redeem your setup code",
+        "setUpFolderSync": "Set up folder sync",
+        "startSandbox": "Start your sandbox",
+        "waitToComeUp": "Wait for it to come up"
+    },
+    "setupProgress": {
+        "hideSteps": "Hide the steps",
+        "pausedAt": "Paused at {toLowerCase}",
+        "seeAllSteps": "See all {count} steps"
+    }
+}

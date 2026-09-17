@@ -1,9 +1,12 @@
 <script setup lang="ts">
 import { useToolCalls } from "./useToolCalls";
+import { useT } from "@intentic/ui/i18n";
 
 // One control for whether a transcript shows its tool calls, drawn identically in the chat pane and the
 // Subagents strip. A hammer alone, struck through when hidden; state is the slash, not brightness, so it
 // doesn't out-glow the numbers beside it. Inherits its host's ink rather than naming its own color.
+
+const t = useT();
 
 const { showToolCalls } = useToolCalls();
 </script>
@@ -13,8 +16,8 @@ const { showToolCalls } = useToolCalls();
         type="button"
         class="touch-target relative inline-flex cursor-pointer items-center transition-colors hover:text-content"
         :aria-pressed="showToolCalls"
-        :aria-label="showToolCalls ? 'Hide tool calls' : 'Show tool calls'"
-        v-tooltip.top="showToolCalls ? 'Hide tool calls' : 'Show tool calls'"
+        :aria-label="showToolCalls ? t(`chat.chatToolCallsToggle.hideToolCalls`) : t(`chat.chatToolCallsToggle.showToolCalls`)"
+        v-tooltip.top="showToolCalls ? t(`chat.chatToolCallsToggle.hideToolCalls`) : t(`chat.chatToolCallsToggle.showToolCalls`)"
         @click="showToolCalls = !showToolCalls"
     >
         <Icon name="hammer" class="rotate-[35deg] text-xs" />

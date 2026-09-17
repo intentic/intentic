@@ -12,7 +12,8 @@ Every check that reads the checkout and nothing else, listed once and run everyw
   a directory agent turns have mounted over, the UI draws from its design system, a mark beside a run of text is
   placed by the rule that computes it rather than by a hand-tuned offset, no tracked text file carries a control
   byte, every skill description fits the budget the prompt pays for on every call, no `.astro` frontmatter holds a
-  script tag for vite's dependency scan to lift out and parse, and the one picture that defines the site's four
+  script tag for vite's dependency scan to lift out and parse, the words a reader sees live in a message catalog
+  rather than in a template and every key one asks for is in one, and the one picture that defines the site's four
   product nouns is read from a docs page and never from the home page.
 
 ## Key files

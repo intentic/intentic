@@ -21,12 +21,15 @@ import RailCard from "../../../components/RailCard.vue";
 import RailColumn from "../../../components/RailColumn.vue";
 import RailLane from "../../../components/RailLane.vue";
 import { fileLinkDecorator } from "../../../lib/markdown/renderMarkdown";
+import { useT } from "@intentic/ui/i18n";
 
 // The page for agents this sandbox's agents started, alongside the terminal panel and Browsers area. A
 // subagent's only view is its transcript, so this is a column of chat components, not a pane. No
 // composer: steering a child goes through its parent (`/children/send`), never directly.
 
 // The transcript is the one thing still polled; the roster itself is pushed.
+const t = useT();
+
 const TRANSCRIPT_POLL_MS = 4000;
 
 const route = useRoute();
@@ -69,8 +72,8 @@ const rowTo = (id: string) => ({ name: `subagents`, params: { id }, query: route
 
 // Running rows first, then finished; dots match the chat rail's own (ChatTabList).
 const lanes = computed<{ readonly label: string; readonly dot: string; readonly rows: SubagentSession[] }[]>(() => [
-    { label: `Running`, dot: `bg-success`, rows: visible.value.filter(subagentLive) },
-    { label: `Finished`, dot: `bg-line-strong`, rows: visible.value.filter((session) => !subagentLive(session)) },
+    { label: t(`chat.subagents.running`), dot: `bg-success`, rows: visible.value.filter(subagentLive) },
+    { label: t(`chat.subagents.finished`), dot: `bg-line-strong`, rows: visible.value.filter((session) => !subagentLive(session)) },
 ]);
 
 // The card's title: the description, falling back to the agent type only when none was given.
@@ -278,33 +281,31 @@ watch(
 </script>
 
 <template>
-<!-- On the card ground (ChatPanel's), not the route's default canvas, since the rail list is copied from the floating chat and must read the same way. -->
+    <!-- On the card ground (ChatPanel's), not the route's default canvas, since the rail list is copied from the floating chat and must read the same way. -->
     <!-- Clips to this surface; an overgrown block used to paint past the card ground and over the shell. -->
     <div class="ground-card flex h-full min-h-0 overflow-hidden bg-card">
-<!-- Not an error: most turns start no agent. -->
+        <!-- Not an error: most turns start no agent. -->
         <div v-if="visible.length === 0" class="flex flex-1 flex-col items-center justify-center gap-2 px-4 text-center">
             <Icon name="users" class="text-2xl text-muted" />
-            <div class="text-sm text-content">{{ focus === undefined ? "No agents started" : "Nothing running for this agent" }}</div>
+            <div class="text-sm text-content">
+                {{ focus === undefined ? t(`chat.subagents.noAgentsStarted`) : t(`chat.subagents.nothingRunningAgent`) }}
+            </div>
             <div class="max-w-sm text-xs text-muted">
                 <template v-if="focus === undefined">
-                    When an agent delegates: with its Agent tool, or by driving Codex or Grok from its shell, the agent it started appears here, with
-                    its own transcript.
+                    {{ t(`chat.subagents.agentDelegatesAgentTool`) }}
                 </template>
-                <template v-else>
-                    The agents {{ focusTitle }} started have finished and aged out of this list. Its own transcript is the record of what they
-                    reported back.
-                </template>
+                <template v-else>{{ t(`chat.subagents.agentsStartedFinishedAged`, { focusTitle }) }}</template>
             </div>
             <RouterLink v-if="focus !== undefined" :to="{ name: `subagents` }" class="text-xs text-link hover:underline">
-                Show every agent
+                {{ t(`chat.subagents.showEveryAgent`) }}
             </RouterLink>
         </div>
 
         <template v-else>
             <!-- The chat rail's own column: lane slabs of session cards, read the same way as agents you started. -->
-<!-- The same width, gutter and drag as the floating chat's rail — this list holds other rows of it, not a copy. -->
+            <!-- The same width, gutter and drag as the floating chat's rail — this list holds other rows of it, not a copy. -->
             <RailColumn>
-<!-- What narrowed this list, and the way out, pinned above the scroller like the chat rail's own filter. -->
+                <!-- What narrowed this list, and the way out, pinned above the scroller like the chat rail's own filter. -->
                 <RouterLink
                     v-if="focus !== undefined"
                     :to="{ name: `subagents` }"
@@ -312,7 +313,7 @@ watch(
                 >
                     <Icon name="comments" class="shrink-0 text-2xs" />
                     <span class="min-w-0 flex-1 truncate">{{ focusTitle }}</span>
-                    <span class="shrink-0 text-link">Show all</span>
+                    <span class="shrink-0 text-link">{{ t(`chat.subagents.showAll`) }}</span>
                 </RouterLink>
                 <div class="flex min-h-0 flex-1 flex-col items-stretch gap-3 overflow-y-auto">
                     <template v-for="lane in lanes" :key="lane.label">
@@ -330,18 +331,16 @@ watch(
                                 :selected="session.id === selected"
                                 :to="rowTo(session.id)"
                             >
-<!-- The chat rail's own facts line: model, a settled row's age, and the live readout. -->
+                                <!-- The chat rail's own facts line: model, a settled row's age, and the live readout. -->
                                 <template v-if="hasFacts(session)" #meta>
-<!-- Clipped to the rail's width; an inherited model says so on hover rather than claiming the child chose it. -->
+                                    <!-- Clipped to the rail's width; an inherited model says so on hover rather than claiming the child chose it. -->
                                     <span
                                         v-if="modelOf(session) !== undefined"
                                         class="max-w-24 truncate"
-                                        v-tooltip.top="
-                                            modelOf(session)!.inherited ? `Its parent's model: nothing named one for this agent` : undefined
-                                        "
+                                        v-tooltip.top="modelOf(session)!.inherited ? t(`chat.subagents.parentsModelNothingNamed`) : undefined"
                                         >{{ modelOf(session)!.label }}</span
                                     >
-<!-- Settled rows only: a live row's clock is the live readout's own ticking elapsed. -->
+                                    <!-- Settled rows only: a live row's clock is the live readout's own ticking elapsed. -->
                                     <span v-if="!subagentLive(session) && session.activityAt > 0" class="ml-auto shrink-0">{{
                                         relativeTime(session.activityAt)
                                     }}</span>
@@ -353,20 +352,20 @@ watch(
             </RailColumn>
 
             <div class="flex min-h-0 min-w-0 flex-1 flex-col">
-<!-- Plain text, distinct from the report below (the same output, said once); its own tinted panel rather than rules. -->
+                <!-- Plain text, distinct from the report below (the same output, said once); its own tinted panel rather than rules. -->
                 <p v-if="current?.error" class="mx-4 mt-3 shrink-0 whitespace-pre-wrap rounded-md bg-danger/10 px-3 py-2 text-2xs text-danger">
                     {{ current.error }}
                 </p>
 
-<!-- One scroller for the report and the work below it, told apart by a label and air rather than a rule, so nothing seams-breaks between them. -->
+                <!-- One scroller for the report and the work below it, told apart by a label and air rather than a rule, so nothing seams-breaks between them. -->
                 <div ref="pane" class="flex min-h-0 flex-1 flex-col overflow-y-auto px-1 py-3" @scroll.passive="onPaneScroll">
                     <div class="chat-turns">
                         <!-- Its own spacing: the report-to-transcript gap is bigger than the gap between two turns. -->
                         <div class="flex min-w-0 flex-col gap-6">
-<!-- Rendered through the chat's markdown, not raw text, and clamped rather than boxed so it can't push the work off-screen. -->
+                            <!-- Rendered through the chat's markdown, not raw text, and clamped rather than boxed so it can't push the work off-screen. -->
                             <section v-if="report !== undefined" class="flex min-w-0 flex-col gap-2">
-                                <span class="text-2xs font-semibold uppercase tracking-wide text-muted">Report</span>
-<!-- The check's standing sits above the report, so the reader knows how to read it before starting. -->
+                                <span class="text-2xs font-semibold uppercase tracking-wide text-muted">{{ t(`chat.subagents.report`) }}</span>
+                                <!-- The check's standing sits above the report, so the reader knows how to read it before starting. -->
                                 <p v-if="current?.verification" class="flex min-w-0 items-baseline gap-1.5 text-2xs">
                                     <Icon
                                         :name="VERIFICATION[current.verification.state].name"
@@ -377,10 +376,10 @@ watch(
                                     </span>
                                     <span class="min-w-0 truncate text-muted">{{ verificationDetail(current.verification) }}</span>
                                 </p>
-<!-- The ceiling is a share of the viewport (60vh), not a fixed height, so it scales with the window instead of over- or under-cutting the report. -->
+                                <!-- The ceiling is a share of the viewport (60vh), not a fixed height, so it scales with the window instead of over- or under-cutting the report. -->
                                 <div ref="reportBox" class="relative" :class="reportClamped ? `max-h-[60vh] overflow-hidden` : undefined">
                                     <Markdown :source="report" :decorate="decorate" class="chat-markdown chat-markdown-compact" />
-<!-- The fade signals there's more; a hard cut mid-heading read as a rendering fault. -->
+                                    <!-- The fade signals there's more; a hard cut mid-heading read as a rendering fault. -->
                                     <div
                                         v-if="reportClamped && reportOverflows"
                                         class="pointer-events-none absolute inset-x-0 bottom-0 h-10 bg-linear-to-t from-card to-transparent"
@@ -392,17 +391,19 @@ watch(
                                     :class="ui.linkButton(`gap-1 text-2xs text-muted hover:text-content hover:no-underline`)"
                                     @click="reportExpanded = !reportExpanded"
                                 >
-                                    {{ reportExpanded ? `Show less` : `Show the full report` }}
+                                    {{ reportExpanded ? t(`chat.subagents.showLess`) : t(`chat.subagents.showFullReport`) }}
                                     <Icon :name="reportExpanded ? `chevron-up` : `chevron-down`" />
                                 </button>
                             </section>
 
-<!-- The child's turns in the chat's own components (ChatTurnAsides, ChatToolRows), including nested children. -->
+                            <!-- The child's turns in the chat's own components (ChatTurnAsides, ChatToolRows), including nested children. -->
                             <section class="flex min-w-0 flex-col gap-1.5">
-                                <span v-if="report !== undefined" class="text-2xs font-semibold uppercase tracking-wide text-muted">Work</span>
+                                <span v-if="report !== undefined" class="text-2xs font-semibold uppercase tracking-wide text-muted">{{
+                                    t(`chat.subagents.work`)
+                                }}</span>
                                 <div class="chat-stack flex min-w-0 flex-col">
                                     <div v-for="(message, index) in messages" :key="index" class="chat-stack flex flex-col">
-<!-- The same bubble the chat gives the user's words. -->
+                                        <!-- The same bubble the chat gives the user's words. -->
                                         <p
                                             v-if="message.role === 'user'"
                                             class="chat-surface max-w-[85%] self-end whitespace-pre-wrap rounded-lg px-3 py-2 text-xs leading-relaxed text-content"
@@ -415,7 +416,7 @@ watch(
                                                 :tools="message.tools"
                                                 :live="current !== undefined && subagentLive(current)"
                                             />
-<!-- `md-prose` carries prose.css's rules; without it headings, lists and code render as plain body text. -->
+                                            <!-- `md-prose` carries prose.css's rules; without it headings, lists and code render as plain body text. -->
                                             <Markdown
                                                 v-if="message.text"
                                                 :source="message.text"
@@ -424,12 +425,12 @@ watch(
                                             />
                                         </template>
                                     </div>
-<!-- A running child streams from its parent's turn, so empty here means "nothing yet", not "nothing coming". -->
+                                    <!-- A running child streams from its parent's turn, so empty here means "nothing yet", not "nothing coming". -->
                                     <p v-if="messages.length === 0" class="px-1 py-3 text-center text-2xs text-subtle">
                                         {{
                                             current !== undefined && subagentLive(current)
-                                                ? "Watching live: what this agent writes lands here as it works."
-                                                : "No transcript was recorded for this agent."
+                                                ? t(`chat.subagents.watchingLiveWhatAgent`)
+                                                : t(`chat.subagents.noTranscriptRecordedAgent`)
                                         }}
                                     </p>
                                 </div>
@@ -438,18 +439,18 @@ watch(
                     </div>
                 </div>
 
-<!-- The pane's controls, under the column like the chat's composer status row: only what's actionable, tool-call visibility and the way back to the parent. -->
+                <!-- The pane's controls, under the column like the chat's composer status row: only what's actionable, tool-call visibility and the way back to the parent. -->
                 <div v-if="current" class="flex shrink-0 items-center justify-center gap-3 px-3 pb-2 pt-1 text-2xs text-subtle">
                     <!-- The chat's own control: hiding calls in one place expresses the same wish for the other. -->
                     <ChatToolCallsToggle />
-<!-- A control and an address: plain click docks the parent conversation, Ctrl/⌘-click opens its own tab. -->
+                    <!-- A control and an address: plain click docks the parent conversation, Ctrl/⌘-click opens its own tab. -->
                     <ActionLink
                         :to="parentTo(current)"
                         :class="FOOTER_ACTION"
-                        v-tooltip.top="`Open the conversation that started this agent`"
+                        v-tooltip.top="t(`chat.subagents.openConversationStartedAgent`)"
                         @activate="openParent(current)"
                     >
-                        <Icon name="comments" class="text-2xs" />Parent
+                        <Icon name="comments" class="text-2xs" />{{ t(`chat.subagents.parent`) }}
                     </ActionLink>
                 </div>
             </div>

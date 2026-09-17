@@ -1,3 +1,5 @@
+import { t } from "../../i18n/index.js";
+
 // What can be done to one sandbox on one device, the vocabulary behind SandboxVerbs.vue. Structural
 // rather than the sandbox contract's own `DeviceSandboxOp`. `rebuild` is deliberately absent: it needs
 // the approved overlay's digest, only knowable from the Environment card.
@@ -47,17 +49,17 @@ export const sandboxVerbPrompt = (verb: SandboxVerb, name: string): SandboxVerbP
         case `remove`:
             return {
                 header: `Remove ${name}?`,
-                body: `This deletes the sandbox and everything in it — its files and its history — from that device. This cannot be undone.`,
+                body: t(`ui.sandboxSandboxVerbs.deletesSandboxEverythingIn`),
             };
         case `update`:
             return {
                 header: `Update ${name}?`,
-                body: `The sandbox restarts onto the newest image and is unavailable while that happens — seconds if the update is already downloaded, a few minutes if not. Its files are kept.`,
+                body: t(`ui.sandboxSandboxVerbs.sandboxRestartsOntoNewest`),
             };
         case `rollback`:
             return {
                 header: `Roll ${name} back?`,
-                body: `The sandbox restarts onto the image it ran before its last update. Its files are kept.`,
+                body: t(`ui.sandboxSandboxVerbs.sandboxRestartsOntoImage`),
             };
         default:
             return undefined;

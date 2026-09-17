@@ -145,7 +145,7 @@ onBeforeUnmount(disarm);
 <template>
     <Teleport v-if="open && anchor !== undefined" :to="anchor.ownerDocument.body">
         <div ref="box" class="ui-anchored" :class="`ui-anchored-${placement?.side ?? side}`" :style="style" role="dialog" aria-modal="false">
-<!-- This div is the surface that paints and clips; the frame around it must not, or it would cut off its own arrow. -->
+            <!-- This div is the surface that paints and clips; the frame around it must not, or it would cut off its own arrow. -->
             <div class="ui-anchored-surface">
                 <slot />
             </div>

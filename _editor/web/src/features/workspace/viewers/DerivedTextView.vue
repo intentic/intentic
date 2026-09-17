@@ -6,6 +6,9 @@ import { formatElapsed } from "../../agents/fleet/agentStatus";
 import { changeEpochOf, derivedEpochOf, sidecarQueue } from "../changes/live/useWorkspaceLive";
 import { firstDeriveAttempt, rememberedDerivedText } from "../files/derivedCache";
 import { deriveText, readDerivedText, type WorkspaceDerived } from "../files/derivedText";
+import { useT } from "@intentic/ui/i18n";
+
+const t = useT();
 
 /* Derived text is the agent-readable rendering of a file. */
 
@@ -185,7 +188,6 @@ const emptyMessage = computed(() => {
                 : `This file was read, but no text came out of it.`;
     }
 });
-
 </script>
 
 <template>
@@ -194,16 +196,22 @@ const emptyMessage = computed(() => {
             <!-- Provenance first: what made this text, how much of an agent's context it costs, and how old it is. -->
             <div class="flex shrink-0 flex-wrap items-center gap-x-2 gap-y-1 border-b border-line px-3 py-1.5 text-2xs text-muted">
                 <Icon name="robot" class="shrink-0 text-[0.7rem]" />
-                <span class="shrink-0" v-tooltip.bottom="'Not the file itself: the text this sandbox rendered from it, and what an agent reads here instead of the bytes.'">
-                    Derived text
+                <span class="shrink-0" v-tooltip.bottom="t(`workspace.derivedTextView.notFileItselfText`)">
+                    {{ t(`workspace.derivedTextView.derivedText`) }}
                 </span>
                 <span class="shrink-0 text-subtle">{{ shadow.deriver }}</span>
-                <span class="shrink-0 text-subtle">{{ formatTokens(shadow.tokens) }} tokens</span>
-                <span v-if="shadow.derivedAt !== undefined" class="shrink-0 text-subtle">{{ timeAgo(Date.parse(shadow.derivedAt), { days: true }) }}</span>
+                <span class="shrink-0 text-subtle">{{ t(`workspace.derivedTextView.tokens`, { tokens: formatTokens(shadow.tokens) }) }}</span>
+                <span v-if="shadow.derivedAt !== undefined" class="shrink-0 text-subtle">{{
+                    timeAgo(Date.parse(shadow.derivedAt), { days: true })
+                }}</span>
                 <span class="flex-1"></span>
                 <!-- The text below is the previous reading while this runs; without the count it looks like nothing is. -->
-                <span v-if="deriving" class="shrink-0 text-subtle">Reading it again… {{ waited }}</span>
-                <CopyButton :text="shadow.content" aria-label="Copy derived text" v-tooltip.bottom="'Copy this text'" />
+                <span v-if="deriving" class="shrink-0 text-subtle">{{ t(`workspace.derivedTextView.readingAgain`, { waited }) }}</span>
+                <CopyButton
+                    :text="shadow.content"
+                    :aria-label="t(`workspace.derivedTextView.copyDerivedText`)"
+                    v-tooltip.bottom="t(`workspace.derivedTextView.copyText`)"
+                />
                 <Button
                     size="small"
                     severity="secondary"
@@ -211,24 +219,28 @@ const emptyMessage = computed(() => {
                     class="shrink-0"
                     :disabled="deriving"
                     @click="derive(path)"
-                    v-tooltip.bottom="'Read the file again and rewrite this text'"
+                    v-tooltip.bottom="t(`workspace.derivedTextView.readFileAgainRewrite`)"
                 >
-                    <Icon :name="deriving ? `spinner` : `refresh`" :spin="deriving" class="text-[0.7rem]" /> Derive again
+                    <Icon :name="deriving ? `spinner` : `refresh`" :spin="deriving" class="text-[0.7rem]" />
+                    {{ t(`workspace.derivedTextView.deriveAgain`) }}
                 </Button>
                 <Button v-if="downloadable" size="small" severity="secondary" :text="true" class="shrink-0" @click="emit(`download`)">
-                    <Icon name="download" class="text-[0.7rem]" /> Download
+                    <Icon name="download" class="text-[0.7rem]" /> {{ t(`ui.action.download`) }}
                 </Button>
             </div>
             <!-- The file moved on under its text. Said plainly, since everything below is then about an older file, and
                  saying whether a fix is already on its way is the difference between a warning and a chore. -->
-            <div v-if="shadow.stale" class="flex shrink-0 items-center gap-2 border-b border-warning/40 bg-warning/10 px-3 py-1.5 text-2xs text-warning">
+            <div
+                v-if="shadow.stale"
+                class="flex shrink-0 items-center gap-2 border-b border-warning/40 bg-warning/10 px-3 py-1.5 text-2xs text-warning"
+            >
                 <Icon :name="waiting ? `spinner` : `exclamation-triangle`" :spin="waiting" class="shrink-0 text-[0.7rem]" />
                 <span>
-                    This file changed after its text was made, so this is a reading of an older version.
+                    {{ t(`workspace.derivedTextView.fileChangedAfterText`) }}
                     <template v-if="waiting">{{ waitLabel }}</template>
                 </span>
             </div>
-<!-- Every cap and degradation the derivation hit, shown rather than stored. -->
+            <!-- Every cap and degradation the derivation hit, shown rather than stored. -->
             <ul v-if="shadow.notes.length > 0" class="shrink-0 space-y-0.5 border-b border-line bg-overlay px-3 py-1.5 text-2xs text-muted">
                 <li v-for="note of shadow.notes" :key="note" class="flex items-start gap-2">
                     <Icon name="info-circle" class="mt-px shrink-0 text-[0.7rem]" />
@@ -238,10 +250,10 @@ const emptyMessage = computed(() => {
             <div class="ui-softscroll min-h-0 flex-1 overflow-auto bg-canvas px-6 py-5">
                 <Markdown v-if="shadow.content !== ''" :source="shadow.content" class="mx-auto max-w-3xl" />
                 <p v-else class="mx-auto max-w-3xl text-sm text-muted">
-                    This file rendered to nothing at all. The notes above say what was read; the file itself may simply hold no text.
+                    {{ t(`workspace.derivedTextView.fileRenderedToNothing`) }}
                 </p>
                 <p v-if="shadow.truncated" class="mx-auto mt-6 max-w-3xl border-t border-line pt-3 text-2xs text-subtle">
-                    Long rendering: only its first part is shown here.
+                    {{ t(`workspace.derivedTextView.longRenderingOnlyFirst`) }}
                 </p>
             </div>
         </template>
@@ -251,20 +263,19 @@ const emptyMessage = computed(() => {
         <div v-else-if="loading || deriving" class="flex h-full flex-col items-center justify-center gap-2 px-6 text-center text-muted">
             <Icon name="spinner" class="text-xl" spin />
             <template v-if="deriving">
-                <p class="text-sm">Reading this file and writing its text…</p>
+                <p class="text-sm">{{ t(`workspace.derivedTextView.readingFileWritingText`) }}</p>
                 <!-- What actually takes time, which is not what a reader assumes: a document is a few hundred
                      milliseconds, and OCR is the one case that runs long. Recordings are read for duration and tags,
                      not transcribed, so this must not imply otherwise. -->
                 <p class="max-w-sm text-2xs text-subtle">
-                    Most documents take a moment. A scanned PDF has to be recognised a page at a time, which is the one that can run to a minute or more.
+                    {{ t(`workspace.derivedTextView.mostDocumentsTakeMoment`) }}
                 </p>
                 <p class="text-2xs tabular-nums text-subtle">{{ waited }}</p>
                 <p v-if="longDerive" class="max-w-sm text-2xs text-subtle">
-                    Still going — nothing has failed. The text is written to disk when it lands, so you can leave this file or come back to it and it will be
-                    here.
+                    {{ t(`workspace.derivedTextView.stillGoingNothingFailed`) }}
                 </p>
             </template>
-            <p v-else-if="slowRead" class="text-2xs text-subtle">Looking for this file's text…</p>
+            <p v-else-if="slowRead" class="text-2xs text-subtle">{{ t(`workspace.derivedTextView.lookingFilesText`) }}</p>
         </div>
 
         <div v-else-if="error" class="flex h-full flex-col items-center justify-center gap-2 px-6 text-center">
@@ -283,16 +294,16 @@ const emptyMessage = computed(() => {
                 <!-- Offered even while queued: this is the way to jump the queue for the file in front of you. -->
                 <Button v-if="canDerive" severity="secondary" :disabled="deriving" @click="derive(path)">
                     <Icon name="align-left" class="text-xs" />
-                    {{ waiting ? `Read it now` : `Render as text` }}
+                    {{ waiting ? t(`workspace.derivedTextView.readNow`) : t(`workspace.derivedTextView.renderText`) }}
                 </Button>
                 <Button v-if="downloadable" severity="secondary" @click="emit(`download`)">
                     <Icon name="download" class="text-xs" />
-                    Download
+                    {{ t(`ui.action.download`) }}
                 </Button>
             </div>
             <!-- Only where it is actually actionable: pointing at a switch that is already on is how this misled before. -->
             <p v-if="shadow?.state === `off`" class="max-w-sm text-2xs text-subtle">
-                Settings → Agent → Document shadows keeps every document, picture, recording and archive rendered as files change.
+                {{ t(`workspace.derivedTextView.settingsAgentDocumentShadows`) }}
             </p>
         </div>
     </div>

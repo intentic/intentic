@@ -2,6 +2,9 @@
 import type { IconName } from "@intentic/ui";
 import { computed } from "vue";
 import { Button, formatBytes } from "@intentic/ui";
+import { useT } from "@intentic/ui/i18n";
+
+const t = useT();
 
 /* The non-renderable states of the viewer: a binary file (no inline preview), a file too large to preview, or an empty file. */
 
@@ -28,7 +31,7 @@ const message = computed(() => {
         <p class="max-w-sm text-sm text-muted">{{ message }}</p>
         <Button v-if="mode !== 'empty'" severity="secondary" class="mt-1" @click="emit('download')">
             <Icon name="download" class="text-xs" />
-            Download
+            {{ t(`ui.action.download`) }}
         </Button>
     </div>
 </template>

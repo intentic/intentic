@@ -1,0 +1,59 @@
+{
+    "deck": {
+        "pictureInFormatBrowsers": "Picture in a format browsers cannot draw"
+    },
+    "documentPaper": {
+        "documentNoTextIn": "This document has no text in it."
+    },
+    "epubViewer": {
+        "bookNoChaptersIn": "This book has no chapters in it.",
+        "chapter": "Chapter",
+        "contents": "Contents"
+    },
+    "mediaViewer": {
+        "back10Seconds": "Back 10 seconds",
+        "back10sJ": "Back 10s (J)",
+        "download": "Download",
+        "exitFullScreen": "Exit full screen",
+        "formatCantPlayedIn": "This format can't be played in the browser. Download it to open in a media player.",
+        "forward10Seconds": "Forward 10 seconds",
+        "forward10sL": "Forward 10s (L)",
+        "fullScreen": "Full screen",
+        "fullScreenF": "Full screen (F)",
+        "loop": "Loop",
+        "mute": "Mute",
+        "muteM": "Mute (M)",
+        "pause": "Pause",
+        "pauseK": "Pause (K)",
+        "pictureInPicture": "Picture in picture",
+        "pictureInPictureP": "Picture in picture (P)",
+        "play": "Play",
+        "playK": "Play (K)",
+        "playbackSpeed": "Playback speed",
+        "playbackSpeed2": "Playback speed (, and .)",
+        "seek": "Seek: {displayTime} of {duration}",
+        "spaceToPlayArrows": "{filename}: space to play, arrows to seek, F for fullscreen",
+        "unmute": "Unmute",
+        "volume": "Volume"
+    },
+    "odfSlidesViewer": {
+        "presentationNoSlides": "This presentation has no slides."
+    },
+    "pdfViewer": {
+        "download": "Download",
+        "pdfCantDisplayedInline": "This PDF can't be displayed inline."
+    },
+    "pptxViewer": {
+        "pictureOnSlide": "Picture on slide {number}",
+        "presentationNoSlides": "This presentation has no slides.",
+        "slide": "Slide {number}",
+        "speakerNotes": "Speaker notes"
+    },
+    "sheetViewer": {
+        "sheetEmpty": "This sheet is empty."
+    },
+    "svgViewer": {
+        "preview": "Preview",
+        "source": "Source"
+    }
+}

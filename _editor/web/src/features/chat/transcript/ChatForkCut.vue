@@ -9,6 +9,9 @@ import { usePaneView } from "../panel/useChat-view";
 import { openAgentConversation } from "../panel/useChat-reveal";
 import { useAgents } from "../../agents/fleet/useAgents";
 import { errandOf } from "../run/errands";
+import { useT } from "@intentic/ui/i18n";
+
+const t = useT();
 
 // A mark in the column's margin, costing no transcript height, hanging off the answer above it rather than the prompt
 // below. Its width matches the turn's control lane exactly, clear of the run-mark past it (`.chat-run-mark` in
@@ -100,7 +103,7 @@ const forkRows = computed<MenuItem[]>(() =>
     ownFiles.value
         ? [
               {
-                  label: `Fork`,
+                  label: t(`chat.chatForkCut.fork`),
                   icon: `fork`,
                   // Named by outcome: which files the new chat opens on, since they have to live in a copy of their
                   // own.
@@ -118,9 +121,9 @@ const forkRows = computed<MenuItem[]>(() =>
                   ? []
                   : [
                         {
-                            label: `Fork chat only`,
+                            label: t(`chat.chatForkCut.forkChatOnly`),
                             icon: `comment`,
-                            hint: `New chat, files as they are now`,
+                            hint: t(`chat.chatForkCut.newChatFilesThey`),
                             disabled: chatBusy.value,
                             command: () => forkAt(props.cut, `now`),
                         },
@@ -132,9 +135,9 @@ const forkRows = computed<MenuItem[]>(() =>
           ? []
           : [
                 {
-                    label: `Fork`,
+                    label: t(`chat.chatForkCut.fork`),
                     icon: `fork`,
-                    hint: `New chat, files as they are now`,
+                    hint: t(`chat.chatForkCut.newChatFilesThey`),
                     disabled: chatBusy.value,
                     command: () => forkAt(props.cut, `now`),
                 },
@@ -149,7 +152,7 @@ const editRow = computed<MenuItem[]>(() => {
     }
     return [
         {
-            label: `Edit this message`,
+            label: t(`chat.chatForkCut.editMessage`),
             icon: `pencil`,
             hint: !anchored.value
                 ? `No saved state for this point`
@@ -179,9 +182,9 @@ const rewindRow = computed<MenuItem[]>(() => [
 // The only row offered on the last answer's mark; see `whole`.
 const wholeRow = computed<MenuItem[]>(() => [
     {
-        label: `Fork the whole conversation`,
+        label: t(`chat.chatForkCut.forkWholeConversation`),
         icon: `fork`,
-        hint: `New chat, everything so far, files as they are now`,
+        hint: t(`chat.chatForkCut.newChatEverythingFar`),
         disabled: chatBusy.value,
         command: () => forkAt(messages.value.length, `now`),
     },
@@ -192,7 +195,7 @@ const openRows = computed<MenuItem[]>(() =>
     forks.value.map((fork) => ({
         label: fork.title ?? `Untitled fork`,
         icon: `arrow-up-right`,
-        hint: `Open this fork`,
+        hint: t(`chat.chatForkCut.openFork`),
         command: () => openFork(fork.id),
     })),
 );

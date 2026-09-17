@@ -6,6 +6,7 @@ import type { DeviceOps } from "../deviceOps";
 import { type DeviceRow, managerOf, type MachineRow } from "../deviceRows";
 import { environmentTitle } from "../machineEnvironments";
 import { useSandbox } from "../../client/useSandbox";
+import { useT } from "@intentic/ui/i18n";
 
 // TURNING SYNC ON WHERE IT IS READ ABOUT. A machine already connected needs no one-liner to start syncing a folder:
 // the switches that pause, unpair and mirror live on this row already, and the one that STARTS it belongs beside them.
@@ -15,6 +16,8 @@ import { useSandbox } from "../../client/useSandbox";
 // `C:\…` path syncs the Windows side and a `/home/…` path the distro. Every button fires at the machine's open door
 // and the daemon routes the line by that folder (hosts/device-commands.ts) — nothing here picks a side, and nothing
 // asks the reader to.
+
+const t = useT();
 
 const { machine, group, ops } = defineProps<{
     machine: MachineRow;
@@ -73,8 +76,7 @@ const enable = (environment: DeviceRow, mode: "sync" | "mirror"): void => {
 <template>
     <div v-if="door" class="mt-2 flex flex-col gap-2">
         <p class="text-2xs text-subtle">
-            Sync this sandbox's files into a folder on this computer. Which side runs it follows the path: a Windows
-            folder syncs Windows, a distro folder syncs that distro.
+            {{ t(`sandbox.sandboxSyncToggles.syncSandboxsFilesInto`) }}
         </p>
         <!-- The field's basis is what makes the BUTTON wrap on a narrow card rather than the input shrink: a path you
              cannot read while typing it is the one thing this field must never be. -->
@@ -93,10 +95,10 @@ const enable = (environment: DeviceRow, mode: "sync" | "mirror"): void => {
             </div>
             <Button
                 size="small"
-                label="Sync files here"
+                :label="t(`sandbox.sandboxSyncToggles.syncFilesHere`)"
                 :loading="ops.syncRunning(key, `sync-install`)"
                 :disabled="ops.working.value || folderFor(environment).trim() === ``"
-                v-tooltip.top="`Start moving this sandbox's files into that folder, and put its ports on this computer's localhost.`"
+                v-tooltip.top="t(`sandbox.sandboxSyncToggles.startMovingSandboxsFiles`)"
                 @click="enable(environment, `sync`)"
             >
                 <template #icon><Icon name="folder" /></template>
@@ -107,10 +109,10 @@ const enable = (environment: DeviceRow, mode: "sync" | "mirror"): void => {
             <Button
                 size="small"
                 severity="secondary"
-                label="Mirror ports only"
+                :label="t(`sandbox.sandboxSyncToggles.mirrorPortsOnly`)"
                 :loading="ops.syncRunning(key, `sync-install`)"
                 :disabled="ops.working.value"
-                v-tooltip.top="`Put this sandbox's ports on this computer's localhost and touch no files.`"
+                v-tooltip.top="t(`sandbox.sandboxSyncToggles.putSandboxsPortsOn`)"
                 @click="enable(choices[0] ?? machine.environments[0]!, `mirror`)"
             >
                 <template #icon><Icon name="ports" /></template>

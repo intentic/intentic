@@ -1,8 +1,207 @@
 {
     "action": {
+        "add": "Add",
+        "apply": "Apply",
+        "approve": "Approve",
+        "back": "Back",
         "cancel": "Cancel",
+        "clear": "Clear",
+        "close": "Close",
+        "connect": "Connect",
+        "continue": "Continue",
         "copied": "Copied",
         "copy": "Copy",
-        "save": "Save"
+        "create": "Create",
+        "delete": "Delete",
+        "disconnect": "Disconnect",
+        "dismiss": "Dismiss",
+        "done": "Done",
+        "download": "Download",
+        "edit": "Edit",
+        "next": "Next",
+        "open": "Open",
+        "refresh": "Refresh",
+        "remove": "Remove",
+        "rename": "Rename",
+        "retry": "Retry",
+        "save": "Save",
+        "send": "Send",
+        "start": "Start",
+        "stop": "Stop",
+        "tryAgain": "Try again",
+        "update": "Update"
+    },
+    "agentRunButton": {
+        "configureStartRun": "Configure and start this run — {spend}"
+    },
+    "code": {
+        "showAll": "Show all",
+        "showLess": "Show less"
+    },
+    "colorPicker": {
+        "accentColour": "Accent colour",
+        "azure": "Azure",
+        "brass": "Brass",
+        "cobalt": "Cobalt",
+        "ember": "Ember",
+        "emerald": "Emerald",
+        "fern": "Fern",
+        "graphite": "Graphite",
+        "iris": "Iris",
+        "lagoon": "Lagoon",
+        "moss": "Moss",
+        "orchid": "Orchid",
+        "rose": "Rose",
+        "vermilion": "Vermilion"
+    },
+    "confirmDialog": {
+        "more": "…and {count} more"
+    },
+    "dagEditor": {
+        "fitWholeGraph": "Fit the whole graph"
+    },
+    "deviceAgent": {
+        "agentAliveStoppedMaking": "Its agent is alive but has stopped making rounds, so this sandbox's picture of its folders and ports is as old as the last one.",
+        "commands": "Commands",
+        "folders": "Folders",
+        "loopKeepsBuildStarted": "A loop keeps the build it started with until it restarts, so replacing the file on disk changes nothing on its own.",
+        "ports": "Ports",
+        "restartAgent": "Restart agent",
+        "stopsStartsDevicesAgent": "Stops and starts this device's agent loop. Nothing is downloaded — the build already installed there is the one that comes up."
+    },
+    "deviceAgentGroup": {
+        "agent": "Agent",
+        "agent2": "Agent {version}",
+        "agentOnThisDevice": "Agent on this device"
+    },
+    "deviceDetail": {
+        "backup": "backup: {folder}",
+        "copyPath": "Copy path",
+        "deviceIsntSyncingFolder": "This device isn't syncing a folder or holding any ports for this sandbox.",
+        "folder": "Folder",
+        "image": "Image",
+        "localhost": "localhost:",
+        "more": "… and {more} more",
+        "noFolderDeviceOnly": "no folder: this device only mirrors ports",
+        "noFolderSynced": "no folder synced",
+        "notRunningHere": "not running here",
+        "offDeviceIsntPutting": "Off: this device isn't putting this sandbox's ports on its own localhost. File syncing is unaffected.",
+        "ports": "Ports",
+        "share": "Share",
+        "show": "show it",
+        "stopped": "stopped",
+        "sync": "Sync"
+    },
+    "deviceRunLog": {
+        "working": "Working…"
+    },
+    "filterBar": {
+        "filter": "Filter…"
+    },
+    "imageView": {
+        "actualSize1": "Actual size (1)",
+        "ctrlScrollToZoom": "Ctrl + scroll to zoom · drag to pan · double-click to fit",
+        "fit": "Fit",
+        "fitToPane0": "Fit to the pane (0)",
+        "imagePreviewCtrlScroll": "Image preview: Ctrl and scroll to zoom, drag to pan",
+        "zoomIn": "Zoom in (+)",
+        "zoomIn2": "Zoom in",
+        "zoomOut": "Zoom out (−)",
+        "zoomOut2": "Zoom out"
+    },
+    "inlineRename": {
+        "couldntSaveName": "Couldn't save that name.",
+        "saveEnter": "Save · Enter",
+        "unnamed": "Unnamed"
+    },
+    "layoutRepoRail": {
+        "allRepositories": "All repositories"
+    },
+    "markdownDocument": {
+        "document": "Document"
+    },
+    "markdownDocumentSurface": {
+        "document": "Document"
+    },
+    "navRail": {
+        "filter": "Filter…"
+    },
+    "noteEditor": {
+        "copyRawNote": "Copy the raw note",
+        "editNote": "Edit this note",
+        "it": "{verb} it",
+        "keep": "Keep it",
+        "loading": "Loading…",
+        "note": "{verb} this note",
+        "note2": "Note",
+        "unsaved": "unsaved",
+        "writeNote": "Write the note."
+    },
+    "picker": {
+        "select": "Select…"
+    },
+    "pickerPanel": {
+        "noMatches": "No matches.",
+        "options": "{count} options"
+    },
+    "projectChip": {
+        "hidden": "· {hidden} hidden"
+    },
+    "repoRail": {
+        "allRepositories": "All repositories",
+        "repository": "Repository"
+    },
+    "sandboxDeviceDetail": {
+        "devicesAgentDoesntReport": "This device's agent doesn't report which paths they are. Updating it lists them here."
+    },
+    "sandboxResourcesDialog": {
+        "all": "all",
+        "allMax": "all {max}",
+        "applyingRestartsSandboxOnto": "Applying restarts the sandbox onto the same image, about a minute, and interrupts whoever is working in it. Its files (in /work) are kept, and the new share survives every later update, rollback and rebuild.",
+        "askedComputerNoNvidia": "Asked for, but this computer has no NVIDIA container runtime, so the sandbox runs without it.",
+        "cores": "cores",
+        "cpuCapInCores": "CPU cap in cores",
+        "cpus": "CPUs",
+        "cpusWhole": "Whole CPUs, {bounds} on this computer. Empty is no limit: every core it has.",
+        "default": "default",
+        "defaultMax": "default: {max}",
+        "fullAccessToComputers": "Full access to this computer's devices and kernel, the way a nested Docker engine needs. Only for a tool that cannot run without it.",
+        "gib": "GiB",
+        "gpu": "GPU",
+        "memory": "Memory",
+        "memoryCapInGib": "Memory cap in GiB",
+        "memoryWhole": "Whole GiB, {bounds} on this computer. Empty is the default: everything it has beyond what it keeps for itself.",
+        "passComputersNvidiaGpus": "Pass this computer's NVIDIA GPUs into the sandbox: the driver rides in with them.",
+        "passGpuThrough": "Pass the GPU through",
+        "privileged": "Privileged",
+        "range": "{min} to {max}",
+        "resources": "Resources for {name}",
+        "runPrivileged": "Run privileged",
+        "sandboxUsingRightNow": "This is the sandbox you are using right now: this page will lose it until it is back."
+    },
+    "sandboxSandboxVerbs": {
+        "deletesSandboxEverythingIn": "This deletes the sandbox and everything in it — its files and its history — from that device. This cannot be undone.",
+        "sandboxRestartsOntoImage": "The sandbox restarts onto the image it ran before its last update. Its files are kept.",
+        "sandboxRestartsOntoNewest": "The sandbox restarts onto the newest image and is unavailable while that happens — seconds if the update is already downloaded, a few minutes if not. Its files are kept."
+    },
+    "sandboxVerbs": {
+        "moreActions": "More actions"
+    },
+    "searchBar": {
+        "aa": "Aa",
+        "clearEsc": "Clear (Esc)",
+        "clearFilter": "Clear filter",
+        "filter": "Filter…",
+        "matchCase": "Match case"
+    },
+    "stepSection": {
+        "done": "{title}: done"
+    },
+    "timeWindow": {
+        "all": "All"
+    },
+    "useOsPreference": {
+        "linuxMacos": "Linux / macOS",
+        "windowsPowershell": "Windows (PowerShell)"
     }
 }

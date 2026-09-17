@@ -22,6 +22,7 @@ import { blockedReason, isSpent, liveUsage, type PlanHeadroom, planHeadroom } fr
 import { useSandbox } from "../client/useSandbox";
 import ConnectFlow from "./ConnectFlow.vue";
 import ConnectionRow from "./ConnectionRow.vue";
+import { useT } from "@intentic/ui/i18n";
 
 // The Agent tab's AI-accounts section: where a credential is added or dropped, across five providers and two
 // mechanisms (a provider's own account; a subscription via the bundled translator), sharing one shape:
@@ -31,6 +32,8 @@ import ConnectionRow from "./ConnectionRow.vue";
 //   - one action per row, morphing through sign-in (Connect -> spinner -> Cancel)
 // Two rules: nothing connects without an explicit click, and an unread state shows loading rather than a false
 // "not connected" (`accountsLoaded`).
+
+const t = useT();
 
 const { reachable } = useSandbox();
 const {
@@ -59,7 +62,7 @@ const {
 } = useChat();
 // Wraps the store's bare error as a notice: the app's sentence leads, the daemon's message is the evidence detail.
 const chatNotice = computed<NoticeModel | undefined>(() =>
-    chatError.value === null ? undefined : { tone: `danger`, title: `Couldn't reach your AI accounts.`, detail: chatError.value },
+    chatError.value === null ? undefined : { tone: `danger`, title: t(`sandbox.aiAccountSection.couldntReachAiAccounts`), detail: chatError.value },
 );
 
 // Subscription rows served by the translator. Codex/Kimi/Gemini: the only connection. Grok: secondary rows under
@@ -67,12 +70,12 @@ const chatNotice = computed<NoticeModel | undefined>(() =>
 const routedProvider = computed<KeyedProvider | undefined>(() =>
     providerSpec(managedProvider.value)?.auth.kind === `translator` ? (managedProvider.value as KeyedProvider) : undefined,
 );
-const ROUTED_ROW: Record<KeyedProvider, { title: string }> = {
-    codex: { title: `ChatGPT subscription` },
-    grok: { title: `Under Claude Code` },
-    kimi: { title: `Kimi Code subscription` },
-    gemini: { title: `Google account` },
-};
+const ROUTED_ROW = computed((): Record<KeyedProvider, { title: string }> => ({
+    codex: { title: t(`sandbox.aiAccountSection.chatgptSubscription`) },
+    grok: { title: t(`sandbox.aiAccountSection.underClaudeCode`) },
+    kimi: { title: t(`sandbox.aiAccountSection.kimiCodeSubscription`) },
+    gemini: { title: t(`sandbox.aiAccountSection.googleAccount`) },
+}));
 
 /* Codex, Kimi and Gemini own no native account: the subscription row IS their connection. */
 const hasNativeAccounts = computed(() => hasSignIn(managedProvider.value) && !subscriptionOnly(managedProvider.value));
@@ -285,10 +288,10 @@ onUnmounted(() => clearTimeout(ringTimer));
 </script>
 
 <template>
-<!-- RowGroup, not Card: wrapping an already-grouped list in a card added a bordered surface for no gain, the group label already carries the heading. -->
-<!-- Deep-link rings stay outside the group to prevent layout shift. -->
-    <RowGroup id="ai-account" label="AI account" :class="ringing ? '-m-1 rounded-xl p-1 ring-2 ring-info' : ''">
-<!-- Each chip's dot has three states (checking / connected / not-connected), not two. -->
+    <!-- RowGroup, not Card: wrapping an already-grouped list in a card added a bordered surface for no gain, the group label already carries the heading. -->
+    <!-- Deep-link rings stay outside the group to prevent layout shift. -->
+    <RowGroup id="ai-account" :label="t(`sandbox.aiAccountSection.aiAccount`)" :class="ringing ? '-m-1 rounded-xl p-1 ring-2 ring-info' : ''">
+        <!-- Each chip's dot has three states (checking / connected / not-connected), not two. -->
         <template #actions>
             <div class="flex flex-wrap items-center justify-end gap-1">
                 <button
@@ -303,15 +306,17 @@ onUnmounted(() => clearTimeout(ringTimer));
                     <span
                         class="h-1.5 w-1.5 shrink-0 rounded-full"
                         :class="!accountsLoaded ? 'bg-content/25' : providerReady(tab.value) ? 'bg-success' : 'bg-content/25'"
-                        :aria-label="!accountsLoaded ? `checking` : providerReady(tab.value) ? `connected` : `not connected`"
+                        :aria-label="
+                            !accountsLoaded ? `checking` : providerReady(tab.value) ? `connected` : t(`sandbox.aiAccountSection.notConnected`)
+                        "
                     />
                     {{ tab.label }}
-<!-- "Free" shown on the chip itself, not only after opening it, so comparing providers doesn't require opening each one. -->
+                    <!-- "Free" shown on the chip itself, not only after opening it, so comparing providers doesn't require opening each one. -->
                     <span
                         v-if="accountsLoaded && isFreeProvider(tab.value) && !providerReady(tab.value)"
                         class="shrink-0 rounded-sm bg-success/15 px-1 font-semibold text-success"
                     >
-                        Free
+                        {{ t(`sandbox.aiAccountSection.free`) }}
                     </span>
                 </button>
             </div>
@@ -319,12 +324,12 @@ onUnmounted(() => clearTimeout(ringTimer));
 
         <Notice v-if="chatNotice" :of="chatNotice" class="m-3" />
 
-<!-- Nothing read yet: an offline sandbox says so and stops; otherwise skeletons in the real rows' shape hold the section's height until they land. -->
+        <!-- Nothing read yet: an offline sandbox says so and stops; otherwise skeletons in the real rows' shape hold the section's height until they land. -->
         <ConnectionRow
             v-if="!accountsLoaded && !reachable"
-            title="Connections unavailable"
+            :title="t(`sandbox.aiAccountSection.connectionsUnavailable`)"
             state="missing"
-            description="Your sandbox is offline: its accounts can't be read or changed from here."
+            :description="t(`sandbox.aiAccountSection.sandboxOfflineAccountsCant`)"
         />
         <template v-else-if="!accountsLoaded">
             <!-- Two skeleton lines: a connected row always has a name plus a usage line under it. -->
@@ -348,7 +353,7 @@ onUnmounted(() => clearTimeout(ringTimer));
             </Row>
         </template>
 
-<!-- Native accounts and translator subscriptions render as one list of the same row shape, since both answer "what am I signed in with, can I drop it?". -->
+        <!-- Native accounts and translator subscriptions render as one list of the same row shape, since both answer "what am I signed in with, can I drop it?". -->
         <template v-else>
             <!-- Native accounts: Claude and Grok only. Codex, Kimi and Gemini skip straight to the subscription row below. -->
             <template v-if="hasNativeAccounts">
@@ -359,7 +364,7 @@ onUnmounted(() => clearTimeout(ringTimer));
                     :state="account.needsReauth ? `reauth` : `connected`"
                     :tone="account.needsReauth ? `warning` : `default`"
                     :note="identityNote(account)"
-                    :description="account.needsReauth ? (account.detail ?? `Signed out, reconnect to keep using it.`) : undefined"
+                    :description="account.needsReauth ? (account.detail ?? t(`sandbox.aiAccountSection.signedOutReconnectTo`)) : undefined"
                     :activity="account.needsReauth || !usageLoaded ? undefined : usageLine(account.id)"
                     :rename="renameOf(account)"
                     :headroom="headroom"
@@ -368,13 +373,13 @@ onUnmounted(() => clearTimeout(ringTimer));
                     <template #control>
                         <Button
                             v-if="account.needsReauth && canConnectMore && !nativeFlowLive"
-                            label="Reconnect"
+                            :label="t(`sandbox.aiAccountSection.reconnect`)"
                             size="small"
                             :loading="accountBusy === managedProvider"
                             @click="connectHere"
                         />
                         <Button
-                            label="Disconnect"
+                            :label="t(`ui.action.disconnect`)"
                             size="small"
                             severity="danger"
                             :text="true"
@@ -384,18 +389,18 @@ onUnmounted(() => clearTimeout(ringTimer));
                     </template>
                 </ConnectionRow>
 
-<!-- No account is still a row, same shape as a connected one, so it reads as a missing connection, not an apology. -->
+                <!-- No account is still a row, same shape as a connected one, so it reads as a missing connection, not an apology. -->
                 <ConnectionRow
                     v-if="accountRows.length === 0"
-                    :title="`${managedLabel} account`"
+                    :title="t(`sandbox.aiAccountSection.account`, { managedLabel })"
                     state="missing"
-                    :note="flowNote(nativeFlowLive) ?? `not connected`"
+                    :note="flowNote(nativeFlowLive) ?? t(`sandbox.aiAccountSection.notConnected`)"
                     :note-busy="nativeFlowLive && connectSent"
                 >
                     <template #control>
                         <Button
                             v-if="nativeFlowLive"
-                            label="Cancel"
+                            :label="t(`ui.action.cancel`)"
                             size="small"
                             severity="secondary"
                             :text="true"
@@ -403,12 +408,12 @@ onUnmounted(() => clearTimeout(ringTimer));
                             @click="cancelConnect"
                         />
                         <!-- Filled: with no account at all, this is the one action the group wants. -->
-                        <Button v-else label="Connect" size="small" :loading="accountBusy === managedProvider" @click="connectHere">
+                        <Button v-else :label="t(`ui.action.connect`)" size="small" :loading="accountBusy === managedProvider" @click="connectHere">
                             <template #icon><Icon name="link" /></template>
                         </Button>
                     </template>
                     <template v-if="nativeFlowLive || estates.length > 0" #below>
-<!-- Estate chooser sits where the sign-in unfolds and is replaced by it, since choosing the estate is the connect's first step, not a separate setting. -->
+                        <!-- Estate chooser sits where the sign-in unfolds and is replaced by it, since choosing the estate is the connect's first step, not a separate setting. -->
                         <ConnectFlow v-if="nativeFlowLive" kind="native" :provider="managedProvider" />
                         <SegmentedControl
                             v-else
@@ -416,7 +421,7 @@ onUnmounted(() => clearTimeout(ringTimer));
                             size="xs"
                             wrap
                             :options="estates.map((variant) => ({ label: variant.label, value: variant.id }))"
-                            :aria-label="`Which ${managedLabel} plan`"
+                            :aria-label="t(`sandbox.aiAccountSection.plan`, { managedLabel })"
                         />
                     </template>
                 </ConnectionRow>
@@ -424,7 +429,7 @@ onUnmounted(() => clearTimeout(ringTimer));
                 <!-- A second account is a different act from having none: its own quiet row where its sign-in also unfolds. -->
                 <ConnectionRow
                     v-else-if="canConnectMore"
-                    title="Add another account"
+                    :title="t(`sandbox.aiAccountSection.addAnotherAccount`)"
                     state="add"
                     :note="flowNote(nativeFlowLive)"
                     :note-busy="nativeFlowLive && connectSent"
@@ -432,7 +437,14 @@ onUnmounted(() => clearTimeout(ringTimer));
                     @click="!nativeFlowLive && connectHere()"
                 >
                     <template v-if="nativeFlowLive" #control>
-                        <Button label="Cancel" size="small" severity="secondary" :text="true" :disabled="nativeFinishing" @click.stop="cancelConnect" />
+                        <Button
+                            :label="t(`ui.action.cancel`)"
+                            size="small"
+                            severity="secondary"
+                            :text="true"
+                            :disabled="nativeFinishing"
+                            @click.stop="cancelConnect"
+                        />
                     </template>
                     <template v-if="nativeFlowLive || estates.length > 0" #below>
                         <ConnectFlow v-if="nativeFlowLive" kind="native" :provider="managedProvider" />
@@ -442,7 +454,7 @@ onUnmounted(() => clearTimeout(ringTimer));
                             size="xs"
                             wrap
                             :options="estates.map((variant) => ({ label: variant.label, value: variant.id }))"
-                            :aria-label="`Which ${managedLabel} plan`"
+                            :aria-label="t(`sandbox.aiAccountSection.plan`, { managedLabel })"
                         />
                     </template>
                 </ConnectionRow>
@@ -463,7 +475,7 @@ onUnmounted(() => clearTimeout(ringTimer));
                 >
                     <template #control>
                         <Button
-                            label="Disconnect"
+                            :label="t(`ui.action.disconnect`)"
                             size="small"
                             severity="danger"
                             :text="true"
@@ -473,19 +485,19 @@ onUnmounted(() => clearTimeout(ringTimer));
                     </template>
                 </ConnectionRow>
 
-<!-- No subscription: states what's missing with the one fix. -->
+                <!-- No subscription: states what's missing with the one fix. -->
                 <ConnectionRow
                     v-if="translatorAccounts[routedProvider].length === 0"
                     :key="`connect-${routedProvider}`"
                     :title="ROUTED_ROW[routedProvider].title"
                     state="missing"
-                    :note="flowNote(routedFlowLive) ?? `not connected`"
+                    :note="flowNote(routedFlowLive) ?? t(`sandbox.aiAccountSection.notConnected`)"
                     :note-busy="routedFlowLive && connectSent"
                 >
                     <template #control>
                         <Button
                             v-if="routedFlowLive"
-                            label="Cancel"
+                            :label="t(`ui.action.cancel`)"
                             size="small"
                             severity="secondary"
                             :text="true"
@@ -495,7 +507,7 @@ onUnmounted(() => clearTimeout(ringTimer));
                         <!-- Filled only when this is the group's one connection; under Grok it stays secondary to the native row above. -->
                         <Button
                             v-else
-                            label="Connect"
+                            :label="t(`ui.action.connect`)"
                             size="small"
                             :severity="routedProvider === `grok` ? `secondary` : undefined"
                             :loading="accountBusy === translatorKey(routedProvider)"
@@ -509,7 +521,7 @@ onUnmounted(() => clearTimeout(ringTimer));
                 <ConnectionRow
                     v-else
                     :key="`add-${routedProvider}`"
-                    title="Add another account"
+                    :title="t(`sandbox.aiAccountSection.addAnotherAccount`)"
                     state="add"
                     :note="flowNote(routedFlowLive)"
                     :note-busy="routedFlowLive && connectSent"
@@ -518,7 +530,7 @@ onUnmounted(() => clearTimeout(ringTimer));
                 >
                     <template v-if="routedFlowLive" #control>
                         <Button
-                            label="Cancel"
+                            :label="t(`ui.action.cancel`)"
                             size="small"
                             severity="secondary"
                             :text="true"
@@ -537,7 +549,7 @@ onUnmounted(() => clearTimeout(ringTimer));
                         <span class="flex w-[1.125rem] shrink-0 justify-center">
                             <Icon :name="expanded ? 'chevron-up' : 'chevron-down'" class="text-2xs" />
                         </span>
-                        {{ expanded ? `Show less` : `Show ${collapsedCount} more accounts` }}
+                        {{ expanded ? t(`sandbox.aiAccountSection.showLess`) : t(`sandbox.aiAccountSection.showMoreAccounts`, { collapsedCount }) }}
                     </span>
                 </template>
             </Row>

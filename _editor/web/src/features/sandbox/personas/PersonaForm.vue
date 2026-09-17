@@ -14,6 +14,7 @@ import PersonaPowersFields from "./PersonaPowersFields.vue";
 import type { BrowserAccount } from "../../extensions/useBrowserAccounts";
 import type { PersonaGrantable, PersonaPowersDraft } from "./personaCard";
 import { useRepos } from "../../workspace/explorer/useRepos";
+import { useT } from "@intentic/ui/i18n";
 
 // Card editor: one of five questions shown at a time via SegmentedControl, replacing a ~30-control scroll. The folder
 // fence lives inside "What it may do", not its own pill, since it's the same question as the toggles above it.
@@ -21,6 +22,8 @@ import { useRepos } from "../../workspace/explorer/useRepos";
 
 // The whole card as a form. Shelves and per-id grants come from PersonaPowersDraft, shared with the quick panel's
 // <PersonaPowersFields>.
+const t = useT();
+
 export interface PersonaDraft extends PersonaPowersDraft {
     /** The saved card's id; always set, since a card is created before it's edited. */
     original: string;
@@ -58,13 +61,16 @@ const { draft, accounts, connected, grantables, error } = defineProps<{
 
 // Order follows how someone thinks about a persona: who, what it may touch, what it runs on, what it's told. Labels
 // match the headings this replaced, so nothing has to be relearned.
-const SECTIONS = [
-    { label: `Speaks as`, value: `identity` },
-    { label: `What it may do`, value: `powers` },
-    { label: `Runs on`, value: `runs` },
-    { label: `What it is told`, value: `told` },
-] as const;
-type Section = (typeof SECTIONS)[number][`value`];
+const SECTIONS = computed(
+    () =>
+        [
+            { label: t(`sandbox.personaForm.speaks`), value: `identity` },
+            { label: t(`sandbox.personaForm.whatMayDo`), value: `powers` },
+            { label: t(`sandbox.personaForm.runsOn`), value: `runs` },
+            { label: t(`sandbox.personaForm.whatTold`), value: `told` },
+        ] as const,
+);
+type Section = (typeof SECTIONS.value)[number][`value`];
 
 // Local, reset on reopen rather than remembered, so a card always opens on the pill that says who it is.
 const section = ref<Section>(`identity`);
@@ -134,7 +140,9 @@ const editing = shallowRef<{ index: number | undefined; anchor: HTMLElement } | 
 const openPicker = (index: number | undefined, anchor: HTMLElement): void => {
     editing.value = { index, anchor };
 };
-const editingPin = computed<ModelPin | undefined>(() => (editing.value?.index === undefined ? undefined : models.entries.value[editing.value.index]?.pin));
+const editingPin = computed<ModelPin | undefined>(() =>
+    editing.value?.index === undefined ? undefined : models.entries.value[editing.value.index]?.pin,
+);
 const pick = (pin: ModelPin): void => models.apply(editing.value?.index, pin);
 const configure = (pin: ModelPin): void => {
     if (editing.value?.index !== undefined) {
@@ -147,26 +155,26 @@ const configure = (pin: ModelPin): void => {
     <!-- The form spans the card row; text fields keep their own reading width. -->
     <div class="flex max-w-4xl flex-col gap-5">
         <!-- Section pills rely on the surrounding field frame. -->
-        <SegmentedControl v-model="section" :options="SECTIONS" aria-label="What to change about this persona" />
+        <SegmentedControl v-model="section" :options="SECTIONS" :aria-label="t(`sandbox.personaForm.whatToChangeAbout`)" />
 
         <template v-if="section === `identity`">
             <!-- The card's own line, shown first since it's the card saying who it is; also the sentence a new chat is matched on. -->
             <div class="ui-field">
-                <label class="ui-field-label" for="persona-brief">What it's for</label>
+                <label class="ui-field-label" for="persona-brief">{{ t(`sandbox.personaForm.what`) }}</label>
                 <input
                     id="persona-brief"
                     v-model="draft.brief"
                     :class="ui.input('max-w-xl')"
                     maxlength="200"
-                    placeholder="Backend work on the api and billing services"
+                    :placeholder="t(`sandbox.personaForm.backendWorkOnApi`)"
                 />
-                <span class="text-xs text-subtle">One line. A new chat is matched to a persona by this sentence, so say what its work looks like.</span>
+                <span class="text-xs text-subtle">{{ t(`sandbox.personaForm.oneLineNewChat`) }}</span>
             </div>
 
             <div class="ui-field">
-                <span class="ui-field-label">Speaks through</span>
+                <span class="ui-field-label">{{ t(`sandbox.personaForm.speaksThrough`) }}</span>
                 <!-- Stated as a fact about the sandbox, not something missing: a persona with no accounts is finished, not half-made. -->
-                <p v-if="accounts.length === 0" class="text-xs text-subtle">No accounts connected in this sandbox yet.</p>
+                <p v-if="accounts.length === 0" class="text-xs text-subtle">{{ t(`sandbox.personaForm.noAccountsConnectedIn`) }}</p>
                 <template v-else>
                     <!-- Picked accounts are removable chips; choosing happens in the adjacent control. -->
                     <div class="flex flex-wrap items-center gap-1.5">
@@ -175,7 +183,7 @@ const configure = (pin: ModelPin): void => {
                             :key="mark.id"
                             type="button"
                             class="ui-chip ui-chip-on group py-1 pl-1.5 pr-2 text-xs hover:border-danger"
-                            :aria-label="`Stop speaking through ${mark.id}`"
+                            :aria-label="t(`sandbox.personaForm.stopSpeakingThrough`, { id: mark.id })"
                             @click="toggleAccount(mark.id)"
                         >
                             <BrandMark
@@ -197,7 +205,13 @@ const configure = (pin: ModelPin): void => {
                         >
                             <!-- "Add another", not "Change": removing is the chip's own job, this control only adds. -->
                             <Icon :name="open ? `check` : `plus`" class="text-2xs" />
-                            {{ open ? `Done choosing` : pickedMarks.length === 0 ? `Choose accounts` : `Add another` }}
+                            {{
+                                open
+                                    ? t(`sandbox.personaForm.doneChoosing`)
+                                    : pickedMarks.length === 0
+                                      ? t(`sandbox.personaForm.chooseAccounts`)
+                                      : t(`sandbox.personaForm.addAnother`)
+                            }}
                         </button>
                     </div>
 
@@ -208,8 +222,8 @@ const configure = (pin: ModelPin): void => {
                             v-model="filter"
                             variant="field"
                             clearable
-                            aria-label="Filter accounts"
-                            placeholder="Filter by name or site"
+                            :aria-label="t(`sandbox.personaForm.filterAccounts`)"
+                            :placeholder="t(`sandbox.personaForm.filterByNameSite`)"
                         />
                         <!-- Account toggles support multiple picks and show connection state. -->
                         <div class="flex max-h-44 flex-wrap gap-2 overflow-y-auto">
@@ -241,7 +255,9 @@ const configure = (pin: ModelPin): void => {
                                 </span>
                                 <Icon v-if="picked(account.id)" name="check" class="ml-0.5 shrink-0 text-xs text-link" />
                             </button>
-                            <span v-if="shown.length === 0" class="px-1 py-1 text-xs text-subtle">No account matches "{{ filter.trim() }}".</span>
+                            <span v-if="shown.length === 0" class="px-1 py-1 text-xs text-subtle">{{
+                                t(`sandbox.personaForm.noAccountMatches`, { trim: filter.trim() })
+                            }}</span>
                         </div>
                     </div>
                 </template>
@@ -249,17 +265,17 @@ const configure = (pin: ModelPin): void => {
         </template>
 
         <template v-else-if="section === `powers`">
-            <p class="text-xs text-subtle">Everything is on unless you turn it off. A session wearing this card gets exactly what is left.</p>
+            <p class="text-xs text-subtle">{{ t(`sandbox.personaForm.everythingOnUnlessTurn`) }}</p>
 
             <PersonaPowersFields :draft="draft" :grantables="grantables" :folder-bound="folderBound">
                 <!-- Folder scope stays in the workspace column with the power toggles. -->
                 <template #where="{ rail }">
                     <div class="flex flex-col gap-3">
                         <div class="flex flex-col gap-0.5">
-                            <span :class="ui.sectionLabel()">Where it works</span>
+                            <span :class="ui.sectionLabel()">{{ t(`sandbox.personaForm.whereWorks`) }}</span>
                             <!-- The workspace copy is a fact, not a selectable mode. -->
                             <span class="text-xs text-subtle">
-                                Every session works in its own copy of the workspace, so several can run at once without touching each other's files.
+                                {{ t(`sandbox.personaForm.everySessionWorksIn`) }}
                             </span>
                         </div>
 
@@ -267,20 +283,29 @@ const configure = (pin: ModelPin): void => {
                         <div class="flex flex-col gap-1">
                             <span class="flex items-center gap-2 text-sm text-content">
                                 <Icon name="folder-open" :class="rail" />
-                                Starts in
+                                {{ t(`sandbox.personaForm.startsIn`) }}
                             </span>
-                            <FolderPicker v-model="draft.startIn" label="Starts in" placeholder="The whole workspace" />
+                            <FolderPicker
+                                v-model="draft.startIn"
+                                :label="t(`sandbox.personaForm.startsIn`)"
+                                :placeholder="t(`sandbox.personaForm.wholeWorkspace`)"
+                            />
                         </div>
 
                         <div class="flex flex-col gap-1">
                             <span class="flex items-center gap-2 text-sm text-content">
                                 <Icon name="folder" :class="rail" />
-                                Only these folders
+                                {{ t(`sandbox.personaForm.onlyFolders`) }}
                             </span>
-                            <FolderPicker v-model="draft.folders" multiple label="Only these folders" placeholder="Anywhere in the workspace" />
+                            <FolderPicker
+                                v-model="draft.folders"
+                                multiple
+                                :label="t(`sandbox.personaForm.onlyFolders`)"
+                                :placeholder="t(`sandbox.personaForm.anywhereInWorkspace`)"
+                            />
                             <!-- Folder scope rejects file tools outside the selected folders. -->
                             <span class="text-xs text-subtle">
-                                File tools pointed outside are refused: this stops mistakes and misread instructions, not a shell.
+                                {{ t(`sandbox.personaForm.fileToolsPointedOutside`) }}
                             </span>
                         </div>
                     </div>
@@ -290,12 +315,11 @@ const configure = (pin: ModelPin): void => {
 
         <template v-else-if="section === `runs`">
             <p class="text-xs text-subtle">
-                The tree a session wearing this card opens on, and the model that reads it. Both are the same for every session on this card, which is
-                what lets a chat matched to it open on a prompt the provider has already cached.
+                {{ t(`sandbox.personaForm.treeSessionWearingCard`) }}
             </p>
 
             <div class="ui-field">
-                <span class="ui-field-label">Models</span>
+                <span class="ui-field-label">{{ t(`sandbox.personaForm.models`) }}</span>
                 <div class="flex flex-col gap-2">
                     <ModelPinList
                         v-if="models.entries.value.length > 0"
@@ -306,20 +330,22 @@ const configure = (pin: ModelPin): void => {
                     />
                     <!-- Empty is the ordinary state: no ladder here, so the chat's or job's own pick answers instead. -->
                     <p v-else class="text-xs text-subtle">
-                        Whatever the chat or the job would have run on anyway. Add a model to decide for every session wearing this card; the
-                        first one that answers wins, so a second entry catches an account that is out.
+                        {{ t(`sandbox.personaForm.whateverChatJobWould`) }}
                     </p>
-                    <AddModelButton label="Add a model for this persona" @open="(anchor: HTMLElement) => openPicker(undefined, anchor)" />
+                    <AddModelButton
+                        :label="t(`sandbox.personaForm.addModelPersona`)"
+                        @open="(anchor: HTMLElement) => openPicker(undefined, anchor)"
+                    />
                 </div>
             </div>
 
             <div class="ui-field">
-                <span class="ui-field-label">Carries</span>
+                <span class="ui-field-label">{{ t(`sandbox.personaForm.carries`) }}</span>
                 <div class="flex flex-col gap-2">
                     <label class="flex items-center justify-between gap-3">
                         <span class="flex min-w-0 flex-col">
-                            <span class="text-sm text-content">Every repository</span>
-                            <span class="text-xs text-subtle">The whole workspace, as a chat with no persona sees it.</span>
+                            <span class="text-sm text-content">{{ t(`sandbox.personaForm.everyRepository`) }}</span>
+                            <span class="text-xs text-subtle">{{ t(`sandbox.personaForm.wholeWorkspaceChatNo`) }}</span>
                         </span>
                         <ToggleSwitch
                             :model-value="draft.carries === undefined"
@@ -328,7 +354,7 @@ const configure = (pin: ModelPin): void => {
                     </label>
                     <template v-if="draft.carries !== undefined">
                         <p v-if="nested.length === 0" class="text-xs text-subtle">
-                            This workspace has no nested repositories, so the workspace repository is all a session carries either way.
+                            {{ t(`sandbox.personaForm.workspaceNoNestedRepositories`) }}
                         </p>
                         <label v-for="repo in nested" :key="repo" class="flex items-center justify-between gap-3 pl-4">
                             <span class="truncate text-sm text-content">{{ repo }}</span>
@@ -336,8 +362,7 @@ const configure = (pin: ModelPin): void => {
                         </label>
                         <!-- An off repository is absent from the session tree. -->
                         <span class="text-xs text-subtle">
-                            A repository that is off is not in the session's tree at all: nothing under it exists there. The workspace repository
-                            is always carried.
+                            {{ t(`sandbox.personaForm.repositoryOffNotIn`) }}
                         </span>
                     </template>
                 </div>

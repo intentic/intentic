@@ -37,17 +37,20 @@ import { publishContextKey } from "../../../shell/commands/contextKeys";
 import { AGENTS } from "../../../shell/commands/categories";
 import { commandShortcut, registerCommand } from "../../../shell/commands/useCommands";
 import MatchLine from "../../../components/MatchLine.vue";
-import { BUILD_IDEAS, buildPrompt } from "./buildIdeas";
+import { buildIdeas, buildPrompt } from "./buildIdeas";
 import AgentCard from "./AgentCard.vue";
 import HeldWakeCard from "./HeldWakeCard.vue";
 import WorkflowRunCard from "./WorkflowRunCard.vue";
 import { uuid } from "../../../lib/uuid";
+import { useT } from "@intentic/ui/i18n";
 // Kanban across Attention/Active/Finished, pure projections of laneOf; a drop runs the action that causes a lane change
 // (laneDrop), never assigns status directly.
 // Board is sized by its own width, not the viewport's: below NARROW_BOARD_PX the three lanes stack instead of columns,
 // same lanes/order/counts/drop targets either way.
 // Finished has no way out on its own, so it gets a window (FINISHED_WINDOW), a Clear, and an Archive view; archiving is
 // lossless (no confirm); the archive's own "Delete all" is bulk-only and confirms first.
+const t = useT();
+
 const router = useRouter();
 const route = useRoute();
 const { mobile } = useDevice();
@@ -172,11 +175,15 @@ const scopedFleet = computed<FleetAgent[]>(() => {
 });
 const scopedHeld = computed<AutomationApproval[]>(() => {
     const project = projectScope.value;
-    return project === undefined ? heldWakes.value : heldWakes.value.filter((wake) => heldWakeInProject(wake, project, personas.value, boxFleet.value));
+    return project === undefined
+        ? heldWakes.value
+        : heldWakes.value.filter((wake) => heldWakeInProject(wake, project, personas.value, boxFleet.value));
 });
 const scopedRuns = computed<WorkflowRun[]>(() => {
     const project = projectScope.value;
-    return project === undefined ? workflowRuns.value : workflowRuns.value.filter((run) => runInProject(run, project, personas.value, boxFleet.value));
+    return project === undefined
+        ? workflowRuns.value
+        : workflowRuns.value.filter((run) => runInProject(run, project, personas.value, boxFleet.value));
 });
 // Both halves of the ledger, kept in both list and filtered forms: an archived run is off the board like an archived
 // agent, shown in Finished's archive view instead.
@@ -263,15 +270,15 @@ const releaseNotice = hold(`fleet-partial`, () => {
               tone: `warning`,
               title: partial.title,
               detail: partial.detail,
-              actions: [{ label: `Try again`, severity: `secondary` as const, run: refreshAcross }],
+              actions: [{ label: t(`ui.action.tryAgain`), severity: `secondary` as const, run: refreshAcross }],
           };
 });
 onUnmounted(releaseNotice);
 
-const SCOPE_OPTIONS = [
-    { label: `This sandbox`, value: `box` as const },
-    { label: `All sandboxes`, value: `all` as const },
-];
+const SCOPE_OPTIONS = computed(() => [
+    { label: t(`agents.agentsView.sandbox`), value: `box` as const },
+    { label: t(`agents.agentsView.allSandboxes`), value: `all` as const },
+]);
 // Excludes a run's steps, which are filed away with the run itself, or the archive would show one run row plus its five
 // conversations.
 const archivedCards = computed(() => archived.value.filter((agent) => !insideRun(agent, ledgerRunIds.value)));
@@ -557,16 +564,10 @@ const animateCardFlight = (el: HTMLElement, dx: number, dy: number): void => {
 
 // Sibling reflow within the same lane smoothly closes ranks.
 const animateCardReflow = (el: HTMLElement, dy: number): void => {
-    el.animate(
-        [
-            { transform: `translate3d(0, ${dy}px, 0)` },
-            { transform: `translate3d(0, 0, 0)` },
-        ],
-        {
-            duration: 220,
-            easing: `cubic-bezier(0.2, 0, 0, 1)`,
-        },
-    );
+    el.animate([{ transform: `translate3d(0, ${dy}px, 0)` }, { transform: `translate3d(0, 0, 0)` }], {
+        duration: 220,
+        easing: `cubic-bezier(0.2, 0, 0, 1)`,
+    });
 };
 
 const canAnimateCard = (id: string, el: HTMLElement): boolean =>
@@ -711,7 +712,7 @@ onMounted(() => {
         registerCommand({
             owner: `builtin`,
             command: `agents.undoArchive`,
-            title: `Undo Archive`,
+            title: t(`agents.agentsView.undoArchive`),
             category: AGENTS,
             icon: `history`,
             keybinding: `Mod+Z`,
@@ -725,7 +726,7 @@ onMounted(() => {
         registerCommand({
             owner: `builtin`,
             command: `agents.filter`,
-            title: `Filter…`,
+            title: t(`agents.agentsView.filter`),
             category: AGENTS,
             icon: `search`,
             // Focus and select, so a chord typed over a stale query starts fresh instead of needing the old text
@@ -742,30 +743,30 @@ onUnmounted(() => {
     }
     boardCommands = [];
 });
-const LANES: readonly { key: FleetLane; label: string; dot: string; empty: string }[] = [
-    { key: `attention`, label: `Attention`, dot: `bg-warning`, empty: `Nothing needs you right now.` },
-    { key: `active`, label: `Active`, dot: `bg-success`, empty: `No agents working. Start one and delegate.` },
-    { key: `finished`, label: `Finished`, dot: `bg-line-strong`, empty: `Finished agents land their work in your workspace.` },
-];
+const LANES = computed((): readonly { key: FleetLane; label: string; dot: string; empty: string }[] => [
+    { key: `attention`, label: t(`agents.agentsView.attention`), dot: `bg-warning`, empty: t(`agents.agentsView.nothingNeedsRightNow`) },
+    { key: `active`, label: t(`agents.agentsView.active`), dot: `bg-success`, empty: t(`agents.agentsView.noAgentsWorkingStart`) },
+    { key: `finished`, label: t(`agents.agentsView.finished`), dot: `bg-line-strong`, empty: t(`agents.agentsView.finishedAgentsLandWork`) },
+]);
 // The board's own total counts what's on screen: a run's steps count once, as their row, not again beside it.
 // Held wakes count toward having something to show, so a fresh workspace with only a hold doesn't hide behind the
 // empty-board splash.
 const total = computed(
-    () => LANES.reduce((sum, lane) => sum + boardLanes.value[lane.key].length, 0) + boardRunRows.value.length + scopedHeld.value.length,
+    () => LANES.value.reduce((sum, lane) => sum + boardLanes.value[lane.key].length, 0) + boardRunRows.value.length + scopedHeld.value.length,
 );
 // A different question from `total`: whether anything has EVER happened here, which is what the first-run screen turns
 // on. A never-registered conversation is a `draft` card, and an untouched draft doesn't count as started.
 // Anything else does, archive included: agents that ran and were filed away are a history, not an empty workspace.
 const started = computed(
     () =>
-        LANES.reduce((sum, lane) => sum + boardLanes.value[lane.key].filter((agent) => agent.status !== `draft`).length, 0) +
+        LANES.value.reduce((sum, lane) => sum + boardLanes.value[lane.key].filter((agent) => agent.status !== `draft`).length, 0) +
             boardRunRows.value.length +
             scopedHeld.value.length +
             archiveSize.value >
         0,
 );
 // Derive header totals from the same cards and runs as the lanes.
-const kept = computed(() => LANES.reduce((sum, lane) => sum + keptIn(lane.key), 0));
+const kept = computed(() => LANES.value.reduce((sum, lane) => sum + keptIn(lane.key), 0));
 // Must not claim more than it knows: "n of 40" asserts all forty were checked, which is false while the daemon's half
 // of the filter is still outstanding.
 // While the answer is partial, the tally says so instead of counting, so a half-finished search isn't mistaken for a
@@ -794,20 +795,20 @@ const starters = computed<readonly { readonly label: string; readonly prompt: st
     // Nothing to point an agent at yet, so only the one task needing no code is offered: build something and get a
     // public link (lands in the outbox, shown as the Preview area's Public site target).
     if (!hasWork.value) {
-        return BUILD_IDEAS.map((example) => ({ label: example.label, prompt: buildPrompt(example.idea) }));
+        return buildIdeas().map((example) => ({ label: example.label, prompt: buildPrompt(example.idea) }));
     }
     return [
         // Uncommitted work leads the list when it exists, since it's the most urgent thing on a workspace that has any.
         ...(workspaceChanges.count.value > 0
-            ? [{ label: `Review my changes`, prompt: `Review my uncommitted changes and flag anything risky before I commit them.` }]
+            ? [{ label: t(`agents.agentsView.reviewMyChanges`), prompt: t(`agents.agentsView.reviewMyUncommittedChanges`) }]
             : []),
         {
-            label: `Explain this codebase`,
-            prompt: `Explain this codebase, what it does, where the entry points are, and which files I should read first.`,
+            label: t(`agents.agentsView.explainCodebase`),
+            prompt: t(`agents.agentsView.explainCodebaseWhatDoes`),
         },
         {
-            label: `Find something to improve`,
-            prompt: `Suggest three small, safe improvements to this codebase. Wait for me to choose one before you change anything.`,
+            label: t(`agents.agentsView.findSomethingToImprove`),
+            prompt: t(`agents.agentsView.suggestThreeSmallSafe`),
         },
     ];
 });
@@ -821,7 +822,7 @@ const starters = computed<readonly { readonly label: string; readonly prompt: st
 // source; Ctrl/Cmd and Shift work too, for muscle memory from the strips.
 // An unmodified click is the reset: it collapses any split, since a selection you can't replace by clicking elsewhere
 // isn't one. Every gesture here is a summons, since the panel it composes may be another window's.
-const paneOrder = computed<FleetAgent[]>(() => LANES.flatMap((lane) => cardsFor(lane.key)));
+const paneOrder = computed<FleetAgent[]>(() => LANES.value.flatMap((lane) => cardsFor(lane.key)));
 const paneAnchor = ref<string>();
 const summonCards = (verb: `show` | `beside` | `panes`, cards: readonly FleetAgent[], focus: string): void => {
     summonChat({ kind: `reveal`, verb, entries: cards.map((card) => agentTabOf(agentSeed(card))), focus, caret: false });
@@ -954,7 +955,8 @@ const copySessionName = async (branch: string): Promise<void> => {
 // One row for however many are armed, since the daemon disarms them together (agents.stopWatching).
 // Stops a chat opened for a look from going (`peeked`, mirrors AgentCard's pin); a row-builder like the two below, so
 // the menu stays a list of groups.
-const keepRow = (agent: FleetAgent): MenuItem[] => (peeked(agent.id) ? [{ label: `Keep Open`, icon: `pin`, command: () => keepAgent(agent) }] : []);
+const keepRow = (agent: FleetAgent): MenuItem[] =>
+    peeked(agent.id) ? [{ label: t(`agents.agentsView.keepOpen`), icon: `pin`, command: () => keepAgent(agent) }] : [];
 
 const watchRow = (agent: FleetAgent, here: boolean): MenuItem[] => {
     const armed = agent.watches?.length ?? 0;
@@ -970,11 +972,11 @@ const filingRow = (agent: FleetAgent, here: boolean): MenuItem[] => {
     const filing = !here
         ? []
         : agent.archivedAt !== undefined
-          ? [{ label: `Restore`, icon: `history`, command: () => restore([agent.id]) }]
+          ? [{ label: t(`agents.agentsView.restore`), icon: `history`, command: () => restore([agent.id]) }]
           : canArchive(agent)
-            ? [{ label: `Archive`, icon: `box`, command: () => archive([agent.id]) }]
+            ? [{ label: t(`agents.agentsView.archive`), icon: `box`, command: () => archive([agent.id]) }]
             : [];
-    return [...filing, ...(unregistered(agent.status) ? [{ label: `Close`, icon: `times`, command: () => closeAgent(agent) }] : [])];
+    return [...filing, ...(unregistered(agent.status) ? [{ label: t(`ui.action.close`), icon: `times`, command: () => closeAgent(agent) }] : [])];
 };
 
 const cardMenuItems = computed<MenuItem[]>(() => {
@@ -991,7 +993,7 @@ const cardMenuItems = computed<MenuItem[]>(() => {
     const here = !isRemote(agent);
     const groups: MenuItem[][] = [
         [
-            { label: `Open`, icon: `arrow-right`, command: () => focusAgent(agent) },
+            { label: t(`ui.action.open`), icon: `arrow-right`, command: () => focusAgent(agent) },
             // For a card whose chat is open only as a look, the press that stops it going; the chat rail's menu carries
             // the identical row for the identical state.
             ...keepRow(agent),
@@ -1001,7 +1003,7 @@ const cardMenuItems = computed<MenuItem[]>(() => {
         ],
         // Hands over the name the card prints; the name's other forms (branch, link) are already labelled on the
         // agent's own page.
-        branch === undefined ? [] : [{ label: `Copy session name`, icon: `code`, command: () => void copySessionName(branch) }],
+        branch === undefined ? [] : [{ label: t(`agents.agentsView.copySessionName`), icon: `code`, command: () => void copySessionName(branch) }],
         // The crossing to another box, named after the destination rather than called "Switch": it's the one press here
         // that costs the whole shell (chat, tree, every extension), so it says where it's taking you first.
         // Also here, not just on the review page, since this menu is where the board keeps decisions made ABOUT a card.
@@ -1109,14 +1111,14 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
 };
 </script>
 <template>
-<!-- `relative` positions the lane-drop affordances only; the fixed drag ghost and the app's notification lane need no containing block here. -->
+    <!-- `relative` positions the lane-drop affordances only; the fixed drag ghost and the app's notification lane need no containing block here. -->
     <div ref="boardEl" class="relative flex h-full min-h-0 flex-col">
-<!-- The filter remains usable at narrow /agents widths. -->
+        <!-- The filter remains usable at narrow /agents widths. -->
         <div class="view-header view-header-wrap flex flex-wrap items-center gap-x-2 gap-y-1 px-3 py-1">
             <div class="flex min-w-0 flex-1 basis-0 items-center gap-2">
-<!-- Drawn only when more than one sandbox exists (scopeOffered): a switch whose two settings look identical teaches the reader to ignore controls. -->
+                <!-- Drawn only when more than one sandbox exists (scopeOffered): a switch whose two settings look identical teaches the reader to ignore controls. -->
                 <SegmentedControl v-if="scopeOffered" v-model="fleetScope" :options="SCOPE_OPTIONS" class="shrink-0" />
-<!-- The open project, and the way out of it: the same scope the workspace chip clears, so both say the same thing. -->
+                <!-- The open project, and the way out of it: the same scope the workspace chip clears, so both say the same thing. -->
                 <ProjectChip :project="projectScope" :hidden="projectHidden" noun="agents" @clear="setProjectScope(undefined)" />
             </div>
             <SearchBar
@@ -1126,15 +1128,15 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
                 variant="field"
                 clearable
                 :busy="searching"
-                aria-label="Filter agents by your messages"
-                placeholder="Filter by your messages…"
+                :aria-label="t(`agents.agentsView.filterAgentsByMessages`)"
+                :placeholder="t(`agents.agentsView.filterByMessages`)"
                 class="mx-auto max-w-full shrink-0"
                 :class="narrow ? 'order-last basis-full' : 'w-72'"
             />
             <div class="flex min-w-0 flex-1 basis-0 items-center justify-end gap-2">
-<!-- Filtering shows a searching state while lane counts are partial. -->
+                <!-- Filtering shows a searching state while lane counts are partial. -->
                 <span v-if="filtering" class="shrink-0 text-2xs text-muted" :aria-busy="searchPartial">{{ matchTally }}</span>
-<!-- Appears exactly when two or more chats sit side by side (the panes are the selection); opens a draft composed from their transcripts but not sent. -->
+                <!-- Appears exactly when two or more chats sit side by side (the panes are the selection); opens a draft composed from their transcripts but not sent. -->
                 <Button
                     v-if="chatStrip.panes.length >= 2"
                     size="small"
@@ -1143,41 +1145,43 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
                     class="shrink-0"
                     @click="synthesize"
                 >
-                    <Icon :name="synthesizing ? `spinner` : `sparkles`" :spin="synthesizing" />Synthesize {{ chatStrip.panes.length }}
+                    <Icon :name="synthesizing ? `spinner` : `sparkles`" :spin="synthesizing" />{{ t(`agents.agentsView.synthesize`) }}
+                    {{ chatStrip.panes.length }}
                 </Button>
-                <Button size="small" class="ui-button-thumb shrink-0" @click="startAgent()"> <Icon name="plus" />New agent </Button>
+                <Button size="small" class="ui-button-thumb shrink-0" @click="startAgent()">
+                    <Icon name="plus" />{{ t(`agents.agentsView.newAgent`) }}
+                </Button>
             </div>
         </div>
-<!-- Failures only: the layout shift and dismissal this costs suit something the user must read, not a routine action's receipt (which floats instead). -->
+        <!-- Failures only: the layout shift and dismissal this costs suit something the user must read, not a routine action's receipt (which floats instead). -->
         <p v-if="notice !== undefined" class="flex shrink-0 items-center gap-2 border-b border-line bg-danger/10 px-3 py-1.5 text-2xs text-danger">
             <Icon name="exclamation-triangle" class="shrink-0 text-2xs" />
             <span class="min-w-0 flex-1">{{ notice }}</span>
-            <button type="button" aria-label="Dismiss" class="shrink-0 rounded p-0.5 hover:bg-overlay" @click="dismissNotice">
+            <button type="button" :aria-label="t(`ui.action.dismiss`)" class="shrink-0 rounded p-0.5 hover:bg-overlay" @click="dismissNotice">
                 <Icon name="times" class="text-2xs" />
             </button>
         </p>
-<!-- What the counter's pulse can't tell a screen reader; covers every archive so the visual pill stays purely visual. -->
+        <!-- What the counter's pulse can't tell a screen reader; covers every archive so the visual pill stays purely visual. -->
         <span class="sr-only" aria-live="polite">{{ announcement }}</span>
-<!-- Nothing on the board AND nothing archived is the only true empty state; an archive behind it would otherwise be a dead end with no door to it. -->
+        <!-- Nothing on the board AND nothing archived is the only true empty state; an archive behind it would otherwise be a dead end with no door to it. -->
         <div v-if="(!started || total === 0) && !archiveOpen" class="flex min-h-0 flex-1 flex-col items-center justify-center gap-4 p-4 text-center">
-<!-- One heading, one sentence, nothing waiting on a daemon read: it used to swap its lower half once accounts loaded. -->
+            <!-- One heading, one sentence, nothing waiting on a daemon read: it used to swap its lower half once accounts loaded. -->
             <template v-if="!started">
                 <div class="flex w-full max-w-xl flex-col gap-2">
-                    <h2 class="text-sm font-semibold text-content">Start your first agent</h2>
+                    <h2 class="text-sm font-semibold text-content">{{ t(`agents.agentsView.startFirstAgent`) }}</h2>
                     <p class="text-2xs text-muted">
-                        Agents work on their own branch while you carry on: you review what they did before anything lands in your workspace.
+                        {{ t(`agents.agentsView.agentsWorkOnOwn`) }}
                     </p>
                 </div>
             </template>
-<!-- A board that's been cleared, not a first run: this user knows what agents are and just needs the way back to the archive. -->
+            <!-- A board that's been cleared, not a first run: this user knows what agents are and just needs the way back to the archive. -->
             <template v-else>
                 <Icon name="sparkles" class="text-3xl text-subtle" />
                 <p class="max-w-sm text-xs text-muted">
-                    Nothing on the board. Start a conversation here or in the workspace; both appear on this board, and isolated work remains
-                    reviewable on its own branch.
+                    {{ t(`agents.agentsView.nothingOnBoardStart`) }}
                 </p>
             </template>
-<!-- Tasks read off the actual workspace (see `starters`), filling the composer rather than dispatching, so the user sends their own first turn. -->
+            <!-- Tasks read off the actual workspace (see `starters`), filling the composer rather than dispatching, so the user sends their own first turn. -->
             <div v-if="!started && starters.length > 0" class="flex max-w-xl flex-wrap items-center justify-center gap-1.5">
                 <button v-for="starter in starters" :key="starter.label" type="button" class="ui-chip" @click="composeAgent(starter.prompt)">
                     {{ starter.label }}
@@ -1191,12 +1195,12 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
                 :class="pulsing ? 'bg-primary-600/25 ring-1 ring-primary-500/50' : ''"
                 @click="toggleArchive"
             >
-                <Icon name="history" class="text-2xs" />{{ archiveSize }} archived agent{{ archiveSize === 1 ? "" : "s" }}
+                <Icon name="history" class="text-2xs" />{{ archiveSize }} {{ t(`agents.agentsView.archivedAgent`) }}{{ archiveSize === 1 ? "" : "s" }}
             </button>
         </div>
-<!-- No padding of its own: the stacked board's sticky lane headers pin to top-0, and padding would leave a gap above them. -->
+        <!-- No padding of its own: the stacked board's sticky lane headers pin to top-0, and padding would leave a gap above them. -->
         <div v-else class="scrollbar-stable min-h-0 flex-1 overflow-auto">
-<!-- `content-start` stops the stacked grid's rows from stretching to fill `h-full`, which would otherwise float a lane's cards above the next header. -->
+            <!-- `content-start` stops the stacked grid's rows from stretching to fill `h-full`, which would otherwise float a lane's cards above the next header. -->
             <div
                 class="grid gap-3.5 p-3.5 sm:gap-4 sm:p-4"
                 :class="[narrow ? 'content-start' : 'grid-cols-3 items-start lg:gap-6 lg:p-6', noMatches ? '' : 'h-full']"
@@ -1209,73 +1213,73 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
                     class="flex min-w-0 flex-col rounded-xl transition-colors"
                     :class="[!dragging && !narrow ? 'min-h-0' : '', laneDropClass(lane.key)]"
                 >
-<!-- Finished's header doubles as the archive's window, swapping its dot/label and growing a way back; pinned while scrolling stacked. -->
+                    <!-- Finished's header doubles as the archive's window, swapping its dot/label and growing a way back; pinned while scrolling stacked. -->
                     <header class="flex h-8 shrink-0 items-center gap-2.5 px-1" :class="narrow ? 'sticky top-0 z-10 rounded-t-xl bg-canvas' : ''">
                         <template v-if="lane.key === 'finished' && archiveOpen">
                             <button
                                 type="button"
-                                aria-label="Back to finished agents"
-                                v-tooltip.bottom="'Back to finished'"
+                                :aria-label="t(`agents.agentsView.backToFinishedAgents`)"
+                                v-tooltip.bottom="t(`agents.agentsView.backToFinished`)"
                                 :class="ui.iconButton(`h-4 w-4 rounded`)"
                                 @click="toggleArchive"
                             >
                                 <Icon name="arrow-left" class="text-2xs" />
                             </button>
-                            <span class="text-2xs font-semibold uppercase tracking-wide text-muted">Archived</span>
+                            <span class="text-2xs font-semibold uppercase tracking-wide text-muted">{{ t(`agents.agentsView.archived`) }}</span>
                             <span data-lane-count class="text-2xs tabular-nums text-subtle">{{ laneCount("finished") }}</span>
                             <Icon v-if="archiveLoading" name="spinner" spin class="text-2xs text-muted" />
                         </template>
                         <template v-else>
                             <span class="h-2 w-2 rounded-full" :class="lane.dot"></span>
                             <span class="text-2xs font-semibold uppercase tracking-wide text-muted">{{ lane.label }}</span>
-<!-- "3 of 12" while filtering: which lane a match sits in is half the answer, so lanes stay and report their own share on screen. -->
-<!-- `data-lane-count` is the count's own hook, so a test asks for the count rather than for whatever class it happens to wear. -->
+                            <!-- "3 of 12" while filtering: which lane a match sits in is half the answer, so lanes stay and report their own share on screen. -->
+                            <!-- `data-lane-count` is the count's own hook, so a test asks for the count rather than for whatever class it happens to wear. -->
                             <span data-lane-count class="text-2xs tabular-nums text-subtle">{{ laneCount(lane.key) }}</span>
                         </template>
                         <span class="flex-1"></span>
                         <template v-if="lane.key === 'finished' && !archiveOpen">
-<!-- Archive feedback highlights the destination counter. -->
+                            <!-- Archive feedback highlights the destination counter. -->
                             <button
                                 v-if="archiveSize > 0"
                                 type="button"
-                                :aria-label="`Open the archive (${archiveSize})`"
-                                v-tooltip.bottom="'Taken off the board: branches and conversations are kept'"
+                                :aria-label="t(`agents.agentsView.openArchive`, { archiveSize })"
+                                v-tooltip.bottom="t(`agents.agentsView.takenOffBoardBranches`)"
                                 class="ui-chip shrink-0 gap-1"
                                 :class="pulsing ? `ui-chip-on ring-1 ring-primary-500/50` : ``"
                                 @click="toggleArchive"
                             >
                                 <Icon name="history" class="text-2xs" />{{ archiveSize }}
                             </button>
-<!-- Hidden while filtering, like the drag: Clear archives the WHOLE lane, which isn't the right scope above a lane reading "1 of 12". -->
+                            <!-- Hidden while filtering, like the drag: Clear archives the WHOLE lane, which isn't the right scope above a lane reading "1 of 12". -->
                             <Button
                                 v-if="clearable > 0 && !filtering"
                                 size="small"
                                 severity="secondary"
                                 :text="true"
                                 class="ui-button-thumb shrink-0"
-                                aria-label="Archive every finished agent"
-                                v-tooltip.bottom="`Archive all ${clearable}: you can undo it`"
+                                :aria-label="t(`agents.agentsView.archiveEveryFinishedAgent`)"
+                                v-tooltip.bottom="t(`agents.agentsView.archiveAllUndo`, { clearable })"
                                 @click="archive()"
                             >
-                                Clear
+                                {{ t(`ui.action.clear`) }}
                             </Button>
                         </template>
-<!-- Retired-agent danger appears on hover; the dialog is the actionable warning. -->
+                        <!-- Retired-agent danger appears on hover; the dialog is the actionable warning. -->
                         <Button
                             v-if="lane.key === 'finished' && archiveOpen && archiveSize > 0 && !filtering"
                             size="small"
                             severity="danger"
                             :text="true"
                             class="shrink-0"
-                            :aria-label="`Delete all ${archived.length} archived agents permanently`"
+                            :aria-label="t(`agents.agentsView.deleteAllArchivedAgents`, { count: archived.length })"
                             :disabled="purging"
-                            v-tooltip.bottom="`Delete all ${archived.length} permanently: branches and all. This can't be undone.`"
+                            v-tooltip.bottom="t(`agents.agentsView.deleteAllPermanentlyBranches`, { count: archived.length })"
                             @click="pendingPurge = true"
                         >
-                            <Icon :name="purging ? 'spinner' : 'trash'" :spin="purging" class="text-2xs" />Delete all
+                            <Icon :name="purging ? 'spinner' : 'trash'" :spin="purging" class="text-2xs" />{{ t(`agents.agentsView.deleteAll`) }}
                         </Button>
                     </header>
-<!-- Held wakes lead the lane, since a hold is wholly waiting on the user, more than anything running below it; Attention lane only. -->
+                    <!-- Held wakes lead the lane, since a hold is wholly waiting on the user, more than anything running below it; Attention lane only. -->
                     <div v-if="lane.key === 'attention' && !archiveOpen && scopedHeld.length > 0" class="flex flex-col gap-2.5 pb-2.5">
                         <HeldWakeCard
                             v-for="entry in scopedHeld"
@@ -1287,7 +1291,7 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
                             @reject="releaseWake(entry.id, `reject`)"
                         />
                     </div>
-<!-- Runs sit above their lane's agent cards, since a run is a container of several of them and a container belongs above its contents, not among them. -->
+                    <!-- Runs sit above their lane's agent cards, since a run is a container of several of them and a container belongs above its contents, not among them. -->
                     <div v-if="runsFor(lane.key).length > 0" class="flex flex-col gap-2.5 pb-2.5">
                         <WorkflowRunCard
                             v-for="run in runsFor(lane.key)"
@@ -1308,23 +1312,19 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
                         v-if="lane.key === 'finished' && archiveOpen && archivedCards.length === 0 && runsFor('finished').length === 0"
                         class="px-1 pb-3 text-2xs text-subtle"
                     >
-                        {{
-                            purged
-                                ? "Archive emptied. Finished agents will collect here again on their own after a few quiet days."
-                                : "Nothing archived yet. Finished agents land here on their own after a few quiet days."
-                        }}
+                        {{ purged ? t(`agents.agentsView.archiveEmptiedFinishedAgents`) : t(`agents.agentsView.nothingArchivedYetFinished`) }}
                     </p>
-<!-- An emptied lane keeps its header rather than collapsing: three columns shrinking to one mid-keystroke would jump the whole board under the cursor. -->
+                    <!-- An emptied lane keeps its header rather than collapsing: three columns shrinking to one mid-keystroke would jump the whole board under the cursor. -->
                     <p
                         v-else-if="
                             cardsFor(lane.key).length === 0 && runsFor(lane.key).length === 0 && !(lane.key === 'attention' && scopedHeld.length > 0)
                         "
                         class="px-1 pb-3 text-2xs text-subtle"
                     >
-                        {{ filtering ? "No matches in this lane." : lane.empty }}
+                        {{ filtering ? t(`agents.agentsView.noMatchesInLane`) : lane.empty }}
                     </p>
                     <div v-else class="relative flex flex-col gap-3.5 pb-2.5">
-<!-- Skips a card whose inputs haven't changed: the roster ticks about once a second per running turn. -->
+                        <!-- Skips a card whose inputs haven't changed: the roster ticks about once a second per running turn. -->
                         <Transition
                             v-for="agent in cardsFor(lane.key)"
                             :key="agent.id"
@@ -1368,7 +1368,7 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
                             />
                         </Transition>
                     </div>
-<!-- The lane's tail, not a pager: the count is the point, and the row keeps them one press away instead of gone; hidden while filtering. -->
+                    <!-- The lane's tail, not a pager: the count is the point, and the row keeps them one press away instead of gone; hidden while filtering. -->
                     <button
                         v-if="lane.key === 'finished' && !archiveOpen && !filtering && hiddenFinished > 0"
                         type="button"
@@ -1376,9 +1376,9 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
                         @click="showAllFinished = !showAllFinished"
                     >
                         <Icon :name="showAllFinished ? 'chevron-up' : 'chevron-down'" class="text-2xs" />
-                        {{ showAllFinished ? "Show fewer" : `${hiddenFinished} earlier` }}
+                        {{ showAllFinished ? t(`agents.agentsView.showFewer`) : t(`agents.agentsView.earlier`, { hiddenFinished }) }}
                     </button>
-<!-- One-way, unlike the lane's toggle: this pile has no "fewer" worth offering, since collapsing it back would lose the reader's place mid-search. -->
+                    <!-- One-way, unlike the lane's toggle: this pile has no "fewer" worth offering, since collapsing it back would lose the reader's place mid-search. -->
                     <button
                         v-if="lane.key === 'finished' && archiveOpen && archiveHidden > 0"
                         type="button"
@@ -1386,24 +1386,22 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
                         @click="archiveShown += ARCHIVE_PAGE"
                     >
                         <Icon name="chevron-down" class="text-2xs" />
-                        {{ archiveHidden }} more
+                        {{ archiveHidden }} {{ t(`agents.agentsView.more`) }}
                     </button>
                 </section>
             </div>
-<!-- The filter's own empty state, not the board's: agents exist, just none matched. -->
+            <!-- The filter's own empty state, not the board's: agents exist, just none matched. -->
             <p v-if="noMatches" class="px-4 pb-6 text-center text-2xs text-subtle">
                 <template v-if="matchCase">
-                    No agent mentions "{{ query.trim() }}" with those exact capitals.
+                    {{ t(`agents.agentsView.noAgentMentions`) }}{{ query.trim() }}{{ t(`agents.agentsView.thoseExactCapitals`) }}
                     <button type="button" class="font-medium text-link underline-offset-2 hover:underline" @click="matchCase = false">
-                        Ignore case
+                        {{ t(`agents.agentsView.ignoreCase`) }}
                     </button>
                 </template>
-                <template v-else
-                    >No agent of yours mentions "{{ query.trim() }}". This searches the titles and what either side said in the chat.</template
-                >
+                <template v-else>{{ t(`agents.agentsView.noAgentYoursMentions`, { trim: query.trim() }) }}</template>
             </p>
         </div>
-<!-- What the query found off the board: the Finished window and the archive both hide agents the filter would otherwise miss entirely. -->
+        <!-- What the query found off the board: the Finished window and the archive both hide agents the filter would otherwise miss entirely. -->
         <div v-if="beyondVisible" class="flex max-h-[50%] shrink-0 flex-col border-t border-line px-3 pb-3 pt-2" :class="narrow ? '' : 'lg:px-4'">
             <button
                 type="button"
@@ -1413,17 +1411,17 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
             >
                 <Icon name="search" class="shrink-0 text-2xs text-subtle" />
                 <span class="min-w-0 flex-1 truncate text-left">{{ beyondLabel }}</span>
-                <span class="shrink-0 font-medium text-link">{{ showBeyond ? "Hide" : "Show" }}</span>
+                <span class="shrink-0 font-medium text-link">{{ showBeyond ? t(`agents.agentsView.hide`) : t(`agents.agentsView.show`) }}</span>
                 <Icon :name="showBeyond ? 'chevron-up' : 'chevron-down'" class="shrink-0 text-2xs" />
             </button>
             <div v-if="showBeyond" class="mt-2 flex min-h-0 flex-col gap-3 overflow-auto">
                 <section v-if="archivedHits.length > 0" class="flex min-w-0 flex-col gap-2.5">
                     <div class="flex items-center gap-2 px-1">
                         <Icon name="box" class="shrink-0 text-2xs text-subtle" />
-                        <span class="text-2xs font-semibold uppercase tracking-wide text-muted">In the archive</span>
+                        <span class="text-2xs font-semibold uppercase tracking-wide text-muted">{{ t(`agents.agentsView.inArchive`) }}</span>
                         <span class="text-2xs tabular-nums text-subtle">{{ archivedHits.length }}</span>
                     </div>
-<!-- Archived agents retain the branch, diff, and transcript actions. -->
+                    <!-- Archived agents retain the branch, diff, and transcript actions. -->
                     <div class="grid gap-2.5" :class="narrow ? '' : 'grid-cols-3 items-start lg:gap-4.5'">
                         <AgentCard
                             v-for="agent in archivedHits"
@@ -1446,10 +1444,10 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
                 <section v-if="sessionMatches.length > 0" class="flex min-w-0 flex-col gap-1">
                     <div class="flex items-center gap-2 px-1">
                         <Icon name="history" class="shrink-0 text-2xs text-subtle" />
-                        <span class="text-2xs font-semibold uppercase tracking-wide text-muted">In earlier chats</span>
+                        <span class="text-2xs font-semibold uppercase tracking-wide text-muted">{{ t(`agents.agentsView.inEarlierChats`) }}</span>
                         <span class="text-2xs tabular-nums text-subtle">{{ sessionMatches.length }}</span>
                     </div>
-<!-- Conversations no agent entry owns; with no card to draw, they read as history rows and open as tabs, the same act the History menu performs. -->
+                    <!-- Conversations no agent entry owns; with no card to draw, they read as history rows and open as tabs, the same act the History menu performs. -->
                     <button
                         v-for="session in sessionMatches"
                         :key="session.id"
@@ -1470,7 +1468,7 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
                 </section>
             </div>
         </div>
-<!-- Discard is destructive and has no lane of its own, so it only exists while a card is actually being dragged. -->
+        <!-- Discard is destructive and has no lane of its own, so it only exists while a card is actually being dragged. -->
         <div
             v-if="dragging"
             data-drop="discard"
@@ -1483,38 +1481,38 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
                       : 'border-line bg-card text-subtle opacity-40'
             "
         >
-            <Icon name="trash" class="text-2xs" />Discard
+            <Icon name="trash" class="text-2xs" />{{ t(`agents.agentsView.discard`) }}
         </div>
-<!-- A drag is the easiest gesture here to trigger by accident, and dropping a conflicted card on Finished spends a turn. -->
-        <Modal :open="pendingResolve !== undefined" size="sm" header="Have the agent resolve the conflict?" @update:open="cancelResolve">
+        <!-- A drag is the easiest gesture here to trigger by accident, and dropping a conflicted card on Finished spends a turn. -->
+        <Modal :open="pendingResolve !== undefined" size="sm" :header="t(`agents.agentsView.agentResolveConflict`)" @update:open="cancelResolve">
             <p class="text-xs text-content">
-                {{ resolveTarget?.title ?? `This agent` }} will start a turn: it rebases its branch onto your current workspace, resolves the conflict
-                in its own worktree, and lands the result when it's done.
+                {{ t(`agents.agentsView.willStartTurn`, { agent: resolveTarget?.title ?? t(`agents.agentsView.thisAgent`) }) }}
             </p>
-            <p class="mt-2 text-xs text-muted">Nothing is written to your workspace unless it succeeds. You can stop the turn at any point.</p>
+            <p class="mt-2 text-xs text-muted">{{ t(`agents.agentsView.nothingWrittenToWorkspace`) }}</p>
             <template #footer>
-                <Button size="small" severity="secondary" :text="true" label="Cancel" @click="cancelResolve" />
-                <Button size="small" label="Ask the agent" @click="confirmResolve" />
+                <Button size="small" severity="secondary" :text="true" :label="t(`ui.action.cancel`)" @click="cancelResolve" />
+                <Button size="small" :label="t(`agents.agentsView.askAgent`)" @click="confirmResolve" />
             </template>
         </Modal>
-<!-- The one dialog guarding something unrecoverable: says what goes in the terms the archive has promised all along ("nothing is lost"). -->
-        <Modal :open="pendingPurge" size="sm" header="Delete every archived agent?" @update:open="pendingPurge = false">
+        <!-- The one dialog guarding something unrecoverable: says what goes in the terms the archive has promised all along ("nothing is lost"). -->
+        <Modal :open="pendingPurge" size="sm" :header="t(`agents.agentsView.deleteEveryArchivedAgent`)" @update:open="pendingPurge = false">
             <p class="text-xs text-content">
-                {{ archived.length }} archived agent{{ archived.length === 1 ? "" : "s" }} will be deleted for good, each one's branch, its
-                conversation and its history. This cannot be undone.
+                {{ t(`agents.agentsView.archivedWillBeDeleted`, { count: archived.length }, archived.length) }}
             </p>
             <p class="mt-2 text-xs text-muted">
-                Work they already landed stays in your workspace. Only what never left their branches is lost. Agents still on the board are
-                untouched.
+                {{ t(`agents.agentsView.workTheyAlreadyLanded`) }}
             </p>
             <template #footer>
-                <Button size="small" severity="secondary" :text="true" label="Cancel" @click="pendingPurge = false" />
-                <Button size="small" severity="danger" @click="confirmPurge">
-                    Delete {{ archived.length }} agent{{ archived.length === 1 ? "" : "s" }}
-                </Button>
+                <Button size="small" severity="secondary" :text="true" :label="t(`ui.action.cancel`)" @click="pendingPurge = false" />
+                <Button
+                    size="small"
+                    severity="danger"
+                    :label="t(`agents.agentsView.deleteAgents`, { count: archived.length }, archived.length)"
+                    @click="confirmPurge"
+                />
             </template>
         </Modal>
-<!-- A real card, so the drag reads as the card itself; `pointer-events-none` keeps the hit test on what's underneath it. -->
+        <!-- A real card, so the drag reads as the card itself; `pointer-events-none` keeps the hit test on what's underneath it. -->
         <div v-if="dragging && dragged !== undefined" class="pointer-events-none fixed left-0 top-0 z-50 rotate-2" :style="ghostStyle">
             <div class="opacity-90 shadow-lg">
                 <AgentCard :agent="dragged" :dense="narrow" />

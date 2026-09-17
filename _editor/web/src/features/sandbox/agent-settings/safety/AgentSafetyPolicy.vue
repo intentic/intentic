@@ -3,11 +3,14 @@ import { MarkdownDocument, Notice, RowGroup, RowNote } from "@intentic/ui";
 import { useSafetyPolicy } from "../../environment/useSafetyPolicy";
 import { useDraft } from "../../../../lib/useDraft";
 import SafetyPolicyInfo from "./SafetyPolicyInfo.vue";
+import { useT } from "@intentic/ui/i18n";
 
 // Replaces six regex-verdict pickers, which couldn't tell a real `rm -rf /` from one quoted in a README; danger is now
 // judged by a model reading this text (guard/command-gate.ts runs it, the contract's safety-policy.ts argues the
 // design). Edited as markdown, so the assistant can edit it too, with an explicit save since every new turn reads this
 // file live.
+
+const t = useT();
 
 const { text, custom, save, isSaving, isLoading, error } = useSafetyPolicy();
 
@@ -15,7 +18,7 @@ const draft = useDraft(() => (isLoading.value ? undefined : text.value));
 </script>
 
 <template>
-    <RowGroup label="Safety policy">
+    <RowGroup :label="t(`sandbox.agentSafetyPolicy.safetyPolicy`)">
         <template #info><SafetyPolicyInfo /></template>
 
         <RowNote variant="block">
@@ -27,14 +30,14 @@ const draft = useDraft(() => (isLoading.value ? undefined : text.value));
                     :stored="isLoading ? undefined : text"
                     :saving="isSaving"
                     save="explicit"
-                    label="Safety policy"
-                    :placeholder="isLoading ? `Loading…` : `What the assistant should stop and ask you about.`"
+                    :label="t(`sandbox.agentSafetyPolicy.safetyPolicy`)"
+                    :placeholder="isLoading ? t(`sandbox.agentSafetyPolicy.loading`) : t(`sandbox.agentSafetyPolicy.whatAssistantShouldStop`)"
                     class="min-h-64"
                     @save="save"
                 >
                     <template #note>
-                        <template v-if="custom">Your own text, in <code>.intentic/config/safety.md</code>.</template>
-                        <template v-else>The text this product ships with. It describes what a fresh sandbox already does.</template>
+                        <template v-if="custom">{{ t(`sandbox.agentSafetyPolicy.ownTextIn`) }} <code>.intentic/config/safety.md</code>.</template>
+                        <template v-else>{{ t(`sandbox.agentSafetyPolicy.textProductShipsDescribes`) }}</template>
                     </template>
                 </MarkdownDocument>
             </div>

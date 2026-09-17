@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { Code, ImageView, SegmentedControl } from "@intentic/extension-ui";
 import { computed, onBeforeUnmount, ref, watch } from "vue";
+import { t } from "./i18n.js";
 
 /* SVG viewer: the picture by default, with a Source toggle for the markup. */
 
@@ -26,8 +27,8 @@ watch(
 onBeforeUnmount(revoke);
 
 const options = computed(() => [
-    { label: `Preview`, value: `preview` as const },
-    { label: `Source`, value: `source` as const },
+    { label: t(`svgViewer.preview`), value: `preview` as const },
+    { label: t(`svgViewer.source`), value: `source` as const },
 ]);
 </script>
 

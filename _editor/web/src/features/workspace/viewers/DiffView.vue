@@ -8,10 +8,13 @@ import { requestCodeAnalysis } from "../health/codeAnalysisClient";
 import { landingChange, type ImportSide } from "../health/codeLanding";
 import { editorType, useMonaco, watchEditorType } from "../files/useMonaco";
 import { PATCH_GAP } from "./diffPatch";
+import { useT } from "@intentic/ui/i18n";
 
 // Diff of one file (before=parent, after=snapshot) via Monaco's diff editor, VSCode's engine: side-by-side with
 // a minimap per pane on desktop, inline on mobile (chunk nav via buttons). Read-only, uncontrolled, remounted per
 // file via :key. Comments strip from both sides unless the reader asks (useLayout.showComments via DiffToolbar).
+
+const t = useT();
 
 const { before, after, path, lines } = defineProps<{
     before?: string;
@@ -241,7 +244,7 @@ onBeforeUnmount(() => {
 <template>
     <div class="relative flex h-full min-h-0">
         <div ref="host" class="h-full min-w-0 flex-1 overflow-hidden bg-canvas"></div>
-<!-- Explains an empty diff either way: hidden comments (one click undoes it) or genuinely identical sides (nothing to offer). -->
+        <!-- Explains an empty diff either way: hidden comments (one click undoes it) or genuinely identical sides (nothing to offer). -->
         <div v-if="changeless !== undefined" class="pointer-events-none absolute inset-x-0 top-2 z-10 flex justify-center px-9">
             <button
                 v-if="changeless === `comments`"
@@ -250,14 +253,14 @@ onBeforeUnmount(() => {
                 @click="toggleShowComments()"
             >
                 <Icon name="eye-slash" class="text-2xs" />
-                Only comments changed: show them
+                {{ t(`workspace.diffView.onlyCommentsChangedShow`) }}
             </button>
             <p
                 v-else
                 class="flex items-center gap-1.5 rounded-full border border-line bg-card/95 px-3 py-1 text-2xs text-muted shadow-sm backdrop-blur"
             >
                 <Icon name="info-circle" class="text-2xs" />
-                No changes: both sides are identical
+                {{ t(`workspace.diffView.noChangesBothSides`) }}
             </p>
         </div>
         <!-- Touch chunk navigation (side-by-side collapses to unified on mobile). -->
@@ -265,7 +268,7 @@ onBeforeUnmount(() => {
             <button
                 type="button"
                 class="flex h-11 w-11 items-center justify-center rounded-full border border-line bg-card/90 text-muted shadow-lg active:bg-overlay"
-                aria-label="Previous change"
+                :aria-label="t(`workspace.diffView.previousChange`)"
                 @click="step(false)"
             >
                 <Icon name="chevron-up" class="text-base" />
@@ -273,7 +276,7 @@ onBeforeUnmount(() => {
             <button
                 type="button"
                 class="flex h-11 w-11 items-center justify-center rounded-full border border-line bg-card/90 text-muted shadow-lg active:bg-overlay"
-                aria-label="Next change"
+                :aria-label="t(`workspace.diffView.nextChange`)"
                 @click="step(true)"
             >
                 <Icon name="chevron-down" class="text-base" />

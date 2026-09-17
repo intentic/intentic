@@ -7,6 +7,9 @@
 // (shared prefix dropped, overflow loses the middle) with the full name on hover.
 import { computed } from "vue";
 import { shortBranch } from "./sessionChip";
+import { useT } from "@intentic/ui/i18n";
+
+const t = useT();
 
 const {
     branch,
@@ -31,7 +34,7 @@ const CHROME = `inline-flex min-w-0 items-center gap-1 rounded font-mono text-2x
         v-if="reveal"
         type="button"
         :class="[CHROME, `transition-colors hover:text-content`, compact ? `h-7 w-7 shrink-0 justify-center hover:bg-overlay` : `max-w-full shrink`]"
-        :aria-label="`Session name: ${branch}`"
+        :aria-label="t(`agents.sessionChip.sessionName`, { branch })"
         @click.stop="emit(`reveal`, $event)"
     >
         <Icon name="code" class="shrink-0 text-2xs" />

@@ -5,10 +5,13 @@ import { computed, ref } from "vue";
 import { useManifestProblems } from "../../extensions/useManifestProblems";
 import { openWorkspaceRef } from "../../../workspace/files/openFileRef";
 import { type ManifestRepairAction, manifestNotices } from "./manifestNotice";
+import { useT } from "@intentic/ui/i18n";
 
 // Reports problems in the sandbox's own state files (a value it couldn't read, an unknown key), unlike
 // SandboxBehindCard, which compares this app's build against the daemon's. A collapsed row shows only a file name
 // and a status tag; the diagnosis and any fix sit behind the row's chevron until asked for.
+
+const t = useT();
 
 const { reports, hasProblems, repair } = useManifestProblems();
 
@@ -34,7 +37,7 @@ const applyRepair = (path: string, action: ManifestRepairAction): Promise<void> 
 </script>
 
 <template>
-    <RowGroup v-if="hasProblems" label="Some settings aren't being applied">
+    <RowGroup v-if="hasProblems" :label="t(`sandbox.sandboxManifestCard.someSettingsArentBeing`)">
         <DisclosureRow
             v-for="notice in notices"
             :key="notice.path"
@@ -80,7 +83,7 @@ const applyRepair = (path: string, action: ManifestRepairAction): Promise<void> 
                     </div>
                     <!-- Outranks the diagnosis: the one line here that requires action. -->
                     <p v-if="notice.fix !== undefined" class="text-content">{{ notice.fix }}</p>
-<!-- Only refusals show here; a successful repair makes the row disappear, so a banner would repeat what's already visible. -->
+                    <!-- Only refusals show here; a successful repair makes the row disappear, so a banner would repeat what's already visible. -->
                     <Notice v-if="repairNotice && acting === notice.path" :of="repairNotice" />
                 </div>
             </template>

@@ -130,7 +130,7 @@ export {
     StatusBadge,
     type StatusVariant,
     StepSection,
-    TIME_WINDOWS,
+    timeWindows,
     type TimeWindow,
     timeWindowWords,
     // Whether the enclosing `<SplitView>` has folded to compact; outside a split it falls back to device width.

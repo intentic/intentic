@@ -13,7 +13,7 @@ const DagFigure = defineAsyncComponent(() => import("./DagFigure.vue"));
 </script>
 
 <template>
-<!-- Mermaid draws itself, palette and all (mermaidTheme.ts): the only figure kind whose picture this file does not compose. -->
+    <!-- Mermaid draws itself, palette and all (mermaidTheme.ts): the only figure kind whose picture this file does not compose. -->
     <MermaidDiagram v-if="figure.kind === `mermaid`" :code="figure.code" />
     <BarChart v-else-if="figure.kind === `bars`" :items="figure.items" :title="figure.title" />
     <StatStrip v-else-if="figure.kind === `stats`" :items="figure.items" />

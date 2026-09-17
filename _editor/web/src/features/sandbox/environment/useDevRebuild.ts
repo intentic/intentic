@@ -6,6 +6,7 @@ import { useSandbox } from "../client/useSandbox";
 import { expectRestart, type RestartQuiet } from "../live/sandboxRestart";
 import { removeStoredValue, storedValue, storeValue } from "../../../lib/browserStorage";
 import { beginHubWork, hubWorkKey } from "../../../shell/hub/hubWork";
+import { t } from "@intentic/ui/i18n";
 
 // FOLLOWING A REBUILD THAT NOTHING ON THIS PAGE OWNS. `dev-rebuild` starts a detached build on the machine holding the
 // checkout and returns at once; the build then outlives the button, the card, the daemon and the container, because the
@@ -107,10 +108,10 @@ const ENVIRONMENT_ROW = hubWorkKey(`sandbox`, `environment`);
 const WHAT = `Rebuilding from your checkout`;
 // The card's own `restarting` line, said to a reader who is no longer on the card. Hedged on WHEN, not on what: a
 // poll four seconds stale can't tell the swap from a machine the build has buried, and both are this rebuild's doing.
-const QUIET: RestartQuiet = {
-    title: `Restarting onto the image you built`,
-    detail: `Your rebuild swaps this sandbox onto its new image when it's done: about half a minute of quiet, then this page reconnects on its own. Your files in /work are kept.`,
-};
+const quiet = (): RestartQuiet => ({
+    title: t(`sandbox.useDevRebuild.restartingOntoImageBuilt`),
+    detail: t(`sandbox.useDevRebuild.rebuildSwapsSandboxOnto`),
+});
 const marks = new Map<string, () => void>();
 
 const mark = (slug: string): void => {
@@ -122,7 +123,7 @@ const mark = (slug: string): void => {
     const sandbox = useSandbox().activeSandboxId.value;
     const ends = [
         beginHubWork(ENVIRONMENT_ROW, WHAT),
-        ...(sandbox === undefined ? [] : [expectRestart({ sandbox, id: `dev-rebuild`, what: WHAT, quiet: QUIET })]),
+        ...(sandbox === undefined ? [] : [expectRestart({ sandbox, id: `dev-rebuild`, what: WHAT, quiet: quiet() })]),
     ];
     marks.set(slug, () => {
         for (const end of ends) {

@@ -2,9 +2,12 @@
 <script setup lang="ts">
 import { Button, ui, CopyButton, Icon, Modal, Notice } from "@intentic/ui";
 import type { ShareDetail, SharedConversation } from "@intentic/sandbox-contract";
-import { ref, watch } from "vue";
+import { computed, ref, watch } from "vue";
 import { jsonBody } from "../../sandbox/client/jsonBody";
 import { sandboxJson } from "../../sandbox/client/sandboxClient";
+import { useT } from "@intentic/ui/i18n";
+
+const t = useT();
 
 const props = defineProps<{ visible: boolean; conversationId: string; title: string }>();
 const emit = defineEmits<{ (event: "update:visible", value: boolean): void; (event: "shared"): void }>();
@@ -32,14 +35,14 @@ watch(
 );
 
 // What each answer actually publishes, said where the answer is made.
-const DETAILS: readonly { readonly value: ShareDetail; readonly label: string; readonly note: string }[] = [
-    { value: `messages`, label: `Messages only`, note: `Your prompts and the agent's written answers.` },
+const DETAILS = computed((): readonly { readonly value: ShareDetail; readonly label: string; readonly note: string }[] => [
+    { value: `messages`, label: t(`chat.chatShareDialog.messagesOnly`), note: t(`chat.chatShareDialog.promptsAgentsWrittenAnswers`) },
     {
         value: `everything`,
-        label: `Everything`,
-        note: `Adds the work the agent did, the files it read and changed, what it ran, and its thinking. This publishes the code and command output that appear in those cards.`,
+        label: t(`chat.chatShareDialog.everything`),
+        note: t(`chat.chatShareDialog.addsWorkAgentDid`),
     },
-];
+]);
 
 const share = async (): Promise<void> => {
     // A share already in the air owns this dialog. The button holds itself once pressed, but Enter in the name
@@ -64,26 +67,28 @@ const share = async (): Promise<void> => {
 </script>
 
 <template>
-    <Modal :open="visible" size="md" header="Share this conversation" @update:open="emit(`update:visible`, $event)">
+    <Modal :open="visible" size="md" :header="t(`chat.chatShareDialog.shareConversation`)" @update:open="emit(`update:visible`, $event)">
         <!-- After: the link, and nothing to decide. -->
         <div v-if="result" class="flex flex-col gap-3">
-            <p class="text-xs text-muted">Anyone with this link can read the conversation. It shows what was said up to now, and nothing after.</p>
+            <p class="text-xs text-muted">{{ t(`chat.chatShareDialog.anyoneLinkReadConversation`) }}</p>
             <div class="flex items-center gap-2 rounded-lg border border-line bg-canvas px-3 py-2">
                 <Icon name="globe" class="shrink-0 text-subtle" />
-                <span class="min-w-0 flex-1 truncate font-mono text-xs text-muted" :title="result.url">{{ result.url ?? `No public address` }}</span>
+                <span class="min-w-0 flex-1 truncate font-mono text-xs text-muted" :title="result.url">{{
+                    result.url ?? t(`chat.chatShareDialog.noPublicAddress`)
+                }}</span>
                 <a
                     v-if="result.url"
                     :href="result.url"
                     target="_blank"
                     rel="noopener"
                     class="flex h-6 w-6 shrink-0 items-center justify-center rounded text-subtle hover:bg-overlay hover:text-content"
-                    aria-label="Open the shared conversation in a new tab"
-                    v-tooltip.bottom="'Open in new tab'"
+                    :aria-label="t(`chat.chatShareDialog.openSharedConversationIn`)"
+                    v-tooltip.bottom="t(`chat.chatShareDialog.openInNewTab`)"
                 >
                     <Icon name="external-link" class="text-2xs" />
                 </a>
             </div>
-            <p class="text-2xs text-subtle">You can update or stop sharing it any time from Sandbox ▸ Public.</p>
+            <p class="text-2xs text-subtle">{{ t(`chat.chatShareDialog.updateStopSharingAny`) }}</p>
         </div>
 
         <!-- Before: the two decisions. -->
@@ -91,13 +96,13 @@ const share = async (): Promise<void> => {
             <Notice v-if="error" tone="danger">{{ error }}</Notice>
 
             <label class="ui-field">
-                <span class="ui-field-label">Title</span>
+                <span class="ui-field-label">{{ t(`chat.chatShareDialog.title`) }}</span>
                 <input v-model="name" autofocus maxlength="80" :class="ui.input()" />
-                <span class="ui-field-hint">Shown at the top of the page, and used to name the link.</span>
+                <span class="ui-field-hint">{{ t(`chat.chatShareDialog.shownAtTopPage`) }}</span>
             </label>
 
             <div class="flex flex-col gap-1.5">
-                <span class="ui-field-label">What to include</span>
+                <span class="ui-field-label">{{ t(`chat.chatShareDialog.whatToInclude`) }}</span>
                 <button
                     v-for="option in DETAILS"
                     :key="option.value"
@@ -123,17 +128,17 @@ const share = async (): Promise<void> => {
             <!-- Sharing makes the conversation readable without sign-in. -->
             <p class="flex items-start gap-1.5 text-2xs text-warning">
                 <Icon name="globe" class="mt-0.5 shrink-0 text-2xs" />
-                <span>Anyone with the link can read it: no sign-in. Secrets are stripped, but nothing else is.</span>
+                <span>{{ t(`chat.chatShareDialog.anyoneLinkReadNo`) }}</span>
             </p>
         </form>
 
         <template #footer>
-            <Button v-if="result" label="Done" size="small" @click="emit(`update:visible`, false)" />
+            <Button v-if="result" :label="t(`ui.action.done`)" size="small" @click="emit(`update:visible`, false)" />
             <template v-else>
-                <Button label="Cancel" size="small" severity="secondary" text @click="emit(`update:visible`, false)" />
-                <Button label="Share" size="small" :loading="busy" :disabled="name.trim().length === 0" @click="share" />
+                <Button :label="t(`ui.action.cancel`)" size="small" severity="secondary" text @click="emit(`update:visible`, false)" />
+                <Button :label="t(`chat.chatShareDialog.share`)" size="small" :loading="busy" :disabled="name.trim().length === 0" @click="share" />
             </template>
-            <CopyButton v-if="result?.url" :text="result.url" label="Copy link" />
+            <CopyButton v-if="result?.url" :text="result.url" :label="t(`chat.chatShareDialog.copyLink`)" />
         </template>
     </Modal>
 </template>

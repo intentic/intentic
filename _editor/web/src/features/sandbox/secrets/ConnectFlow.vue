@@ -4,10 +4,13 @@ import { Button, ui, CopyButton } from "@intentic/ui";
 import { computed, nextTick, onUnmounted, ref, useId, useTemplateRef, watch } from "vue";
 import { useChat } from "../../chat/run/useChat";
 import ProviderLogo from "../../chat/accounts/ProviderLogo.vue";
+import { useT } from "@intentic/ui/i18n";
 
 // One sign-in panel for every provider and mechanism (own account or translator subscription); branches only on
 // the handshake shape (device: read-only poll; redirect: paste back a code or address), never on the provider. Lives
 // inside whatever row or strip started the sign-in; Cancel belongs to that caller, not here.
+
+const t = useT();
 
 const { kind, provider } = defineProps<{ kind: `native` | `routed`; provider: AgentProvider }>();
 
@@ -64,9 +67,7 @@ const pastePlaceholder = computed(() => (redirectFlow.value ? `Paste the address
 
 // Fake dead-end address per flow, for the user to recognize against the real error page. Google's grant param is
 // `code`, BigModel's is `authCode`; truncated like a real one since only the shape matters.
-const deadEndAddress = computed(() =>
-    kind === `routed` ? `localhost:8317/?code=4/0AX4…` : `127.0.0.1:8317/callback?authCode=eyJhb…`,
-);
+const deadEndAddress = computed(() => (kind === `routed` ? `localhost:8317/?code=4/0AX4…` : `127.0.0.1:8317/callback?authCode=eyJhb…`));
 
 // The picture of the dead-end page is reference, not an instruction, so it stays folded until asked for: at full
 // size it outweighs the real button ten to one and wears the emphasis ring, which is why it got clicked.
@@ -74,7 +75,9 @@ const showDeadEnd = ref(false);
 
 // True only for the paste-back flow: `connectLabel` is read solely by `completeConnect`. Every out-of-band flow
 // lands its account through a route that never sees the field; naming there happens as a rename afterward.
-const namesTheAccount = computed(() => kind === `native` && nativeConnectFlow.value?.provider === provider && nativeConnectFlow.value.flow === `paste`);
+const namesTheAccount = computed(
+    () => kind === `native` && nativeConnectFlow.value?.provider === provider && nativeConnectFlow.value.flow === `paste`,
+);
 
 // The grant is spent and the daemon is still minting the credential behind it: a native redirect lands its
 // account through the poll rather than the response, so accepted is not yet connected.
@@ -220,13 +223,13 @@ watch(flow, (live) => {
 
 <template>
     <div v-if="flow" class="flex flex-col gap-2.5">
-<!-- The exchange takes the whole panel rather than spinning one button inside it: what was brought back is already spent. -->
+        <!-- The exchange takes the whole panel rather than spinning one button inside it: what was brought back is already spent. -->
         <p v-if="redeeming" class="flex items-center gap-1.5 text-2xs text-subtle"><Icon name="spinner" spin />{{ submitNote }}</p>
         <!-- Out-of-band sign-in: the page finishes it, so the button and the wait are the whole panel. -->
         <template v-else-if="deviceFlow">
             <!-- `self-start`: without it the button stretches edge to edge, reading as a banner, not step one of three. -->
             <Button as="a" class="self-start touch-target" size="small" :href="flow.url" target="_blank" rel="noopener" @click="openedProvider">
-                <ProviderLogo :provider="provider" />Open {{ destination }}<Icon name="external-link" />
+                <ProviderLogo :provider="provider" />{{ t(`ui.action.open`) }} {{ destination }}<Icon name="external-link" />
             </Button>
             <!-- Placed above what it describes: an instruction read after the fact is read too late. -->
             <p v-if="hint" class="text-2xs text-subtle">{{ hint }}</p>
@@ -235,26 +238,32 @@ watch(flow, (live) => {
                 <span class="truncate font-mono text-base font-semibold tracking-[0.2em] text-content">{{ flow.code }}</span>
                 <CopyButton :text="flow.code" />
             </div>
-            <p v-else class="flex items-center gap-1.5 text-2xs text-subtle"><Icon name="spinner" spin />Waiting for approval…</p>
+            <p v-else class="flex items-center gap-1.5 text-2xs text-subtle">
+                <Icon name="spinner" spin />{{ t(`sandbox.connectFlow.waitingApproval`) }}
+            </p>
         </template>
 
-<!-- Step one, and the only thing on the panel: what to come back with is said BEFORE the trip, since afterwards there are two tabs between the reader and this sentence. -->
+        <!-- Step one, and the only thing on the panel: what to come back with is said BEFORE the trip, since afterwards there are two tabs between the reader and this sentence. -->
         <template v-else-if="!broughtBack">
             <p class="text-2xs text-muted">
-                Sign in, then come back here with {{ grantNoun }}<template v-if="redirectFlow">
-                    — its last page <span class="font-semibold text-content">won't load</span>, and that's expected</template
+                {{ t(`sandbox.connectFlow.signInComeBack`) }} {{ grantNoun
+                }}<template v-if="redirectFlow">
+                    {{ t(`sandbox.connectFlow.lastPage`) }} <span class="font-semibold text-content">{{ t(`sandbox.connectFlow.wontLoad`) }}</span
+                    >{{ t(`sandbox.connectFlow.thatsExpected`) }}</template
                 >.
             </p>
             <Button as="a" class="self-start touch-target" size="small" :href="flow.url" target="_blank" rel="noopener" @click="openedProvider">
-                <ProviderLogo :provider="provider" />Open {{ destination }}<Icon name="external-link" />
+                <ProviderLogo :provider="provider" />{{ t(`ui.action.open`) }} {{ destination }}<Icon name="external-link" />
             </Button>
-<!-- The way in for someone who already made the trip (a reopened panel, a second tab); without it the only way out of step one was Cancel. -->
-            <button type="button" :class="ui.textAction(`text-2xs text-subtle`)" @click="connectSent = true">Already have it? Paste it here</button>
+            <!-- The way in for someone who already made the trip (a reopened panel, a second tab); without it the only way out of step one was Cancel. -->
+            <button type="button" :class="ui.textAction(`text-2xs text-subtle`)" @click="connectSent = true">
+                {{ t(`sandbox.connectFlow.alreadyPasteHere`) }}
+            </button>
         </template>
 
         <!-- Step two: the field is the subject now, so nothing else on the panel competes for the press. -->
         <template v-else>
-            <label :for="pasteFieldId" class="text-2xs text-muted">Paste {{ grantNoun }}</label>
+            <label :for="pasteFieldId" class="text-2xs text-muted">{{ t(`sandbox.connectFlow.paste`, { grantNoun }) }}</label>
             <div class="flex gap-2">
                 <input
                     :id="pasteFieldId"
@@ -265,15 +274,21 @@ watch(flow, (live) => {
                     :class="ui.inputSm(`min-w-0 flex-1 font-mono`)"
                     @keydown.enter="finish"
                 />
-                <Button label="Finish" class="touch-target" size="small" :disabled="pasted.trim().length === 0" @click="finish" />
+                <Button
+                    :label="t(`sandbox.connectFlow.finish`)"
+                    class="touch-target"
+                    size="small"
+                    :disabled="pasted.trim().length === 0"
+                    @click="finish"
+                />
             </div>
             <div class="flex flex-wrap items-center gap-x-4">
                 <a :class="ui.linkButton(`text-2xs`)" :href="flow.url" target="_blank" rel="noopener" @click="openedProvider">
-                    Open {{ destination }} again<Icon name="external-link" />
+                    {{ t(`ui.action.open`) }} {{ destination }} {{ t(`sandbox.connectFlow.again`) }}<Icon name="external-link" />
                 </a>
-<!-- The dead-end page as reference rather than instruction: folded, and inert, so a press on it can't be swallowed by a picture. -->
+                <!-- The dead-end page as reference rather than instruction: folded, and inert, so a press on it can't be swallowed by a picture. -->
                 <button v-if="redirectFlow" type="button" :class="ui.textAction(`text-2xs`)" @click="showDeadEnd = !showDeadEnd">
-                    <Icon :name="showDeadEnd ? `chevron-down` : `chevron-right`" />What that page looks like
+                    <Icon :name="showDeadEnd ? `chevron-down` : `chevron-right`" />{{ t(`sandbox.connectFlow.whatPageLooksLike`) }}
                 </button>
             </div>
             <div
@@ -294,14 +309,20 @@ watch(flow, (live) => {
                 </div>
                 <div class="flex flex-col items-center gap-1 px-3 py-3">
                     <Icon name="globe" class="text-base text-content/20" />
-                    <span class="text-2xs text-subtle">This site can't be reached</span>
+                    <span class="text-2xs text-subtle">{{ t(`sandbox.connectFlow.siteCantReached`) }}</span>
                 </div>
             </div>
             <template v-if="namesTheAccount">
                 <button v-if="!namingAccount" type="button" :class="ui.textAction(`text-2xs text-subtle`)" @click="namingAccount = true">
-                    Name this account…
+                    {{ t(`sandbox.connectFlow.nameAccount`) }}
                 </button>
-                <input v-else v-model="connectLabel" name="accountLabel" placeholder="Account name" :class="ui.inputSm(`min-w-0`)" />
+                <input
+                    v-else
+                    v-model="connectLabel"
+                    name="accountLabel"
+                    :placeholder="t(`sandbox.connectFlow.accountName`)"
+                    :class="ui.inputSm(`min-w-0`)"
+                />
             </template>
         </template>
     </div>

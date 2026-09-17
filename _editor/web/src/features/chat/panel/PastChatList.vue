@@ -4,11 +4,14 @@ import type { ChatSession } from "../run/useChat-sessions";
 import MatchLine from "../../../components/MatchLine.vue";
 import { viewersOfSession } from "../../../shell/presence/usePresence";
 import PresenceAvatars from "../../../shell/presence/PresenceAvatars.vue";
+import { useT } from "@intentic/ui/i18n";
 
 // The past-chats list, stored sessions as reopenable rows. One body, two hosts (desktop AnchoredOverlay, mobile
 // BottomSheet), so the title/presence/snippet/time rule lives once instead of drifting between two copies. `touch`
 // is a real difference (a 48px row with an `:active` tint vs. a dense hover row), passed as a prop since the
 // mounting strip already knows its own device.
+
+const t = useT();
 
 defineProps<{ sessions: readonly ChatSession[]; query: string; touch?: boolean }>();
 const emit = defineEmits<{ open: [id: string] }>();
@@ -27,9 +30,9 @@ const emit = defineEmits<{ open: [id: string] }>();
             <span class="flex items-center gap-1.5">
                 <span class="min-w-0 flex-1 truncate text-content" :class="touch ? `text-sm` : `text-xs`">{{ session.title }}</span>
                 <!-- Members with this session open right now. -->
-                <PresenceAvatars :members="viewersOfSession(session.id)" label="in this chat" />
+                <PresenceAvatars :members="viewersOfSession(session.id)" :label="t(`chat.pastChatList.inChat`)" />
             </span>
-<!-- Why this row matched, when it wasn't the title: the line the query hit and which side said it. -->
+            <!-- Why this row matched, when it wasn't the title: the line the query hit and which side said it. -->
             <MatchLine
                 v-if="session.snippet !== undefined"
                 :snippet="session.snippet"
@@ -40,5 +43,7 @@ const emit = defineEmits<{ open: [id: string] }>();
         </button>
     </template>
     <!-- "No matching chats" and "no chats" are different facts, and the query is what tells them apart. -->
-    <p v-else class="px-2 py-3 text-center text-2xs text-subtle">{{ query ? "No matching chats." : "No previous chats." }}</p>
+    <p v-else class="px-2 py-3 text-center text-2xs text-subtle">
+        {{ query ? t(`chat.pastChatList.noMatchingChats`) : t(`chat.pastChatList.noPreviousChats`) }}
+    </p>
 </template>

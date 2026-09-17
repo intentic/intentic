@@ -5,12 +5,15 @@ import { computed, ref, watch } from "vue";
 import { sandboxBlob } from "../../sandbox/client/sandboxClient";
 import { useLayout } from "../../../shell/window/useLayout";
 import { compareSides, type ImageSize, imageSize, type SidesComparison } from "./imageSides";
+import { useT } from "@intentic/ui/i18n";
 
 // Before/after viewer for binary diffs (mainly images): DiffView's framing, bytes instead of text. Bytes come from
 // sandboxBlob as revocable blob: URLs, since daemon routes are Bearer-authenticated. Both panes share one zoom/pan
 // `view`; only renderable images draw inline, others hand over the bytes.
 
 // `at`: sandbox the bytes are on, absent for the active one; a wrong address could answer from a different file.
+const t = useT();
+
 const { path, before, after, at } = defineProps<{ path: string; before?: string; after?: string; at?: string }>();
 
 const { mobile } = useDevice();
@@ -151,8 +154,8 @@ const verdict = computed(() => {
 const panes = computed(() =>
     (
         [
-            { key: `before` as const, label: `Before`, url: before },
-            { key: `after` as const, label: `After`, url: after },
+            { key: `before` as const, label: t(`workspace.binaryDiffView.before`), url: before },
+            { key: `after` as const, label: t(`workspace.binaryDiffView.after`), url: after },
         ] as const
     ).flatMap((pane) => (pane.url === undefined ? [] : [{ key: pane.key, label: pane.label, side: loaded.value[pane.key] }])),
 );
@@ -173,7 +176,7 @@ const panes = computed(() =>
                 class="flex min-h-0 min-w-0 flex-1 flex-col"
                 :class="split && index > 0 ? 'border-line md:border-l' : index > 0 ? 'border-t border-line' : ''"
             >
-<!-- Side label, picture dimensions, and file size; dimensions matter most, since that's what tells two same-sized screenshots apart. -->
+                <!-- Side label, picture dimensions, and file size; dimensions matter most, since that's what tells two same-sized screenshots apart. -->
                 <div class="flex h-7 shrink-0 items-center gap-1.5 border-b border-line/60 px-2">
                     <span class="text-2xs font-medium uppercase tracking-wide" :class="pane.key === 'before' ? 'text-danger' : 'text-success'">
                         {{ pane.label }}
@@ -185,7 +188,7 @@ const panes = computed(() =>
                     <span
                         v-if="pane.key === 'after' && delta !== undefined"
                         class="text-2xs tabular-nums text-subtle"
-                        v-tooltip.bottom="`${delta} against the before side`"
+                        v-tooltip.bottom="t(`workspace.binaryDiffView.againstBeforeSide`, { delta })"
                     >
                         {{ delta }}
                     </span>
@@ -195,8 +198,8 @@ const panes = computed(() =>
                         type="button"
                         :class="ui.iconButton(`h-5 w-5 rounded`)"
                         @click="download(pane.side, pane.label.toLowerCase())"
-                        v-tooltip.bottom="`Download the ${pane.label.toLowerCase()} version`"
-                        :aria-label="`Download the ${pane.label.toLowerCase()} version of ${filename}`"
+                        v-tooltip.bottom="t(`workspace.binaryDiffView.downloadVersion`, { toLowerCase: pane.label.toLowerCase() })"
+                        :aria-label="t(`workspace.binaryDiffView.downloadVersion2`, { toLowerCase: pane.label.toLowerCase(), filename })"
                     >
                         <Icon name="download" class="text-2xs" />
                     </button>
@@ -210,7 +213,7 @@ const panes = computed(() =>
                         <Icon name="exclamation-triangle" class="text-2xl text-danger" />
                         <p class="text-xs text-danger">{{ pane.side.error }}</p>
                     </div>
-<!-- Shared view: zooming or panning either pane moves the other to match, the only way to compare two similar pictures by eye. -->
+                    <!-- Shared view: zooming or panning either pane moves the other to match, the only way to compare two similar pictures by eye. -->
                     <ImageView
                         v-else-if="renderable && pane.side.url"
                         :src="pane.side.url"
@@ -220,17 +223,17 @@ const panes = computed(() =>
                     <!-- Not an image: nothing to compare visually, so say what it is and hand over the bytes. -->
                     <div v-else class="flex h-full flex-col items-center justify-center gap-3 px-6 text-center">
                         <Icon name="box" class="text-3xl text-subtle" />
-                        <p class="max-w-sm text-xs text-muted">Binary file: no preview for this type.</p>
+                        <p class="max-w-sm text-xs text-muted">{{ t(`workspace.binaryDiffView.binaryFileNoPreview`) }}</p>
                         <Button v-if="pane.side.url" severity="secondary" @click="download(pane.side, pane.label.toLowerCase())">
                             <Icon name="download" class="text-xs" />
-                            Download
+                            {{ t(`ui.action.download`) }}
                         </Button>
                     </div>
                 </div>
             </div>
 
             <!-- Neither side exists (mode-only change, or a path that vanished before this fetch); rare, but not an error. -->
-            <p v-if="panes.length === 0" class="p-4 text-xs text-subtle">Binary file: neither side has content to show.</p>
+            <p v-if="panes.length === 0" class="p-4 text-xs text-subtle">{{ t(`workspace.binaryDiffView.binaryFileNeitherSide`) }}</p>
         </div>
     </div>
 </template>

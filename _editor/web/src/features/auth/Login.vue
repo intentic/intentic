@@ -8,6 +8,9 @@ import { useGoogleIdentity } from "./useGoogleIdentity";
 import { desktopVersion, signInThroughBrowser } from "../../app/environments/desktop";
 import { desktopInstaller } from "../../app/environments/desktopDownloads";
 import { returnPath } from "../../router/signIn";
+import { useT } from "@intentic/ui/i18n";
+
+const t = useT();
 
 const { signInWithGoogle, signInWithGoogleCredential } = useAuth();
 const { getIdToken, renderButton } = useGoogleIdentity();
@@ -17,7 +20,6 @@ const route = useRoute();
 // Where the guard sent this visitor; sanitized as both a router push and an OAuth callback (router/signIn.ts).
 const destination = computed(() => returnPath(route.query[`returnTo`]));
 
-
 // True in the desktop webview, where Google can't run; sign-in there hands off to the real browser instead.
 const desktop = computed(() => desktopVersion() !== undefined);
 
@@ -26,11 +28,7 @@ const desktop = computed(() => desktopVersion() !== undefined);
 // Titles only: a station on a rail names where you are, and the sentences under them cost this screen the
 // height that put a scrollbar on the desktop window.
 const install = desktopInstaller();
-const steps: readonly string[] = [
-    `Sign in with Google`,
-    `Your sandbox is waiting`,
-    install === undefined ? `Paste one command` : `Install the app`,
-];
+const steps: readonly string[] = [`Sign in with Google`, `Your sandbox is waiting`, install === undefined ? `Paste one command` : `Install the app`];
 
 // Mints one Google credential and spends it on both the platform and the sandbox, removing the second ask; the
 // credential the sandbox gets is unchanged. The escape link is unconditional because one failure mode (a button
@@ -92,7 +90,7 @@ watch(
 
 <template>
     <div class="entry door">
-<!-- Pinned to a fixed 16:9 across the full width so the two figures stay whole; the bottom crops instead, into the fade below. -->
+        <!-- Pinned to a fixed 16:9 across the full width so the two figures stay whole; the bottom crops instead, into the fade below. -->
         <div class="entry-plate" aria-hidden="true"><div class="entry-plate-img"></div></div>
 
         <main class="shell">
@@ -101,18 +99,24 @@ watch(
             <!-- Flanked, not underlined: a trailing hairline would tip sideways on this centred axis. -->
             <p class="entry-eyebrow">
                 <span class="entry-lozenge"></span>
-                <span>Welcome to intentic</span>
+                <span>{{ t(`auth.login.welcomeToIntentic`) }}</span>
                 <span class="entry-lozenge"></span>
             </p>
 
             <h1 class="headline">
-                <span class="beat"><span class="entry-display">Sign in</span><span class="entry-stop">.</span></span>
-                <span class="beat"><span class="entry-display">Build with agents</span><span class="entry-stop">.</span></span>
+                <span class="beat"
+                    ><span class="entry-display">{{ t(`auth.login.signIn`) }}</span
+                    ><span class="entry-stop">.</span></span
+                >
+                <span class="beat"
+                    ><span class="entry-display">{{ t(`auth.login.buildAgents`) }}</span
+                    ><span class="entry-stop">.</span></span
+                >
             </h1>
 
-            <p class="hero-sub">A workspace for coding agents.</p>
+            <p class="hero-sub">{{ t(`auth.login.workspaceCodingAgents`) }}</p>
 
-<!-- The one framed object here; the turned corner and lotus finial only appear on a panel big enough to carry them. -->
+            <!-- The one framed object here; the turned corner and lotus finial only appear on a panel big enough to carry them. -->
             <section class="entry-frame gate">
                 <span class="entry-corner entry-corner-tl"></span>
                 <span class="entry-corner entry-corner-tr"></span>
@@ -122,37 +126,39 @@ watch(
 
                 <p v-if="error" class="gate-error">{{ error }}</p>
 
-<!-- Google's button also supplies the sandbox credential, one sign-in for both. -->
+                <!-- Google's button also supplies the sandbox credential, one sign-in for both. -->
                 <div v-show="googleReady" class="entry-socket">
                     <div ref="googleButton" class="entry-socket-slot"></div>
                 </div>
 
-<!-- The site's primary button style (@intentic/entry-css), shown only when Google's embedded button could not render. -->
+                <!-- The site's primary button style (@intentic/entry-css), shown only when Google's embedded button could not render. -->
                 <Button
                     v-if="!googleReady"
-                    :label="desktop ? `Continue with Google in your browser` : `Continue with Google`"
+                    :label="desktop ? t(`auth.login.continueGoogleInBrowser`) : t(`auth.login.continueGoogle`)"
                     class="w-full justify-center"
                     @click="redirectSignIn"
                 >
                     <template #icon><Icon name="google" /></template>
                 </Button>
 
-<!-- Embedded-button failures are handled by the direct login path. -->
+                <!-- Embedded-button failures are handled by the direct login path. -->
                 <button v-if="googleReady && !desktop" type="button" class="escape" v-action="redirectSignIn">
-                    Trouble signing in? Use Google's own page.
+                    {{ t(`auth.login.troubleSigningInUse`) }}
                 </button>
 
                 <p class="fine">
-                    We keep your email address and your workspace's address, and nothing else. By continuing you agree to our
+                    {{ t(`auth.login.weKeepEmailAddress`) }}
                     <!-- Named separately from Terms since breaching it can destroy a hosted machine without notice. -->
-                    <a href="https://intentic.dev/terms/" target="_blank" rel="noopener">Terms</a>,
-                    <a href="https://intentic.dev/acceptable-use/" target="_blank" rel="noopener">Acceptable Use Policy</a> and
-                    <a href="https://intentic.dev/privacy/" target="_blank" rel="noopener">Privacy Policy</a>.
+                    <a href="https://intentic.dev/terms/" target="_blank" rel="noopener">{{ t(`auth.login.terms`) }}</a
+                    >, <a href="https://intentic.dev/acceptable-use/" target="_blank" rel="noopener">{{ t(`auth.login.acceptableUsePolicy`) }}</a>
+                    {{ t(`auth.login.and`) }}
+                    <a href="https://intentic.dev/privacy/" target="_blank" rel="noopener">{{ t(`auth.login.privacyPolicy`) }}</a
+                    >.
                 </p>
             </section>
 
             <section class="rail">
-                <p class="entry-eyebrow eyebrow-bare">Three steps to your first agent</p>
+                <p class="entry-eyebrow eyebrow-bare">{{ t(`auth.login.threeStepsToFirst`) }}</p>
                 <ol class="steps">
                     <li v-for="(step, index) in steps" :key="step" class="step" :aria-current="index === 0 ? `step` : undefined">
                         <span class="entry-lozenge"></span>
@@ -322,7 +328,7 @@ watch(
         top: 0.3rem;
         left: calc(-1.5rem - 0.275rem);
     }
-/* Google's own button sizes itself and is the widest fixed element; narrowing the slot keeps it a comfortable width on a phone. */
+    /* Google's own button sizes itself and is the widest fixed element; narrowing the slot keeps it a comfortable width on a phone. */
     .door {
         padding-left: 1rem;
         padding-right: 1rem;

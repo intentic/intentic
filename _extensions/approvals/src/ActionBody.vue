@@ -3,6 +3,7 @@
 import type { ActionApprovalSummary } from "@intentic/sandbox-contract";
 import { ui, Code, Markdown } from "@intentic/extension-ui";
 import { ref } from "vue";
+import { t } from "./i18n.js";
 
 const { action, tone = `full` } = defineProps<{
     action: ActionApprovalSummary;
@@ -31,7 +32,7 @@ const showInstructions = ref(false);
                 :aria-expanded="showInstructions"
                 @click="showInstructions = !showInstructions"
             >
-                {{ showInstructions ? `Hide what the agent will be told` : `What the agent will be told` }}
+                {{ showInstructions ? t(`actionBody.hideWhatAgentTold`) : t(`actionBody.whatAgentTold`) }}
                 <Icon :name="showInstructions ? `chevron-up` : `chevron-down`" />
             </button>
             <Code v-if="showInstructions" :code="action.instructions" class="mt-1" />

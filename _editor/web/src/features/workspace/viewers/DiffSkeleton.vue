@@ -2,13 +2,16 @@
 import { useDevice } from "@intentic/ui";
 import { computed } from "vue";
 import { useLayout } from "../../../shell/window/useLayout";
+import { useT } from "@intentic/ui/i18n";
 
 // Outline of a diff whose content hasn't arrived (what a `pending` tab shows). Drawn as the eventual layout, not
 // a spinner, since the reader already knows which file; the toolbar above already gives status and ± counts. Split
 // follows the same preference the real viewer reads, so the outline never promises a layout the diff then contradicts.
 
+const t = useT();
+
 const { bare = false } = defineProps<{
-/** Omit the status region when the caller already announces the review wait. */
+    /** Omit the status region when the caller already announces the review wait. */
     bare?: boolean;
 }>();
 
@@ -36,7 +39,7 @@ const LINES = [
 <template>
     <!-- The bars are decoration; role=status plus the sr-only line carry it to the readers who need it said. -->
     <div class="flex h-full min-h-0 overflow-hidden" :role="bare ? undefined : `status`" :aria-busy="bare ? undefined : true">
-        <span v-if="!bare" class="sr-only">Reading the file…</span>
+        <span v-if="!bare" class="sr-only">{{ t(`workspace.diffSkeleton.readingFile`) }}</span>
         <div
             v-for="pane in split ? 2 : 1"
             :key="pane"
@@ -45,7 +48,7 @@ const LINES = [
         >
             <span v-for="(line, index) in LINES" :key="index" class="flex items-center gap-3">
                 <!-- Gutter appears in every pane regardless of layout: the one column a reader can always count on. -->
-<!-- The app's own loading placeholder, not a hand-mixed tint of the same strength. -->
+                <!-- The app's own loading placeholder, not a hand-mixed tint of the same strength. -->
                 <span class="skeleton block h-2 w-4 shrink-0" />
                 <span class="skeleton block h-2" :class="[line.width, line.indent]" />
             </span>

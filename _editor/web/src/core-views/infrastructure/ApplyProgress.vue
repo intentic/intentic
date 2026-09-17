@@ -3,13 +3,18 @@ import { computed } from "vue";
 import { Button, Card, ui, Notice, type NoticeModel, ProgressRing } from "@intentic/ui";
 import PlanStepRow from "../../components/PlanStepRow.vue";
 import type { useApplyProgress } from "./useApplyProgress";
+import { useT } from "@intentic/ui/i18n";
+
+const t = useT();
 
 /* The live apply progress, replacing the old spinner + "follow progress in the terminal": per-resource rows (creating → created). */
 const { progress } = defineProps<{ progress: ReturnType<typeof useApplyProgress> }>();
 const { applying, reattaching, error, nodes, readiness, iterations, prunes, orphans, converged, applyPhaseDone, progressPct } = progress;
 // The runner reports a bare message and no idea what it was applying; this card does.
 const applyNotice = computed<NoticeModel | undefined>(() =>
-    error.value === undefined ? undefined : { tone: `danger`, title: `Applying your changes failed.`, detail: error.value },
+    error.value === undefined
+        ? undefined
+        : { tone: `danger`, title: t(`views.infrastructureApplyProgress.applyingChangesFailed`), detail: error.value },
 );
 </script>
 
@@ -22,17 +27,25 @@ const applyNotice = computed<NoticeModel | undefined>(() =>
                 <Icon v-else-if="error" name="exclamation-triangle" class="text-danger" />
                 <Icon v-else name="check-circle" class="text-success" />
                 <span class="text-sm font-medium text-content">
-                    {{ error ? "Apply failed" : applying ? (applyPhaseDone ? "Finishing up…" : "Applying changes…") : "Applied" }}
+                    {{
+                        error
+                            ? t(`views.applyProgress.applyFailed`)
+                            : applying
+                              ? applyPhaseDone
+                                  ? t(`views.applyProgress.finishingUp`)
+                                  : t(`views.applyProgress.applyingChanges`)
+                              : t(`views.applyProgress.applied`)
+                    }}
                 </span>
             </div>
-            <Button label="View logs" size="small" severity="secondary" :text="true" @click="progress.viewLogs()">
+            <Button :label="t(`views.applyProgress.viewLogs`)" size="small" severity="secondary" :text="true" @click="progress.viewLogs()">
                 <template #icon><Icon name="window-maximize" /></template>
             </Button>
         </div>
 
         <!-- The progress stream dropped and is being re-opened: the job itself is unaffected (it runs in tmux). -->
         <p v-if="reattaching" class="flex items-center gap-1.5 text-2xs text-warning">
-            <Icon name="refresh" spin /> Progress stream dropped: reconnecting… (the apply itself keeps running)
+            <Icon name="refresh" spin /> {{ t(`views.applyProgress.progressStreamDroppedReconnecting`) }}
         </p>
 
         <!-- Per-resource apply progress: a spinner + present-tense label while in flight, the action badge once done. -->
@@ -83,13 +96,15 @@ const applyNotice = computed<NoticeModel | undefined>(() =>
                 context="plan"
             />
         </div>
-        <p v-if="orphans.length > 0" class="text-2xs text-warning">Not in your intent: {{ orphans.map((orphan) => orphan.id).join(", ") }}</p>
+        <p v-if="orphans.length > 0" class="text-2xs text-warning">
+            {{ t(`views.applyProgress.notInYourIntent`, { ids: orphans.map((orphan) => orphan.id).join(`, `) }) }}
+        </p>
 
         <p v-if="applyPhaseDone && converged !== undefined && !error" class="text-xs" :class="converged ? 'text-success' : 'text-warning'">
             {{
                 converged
-                    ? `Converged in ${iterations.length} iteration${iterations.length === 1 ? "" : "s"}.`
-                    : "Didn't fully converge, a re-apply may be needed."
+                    ? t(`views.applyProgress.convergedIn`, { count: iterations.length }, iterations.length)
+                    : t(`views.applyProgress.didntFullyConvergeRe`)
             }}
         </p>
 

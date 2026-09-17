@@ -2,17 +2,18 @@ import { type AgentProvider, type CatalogOption, type Persona, providerLabel } f
 import type { IconName } from "@intentic/ui";
 import { filterEntries, normalize, type PickerEntry } from "../models/modelPickerState";
 import { QUICK_KINDS, type QuickKind } from "./useMentions";
+import { t } from "@intentic/ui/i18n";
 
 // The rows the composer's `@` token offers besides files: the four turn settings, as one pure derivation over plain
 // data. A kind whose source is undefined is not offered at all (the pill row refuses it too), so it appears in
 // neither the summary nor a search. Files are the component's own list, appended after these.
 
-export const KIND_META: Record<QuickKind, { readonly label: string; readonly badge: string; readonly icon: IconName }> = {
-    persona: { label: `Acts as`, badge: `Persona`, icon: `users` },
-    sandbox: { label: `Where this runs`, badge: `Where`, icon: `desktop` },
-    model: { label: `Model`, badge: `Model`, icon: `cpu` },
-    effort: { label: `Effort`, badge: `Effort`, icon: `bolt` },
-};
+export const kindMeta = (): Record<QuickKind, { readonly label: string; readonly badge: string; readonly icon: IconName }> => ({
+    persona: { label: t(`chat.composerQuickPick.acts`), badge: `Persona`, icon: `users` },
+    sandbox: { label: t(`chat.composerQuickPick.whereRuns`), badge: `Where`, icon: `desktop` },
+    model: { label: t(`chat.composerQuickPick.model`), badge: `Model`, icon: `cpu` },
+    effort: { label: t(`chat.composerQuickPick.effort`), badge: `Effort`, icon: `bolt` },
+});
 
 export interface QuickPickSources {
     readonly persona: { readonly cards: readonly Persona[]; readonly picked: string | undefined } | undefined;
@@ -45,7 +46,12 @@ interface RowBase {
 // A summary row: the kind's current value; picking it drills into that kind.
 type DrillRow = RowBase & { readonly kind: `drill`; readonly into: QuickKind };
 type PersonaRow = RowBase & { readonly kind: `persona`; readonly id: string | undefined; readonly current: boolean };
-type SandboxRow = RowBase & { readonly kind: `sandbox`; readonly box: string | undefined; readonly runner: string | undefined; readonly current: boolean };
+type SandboxRow = RowBase & {
+    readonly kind: `sandbox`;
+    readonly box: string | undefined;
+    readonly runner: string | undefined;
+    readonly current: boolean;
+};
 type ModelRow = RowBase & { readonly kind: `model`; readonly entry: PickerEntry; readonly current: boolean };
 type EffortRow = RowBase & { readonly kind: `effort`; readonly value: string; readonly current: boolean };
 export type QuickRow = DrillRow | PersonaRow | SandboxRow | ModelRow | EffortRow;
@@ -64,17 +70,22 @@ const matches = (query: string, ...texts: (string | undefined)[]): boolean => {
 
 const personaRows = (source: NonNullable<QuickPickSources[`persona`]>, query: string): PersonaRow[] => {
     const rows: PersonaRow[] = [
-        { kind: `persona`, key: `persona:`, id: undefined, label: `Anyone`, detail: `Every connected account`, current: source.picked === undefined },
-        ...source.cards.map(
-            (card): PersonaRow => ({
-                kind: `persona`,
-                key: `persona:${card.id}`,
-                id: card.id,
-                label: card.label ?? card.id,
-                detail: card.brief ?? (card.capabilities.length > 0 ? card.capabilities.join(` · `) : undefined),
-                current: source.picked === card.id,
-            }),
-        ),
+        {
+            kind: `persona`,
+            key: `persona:`,
+            id: undefined,
+            label: t(`chat.composerQuickPick.anyone`),
+            detail: t(`chat.composerQuickPick.everyConnectedAccount`),
+            current: source.picked === undefined,
+        },
+        ...source.cards.map((card): PersonaRow => ({
+            kind: `persona`,
+            key: `persona:${card.id}`,
+            id: card.id,
+            label: card.label ?? card.id,
+            detail: card.brief ?? (card.capabilities.length > 0 ? card.capabilities.join(` · `) : undefined),
+            current: source.picked === card.id,
+        })),
     ];
     return rows.filter((row) => matches(query, row.label, row.id));
 };
@@ -82,29 +93,33 @@ const personaRows = (source: NonNullable<QuickPickSources[`persona`]>, query: st
 const sandboxRows = (source: NonNullable<QuickPickSources[`sandbox`]>, query: string): SandboxRow[] => {
     const here = source.box === undefined && source.runner === undefined;
     const rows: SandboxRow[] = [
-        { kind: `sandbox`, key: `sandbox:`, box: undefined, runner: undefined, label: `This sandbox`, detail: `Here`, current: here },
-        ...source.runners.map(
-            (runner): SandboxRow => ({
-                kind: `sandbox`,
-                key: `sandbox:runner:${runner.id}`,
-                box: undefined,
-                runner: runner.id,
-                label: runner.id,
-                detail: `Runner on your computer`,
-                current: source.runner === runner.id,
-            }),
-        ),
-        ...source.boxes.map(
-            (box): SandboxRow => ({
-                kind: `sandbox`,
-                key: `sandbox:box:${box.id}`,
-                box: box.id,
-                runner: undefined,
-                label: box.name,
-                detail: `Another sandbox`,
-                current: source.box === box.id,
-            }),
-        ),
+        {
+            kind: `sandbox`,
+            key: `sandbox:`,
+            box: undefined,
+            runner: undefined,
+            label: t(`chat.composerQuickPick.sandbox`),
+            detail: t(`chat.composerQuickPick.here`),
+            current: here,
+        },
+        ...source.runners.map((runner): SandboxRow => ({
+            kind: `sandbox`,
+            key: `sandbox:runner:${runner.id}`,
+            box: undefined,
+            runner: runner.id,
+            label: runner.id,
+            detail: t(`chat.composerQuickPick.runnerOnComputer`),
+            current: source.runner === runner.id,
+        })),
+        ...source.boxes.map((box): SandboxRow => ({
+            kind: `sandbox`,
+            key: `sandbox:box:${box.id}`,
+            box: box.id,
+            runner: undefined,
+            label: box.name,
+            detail: t(`chat.composerQuickPick.anotherSandbox`),
+            current: source.box === box.id,
+        })),
     ];
     return rows.filter((row) => matches(query, row.label));
 };
@@ -131,7 +146,14 @@ const modelRows = (source: NonNullable<QuickPickSources[`model`]>, query: string
 
 const effortRows = (source: NonNullable<QuickPickSources[`effort`]>, query: string): EffortRow[] =>
     source.options
-        .map((option): EffortRow => ({ kind: `effort`, key: `effort:${option.value}`, value: option.value, label: option.label, detail: undefined, current: source.picked === option.value }))
+        .map((option): EffortRow => ({
+            kind: `effort`,
+            key: `effort:${option.value}`,
+            value: option.value,
+            label: option.label,
+            detail: undefined,
+            current: source.picked === option.value,
+        }))
         .filter((row) => matches(query, row.label, row.value));
 
 const rowsOf = (sources: QuickPickSources, kind: QuickKind, query: string): QuickRow[] => {
@@ -183,14 +205,19 @@ const summaryRows = (sources: QuickPickSources, query: string): DrillRow[] =>
         if (value === undefined) {
             return [];
         }
-        const meta = KIND_META[kind];
-        return matches(query, kind, meta.label, meta.badge) ? [{ kind: `drill`, key: `drill:${kind}`, into: kind, label: meta.label, detail: value }] : [];
+        const meta = kindMeta()[kind];
+        return matches(query, kind, meta.label, meta.badge)
+            ? [{ kind: `drill`, key: `drill:${kind}`, into: kind, label: meta.label, detail: value }]
+            : [];
     });
 
 // The setting rows for one token. Empty: one summary row per offered kind. Drilled (`model:son`): that kind alone,
 // its list capped for scrolling. Typing (`son`): the summary rows the word names, then each kind's matches in kind
 // order, models capped so files below stay within reach.
-export const quickRows = (sources: QuickPickSources, token: { readonly kind: QuickKind | undefined; readonly query: string }): readonly QuickRow[] => {
+export const quickRows = (
+    sources: QuickPickSources,
+    token: { readonly kind: QuickKind | undefined; readonly query: string },
+): readonly QuickRow[] => {
     if (token.kind !== undefined) {
         return rowsOf(sources, token.kind, token.query).slice(0, DRILLED_ROWS);
     }

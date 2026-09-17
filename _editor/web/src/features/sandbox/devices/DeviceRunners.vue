@@ -7,10 +7,13 @@ import DeviceOpFailure from "./DeviceOpFailure.vue";
 import { runnerFallback } from "./deviceFallback";
 import { createRunner, removeRunner, syncRunnerSettings, updateRunner, useRunners } from "./useRunners";
 import { useHubWork } from "../../../shell/hub/hubWork";
+import { useT } from "@intentic/ui/i18n";
 
 // This sandbox's runners on one device: containers it keeps there to run agents (docs/remote-runners-plan.md),
 // separate from the sandbox list above (workspaces belonging to a person). Only runners this sandbox asked for
 // appear under a machine; one started by hand has no host recorded and no row here.
+
+const t = useT();
 
 const { device } = defineProps<{ device: Device }>();
 
@@ -134,15 +137,19 @@ const add = async (): Promise<void> => {
 </script>
 
 <template>
-<!-- "on this device", not "for this sandbox": this list sits under the machine's own sandbox list. -->
-    <RowGroup v-if="device.hostId !== undefined" label="Runners on this device" :count="mine.length === 0 ? undefined : mine.length">
+    <!-- "on this device", not "for this sandbox": this list sits under the machine's own sandbox list. -->
+    <RowGroup
+        v-if="device.hostId !== undefined"
+        :label="t(`sandbox.deviceRunners.runnersOnDevice`)"
+        :count="mine.length === 0 ? undefined : mine.length"
+    >
         <template #actions>
             <Button
                 v-if="!adding"
                 size="small"
                 severity="secondary"
                 :text="true"
-                label="Add runner"
+                :label="t(`sandbox.deviceRunners.addRunner`)"
                 :disabled="busy !== undefined || device.online !== true"
                 @click="adding = true"
             >
@@ -155,13 +162,13 @@ const add = async (): Promise<void> => {
             <input
                 v-model="asked"
                 type="text"
-                placeholder="a name, e.g. rog"
+                :placeholder="t(`sandbox.deviceRunners.nameEGRog`)"
                 :class="ui.inputSm(`w-44`)"
                 @keydown.enter.prevent="add()"
                 @keydown.esc.prevent="adding = false"
             />
-            <Button size="small" label="Create" :disabled="asked === `` || nameError !== undefined" @click="add()" />
-            <Button size="small" severity="secondary" :text="true" label="Cancel" @click="adding = false" />
+            <Button size="small" :label="t(`ui.action.create`)" :disabled="asked === `` || nameError !== undefined" @click="add()" />
+            <Button size="small" severity="secondary" :text="true" :label="t(`ui.action.cancel`)" @click="adding = false" />
             <span v-if="nameError" class="text-2xs text-danger">{{ nameError }}</span>
         </RowNote>
 
@@ -176,16 +183,16 @@ const add = async (): Promise<void> => {
                         {{ driftSummary(runner) }}
                     </span>
                 </span>
-                <StatusBadge v-if="!runner.online" variant="neutral" size="xs" label="offline" />
-<!-- A runner behind the parent runs fine until it doesn't, then fails as a link error rather than an old machine; drift is said here instead. -->
-                <StatusBadge v-else-if="runner.parity === `outdated`" variant="warning" size="xs" label="outdated" />
-<!-- Update rebuilds an outdated container; Sync pushes the fixable half over the runner's live link. -->
+                <StatusBadge v-if="!runner.online" variant="neutral" size="xs" :label="t(`sandbox.deviceRunners.offline`)" />
+                <!-- A runner behind the parent runs fine until it doesn't, then fails as a link error rather than an old machine; drift is said here instead. -->
+                <StatusBadge v-else-if="runner.parity === `outdated`" variant="warning" size="xs" :label="t(`sandbox.deviceRunners.outdated`)" />
+                <!-- Update rebuilds an outdated container; Sync pushes the fixable half over the runner's live link. -->
                 <span class="ml-auto flex items-center gap-1">
                     <Button
                         v-if="runner.parity === `outdated` && runner.online"
                         size="small"
                         severity="secondary"
-                        label="Update"
+                        :label="t(`ui.action.update`)"
                         :disabled="busy !== undefined || device.online !== true"
                         @click="run(`update`, runner.id)"
                     />
@@ -194,7 +201,7 @@ const add = async (): Promise<void> => {
                         size="small"
                         severity="secondary"
                         :text="true"
-                        :label="syncing === runner.id ? `Syncing…` : `Sync settings`"
+                        :label="syncing === runner.id ? t(`sandbox.deviceRunners.syncing`) : t(`sandbox.deviceRunners.syncSettings`)"
                         :disabled="syncing !== undefined || busy !== undefined"
                         @click="sync(runner.id)"
                     />
@@ -202,7 +209,7 @@ const add = async (): Promise<void> => {
                         size="small"
                         severity="secondary"
                         :text="true"
-                        label="Remove"
+                        :label="t(`ui.action.remove`)"
                         :disabled="busy !== undefined || device.online !== true"
                         @click="run(`remove`, runner.id)"
                     />
@@ -211,9 +218,9 @@ const add = async (): Promise<void> => {
         </ul>
 
         <!-- Said where the list would be, since an empty surface with a heading reads as a failure to load. -->
-        <RowNote v-if="mine.length === 0 && !adding" variant="empty">
-            This sandbox keeps no runner on {{ device.label }}. Add one to hand it conversations to run there.
-        </RowNote>
+        <RowNote v-if="mine.length === 0 && !adding" variant="empty">{{
+            t(`sandbox.deviceRunners.sandboxKeepsNoRunner`, { label: device.label })
+        }}</RowNote>
 
         <!-- The machine's own output while `ic` works, and whatever it said at the end. -->
         <RowNote v-if="busy !== undefined || failure || done" variant="block" class="flex flex-col gap-1">
@@ -221,8 +228,8 @@ const add = async (): Promise<void> => {
                 v-if="busy !== undefined"
                 :lines="lines"
                 :running="true"
-                empty="Starting on that device…"
-                note="Running on that device. It keeps going even if you leave this page."
+                :empty="t(`sandbox.deviceRunners.startingOnDevice`)"
+                :note="t(`sandbox.deviceRunners.runningOnDeviceKeeps`)"
             />
             <DeviceOpFailure v-if="failure" :of="failure.notice" :command="failure.command" :machine="device.label" />
             <p v-else-if="done" class="text-xs text-muted">{{ done }}</p>
@@ -231,15 +238,12 @@ const add = async (): Promise<void> => {
         <ConfirmDialog
             :open="confirmingRemove !== undefined"
             :header="removeHeader"
-            confirm-label="Remove"
+            :confirm-label="t(`ui.action.remove`)"
             confirm-icon="trash"
             @cancel="confirmingRemove = undefined"
             @confirm="removeConfirmed"
         >
-            <p>
-                The runner comes off {{ device.label }}. Its work lives in this sandbox's git, so nothing is lost with it — and you can make a new
-                one here any time.
-            </p>
+            <p>{{ t(`sandbox.deviceRunners.runnerComesOffWork`, { label: device.label }) }}</p>
         </ConfirmDialog>
     </RowGroup>
 </template>

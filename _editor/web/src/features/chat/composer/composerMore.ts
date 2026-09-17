@@ -2,6 +2,7 @@ import type { PermissionMode } from "@intentic/sandbox-contract";
 import type { IconName } from "@intentic/ui";
 import { modeMeta } from "../models/catalog";
 import type { RunThroughState } from "../models/useRunThrough";
+import { t } from "@intentic/ui/i18n";
 
 // One rule for the composer row vs overflow: a control at its default is a named row in the overflow
 // menu; set to anything else, it becomes a chip on the row. A pure, testable table; placement, model
@@ -73,14 +74,38 @@ const rowFor = (control: ComposerControl, situation: ComposerControlSituation): 
         case `mode`: {
             // Reads the live mode, not MODE_META's description, which is written for the picker and wraps here.
             const meta = modeMeta(situation.mode);
-            return { key: control, icon: meta.icon, label: `Agent mode`, value: meta.label, description: `How much it may do before asking.` };
+            return {
+                key: control,
+                icon: meta.icon,
+                label: t(`chat.composerMore.agentMode`),
+                value: meta.label,
+                description: t(`chat.composerMore.howMuchMayDo`),
+            };
         }
         case `persona`:
-            return { key: control, icon: `users`, label: `Acts as`, value: `Anyone`, description: `One persona's accounts only.` };
+            return {
+                key: control,
+                icon: `users`,
+                label: t(`chat.composerMore.acts`),
+                value: `Anyone`,
+                description: t(`chat.composerMore.onePersonasAccountsOnly`),
+            };
         case `runThrough`:
-            return { key: control, icon: `fork`, label: `Run through`, value: `Just this chat`, description: `Loop it, or run a workflow.` };
+            return {
+                key: control,
+                icon: `fork`,
+                label: t(`chat.composerMore.runThrough`),
+                value: `Just this chat`,
+                description: t(`chat.composerMore.loopRunWorkflow`),
+            };
         case `voice`:
-            return { key: control, icon: `robot`, label: `Write as agent`, value: `Off`, description: `Lands in the transcript, no reply.` };
+            return {
+                key: control,
+                icon: `robot`,
+                label: t(`chat.composerMore.writeAgent`),
+                value: `Off`,
+                description: t(`chat.composerMore.landsInTranscriptNo`),
+            };
     }
 };
 

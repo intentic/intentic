@@ -4,10 +4,13 @@ import { useAgents } from "../../agents/fleet/useAgents";
 import { useChat } from "../run/useChat";
 import { usePaneView } from "../panel/useChat-view";
 import { openAgentConversation } from "../panel/useChat-reveal";
+import { useT } from "@intentic/ui/i18n";
 
 // Banner at the top of a forked transcript linking back to the chat it inherited turns from, so the two stay
 // comparable. Read from the fleet registry rather than the tab, since the registry has carried the fork's source since
 // the first turn, unlike a reopened tab.
+
+const t = useT();
 
 const { conversation } = usePaneView();
 const { agentById } = useAgents();
@@ -43,7 +46,7 @@ const openSource = (): void => {
     <div v-if="forkedFrom" class="flex items-center justify-center gap-1.5 px-3 pb-1 text-2xs text-subtle">
         <Icon name="fork" class="text-2xs" />
         <span>
-            Forked from
+            {{ t(`chat.chatForkLine.forked`) }}
             <button
                 v-if="reachable"
                 type="button"
@@ -52,7 +55,7 @@ const openSource = (): void => {
             >
                 {{ label }}
             </button>
-            <span v-else class="italic">a chat that is no longer here</span>
+            <span v-else class="italic">{{ t(`chat.chatForkLine.chatNoLongerHere`) }}</span>
             <span> · {{ files }}</span>
         </span>
     </div>

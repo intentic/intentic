@@ -5,10 +5,13 @@ import { ui, Picker } from "@intentic/ui";
 import ToggleSwitch from "primevue/toggleswitch";
 import { onMounted } from "vue";
 import { extensionSettingsStore } from "../../extensions/useExtensionSettings";
+import { useT } from "@intentic/ui/i18n";
 
 // One extension's declared settings, rendered schema-driven by type (boolean, enum, string/number, secret). Values live
 // in the shared per-extension store, so a running extension's api.settings sees an edit immediately. Its own component
 // since it's the one form inside a list meant to be scanned, not read line by line.
+
+const t = useT();
 
 const { extensionId, settings } = defineProps<{ extensionId: string; settings: readonly SettingContribution[] }>();
 
@@ -40,7 +43,7 @@ const secretIsSet = (setting: SettingContribution): boolean => store().secretsSe
                 <p v-if="setting.description" class="text-2xs text-muted">{{ setting.description }}</p>
                 <!-- The env var name the agent's shell sees this value under; invisible everywhere else. -->
                 <p v-if="setting.env" class="text-2xs text-subtle">
-                    reaches the agent as <span class="font-mono">{{ setting.env }}</span>
+                    {{ t(`sandbox.extensionSettingsForm.reachesAgent`) }} <span class="font-mono">{{ setting.env }}</span>
                 </p>
             </div>
             <!-- Write-only: the stored value never reaches the browser; typing a new one replaces it, and saving empty clears it. -->
@@ -49,7 +52,7 @@ const secretIsSet = (setting: SettingContribution): boolean => store().secretsSe
                 type="password"
                 autocomplete="off"
                 :class="ui.inputSm(`w-48 shrink-0`)"
-                :placeholder="secretIsSet(setting) ? `•••••• (set)` : `Enter value`"
+                :placeholder="secretIsSet(setting) ? t(`sandbox.extensionSettingsForm.set`) : t(`sandbox.extensionSettingsForm.enterValue`)"
                 :aria-label="setting.title"
                 @change="(event) => setValue(setting, (event.target as HTMLInputElement).value)"
             />
@@ -66,7 +69,7 @@ const secretIsSet = (setting: SettingContribution): boolean => store().secretsSe
                 class="w-48 shrink-0"
                 :model-value="String(valueOf(setting) ?? ``) || undefined"
                 :options="(setting.enum ?? []).map((option) => ({ value: option, label: option }))"
-                placeholder="Choose…"
+                :placeholder="t(`sandbox.extensionSettingsForm.choose`)"
                 :aria-label="setting.title"
                 @update:model-value="(value: string | undefined) => value !== undefined && setValue(setting, value)"
             />

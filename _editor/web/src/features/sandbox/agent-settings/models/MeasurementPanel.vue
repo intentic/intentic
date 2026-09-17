@@ -13,10 +13,13 @@ export interface PanelReading {
 <script setup lang="ts">
 import { Row, ui, Verdict } from "@intentic/ui";
 import { commitPercent } from "./numberInputs";
+import { useT } from "@intentic/ui/i18n";
 
 // Shared "measure it" block for the two settings with an experiment (iq search teaching, output cleaners), built from
 // `<Row>`/`<Verdict>` primitives rather than hand-drawn markup. Shows one headline reading (the experiment's first
 // metric) plus secondary readings below it; methodology belongs in the group's info dialog, not here.
+
+const t = useT();
 
 const {
     percent,
@@ -41,15 +44,14 @@ const {
 const emit = defineEmits<{ commit: [fraction: number] }>();
 
 // Formatted here, not in the template: `<Verdict>` takes evidence as a plain string.
-const evidenceOf = (reading: PanelReading): string =>
-    `${reading.on.toLocaleString()} ${onLabel} · ${reading.off.toLocaleString()} ${offLabel}`;
+const evidenceOf = (reading: PanelReading): string => `${reading.on.toLocaleString()} ${onLabel} · ${reading.off.toLocaleString()} ${offLabel}`;
 </script>
 
 <template>
     <!-- No background or border of its own: the row's `#below` and the group's `divide-y` already provide the boundaries. -->
     <div class="flex flex-col gap-3">
         <!-- `flush`: the row above already pays the padding. `dense`: this is that row's child, ranked below it. -->
-        <Row flush density="dense" title="Measure it" :description="note">
+        <Row flush density="dense" :title="t(`sandbox.measurementPanel.measure`)" :description="note">
             <template #control>
                 <span class="flex shrink-0 items-center gap-1">
                     <input
@@ -58,7 +60,7 @@ const evidenceOf = (reading: PanelReading): string =>
                         max="100"
                         :value="percent"
                         :disabled="disabled"
-                        aria-label="Control group, as a percentage"
+                        :aria-label="t(`sandbox.measurementPanel.controlGroupPercentage`)"
                         :class="ui.inputSm('w-16 text-right')"
                         @change="(event: Event) => commitPercent(event, percent, (fraction: number) => emit(`commit`, fraction))"
                     />

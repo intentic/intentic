@@ -4,8 +4,11 @@ import { computed, ref } from "vue";
 import DeviceBoardCard from "./DeviceBoardCard.vue";
 import { type MachineRow, rowMatches, showFilter } from "./deviceRows";
 import { desktopApp } from "../../../app/environments/desktop";
+import { useT } from "@intentic/ui/i18n";
 
 // Device cards list paired machines, one per PC however many doors it has; controls live on each machine's page.
+
+const t = useT();
 
 const { rows, isLoading, notice, outline, ownSlug, readAt } = defineProps<{
     rows: readonly MachineRow[];
@@ -32,15 +35,16 @@ const inDesktopApp = desktopApp() !== undefined;
 </script>
 
 <template>
-    <RowGroup label="Devices">
+    <RowGroup :label="t(`sandbox.deviceBoard.devices`)">
         <template #actions>
-            <Button size="small" severity="secondary" label="Add a device" @click="emit(`add`)">
+            <Button size="small" severity="secondary" :label="t(`sandbox.deviceBoard.addDevice`)" @click="emit(`add`)">
                 <template #icon><Icon name="plus" /></template>
             </Button>
         </template>
 
         <RowNote v-if="inDesktopApp" icon="desktop">
-            This device's own sandboxes are also in <b>This device</b>, from the Intentic icon in your tray.
+            {{ t(`sandbox.deviceBoard.devicesOwnSandboxesAlso`) }} <b>{{ t(`sandbox.deviceBoard.device`) }}</b
+            >{{ t(`sandbox.deviceBoard.intenticIconInTray`) }}
         </RowNote>
 
         <!-- Shown only once there's something to search; ports are matched too. -->
@@ -48,8 +52,8 @@ const inDesktopApp = desktopApp() !== undefined;
             <SearchBar
                 v-model="query"
                 variant="field"
-                placeholder="Filter by device, sandbox, folder or port"
-                aria-label="Filter devices"
+                :placeholder="t(`sandbox.deviceBoard.filterByDeviceSandbox`)"
+                :aria-label="t(`sandbox.deviceBoard.filterDevices`)"
                 :clearable="true"
             />
         </RowNote>
@@ -57,18 +61,17 @@ const inDesktopApp = desktopApp() !== undefined;
         <Notice v-if="notice" :of="notice" class="m-4" />
         <div v-else-if="isLoading" role="status" aria-busy="true">
             <template v-if="outline">
-                <span class="sr-only">Reading your devices…</span>
+                <span class="sr-only">{{ t(`sandbox.deviceBoard.readingDevices`) }}</span>
                 <SkeletonRows :rows="2" description />
             </template>
         </div>
         <RowNote v-else-if="rows.length === 0" variant="empty">
-            No device is paired with this sandbox yet. Add one to work on it from your own editor, or connect a Linux/Windows PC from Capabilities to
-            let the agent work there.
+            {{ t(`sandbox.deviceBoard.noDevicePairedSandbox`) }}
         </RowNote>
 
         <DeviceBoardCard v-for="row in shown" :key="row.key" :machine="row" :needle="needle" :own-slug="ownSlug" :read-at="readAt" />
 
         <!-- A filter that matched nothing says so, rather than leaving a group that looks empty by accident. -->
-        <RowNote v-if="shown.length === 0 && rows.length > 0" variant="empty">No device or sandbox here matches "{{ query }}".</RowNote>
+        <RowNote v-if="shown.length === 0 && rows.length > 0" variant="empty">{{ t(`sandbox.deviceBoard.noDeviceSandboxHere`, { query }) }}</RowNote>
     </RowGroup>
 </template>

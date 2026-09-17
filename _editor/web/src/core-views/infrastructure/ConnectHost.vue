@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ui, Code, commandLang, InfoHint, OS_OPTIONS, SegmentedControl, useOsPreference } from "@intentic/ui";
+import { ui, Code, commandLang, InfoHint, osOptions, SegmentedControl, useOsPreference } from "@intentic/ui";
 import { computed, onUnmounted, ref } from "vue";
 import { useInventory } from "../../features/extensions/useInventory";
 import { useSandbox } from "../../features/sandbox/client/useSandbox";
@@ -7,10 +7,13 @@ import { bashCommand, psCommand } from "../../app/environments/scriptCommand";
 import ScriptSourceSwitch from "../../features/capabilities/connect/ScriptSourceSwitch.vue";
 import { zoneFromUrl } from "@intentic/sandbox-contract";
 import { normalizeHostName } from "./hostName";
+import { useT } from "@intentic/ui/i18n";
 
 // Shared connect-a-server flow, shown as InfraDeclare's requirement card and behind its Add-server button.
 // One command sets up the host and self-registers via /enroll; no sandbox recreate, no keys pasted here.
 // Always carries the user's own Cloudflare token: intentic's tunnels carry web traffic only.
+const t = useT();
+
 const { entries, refetch } = useInventory();
 const { active, daemonUrl } = useSandbox();
 
@@ -91,62 +94,59 @@ onUnmounted(() => clearInterval(timer));
     <div class="@container flex flex-col gap-3">
         <div>
             <div class="flex items-center gap-2">
-                <h3 class="font-semibold text-content">Connect a server</h3>
-                <InfoHint label="How connecting a machine works">
-                    <span class="block text-sm font-medium text-content">Connect a machine</span>
+                <h3 class="font-semibold text-content">{{ t(`views.connectHost.connectServer`) }}</h3>
+                <InfoHint :label="t(`views.connectHost.howConnectingMachineWorks`)">
+                    <span class="block text-sm font-medium text-content">{{ t(`views.connectHost.connectMachine`) }}</span>
                     <span class="mt-1 block text-xs text-muted">
-                        Run the command on any host (the machine this sandbox runs on, or another). It creates a service user + SSH key + a Cloudflare
-                        tunnel and registers the host with your sandbox. Run it on more machines to spread services across them.
+                        {{ t(`views.connectHost.runCommandOnAny`) }}
                     </span>
                 </InfoHint>
             </div>
             <p class="mt-0.5 text-xs text-muted">
                 <!-- Placement-specific: the requirement cards say why a server is being asked for. -->
                 <slot name="reason"></slot>
-                One command, run on the target host as root. Cloudflare is set up as part of it.
+                {{ t(`views.connectHost.oneCommandRunOn`) }}
             </p>
         </div>
 
         <form class="flex flex-col gap-3" @submit.prevent>
             <div class="grid gap-3 @lg:grid-cols-2">
                 <label class="ui-field">
-                    <span class="ui-field-label">Cloudflare API token</span>
+                    <span class="ui-field-label">{{ t(`views.connectHost.cloudflareApiToken`) }}</span>
                     <input
                         v-model="cfToken"
                         type="password"
                         autocomplete="off"
-                        placeholder="Paste your Cloudflare API token"
+                        :placeholder="t(`views.connectHost.pasteCloudflareApiToken`)"
                         :class="[ui.input(), cfTokenTouched && cfToken.trim().length > 0 && !cfTokenValid ? 'ui-field-error-box' : '']"
                         @blur="cfTokenTouched = true"
                     />
                     <span v-if="cfTokenTouched && cfToken.trim().length > 0 && !cfTokenValid" class="ui-field-error">
                         <Icon name="exclamation-triangle" class="text-2xs" />
-                        That doesn't look like a Cloudflare API token: double-check for copy/paste slips.
+                        {{ t(`views.connectHost.doesntLookLikeCloudflare`) }}
                     </span>
-                    <span v-else class="text-2xs text-subtle"
-                        >Zone:Read · DNS:Edit · Cloudflare Tunnel:Edit. Rides the command into your host, never to the platform.</span
-                    >
+                    <span v-else class="text-2xs text-subtle">{{ t(`views.connectHost.zoneReadDnsEdit`) }}</span>
                 </label>
                 <label class="ui-field">
-                    <span class="ui-field-label">Host name (optional)</span>
+                    <span class="ui-field-label">{{ t(`views.connectHost.hostNameOptional`) }}</span>
                     <input
                         v-model="hostName"
-                        placeholder="defaults to the machine's hostname"
+                        :placeholder="t(`views.connectHost.defaultsToMachinesHostname`)"
                         :class="[ui.input(), hostNameTouched && rawHostName !== '' && canonicalHostName === '' ? 'ui-field-error-box' : '']"
                         @blur="hostNameTouched = true"
                     />
                     <span v-if="hostNameTouched && rawHostName !== '' && canonicalHostName === ''" class="ui-field-error">
                         <Icon name="exclamation-triangle" class="text-2xs" />
-                        Use lowercase letters, digits and hyphens only.
+                        {{ t(`views.connectHost.useLowercaseLettersDigits`) }}
                     </span>
                     <span v-else-if="hostNameTaken" class="text-2xs text-warning">
                         <Icon name="exclamation-triangle" class="text-2xs" />
-                        <span class="font-mono">{{ canonicalHostName }}</span> is already a machine in your intent. Connecting replaces it.
+                        <span class="font-mono">{{ canonicalHostName }}</span> {{ t(`views.connectHost.alreadyMachineInIntent`) }}
                     </span>
                     <span v-else-if="canonicalHostName !== ``" class="text-2xs text-success">
-                        ✓ Saved in intent as <span class="font-mono">{{ canonicalHostName }}</span>
+                        {{ t(`views.connectHost.savedInIntent`) }} <span class="font-mono">{{ canonicalHostName }}</span>
                     </span>
-                    <span v-else class="text-2xs text-subtle">A short name for this machine in your intent.</span>
+                    <span v-else class="text-2xs text-subtle">{{ t(`views.connectHost.shortNameMachineIn`) }}</span>
                 </label>
             </div>
 
@@ -156,28 +156,21 @@ onUnmounted(() => clearInterval(timer));
             </div>
             <template v-else>
                 <div class="flex flex-wrap items-center justify-between gap-2">
-                    <SegmentedControl v-model="cmdOs" :options="OS_OPTIONS" />
-<!-- The strongest case for the switch: this runs on a SERVER, which never has the developer's checkout. -->
+                    <SegmentedControl v-model="cmdOs" :options="osOptions()" />
+                    <!-- The strongest case for the switch: this runs on a SERVER, which never has the developer's checkout. -->
                     <ScriptSourceSwitch />
                 </div>
                 <Code
                     :code="cmdOs === `windows` ? connectHostCommandPs : connectHostCommand"
                     :lang="commandLang(cmdOs)"
-                    :label="
-                        cmdOs === `windows`
-                            ? `Run in PowerShell on the machine you want to deploy onto (needs Docker Desktop)`
-                            : `Run on the machine you want to deploy onto (needs root)`
-                    "
+                    :label="cmdOs === `windows` ? t(`views.connectHost.runInPowershellOn`) : t(`views.connectHost.runOnMachineWant`)"
                     :wrap="true"
                 />
             </template>
 
             <div v-if="commandReady" class="flex items-center gap-2 text-2xs text-subtle">
                 <Icon name="spinner" class="text-info" spin />
-                <span
-                    >Waiting for machines to register: each appears in your server list as you connect it. Re-run the command on each host you want to
-                    add.</span
-                >
+                <span>{{ t(`views.connectHost.waitingMachinesToRegister`) }}</span>
             </div>
         </form>
     </div>

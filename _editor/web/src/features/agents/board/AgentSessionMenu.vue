@@ -6,11 +6,14 @@ import { useAgents } from "../fleet/useAgents";
 import { useRole } from "../../sandbox/secrets/useRole";
 import { landsByDefault } from "../../sandbox/environment/rules";
 import { useSandboxSettings } from "../../sandbox/overview/useSandboxSettings";
+import { useT } from "@intentic/ui/i18n";
 
 // Session-level actions (refresh, land, hold, archive, discard), as opposed to diff actions; once-per-session decisions
 // live behind one glyph rather than permanently cluttering the toolbar.
 // Land, Rename and the session name stay in the header on desktop; on a phone, where the row holds the title and
 // little else, they are this menu's first items instead.
+
+const t = useT();
 
 const { changes, agentId, phone, renameable, sessionName } = defineProps<{
     agentId: string;
@@ -121,82 +124,74 @@ const ITEM = `flex w-full items-start gap-2 rounded-lg px-2.5 py-1.5 text-left t
         >
             <Icon name="check" class="mt-0.5 text-xs text-success" />
             <span class="flex min-w-0 flex-col">
-                <span class="text-sm text-content md:text-xs">Land now</span>
+                <span class="text-sm text-content md:text-xs">{{ t(`agents.agentSessionMenu.landNow`) }}</span>
                 <span class="text-2xs text-subtle">
                     {{
                         writing
-                            ? `The agent is still writing: you'll be asked to confirm`
+                            ? t(`agents.agentSessionMenu.agentStillWritingYoull`)
                             : changes.pending.value.length === 0
-                              ? `Already in your workspace`
+                              ? t(`agents.agentSessionMenu.alreadyInWorkspace`)
                               : streaming
-                                ? `Applies what the agent has written so far`
-                                : `Applies ${changes.pending.value.length} change(s) to your workspace`
+                                ? t(`agents.agentSessionMenu.appliesWhatAgentWritten`)
+                                : t(`agents.agentSessionMenu.appliesChangeSTo`, { count: changes.pending.value.length })
                     }}
                 </span>
             </span>
         </button>
-<!-- Replaces "Land now" rather than joining it: with landed work missing, a plain land would leave that part exactly as missing. -->
+        <!-- Replaces "Land now" rather than joining it: with landed work missing, a plain land would leave that part exactly as missing. -->
         <button v-if="away !== undefined && canShip" type="button" :class="ITEM" :disabled="changes.actionBusy.value" @click="relandNow">
             <Icon name="undo" class="mt-0.5 text-xs text-warning" />
             <span class="flex min-w-0 flex-col">
-                <span class="text-sm text-content md:text-xs">Land again</span>
-                <span class="text-2xs text-subtle">{{ writing ? `The agent is still writing, you'll be asked to confirm` : away.text }}</span>
+                <span class="text-sm text-content md:text-xs">{{ t(`agents.agentSessionMenu.landAgain`) }}</span>
+                <span class="text-2xs text-subtle">{{ writing ? t(`agents.agentSessionMenu.agentStillWritingYoull2`) : away.text }}</span>
             </span>
         </button>
         <button v-if="phone && renameable" type="button" :class="ITEM" @click="run(() => emit(`rename`))">
             <Icon name="pencil" class="mt-0.5 text-xs text-subtle" />
-            <span class="text-sm text-content md:text-xs">Rename</span>
+            <span class="text-sm text-content md:text-xs">{{ t(`ui.action.rename`) }}</span>
         </button>
         <button v-if="phone && sessionName !== undefined" type="button" :class="ITEM" @click="run(() => emit(`identity`))">
             <Icon name="code" class="mt-0.5 text-xs text-subtle" />
             <span class="flex min-w-0 flex-col">
-                <span class="text-sm text-content md:text-xs">Session name</span>
+                <span class="text-sm text-content md:text-xs">{{ t(`agents.agentSessionMenu.sessionName`) }}</span>
                 <span class="truncate font-mono text-2xs text-subtle">{{ sessionName }}</span>
             </span>
         </button>
         <button type="button" :class="ITEM" @click="run(() => changes.refresh())">
             <Icon name="refresh" class="mt-0.5 text-xs text-subtle" :spin="changes.fetching.value" />
-            <span class="text-sm text-content md:text-xs">Refresh</span>
+            <span class="text-sm text-content md:text-xs">{{ t(`ui.action.refresh`) }}</span>
         </button>
         <button v-if="canShip" type="button" :class="ITEM" :disabled="changes.actionBusy.value || archived" @click="toggleAutoLand">
             <Icon :name="autoLandOn ? 'lock' : 'unlock'" class="mt-0.5 text-xs" :class="autoLandOn ? 'text-subtle' : 'text-link'" />
             <span class="flex min-w-0 flex-col">
-                <span class="text-sm text-content md:text-xs">{{ autoLandOn ? `Hold work on the branch` : `Land automatically` }}</span>
+                <span class="text-sm text-content md:text-xs">{{
+                    autoLandOn ? t(`agents.agentSessionMenu.holdWorkOnBranch`) : t(`agents.agentSessionMenu.landAutomatically`)
+                }}</span>
                 <span class="text-2xs text-subtle">
-                    {{
-                        autoLandOn
-                            ? `Finished turns land into your workspace by themselves. Hold keeps this agent's future work on its branch until you press Land now.`
-                            : `Holding: finished work waits on this agent's branch. Switch back to landing at turn completion.`
-                    }}
+                    {{ autoLandOn ? t(`agents.agentSessionMenu.finishedTurnsLandInto`) : t(`agents.agentSessionMenu.holdingFinishedWorkWaits`) }}
                 </span>
             </span>
         </button>
-<!-- The allowance posture, shown only on a card actually waiting on one. -->
+        <!-- The allowance posture, shown only on a card actually waiting on one. -->
         <button v-if="limitedCard !== undefined" type="button" :class="ITEM" :disabled="archived" @click="toggleSendsAgain">
             <Icon :name="sendsAgainOn ? 'clock' : 'refresh'" class="mt-0.5 text-xs" :class="sendsAgainOn ? 'text-link' : 'text-subtle'" />
             <span class="flex min-w-0 flex-col">
                 <span class="text-sm text-content md:text-xs">{{
-                    sendsAgainOn ? `Stop sending this again by itself` : `Send again when the allowance is back`
+                    sendsAgainOn ? t(`agents.agentSessionMenu.stopSendingAgainBy`) : t(`agents.agentSessionMenu.sendAgainAllowanceBack`)
                 }}</span>
                 <span class="text-2xs text-subtle">
-                    {{
-                        sendsAgainOn
-                            ? `This turn goes again by itself at the reset. Stopping leaves it here to send by hand.`
-                            : `Nothing sends it for you. Arm it and this turn goes once, at the hour the provider named.`
-                    }}
+                    {{ sendsAgainOn ? t(`agents.agentSessionMenu.turnGoesAgainBy`) : t(`agents.agentSessionMenu.nothingSendsArmTurn`) }}
                 </span>
             </span>
         </button>
         <button v-if="limitedCard !== undefined" type="button" :class="ITEM" :disabled="archived" @click="toggleMoves">
             <Icon name="user" class="mt-0.5 text-xs" :class="movesOn ? 'text-link' : 'text-subtle'" />
             <span class="flex min-w-0 flex-col">
-                <span class="text-sm text-content md:text-xs">{{ movesOn ? `Stop moving this to another account` : `Move to another account when spent` }}</span>
+                <span class="text-sm text-content md:text-xs">{{
+                    movesOn ? t(`agents.agentSessionMenu.stopMovingToAnother`) : t(`agents.agentSessionMenu.moveToAnotherAccount`)
+                }}</span>
                 <span class="text-2xs text-subtle">
-                    {{
-                        movesOn
-                            ? `A refused turn moves to a connected account of the same provider with room, at once, on this chat's behalf.`
-                            : `Spends a second account on this chat's behalf; with none that has room, it waits as the row above says.`
-                    }}
+                    {{ movesOn ? t(`agents.agentSessionMenu.refusedTurnMovesTo`) : t(`agents.agentSessionMenu.spendsSecondAccountOn`) }}
                 </span>
             </span>
         </button>
@@ -210,25 +205,25 @@ const ITEM = `flex w-full items-start gap-2 rounded-lg px-2.5 py-1.5 text-left t
         >
             <Icon name="box" class="mt-0.5 text-xs text-subtle" />
             <span class="flex min-w-0 flex-col">
-                <span class="text-sm text-content md:text-xs">Archive</span>
+                <span class="text-sm text-content md:text-xs">{{ t(`agents.agentSessionMenu.archive`) }}</span>
                 <span class="text-2xs text-subtle">
-                    {{ streaming ? `Wait for the agent turn to finish` : `The branch, diff and conversation are kept` }}
+                    {{ streaming ? t(`agents.agentSessionMenu.waitAgentTurnTo`) : t(`agents.agentSessionMenu.branchDiffConversationKept`) }}
                 </span>
             </span>
         </button>
         <button v-else type="button" :class="ITEM" :disabled="archiveBusy" @click="run(() => restore([agentId]))">
             <Icon name="history" class="mt-0.5 text-xs text-link" />
             <span class="flex min-w-0 flex-col">
-                <span class="text-sm text-link md:text-xs">Restore</span>
-                <span class="text-2xs text-subtle">Puts it back on the board</span>
+                <span class="text-sm text-link md:text-xs">{{ t(`agents.agentSessionMenu.restore`) }}</span>
+                <span class="text-2xs text-subtle">{{ t(`agents.agentSessionMenu.putsBackOnBoard`) }}</span>
             </span>
         </button>
         <button v-if="canShip" type="button" :class="ITEM" :disabled="changes.actionBusy.value || streaming" @click="run(() => emit(`discard`))">
             <Icon name="trash" class="mt-0.5 text-xs text-danger" />
             <span class="flex min-w-0 flex-col">
-                <span class="text-sm text-danger md:text-xs">Discard</span>
+                <span class="text-sm text-danger md:text-xs">{{ t(`agents.agentSessionMenu.discard`) }}</span>
                 <span class="text-2xs text-subtle">
-                    {{ streaming ? `Wait for the agent turn to finish` : `Drops this agent's branch and worktree` }}
+                    {{ streaming ? t(`agents.agentSessionMenu.waitAgentTurnTo`) : t(`agents.agentSessionMenu.dropsAgentsBranchWorktree`) }}
                 </span>
             </span>
         </button>

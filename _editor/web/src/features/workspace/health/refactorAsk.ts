@@ -1,6 +1,7 @@
 import type { WorkspaceHotspot, WorkspaceKeyModule } from "@intentic/api-contract";
 import { composeAsk, REFACTOR_INVARIANTS } from "@intentic/sandbox-contract/chores";
 import type { ChurnWindow } from "./codebaseHealth";
+import { t } from "@intentic/ui/i18n";
 
 // Which refactor a row's own figures call for, and what to say to the agent. Comparisons are leader-relative
 // (a share of the top row), never an absolute threshold, and never surface as a grade, only wording.
@@ -56,49 +57,49 @@ const dormantFor = (ms: number): string => {
 // - hint: speaks to the user, from a tooltip.
 // - goal: what shape to move toward, never a design, since the agent reads the file first.
 // - done: falsifiable; the agent can check it itself via `iq` in its own worktree.
-const ARCHETYPE: Record<RefactorKind, { hint: string; diagnosis: string; goal: string; done: string }> = {
+const archetype = (): Record<RefactorKind, { hint: string; diagnosis: string; goal: string; done: string }> => ({
     decompose: {
-        hint: `Split it along its change seams`,
+        hint: t(`workspace.refactorAsk.splitAlongChangeSeams`),
         diagnosis: `It changes constantly and branches heavily, so every edit here is slow and easy to get wrong.`,
         goal: `Split it along its change seams, what gets edited together stays together, moving the branch-dense logic into single-purpose units with names of their own.`,
         done: `Done when \`iq hotspots --in <path>\` reports materially fewer branch points and the project's checks pass.`,
     },
     simplify: {
-        hint: `Flatten its branching where it stands`,
+        hint: t(`workspace.refactorAsk.flattenBranchingWhereStands`),
         diagnosis: `Its branching is far out of proportion to how often it changes: the logic is tangled, not the file crowded.`,
         goal: `Flatten it where it stands: edge cases as early returns, compound conditions behind named predicates, long chains as lookups. Extract a unit only if a cohesive one falls out.`,
         done: `Done when \`iq hotspots --in <path>\` reports materially fewer branch points and the project's checks pass.`,
     },
     split: {
-        hint: `Split it by responsibility, so changes stop colliding`,
+        hint: t(`workspace.refactorAsk.splitByResponsibilityChanges`),
         diagnosis: `The churn is out of proportion to the branching: this file is not tangled, it is crowded, unrelated work keeps landing in one place.`,
         goal: `Split it by responsibility so those changes stop colliding: one subject per file, each named for what it is FOR.`,
         done: `Done when every new file's subject takes one line to state and the project's checks pass.`,
     },
     stabilize: {
-        hint: `Separate its stable contract from its churn`,
+        hint: t(`workspace.refactorAsk.separateStableContractChurn`),
         diagnosis: `It churns like a hotspot and the rest of the repository imports it, so every edit here ripples outward.`,
         goal: `Separate the contract from the churn: a narrow, stable surface for importers to depend on, with the volatile implementation private behind it.`,
         done: `Done when the exported surface is smaller than what it hides, every importer reaches the true source, and the project's checks pass.`,
     },
     tests: {
-        hint: `Split it by subject and hoist shared setup`,
+        hint: t(`workspace.refactorAsk.splitBySubjectHoist`),
         diagnosis: `It is a test file, so these figures are the cost of working in it rather than risk to the product.`,
         goal: `Split it by subject, one behaviour per file, and hoist repeated setup into shared fixtures. Do not change what is asserted; if an assertion looks wrong, say so instead of fixing it.`,
         done: `Done when the same tests pass, the same number of them run, and no assertion changed.`,
     },
     narrow: {
-        hint: `Narrow its surface into modules by subject`,
+        hint: t(`workspace.refactorAsk.narrowSurfaceIntoModules`),
         diagnosis: `Everything imports it because it holds everything, so unrelated changes queue behind each other here.`,
         goal: `Split it into modules by what each export is ABOUT, and repoint importers at the module that now owns what they use.`,
         done: `Done when what remains at that path exports only what belongs together, \`iq outline\` it to check, and the project's checks pass.`,
     },
-};
+});
 
 // The four-part shape and refactor invariants live in @intentic/sandbox-contract/chores, shared with the
 // Maintenance surface's chores. Local here is only which archetype a row calls for and what it asks.
 const compose = (path: string, why: string, kind: RefactorKind): string => {
-    const { diagnosis, goal, done } = ARCHETYPE[kind];
+    const { diagnosis, goal, done } = archetype()[kind];
     return composeAsk({ subject: `Refactor ${path}.`, why, diagnosis, goal, invariants: REFACTOR_INVARIANTS, done: done.replace(`<path>`, path) });
 };
 
@@ -144,8 +145,8 @@ export const hotspotAsk = (hotspot: WorkspaceHotspot, context: HotspotContext): 
     return {
         kind,
         hint: dormant
-            ? `Nothing has touched this in ${dormantFor(idle)}, a tangled file nobody edits costs nobody anything. Start an agent anyway: ${ARCHETYPE[kind].hint.toLowerCase()}.`
-            : `Start an agent on it: ${ARCHETYPE[kind].hint.toLowerCase()}.`,
+            ? `Nothing has touched this in ${dormantFor(idle)}, a tangled file nobody edits costs nobody anything. Start an agent anyway: ${archetype()[kind].hint.toLowerCase()}.`
+            : `Start an agent on it: ${archetype()[kind].hint.toLowerCase()}.`,
         prompt: compose(hotspot.path, hotspotWhy(hotspot, context.rank, context.window), kind),
         dormant,
     };
@@ -166,7 +167,7 @@ export const moduleAsk = (module: WorkspaceKeyModule, context: ModuleContext): R
     const why = `#${context.rank} key module by PageRank: ${count(module.exports)} exports against a median of ${count(context.medianExports)} across that ranking.`;
     return {
         kind: `narrow`,
-        hint: `Start an agent on it: ${ARCHETYPE.narrow.hint.toLowerCase()}.`,
+        hint: t(`workspace.refactorAsk.startAgentOn`, { toLowerCase: archetype().narrow.hint.toLowerCase() }),
         prompt: compose(module.path, why, `narrow`),
         // Churn isn't part of the import-graph ranking, so there's no age to step back from here.
         dormant: false,

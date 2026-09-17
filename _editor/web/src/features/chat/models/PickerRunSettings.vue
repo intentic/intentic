@@ -3,6 +3,9 @@ import type { AgentHarness, AgentProvider } from "@intentic/sandbox-contract";
 import { computed, toRef } from "vue";
 import { type RunSettingsPatch, usePickerRunSettings } from "./pickerRunSettings";
 import EffortMeter from "../composer/EffortMeter.vue";
+import { useT } from "@intentic/ui/i18n";
+
+const t = useT();
 
 /* THE CONTROLS FOR HOW THE MODEL IS RUN: reasoning effort, extended thinking, speed. */
 
@@ -41,13 +44,13 @@ const chipsShown = computed(() => thinkingOffered.value || fastOffered.value);
 </script>
 
 <template>
-<!-- REASONING EFFORT, the app's own meter, the same control the composer draws beside its model pill. -->
+    <!-- REASONING EFFORT, the app's own meter, the same control the composer draws beside its model pill. -->
     <div v-if="effortShown" class="flex items-center justify-between gap-2">
-        <span class="text-2xs font-medium uppercase tracking-wide text-muted">Reasoning effort</span>
+        <span class="text-2xs font-medium uppercase tracking-wide text-muted">{{ t(`chat.pickerRunSettings.reasoningEffort`) }}</span>
         <EffortMeter :efforts="efforts" :effort="level" class="shrink-0" @pick="emit(`update`, { effort: $event })" />
     </div>
 
-<!-- CLAUDE'S TWO SWITCHES. -->
+    <!-- CLAUDE'S TWO SWITCHES. -->
     <div v-if="chipsShown" class="flex flex-wrap items-center gap-1.5">
         <button
             v-if="thinkingOffered"
@@ -58,7 +61,7 @@ const chipsShown = computed(() => thinkingOffered.value || fastOffered.value);
             @click="emit(`update`, { thinking: !thinkingOn })"
         >
             <span class="h-1.5 w-1.5 shrink-0 rounded-full border border-current" :class="{ 'bg-current': thinkingOn }" aria-hidden="true"></span>
-            <span>Extended thinking</span>
+            <span>{{ t(`chat.pickerRunSettings.extendedThinking`) }}</span>
         </button>
         <button
             v-if="fastOffered"
@@ -69,7 +72,7 @@ const chipsShown = computed(() => thinkingOffered.value || fastOffered.value);
             @click="emit(`update`, { fast: !fastOn })"
         >
             <span class="h-1.5 w-1.5 shrink-0 rounded-full border border-current" :class="{ 'bg-current': fastOn }" aria-hidden="true"></span>
-            <span>Fast speed</span>
+            <span>{{ t(`chat.pickerRunSettings.fastSpeed`) }}</span>
         </button>
     </div>
 </template>

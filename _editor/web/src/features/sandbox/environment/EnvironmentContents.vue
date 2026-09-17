@@ -5,10 +5,13 @@ import { computed, ref } from "vue";
 import type { ContentsGroup } from "./useEnvironmentContents";
 import { useSandboxOutline } from "../overview/useSandboxOutline";
 import { environmentVisual } from "./environmentVisual";
+import { useT } from "@intentic/ui/i18n";
 
 // What this sandbox has, not its build recipe (one pill away). Decisions (agent-added, capability) get full rows; the
 // base staples are a scannable strip, since nobody reads them, they only check for one. One line per row: name,
 // versions and a truncated sentence; the full paragraph opens on click, never duplicating the row's own summary.
+
+const t = useT();
 
 const { groups, loading, error } = defineProps<{
     groups: ContentsGroup[];
@@ -58,12 +61,15 @@ const toolLabel = (item: EnvironmentItem, tool: EnvironmentItem[`tools`][number]
 const provenance = (tool: EnvironmentItem[`tools`][number]): string => `Read by running ${tool.name} in this sandbox, just now`;
 
 // No badge for `active`: it's the normal case, and marking it would drown the two states that matter.
-const STATES = {
-    active: undefined,
-    "after-rebuild": { icon: `clock`, label: `arrives after rebuild`, tone: `text-warning` },
-    "awaiting-approval": { icon: `sparkles`, label: `waiting for your approval`, tone: `text-link` },
-} as const;
-const stateOf = (item: EnvironmentItem) => STATES[item.state];
+const STATES = computed(
+    () =>
+        ({
+            active: undefined,
+            "after-rebuild": { icon: `clock`, label: t(`sandbox.environmentContents.arrivesAfterRebuild`), tone: `text-warning` },
+            "awaiting-approval": { icon: `sparkles`, label: t(`sandbox.environmentContents.waitingApproval`), tone: `text-link` },
+        }) as const,
+);
+const stateOf = (item: EnvironmentItem) => STATES.value[item.state];
 
 // Shows originLabel only when it doesn't just repeat the row's own name (e.g. 'workspace extension', not '<name>
 // capability').
@@ -163,15 +169,21 @@ const countLabel = (group: ContentsGroup): string => `${group.items.length} ${gr
                             :class="ui.linkButton(`gap-1 text-2xs text-muted hover:text-content`)"
                             @click="toggleFull(item.id)"
                         >
-                            {{ full.has(item.id) ? `Show less` : `Show more` }}
+                            {{ full.has(item.id) ? t(`sandbox.environmentContents.showLess`) : t(`sandbox.environmentContents.showMore`) }}
                             <Icon :name="full.has(item.id) ? `chevron-up` : `chevron-down`" />
                         </button>
                         <!-- The plumbing count lives here, not the row: it's the least useful fact and was crowding the row's own line. -->
                         <p v-if="item.extras !== undefined" class="text-2xs text-subtle">
-                            Plus {{ item.extras }} libraries and headers these commands need, which nobody runs directly.
+                            {{ t(`sandbox.environmentContents.plusLibrariesHeadersCommands`, { extras: item.extras }) }}
                         </p>
                         <!-- Clamped: a toolchain's install step can run to many lines and would push the next row off screen. -->
-                        <Code v-if="item.commands !== undefined" :code="item.commands" lang="docker" label="What this installs" :clamp-lines="10" />
+                        <Code
+                            v-if="item.commands !== undefined"
+                            :code="item.commands"
+                            lang="docker"
+                            :label="t(`sandbox.environmentContents.whatInstalls`)"
+                            :clamp-lines="10"
+                        />
                     </div>
                 </template>
             </DisclosureRow>
@@ -215,7 +227,7 @@ const countLabel = (group: ContentsGroup): string => `${group.items.length} ${gr
 
         <!-- Loading mirrors the loaded sections and staples strip. -->
         <div v-if="loading && outline" class="flex flex-col gap-5" role="status" aria-busy="true">
-            <span class="sr-only">Checking installed versions…</span>
+            <span class="sr-only">{{ t(`sandbox.environmentContents.checkingInstalledVersions`) }}</span>
             <!-- Two sections, not three: a sandbox may have no capability group, and an extra one would over-promise height. -->
             <RowGroup v-for="(section, index) in [4, 3]" :key="index" flat undivided>
                 <template #label><span class="skeleton block h-2.5" :class="index === 0 ? `w-44` : `w-36`" aria-hidden="true" /></template>
@@ -240,7 +252,7 @@ const countLabel = (group: ContentsGroup): string => `${group.items.length} ${gr
         <template v-else-if="loading" />
         <Notice v-else-if="error !== undefined" :of="{ tone: `warning`, title: `Could not read what the sandbox has installed.`, detail: error }" />
         <div v-else-if="groups.length === 0" :class="ui.emptyState(`py-8`)">
-            Nothing added on top of the stock image yet, and nothing in it answered, which usually means the sandbox is still starting.
+            {{ t(`sandbox.environmentContents.nothingAddedOnTop`) }}
         </div>
     </div>
 </template>

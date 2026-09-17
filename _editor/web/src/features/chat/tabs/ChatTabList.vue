@@ -56,10 +56,13 @@ import { commandShortcut } from "../../../shell/commands/useCommands";
 import { viewersOfSession } from "../../../shell/presence/usePresence";
 import PresenceAvatars from "../../../shell/presence/PresenceAvatars.vue";
 import { providerLabel, type WorkflowRun } from "@intentic/sandbox-contract";
+import { useT } from "@intentic/ui/i18n";
 
 // Switcher for every open conversation, hosted by both the docked ChatTabs sheet and the floating rail. Card and
 // lane shell come from RailCard/RailLane; this file only decides which lanes exist, what goes in them, and what
 // each card shows, and emits verbs rather than writing state directly.
+
+const t = useT();
 
 const emit = defineEmits<{
     select: [id: string];
@@ -76,10 +79,10 @@ const router = useRouter();
 // Switches between open chats (lanes) and personas (ChatPersonaRail); swaps the whole list, not a regroup.
 const { grouping, set: setGrouping } = useChatGrouping();
 // Labelled "Agents", matching the fleet board's cards and how the product names them elsewhere.
-const GROUPINGS: readonly { label: string; value: ChatGrouping; title: string }[] = [
-    { label: `Agents`, value: `lane`, title: `Every conversation this window holds, by what needs you` },
-    { label: `Personas`, value: `persona`, title: `The people this sandbox can be, pick one and talk to them` },
-];
+const GROUPINGS = computed((): readonly { label: string; value: ChatGrouping; title: string }[] => [
+    { label: t(`chat.chatTabList.agents`), value: `lane`, title: t(`chat.chatTabList.everyConversationWindowHolds`) },
+    { label: t(`chat.chatTabList.personas`), value: `persona`, title: t(`chat.chatTabList.peopleSandboxPickOne`) },
+]);
 
 // The chat the Agents list was showing, parked while Personas is up and restored on return if it still exists.
 let parked: string | undefined;
@@ -175,11 +178,11 @@ const lanes = computed<Record<FleetLane, OpenChat[]>>(() => {
 });
 // Clear's own words for the lane: the adjective its label counts ("3 working chats"), and what becomes of
 // those chats once they leave this window.
-const LANES: readonly { key: FleetLane; label: string; dot: string; clears: string; keeps: string }[] = [
-    { key: `attention`, label: `Attention`, dot: `bg-warning`, clears: `waiting`, keeps: `they keep waiting on the board` },
-    { key: `active`, label: `Active`, dot: `bg-success`, clears: `working`, keeps: `their turns keep running` },
-    { key: `finished`, label: `Finished`, dot: `bg-line-strong`, clears: `finished`, keeps: `they stay in Past chats` },
-];
+const LANES = computed((): readonly { key: FleetLane; label: string; dot: string; clears: string; keeps: string }[] => [
+    { key: `attention`, label: t(`chat.chatTabList.attention`), dot: `bg-warning`, clears: `waiting`, keeps: `they keep waiting on the board` },
+    { key: `active`, label: t(`chat.chatTabList.active`), dot: `bg-success`, clears: `working`, keeps: `their turns keep running` },
+    { key: `finished`, label: t(`chat.chatTabList.finished`), dot: `bg-line-strong`, clears: `finished`, keeps: `they stay in Past chats` },
+]);
 // What Clear closes per lane, counted off the very set the press sends, so the button can't name a number it
 // doesn't close. Includes the chats a run's row folds away: they lane here too, and the lane is the target.
 const clearing = computed<Record<FleetLane, ReadonlySet<string>>>(() => ({
@@ -188,7 +191,7 @@ const clearing = computed<Record<FleetLane, ReadonlySet<string>>>(() => ({
     finished: tabsInLane(`finished`),
 }));
 // "1 working chat", never "1 working chats": a lane holding one is the common case here.
-const clearLabel = (lane: (typeof LANES)[number]): string => {
+const clearLabel = (lane: (typeof LANES.value)[number]): string => {
     const count = clearing.value[lane.key].size;
     return `Close all ${count} ${lane.clears} ${count === 1 ? `chat` : `chats`}`;
 };
@@ -196,7 +199,7 @@ const clearLabel = (lane: (typeof LANES)[number]): string => {
 // Lane visibility is filtered in JS, not `v-show`: `LANES` is compile-time so `v-for` yields a stable fragment,
 // and `v-show` (set only on mount) would freeze stale in a long-lived floating window.
 // A lane holding only a run still counts as occupied, or it's filtered into a section that's never drawn.
-const occupiedLanes = computed(() => LANES.filter((lane) => lanes.value[lane.key].length > 0 || runsIn(lane.key).length > 0));
+const occupiedLanes = computed(() => LANES.value.filter((lane) => lanes.value[lane.key].length > 0 || runsIn(lane.key).length > 0));
 
 // Caps Finished at windowFinished (the board's own cap): a browsing limit, not a close, everything stays open
 // and reachable. The active chat is always pinned in; a filter or the row's own expand lifts the cap.
@@ -367,7 +370,7 @@ const beginRename = (id: string): void => {
 const renamingDrawn = computed(
     () =>
         renamingId.value !== undefined &&
-        LANES.some((lane) => cardsIn(lane.key).some((entry) => entry.conversation.conversationId === renamingId.value)),
+        LANES.value.some((lane) => cardsIn(lane.key).some((entry) => entry.conversation.conversationId === renamingId.value)),
 );
 // A rename cannot outlive the row it sits on: with no drawn row there is no input left to blur it shut, and
 // the edit would redraw that row as an empty field in place of its card the next time the chat appeared.
@@ -392,7 +395,9 @@ const showPreview = (event: MouseEvent, entry: OpenChat): void => {
         // Labelled "Latest" only when two prompts differ; a fresh draft with neither shows no preview.
         messages: [
             ...(first === undefined ? [] : [{ text: first.text, attachments: first.attachments }]),
-            ...(last === undefined || last === first ? [] : [{ label: `Latest`, text: last.text, attachments: last.attachments }]),
+            ...(last === undefined || last === first
+                ? []
+                : [{ label: t(`chat.chatTabList.latest`), text: last.text, attachments: last.attachments }]),
         ],
     });
 };
@@ -491,43 +496,43 @@ const tabMenuItems = computed<MenuItem[]>(() => {
     const peeked = conversations.value.find((conversation) => conversation.conversationId === id)?.peek.value === true;
     return [
         // Keep Open leads the menu, shown only on a preview tab: same convention and wording as WorkspaceDesktop.
-        ...(peeked ? [{ label: `Keep Open`, icon: `pin` as IconName, command: () => keepChat(id) }, { separator: true }] : []),
-        { label: `Rename`, icon: `pencil`, shortcut: commandShortcut(`chat.rename`), command: () => beginRename(id) },
+        ...(peeked ? [{ label: t(`chat.chatTabList.keepOpen`), icon: `pin` as IconName, command: () => keepChat(id) }, { separator: true }] : []),
+        { label: t(`ui.action.rename`), icon: `pencil`, shortcut: commandShortcut(`chat.rename`), command: () => beginRename(id) },
         // Share opens a dialog rather than acting directly; it renders a frozen snapshot, the conversation is
         // unchanged.
-        { label: `Share…`, icon: `globe`, command: () => openShare(id) },
+        { label: t(`chat.chatTabList.share`), icon: `globe`, command: () => openShare(id) },
         { separator: true },
         // Open Beside/Close Pane mirror Ctrl+click; unlike Close, they give back the column without ending the chat.
         ...(paneable.value
             ? [
                   // No glyph, like the terminal's Split row; not the ×, which would suggest this ends the chat.
                   showing(id) && split.value
-                      ? { label: `Close Pane`, shortcut: commandShortcut(`chat.closePane`), command: () => closePane(id) }
-                      : { label: `Open Beside`, shortcut: commandShortcut(`chat.splitView`), command: () => openBeside(id) },
+                      ? { label: t(`chat.chatTabList.closePane`), shortcut: commandShortcut(`chat.closePane`), command: () => closePane(id) }
+                      : { label: t(`chat.chatTabList.openBeside`), shortcut: commandShortcut(`chat.splitView`), command: () => openBeside(id) },
                   { separator: true },
               ]
             : []),
-        { label: `Close`, icon: `times`, shortcut: commandShortcut(`chat.closeTab`), command: () => emit(`close`, new Set([id])) },
+        { label: t(`ui.action.close`), icon: `times`, shortcut: commandShortcut(`chat.closeTab`), command: () => emit(`close`, new Set([id])) },
         {
-            label: `Close Others`,
+            label: t(`chat.chatTabList.closeOthers`),
             disabled: others.size === 0,
             shortcut: commandShortcut(`chat.closeOtherTabs`),
             command: () => emit(`close`, others),
         },
         {
-            label: `Close to the Right`,
+            label: t(`chat.chatTabList.closeToRight`),
             disabled: toRight.size === 0,
             shortcut: commandShortcut(`chat.closeTabsToRight`),
             command: () => emit(`close`, toRight),
         },
         { separator: true },
         {
-            label: `Close Finished`,
+            label: t(`chat.chatTabList.closeFinished`),
             disabled: finished.size === 0,
             shortcut: commandShortcut(`chat.closeFinishedTabs`),
             command: () => emit(`close`, finished),
         },
-        { label: `Close All`, shortcut: commandShortcut(`chat.closeAllTabs`), command: () => emit(`close`, allTabs()) },
+        { label: t(`chat.chatTabList.closeAll2`), shortcut: commandShortcut(`chat.closeAllTabs`), command: () => emit(`close`, allTabs()) },
         { separator: true },
         {
             label: floats.value ? `Dock chat back` : `Move chat into new window`,
@@ -560,10 +565,10 @@ const keepTab = (event: Event, id: string): void => {
 
 <template>
     <div class="flex min-h-0 flex-col gap-1.5">
-<!-- Reading order top to bottom: narrow with the filter, pick a lane, and when the query reaches past what's open, the "Not open" group at the foot. -->
-<!-- The `Aa` case toggle mirrors the board's: a mode only one of the two search boxes could see or undo would be confusing. -->
-<!-- Tabs, not a pill track: this switch decides what the column IS, so it reads as the column's own header — and a bordered track here stacked a second box directly above the filter field's, which made the header two grey boxes rather than a heading over a control. -->
-<!-- Centred over the column: with no track to give them an edge to sit on, flush left read as the first row of the list rather than its title. -->
+        <!-- Reading order top to bottom: narrow with the filter, pick a lane, and when the query reaches past what's open, the "Not open" group at the foot. -->
+        <!-- The `Aa` case toggle mirrors the board's: a mode only one of the two search boxes could see or undo would be confusing. -->
+        <!-- Tabs, not a pill track: this switch decides what the column IS, so it reads as the column's own header — and a bordered track here stacked a second box directly above the filter field's, which made the header two grey boxes rather than a heading over a control. -->
+        <!-- Centred over the column: with no track to give them an edge to sit on, flush left read as the first row of the list rather than its title. -->
         <SegmentedControl
             :model-value="grouping"
             :options="GROUPINGS"
@@ -580,17 +585,17 @@ const keepTab = (event: Event, id: string): void => {
             variant="field"
             clearable
             :busy="searching"
-            aria-label="Filter chats by your messages"
-            placeholder="Filter by your messages…"
+            :aria-label="t(`chat.chatTabList.filterChatsByMessages`)"
+            :placeholder="t(`chat.chatTabList.filterByMessages`)"
             class="shrink-0"
         />
-<!-- A different list, not this one regrouped — its own component (see ChatPersonaRail). -->
+        <!-- A different list, not this one regrouped — its own component (see ChatPersonaRail). -->
         <ChatPersonaRail v-if="grouping === `persona`" @select="onPersonaSelect" />
-<!-- LANE BREAKS OUTRANK CARD BREAKS, and at 12px against 10px they barely did: the eye groups by proximity. -->
+        <!-- LANE BREAKS OUTRANK CARD BREAKS, and at 12px against 10px they barely did: the eye groups by proximity. -->
         <div v-else ref="scroller" class="flex min-h-0 flex-1 flex-col items-stretch gap-4 overflow-y-auto">
-<!-- An empty lane isn't drawn at all (see occupiedLanes); one emptied only by the filter keeps its header. -->
+            <!-- An empty lane isn't drawn at all (see occupiedLanes); one emptied only by the filter keeps its header. -->
             <RailLane v-for="lane in occupiedLanes" :key="lane.key" :label="lane.label" :dot="lane.dot" :count="countIn(lane.key)">
-<!-- Closing a chat is lossless in every lane. -->
+                <!-- Closing a chat is lossless in every lane. -->
                 <template #actions>
                     <Button
                         v-if="clearing[lane.key].size > 0 && !filtering"
@@ -599,13 +604,13 @@ const keepTab = (event: Event, id: string): void => {
                         :text="true"
                         class="shrink-0"
                         :aria-label="clearLabel(lane)"
-                        v-tooltip.bottom="`Close all ${clearing[lane.key].size}: ${lane.keeps}`"
+                        v-tooltip.bottom="t(`chat.chatTabList.closeAll`, { size: clearing[lane.key].size, keeps: lane.keeps })"
                         @click="emit('close', clearing[lane.key])"
                     >
-                        Clear
+                        {{ t(`ui.action.clear`) }}
                     </Button>
                 </template>
-<!-- Dashed like the board's run card: a run is the container for the rows below it, not one of them. -->
+                <!-- Dashed like the board's run card: a run is the container for the rows below it, not one of them. -->
                 <div v-if="runsIn(lane.key).length > 0" class="flex min-w-0 flex-col gap-2.5">
                     <RailCard
                         v-for="run in runsIn(lane.key)"
@@ -614,31 +619,30 @@ const keepTab = (event: Event, id: string): void => {
                         icon="sitemap"
                         dashed
                         :selected="runOnScreen(run)"
-                        :aria-label="`Open the workflow run ${run.workflow.name}`"
+                        :aria-label="t(`chat.chatTabList.openWorkflowRun`, { name: run.workflow.name })"
                         @click="openRunInChat(run)"
                     >
                         <template #meta>
                             <span class="min-w-0 truncate text-subtle">
-                                {{ run.steps.filter((step) => step.state === `done`).length }}/{{ run.steps.length }} steps<template
-                                    v-if="runningTitles(run).length > 0"
-                                >
-                                    · {{ runningTitles(run).join(` · `) }}</template
-                                >
+                                {{ run.steps.filter((step) => step.state === `done`).length }}/{{ run.steps.length }} {{ t(`chat.chatTabList.steps`)
+                                }}<template v-if="runningTitles(run).length > 0"> · {{ runningTitles(run).join(` · `) }}</template>
                             </span>
                         </template>
                     </RailCard>
                 </div>
-                <p v-if="cardsIn(lane.key).length === 0 && runsIn(lane.key).length === 0" class="px-1 text-2xs text-subtle">No matches</p>
+                <p v-if="cardsIn(lane.key).length === 0 && runsIn(lane.key).length === 0" class="px-1 text-2xs text-subtle">
+                    {{ t(`chat.chatTabList.noMatches`) }}
+                </p>
                 <div v-else-if="cardsIn(lane.key).length > 0" class="flex min-w-0 flex-col gap-2.5">
                     <template v-for="{ conversation: c, agent } in cardsIn(lane.key)" :key="c.conversationId">
-<!-- Replaces the card rather than nesting a field in it (a button can't host a usable input). -->
+                        <!-- Replaces the card rather than nesting a field in it (a button can't host a usable input). -->
                         <input
                             v-if="edit.editing && renamingId === c.conversationId"
                             v-model="edit.draft"
                             type="text"
                             maxlength="80"
-                            aria-label="Chat title"
-                            :placeholder="c.isolated.value ? 'New agent' : 'New chat'"
+                            :aria-label="t(`chat.chatTabList.chatTitle`)"
+                            :placeholder="c.isolated.value ? t(`chat.chatTabList.newAgent`) : t(`chat.chatTabList.newChat`)"
                             class="ui-field-box ui-field-inline w-full shrink-0 select-text rounded-lg px-2.5 py-2 text-xs font-semibold placeholder:font-normal"
                             @keydown.enter.stop.prevent="edit.commit()"
                             @keydown.esc.stop.prevent="edit.cancel()"
@@ -673,15 +677,15 @@ const keepTab = (event: Event, id: string): void => {
                                 <PresenceAvatars
                                     v-if="c.session.value !== undefined"
                                     :members="viewersOfSession(c.session.value.id)"
-                                    label="in this chat"
+                                    :label="t(`chat.chatTabList.inChat`)"
                                 />
-<!-- The × is a hit target around an 11px glyph; a miss lands on the card and re-selects it. -->
+                                <!-- The × is a hit target around an 11px glyph; a miss lands on the card and re-selects it. -->
                                 <!-- The peeked card keeps its pin action in the trailing slot. -->
                                 <span
                                     v-if="c.peek.value"
                                     role="button"
-                                    aria-label="Keep this chat open"
-                                    v-tooltip.top="'Keep open, otherwise this chat closes when you open another'"
+                                    :aria-label="t(`chat.chatTabList.keepChatOpen`)"
+                                    v-tooltip.top="t(`chat.chatTabList.keepOpenOtherwiseChat`)"
                                     class="-my-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded text-muted opacity-0 transition hover:bg-overlay hover:text-content focus-visible:opacity-100 group-hover:opacity-100"
                                     @click="keepTab($event, c.conversationId)"
                                 >
@@ -690,17 +694,17 @@ const keepTab = (event: Event, id: string): void => {
                                 <span
                                     v-else-if="conversations.length > 1"
                                     role="button"
-                                    aria-label="Close chat"
+                                    :aria-label="t(`chat.chatTabList.closeChat`)"
                                     class="-my-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded text-muted opacity-0 transition hover:bg-overlay hover:text-content focus-visible:opacity-100 group-hover:opacity-100"
                                     @click="closeTab($event, c.conversationId)"
                                 >
                                     <Icon name="times" class="text-2xs" />
                                 </span>
                             </template>
-<!-- One line: where it came from, the model, and (settled only) its age, right-aligned. Why it needs you is the card's corner (see `chipOf`), where the board puts it too. -->
+                            <!-- One line: where it came from, the model, and (settled only) its age, right-aligned. Why it needs you is the card's corner (see `chipOf`), where the board puts it too. -->
                             <template v-if="hasMeta({ conversation: c, agent })" #meta>
                                 <UnsentMark v-if="c.unsent.value" :preview="draftPreview(c.draft.value)" :at="c.draftAt.value" :now="now" />
-<!-- One glyph, no countdown: the rail says which chat is about to stop being cheap to answer, the board says for how long. -->
+                                <!-- One glyph, no countdown: the rail says which chat is about to stop being cheap to answer, the board says for how long. -->
                                 <Icon
                                     v-if="coolingOf(agent) !== undefined"
                                     name="bolt"
@@ -714,13 +718,19 @@ const keepTab = (event: Event, id: string): void => {
                                 <!-- Chats in another sandbox identify that sandbox in metadata. -->
                                 <span
                                     v-if="c.box.value !== undefined"
-                                    v-tooltip.top="`Runs in “${boxNameOf.get(c.box.value!) ?? `another sandbox`}”`"
+                                    v-tooltip.top="
+                                        t(`chat.chatTabList.runsInQuoted`, {
+                                            sandbox: boxNameOf.get(c.box.value!) ?? t(`chat.chatTabList.anotherSandbox`),
+                                        })
+                                    "
                                     class="flex shrink-0 items-center"
-                                    :aria-label="`Runs in ${boxNameOf.get(c.box.value!) ?? `another sandbox`}`"
+                                    :aria-label="
+                                        t(`chat.chatTabList.runsIn`, { sandbox: boxNameOf.get(c.box.value!) ?? t(`chat.chatTabList.anotherSandbox`) })
+                                    "
                                 >
                                     <Icon name="boxes" class="text-2xs text-subtle" />
                                 </span>
-                                <span v-if="isArchived(c)" class="flex shrink-0 items-center" aria-label="Archived">
+                                <span v-if="isArchived(c)" class="flex shrink-0 items-center" :aria-label="t(`chat.chatTabList.archived`)">
                                     <Icon name="box" class="text-2xs text-subtle" />
                                 </span>
                                 <!-- Spend, diff and turn count are deliberately absent here; they live on the board and Usage tab. -->
@@ -735,7 +745,7 @@ const keepTab = (event: Event, id: string): void => {
                         </RailCard>
                     </template>
                 </div>
-<!-- Not a pager — the count itself is the point ("12 more open"), one press away rather than gone. -->
+                <!-- Not a pager — the count itself is the point ("12 more open"), one press away rather than gone. -->
                 <button
                     v-if="lane.key === 'finished' && !filtering && hiddenFinished > 0"
                     type="button"
@@ -743,18 +753,18 @@ const keepTab = (event: Event, id: string): void => {
                     @click="showAllFinished = !showAllFinished"
                 >
                     <Icon :name="showAllFinished ? 'chevron-up' : 'chevron-down'" class="text-2xs" />
-                    {{ showAllFinished ? "Show fewer" : `${hiddenFinished} earlier` }}
+                    {{ showAllFinished ? t(`chat.chatTabList.showFewer`) : t(`chat.chatTabList.earlier`, { hiddenFinished }) }}
                 </button>
             </RailLane>
 
-<!-- Query hits outside this window's open chats (fleet, archive, agent-less conversations); a row opens the conversation, same as History. -->
-            <RailLane v-if="filtering && notOpenCount > 0" label="Not open" icon="search" :count="notOpenCount">
+            <!-- Query hits outside this window's open chats (fleet, archive, agent-less conversations); a row opens the conversation, same as History. -->
+            <RailLane v-if="filtering && notOpenCount > 0" :label="t(`chat.chatTabList.notOpen`)" icon="search" :count="notOpenCount">
                 <div class="flex min-w-0 flex-col gap-2.5">
                     <!-- Same identity tile as the lanes above; the category tint still signals what kind of work this is. -->
                     <RailCard
                         v-for="agent in notOpen"
                         :key="agent.id"
-                        :title="agent.title ?? 'Untitled agent'"
+                        :title="agent.title ?? t(`chat.chatTabList.untitledAgent`)"
                         :title-action="agent.titleAction"
                         :needle="needle"
                         :match-case="matchCase"
@@ -765,7 +775,12 @@ const keepTab = (event: Event, id: string): void => {
                     >
                         <template #meta>
                             <!-- Archived, not gone: the branch, diff and transcript all survive, so this is a real destination. -->
-                            <Icon v-if="agent.archivedAt !== undefined" name="box" class="shrink-0 text-2xs" aria-label="Archived" />
+                            <Icon
+                                v-if="agent.archivedAt !== undefined"
+                                name="box"
+                                class="shrink-0 text-2xs"
+                                :aria-label="t(`chat.chatTabList.archived`)"
+                            />
                             <span v-if="agent.updatedAt > 0" class="ml-auto shrink-0">{{ relativeTime(agent.updatedAt) }}</span>
                         </template>
                     </RailCard>
@@ -794,7 +809,7 @@ const keepTab = (event: Event, id: string): void => {
             edit.error
         }}</span>
 
-<!-- Both teleport out (hover card to the overlay target, menu to `append-to`); kept here only so the component stays single-rooted. -->
+        <!-- Both teleport out (hover card to the overlay target, menu to `append-to`); kept here only so the component stays single-rooted. -->
         <HoverCard ref="hoverCard" />
         <ContextMenu ref="tabMenu" :model="tabMenuItems" :min-width="13" />
         <ChatShareDialog

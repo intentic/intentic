@@ -16,10 +16,13 @@ import type { PickerEntry } from "../../../chat/models/modelPickerState";
 import { providerDisplayLabel } from "../../../chat/accounts/providerCatalog";
 import { defaultRunSettings, usePickerRunSettings } from "../../../chat/models/pickerRunSettings";
 import { useChat } from "../../../chat/run/useChat";
+import { useT } from "@intentic/ui/i18n";
 
 // Full app model picker (composer's ModelPicker), pointed at one entry of a pinned list. No account control: that's a
 // per-turn question (PickerAccounts); the daemon spreads unattended work over headroom instead. Effort, thinking, fast
 // and harness live per entry, not shared, and draw only where the run would honour them.
+
+const t = useT();
 
 const emit = defineEmits<{ pick: [ModelPin]; configure: [ModelPin]; close: [] }>();
 const {
@@ -56,7 +59,7 @@ const { hasContent: runSettingsShown } = usePickerRunSettings(
 const harnessChoosable = computed(() => contractHarnessChoosable(provider.value));
 const harnessOptions = computed(() => [
     { label: providerDisplayLabel(provider.value), value: `native` },
-    { label: `Claude Code`, value: `claude-code` },
+    { label: t(`sandbox.modelPinPickerBody.claudeCode`), value: `claude-code` },
 ]);
 
 // What this provider/harness pair cannot do, straight off its declared record: the honest half of a choice made
@@ -95,19 +98,16 @@ const unpickable = (entry: PickerEntry): boolean =>
     <ModelPicker :provider="provider" :model="model" :unpickable="unpickable" @pick="pick" @close="emit(`close`)">
         <template #footer>
             <!-- Composer footer's own spacing, so a reader can't tell whether this opened from a settings row or the composer. -->
-            <div
-                v-if="footerVisible"
-                class="flex min-h-0 shrink flex-col gap-2 overflow-y-auto border-t border-line bg-canvas px-3 py-2"
-            >
+            <div v-if="footerVisible" class="flex min-h-0 shrink flex-col gap-2 overflow-y-auto border-t border-line bg-canvas px-3 py-2">
                 <!-- Labels whose settings these are: the picker above browses every provider, this configures only the one entry. -->
                 <div class="flex items-center justify-between gap-2">
                     <span class="flex min-w-0 items-center gap-1.5 text-2xs font-medium uppercase tracking-wide text-muted">
                         <ProviderLogo :provider="provider" class="shrink-0 text-xs" />
-                        <span class="truncate">{{ providerDisplayLabel(provider) }} run</span>
+                        <span class="truncate">{{ t(`sandbox.modelPinPickerBody.run`, { provider: providerDisplayLabel(provider) }) }}</span>
                     </span>
                 </div>
 
-<!-- Reasoning effort, extended thinking and speed: the shell picker's own controls, shared verbatim (PickerRunSettings). -->
+                <!-- Reasoning effort, extended thinking and speed: the shell picker's own controls, shared verbatim (PickerRunSettings). -->
                 <PickerRunSettings
                     :provider="provider"
                     :model="model"
@@ -120,7 +120,7 @@ const unpickable = (entry: PickerEntry): boolean =>
 
                 <!-- Harness axis: the provider's own runtime, or its model through Claude Code. -->
                 <div v-if="harnessChoosable" class="flex items-center justify-between gap-2">
-                    <span class="text-2xs font-medium uppercase tracking-wide text-muted">Harness</span>
+                    <span class="text-2xs font-medium uppercase tracking-wide text-muted">{{ t(`sandbox.modelPinPickerBody.harness`) }}</span>
                     <div class="flex items-center gap-1">
                         <button
                             v-for="option in harnessOptions"
@@ -138,9 +138,11 @@ const unpickable = (entry: PickerEntry): boolean =>
 
                 <!-- Model limits must be visible before an unattended run starts. -->
                 <div v-if="limitations.length > 0" class="flex items-center justify-between gap-2">
-                    <span class="text-2xs font-medium uppercase tracking-wide text-muted">Not available here</span>
-                    <InfoHint label="What isn't available here" :text="`${limitations.length}`" class="shrink-0">
-                        <span class="block text-xs font-medium text-content">Not available here</span>
+                    <span class="text-2xs font-medium uppercase tracking-wide text-muted">{{
+                        t(`sandbox.modelPinPickerBody.notAvailableHere`)
+                    }}</span>
+                    <InfoHint :label="t(`sandbox.modelPinPickerBody.whatIsntAvailableHere`)" :text="`${limitations.length}`" class="shrink-0">
+                        <span class="block text-xs font-medium text-content">{{ t(`sandbox.modelPinPickerBody.notAvailableHere`) }}</span>
                         <ul class="mt-1 flex flex-col gap-1 text-xs">
                             <li v-for="limit in limitations" :key="limit" class="flex items-start gap-1.5">
                                 <span class="mt-[0.4rem] h-1 w-1 shrink-0 rounded-full bg-line-strong" aria-hidden="true"></span>

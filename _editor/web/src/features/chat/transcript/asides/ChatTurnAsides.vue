@@ -6,6 +6,9 @@ import type { ChatAsideMark } from "./chatAsides";
 import ChatToolRows from "../../tools/ChatToolRows.vue";
 import { useToolCalls } from "../../tools/useToolCalls";
 import { summarizeRun } from "../../tools/toolRun";
+import { useT } from "@intentic/ui/i18n";
+
+const t = useT();
 
 // What an assistant turn thought and did, on one lane: shared by the conversation (ChatMessageView) and a delegated
 // agent's record (Subagents.vue) so both read the same. Both marks belong to one row, which is why they are decided
@@ -25,7 +28,9 @@ const run = computed(() => (showToolCalls.value ? undefined : summarizeRun(props
 
 // `sparkles` is the mark the think tool already carries (toolPresentation.ts).
 const marks = computed<readonly ChatAsideMark[]>(() => [
-    ...(props.thinking === undefined || props.thinking === `` ? [] : [{ key: `thinking`, icon: `sparkles` as const, label: `Thinking`, busy: props.live }]),
+    ...(props.thinking === undefined || props.thinking === ``
+        ? []
+        : [{ key: `thinking`, icon: `sparkles` as const, label: t(`chat.chatTurnAsides.thinking`), busy: props.live }]),
     ...(run.value === undefined
         ? []
         : [

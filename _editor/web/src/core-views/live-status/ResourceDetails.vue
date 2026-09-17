@@ -4,6 +4,9 @@ import { Button, Card, StatusBadge } from "@intentic/ui";
 import { computed, reactive } from "vue";
 import { statusLabel, statusVariant } from "../../features/extensions/reconcileStatus";
 import { groupAccent, resourceIcon, resourceLogoUrl } from "../../features/extensions/resourceVisual";
+import { useT } from "@intentic/ui/i18n";
+
+const t = useT();
 
 /* Details for the selected planned resource, shown below the dependency graph. */
 
@@ -44,24 +47,27 @@ const logoFailed = reactive(new Set<string>());
                 <div class="flex min-w-0 flex-wrap items-center gap-2">
                     <span class="truncate font-medium text-content">{{ resource.id }}</span>
                     <StatusBadge :variant="statusVariant(resource.status)" :label="statusLabel(resource.status)" size="xs" dot />
-                    <span class="ui-status-pill bg-subtle/10 text-2xs font-medium text-subtle">{{
-                        resource.type
-                    }}</span>
-                    <span
-                        class="ui-status-pill text-2xs font-medium"
-                        :class="groupAccent(resource.group).frame"
-                        >{{ resource.group }}</span
-                    >
+                    <span class="ui-status-pill bg-subtle/10 text-2xs font-medium text-subtle">{{ resource.type }}</span>
+                    <span class="ui-status-pill text-2xs font-medium" :class="groupAccent(resource.group).frame">{{ resource.group }}</span>
                 </div>
             </div>
             <div class="flex shrink-0 items-center gap-2">
-                <Button v-if="openUrl" as="a" label="Open" size="small" severity="secondary" :href="openUrl" target="_blank" rel="noopener">
+                <Button
+                    v-if="openUrl"
+                    as="a"
+                    :label="t(`ui.action.open`)"
+                    size="small"
+                    severity="secondary"
+                    :href="openUrl"
+                    target="_blank"
+                    rel="noopener"
+                >
                     <template #icon><Icon name="external-link" /></template>
                 </Button>
                 <Button
                     v-if="deployment?.komodoDeploymentUrl"
                     as="a"
-                    label="Komodo"
+                    :label="t(`views.resourceDetails.komodo`)"
                     size="small"
                     :text="true"
                     :href="deployment.komodoDeploymentUrl"
@@ -70,18 +76,26 @@ const logoFailed = reactive(new Set<string>());
                 >
                     <template #icon><Icon name="cog" /></template>
                 </Button>
-                <Button size="small" :text="true" severity="secondary" aria-label="Close details" @click="selectedId = undefined">
+                <Button
+                    size="small"
+                    :text="true"
+                    severity="secondary"
+                    :aria-label="t(`views.resourceDetails.closeDetails`)"
+                    @click="selectedId = undefined"
+                >
                     <template #icon><Icon name="times" /></template>
                 </Button>
             </div>
         </div>
 
         <!-- Why it's out of sync (present only for drift). -->
-        <p v-if="resource.reason" class="text-sm text-muted"><span class="font-medium text-subtle">Reason:</span> {{ resource.reason }}</p>
+        <p v-if="resource.reason" class="text-sm text-muted">
+            <span class="font-medium text-subtle">{{ t(`views.resourceDetails.reason`) }}</span> {{ resource.reason }}
+        </p>
 
         <!-- Resolved non-secret inputs: the "what does this resolve to" answer, shown nowhere else. -->
         <div v-if="configEntries.length > 0">
-            <h4 class="mb-1 text-2xs font-semibold uppercase tracking-wide text-subtle">Config</h4>
+            <h4 class="mb-1 text-2xs font-semibold uppercase tracking-wide text-subtle">{{ t(`views.resourceDetails.config`) }}</h4>
             <div class="flex flex-wrap gap-1">
                 <span v-for="[key, value] in configEntries" :key="key" class="rounded bg-overlay px-1.5 py-0.5 font-mono text-2xs text-subtle"
                     >{{ key }}={{ value }}</span
@@ -91,29 +105,17 @@ const logoFailed = reactive(new Set<string>());
 
         <!-- Both directions of the dependency edges, as chips that re-select to navigate the graph. -->
         <div v-if="resource.dependsOn.length > 0">
-            <h4 class="mb-1 text-2xs font-semibold uppercase tracking-wide text-subtle">Depends on</h4>
+            <h4 class="mb-1 text-2xs font-semibold uppercase tracking-wide text-subtle">{{ t(`views.resourceDetails.dependsOn`) }}</h4>
             <div class="flex flex-wrap gap-1">
-                <button
-                    v-for="dep in resource.dependsOn"
-                    :key="dep"
-                    type="button"
-                    class="ui-chip font-mono text-content"
-                    @click="selectedId = dep"
-                >
+                <button v-for="dep in resource.dependsOn" :key="dep" type="button" class="ui-chip font-mono text-content" @click="selectedId = dep">
                     {{ dep }}
                 </button>
             </div>
         </div>
         <div v-if="requiredBy.length > 0">
-            <h4 class="mb-1 text-2xs font-semibold uppercase tracking-wide text-subtle">Required by</h4>
+            <h4 class="mb-1 text-2xs font-semibold uppercase tracking-wide text-subtle">{{ t(`views.resourceDetails.requiredBy`) }}</h4>
             <div class="flex flex-wrap gap-1">
-                <button
-                    v-for="dep in requiredBy"
-                    :key="dep"
-                    type="button"
-                    class="ui-chip font-mono text-content"
-                    @click="selectedId = dep"
-                >
+                <button v-for="dep in requiredBy" :key="dep" type="button" class="ui-chip font-mono text-content" @click="selectedId = dep">
                     {{ dep }}
                 </button>
             </div>
@@ -122,8 +124,13 @@ const logoFailed = reactive(new Set<string>());
         <!-- Live reality join: is the planned resource actually running, and on what image. -->
         <div v-if="deployment" class="border-t border-line-subtle pt-2">
             <div class="flex items-center gap-2">
-                <h4 class="text-2xs font-semibold uppercase tracking-wide text-subtle">Running now</h4>
-                <StatusBadge :variant="deployment.live ? 'success' : 'neutral'" :label="deployment.live ? 'live' : 'not deployed'" size="xs" dot />
+                <h4 class="text-2xs font-semibold uppercase tracking-wide text-subtle">{{ t(`views.resourceDetails.runningNow`) }}</h4>
+                <StatusBadge
+                    :variant="deployment.live ? 'success' : 'neutral'"
+                    :label="deployment.live ? 'live' : t(`views.resourceDetails.notDeployed`)"
+                    size="xs"
+                    dot
+                />
             </div>
             <p class="mt-1 truncate font-mono text-2xs text-subtle">{{ deployment.image }}</p>
         </div>

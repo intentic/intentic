@@ -23,19 +23,25 @@ import AgentSafetyPolicy from "../agent-settings/safety/AgentSafetyPolicy.vue";
 import AgentSafetyRules from "../agent-settings/safety/AgentSafetyRules.vue";
 import AgentSkills from "../agent-settings/skills/AgentSkills.vue";
 import AgentSubagents from "../agent-settings/behaviour/AgentSubagents.vue";
+import { useT } from "@intentic/ui/i18n";
 
 // Agent tab: every AI-related setting for this sandbox. Each group reads and writes the same settings object via
 // useSandboxSettings; only page-level state (which category, blocked/dropped notices) lives here. Categories are one
 // axis, grouped by part of the agent rather than by subject and phase.
 
-const SECTIONS = [
-    { label: `Models`, value: `models` },
-    { label: `Instructions`, value: `instructions` },
-    { label: `Tools`, value: `tools` },
-    { label: `Safety`, value: `safety` },
-    { label: `Finishing`, value: `finishing` },
-] as const;
-type Section = (typeof SECTIONS)[number][`value`];
+const t = useT();
+
+const SECTIONS = computed(
+    () =>
+        [
+            { label: t(`sandbox.sandboxAgent.models`), value: `models` },
+            { label: t(`sandbox.sandboxAgent.instructions`), value: `instructions` },
+            { label: t(`sandbox.sandboxAgent.tools`), value: `tools` },
+            { label: t(`sandbox.sandboxAgent.safety`), value: `safety` },
+            { label: t(`sandbox.sandboxAgent.finishing`), value: `finishing` },
+        ] as const,
+);
+type Section = (typeof SECTIONS.value)[number][`value`];
 const DEFAULT: Section = `models`;
 
 const route = useRoute();
@@ -48,7 +54,7 @@ const section = computed<Section>({
         if (typeof route.query[`connect`] === `string`) {
             return `models`;
         }
-        return SECTIONS.find((entry) => entry.value === route.query[`section`])?.value ?? DEFAULT;
+        return SECTIONS.value.find((entry) => entry.value === route.query[`section`])?.value ?? DEFAULT;
     },
     // Pushed, not replaced, so Back returns to the prior category instead of leaving the page.
     set: (value) => void router.push({ query: { ...route.query, connect: undefined, section: value === DEFAULT ? undefined : value } }),
@@ -65,24 +71,22 @@ const settingsBlocked = computed<NoticeModel | undefined>(() => {
     }
     // A failed read is an error; an offline sandbox is a fact about the world, so it's a warning, not a danger tone.
     if (settingsError.value !== undefined) {
-        return { tone: `danger`, title: `Couldn't read this sandbox's settings.`, detail: settingsError.value };
+        return { tone: `danger`, title: t(`sandbox.sandboxAgent.couldntReadSandboxsSettings`), detail: settingsError.value };
     }
-    return sandbox.reachable.value
-        ? undefined
-        : { tone: `warning`, title: `Your sandbox is offline, its settings can't be read or changed from here.` };
+    return sandbox.reachable.value ? undefined : { tone: `warning`, title: t(`sandbox.sandboxAgent.sandboxOfflineSettingsCant`) };
 });
 </script>
 
 <template>
     <!-- `@container`: every category below thins against this pane, which the docked chat can leave a third of the window's width. -->
     <div class="@container flex flex-col gap-6">
-<!-- No border under the strip: on mobile the hub draws its own bordered pill row above this one, and two bordered strips would read as two controls. -->
-        <SegmentedControl v-model="section" :options="SECTIONS" aria-label="Agent settings category" />
+        <!-- No border under the strip: on mobile the hub draws its own bordered pill row above this one, and two bordered strips would read as two controls. -->
+        <SegmentedControl v-model="section" :options="SECTIONS" :aria-label="t(`sandbox.sandboxAgent.agentSettingsCategory`)" />
 
-<!-- Page-level so it sits above whichever category is showing; every control below is inert while the read is pending or failed. -->
+        <!-- Page-level so it sits above whichever category is showing; every control below is inert while the read is pending or failed. -->
         <Notice v-if="settingsBlocked" :of="settingsBlocked" />
 
-<!-- Daemon accepted the save but dropped a field; the control already reverted, so without this it looks like a rejected input. -->
+        <!-- Daemon accepted the save but dropped a field; the control already reverted, so without this it looks like a rejected input. -->
         <Notice v-if="settingsDropped" tone="warning">{{ settingsDropped }}</Notice>
 
         <!-- Accounts first: every model choice below depends on a signed-in provider. -->
@@ -107,7 +111,7 @@ const settingsBlocked = computed<NoticeModel | undefined>(() => {
             <AgentSubagents />
         </template>
 
-<!-- Whether anything judges, then what it judges against; the decision log sits last so it doesn't bury the controls above it. -->
+        <!-- Whether anything judges, then what it judges against; the decision log sits last so it doesn't bury the controls above it. -->
         <template v-else-if="section === `safety`">
             <AgentSafetyJudge />
             <!-- Between the switch and the policy: what the judge is scoped to precedes the document it judges against. -->

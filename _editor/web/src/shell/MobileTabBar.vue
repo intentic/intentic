@@ -18,6 +18,9 @@ import { usePushFlow } from "../features/workspace/push/usePushFlow";
 import { useSandboxAttention } from "../features/sandbox/overview/sandboxAttention";
 import { useSandbox } from "../features/sandbox/client/useSandbox";
 import { restartRunning } from "../features/sandbox/live/sandboxRestart";
+import { useT } from "@intentic/ui/i18n";
+
+const t = useT();
 
 // Four fixed tabs: Agents (fleet, "needs you" badge), Chat (the conversation you were last in), Review (drafts plus
 // uncommitted changes owed), Menu (what the sandbox needs, standing in for the desktop rail's chip); everything else,
@@ -62,7 +65,7 @@ const chatBadge = computed<ViewBadge | undefined>(() => {
         case `streaming`:
             return { running: `Working on your last message` };
         case `awaiting`:
-            return { count: 1, tooltip: `Waiting for your answer` };
+            return { count: 1, tooltip: t(`shell.mobileTabBar.waitingAnswer`) };
         default:
             return undefined;
     }
@@ -70,7 +73,7 @@ const chatBadge = computed<ViewBadge | undefined>(() => {
 const chatTab = computed<Tab>(() => ({
     id: `chat`,
     to: mobileChatPath(active.value.conversationId),
-    label: `Chat`,
+    label: t(`shell.mobileTabBar.chat`),
     match: (route) => route.path.startsWith(`/agents/`),
     ...(chatBadge.value === undefined ? {} : { badge: chatBadge.value }),
 }));
@@ -90,7 +93,7 @@ const reviewBadge = computed<ViewBadge | undefined>(() => {
     }
     const count = (approvalsTile.value?.badge?.count ?? 0) + changes.count.value;
     if (count > 0) {
-        return { count, tooltip: `${count} to review`, ...landing };
+        return { count, tooltip: t(`shell.mobileTabBar.toReview`, { count }), ...landing };
     }
     const work = changes.outgoing.value;
     if (work === undefined) {
@@ -103,7 +106,7 @@ const tabs = computed<readonly Tab[]>(() => [
     {
         id: `agents`,
         to: `/agents`,
-        label: `Agents`,
+        label: t(`shell.mobileTabBar.agents`),
         // The desktop rail's tile, on a phone: one derivation (agentsTile.ts) for both, so a count that follows
         // the board's scope cannot follow it in one shell and not the other.
         ...(agentsBadge.value === undefined ? {} : { badge: agentsBadge.value }),
@@ -115,11 +118,11 @@ const tabs = computed<readonly Tab[]>(() => [
         /* The queue when the pack is on; the workspace's OWN review: its Changes panel, when it is off. */
         id: `approvals`,
         to: approvalsTile.value?.to ?? `/workspace?panel=changes`,
-        label: `Review`,
+        label: t(`shell.mobileTabBar.review`),
         ...(reviewBadge.value === undefined ? {} : { badge: reviewBadge.value }),
         ...(approvalsTile.value === undefined ? { panel: `changes` as const } : {}),
     },
-    { id: `menu`, to: `/menu`, label: `Menu`, ...(menuBadge.value === undefined ? {} : { badge: menuBadge.value }) },
+    { id: `menu`, to: `/menu`, label: t(`shell.mobileTabBar.menu`), ...(menuBadge.value === undefined ? {} : { badge: menuBadge.value }) },
 ]);
 
 // Same order as the rail's tileLabel; the only spot badge, running work and note are spelled out for a screen reader.
@@ -156,7 +159,7 @@ const isNavActive = (tab: Tab): boolean => {
             :aria-label="tabLabel(tab)"
         >
             <!-- mark replaces the count when the amount isn't what you act on; aria-hidden, the label already says it. -->
-<!-- One type size for all three corner marks, the same one the desktop rail sets: each states its own size as a
+            <!-- One type size for all three corner marks, the same one the desktop rail sets: each states its own size as a
                  multiple of it, so the badge, the turning mark and the note weigh the same instead of landing on three numbers. -->
             <span class="relative text-[0.625rem]">
                 <RailIcon :area="tab.id" class="text-xl" />

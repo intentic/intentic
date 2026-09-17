@@ -2,6 +2,7 @@
 import { Button, Card, Checkbox, ui, Icon, Modal } from "@intentic/extension-ui";
 import type { RepoApp, TemplateSummary } from "@intentic/sandbox-contract";
 import { computed, ref } from "vue";
+import { t } from "./i18n.js";
 
 // Single entry point for scaffolding apps, kept behind a modal so the view stays a clean apps+tests list. Pure picker:
 // emits the chosen template/name entries and closes; AppsView owns the install kickoff and terminal.
@@ -82,9 +83,9 @@ const submit = (): void => {
 </script>
 
 <template>
-    <Modal v-model:open="visible" size="md" header="Add an app" @hide="reset">
+    <Modal v-model:open="visible" size="md" :header="t(`addAppDialog.addApp`)" @hide="reset">
         <div class="flex flex-col gap-3">
-            <p class="text-sm text-muted">Pick one or more templates to scaffold into this monorepo. Name each instance to run several of a kind.</p>
+            <p class="text-sm text-muted">{{ t(`addAppDialog.pickOneMoreTemplates`) }}</p>
             <Card v-for="template in templates" :key="template.key" class="flex flex-col gap-2">
                 <label class="flex cursor-pointer items-start gap-3">
                     <Checkbox
@@ -104,17 +105,17 @@ const submit = (): void => {
                 </label>
                 <!-- Name input shown when this template is checked. -->
                 <div v-if="selected.includes(template.key)" class="ml-8 flex items-center gap-2">
-                    <label class="text-xs text-muted">Name:</label>
+                    <label class="text-xs text-muted">{{ t(`addAppDialog.name`) }}</label>
                     <input
                         v-model="instanceNames[template.key]"
                         type="text"
                         :class="ui.inputSm(`flex-1`)"
-                        placeholder="e.g. shop-api"
+                        :placeholder="t(`addAppDialog.eGShopApi`)"
                     />
                 </div>
             </Card>
             <div class="flex justify-end">
-                <Button label="Add" :disabled="!canAdd" @click="submit">
+                <Button :label="t(`addAppDialog.add`)" :disabled="!canAdd" @click="submit">
                     <template #icon><Icon name="plus" /></template>
                 </Button>
             </div>

@@ -7,12 +7,15 @@ import { useEnvironment } from "../environment/useEnvironment";
 import { runSeveringDeviceCommand, useDevices, useHostHolding } from "../devices/useDevices";
 import { useHubWork } from "../../../shell/hub/hubWork";
 import ConnectDeviceHint from "../devices/ConnectDeviceHint.vue";
+import { useT } from "@intentic/ui/i18n";
 
 // Checks the daemon's route surface against this app's contract, not version strings (SandboxUpdateCard); catches
 // gaps a version compare misses (dev packages are all 0.0.0). A missing route names the daemon as older; a drifted
 // payload only proves disagreement, so the heading never guesses. Non-blocking: an old sandbox keeps working.
 
 // A route name with no dot is its own area, not a hole in the list.
+const t = useT();
+
 const areas = (names: readonly string[]): string[] => [...new Set(names.map((name) => name.split(`.`)[0] ?? name))].toSorted();
 // Display label overrides for area name casing (`vpn` -> `VPN`).
 const AREA_LABEL: Readonly<Record<string, string>> = { ci: `CI`, vpn: `VPN` };
@@ -78,7 +81,9 @@ const reloadOnDevice = async (): Promise<void> => {
 
 const heading = computed(() => (daemonBehind.value ? `Sandbox is behind the app` : `App and sandbox are out of sync`));
 const detail = computed(() =>
-    daemonBehind.value ? `${missingLabel.value} won't work until the sandbox is reloaded.` : `${driftedLabel.value} may show blank values or fail to save.`,
+    daemonBehind.value
+        ? `${missingLabel.value} won't work until the sandbox is reloaded.`
+        : `${driftedLabel.value} may show blank values or fail to save.`,
 );
 </script>
 
@@ -93,39 +98,49 @@ const detail = computed(() =>
                         <!-- Compiles and restarts the daemon out there; this page's own connection dies with it. -->
                         <Button
                             v-if="hostId"
-                            :label="reloading ? `Reloading…` : `Reload sandbox`"
+                            :label="reloading ? t(`sandbox.sandboxBehindCard.reloading`) : t(`sandbox.sandboxBehindCard.reloadSandbox`)"
                             size="small"
                             :loading="reloading"
                             @click="void reloadOnDevice()"
                         >
                             <template #icon><Icon name="bolt" /></template>
                         </Button>
-                        <Button v-if="daemonDrifted || reloaded" label="Reload page" size="small" severity="secondary" @click="reloadPage" />
+                        <Button
+                            v-if="daemonDrifted || reloaded"
+                            :label="t(`sandbox.sandboxBehindCard.reloadPage`)"
+                            size="small"
+                            severity="secondary"
+                            @click="reloadPage"
+                        />
                         <span v-if="hostId" class="text-2xs text-subtle">
-                            <template v-if="reloaded">Rebuilt on {{ hostId }} — reload this page to pick it up.</template>
-                            <template v-else-if="reloading">
-                                Compiling on {{ hostId }} and restarting the container: this can take a minute, and the connection drops as it
-                                comes back.
-                            </template>
-                            <template v-else>Compiles the working tree on {{ hostId }} and restarts this sandbox.</template>
+                            <template v-if="reloaded">{{ t(`sandbox.sandboxBehindCard.rebuiltOnReloadPage`, { hostId }) }}</template>
+                            <template v-else-if="reloading">{{ t(`sandbox.sandboxBehindCard.compilingOnRestartingContainer`, { hostId }) }}</template>
+                            <template v-else>{{ t(`sandbox.sandboxBehindCard.compilesWorkingTreeOn`, { hostId }) }}</template>
                         </span>
                     </div>
                     <Notice v-if="failed" tone="warning" class="text-2xs">{{ failed }}</Notice>
                     <div v-if="showCommand" class="flex flex-wrap items-center gap-2">
-                        <span class="text-2xs text-subtle">{{ daemonDrifted && !failed ? `Still here? Run` : `Run` }}</span>
+                        <span class="text-2xs text-subtle">{{
+                            daemonDrifted && !failed ? t(`sandbox.sandboxBehindCard.stillHereRun`) : t(`sandbox.sandboxBehindCard.run`)
+                        }}</span>
                         <div class="sandbox-reload-command flex min-w-0 flex-1 items-center rounded-md border border-line bg-canvas">
                             <Code class="min-w-0 flex-1" :code="reloadCommand" lang="bash" :copyable="false" />
-                            <CopyButton :text="reloadCommand" label="Copy" aria-label="Copy reload command" class="mr-1" />
+                            <CopyButton
+                                :text="reloadCommand"
+                                :label="t(`ui.action.copy`)"
+                                :aria-label="t(`sandbox.sandboxBehindCard.copyReloadCommand`)"
+                                class="mr-1"
+                            />
                         </div>
                     </div>
-<!-- Only where the button never had a chance: a refusal means the door is open and something else went wrong, which connecting a second time would not fix. -->
+                    <!-- Only where the button never had a chance: a refusal means the door is open and something else went wrong, which connecting a second time would not fix. -->
                     <ConnectDeviceHint v-if="!hostId" :slug="slug" gains="this becomes a button." />
                 </div>
                 <div v-else-if="daemonDrifted" class="flex flex-wrap items-center gap-2">
-                    <Button label="Reload page" size="small" @click="reloadPage" />
-                    <span class="text-2xs text-subtle">If it stays, update the sandbox image.</span>
+                    <Button :label="t(`sandbox.sandboxBehindCard.reloadPage`)" size="small" @click="reloadPage" />
+                    <span class="text-2xs text-subtle">{{ t(`sandbox.sandboxBehindCard.staysUpdateSandboxImage`) }}</span>
                 </div>
-                <p v-else class="text-2xs text-subtle">Update the sandbox image.</p>
+                <p v-else class="text-2xs text-subtle">{{ t(`sandbox.sandboxBehindCard.updateSandboxImage`) }}</p>
             </div>
         </RowNote>
     </RowGroup>

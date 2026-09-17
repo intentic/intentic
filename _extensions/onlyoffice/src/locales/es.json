@@ -1,0 +1,16 @@
+{
+    "onlyOfficeViewer": {
+        "downloading": "Downloading ONLYOFFICE Docs…",
+        "downloadingPercent": "Downloading ONLYOFFICE Docs, {percent}%…",
+        "editorNeedsAddressBrowser": "The editor needs an address the browser can reach. Your sandbox isn't reachable from outside yet: finish setup so it registers its address.",
+        "extensionSettings": "Extension settings",
+        "onlyofficeDocsRunsContainer": "ONLYOFFICE Docs runs as a container in this sandbox's Docker engine, which isn't on. {detail}",
+        "openCapabilities": "Open capabilities",
+        "openEditSaveDocument": "Open, edit and save this document in ONLYOFFICE Docs. The first start downloads the document server, about 2 GB, once.",
+        "openingInOnlyofficeDocs": "Opening in ONLYOFFICE Docs…",
+        "startOnlyofficeDocs": "Start ONLYOFFICE Docs",
+        "startSandboxNowOn": "Start it with the sandbox from now on",
+        "startingDocumentServerCold": "Starting the document server… A cold start takes about two minutes: it regenerates its fonts and themes every time. It stays up afterwards.",
+        "tryAgain": "Try again"
+    }
+}

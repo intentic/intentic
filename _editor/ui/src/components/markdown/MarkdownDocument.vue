@@ -17,7 +17,7 @@ const {
     save: policy = `auto`,
     saving = false,
     placeholder = ``,
-    label = `Document`,
+    label,
     stored,
     maxChars,
     readOnlyReason,
@@ -109,7 +109,7 @@ defineExpose({ text, commit, focus: (): void => surface.value?.focus(), dirty, s
             :source="doc"
             :caret-at="caretAt"
             :placeholder="placeholder"
-            :aria-label="label"
+            :aria-label="label ?? t(`ui.markdownDocument.document`)"
             @change="onChange"
             @save="commit"
         />
@@ -119,7 +119,7 @@ defineExpose({ text, commit, focus: (): void => surface.value?.focus(), dirty, s
             :model-value="doc"
             lang="markdown"
             :placeholder="placeholder"
-            :aria-label="label"
+            :aria-label="label ?? t(`ui.markdownDocument.document`)"
             class="min-w-0 flex-1"
             @update:model-value="onChange"
             @keydown.ctrl.s.prevent="commit"

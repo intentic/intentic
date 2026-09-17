@@ -50,7 +50,7 @@ const hideBrokenImage = (event: Event): void => {
     >
         <span v-if="initials !== undefined" class="font-semibold leading-none">{{ initials }}</span>
         <Icon v-else name="user" />
-<!-- Layered over the fallback tier, so a failed load reveals it rather than leaving a hole. -->
+        <!-- Layered over the fallback tier, so a failed load reveals it rather than leaving a hole. -->
         <img
             v-if="src !== undefined && src !== null"
             :src="src"

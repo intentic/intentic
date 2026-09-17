@@ -3,10 +3,13 @@ import { Button, Row, RowGroup } from "@intentic/ui";
 import ToggleSwitch from "primevue/toggleswitch";
 import { computed } from "vue";
 import { usePushNotifications } from "../../push/usePushNotifications";
+import { useT } from "@intentic/ui/i18n";
 
 // Whether this sandbox may reach you when you're not looking at it. Per-device: enabling here does not affect other
 // devices, and the daemon suppresses sends while any tab on this sandbox is open and active. Shown as a footnote under
 // the group, not as rows, since a control-less Row reads as broken.
+
+const t = useT();
 
 const { state, busy, error, delivered, canToggle, enable, disable, sendTest } = usePushNotifications();
 
@@ -39,13 +42,15 @@ const status = computed(() => {
 <template>
     <div class="flex flex-col gap-6">
         <div class="flex flex-col gap-2">
-            <RowGroup label="Push notifications">
-                <Row icon="bolt" title="Notify this device" :description="status">
+            <RowGroup :label="t(`settings.settingsNotifications.pushNotifications`)">
+                <Row icon="bolt" :title="t(`settings.settingsNotifications.notifyDevice`)" :description="status">
                     <template #control><ToggleSwitch :model-value="enabled" :disabled="!canToggle" @update:model-value="toggle" /></template>
                 </Row>
-                <Row v-if="enabled" icon="send" title="Send a test">
+                <Row v-if="enabled" icon="send" :title="t(`settings.settingsNotifications.sendTest`)">
                     <template #control>
-                        <Button size="small" severity="secondary" :disabled="busy" @click="sendTest"> Send test </Button>
+                        <Button size="small" severity="secondary" :disabled="busy" @click="sendTest">
+                            {{ t(`settings.settingsNotifications.sendTest2`) }}
+                        </Button>
                     </template>
                 </Row>
             </RowGroup>

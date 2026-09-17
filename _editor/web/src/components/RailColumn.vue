@@ -4,6 +4,9 @@ import { computed } from "vue";
 import { ResizeSeam } from "@intentic/ui";
 import { DEFAULT_RAIL_WIDTH, MAX_RAIL_WIDTH, MIN_RAIL_WIDTH, railWidth, setRailWidth } from "../features/agents/board/columnWidth";
 import { toAppPx, toScreenPx, uiLength } from "../shell/window/uiScale";
+import { useT } from "@intentic/ui/i18n";
+
+const t = useT();
 
 /* The seam speaks in pointer coordinates; the rail's width is stored in app pixels (see uiScale). */
 const seamWidth = computed<number>({
@@ -14,7 +17,7 @@ const seamWidth = computed<number>({
 
 <template>
     <!-- No edge at all: the rail and the pane share one surface, and the seam below is what a pointer finds when the width is what you want, not a rule standing there the rest of the time. -->
-<!-- The width stays on the <aside>, which is the rail: hosts, and railColumn.test.ts, address it as one element at one width. -->
+    <!-- The width stays on the <aside>, which is the rail: hosts, and railColumn.test.ts, address it as one element at one width. -->
     <aside class="relative flex h-full min-h-0 shrink-0" :style="{ width: uiLength(railWidth) }">
         <div class="flex min-h-0 min-w-0 flex-1 flex-col items-stretch gap-1 p-1.5">
             <slot />
@@ -24,7 +27,7 @@ const seamWidth = computed<number>({
             :min="toScreenPx(MIN_RAIL_WIDTH)"
             :max="toScreenPx(MAX_RAIL_WIDTH)"
             :reset="toScreenPx(DEFAULT_RAIL_WIDTH)"
-            title="Drag to resize · double-click to reset"
+            :title="t(`common.railColumn.dragToResizeDouble`)"
         />
     </aside>
 </template>

@@ -9,7 +9,7 @@ import MarkdownDocument from "../markdown/MarkdownDocument.vue";
 import ScrollFrame from "../layout/ScrollFrame.vue";
 import StatusBadge from "../feedback/StatusBadge.vue";
 
-const { verb = `Delete`, paged = false } = defineProps<{
+const { verb, paged = false } = defineProps<{
     /** The note's name, in the frame's header. */
     title: string;
     /** The file as it stands on disk: what Copy copies, whatever is on screen. */
@@ -45,7 +45,7 @@ const confirming = defineModel<boolean>(`confirming`, { default: false });
         <!-- "Unsaved" is this component's own badge, a fact about the draft it holds, not something callers render. -->
         <template #badges>
             <slot name="badges" />
-            <StatusBadge v-if="editing" variant="warning" size="xs" label="unsaved" />
+            <StatusBadge v-if="editing" variant="warning" size="xs" :label="t(`ui.noteEditor.unsaved`)" />
         </template>
 
         <template v-if="$slots[`description`]" #description><slot name="description" /></template>
@@ -61,15 +61,21 @@ const confirming = defineModel<boolean>(`confirming`, { default: false });
             <!-- Caller's own controls sit before Copy, shown only while reading; editing replaces everything to their right. -->
             <template v-else>
                 <slot name="actions" />
-                <CopyButton :text="raw" v-tooltip.top="'Copy the raw note'" />
-                <button type="button" :class="ui.iconButton(`h-7 w-7`)" aria-label="Edit this note" v-tooltip.top="'Edit'" @click="emit(`edit`)">
+                <CopyButton :text="raw" v-tooltip.top="t(`ui.noteEditor.copyRawNote`)" />
+                <button
+                    type="button"
+                    :class="ui.iconButton(`h-7 w-7`)"
+                    :aria-label="t(`ui.noteEditor.editNote`)"
+                    v-tooltip.top="t(`ui.action.edit`)"
+                    @click="emit(`edit`)"
+                >
                     <Icon name="pencil" />
                 </button>
                 <button
                     type="button"
                     :class="ui.iconButton(`h-7 w-7 hover:bg-danger/10 hover:text-danger`)"
-                    :aria-label="`${verb} this note`"
-                    v-tooltip.top="verb"
+                    :aria-label="t(`ui.noteEditor.note`, { verb: verb ?? t(`ui.action.delete`) })"
+                    v-tooltip.top="verb ?? t(`ui.action.delete`)"
                     @click="confirming = true"
                 >
                     <Icon name="trash" />
@@ -82,14 +88,20 @@ const confirming = defineModel<boolean>(`confirming`, { default: false });
             <div v-if="confirming" class="flex flex-wrap items-center justify-between gap-2 border-b border-danger/30 bg-danger/10 px-4 py-2.5">
                 <span class="text-xs text-danger"><slot name="confirm" /></span>
                 <div class="flex shrink-0 items-center gap-1.5">
-                    <Button label="Keep it" size="small" severity="secondary" @click="confirming = false" />
-                    <Button :label="`${verb} it`" size="small" severity="danger" :loading="removing" @click="emit(`remove`)" />
+                    <Button :label="t(`ui.noteEditor.keep`)" size="small" severity="secondary" @click="confirming = false" />
+                    <Button
+                        :label="t(`ui.noteEditor.it`, { verb: verb ?? t(`ui.action.delete`) })"
+                        size="small"
+                        severity="danger"
+                        :loading="removing"
+                        @click="emit(`remove`)"
+                    />
                 </div>
             </div>
             <div v-if="error" class="border-b border-danger/30 bg-danger/10 px-4 py-2 text-xs text-danger">{{ error }}</div>
         </template>
 
-        <p v-if="loading && !editing" class="px-4 py-6 text-xs text-subtle">Loading…</p>
+        <p v-if="loading && !editing" class="px-4 py-6 text-xs text-subtle">{{ t(`ui.noteEditor.loading`) }}</p>
         <template v-else>
             <!-- `save="none"`: this frame's Cancel/Save pair is the save policy, so the document must not offer its own. -->
             <div
@@ -99,10 +111,16 @@ const confirming = defineModel<boolean>(`confirming`, { default: false });
                 @keydown.meta.s.prevent="emit(`save`)"
                 @keydown.esc="emit(`cancel`)"
             >
-                <MarkdownDocument v-model="source" editable save="none" label="Note" placeholder="Write the note." />
+                <MarkdownDocument
+                    v-model="source"
+                    editable
+                    save="none"
+                    :label="t(`ui.noteEditor.note2`)"
+                    :placeholder="t(`ui.noteEditor.writeNote`)"
+                />
             </div>
             <slot v-else>
-                <MarkdownDocument :model-value="source" label="Note" class="px-4 py-3" />
+                <MarkdownDocument :model-value="source" :label="t(`ui.noteEditor.note2`)" class="px-4 py-3" />
             </slot>
         </template>
     </ScrollFrame>

@@ -11,7 +11,7 @@ import { endpointProviders, endpointsLoaded, trialStatus } from "../../chat/acco
 import { useChat } from "../../chat/run/useChat";
 import { queryClient } from "../../../lib/queryPersistence";
 import { PANELS } from "../../../lib/queryKeys";
-import { BUILD_IDEAS, buildPrompt } from "./buildIdeas";
+import { buildIdeas, buildPrompt } from "./buildIdeas";
 import { router } from "../../../router";
 import AgentsView from "./AgentsView.vue";
 import { IconStub } from "@intentic/ui/testing";
@@ -70,7 +70,7 @@ it(`asks for a task rather than for a sign-in, even with nothing connected`, asy
     // Nor the subscription row that came with it: what a chat can send with is answered in the model picker.
     expect(starterNamed(board, `Claude`)).toBeUndefined();
     // Something to press: the build ladder, since this mount has no repositories.
-    expect(starterNamed(board, BUILD_IDEAS[0]!.label)).toEqual(expect.any(Object));
+    expect(starterNamed(board, buildIdeas()[0]!.label)).toEqual(expect.any(Object));
 
     // There is one composer in this product, the chat's; a second one here couldn't even send, since nothing is
     // connected yet.
@@ -106,7 +106,7 @@ it(`offers building on an empty workspace, and nothing that points at code which
     expect(starterNamed(board, `Review my changes`)).toBeUndefined();
 
     // The build ladder is drawn from its own source (buildIdeas.ts).
-    for (const example of BUILD_IDEAS) {
+    for (const example of buildIdeas()) {
         expect(starterNamed(board, example.label)).toEqual(expect.any(Object));
     }
 });
@@ -117,10 +117,10 @@ it(`fills the composer with the build task rather than sending it`, async () => 
     const board = mount(AgentsView);
     await nextTick();
 
-    starterNamed(board, BUILD_IDEAS[0]!.label)!.click();
+    starterNamed(board, buildIdeas()[0]!.label)!.click();
     await nextTick();
 
-    expect(useChat().active.value.draft.value).toBe(buildPrompt(BUILD_IDEAS[0]!.idea));
+    expect(useChat().active.value.draft.value).toBe(buildPrompt(buildIdeas()[0]!.idea));
     expect(useChat().active.value.messages.value).toHaveLength(0);
 });
 

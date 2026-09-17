@@ -11,10 +11,13 @@ import { type RunSettingsPatch, usePickerRunSettings } from "./pickerRunSettings
 import ModelPicker from "./ModelPicker.vue";
 import PickerAccounts from "../accounts/PickerAccounts.vue";
 import PickerRunSettings from "./PickerRunSettings.vue";
+import { useT } from "@intentic/ui/i18n";
 
 // Chat's binding of the shared model picker: the list, the who-serves-the-turn block, and per-conversation footer
 // controls (extended thinking, fast speed, this runtime's limits). Edits the given conversation, not the active tab, so
 // a proposed session's picker can be re-pointed before it starts. Harness is a separate axis from the model.
+
+const t = useT();
 
 const emit = defineEmits<{ selected: [] }>();
 const { conversation } = defineProps<{ conversation: Conversation }>();
@@ -124,15 +127,12 @@ const footerVisible = computed(
 <template>
     <ModelPicker :provider="provider" :model="model" :unpickable="unpickable" @pick="pick" @close="emit(`selected`)">
         <template #footer>
-<!-- Session controls with no place in the shared list: who serves the turn, extended thinking, fast speed, and this runtime's limits. -->
-<!-- Matches the model list's own px-3 rhythm; row groups counter it with -mx-3 so their tint still spans the panel. -->
-<!-- Shrinks and scrolls instead of holding natural height, paired with the list's own floor. -->
-<!-- bg-canvas marks the footer as the surface the list stands on, not more list; a rule alone read unclearly on a tall picker. -->
-            <div
-                v-if="footerVisible"
-                class="flex min-h-0 shrink flex-col gap-2 overflow-y-auto border-t border-line bg-canvas px-3 py-2"
-            >
-<!-- Account list and harness axis, shared with the shell's own picker. -->
+            <!-- Session controls with no place in the shared list: who serves the turn, extended thinking, fast speed, and this runtime's limits. -->
+            <!-- Matches the model list's own px-3 rhythm; row groups counter it with -mx-3 so their tint still spans the panel. -->
+            <!-- Shrinks and scrolls instead of holding natural height, paired with the list's own floor. -->
+            <!-- bg-canvas marks the footer as the surface the list stands on, not more list; a rule alone read unclearly on a tall picker. -->
+            <div v-if="footerVisible" class="flex min-h-0 shrink flex-col gap-2 overflow-y-auto border-t border-line bg-canvas px-3 py-2">
+                <!-- Account list and harness axis, shared with the shell's own picker. -->
                 <PickerAccounts
                     v-if="accountsShown"
                     :provider="provider"
@@ -146,7 +146,7 @@ const footerVisible = computed(
                     @navigate="emit(`selected`)"
                 />
 
-<!-- Extended thinking and speed: the shell picker's and the settings page's own chips, shared verbatim (PickerRunSettings). -->
+                <!-- Extended thinking and speed: the shell picker's and the settings page's own chips, shared verbatim (PickerRunSettings). -->
                 <div v-if="runSettingsShown" class="flex flex-col gap-1">
                     <PickerRunSettings
                         :provider="provider"
@@ -158,24 +158,24 @@ const footerVisible = computed(
                         :effort-row="false"
                         @update="applyRun($event)"
                     />
-<!-- Shown only when the harness's answer differs from the ask; a notice under a working control trains people to ignore notices. -->
+                    <!-- Shown only when the harness's answer differs from the ask; a notice under a working control trains people to ignore notices. -->
                     <span v-if="fastSpeedNotice !== undefined" class="text-2xs text-subtle">{{ fastSpeedNotice }}</span>
                 </div>
 
-<!-- The toggle is the standing veto (tierHold), shown only where it could stop something. -->
+                <!-- The toggle is the standing veto (tierHold), shown only where it could stop something. -->
                 <div v-if="tierHoldOffered || tierNotice !== undefined" class="flex flex-col gap-1">
                     <div v-if="tierHoldOffered" class="flex items-center justify-between gap-2">
-                        <span class="text-2xs font-medium uppercase tracking-wide text-muted">Simple turns may run cheaper</span>
+                        <span class="text-2xs font-medium uppercase tracking-wide text-muted">{{ t(`chat.chatModelPicker.simpleTurnsMayRun`) }}</span>
                         <button
                             type="button"
                             class="composer-ghost h-7 gap-1 px-2.5 text-2xs font-medium max-md:h-10"
                             :class="{ 'composer-active': tierHold }"
                             @click="conversation.setTierHold(!tierHold)"
                             :aria-pressed="tierHold"
-                            aria-label="Keep this conversation on the picked model"
+                            :aria-label="t(`chat.chatModelPicker.keepConversationOnPicked`)"
                         >
                             <Icon name="credit-card" class="text-2xs" />
-                            <span>{{ tierHold ? "My pick only" : "Allowed" }}</span>
+                            <span>{{ tierHold ? t(`chat.chatModelPicker.myPickOnly`) : t(`chat.chatModelPicker.allowed`) }}</span>
                         </button>
                     </div>
                     <span v-if="tierNotice !== undefined" class="text-2xs text-subtle">{{ tierNotice }}</span>
@@ -185,16 +185,16 @@ const footerVisible = computed(
                         class="text-2xs text-link hover:underline"
                         @click="emit(`selected`)"
                     >
-                        Turn it off for every chat
+                        {{ t(`chat.chatModelPicker.turnOffEveryChat`) }}
                     </RouterLink>
                 </div>
 
-<!-- One row (label-left/control-right), the list itself behind a hover card. -->
+                <!-- One row (label-left/control-right), the list itself behind a hover card. -->
                 <div v-if="limitations.length > 0" class="flex items-center justify-between gap-2">
-                    <span class="text-2xs font-medium uppercase tracking-wide text-muted">Not available here</span>
-                    <InfoHint label="What isn't available here" :text="`${limitations.length}`" class="shrink-0">
-<!-- States its own heading, since the card teleports to the tooltip tier and may land clear of the row that raised it. -->
-                        <span class="block text-xs font-medium text-content">Not available here</span>
+                    <span class="text-2xs font-medium uppercase tracking-wide text-muted">{{ t(`chat.chatModelPicker.notAvailableHere`) }}</span>
+                    <InfoHint :label="t(`chat.chatModelPicker.whatIsntAvailableHere`)" :text="`${limitations.length}`" class="shrink-0">
+                        <!-- States its own heading, since the card teleports to the tooltip tier and may land clear of the row that raised it. -->
+                        <span class="block text-xs font-medium text-content">{{ t(`chat.chatModelPicker.notAvailableHere`) }}</span>
                         <ul class="mt-1 flex flex-col gap-1 text-xs">
                             <li v-for="limit in limitations" :key="limit" class="flex items-start gap-1.5">
                                 <span class="mt-[0.4rem] h-1 w-1 shrink-0 rounded-full bg-line-strong" aria-hidden="true"></span>

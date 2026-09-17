@@ -4,6 +4,7 @@ import { HARNESSES, type OutputField, providerLabel, type WorkflowStep } from "@
 import { computed, ref } from "vue";
 import { host } from "./host";
 import { usePersonas } from "./usePersonas";
+import { t } from "./i18n.js";
 
 // Step panel asks two things: what it does (prompt) and how it's known done (goal), rendered as prose via
 // `<ProseField>`, not bordered fields. Everything else defaults and sits behind Advanced, whose summary names anything
@@ -35,21 +36,21 @@ const title = computed({ get: () => step.value.title, set: (value: string) => pa
 const prompt = computed({ get: () => step.value.prompt ?? ``, set: (value: string) => patch({ prompt: declared(value) }) });
 const goal = computed({ get: () => step.value.goal ?? ``, set: (value: string) => patch({ goal: declared(value) }) });
 
-const OUTPUT_OPTIONS = [
-    { value: `none` as const, label: `Nothing` },
-    { value: `claim` as const, label: `A claim` },
-    { value: `json` as const, label: `Data` },
-];
-const CONTEXT_OPTIONS = [
-    { value: `fresh` as const, label: `Fresh each round` },
-    { value: `continue` as const, label: `Keep the thread` },
-];
-const TYPE_OPTIONS: { label: string; value: OutputField["type"] }[] = [
+const OUTPUT_OPTIONS = computed(() => [
+    { value: `none` as const, label: t(`stepInspector.nothing`) },
+    { value: `claim` as const, label: t(`stepInspector.claim`) },
+    { value: `json` as const, label: t(`stepInspector.data`) },
+]);
+const CONTEXT_OPTIONS = computed(() => [
+    { value: `fresh` as const, label: t(`stepInspector.freshEachRound`) },
+    { value: `continue` as const, label: t(`stepInspector.keepThread`) },
+]);
+const TYPE_OPTIONS = computed((): { label: string; value: OutputField["type"] }[] => [
     { label: `text`, value: `string` },
     { label: `number`, value: `number` },
     { label: `yes/no`, value: `boolean` },
-    { label: `list of text`, value: `string[]` },
-];
+    { label: t(`stepInspector.listText`), value: `string[]` },
+]);
 
 const newField = (existing: readonly OutputField[] = []): OutputField => {
     const names = new Set(existing.map((field) => field.name));
@@ -158,7 +159,7 @@ const actsAs = computed<string>({
 
 // `face` renders each persona's own character, matching the Personas page and chat; Nobody gets a plain icon.
 const personaOptions = computed<readonly PickerOption[]>(() => [
-    { value: NOBODY, label: `Nobody`, description: `full tools, no accounts`, icon: `circle` as const },
+    { value: NOBODY, label: t(`stepInspector.nobody`), description: t(`stepInspector.fullToolsNoAccounts`), icon: `circle` as const },
     ...personas.value.map((persona) => ({ value: persona.id, label: persona.label ?? persona.id, face: persona })),
 ]);
 const personaLabel = (id: string): string => personas.value.find((persona) => persona.id === id)?.label ?? id;
@@ -212,9 +213,9 @@ const advancedSummary = computed(() => {
                 <ProseField v-model="title" variant="heading" :placeholder="TITLE_HINT" class="min-w-0 flex-1" />
                 <button
                     type="button"
-                    v-tooltip.top="`Delete this step`"
+                    v-tooltip.top="t(`stepInspector.deleteStep`)"
                     :class="ui.iconButton(`mt-1 text-danger`)"
-                    aria-label="Delete step"
+                    :aria-label="t(`stepInspector.deleteStep2`)"
                     @click="emit(`remove`)"
                 >
                     <Icon name="trash" />
@@ -225,17 +226,13 @@ const advancedSummary = computed(() => {
             <ProseField v-model="prompt" :placeholder="PROMPT_HINT" class="-mx-2 mt-3 min-h-24" />
 
             <div class="mt-5 flex items-baseline justify-between border-t border-line/60 pt-4">
-                <h3 class="text-sm font-semibold text-content">Done when</h3>
-                <span v-if="repeats" class="text-2xs text-subtle">restated every round</span>
+                <h3 class="text-sm font-semibold text-content">{{ t(`stepInspector.done`) }}</h3>
+                <span v-if="repeats" class="text-2xs text-subtle">{{ t(`stepInspector.restatedEveryRound`) }}</span>
             </div>
             <ProseField v-model="goal" :placeholder="GOAL_HINT" class="-mx-2 mt-1 min-h-12" />
             <!-- Wording depends on `repeats`: without an output or check, this step is one session, not a loop. -->
             <p class="px-0.5 text-2xs text-subtle">
-                {{
-                    repeats
-                        ? `It repeats until this is true.`
-                        : `One session, finished when it finishes. Ask for an output or a check below to make it repeat until this is true.`
-                }}
+                {{ repeats ? t(`stepInspector.repeatsUntilTrue`) : t(`stepInspector.oneSessionFinishedFinishes`) }}
             </p>
 
             <!-- Shut by default; the summary line names what's inside so shutting it stays safe. -->
@@ -246,76 +243,78 @@ const advancedSummary = computed(() => {
                 @click="advanced = !advanced"
             >
                 <Icon :name="advanced ? `chevron-down` : `chevron-right`" class="shrink-0 text-2xs text-subtle" />
-                <span class="shrink-0 text-sm font-semibold text-content">Advanced</span>
+                <span class="shrink-0 text-sm font-semibold text-content">{{ t(`stepInspector.advanced`) }}</span>
                 <span class="min-w-0 flex-1 truncate text-right text-2xs text-subtle">{{ advancedSummary }}</span>
             </button>
 
             <div v-if="advanced" class="mt-3 flex flex-col gap-4">
                 <div class="flex flex-col gap-1.5">
-                    <span :class="ui.sectionLabel()">What it hands on</span>
+                    <span :class="ui.sectionLabel()">{{ t(`stepInspector.whatHandsOn`) }}</span>
                     <SegmentedControl v-model="outputKind" :options="OUTPUT_OPTIONS" />
                     <div v-if="step.output.kind === `json`" class="flex flex-col gap-1.5">
                         <div v-for="(field, index) in fields" :key="index" class="flex flex-wrap items-start gap-1.5">
                             <input
                                 :value="field.name"
                                 :class="[ui.inputSm(), `w-24 font-mono`]"
-                                placeholder="name"
+                                :placeholder="t(`stepInspector.name`)"
                                 @input="patchField(index, { name: ($event.target as HTMLInputElement).value })"
                             />
                             <Picker
                                 :model-value="field.type"
                                 :options="TYPE_OPTIONS"
-                                aria-label="Field type"
+                                :aria-label="t(`stepInspector.fieldType`)"
                                 class="w-28 px-2 py-1 text-2xs"
                                 @update:model-value="patchField(index, { type: $event })"
                             />
                             <input
                                 :value="field.description"
                                 :class="[ui.input(), `min-w-36 flex-1`]"
-                                placeholder="what belongs here: the model reads this"
+                                :placeholder="t(`stepInspector.whatBelongsHereModel`)"
                                 @input="patchField(index, { description: ($event.target as HTMLInputElement).value })"
                             />
                             <label class="flex items-center gap-1 pt-1.5 text-2xs text-subtle">
                                 <Checkbox :model-value="field.required" binary @update:model-value="patchField(index, { required: $event })" />
-                                required
+                                {{ t(`stepInspector.required`) }}
                             </label>
                             <button
                                 type="button"
                                 :class="ui.iconButton(`text-danger`)"
-                                aria-label="Remove field"
+                                :aria-label="t(`stepInspector.removeField`)"
                                 @click="setFields(fields.filter((_, at) => at !== index))"
                             >
                                 <Icon name="trash" />
                             </button>
                         </div>
-                        <Button label="Add field" size="small" severity="secondary" :text="true" @click="setFields([...fields, newField(fields)])">
+                        <Button
+                            :label="t(`stepInspector.addField`)"
+                            size="small"
+                            severity="secondary"
+                            :text="true"
+                            @click="setFields([...fields, newField(fields)])"
+                        >
                             <template #icon><Icon name="plus" /></template>
                         </Button>
                     </div>
                     <span v-else class="text-2xs text-subtle">
-                        {{
-                            step.output.kind === `claim`
-                                ? `It writes "done, and here is why": self-assessed, so pair it with a check below on anything expensive.`
-                                : `It leaves its work and nothing else, so it needs a check below or nothing can tell it it is finished.`
-                        }}
+                        {{ step.output.kind === `claim` ? t(`stepInspector.writesDoneHereWhy`) : t(`stepInspector.leavesWorkNothingElse`) }}
                     </span>
                 </div>
 
                 <div class="flex flex-col gap-1.5">
-                    <span :class="ui.sectionLabel()">And only done when</span>
+                    <span :class="ui.sectionLabel()">{{ t(`stepInspector.onlyDone`) }}</span>
                     <!-- A command is a value and keeps its box; the rubric beside it is prose and does not. -->
-                    <input v-model="command" :class="[ui.input(), `font-mono`]" placeholder="pnpm test" />
+                    <input v-model="command" :class="[ui.input(), `font-mono`]" :placeholder="t(`stepInspector.pnpmTest`)" />
                     <!-- Kept flush with its boxed siblings here, unlike the bled-out passages above. -->
                     <ProseField v-model="rubric" :placeholder="RUBRIC_HINT" class="min-h-12" />
                 </div>
 
                 <div class="flex flex-col gap-1.5">
-                    <span :class="ui.sectionLabel()">Memory between rounds</span>
+                    <span :class="ui.sectionLabel()">{{ t(`stepInspector.memoryBetweenRounds`) }}</span>
                     <SegmentedControl :model-value="step.context" :options="CONTEXT_OPTIONS" @update:model-value="patch({ context: $event })" />
                 </div>
 
                 <label class="flex flex-col gap-1.5">
-                    <span :class="ui.sectionLabel()">Spend ceiling</span>
+                    <span :class="ui.sectionLabel()">{{ t(`stepInspector.spendCeiling`) }}</span>
                     <span class="flex items-center gap-1.5">
                         <span class="text-xs text-subtle">$</span>
                         <input
@@ -324,22 +323,22 @@ const advancedSummary = computed(() => {
                             min="0.01"
                             step="0.01"
                             :class="[ui.input(), `w-28 tabular-nums`]"
-                            placeholder="No ceiling"
+                            :placeholder="t(`stepInspector.noCeiling`)"
                             @input="setMaxSpend(($event.target as HTMLInputElement).value)"
                         />
                     </span>
-                    <span class="text-2xs text-subtle">Across every round of this step. Empty leaves it uncapped.</span>
+                    <span class="text-2xs text-subtle">{{ t(`stepInspector.acrossEveryRoundStep`) }}</span>
                 </label>
 
                 <div class="flex flex-col gap-1.5">
-                    <span :class="ui.sectionLabel()">Runs on</span>
+                    <span :class="ui.sectionLabel()">{{ t(`stepInspector.runsOn`) }}</span>
                     <!-- A chip, not a boxed input: this panel holds no model catalog of its own. Unpin shows only once pinned. -->
                     <div class="flex items-center gap-1.5">
                         <button
                             ref="chip"
                             type="button"
                             class="flex min-w-0 flex-1 cursor-pointer items-center gap-1.5 rounded-lg border border-line px-2.5 py-1.5 text-left text-xs text-content transition-colors hover:border-line-strong"
-                            :aria-label="`Model for this step: ${pinLabel}`"
+                            :aria-label="t(`stepInspector.modelStep`, { pinLabel })"
                             v-action="choose"
                         >
                             <Icon name="sparkles" class="shrink-0 text-subtle" />
@@ -349,9 +348,9 @@ const advancedSummary = computed(() => {
                         <button
                             v-if="step.agent !== undefined"
                             type="button"
-                            v-tooltip.top="`Unpin: run this step on whatever you normally use`"
+                            v-tooltip.top="t(`stepInspector.unpinRunStepOn`)"
                             :class="ui.iconButton()"
-                            aria-label="Unpin the model"
+                            :aria-label="t(`stepInspector.unpinModel`)"
                             @click="unpin"
                         >
                             <Icon name="times" />
@@ -365,17 +364,15 @@ const advancedSummary = computed(() => {
                         @update:model-value="patch({ harness: $event })"
                     />
                     <span class="text-2xs text-subtle">
-                        Pin one where the model is part of the design: two steps on two providers is how you compare them. Left alone, this step runs
-                        on whatever you normally use.
+                        {{ t(`stepInspector.pinOneWhereModel`) }}
                     </span>
                 </div>
 
                 <div class="flex flex-col gap-1.5">
-                    <span :class="ui.sectionLabel()">Acts as</span>
-                    <Picker v-model="actsAs" :options="personaOptions" aria-label="Persona for this step" class="w-full text-xs" />
+                    <span :class="ui.sectionLabel()">{{ t(`stepInspector.acts`) }}</span>
+                    <Picker v-model="actsAs" :options="personaOptions" :aria-label="t(`stepInspector.personaStep`)" class="w-full text-xs" />
                     <span class="text-2xs text-subtle">
-                        A step runs with nobody at the keyboard, so it reaches no logged-in account unless it acts as a persona: the card also sets
-                        how far its tools go and where it works.
+                        {{ t(`stepInspector.stepRunsNobodyAt`) }}
                     </span>
                 </div>
             </div>

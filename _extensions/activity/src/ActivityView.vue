@@ -9,7 +9,7 @@ import {
     SegmentedControl,
     sinceOf,
     StatusBadge,
-    TIME_WINDOWS,
+    timeWindows,
     type TimeWindow,
 } from "@intentic/extension-ui";
 import { computed } from "vue";
@@ -59,6 +59,10 @@ const visible = computed(() =>
 const failed = computed(() => windowed.value.filter((episode) => episode.failed).length);
 
 const voiceMinutes = computed(() => (status.value?.voice === undefined ? 0 : Math.round((Date.now() - status.value.voice.startedAt) / 60_000)));
+const voiceSpeakers = computed(() => {
+    const participants = status.value?.voice?.participants ?? [];
+    return participants.length > 0 ? participants.join(`, `) : t(`activityView.noSpeakersYet`);
+});
 </script>
 
 <template>
@@ -69,10 +73,8 @@ const voiceMinutes = computed(() => (status.value?.voice === undefined ? 0 : Mat
         <!-- The feed heading stays above the scrolling activity rows. -->
         <div v-if="status?.voice" class="rounded-lg border border-line bg-card px-3 py-2">
             <Row icon="microphone" tone="info" density="compact" :flush="true" :title="`#${status.voice.channelName}`">
-                <template #description>
-                    {{ voiceMinutes }} min: {{ status.voice.participants.length > 0 ? status.voice.participants.join(`, `) : `no speakers yet` }}
-                </template>
-                <template #control><StatusBadge variant="info" label="transcribing" size="xs" dot /></template>
+                <template #description>{{ t(`activityView.voiceMinutes`, { minutes: voiceMinutes, speakers: voiceSpeakers }) }}</template>
+                <template #control><StatusBadge variant="info" :label="t(`activityView.transcribing`)" size="xs" dot /></template>
             </Row>
         </div>
 
@@ -81,15 +83,14 @@ const voiceMinutes = computed(() => (status.value?.voice === undefined ? 0 : Mat
             <template #controls>
                 <SourceFilter v-model="source" :sources="sources" :total="windowed.length" :failed="failed" />
                 <span class="h-4 w-px bg-line" aria-hidden="true"></span>
-                <SegmentedControl v-model="window" size="xs" :options="TIME_WINDOWS" />
+                <SegmentedControl v-model="window" size="xs" :options="timeWindows()" />
             </template>
             <template #actions>
-                <InfoHint label="Activity">
-                    <span class="block text-sm font-medium text-content">Activity</span>
+                <InfoHint :label="t(`activityView.activity`)">
+                    <span class="block text-sm font-medium text-content">{{ t(`activityView.activity`) }}</span>
                     <span class="mt-1 block text-xs text-muted">
-                        One entry per thing that happened, grouped by <b>who set it off</b>: a connected provider that woke the agent, a schedule, or
-                        you. A turn's whole lifecycle: start, plan, failure, completion, and every provider call it made, is one entry; expand it for
-                        the raw events the daemon recorded.
+                        {{ t(`activityView.oneEntryPerThing`) }} <b>{{ t(`activityView.whoSetOff`) }}</b
+                        >{{ t(`activityView.connectedProviderWokeAgent`) }}
                     </span>
                 </InfoHint>
             </template>

@@ -2,11 +2,14 @@
 import { placeAnchored, type Placement, ProgressRing, type Side } from "@intentic/ui";
 import { computed, type CSSProperties, nextTick, onBeforeUnmount, ref } from "vue";
 import { formatAge, formatReset, formatUtilization, type PlanHeadroom, usageDetail, usageTone } from "../features/chat/session/usageStatus";
+import { useT } from "@intentic/ui/i18n";
 
 // Usage ring and breakdown panel, shared by the composer chip, model picker and Agent tab rows. A small table
 // (line and meter per pool), not a tooltip; opens beside the ring, never over the row column, falling back
 // above only when neither flank fits. Teleported into the anchor's own window; sr-only text beside the arc
 // repeats it for screen readers.
+
+const t = useT();
 
 const { headroom, flank = `right` } = defineProps<{
     headroom: PlanHeadroom;
@@ -105,7 +108,7 @@ onBeforeUnmount(hide);
         <span class="sr-only">{{ activity ? `${usageDetail(headroom)} ${activity}.` : usageDetail(headroom) }}</span>
 
         <Teleport v-if="open && anchor !== undefined" :to="anchor.ownerDocument.body">
-<!-- aria-hidden: the sr-only line already says this; pointer-events-none: never eat the hover that raised it. -->
+            <!-- aria-hidden: the sr-only line already says this; pointer-events-none: never eat the hover that raised it. -->
             <div
                 ref="box"
                 class="ui-anchored pointer-events-none"
@@ -114,13 +117,15 @@ onBeforeUnmount(hide);
                 aria-hidden="true"
             >
                 <div class="ui-anchored-surface w-60 gap-3 px-3 py-2.5 text-left">
-<!-- Age sits in the header, not the footer: every figure below is a floor once stale, qualifying the whole card. -->
+                    <!-- Age sits in the header, not the footer: every figure below is a floor once stale, qualifying the whole card. -->
                     <div class="flex items-baseline justify-between gap-2">
-                        <span class="text-2xs font-medium uppercase tracking-wide text-subtle">Plan limits</span>
-                        <span class="shrink-0 text-2xs text-subtle">measured {{ formatAge(headroom.measuredAt) }}</span>
+                        <span class="text-2xs font-medium uppercase tracking-wide text-subtle">{{ t(`common.usageRing.planLimits`) }}</span>
+                        <span class="shrink-0 text-2xs text-subtle">{{
+                            t(`common.usageRing.measured`, { measuredAt: formatAge(headroom.measuredAt) })
+                        }}</span>
                     </div>
 
-<!-- One line per pool: pools are independently gated, so which is about to bite can't come from one number. -->
+                    <!-- One line per pool: pools are independently gated, so which is about to bite can't come from one number. -->
                     <div v-for="pool in headroom.pools" :key="pool.kind" class="flex flex-col gap-1">
                         <div class="flex items-baseline justify-between gap-2">
                             <span class="min-w-0 truncate text-xs" :class="pool === headroom.binding ? `font-medium text-content` : `text-muted`">
@@ -138,21 +143,23 @@ onBeforeUnmount(hide);
                                 :style="{ width: `${Math.max(pool.percent, 1)}%` }"
                             />
                         </div>
-                        <span v-if="pool.resetsAt !== undefined" class="text-2xs text-subtle">resets {{ formatReset(pool.resetsAt) }}</span>
+                        <span v-if="pool.resetsAt !== undefined" class="text-2xs text-subtle">{{
+                            t(`common.usageRing.resets`, { resetsAt: formatReset(pool.resetsAt) })
+                        }}</span>
                     </div>
 
                     <!-- Kept apart from the pools above: those are the plan's allowances, this is spend against them. -->
                     <div v-if="activity" class="mt-1 flex flex-col gap-1">
-                        <span class="text-2xs font-medium uppercase tracking-wide text-subtle">This sandbox</span>
+                        <span class="text-2xs font-medium uppercase tracking-wide text-subtle">{{ t(`common.usageRing.sandbox`) }}</span>
                         <span class="text-xs leading-relaxed text-muted">{{ activity }}</span>
                     </div>
 
                     <!-- Measured, with every pool since reset; distinct from unmeasured, which draws no ring at all. -->
-                    <p v-if="headroom.pools.length === 0" class="text-xs text-muted">Every pool has reset: the full allowance is available.</p>
+                    <p v-if="headroom.pools.length === 0" class="text-xs text-muted">{{ t(`common.usageRing.everyPoolResetFull`) }}</p>
 
                     <!-- The ≥ mark is explained only when one is shown; a card of hard 100s has none to explain. -->
                     <p v-if="headroom.stale && headroom.pools.some((pool) => pool.percent < 100)" class="text-2xs leading-relaxed text-subtle">
-                        ≥ these are floors: every device on the account spends the same pools.
+                        {{ t(`common.usageRing.floorsEveryDeviceOn`) }}
                     </p>
                 </div>
             </div>

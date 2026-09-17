@@ -14,19 +14,22 @@ import { useWorkspaceState } from "../../features/extensions/useWorkspaceState";
 import { useRole } from "../../features/sandbox/secrets/useRole";
 import DependencyGraph from "./DependencyGraph.vue";
 import ResourceDetails from "./ResourceDetails.vue";
+import { useT } from "@intentic/ui/i18n";
 
 // Plan-vs-reality board. Left: Planned, the resolved desired-state dependency graph, nodes colored by last
 // reconcile status. Right: Running now, live Komodo deployments plus an on-demand live check that streams
 // `intentic deploy plan` to report per-resource drift. Read-only.
 
+const t = useT();
+
 const { state, error: wsError, isLoading: wsLoading, refetch: refetchState } = useWorkspaceState();
 // Bare messages from the two queries below; this page knows what each was for and writes the sentence.
 const wsNotice = computed<NoticeModel | undefined>(() =>
-    wsError.value === undefined ? undefined : { tone: `danger`, title: `Couldn't read this workspace's state.`, detail: wsError.value },
+    wsError.value === undefined ? undefined : { tone: `danger`, title: t(`views.liveStatusView.couldntReadWorkspacesState`), detail: wsError.value },
 );
 const { deployments, komodoReachable, error: appsError, isLoading: appsLoading, refetch: refetchDeployments } = useDeployments();
 const appsNotice = computed<NoticeModel | undefined>(() =>
-    appsError.value === undefined ? undefined : { tone: `danger`, title: `Couldn't list what's running.`, detail: appsError.value },
+    appsError.value === undefined ? undefined : { tone: `danger`, title: t(`views.liveStatusView.couldntListWhatsRunning`), detail: appsError.value },
 );
 
 // Shared with the dependency graph: selecting a node highlights its matching actual-state card.
@@ -102,47 +105,56 @@ const toggleAccessReveal = async (key: string): Promise<void> => {
 <template>
     <div class="h-full min-h-0 overflow-auto">
         <Page width="full">
-            <PageHeader title="Live status">
+            <PageHeader :title="t(`views.liveStatusView.liveStatus`)">
                 <template #info>
-                    <InfoHint label="Live status">
-                        <span class="block text-sm font-medium text-content">Live status</span>
+                    <InfoHint :label="t(`views.liveStatusView.liveStatus`)">
+                        <span class="block text-sm font-medium text-content">{{ t(`views.liveStatusView.liveStatus`) }}</span>
                         <span class="mt-1 block text-xs text-muted">
-                            <b>Planned</b> is what your configuration resolves to. <b>Running now</b> is what's really on your server. When they
-                            match, you're <b>up to date</b>.
+                            <b>{{ t(`views.liveStatusView.planned`) }}</b> {{ t(`views.liveStatusView.whatConfigurationResolvesTo`) }}
+                            <b>{{ t(`views.liveStatusView.runningNow`) }}</b> {{ t(`views.liveStatusView.whatsReallyOnServer`) }}
+                            <b>{{ t(`views.liveStatusView.upToDate`) }}</b
+                            >.
                         </span>
                     </InfoHint>
                     <StatusBadge v-if="convergence" :variant="convergence.variant" :label="convergence.label" dot />
                 </template>
                 <template #actions>
-                    <PageAction quiet icon="refresh" label="Refresh" hint="Re-read the live cluster state" :disabled="loading" @click="refresh" />
+                    <PageAction
+                        quiet
+                        icon="refresh"
+                        :label="t(`ui.action.refresh`)"
+                        :hint="t(`views.liveStatusView.reReadLiveCluster`)"
+                        :disabled="loading"
+                        @click="refresh"
+                    />
                 </template>
             </PageHeader>
 
             <Notice v-if="wsNotice" :of="wsNotice" class="mb-4" />
 
-<!-- Engine declared but down on a previously-applied setup: "Not deployed" below is meaningless until it's back. -->
+            <!-- Engine declared but down on a previously-applied setup: "Not deployed" below is meaningless until it's back. -->
             <div
                 v-if="komodoReachable === false && state?.converged !== undefined"
                 class="mb-4 flex items-center gap-2 rounded-lg border border-warning/40 bg-warning/10 px-4 py-3 text-sm text-warning"
             >
                 <Icon name="exclamation-triangle" class="shrink-0" />
-                <span>Your deployment engine (Komodo) is unreachable on your server: live states below reflect desired config only.</span>
+                <span>{{ t(`views.liveStatusView.deploymentEngineKomodoUnreachable`) }}</span>
             </div>
 
             <div class="flex flex-col gap-4">
                 <!-- TOP, desired state: the dependency graph, nodes colored by their last reconcile status. -->
                 <section class="rounded-lg border border-line bg-card p-4">
                     <h3 :class="ui.sectionLabel('mb-3 flex items-center gap-2')">
-                        Planned
-                        <InfoHint label="Graph legend">
-                            <span class="block text-xs font-medium text-content">Category</span>
+                        {{ t(`views.liveStatusView.planned`) }}
+                        <InfoHint :label="t(`views.liveStatusView.graphLegend`)">
+                            <span class="block text-xs font-medium text-content">{{ t(`views.liveStatusView.category`) }}</span>
                             <ul class="mt-1 grid grid-cols-2 gap-x-3 gap-y-1 text-xs">
                                 <li v-for="g in ResourceGroupSchema.options" :key="g" class="flex items-center gap-1.5">
                                     <span class="h-2.5 w-2.5 shrink-0 rounded-sm" :class="groupAccent(g).bar"></span>
                                     <span class="capitalize text-muted">{{ g }}</span>
                                 </li>
                             </ul>
-                            <span class="mt-3 block text-xs font-medium text-content">Status</span>
+                            <span class="mt-3 block text-xs font-medium text-content">{{ t(`views.liveStatusView.status`) }}</span>
                             <ul class="mt-1 flex flex-col gap-1 text-xs">
                                 <li v-for="s in ['noop', 'create', 'update', 'delete', 'unknown']" :key="s" class="flex items-center gap-1.5">
                                     <span class="h-1.5 w-1.5 shrink-0 rounded-full" :class="statusDot(s)"></span>
@@ -163,7 +175,7 @@ const toggleAccessReveal = async (key: string): Promise<void> => {
 
                 <!-- BOTTOM, actual state: live Komodo deployments plus an on-demand live `intentic deploy plan` read. -->
                 <section class="rounded-lg border border-line bg-card p-4">
-                    <h3 :class="ui.sectionLabel('mb-3 flex items-baseline gap-2')">Running now</h3>
+                    <h3 :class="ui.sectionLabel('mb-3 flex items-baseline gap-2')">{{ t(`views.liveStatusView.runningNow`) }}</h3>
 
                     <Notice v-if="appsNotice" :of="appsNotice" class="mb-3" />
 
@@ -180,7 +192,7 @@ const toggleAccessReveal = async (key: string): Promise<void> => {
                                         <span class="truncate font-medium text-content">{{ d.name }}</span>
                                         <StatusBadge
                                             :variant="d.live ? 'success' : 'neutral'"
-                                            :label="d.live ? 'Live' : 'Not deployed'"
+                                            :label="d.live ? t(`views.liveStatusView.live`) : t(`views.liveStatusView.notDeployed`)"
                                             size="xs"
                                             dot
                                         />
@@ -191,7 +203,7 @@ const toggleAccessReveal = async (key: string): Promise<void> => {
                                     <Button
                                         v-if="d.url"
                                         as="a"
-                                        label="Open"
+                                        :label="t(`ui.action.open`)"
                                         size="small"
                                         severity="secondary"
                                         :href="d.url"
@@ -203,7 +215,7 @@ const toggleAccessReveal = async (key: string): Promise<void> => {
                                     <Button
                                         v-if="d.komodoDeploymentUrl"
                                         as="a"
-                                        label="Komodo"
+                                        :label="t(`views.liveStatusView.komodo`)"
                                         size="small"
                                         :text="true"
                                         :href="d.komodoDeploymentUrl"
@@ -225,34 +237,34 @@ const toggleAccessReveal = async (key: string): Promise<void> => {
                             </div>
                         </Card>
                         <p v-if="deployments.length === 0 && !appsLoading" class="py-6 text-center text-sm text-muted">
-                            No live deployments yet. Wire an app in your intent and provision to see it here.
+                            {{ t(`views.liveStatusView.noLiveDeploymentsYet`) }}
                         </p>
                     </div>
 
-<!-- Live check: streams "intentic deploy plan" to diff the desired graph against live infrastructure. -->
+                    <!-- Live check: streams "intentic deploy plan" to diff the desired graph against live infrastructure. -->
                     <div class="mt-4 border-t border-line-subtle pt-3">
                         <div class="mb-2 flex items-center gap-2">
-                            <h3 class="text-2xs font-semibold uppercase tracking-wide text-subtle/70">Live check</h3>
+                            <h3 class="text-2xs font-semibold uppercase tracking-wide text-subtle/70">{{ t(`views.liveStatusView.liveCheck`) }}</h3>
                             <template v-if="checking">
                                 <Icon name="spinner" class="text-2xs text-info" spin />
-                                <span class="text-2xs text-subtle">Reading live infrastructure…</span>
+                                <span class="text-2xs text-subtle">{{ t(`views.liveStatusView.readingLiveInfrastructure`) }}</span>
                             </template>
                         </div>
                         <Notice v-if="liveError" :of="liveError" />
                         <div v-else-if="liveRan && !checking" class="flex flex-col gap-1.5">
                             <PlanStepRow v-for="item in liveActions" :key="item.id" :id="item.id" :action="item.action" :reason="item.reason" />
-                            <p v-if="liveActions.length === 0" class="text-2xs text-subtle">No resources read.</p>
+                            <p v-if="liveActions.length === 0" class="text-2xs text-subtle">{{ t(`views.liveStatusView.noResourcesRead`) }}</p>
                             <p v-if="liveOrphans.length > 0" class="mt-1 text-2xs text-danger">
-                                Orphans (live but not in intent): {{ liveOrphans.map((orphan) => orphan.id).join(", ") }}
+                                {{ t(`views.liveStatusView.orphans`, { ids: liveOrphans.map((orphan) => orphan.id).join(`, `) }) }}
                             </p>
                         </div>
-                        <p v-else-if="!checking" class="text-2xs text-subtle">Refresh to read the live state of your infrastructure.</p>
+                        <p v-else-if="!checking" class="text-2xs text-subtle">{{ t(`views.liveStatusView.refreshToReadLive`) }}</p>
                     </div>
                 </section>
 
-<!-- Access: URLs + admin logins for what's provisioned. -->
+                <!-- Access: URLs + admin logins for what's provisioned. -->
                 <section v-if="access.length > 0" class="rounded-lg border border-line bg-card p-4">
-                    <h3 :class="ui.sectionLabel('mb-3')">Access</h3>
+                    <h3 :class="ui.sectionLabel('mb-3')">{{ t(`views.liveStatusView.access`) }}</h3>
                     <Notice v-if="accessError" :of="accessError" class="mb-2" />
                     <div class="flex flex-col gap-2">
                         <div v-for="entry in access" :key="entry.id" class="flex flex-col gap-1.5 rounded-lg border border-line px-3 py-2.5">
@@ -272,16 +284,21 @@ const toggleAccessReveal = async (key: string): Promise<void> => {
                                 class="flex flex-wrap items-center gap-3 text-xs text-muted"
                             >
                                 <span v-if="entry.username !== undefined"
-                                    >user: <span class="font-mono text-content">{{ entry.username }}</span></span
+                                    >{{ t(`views.liveStatusView.user`) }} <span class="font-mono text-content">{{ entry.username }}</span></span
                                 >
                                 <template v-if="entry.password !== undefined">
                                     <template v-if="entry.password.source === `generated` && canOperate">
                                         <span v-if="revealedAccess.has(entry.password.key)" class="inline-flex items-center gap-1">
-                                            password: <span class="font-mono text-content">{{ revealedAccess.get(entry.password.key) }}</span>
+                                            {{ t(`views.liveStatusView.password`) }}
+                                            <span class="font-mono text-content">{{ revealedAccess.get(entry.password.key) }}</span>
                                             <CopyButton :text="revealedAccess.get(entry.password.key) ?? ``" />
                                         </span>
                                         <Button
-                                            :label="revealedAccess.has(entry.password.key) ? `Hide password` : `Reveal password`"
+                                            :label="
+                                                revealedAccess.has(entry.password.key)
+                                                    ? t(`views.liveStatusView.hidePassword`)
+                                                    : t(`views.liveStatusView.revealPassword`)
+                                            "
                                             size="small"
                                             severity="secondary"
                                             :text="true"
@@ -291,7 +308,9 @@ const toggleAccessReveal = async (key: string): Promise<void> => {
                                         </Button>
                                     </template>
                                     <span v-else
-                                        >password: your <span class="font-mono text-content">{{ entry.password.key }}</span> secret</span
+                                        >{{ t(`views.liveStatusView.password2`) }}
+                                        <span class="font-mono text-content">{{ entry.password.key }}</span>
+                                        {{ t(`views.liveStatusView.secret`) }}</span
                                     >
                                 </template>
                             </div>

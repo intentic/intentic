@@ -9,6 +9,9 @@ import type { PickerGroup, PickerOptions } from "../forms/picker.js";
 import type { RepoRailAll, RepoRailGroup, RepoRailRow } from "./repoRail.js";
 import Row from "../rows/Row.vue";
 import { useCompact } from "./splitView.js";
+import { useT } from "../../i18n/index.js";
+
+const t = useT();
 
 const { groups, all, memory } = defineProps<{
     /** The repositories, in the runs they should be read in. Empty groups drop out. */
@@ -33,7 +36,7 @@ const compact = useCompact();
 
 // The same model as options, with each row's number as the quiet right-hand annotation.
 const options = computed<PickerOptions<string>>(() => [
-    { options: [{ value: ``, label: `All repositories`, description: all.meta, icon: all.icon }] },
+    { options: [{ value: ``, label: t(`ui.layoutRepoRail.allRepositories`), description: all.meta, icon: all.icon }] },
     ...shown.value.map((group): PickerGroup<string> => ({
         label: group.label,
         options: group.rows.map((row) => ({ value: row.value, label: row.label, description: row.meta, icon: row.icon, mono: row.mono })),
@@ -44,7 +47,14 @@ const picked = computed<string>({ get: () => selected.value ?? ``, set: (value) 
 </script>
 
 <template>
-    <Picker v-if="compact" v-model="picked" :options="options" aria-label="Repository" header="Repository" class="w-full text-xs" />
+    <Picker
+        v-if="compact"
+        v-model="picked"
+        :options="options"
+        :aria-label="t(`ui.repoRail.repository`)"
+        :header="t(`ui.repoRail.repository`)"
+        class="w-full text-xs"
+    />
 
     <NavRail v-else :groups="navGroups">
         <template #pinned>
@@ -52,7 +62,7 @@ const picked = computed<string>({ get: () => selected.value ?? ``, set: (value) 
                 as="button"
                 density="dense"
                 :icon="all.icon"
-                title="All repositories"
+                :title="t(`ui.repoRail.allRepositories`)"
                 :selected="selected === undefined"
                 class="rounded-md"
                 @click="selected = undefined"

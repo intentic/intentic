@@ -13,10 +13,13 @@ import { useWorkspaceTree } from "../../workspace/explorer/useWorkspaceTree";
 import SandboxBehindCard from "./SandboxBehindCard.vue";
 import SandboxManifestCard from "./manifest/SandboxManifestCard.vue";
 import SandboxUpdateCard from "./SandboxUpdateCard.vue";
+import { useT } from "@intentic/ui/i18n";
 
 // Overview tab: sandbox identity (name, logo), self-reported image/version/URL relayed live via /info, online
 // status, and the non-blocking update prompt. Excludes per-tab status links or a running list: those duplicate
 // badges and panels that already live elsewhere (rail, tab badges, Preview/Ports).
+
+const t = useT();
 
 const sandbox = useSandbox();
 const { hasSnapshot } = useWorkspaceTree();
@@ -135,13 +138,17 @@ const removeLogo = async (): Promise<void> => {
         <Card class="flex flex-col gap-4">
             <div class="flex flex-col gap-3 @2xl:flex-row @2xl:items-center @2xl:justify-between">
                 <div class="flex min-w-0 flex-1 items-center gap-3">
-<!-- The logo tile is the control itself: live for owners in every state, disabled for members. -->
+                    <!-- The logo tile is the control itself: live for owners in every state, disabled for members. -->
                     <button
                         ref="logoTrigger"
                         type="button"
                         :disabled="!isOwner || logoBusy"
-                        :aria-label="isOwner ? (logo ? `Change or remove the logo` : `Add a logo`) : undefined"
-                        v-tooltip.bottom="isOwner ? (logo ? `Change or remove the logo` : `Add a logo`) : undefined"
+                        :aria-label="
+                            isOwner ? (logo ? t(`sandbox.sandboxOverview.changeRemoveLogo`) : t(`sandbox.sandboxOverview.addLogo`)) : undefined
+                        "
+                        v-tooltip.bottom="
+                            isOwner ? (logo ? t(`sandbox.sandboxOverview.changeRemoveLogo`) : t(`sandbox.sandboxOverview.addLogo`)) : undefined
+                        "
                         class="group relative flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-line-subtle bg-card text-muted"
                         :class="isOwner ? 'cursor-pointer hover:border-line-strong' : ''"
                         @click="pressLogo"
@@ -167,14 +174,14 @@ const removeLogo = async (): Promise<void> => {
                                 class="flex items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-content transition-colors hover:bg-content/5"
                                 @click="changeLogo"
                             >
-                                <Icon name="image" class="shrink-0 text-sm text-muted" />Change logo…
+                                <Icon name="image" class="shrink-0 text-sm text-muted" />{{ t(`sandbox.sandboxOverview.changeLogo`) }}
                             </button>
                             <button
                                 type="button"
                                 class="flex items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-danger transition-colors hover:bg-danger/10"
                                 v-action="removeLogo"
                             >
-                                <Icon name="trash" class="shrink-0 text-sm" />Remove logo
+                                <Icon name="trash" class="shrink-0 text-sm" />{{ t(`sandbox.sandboxOverview.removeLogo`) }}
                             </button>
                         </div>
                     </AnchoredOverlay>
@@ -187,8 +194,8 @@ const removeLogo = async (): Promise<void> => {
                                 <InlineRename
                                     :value="sandbox.active.value?.name"
                                     :write="writeName"
-                                    label="Sandbox name"
-                                    action="Rename sandbox"
+                                    :label="t(`sandbox.sandboxOverview.sandboxName`)"
+                                    :action="t(`sandbox.sandboxOverview.renameSandbox`)"
                                     fallback="Sandbox"
                                     :editable="isOwner"
                                     :maxlength="60"
@@ -202,14 +209,14 @@ const removeLogo = async (): Promise<void> => {
                 </div>
             </div>
 
-<!-- Reserves this card's second half while /info is still loading, since identity above renders instantly from the platform. -->
+            <!-- Reserves this card's second half while /info is still loading, since identity above renders instantly from the platform. -->
             <div
                 v-if="sandbox.reachable.value && infoLoading && outline"
                 role="status"
                 aria-busy="true"
                 class="flex flex-col gap-2 rounded-lg bg-canvas px-3 py-2.5"
             >
-                <span class="sr-only">Reading what this sandbox reports about itself…</span>
+                <span class="sr-only">{{ t(`sandbox.sandboxOverview.readingWhatSandboxReports`) }}</span>
                 <div v-for="row in 2" :key="row" class="flex items-center justify-between gap-3" aria-hidden="true">
                     <span class="skeleton block h-2 w-16" />
                     <span class="skeleton block h-2" :class="row === 1 ? `w-48` : `w-32`" />
@@ -222,26 +229,26 @@ const removeLogo = async (): Promise<void> => {
                 class="flex flex-col gap-1.5 rounded-lg bg-canvas px-3 py-2.5 text-2xs"
             >
                 <div v-if="info?.image" class="flex items-start justify-between gap-3">
-                    <dt class="text-subtle">Image</dt>
+                    <dt class="text-subtle">{{ t(`sandbox.sandboxOverview.image`) }}</dt>
                     <dd class="min-w-0 text-right">
                         <div class="truncate font-mono text-content">{{ info.image }}</div>
                         <div v-if="installed" class="mt-0.5 font-mono text-subtle">
-                            installed version {{ installed }}
-                            <span v-if="updateAvailable" class="text-warning">→ {{ latest }} available</span>
+                            {{ t(`sandbox.sandboxOverview.installedVersion`) }} {{ installed }}
+                            <span v-if="updateAvailable" class="text-warning">{{ t(`sandbox.sandboxOverview.available`, { latest }) }}</span>
                         </div>
                     </dd>
                 </div>
                 <div v-else-if="installed" class="flex items-center justify-between gap-3">
-                    <dt class="text-subtle">Installed version</dt>
+                    <dt class="text-subtle">{{ t(`sandbox.sandboxOverview.installedVersion2`) }}</dt>
                     <dd class="font-mono text-content">
                         {{ installed }}
-                        <span v-if="updateAvailable" class="text-warning">→ {{ latest }} available</span>
+                        <span v-if="updateAvailable" class="text-warning">{{ t(`sandbox.sandboxOverview.available`, { latest }) }}</span>
                     </dd>
                 </div>
                 <div v-if="agentUrl" class="flex items-center justify-between gap-3">
-                    <dt class="text-subtle">Sandbox URL</dt>
+                    <dt class="text-subtle">{{ t(`sandbox.sandboxOverview.sandboxUrl`) }}</dt>
                     <dd class="min-w-0">
-<!-- `touch-target`: this link isn't exempt like inline prose text, since it's icon-bearing, alone on its row, and opens a new tab. -->
+                        <!-- `touch-target`: this link isn't exempt like inline prose text, since it's icon-bearing, alone on its row, and opens a new tab. -->
                         <a
                             :href="agentUrl"
                             target="_blank"
@@ -255,25 +262,33 @@ const removeLogo = async (): Promise<void> => {
             </dl>
         </Card>
 
-<!-- Upgrade path for hosted sandboxes only (a member can't create one for the owner). -->
+        <!-- Upgrade path for hosted sandboxes only (a member can't create one for the owner). -->
         <Card v-if="hosted && isOwner" class="flex flex-col gap-2">
-            <div class="flex items-center gap-2 text-sm font-medium text-content"><Icon name="bolt" class="text-link" /> Need more power?</div>
+            <div class="flex items-center gap-2 text-sm font-medium text-content">
+                <Icon name="bolt" class="text-link" /> {{ t(`sandbox.sandboxOverview.needMorePower`) }}
+            </div>
             <!-- The cost fact is shown first: what a reader of this card usually comes here to check. -->
             <p v-if="machineStanding" class="text-xs text-muted">
                 <span class="text-content">{{ machineStanding }}</span>
-                <template v-if="planOffered"> · <RouterLink to="/settings/billing" class="text-link hover:underline">Billing</RouterLink></template>
+                <template v-if="planOffered">
+                    ·
+                    <RouterLink to="/settings/billing" class="text-link hover:underline">{{
+                        t(`sandbox.sandboxOverview.billing`)
+                    }}</RouterLink></template
+                >
             </p>
             <p class="text-xs leading-relaxed text-muted">
-                This sandbox is a small starter machine we host for you. When it feels tight, move it to
-                <span class="text-content">your own device</span>: no hour limit, nothing metered, and the only place your GPU is.
+                {{ t(`sandbox.sandboxOverview.sandboxSmallStarterMachine`) }}
+                <span class="text-content">{{ t(`sandbox.sandboxOverview.ownDevice`) }}</span
+                >{{ t(`sandbox.sandboxOverview.noHourLimitNothing`) }}
             </p>
-            <RouterLink to="/setup" class="text-xs text-link hover:underline">Set it up there →</RouterLink>
+            <RouterLink to="/setup" class="text-xs text-link hover:underline">{{ t(`sandbox.sandboxOverview.setUp`) }}</RouterLink>
         </Card>
 
         <!-- A newer sandbox image has shipped; this prompt self-hides otherwise. -->
         <SandboxUpdateCard />
 
-<!-- Names a route gap between this app and the daemon instead of a silent 404; fires in dev too, where versions are all 0.0.0. -->
+        <!-- Names a route gap between this app and the daemon instead of a silent 404; fires in dev too, where versions are all 0.0.0. -->
         <SandboxBehindCard />
         <SandboxManifestCard />
     </div>

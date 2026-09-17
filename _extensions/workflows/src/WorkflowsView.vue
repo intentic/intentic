@@ -26,10 +26,11 @@ import WorkflowCard from "./WorkflowCard.vue";
 import WorkflowDesigner from "./WorkflowDesigner.vue";
 import WorkflowRunPage from "./WorkflowRunPage.vue";
 import { host } from "./host";
-import { WORKFLOW_TEMPLATES, type WorkflowTemplate } from "./templates";
-import { STEP_TONE } from "./workflowDag";
+import { workflowTemplates, type WorkflowTemplate } from "./templates";
+import { stepTone } from "./workflowDag";
 import { loopIdFrom, useLoopDesigns } from "./useLoopDesigns";
 import { useWorkflows } from "./useWorkflows";
+import { t } from "./i18n.js";
 
 // Workflows (a graph of sessions, each with a declared output) and loops (one session repeated until a stated bar
 // clears) are the same kind of design, authored once and handed a job later; unlike an automation, nothing here fires
@@ -98,7 +99,7 @@ const blank = (): void =>
         steps: [
             {
                 id: `step-1`,
-                title: `First step`,
+                title: t(`workflowsView.firstStep`),
                 needs: [],
                 handoff: `fresh`,
                 output: { kind: `none` },
@@ -236,11 +237,11 @@ const RUN_VARIANT: Record<WorkflowRun["state"], StatusVariant> = {
     <WorkflowRunPage v-else-if="watching" :key="watching.runId" :run="watching" @close="backToList()" />
 
     <Page v-else width="wide">
-        <PageHeader title="Workflows">
+        <PageHeader :title="t(`workflowsView.workflows`)">
             <template #actions>
                 <!-- Loop is the secondary action, not lesser: most people come here for a workflow first. -->
-                <PageAction icon="repeat" label="New loop" @click="newLoop()" />
-                <PageAction icon="plus" label="New workflow" primary @click="blank()" />
+                <PageAction icon="repeat" :label="t(`workflowsView.newLoop`)" @click="newLoop()" />
+                <PageAction icon="plus" :label="t(`workflowsView.newWorkflow`)" primary @click="blank()" />
             </template>
         </PageHeader>
 
@@ -248,7 +249,7 @@ const RUN_VARIANT: Record<WorkflowRun["state"], StatusVariant> = {
 
         <!-- Link to a run that rolled off the ledger; not an error, just a fact, so the page stays usable underneath. -->
         <Notice v-if="lostRunId !== undefined" tone="info" class="mb-4">
-            Run <span class="font-mono">{{ lostRunId }}</span> is no longer on the record: the ledger keeps the last 50 runs.
+            {{ t(`workflowsView.run`) }} <span class="font-mono">{{ lostRunId }}</span> {{ t(`workflowsView.noLongerOnRecord`) }}
         </Notice>
 
         <div class="flex flex-col gap-6">
@@ -256,7 +257,7 @@ const RUN_VARIANT: Record<WorkflowRun["state"], StatusVariant> = {
             <section v-if="live.length > 0">
                 <div class="mb-2 flex items-center gap-2 px-0.5">
                     <Icon name="spinner" spin class="text-2xs text-link" />
-                    <span :class="ui.sectionLabel('text-link')">Running now</span>
+                    <span :class="ui.sectionLabel('text-link')">{{ t(`workflowsView.runningNow`) }}</span>
                 </div>
                 <div class="flex flex-col gap-2">
                     <button
@@ -276,7 +277,7 @@ const RUN_VARIANT: Record<WorkflowRun["state"], StatusVariant> = {
                                 v-for="step in run.steps"
                                 :key="step.stepId"
                                 class="h-1 flex-1 rounded-full"
-                                :class="STEP_TONE[step.state].bar"
+                                :class="stepTone()[step.state].bar"
                             ></span>
                         </span>
                         <!-- What this run was asked to do; the only thing distinguishing two runs of the same design. -->
@@ -287,7 +288,7 @@ const RUN_VARIANT: Record<WorkflowRun["state"], StatusVariant> = {
 
             <!-- Skeleton matches the real card's height (mostly the diagram frame), so nothing jumps down the page once it lands. -->
             <section v-if="isLoading && outline" role="status" aria-busy="true">
-                <span class="sr-only">Reading your workflows…</span>
+                <span class="sr-only">{{ t(`workflowsView.readingWorkflows`) }}</span>
                 <div class="mb-2 flex items-center gap-2 px-0.5" aria-hidden="true">
                     <span class="skeleton block h-2.5 w-24" />
                 </div>
@@ -310,7 +311,7 @@ const RUN_VARIANT: Record<WorkflowRun["state"], StatusVariant> = {
 
             <section v-else-if="!isLoading && workflows.length > 0">
                 <div class="mb-2 flex items-center gap-2 px-0.5">
-                    <span :class="ui.sectionLabel()">Your workflows</span>
+                    <span :class="ui.sectionLabel()">{{ t(`workflowsView.workflows2`) }}</span>
                     <span class="text-2xs font-medium text-subtle">{{ workflows.length }}</span>
                 </div>
                 <div class="flex flex-col gap-3">
@@ -326,22 +327,22 @@ const RUN_VARIANT: Record<WorkflowRun["state"], StatusVariant> = {
                             <button
                                 type="button"
                                 class="cursor-pointer"
-                                :aria-label="`CI wiring for ${workflow.name}`"
-                                v-tooltip.top="`A pipeline can run this: the webhook URL and a paste-ready CI step`"
+                                :aria-label="t(`workflowsView.ciWiring`, { name: workflow.name })"
+                                v-tooltip.top="t(`workflowsView.pipelineRunWebhookUrl`)"
                                 @click="showGate(workflow, $event)"
                             >
                                 <StatusBadge variant="primary" size="xs">
                                     <Icon name="shield" class="text-2xs" />
-                                    CI gate
+                                    {{ t(`workflowsView.ciGate`) }}
                                 </StatusBadge>
                             </button>
                         </template>
                         <!-- Run always shows; edit and delete appear on hover only, staying put below `md` where there's no hover. -->
                         <template #actions>
                             <Button
-                                label="Run"
+                                :label="t(`workflowsView.run`)"
                                 size="small"
-                                v-tooltip.top="`Opens a session with this design picked: nothing runs until you send`"
+                                v-tooltip.top="t(`workflowsView.opensSessionDesignPicked`)"
                                 @click="runNow(workflow)"
                             >
                                 <template #icon><Icon name="play" /></template>
@@ -349,8 +350,8 @@ const RUN_VARIANT: Record<WorkflowRun["state"], StatusVariant> = {
                             <button
                                 type="button"
                                 :class="ui.iconButton('md:opacity-0 md:group-hover/card:opacity-100 md:focus-visible:opacity-100')"
-                                :aria-label="`Edit ${workflow.name}`"
-                                v-tooltip.top="`Edit`"
+                                :aria-label="t(`workflowsView.edit`, { name: workflow.name })"
+                                v-tooltip.top="t(`workflowsView.edit2`)"
                                 @click="openSaved(workflow.id)"
                             >
                                 <Icon name="pencil" />
@@ -358,8 +359,8 @@ const RUN_VARIANT: Record<WorkflowRun["state"], StatusVariant> = {
                             <button
                                 type="button"
                                 :class="ui.iconButton('hover:text-danger md:opacity-0 md:group-hover/card:opacity-100 md:focus-visible:opacity-100')"
-                                :aria-label="`Delete ${workflow.name}`"
-                                v-tooltip.top="`Delete`"
+                                :aria-label="t(`workflowsView.delete`, { name: workflow.name })"
+                                v-tooltip.top="t(`workflowsView.delete2`)"
                                 @click="confirmRemoveId = workflow.id"
                             >
                                 <Icon name="trash" />
@@ -373,36 +374,32 @@ const RUN_VARIANT: Record<WorkflowRun["state"], StatusVariant> = {
                                 class="flex cursor-pointer items-center gap-1.5 hover:underline"
                                 @click="watchRun(workflow.runs[0].runId)"
                             >
-                                <span>Last run</span>
+                                <span>{{ t(`workflowsView.lastRun`) }}</span>
                                 <StatusBadge :variant="RUN_VARIANT[workflow.runs[0].state]" size="xs" :label="workflow.runs[0].state" />
                                 <span>{{ timeAgo(workflow.runs[0].startedAt) }}</span>
                             </button>
-                            <span v-else>Never run</span>
+                            <span v-else>{{ t(`workflowsView.neverRun`) }}</span>
                         </template>
                     </WorkflowCard>
                 </div>
             </section>
 
             <!-- Rows, not cards: a loop has no shape to draw, just three facts on a line (what ends it, how far, what it's for). -->
-            <RowGroup
-                v-if="loops.length > 0"
-                label="Your loops"
-                :count="loops.length"
-                caption="Pick one in a chat: what you type there is what it works towards."
-            >
+            <RowGroup v-if="loops.length > 0" :label="t(`workflowsView.loops`)" :count="loops.length" :caption="t(`workflowsView.pickOneInChat`)">
                 <Row v-for="design in loops" :key="design.id" icon="repeat" density="compact" class="group/item">
                     <template #title>{{ design.name }}</template>
                     <template #description>
-                        Ends on {{ loopDesignLine(design) }}{{ design.context === `continue` ? ` · keeps context` : `` }}
+                        {{ t(`workflowsView.endsOn`) }} {{ loopDesignLine(design)
+                        }}{{ design.context === `continue` ? t(`workflowsView.keepsContext`) : `` }}
                         <span v-if="design.description">: {{ design.description }}</span>
                     </template>
                     <!-- Use is the loud control, like Run on a workflow card; edit and delete appear on hover only. -->
                     <template #control>
                         <Button
-                            label="Use"
+                            :label="t(`workflowsView.use`)"
                             size="small"
                             severity="secondary"
-                            v-tooltip.top="`Opens a chat with this loop picked: nothing runs until you send`"
+                            v-tooltip.top="t(`workflowsView.opensChatLoopPicked`)"
                             @click="loopNow(design)"
                         >
                             <template #icon><Icon name="play" /></template>
@@ -410,8 +407,8 @@ const RUN_VARIANT: Record<WorkflowRun["state"], StatusVariant> = {
                         <button
                             type="button"
                             :class="ui.iconButton('md:opacity-0 md:group-hover/item:opacity-100 md:focus-visible:opacity-100')"
-                            :aria-label="`Edit ${design.name}`"
-                            v-tooltip.top="`Edit`"
+                            :aria-label="t(`workflowsView.edit`, { name: design.name })"
+                            v-tooltip.top="t(`workflowsView.edit2`)"
                             @click="editLoop(design)"
                         >
                             <Icon name="pencil" />
@@ -419,8 +416,8 @@ const RUN_VARIANT: Record<WorkflowRun["state"], StatusVariant> = {
                         <button
                             type="button"
                             :class="ui.iconButton('hover:text-danger md:opacity-0 md:group-hover/item:opacity-100 md:focus-visible:opacity-100')"
-                            :aria-label="`Delete ${design.name}`"
-                            v-tooltip.top="`Delete`"
+                            :aria-label="t(`workflowsView.delete`, { name: design.name })"
+                            v-tooltip.top="t(`workflowsView.delete2`)"
                             @click="confirmRemoveLoopId = design.id"
                         >
                             <Icon name="trash" />
@@ -429,25 +426,21 @@ const RUN_VARIANT: Record<WorkflowRun["state"], StatusVariant> = {
                 </Row>
             </RowGroup>
 
-<!-- Same dashed card as a saved workflow, not a bare box, so it reads as one of those, ready-made. -->
+            <!-- Same dashed card as a saved workflow, not a bare box, so it reads as one of those, ready-made. -->
             <section>
                 <div class="mb-2 flex flex-wrap items-center gap-x-2 gap-y-1 px-0.5">
-                    <span :class="ui.sectionLabel()">Start from a template</span>
+                    <span :class="ui.sectionLabel()">{{ t(`workflowsView.startTemplate`) }}</span>
                     <!-- Avoids claiming an empty library while the read is still in flight; `[]` looks the same either way. -->
                     <span class="min-w-0 text-2xs text-subtle">
-                        {{
-                            workflows.length > 0 || isLoading
-                                ? `A ready-made design, opened in the designer: nothing is saved or spent until you say so.`
-                                : `Nothing saved yet. Open a ready-made design and edit it, nothing is saved or spent until you say so.`
-                        }}
+                        {{ workflows.length > 0 || isLoading ? t(`workflowsView.readyMadeDesignOpened`) : t(`workflowsView.nothingSavedYetOpen`) }}
                     </span>
                     <button type="button" :class="ui.linkButton('ml-auto text-2xs text-muted hover:text-content')" @click="blank()">
-                        or start from blank
+                        {{ t(`workflowsView.startBlank`) }}
                     </button>
                 </div>
                 <div class="flex flex-col gap-3">
                     <WorkflowCard
-                        v-for="template in WORKFLOW_TEMPLATES"
+                        v-for="template in workflowTemplates()"
                         :key="template.workflow.id"
                         :workflow="template.workflow"
                         :description="template.summary"
@@ -457,23 +450,23 @@ const RUN_VARIANT: Record<WorkflowRun["state"], StatusVariant> = {
                         <template #badges>
                             <StatusBadge variant="neutral" size="xs">
                                 <Icon :name="template.icon" class="text-2xs" />
-                                Template
+                                {{ t(`workflowsView.template`) }}
                             </StatusBadge>
                         </template>
                         <template #actions>
-                            <Button label="Use this template" size="small" severity="secondary" @click="fromTemplate(template)">
+                            <Button :label="t(`workflowsView.useTemplate`)" size="small" severity="secondary" @click="fromTemplate(template)">
                                 <template #icon><Icon name="plus" /></template>
                             </Button>
                         </template>
                         <!-- Said plainly: this looks like adding new but really re-forks an existing copy. -->
                         <template v-if="savedAlready(template)" #meta>
-                            <span class="text-warning">You have a copy: saving from here replaces it.</span>
+                            <span class="text-warning">{{ t(`workflowsView.copySavingHereReplaces`) }}</span>
                         </template>
                     </WorkflowCard>
                 </div>
             </section>
 
-            <RowGroup v-if="past.length > 0" label="Earlier runs" :count="past.length">
+            <RowGroup v-if="past.length > 0" :label="t(`workflowsView.earlierRuns`)" :count="past.length">
                 <button
                     v-for="run in past"
                     :key="run.runId"
@@ -495,26 +488,26 @@ const RUN_VARIANT: Record<WorkflowRun["state"], StatusVariant> = {
 
         <ConfirmDialog
             :open="confirmRemoveId !== undefined"
-            header="Delete this workflow?"
-            confirm-label="Delete"
+            :header="t(`workflowsView.deleteWorkflow`)"
+            :confirm-label="t(`workflowsView.delete2`)"
             confirm-icon="trash"
             :loading="remove.isPending.value"
             @confirm="removeWorkflow()"
             @cancel="confirmRemoveId = undefined"
         >
-            <p class="text-sm text-subtle">Its run history stays: every run kept its own copy of the design. A run already going is not stopped.</p>
+            <p class="text-sm text-subtle">{{ t(`workflowsView.runHistoryStaysEvery`) }}</p>
         </ConfirmDialog>
 
         <ConfirmDialog
             :open="confirmRemoveLoopId !== undefined"
-            header="Delete this loop?"
-            confirm-label="Delete"
+            :header="t(`workflowsView.deleteLoop`)"
+            :confirm-label="t(`workflowsView.delete2`)"
             confirm-icon="trash"
             :loading="removeLoop.isPending.value"
             @confirm="deleteLoop()"
             @cancel="confirmRemoveLoopId = undefined"
         >
-            <p class="text-sm text-subtle">A loop already running from it keeps going: it copied what it needed when it started.</p>
+            <p class="text-sm text-subtle">{{ t(`workflowsView.loopAlreadyRunningKeeps`) }}</p>
         </ConfirmDialog>
 
         <LoopForm

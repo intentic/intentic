@@ -1,44 +1,54 @@
 <script setup lang="ts">
 import { InfoDialog, InfoTable } from "@intentic/ui";
+import { useT } from "@intentic/ui/i18n";
+
+const t = useT();
 
 /* The (i) beside the Safety policy. */
 
 const TIERS = [
-    [`The sandbox itself`, `A container, a git worktree of its own, credentials masked out of everything the model reads`, `Nobody. Nothing here can change it.`],
+    [
+        `The sandbox itself`,
+        `A container, a git worktree of its own, credentials masked out of everything the model reads`,
+        `Nobody. Nothing here can change it.`,
+    ],
     [`A quick pattern match`, `Spots the handful of commands worth a second look, and is wrong often`, `Nobody`],
-    [`A model reading your policy`, `Applies what you wrote to this command, plus what the sandbox knows about the turn`, `Nobody, unless it decides to ask`],
+    [
+        `A model reading your policy`,
+        `Applies what you wrote to this command, plus what the sandbox knows about the turn`,
+        `Nobody, unless it decides to ask`,
+    ],
     [`You`, `A card, with the model's one-sentence reason on it`, `You`],
 ];
 </script>
 
 <template>
-    <InfoDialog title="Safety policy">
+    <InfoDialog :title="t(`sandbox.safetyPolicyInfo.safetyPolicy`)">
         <p class="text-sm text-muted">
-            Your assistant runs commands on its own. This is where you say which of them are worth interrupting you about. It's prose because the
-            thing reading it is a model: it can tell a script being written to a file from a directory actually being deleted, which a list of
-            rules can't.
+            {{ t(`sandbox.safetyPolicyInfo.assistantRunsCommandsOn`) }}
         </p>
 
-        <h3 class="mt-5 text-xs font-semibold uppercase tracking-wide text-subtle">What happens to a command</h3>
+        <h3 class="mt-5 text-xs font-semibold uppercase tracking-wide text-subtle">{{ t(`sandbox.safetyPolicyInfo.whatHappensToCommand`) }}</h3>
         <InfoTable class="mt-2" :headers="[`Step`, `What it does`, `Who it interrupts`]" :rows="TIERS" />
 
-<!-- The honest limit, and the reason the page is safe to hand to the assistant. -->
-        <h3 class="mt-5 text-xs font-semibold uppercase tracking-wide text-subtle">What this can and cannot do</h3>
+        <!-- The honest limit, and the reason the page is safe to hand to the assistant. -->
+        <h3 class="mt-5 text-xs font-semibold uppercase tracking-wide text-subtle">{{ t(`sandbox.safetyPolicyInfo.whatCannotDo`) }}</h3>
         <p class="mt-2 text-2xs text-muted">
-            It decides <span class="font-medium text-content">how often you are interrupted</span>, not what the assistant is capable of. Nothing
-            written here can let it out of its container, widen what one of your devices allows, or show it a credential — those are enforced
-            elsewhere and are not editable from this page. The worst a bad line can do is stop asking you about something you wanted to see.
+            {{ t(`sandbox.safetyPolicyInfo.decides`) }}
+            <span class="font-medium text-content">{{ t(`sandbox.safetyPolicyInfo.howOftenInterrupted`) }}</span
+            >{{ t(`sandbox.safetyPolicyInfo.notWhatAssistantCapable`) }}
         </p>
         <p class="mt-2 text-2xs text-muted">
-            That is also why the assistant may edit this file when you ask it to. It cannot grant itself anything by doing so. It is refused if the
-            turn has read something from outside, or if nobody is watching.
+            {{ t(`sandbox.safetyPolicyInfo.alsoWhyAssistantMay`) }}
         </p>
         <p class="mt-2 text-2xs text-muted">
-            A few rules sit outside the document. In this sandbox: wiping a disk, deleting <code>/</code>, or deleting anything under
+            {{ t(`sandbox.safetyPolicyInfo.fewRulesSitOutside`) }} <code>/</code>{{ t(`sandbox.safetyPolicyInfo.deletingAnythingUnder`) }}
             <code>/history</code>. On your own computers, any delete as well, because nothing there is rebuilt from an image. A model can be argued
             into most things by text inside the command it is judging, and those cost more than any policy line is worth. They are also the rules the
-            <span class="font-medium text-content">Safety judge</span> switch above cannot reach — turning the judge off stops your policy being read,
-            not those. <span class="font-medium text-content">What gets stopped</span> lists all of them.
+            <span class="font-medium text-content">{{ t(`sandbox.safetyPolicyInfo.safetyJudge`) }}</span>
+            {{ t(`sandbox.safetyPolicyInfo.switchAboveCannotReach`) }}
+            <span class="font-medium text-content">{{ t(`sandbox.safetyPolicyInfo.whatGetsStopped`) }}</span>
+            {{ t(`sandbox.safetyPolicyInfo.listsAll`) }}
         </p>
     </InfoDialog>
 </template>

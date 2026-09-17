@@ -25,8 +25,11 @@ import { laneOfTab, tabLabel } from "../tabs/tabs";
 import { useChat } from "../run/useChat";
 import { usePersonas } from "../../sandbox/personas/usePersonas";
 import RailCard from "../../../components/RailCard.vue";
+import { useT } from "@intentic/ui/i18n";
 
 // The host focuses the chat; this list only emits verbs, never writes the store directly.
+const t = useT();
+
 const emit = defineEmits<{ select: [id: string] }>();
 
 const { personas } = usePersonas();
@@ -192,103 +195,102 @@ const sessionsOf = (row: PersonaRow) =>
             LANE_RANK[laneOfTab(a.conversation, a.agent)] - LANE_RANK[laneOfTab(b.conversation, b.agent)] ||
             (b.agent?.updatedAt ?? 0) - (a.agent?.updatedAt ?? 0),
     );
-
 </script>
 
 <template>
     <!-- No slab: the other half of this rail (the lanes) has none either, and the cards take their step up from `--card-rest`. -->
     <div class="flex min-h-0 min-w-0 flex-col p-2">
         <div class="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto">
-        <template v-if="empty">
-            <!-- A real link, since the sandbox hub has an address and this is often the first place someone finds it. -->
-            <RouterLink to="/sandbox/personas" :class="ui.addTile(`gap-1 rounded-lg py-1.5 text-2xs`)">
-                <Icon name="plus" class="text-2xs" />
-                Set up a persona
-            </RouterLink>
-        </template>
-
-        <template v-else>
-            <template v-for="row in rows" :key="row.key">
-                <!-- Running personas expose status and live activity in the card. -->
-                <RailCard
-                    :title="row.label"
-                    :status="row.status"
-                    :live="row.live"
-                    :now="now"
-                    tight
-                    :selected="row.open"
-                    :attention="row.needsYou"
-                    :aria-expanded="isExpanded(row)"
-                    :aria-label="`Show ${row.label}'s chats`"
-                    @click="toggleExpanded(row)"
-                >
-                    <!-- The persona face leads the card at its standard size. -->
-                    <template #aside>
-                        <!-- The face's default size sets the row height. -->
-                        <PersonaFace :persona="row" />
-                    </template>
-                    <!-- The clock rides the title line, so gaining one never changes the row's height. -->
-                    <template #trailing>
-                        <span v-if="row.lastAt !== undefined && row.lastAt > 0" class="shrink-0 text-2xs text-subtle">{{
-                            relativeTime(row.lastAt)
-                        }}</span>
-                    </template>
-                    <!-- Model, bounds, and activity share one non-wrapping metadata line. -->
-                    <template #meta>
-                        <span class="flex min-h-4 min-w-0 flex-1 items-center gap-2 overflow-hidden">
-                            <!-- The model leads the metadata line. -->
-                            <span v-if="row.model !== undefined" class="min-w-0 truncate text-subtle">{{ row.model }}</span>
-                            <!-- Bounds follow the model as static configuration. -->
-                            <StatusBadge v-if="row.bounds !== undefined" variant="neutral" size="xs">{{ row.bounds }}</StatusBadge>
-                            <!-- Hidden at zero (a fresh persona is simply fresh). -->
-                            <span v-if="row.chats > 0" class="flex shrink-0 items-center gap-0.5 text-muted">
-                                {{ row.chats }} chat{{ row.chats === 1 ? `` : `s` }}
-                                <Icon :name="isExpanded(row) ? `chevron-up` : `chevron-down`" class="text-2xs" />
-                            </span>
-                        </span>
-                    </template>
-                </RailCard>
-
-                <!-- Persona chats are grouped beneath the persona row. -->
-                <!-- Group indentation keeps full-width chat cards inside the rail. -->
-                <!-- Chat rows reuse the persona's live activity source. -->
-                <div v-if="isExpanded(row)" class="ml-5 flex min-w-0 flex-col gap-2">
-                    <RailCard
-                        v-for="entry in sessionsOf(row)"
-                        :key="entry.conversation.conversationId"
-                        :title="tabLabel(entry.conversation)"
-                        :title-action="entry.agent?.titleAction"
-                        :provider="entry.agent?.provider ?? entry.conversation.provider.value"
-                        :status="statusOf(entry)"
-                        :chip="chipOf(entry)"
-                        :live="liveOf(entry)"
-                        :now="now"
-                        tight
-                        :selected="entry.conversation.conversationId === picked"
-                        :attention="entry.agent !== undefined && blocked(entry.agent)"
-                        :aria-label="`Open ${tabLabel(entry.conversation)}`"
-                        @click="show(entry.conversation.conversationId)"
-                    >
-                        <template #trailing>
-                            <span v-if="entry.agent !== undefined && entry.agent.updatedAt > 0" class="shrink-0 text-2xs text-subtle">{{
-                                relativeTime(entry.agent.updatedAt)
-                            }}</span>
-                        </template>
-                    </RailCard>
-                    <!-- Existing chat groups always retain a start-chat action. -->
-                    <button type="button" :class="ui.addTile(`gap-1 rounded-lg py-1.5 text-2xs`)" @click="startAs(row)">
-                        <Icon name="plus" class="text-2xs" />
-                        New chat as {{ row.label }}
-                    </button>
-                </div>
+            <template v-if="empty">
+                <!-- A real link, since the sandbox hub has an address and this is often the first place someone finds it. -->
+                <RouterLink to="/sandbox/personas" :class="ui.addTile(`gap-1 rounded-lg py-1.5 text-2xs`)">
+                    <Icon name="plus" class="text-2xs" />
+                    {{ t(`chat.chatPersonaRail.setUpPersona`) }}
+                </RouterLink>
             </template>
 
-            <!-- Link to the page that owns these cards, in the same place the composer's picker puts it. -->
-            <RouterLink to="/sandbox/personas" :class="ui.addTile(`gap-1 rounded-lg py-1.5 text-2xs`)">
-                <Icon name="cog" class="text-2xs" />
-                Manage personas
-            </RouterLink>
-        </template>
+            <template v-else>
+                <template v-for="row in rows" :key="row.key">
+                    <!-- Running personas expose status and live activity in the card. -->
+                    <RailCard
+                        :title="row.label"
+                        :status="row.status"
+                        :live="row.live"
+                        :now="now"
+                        tight
+                        :selected="row.open"
+                        :attention="row.needsYou"
+                        :aria-expanded="isExpanded(row)"
+                        :aria-label="t(`chat.chatPersonaRail.showSChats`, { label: row.label })"
+                        @click="toggleExpanded(row)"
+                    >
+                        <!-- The persona face leads the card at its standard size. -->
+                        <template #aside>
+                            <!-- The face's default size sets the row height. -->
+                            <PersonaFace :persona="row" />
+                        </template>
+                        <!-- The clock rides the title line, so gaining one never changes the row's height. -->
+                        <template #trailing>
+                            <span v-if="row.lastAt !== undefined && row.lastAt > 0" class="shrink-0 text-2xs text-subtle">{{
+                                relativeTime(row.lastAt)
+                            }}</span>
+                        </template>
+                        <!-- Model, bounds, and activity share one non-wrapping metadata line. -->
+                        <template #meta>
+                            <span class="flex min-h-4 min-w-0 flex-1 items-center gap-2 overflow-hidden">
+                                <!-- The model leads the metadata line. -->
+                                <span v-if="row.model !== undefined" class="min-w-0 truncate text-subtle">{{ row.model }}</span>
+                                <!-- Bounds follow the model as static configuration. -->
+                                <StatusBadge v-if="row.bounds !== undefined" variant="neutral" size="xs">{{ row.bounds }}</StatusBadge>
+                                <!-- Hidden at zero (a fresh persona is simply fresh). -->
+                                <span v-if="row.chats > 0" class="flex shrink-0 items-center gap-0.5 text-muted">
+                                    {{ row.chats }} {{ t(`chat.chatPersonaRail.chat`) }}{{ row.chats === 1 ? `` : `s` }}
+                                    <Icon :name="isExpanded(row) ? `chevron-up` : `chevron-down`" class="text-2xs" />
+                                </span>
+                            </span>
+                        </template>
+                    </RailCard>
+
+                    <!-- Persona chats are grouped beneath the persona row. -->
+                    <!-- Group indentation keeps full-width chat cards inside the rail. -->
+                    <!-- Chat rows reuse the persona's live activity source. -->
+                    <div v-if="isExpanded(row)" class="ml-5 flex min-w-0 flex-col gap-2">
+                        <RailCard
+                            v-for="entry in sessionsOf(row)"
+                            :key="entry.conversation.conversationId"
+                            :title="tabLabel(entry.conversation)"
+                            :title-action="entry.agent?.titleAction"
+                            :provider="entry.agent?.provider ?? entry.conversation.provider.value"
+                            :status="statusOf(entry)"
+                            :chip="chipOf(entry)"
+                            :live="liveOf(entry)"
+                            :now="now"
+                            tight
+                            :selected="entry.conversation.conversationId === picked"
+                            :attention="entry.agent !== undefined && blocked(entry.agent)"
+                            :aria-label="t(`chat.chatPersonaRail.open`, { conversation: tabLabel(entry.conversation) })"
+                            @click="show(entry.conversation.conversationId)"
+                        >
+                            <template #trailing>
+                                <span v-if="entry.agent !== undefined && entry.agent.updatedAt > 0" class="shrink-0 text-2xs text-subtle">{{
+                                    relativeTime(entry.agent.updatedAt)
+                                }}</span>
+                            </template>
+                        </RailCard>
+                        <!-- Existing chat groups always retain a start-chat action. -->
+                        <button type="button" :class="ui.addTile(`gap-1 rounded-lg py-1.5 text-2xs`)" @click="startAs(row)">
+                            <Icon name="plus" class="text-2xs" />
+                            {{ t(`chat.chatPersonaRail.newChat`) }} {{ row.label }}
+                        </button>
+                    </div>
+                </template>
+
+                <!-- Link to the page that owns these cards, in the same place the composer's picker puts it. -->
+                <RouterLink to="/sandbox/personas" :class="ui.addTile(`gap-1 rounded-lg py-1.5 text-2xs`)">
+                    <Icon name="cog" class="text-2xs" />
+                    {{ t(`chat.chatPersonaRail.managePersonas`) }}
+                </RouterLink>
+            </template>
         </div>
     </div>
 </template>

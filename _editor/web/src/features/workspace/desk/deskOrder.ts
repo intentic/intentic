@@ -1,5 +1,6 @@
 import type { WorkspaceTreeEntry } from "@intentic/api-contract";
 import { categoryForEntry, type FileCategory } from "@intentic/ui/file-icon";
+import { t } from "@intentic/ui/i18n";
 
 // How the desk lays a folder out: folders first, then files in KIND groups, each in natural name order. A kind, not an
 // extension: extension groups shatter a source folder into json/ts/tsx/vue/css islands, while a kind is what the icon's
@@ -14,17 +15,17 @@ export interface DeskGroup {
 }
 
 // Reading order: what a person opens first, down to what a tool put here.
-const GROUP_ORDER: readonly { readonly key: DeskGroupKey; readonly label: string }[] = [
-    { key: `folders`, label: `Folders` },
-    { key: `documents`, label: `Documents` },
-    { key: `pictures`, label: `Pictures` },
-    { key: `media`, label: `Media` },
-    { key: `code`, label: `Code` },
-    { key: `styles`, label: `Styles` },
-    { key: `data`, label: `Data` },
-    { key: `config`, label: `Config` },
-    { key: `archives`, label: `Archives` },
-    { key: `other`, label: `Other` },
+const groupOrder = (): readonly { readonly key: DeskGroupKey; readonly label: string }[] => [
+    { key: `folders`, label: t(`workspace.deskOrder.folders`) },
+    { key: `documents`, label: t(`workspace.deskOrder.documents`) },
+    { key: `pictures`, label: t(`workspace.deskOrder.pictures`) },
+    { key: `media`, label: t(`workspace.deskOrder.media`) },
+    { key: `code`, label: t(`workspace.deskOrder.code`) },
+    { key: `styles`, label: t(`workspace.deskOrder.styles`) },
+    { key: `data`, label: t(`workspace.deskOrder.data`) },
+    { key: `config`, label: t(`workspace.deskOrder.config`) },
+    { key: `archives`, label: t(`workspace.deskOrder.archives`) },
+    { key: `other`, label: t(`workspace.deskOrder.other`) },
 ];
 
 // Video is `generic` to fileIcon.ts; the desk seats it with sound, since both are watched rather than read.
@@ -78,7 +79,7 @@ export const deskGroups = (entries: readonly WorkspaceTreeEntry[]): readonly Des
             bucket.push(entry);
         }
     }
-    return GROUP_ORDER.flatMap(({ key, label }) => {
+    return groupOrder().flatMap(({ key, label }) => {
         const bucket = buckets.get(key);
         return bucket === undefined ? [] : [{ key, label, entries: bucket.toSorted(byNaturalName) }];
     });

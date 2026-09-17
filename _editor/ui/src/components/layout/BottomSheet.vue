@@ -17,7 +17,7 @@ const visible = defineModel<boolean>({ required: true });
     >
         <div class="mx-auto mt-2 h-1 w-9 shrink-0 rounded-full bg-line" aria-hidden="true" />
         <div v-if="header" class="shrink-0 px-4 pb-1 pt-3 text-sm font-semibold text-content">{{ header }}</div>
-<!-- THE ONE SCROLLER IN THE SHEET. It must be the element that overflows: `overscroll-behavior: contain` on a scroll
+        <!-- THE ONE SCROLLER IN THE SHEET. It must be the element that overflows: `overscroll-behavior: contain` on a scroll
      container that cannot scroll swallows the finger instead of chaining to whatever can, which is how every tall
      sheet (model picker, chats) stopped moving under touch while the Drawer's own content box held the overflow. -->
         <div class="min-h-0 flex-1 overflow-y-auto px-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-2" style="overscroll-behavior: contain">

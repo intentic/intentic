@@ -5,11 +5,14 @@ import { computed, ref } from "vue";
 import { relativeTime } from "../chat/models/catalog";
 import { KIND_ICONS } from "./terminalMeta";
 import { openWorkTerminal, useWorkTerminals, type WorkTerminalRow } from "./useWorkTerminals";
+import { useT } from "@intentic/ui/i18n";
 
 // Popover listing work in progress (agent Bash shells, daemon job sessions, one-shot runs) instead of tabbing into the
 // strip, and under it the jobs that have just ended: a finished check is the one whose pane you want, and it leaves the
 // strip the moment you look away. Hidden until there is something to say. Revealing a row tabs it regardless of the
 // preference; there is no Stop here.
+
+const t = useT();
 
 const { rows, finished, showWorkTerminals } = useWorkTerminals();
 // Anchored, not a Popover, so the overlay follows a popped-out terminal window instead of its edge.
@@ -38,15 +41,17 @@ const endedAt = (row: WorkTerminalRow): string => (row.activityAt > 0 ? `finishe
         :class="ui.iconButton()"
         :aria-expanded="panelOpen"
         @click="panelOpen = !panelOpen"
-        v-tooltip.top="'Work terminals'"
-        aria-label="Work terminals"
+        v-tooltip.top="t(`terminal.workTerminals.workTerminals`)"
+        :aria-label="t(`terminal.workTerminals.workTerminals`)"
     >
         <Icon name="wave-pulse" class="text-xs" :class="live ? 'text-link' : 'text-muted'" />
     </button>
 
     <AnchoredOverlay v-model="panelOpen" :anchor="trigger ?? undefined" side="bottom" cross="end">
         <div class="flex w-80 flex-col p-1">
-            <div v-if="live" class="px-2 py-1.5 text-2xs font-medium uppercase tracking-wide text-muted">Running</div>
+            <div v-if="live" class="px-2 py-1.5 text-2xs font-medium uppercase tracking-wide text-muted">
+                {{ t(`terminal.workTerminals.running`) }}
+            </div>
             <button
                 v-for="row in rows"
                 :key="row.session"
@@ -72,7 +77,7 @@ const endedAt = (row: WorkTerminalRow): string => (row.activityAt > 0 ? `finishe
                 class="px-2 py-1.5 text-2xs font-medium uppercase tracking-wide text-muted"
                 :class="live ? 'mt-1 border-t border-line-subtle pt-2' : undefined"
             >
-                Finished
+                {{ t(`terminal.workTerminals.finished`) }}
             </div>
             <button
                 v-for="row in finished"
@@ -93,8 +98,8 @@ const endedAt = (row: WorkTerminalRow): string => (row.activityAt > 0 ? `finishe
             <!-- The preference for where hidden terminals reappear as tabs. -->
             <label class="mt-1 flex cursor-pointer items-center gap-2.5 border-t border-line-subtle px-2 pb-1 pt-2">
                 <div class="min-w-0 flex-1">
-                    <div class="text-xs text-content">Always show as tabs</div>
-                    <div class="text-2xs text-muted">Give every agent shell and job its own tab in this panel.</div>
+                    <div class="text-xs text-content">{{ t(`terminal.workTerminals.alwaysShowTabs`) }}</div>
+                    <div class="text-2xs text-muted">{{ t(`terminal.workTerminals.giveEveryAgentShell`) }}</div>
                 </div>
                 <ToggleSwitch v-model="showWorkTerminals" />
             </label>

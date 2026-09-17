@@ -3,6 +3,7 @@ import { CAPABILITY_CATALOG, type CapabilityCatalogEntry, type CapabilityCategor
 import { contributionDiscriminator } from "@intentic/extension-manifest";
 import type { ExtensionSummary } from "@intentic/sandbox-contract";
 import type { IconName } from "@intentic/ui";
+import { t } from "@intentic/ui/i18n";
 
 // A card's facts and which live connections came from it: the catalog and connected-inventory questions both join a
 // catalog entry to matching instances. That join's rules (which field distinguishes two cards of one kind, a free
@@ -67,7 +68,7 @@ export const withIdentityPicker = (entry: CapabilityCatalogEntry, identities: re
     if (identities.length === 0) {
         return { ...entry, fields: entry.fields.filter((field) => field.key !== `identity`) };
     }
-    const options = [{ value: ``, label: `Standalone` }, ...identities.map((id) => ({ value: id, label: id }))];
+    const options = [{ value: ``, label: t(`capabilities.cards.standalone`) }, ...identities.map((id) => ({ value: id, label: id }))];
     return { ...entry, fields: entry.fields.map((field) => (field.key === `identity` ? { ...field, options } : field)) };
 };
 

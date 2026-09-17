@@ -22,12 +22,12 @@ const pinned = computed(() => sticky && !scroll);
 </script>
 
 <template>
-<!-- A @container, because whether the header's title and actions fit on one line is a fact about the PANEL. -->
+    <!-- A @container, because whether the header's title and actions fit on one line is a fact about the PANEL. -->
     <section
         class="@container flex min-h-0 flex-col rounded-lg border border-line-subtle bg-card"
         :class="[grow ? `flex-1` : ``, scroll ? `overflow-hidden` : `overflow-clip`]"
     >
-<!-- THE HEAD AND THE STRIPS PIN AS ONE BLOCK when pinned, rather than as two stacked `sticky` elements at hand-computed offsets. -->
+        <!-- THE HEAD AND THE STRIPS PIN AS ONE BLOCK when pinned, rather than as two stacked `sticky` elements at hand-computed offsets. -->
         <div :class="pinned ? `sticky top-(--pinned-top) z-2 shrink-0 bg-card` : `contents`">
             <header
                 v-if="title !== undefined || $slots[`title`] || $slots[`actions`] || $slots[`lead`]"

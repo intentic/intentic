@@ -22,6 +22,7 @@ import {
     planLimitSummary,
     usageTone,
 } from "../../chat/session/usageStatus";
+import { useT } from "@intentic/ui/i18n";
 
 // How much of your plans is left, the section that must scale to a 36-connection fleet rather than one row per
 // account. A hierarchy, each level answering a different question:
@@ -36,6 +37,8 @@ import {
 
 // Refreshes on arrival since plan pools are account-wide (other clients spend the same allowance), so a stale
 // read looks confidently wrong. Same pattern as AiAccountSection's rings.
+const t = useT();
+
 onMounted(() => void refreshConnections());
 
 // Module-level flag, not a query, but gated the same way: nothing draws for a read landing in the first beat.
@@ -128,32 +131,34 @@ const openRoster = (provider: string): void => {
 
 const roster = computed(() => {
     const query = rosterQuery.value.trim().toLowerCase();
-    return rows.value
-        .filter(
-            (row) =>
-                (rosterProvider.value === undefined || row.provider === rosterProvider.value) &&
-                (query === `` || row.label.toLowerCase().includes(query) || providerLabel(row.provider).toLowerCase().includes(query)),
-        )
-        // Reconciling one account is what this table is for, and "why is this one doing nothing" is a question its
-        // meter columns answer with a dash.
-        .map((row) => ({ row, blocked: blockedReason(row) }));
+    return (
+        rows.value
+            .filter(
+                (row) =>
+                    (rosterProvider.value === undefined || row.provider === rosterProvider.value) &&
+                    (query === `` || row.label.toLowerCase().includes(query) || providerLabel(row.provider).toLowerCase().includes(query)),
+            )
+            // Reconciling one account is what this table is for, and "why is this one doing nothing" is a question its
+            // meter columns answer with a dash.
+            .map((row) => ({ row, blocked: blockedReason(row) }))
+    );
 });
 </script>
 
 <template>
     <!-- `@container` over the section: columns thin against the panel, not the window's width. -->
-    <RowGroup v-if="rows.length > 0" id="accounts" class="@container" label="Plan limits">
+    <RowGroup v-if="rows.length > 0" id="accounts" class="@container" :label="t(`sandbox.planLimitsPanel.planLimits`)">
         <!-- 1. CAPACITY: headline is a count, not a percentage, since that question survives having 31 accounts. -->
         <RowNote variant="block">
             <div class="flex flex-col gap-2">
                 <!-- Answers "can I start work, and if not, when", not a connection count (the roster already does that). -->
                 <div class="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-<!-- Counted against the accounts that could have room, never the whole roster: a credential no turn can run on belongs to the legend below. -->
+                    <!-- Counted against the accounts that could have room, never the whole roster: a credential no turn can run on belongs to the legend below. -->
                     <span class="text-sm text-content">
-                        {{ summary.counts.room }} of {{ capacityTotal }} accounts {{ summary.counts.room === 1 ? `has` : `have` }} room
+                        {{ t(`sandbox.planLimitsPanel.accountsWithRoom`, { count: summary.counts.room, total: capacityTotal }, summary.counts.room) }}
                     </span>
-                    <span v-if="summary.nextResetAt !== undefined" class="ml-auto shrink-0 text-2xs text-subtle">
-                        next pool reopens {{ formatReset(summary.nextResetAt) }}
+                    <span v-if="summary.nextResetAt !== undefined" class="ml-auto shrink-0 text-2xs text-subtle"
+                        >{{ t(`sandbox.planLimitsPanel.nextPoolReopens`, { nextResetAt: formatReset(summary.nextResetAt) }) }}
                     </span>
                 </div>
 
@@ -188,7 +193,7 @@ const roster = computed(() => {
         <RowNote variant="block">
             <div class="flex flex-col gap-6">
                 <div v-for="group in groups" :key="group.provider" class="flex gap-2">
-<!-- Rail: the mark plus a line showing how far the provider reaches. -->
+                    <!-- Rail: the mark plus a line showing how far the provider reaches. -->
                     <div class="flex w-5 shrink-0 flex-col items-center gap-1.5">
                         <span class="flex size-5 items-center justify-center rounded-md bg-content/10 text-content">
                             <ProviderLogo :provider="group.provider" class="text-xs" />
@@ -202,13 +207,13 @@ const roster = computed(() => {
                             <span class="text-sm font-semibold text-content">{{ providerLabel(group.provider) }}</span>
                             <!-- One account ⇒ its own name, because "1 account" says nothing a reader wanted. -->
                             <span class="min-w-0 truncate text-2xs text-subtle">{{ groupNote(group) }}</span>
-                            <span v-if="single(group)?.measuredAt !== undefined" class="ml-auto shrink-0 text-2xs text-subtle">
-                                read {{ formatAge(single(group)!.measuredAt!) }}
+                            <span v-if="single(group)?.measuredAt !== undefined" class="ml-auto shrink-0 text-2xs text-subtle"
+                                >{{ t(`sandbox.planLimitsPanel.read`, { measuredAt: formatAge(single(group)!.measuredAt!) }) }}
                             </span>
                             <span v-else-if="!isInline(group)" class="ml-auto shrink-0 text-2xs text-muted">{{ groupState(group) }}</span>
                         </div>
 
-<!-- Indented one step from the provider's name; smaller, lighter, and markless, so an account heading can't read as another provider. -->
+                        <!-- Indented one step from the provider's name; smaller, lighter, and markless, so an account heading can't read as another provider. -->
                         <div class="flex flex-col gap-3 pb-1 pl-3">
                             <!-- Small provider: the meters themselves. Nothing that fits is folded away. -->
                             <template v-if="isInline(group)">
@@ -230,16 +235,15 @@ const roster = computed(() => {
                                             v-if="row.measuredAt !== undefined"
                                             class="ml-auto shrink-0 text-2xs"
                                             :class="row.stale ? `text-muted` : `text-subtle`"
-                                        >
-                                            read {{ formatAge(row.measuredAt) }}
+                                            >{{ t(`sandbox.planLimitsPanel.read`, { measuredAt: formatAge(row.measuredAt) }) }}
                                         </span>
                                     </div>
 
                                     <p v-if="row.pools.length === 0" class="text-2xs text-subtle">
                                         {{
                                             row.readable
-                                                ? `No reading yet.`
-                                                : `This plan publishes no limits, spend is all this sandbox can tell you.`
+                                                ? t(`sandbox.planLimitsPanel.noReadingYet`)
+                                                : t(`sandbox.planLimitsPanel.planPublishesNoLimits`)
                                         }}
                                     </p>
 
@@ -264,7 +268,11 @@ const roster = computed(() => {
                                             {{ formatUtilization(pool.percent, row.stale) }}
                                         </span>
                                         <span class="shrink-0 truncate text-right text-2xs text-subtle @xl:w-32">
-                                            {{ pool.resetsAt === undefined ? `` : `resets ${formatReset(pool.resetsAt)}` }}
+                                            {{
+                                                pool.resetsAt === undefined
+                                                    ? ``
+                                                    : t(`sandbox.planLimitsPanel.resets`, { resetsAt: formatReset(pool.resetsAt) })
+                                            }}
                                         </span>
                                     </div>
                                 </div>
@@ -289,11 +297,11 @@ const roster = computed(() => {
                                 </div>
                                 <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-2xs">
                                     <button type="button" class="cursor-pointer text-link hover:underline" @click="openRoster(group.provider)">
-                                        View accounts
+                                        {{ t(`sandbox.planLimitsPanel.viewAccounts`) }}
                                     </button>
                                     <!-- Never a silent cap: a strip that shows 24 of 31 says so. -->
-                                    <span v-if="group.rows.length > MAX_BARS" class="text-subtle">
-                                        showing the {{ MAX_BARS }} most constrained of {{ group.rows.length }}
+                                    <span v-if="group.rows.length > MAX_BARS" class="text-subtle"
+                                        >{{ t(`sandbox.planLimitsPanel.showingMostConstrained`, { max_bars: MAX_BARS, count: group.rows.length }) }}
                                     </span>
                                 </div>
                             </template>
@@ -303,23 +311,20 @@ const roster = computed(() => {
             </div>
         </RowNote>
 
-<!-- 3. -->
+        <!-- 3. -->
         <RowNote v-if="summary.attention.length > 0" variant="block">
             <div class="flex flex-col gap-2">
                 <div class="flex flex-wrap items-baseline gap-x-2 gap-y-1">
-                    <span class="text-2xs font-medium text-danger">Can't serve a turn · {{ attentionTotal }}</span>
-                    <span class="text-2xs text-subtle"> reconnect {{ attentionTotal === 1 ? `it` : `them` }} on the Agent tab </span>
+                    <span class="text-2xs font-medium text-danger">{{ t(`sandbox.planLimitsPanel.cantServeTurn`, { attentionTotal }) }}</span>
+                    <span class="text-2xs text-subtle">
+                        {{ t(`sandbox.planLimitsPanel.reconnectOnAgentTab`, { count: attentionTotal }, attentionTotal) }}
+                    </span>
                 </div>
                 <div v-for="group in attentionShown" :key="group.reason" class="flex flex-col gap-1">
                     <span class="text-2xs text-muted">{{ group.reason }}</span>
                     <!-- Wraps as a set, not a column: names are short, unordered, and scanned for the one you recognise. -->
                     <div class="flex flex-wrap items-center gap-x-4 gap-y-1">
-                        <span
-                            v-for="row in group.rows"
-                            :key="row.id"
-                            v-tooltip.top="row.identity"
-                            class="flex min-w-0 items-center gap-1.5 text-2xs"
-                        >
+                        <span v-for="row in group.rows" :key="row.id" v-tooltip.top="row.identity" class="flex min-w-0 items-center gap-1.5 text-2xs">
                             <ProviderLogo :provider="row.provider" class="shrink-0 text-muted" />
                             <span class="min-w-0 truncate text-muted">{{ row.label }}</span>
                         </span>
@@ -330,7 +335,7 @@ const roster = computed(() => {
                             class="cursor-pointer text-2xs text-link hover:underline"
                             @click="attentionExpanded = true"
                         >
-                            +{{ group.hidden }} more
+                            {{ t(`sandbox.planLimitsPanel.more`, { hidden: group.hidden }) }}
                         </button>
                     </div>
                 </div>
@@ -343,7 +348,7 @@ const roster = computed(() => {
                 <div class="flex flex-wrap items-center gap-x-3 gap-y-2">
                     <button type="button" class="flex cursor-pointer items-center gap-1.5 text-2xs text-content" @click="rosterOpen = !rosterOpen">
                         <Icon :name="rosterOpen ? `chevron-down` : `chevron-right`" class="text-muted" />
-                        All accounts
+                        {{ t(`sandbox.planLimitsPanel.allAccounts`) }}
                         <span class="text-subtle">{{ rows.length }}</span>
                     </button>
                     <button v-if="rosterProvider !== undefined" type="button" class="ui-chip gap-1" @click="rosterProvider = undefined">
@@ -354,8 +359,8 @@ const roster = computed(() => {
                         v-model="rosterQuery"
                         variant="field"
                         clearable
-                        aria-label="Filter accounts"
-                        placeholder="Filter accounts…"
+                        :aria-label="t(`sandbox.planLimitsPanel.filterAccounts`)"
+                        :placeholder="t(`sandbox.planLimitsPanel.filterAccounts2`)"
                         class="ml-auto w-full @xl:w-56"
                     />
                 </div>
@@ -364,12 +369,12 @@ const roster = computed(() => {
                     <table class="w-full text-2xs">
                         <thead class="text-left text-subtle">
                             <tr class="border-b border-line-subtle">
-                                <th class="py-1.5 pr-3 font-medium">Account</th>
-                                <th class="py-1.5 pr-3 font-medium">Provider</th>
-                                <th class="py-1.5 pr-3 font-medium">Binding pool</th>
-                                <th class="py-1.5 pr-3 text-right font-medium">Used</th>
-                                <th class="py-1.5 pr-3 font-medium">Reopens</th>
-                                <th class="py-1.5 font-medium">Read</th>
+                                <th class="py-1.5 pr-3 font-medium">{{ t(`sandbox.planLimitsPanel.account`) }}</th>
+                                <th class="py-1.5 pr-3 font-medium">{{ t(`sandbox.planLimitsPanel.provider`) }}</th>
+                                <th class="py-1.5 pr-3 font-medium">{{ t(`sandbox.planLimitsPanel.bindingPool`) }}</th>
+                                <th class="py-1.5 pr-3 text-right font-medium">{{ t(`sandbox.planLimitsPanel.used`) }}</th>
+                                <th class="py-1.5 pr-3 font-medium">{{ t(`sandbox.planLimitsPanel.reopens`) }}</th>
+                                <th class="py-1.5 font-medium">{{ t(`sandbox.planLimitsPanel.read2`) }}</th>
                             </tr>
                         </thead>
                         <tbody class="text-muted">
@@ -381,7 +386,9 @@ const roster = computed(() => {
                                     <span v-if="blocked !== undefined" class="block truncate text-danger">{{ blocked }}</span>
                                 </td>
                                 <td class="py-1.5 pr-3">{{ providerLabel(row.provider) }}</td>
-                                <td class="py-1.5 pr-3">{{ row.binding?.label ?? (row.readable ? `—` : `no published limits`) }}</td>
+                                <td class="py-1.5 pr-3">
+                                    {{ row.binding?.label ?? (row.readable ? `—` : t(`sandbox.planLimitsPanel.noPublishedLimits`)) }}
+                                </td>
                                 <td class="py-1.5 pr-3 text-right tabular-nums" :class="row.percent === undefined ? `` : usageTone(row.percent)">
                                     {{ row.percent === undefined ? `—` : formatUtilization(row.percent, row.stale) }}
                                 </td>
@@ -390,16 +397,16 @@ const roster = computed(() => {
                             </tr>
                         </tbody>
                     </table>
-                    <p v-if="roster.length === 0" :class="ui.emptyState(`py-4`)">No account matches that filter.</p>
+                    <p v-if="roster.length === 0" :class="ui.emptyState(`py-4`)">{{ t(`sandbox.planLimitsPanel.noAccountMatchesFilter`) }}</p>
                 </div>
             </div>
         </RowNote>
     </RowGroup>
 
-<!-- An unread state is not an empty one: drawn as the panel itself (headline, band strip, legend), not a "Reading..." sentence in its place. -->
+    <!-- An unread state is not an empty one: drawn as the panel itself (headline, band strip, legend), not a "Reading..." sentence in its place. -->
     <RowGroup v-else-if="!accountsLoaded && outline" class="@container" role="status" aria-busy="true">
         <template #label><span class="skeleton block h-2.5 w-24" aria-hidden="true" /></template>
-        <span class="sr-only">Reading your connections…</span>
+        <span class="sr-only">{{ t(`sandbox.planLimitsPanel.readingConnections`) }}</span>
         <RowNote variant="block" aria-hidden="true">
             <div class="flex flex-col gap-2">
                 <div class="flex flex-wrap items-baseline gap-x-3 gap-y-1">
@@ -417,6 +424,6 @@ const roster = computed(() => {
 
     <!-- Said only once it is true, and silent for the beat before the outline earns its place. -->
     <p v-else-if="accountsLoaded" :class="ui.emptyState()">
-        No AI account is connected yet: connect one on the Agent tab and its plan limits appear here.
+        {{ t(`sandbox.planLimitsPanel.noAiAccountConnected`) }}
     </p>
 </template>

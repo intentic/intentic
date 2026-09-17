@@ -5,6 +5,9 @@ import { useListNavigation } from "../../composables/useListNavigation.js";
 import PersonaFace from "../brand/PersonaFace.vue";
 import SearchBar from "./SearchBar.vue";
 import { nextPickerId, normalizePickerGroups, type PickerOption, type PickerOptions } from "./picker.js";
+import { useT } from "../../i18n/index.js";
+
+const t = useT();
 
 const {
     options,
@@ -160,7 +163,7 @@ onMounted(() => {
                     @mouseenter="activeIndex = row.index"
                 >
                     <slot name="icon" :option="row.option">
-<!-- A row naming a person wears their face, bigger than the trigger's: a form field must not grow. -->
+                        <!-- A row naming a person wears their face, bigger than the trigger's: a form field must not grow. -->
                         <PersonaFace v-if="row.option.face !== undefined" :persona="row.option.face" :size="28" />
                         <Icon
                             v-else-if="row.option.icon !== undefined"
@@ -170,14 +173,18 @@ onMounted(() => {
                             aria-hidden="true"
                         />
                     </slot>
-<!-- Label and hint share one column, under the words they explain, not the icon; a check must clear both lines. -->
+                    <!-- Label and hint share one column, under the words they explain, not the icon; a check must clear both lines. -->
                     <span class="flex min-w-0 shrink flex-col gap-0.5">
                         <span
                             class="truncate text-sm md:text-xs"
-                            :class="[row.option.value === selectedValue ? `text-link` : `text-content`, row.option.mono === true ? `font-mono` : ``, labelClass]"
+                            :class="[
+                                row.option.value === selectedValue ? `text-link` : `text-content`,
+                                row.option.mono === true ? `font-mono` : ``,
+                                labelClass,
+                            ]"
                             >{{ row.option.label }}</span
                         >
-<!-- Wraps on purpose: a sentence cut off mid-clause teaches nothing, and height is the only room left to spend. -->
+                        <!-- Wraps on purpose: a sentence cut off mid-clause teaches nothing, and height is the only room left to spend. -->
                         <span v-if="row.option.hint !== undefined" class="text-2xs leading-snug text-subtle">{{ row.option.hint }}</span>
                     </span>
                     <span v-if="row.option.description !== undefined" class="min-w-0 flex-1 truncate text-right text-2xs text-subtle">{{
@@ -192,8 +199,8 @@ onMounted(() => {
                     />
                 </button>
             </template>
-            <p v-if="flat.length === 0" class="px-3 py-3 text-center text-2xs text-subtle">No matches.</p>
+            <p v-if="flat.length === 0" class="px-3 py-3 text-center text-2xs text-subtle">{{ t(`ui.pickerPanel.noMatches`) }}</p>
         </div>
-        <div class="sr-only" aria-live="polite">{{ flat.length }} options</div>
+        <div class="sr-only" aria-live="polite">{{ t(`ui.pickerPanel.options`, { count: flat.length }) }}</div>
     </div>
 </template>

@@ -10,11 +10,14 @@ import { useSandboxAvailability } from "../../sandbox/overview/useSandboxAvailab
 import { useWorkspaceTree } from "../../workspace/explorer/useWorkspaceTree";
 import ChatToolCallsToggle from "../tools/ChatToolCallsToggle.vue";
 import UsageRing from "../../../components/UsageRing.vue";
+import { useT } from "@intentic/ui/i18n";
 
 // The pane's status bar: readouts under the composer, the one part of the footer outside the scroller — about the
 // pane (context fill, subscription headroom, what send is waiting for), not the message being written. The left
 // slot is the composer's own words (a refusal, a shortcut hint); everything right of it is measured off this
 // pane's conversation and account.
+
+const t = useT();
 
 const { block, hint } = defineProps<{
     /** Why Send won't go, if it won't; owns the slot whenever set. */
@@ -44,7 +47,7 @@ const contextRing = computed(() => {
         value: pct,
         label: `${pct}%`,
         warn: pct >= 80,
-        tooltip: `Context · ${formatTokens(usage.tokens)} / ${formatTokens(usage.contextWindow)} (${pct}%)`,
+        tooltip: t(`chat.chatPaneStatus.context`, { tokens: formatTokens(usage.tokens), contextWindow: formatTokens(usage.contextWindow), pct }),
     };
 });
 
@@ -63,23 +66,22 @@ const usageChip = computed(() => {
     const reset = headroom.percent >= SPENT_PERCENT && headroom.binding.resetsAt !== undefined ? ` · ${formatReset(headroom.binding.resetsAt)}` : ``;
     return { headroom, label: `${formatUtilization(headroom.percent, headroom.stale)}${reset}` };
 });
-
 </script>
 
 <template>
-<!-- Keep the composer above the mobile keyboard inset. -->
+    <!-- Keep the composer above the mobile keyboard inset. -->
     <div
         class="mx-auto flex w-full max-w-[51rem] items-center gap-2 px-3 pb-2 text-2xs text-subtle"
         :style="mobile && keyboardInset > 0 ? { paddingBottom: `${keyboardInset + 8}px` } : undefined"
     >
-<!-- The refusal owns this slot whenever set, since a tooltip alone never reaches touch; it displaces the keyboard hint. -->
+        <!-- The refusal owns this slot whenever set, since a tooltip alone never reaches touch; it displaces the keyboard hint. -->
         <span v-if="block !== undefined" class="flex min-w-0 items-center gap-1 text-warning">
             <Icon name="exclamation-circle" class="shrink-0 text-2xs" />
             <span class="truncate">{{ block }}</span>
         </span>
         <span v-else-if="!mobile" class="@max-md:hidden">{{ hint }}</span>
         <div class="ml-auto flex items-center gap-3">
-<!-- Whether this transcript shows its tool calls (ChatToolCallsToggle, also drawn in the Subagents pane); joins the other readouts under the composer. -->
+            <!-- Whether this transcript shows its tool calls (ChatToolCallsToggle, also drawn in the Subagents pane); joins the other readouts under the composer. -->
             <ChatToolCallsToggle />
             <span v-if="contextRing" class="inline-flex items-center gap-1" v-tooltip.top="contextRing.tooltip">
                 <ProgressRing :value="contextRing.value" :class="contextRing.warn ? 'text-warning' : 'text-primary-500'" />
@@ -95,11 +97,11 @@ const usageChip = computed(() => {
                     ><span class="@max-xs:hidden">{{ usageChip.label }}</span></UsageRing
                 >
             </RouterLink>
-<!-- Every chip here names a page, so each is a link: hover shows the address, Ctrl/Cmd-click opens it without leaving the chat. -->
+            <!-- Every chip here names a page, so each is a link: hover shows the address, Ctrl/Cmd-click opens it without leaving the chat. -->
             <RouterLink to="/sandbox/agent" class="touch-target inline-flex items-center gap-1 transition-colors hover:text-content">
-<!-- One spelling and colour for sandbox state, shared with the rail chip and switcher (availability.ts); a short retry keeps the healthy look. -->
+                <!-- One spelling and colour for sandbox state, shared with the rail chip and switcher (availability.ts); a short retry keeps the healthy look. -->
                 <span class="inline-block h-1.5 w-1.5 rounded-full" :class="availabilityVisual.dotClass"></span>
-                {{ availabilityVisual.label }} · Manage
+                {{ availabilityVisual.label }} {{ t(`chat.chatPaneStatus.manage`) }}
             </RouterLink>
         </div>
     </div>

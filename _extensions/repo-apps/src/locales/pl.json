@@ -1,0 +1,44 @@
+{
+    "addAppDialog": {
+        "add": "Add",
+        "addApp": "Add an app",
+        "eGShopApi": "e.g. shop-api",
+        "name": "Name:",
+        "pickOneMoreTemplates": "Pick one or more templates to scaffold into this monorepo. Name each instance to run several of a kind."
+    },
+    "appsView": {
+        "addApp": "Add app",
+        "addingAppsFollowProgress": "Adding apps: follow progress in the terminal.",
+        "api": "API",
+        "libraryTests": "Library tests",
+        "noAppsYetUse": "No apps yet: use \"Add app\" to scaffold one and get a live preview.",
+        "noVitestProjectsFound": "No vitest projects found: nothing here owns a vitest.config.* or *.test.* file.",
+        "openPreview": "Open preview",
+        "openPreviewInNew": "Open {app} preview in a new tab",
+        "openTerminal": "Open {app} terminal",
+        "packages": "Packages",
+        "readingRepositorysApps": "Reading this repository's apps…",
+        "run": "Run",
+        "runAll": "Run all",
+        "runTests": "Run tests",
+        "runVitestApp": "Run vitest for this app",
+        "start": "Start",
+        "startAll": "Start all",
+        "stop": "Stop",
+        "stopAll": "Stop all",
+        "terminal": "Terminal",
+        "web": "Web"
+    },
+    "dependenciesView": {
+        "dev": "dev",
+        "devDependencies": "Dev dependencies",
+        "noWorkspacePackagesFound": "No workspace packages found: pnpm-workspace.yaml names no package dirs.",
+        "readingWorkspaceGraph": "Reading the workspace graph…",
+        "usedBy": "used by",
+        "uses": "uses"
+    },
+    "extension": {
+        "apps": "Apps",
+        "dependencies": "Dependencies"
+    }
+}

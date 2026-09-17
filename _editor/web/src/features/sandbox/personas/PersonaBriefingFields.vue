@@ -3,10 +3,13 @@ import { type TurnBriefingNoteId, TURN_BRIEFING_FIXTURES, TURN_BRIEFING_NOTES } 
 import { ui, Icon } from "@intentic/ui";
 import ToggleSwitch from "primevue/toggleswitch";
 import { computed, ref } from "vue";
+import { useT } from "@intentic/ui/i18n";
 
 // What the sandbox says before the user does, as a card's own decision. Rows are named with the exact titles the
 // chat's "Sent with your message" fold shows, so switching one off means switching off the line you just read there.
 // The draft is the parent's, mutated in place, like <PersonaPowersFields>.
+
+const t = useT();
 
 const { omitted } = defineProps<{
     /** Note ids this card drops; everything not listed is sent. Mutated in place. */
@@ -35,10 +38,9 @@ const showFixtures = ref(false);
 <template>
     <div class="flex flex-col gap-3">
         <div class="flex flex-col gap-0.5">
-            <span :class="ui.sectionLabel()">Sent with every message</span>
+            <span :class="ui.sectionLabel()">{{ t(`sandbox.personaBriefingFields.sentEveryMessage`) }}</span>
             <span class="text-xs text-subtle">
-                The sandbox puts these in front of the message before the model reads it; the chat shows them under "Sent with your message". Turn one
-                off for a card whose model has little room to spare, or whose work never needs it.
+                {{ t(`sandbox.personaBriefingFields.sandboxPutsInFront`) }}
             </span>
         </div>
 
@@ -59,7 +61,7 @@ const showFixtures = ref(false);
                 @click="showFixtures = !showFixtures"
             >
                 <Icon :name="showFixtures ? `chevron-down` : `chevron-right`" class="text-2xs" />
-                {{ TURN_BRIEFING_FIXTURES.length }} more are always sent
+                {{ TURN_BRIEFING_FIXTURES.length }} {{ t(`sandbox.personaBriefingFields.moreAlwaysSent`) }}
             </button>
             <!-- Omitted notes are named so the visible briefing list is unambiguous. -->
             <dl v-if="showFixtures" class="flex flex-col gap-1 pl-5">
@@ -71,7 +73,7 @@ const showFixtures = ref(false);
         </div>
 
         <p v-if="dropped > 0" class="text-xs text-subtle">
-            {{ dropped }} of {{ TURN_BRIEFING_NOTES.length }} turned off for this persona. Every other chat in this sandbox still gets all of them.
+            {{ t(`sandbox.personaBriefingFields.turnedOffPersonaEvery`, { dropped, count: TURN_BRIEFING_NOTES.length }) }}
         </p>
     </div>
 </template>

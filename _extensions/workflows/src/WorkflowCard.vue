@@ -4,6 +4,7 @@ import type { Workflow } from "@intentic/sandbox-contract";
 import { computed } from "vue";
 import WorkflowNodeCard from "./WorkflowNodeCard.vue";
 import { workflowDag, workflowLayers } from "./workflowDag";
+import { t } from "./i18n.js";
 
 // One card for both a saved workflow and a template (dashed = not owned yet). Draws the actual graph via
 // `workflowDag`/`<DagGraph>`, the same derivation the designer and run view use, not a decorative diagram.
@@ -61,7 +62,7 @@ const shape = computed(() => {
             <button
                 type="button"
                 class="absolute inset-0 cursor-pointer rounded-lg transition-shadow hover:ring-1 hover:ring-line-strong focus-visible:ring-1 focus-visible:ring-link focus-visible:outline-none"
-                :aria-label="`Open ${workflow.name} in the designer`"
+                :aria-label="t(`workflowCard.openInDesigner`, { name: workflow.name })"
                 @click="emit(`open`)"
             ></button>
         </div>

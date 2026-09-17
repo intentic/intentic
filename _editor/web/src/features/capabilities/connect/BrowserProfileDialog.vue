@@ -7,10 +7,13 @@ import { keyIntent, type KeyFrame } from "../../browsers/keyIntent";
 import { pointerFrame, type PointerAction } from "../../browsers/pointerFrame";
 import { videoSink } from "../../browsers/videoSink";
 import { socketUrl as wsSocketUrl } from "../../sandbox/client/wsTicket";
+import { useT } from "@intentic/ui/i18n";
 
 // One connected account's Chromium, driven live over /system/browser-profile (video in, input replayed via XTEST).
 // `capability` picks which connection's browser to open, since a site may be connected more than once; `label`
 // names the account. `login` opens sign-in; `browse` reopens the same signed-in profile.
+
+const t = useT();
 
 const props = defineProps<{ visible: boolean; capability: string; label: string; mode: "login" | "browse" }>();
 const emit = defineEmits<{ (event: "update:visible", value: boolean): void; (event: "done"): void }>();
@@ -249,24 +252,21 @@ const finish = (): void => {
         :open="visible"
         size="xl"
         :dismissable="false"
-        :header="browsing ? `${label}, your browser` : `Log in to ${label}`"
+        :header="browsing ? t(`capabilities.browserProfileDialog.browser`, { label }) : t(`capabilities.browserProfileDialog.logInTo`, { label })"
         @update:open="!$event && cancel()"
     >
         <p class="mb-3 text-xs text-muted">
-            <template v-if="browsing">
-                This is the signed-in browser the agent uses for {{ label }}: do whatever you need in it. The agent can't use it while this window is
-                open, and anything you change here it sees next time.
-            </template>
+            <template v-if="browsing">{{ t(`capabilities.browserProfileDialog.signedInBrowserAgent`, { label }) }}</template>
             <template v-else>
-                Sign in as you would normally: including any 2FA. When you're on your logged-in home page, click
-                <b>I'm done</b> and the agent will act as you here. Your session stays inside your sandbox.
+                {{ t(`capabilities.browserProfileDialog.signInWouldNormally`) }}
+                <b>{{ t(`capabilities.browserProfileDialog.imDone`) }}</b> {{ t(`capabilities.browserProfileDialog.agentActHereSession`) }}
             </template>
         </p>
 
         <Notice v-if="errorMsg" :of="errorMsg" class="mb-3" />
 
-<!-- No address bar any more: the picture is now the whole window, so the real address bar and back button are Chromium's own. -->
-<!-- Capped, not just proportioned: aspect-ratio alone could derive a height taller than the modal. -->
+        <!-- No address bar any more: the picture is now the whole window, so the real address bar and back button are Chromium's own. -->
+        <!-- Capped, not just proportioned: aspect-ratio alone could derive a height taller than the modal. -->
         <div
             ref="surface"
             tabindex="0"
@@ -280,22 +280,31 @@ const finish = (): void => {
             @paste="onPaste"
             @contextmenu.prevent
         >
-<!-- Whole window decoded from H.264; the only pointer shown is the X server's own, so `cursor-none` hides the local one. -->
+            <!-- Whole window decoded from H.264; the only pointer shown is the X server's own, so `cursor-none` hides the local one. -->
             <canvas v-show="painting" ref="canvasEl" class="h-full w-full cursor-none object-contain" />
             <div v-if="!painting" class="absolute inset-0 flex items-center justify-center gap-2 text-xs text-muted">
                 <Icon name="spinner" spin />
-                <span>{{ status === "error" ? "Couldn't start the browser." : "Starting the browser…" }}</span>
+                <span>{{
+                    status === "error"
+                        ? t(`capabilities.browserProfileDialog.couldntStartBrowser`)
+                        : t(`capabilities.browserProfileDialog.startingBrowser`)
+                }}</span>
             </div>
         </div>
 
         <template #footer>
-<!-- Browsing ends by closing (the daemon flushes the profile), so one button, not a Cancel implying it's undoable. -->
-            <Button v-if="browsing" label="Close" :loading="status === 'saving'" @click="finish">
+            <!-- Browsing ends by closing (the daemon flushes the profile), so one button, not a Cancel implying it's undoable. -->
+            <Button v-if="browsing" :label="t(`ui.action.close`)" :loading="status === 'saving'" @click="finish">
                 <template #icon><Icon name="check" /></template>
             </Button>
             <template v-else>
-                <Button label="Cancel" severity="secondary" :text="true" @click="cancel" />
-                <Button label="I'm done" :disabled="status !== 'ready'" :loading="status === 'saving'" @click="finish">
+                <Button :label="t(`ui.action.cancel`)" severity="secondary" :text="true" @click="cancel" />
+                <Button
+                    :label="t(`capabilities.browserProfileDialog.imDone`)"
+                    :disabled="status !== 'ready'"
+                    :loading="status === 'saving'"
+                    @click="finish"
+                >
                     <template #icon><Icon name="check" /></template>
                 </Button>
             </template>

@@ -1,4 +1,5 @@
 import type { ManifestProblem, ManifestProblemReport } from "@intentic/sandbox-contract";
+import { t } from "@intentic/ui/i18n";
 
 // Render-ready shape for a broken settings file: `file`/`impact` are the whole collapsed row; everything else
 // shows only once opened. Only an unknownKey problem gets a repair button, its remedy already fully known; an
@@ -66,7 +67,7 @@ const lineOf = (problem: ManifestProblem): ManifestLine => {
     if (problem.kind === `unknownKey`) {
         // Buttons answer the question their own line asked, so they need no separate heading. A rename stays a question
         // until clicked: `nearestKey` guesses, so applying it silently would decide for the reader.
-        const remove = { key: problem.detail, label: `Remove it`, spoken: `Remove "${problem.detail}"` };
+        const remove = { key: problem.detail, label: t(`sandbox.manifestNotice.remove`), spoken: `Remove "${problem.detail}"` };
         return problem.suggestion === undefined
             ? { text: `"${problem.detail}" — no setting by that name.`, repairs: [remove] }
             : {
@@ -75,7 +76,7 @@ const lineOf = (problem: ManifestProblem): ManifestLine => {
                       {
                           key: problem.detail,
                           to: problem.suggestion,
-                          label: `Rename it`,
+                          label: t(`sandbox.manifestNotice.rename`),
                           spoken: `Rename "${problem.detail}" to "${problem.suggestion}"`,
                       },
                       remove,

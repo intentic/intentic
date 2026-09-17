@@ -4,6 +4,9 @@ import type { CapabilityField } from "@intentic/extension-manifest";
 import { SegmentedControl, StatusBadge, ui } from "@intentic/ui";
 import ToggleSwitch from "primevue/toggleswitch";
 import type { ConfSummary } from "../model/normalize";
+import { useT } from "@intentic/ui/i18n";
+
+const t = useT();
 
 const { field, values } = defineProps<{
     field: CapabilityField;
@@ -29,11 +32,17 @@ const emit = defineEmits<{ edited: []; pasted: [event: ClipboardEvent]; left: []
 </script>
 
 <template>
-<!-- Keep answered fields beside their labels at the width of the answers. -->
+    <!-- Keep answered fields beside their labels at the width of the answers. -->
     <label v-if="inline" class="flex items-start justify-between gap-4">
         <span class="min-w-0">
             <span class="ui-field-label">{{ field.label }}</span>
-            <StatusBadge v-if="field.rebuild" variant="neutral" size="xs" label="needs rebuild" class="ml-1.5 align-middle" />
+            <StatusBadge
+                v-if="field.rebuild"
+                variant="neutral"
+                size="xs"
+                :label="t(`capabilities.capabilityFieldRow.needsRebuild`)"
+                class="ml-1.5 align-middle"
+            />
             <span v-if="field.hint" class="mt-0.5 block text-2xs text-muted">{{ field.hint }}</span>
         </span>
         <ToggleSwitch
@@ -53,8 +62,14 @@ const emit = defineEmits<{ edited: []; pasted: [event: ClipboardEvent]; left: []
     </label>
     <label v-else class="ui-field">
         <span class="ui-field-label">
-            {{ field.label }}{{ field.optional ? " (optional)" : "" }}
-            <StatusBadge v-if="field.rebuild" variant="neutral" size="xs" label="needs rebuild" class="ml-1.5 align-middle" />
+            {{ field.label }}{{ field.optional ? t(`capabilities.capabilityFieldRow.optional`) : "" }}
+            <StatusBadge
+                v-if="field.rebuild"
+                variant="neutral"
+                size="xs"
+                :label="t(`capabilities.capabilityFieldRow.needsRebuild`)"
+                class="ml-1.5 align-middle"
+            />
             <!-- The check marks a value that passed the field's validation rule. -->
             <Icon v-if="checked" name="check-circle" class="ml-1 align-middle text-2xs text-success" />
         </span>
@@ -87,18 +102,20 @@ const emit = defineEmits<{ edited: []; pasted: [event: ClipboardEvent]; left: []
             @paste="emit('pasted', $event)"
             @blur="emit('left')"
         />
-<!-- Field messages use one severity-ordered line below the control. -->
+        <!-- Field messages use one severity-ordered line below the control. -->
         <span v-if="alarm" class="ui-field-error">
             <Icon name="exclamation-triangle" class="text-2xs" />
             {{ alarm }}
         </span>
-<!-- Fix messages use an underlined action link. -->
+        <!-- Fix messages use an underlined action link. -->
         <span v-else-if="urlFix" class="flex flex-wrap items-center gap-x-1.5 text-2xs text-warning">
             <Icon name="exclamation-triangle" class="text-2xs" />
-            The sandbox is a container: localhost points at the sandbox itself.
-            <button type="button" :class="ui.linkButton(`text-2xs underline`)" @click.prevent="emit('fix')">Use host.docker.internal</button>
+            {{ t(`capabilities.capabilityFieldRow.sandboxContainerLocalhostPoints`) }}
+            <button type="button" :class="ui.linkButton(`text-2xs underline`)" @click.prevent="emit('fix')">
+                {{ t(`capabilities.capabilityFieldRow.useHostDockerInternal`) }}
+            </button>
         </span>
-        <span v-else-if="quiet" class="text-2xs text-subtle">Required.</span>
+        <span v-else-if="quiet" class="text-2xs text-subtle">{{ t(`capabilities.capabilityFieldRow.required`) }}</span>
         <span v-else-if="note" class="flex items-center gap-1 text-2xs text-success">
             <Icon name="check-circle" class="text-2xs" />
             {{ note }}

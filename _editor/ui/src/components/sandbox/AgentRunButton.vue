@@ -4,6 +4,9 @@ import { type ComponentPublicInstance, computed, ref } from "vue";
 import Icon from "../primitives/Icon.vue";
 import type { AgentRunPicker } from "../../composables/useAgentRunPick.js";
 import type { IconName } from "../../icons/iconSets.js";
+import { useT } from "../../i18n/index.js";
+
+const t = useT();
 
 /* THE BUTTON THAT STARTS AN AGENT FOR YOU: Fix with agent on a red pipeline, Ask the agent to fix on a broken container, Run a chore, Run all 21 stories. */
 
@@ -21,7 +24,7 @@ const {
     // The primary half's words, and the verb the picker's own commit bar wears: the panel a caret opens is
     // closed by a button saying the same thing the button beside it says.
     label: string;
-/* WHAT THIS RUN OPENS ON AND HOW TO RE-POINT IT, whole (useAgentRunPick). */
+    /* WHAT THIS RUN OPENS ON AND HOW TO RE-POINT IT, whole (useAgentRunPick). */
     picker: AgentRunPicker;
     severity?: string | undefined;
     size?: string;
@@ -71,7 +74,7 @@ const openPicker = (): void => {
 
 <template>
     <span class="inline-flex items-stretch gap-px">
-<!-- Only borderless text buttons trim their inner edges. -->
+        <!-- Only borderless text buttons trim their inner edges. -->
         <Button
             :label="label"
             :size="size"
@@ -85,7 +88,7 @@ const openPicker = (): void => {
         >
             <template v-if="icon" #icon><Icon :name="icon" /></template>
         </Button>
-<!-- Disabled together with the primary half, never on its own, so nobody can configure a model for a click that can't run. -->
+        <!-- Disabled together with the primary half, never on its own, so nobody can configure a model for a click that can't run. -->
         <Button
             ref="caret"
             :size="size"
@@ -93,11 +96,11 @@ const openPicker = (): void => {
             :text="text"
             :disabled="disabled || loading"
             :class="['rounded-l-none', text ? 'pl-1 pr-1.5' : 'px-1.5']"
-            :aria-label="`Configure and start this run — ${spend}`"
+            :aria-label="t(`ui.agentRunButton.configureStartRun`, { spend })"
             v-tooltip.top="caretHint"
             @click="openPicker"
         >
-<!-- The deviation spelled out where a bare chevron would be. -->
+            <!-- The deviation spelled out where a bare chevron would be. -->
             <span class="flex items-center gap-1">
                 <template v-if="overridden">
                     <Icon name="sparkles" class="shrink-0 text-2xs" />

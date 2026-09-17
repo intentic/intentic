@@ -22,6 +22,13 @@ vi.hoisted(() => {
 const { default: ShareApp } = await import("./ShareApp.vue");
 const { ELEMENT_ID } = await import("./payload");
 
+// The page's own boot registers these; a component whose catalog nobody registered draws `share.shareApp.…` at the
+// reader, which is exactly what an assertion about the page's words must be able to catch.
+const { registerCatalog } = await import("@intentic/ui/i18n");
+const { appCatalog } = await import("@intentic/web/app/i18n");
+const { registerShareCatalog } = await import("./i18n");
+await Promise.all([registerShareCatalog(), registerCatalog(appCatalog)]);
+
 let app: App | undefined;
 
 // Put a conversation in the document the way the daemon does, then boot the page over it.

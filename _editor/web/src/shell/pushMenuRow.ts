@@ -1,4 +1,5 @@
 import type { PushState } from "../push/usePushNotifications";
+import { t } from "@intentic/ui/i18n";
 
 // What the phone's Menu says about push on THIS device, since an agent that needs you and cannot reach you is the
 // assistant failing at its one job. Nothing once it is on: a standing "you're set" row teaches the reader to skip
@@ -14,10 +15,10 @@ export const pushMenuRow = (state: PushState): PushMenuRow | undefined => {
         case `on`:
             return undefined;
         case `off`:
-            return { message: `Get notified when an agent needs you`, detail: `Push notifications are off on this phone`, tone: `info` };
+            return { message: t(`shell.pushMenuRow.getNotifiedAgentNeeds`), detail: t(`shell.pushMenuRow.pushNotificationsOffOn`), tone: `info` };
         case `denied`:
-            return { message: `Notifications are blocked for this app`, detail: `Re-allow them in your browser's site settings`, tone: `warning` };
+            return { message: t(`shell.pushMenuRow.notificationsBlockedApp`), detail: t(`shell.pushMenuRow.reAllowInBrowsers`), tone: `warning` };
         case `unsupported`:
-            return { message: `Add to your Home Screen to get notified`, detail: `This browser can't receive push until the app is installed`, tone: `info` };
+            return { message: t(`shell.pushMenuRow.addToHomeScreen`), detail: t(`shell.pushMenuRow.browserCantReceivePush`), tone: `info` };
     }
 };

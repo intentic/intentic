@@ -10,9 +10,9 @@ withDefaults(
 </script>
 
 <template>
-<!-- `primary-500` rather than a fixed hex: the site's mark is one orange because a site has one brand colour, and this app lets a person pick theirs. -->
+    <!-- `primary-500` rather than a fixed hex: the site's mark is one orange because a site has one brand colour, and this app lets a person pick theirs. -->
     <span class="inline-flex items-center gap-2.5 text-primary-500" aria-label="intentic">
-<!-- `-1.3` on the viewBox's y is the site's own framing: the drawing sits low in its square. -->
+        <!-- `-1.3` on the viewBox's y is the site's own framing: the drawing sits low in its square. -->
         <svg class="brand-lotus" viewBox="0 -1.3 32 32" fill="currentColor" aria-hidden="true">
             <path d="M8.4 25.6c-3.2 0-5.6-1-7.2-3 3.6-1.2 6.6-.7 9 1.4z" opacity=".42" />
             <path d="M23.6 25.6c3.2 0 5.6-1 7.2-3-3.6-1.2-6.6-.7-9 1.4z" opacity=".42" />
@@ -38,7 +38,7 @@ withDefaults(
             />
             <path d="M16 3.4c2.8 4 4.2 7.5 4.2 10.6 0 2.9-1.4 5.4-4.2 7.3-2.8-1.9-4.2-4.4-4.2-7.3 0-3.1 1.4-6.6 4.2-10.6z" />
         </svg>
-<!-- The flower's square reserves room for descenders the word "intentic" does not have, so centring the two BOXES parks the mark visibly above the letters. -->
+        <!-- The flower's square reserves room for descenders the word "intentic" does not have, so centring the two BOXES parks the mark visibly above the letters. -->
         <span v-if="shape === `lockup`" class="brand-word">intentic</span>
     </span>
 </template>

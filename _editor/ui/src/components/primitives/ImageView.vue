@@ -2,10 +2,13 @@
 import { computed, onBeforeUnmount, ref, watch } from "vue";
 import type { ImageViewState } from "./imageView.js";
 import { ui } from "../../lib/ui.js";
+import { useT } from "../../i18n/index.js";
 
 // The one surface that draws a picture (file viewer, SVG preview, both sides of a binary diff), so zoom, pan
 // and the checkerboard match everywhere. Ctrl/pinch zooms about the pointer, not the whole app; dragging pans
 // instead of triggering a native image drag, which Chromium types as a file drop.
+
+const t = useT();
 
 const { src, view } = defineProps<{ src: string; view?: ImageViewState }>();
 // Shared view for panes that must sync zoom (e.g. a diff); only deliberate moves publish, not internal ones.
@@ -306,7 +309,7 @@ const showDimensions = computed(() => natural.value !== undefined && box.value.w
         :class="dragging ? `cursor-grabbing` : pannable ? `cursor-grab` : `cursor-default`"
         tabindex="0"
         role="group"
-        aria-label="Image preview: Ctrl and scroll to zoom, drag to pan"
+        :aria-label="t(`ui.imageView.imagePreviewCtrlScroll`)"
         @wheel="onWheel"
         @pointerdown="onPointerDown"
         @pointermove="onPointerMove"
@@ -317,7 +320,7 @@ const showDimensions = computed(() => natural.value !== undefined && box.value.w
     >
         <img :src="src" alt="" draggable="false" class="absolute left-0 top-0 max-w-none origin-top-left" :style="imageStyle" @load="onLoad" />
 
-<!-- Dimmed until the pointer is in the pane, so the controls never compete with the picture. -->
+        <!-- Dimmed until the pointer is in the pane, so the controls never compete with the picture. -->
         <div class="pointer-events-none absolute inset-x-0 bottom-0 flex justify-center p-2">
             <div
                 v-if="natural"
@@ -330,25 +333,22 @@ const showDimensions = computed(() => natural.value !== undefined && box.value.w
                     type="button"
                     :class="ui.iconButton(`h-5 w-5 rounded text-sm leading-none`)"
                     :disabled="nextStop(-1) === undefined"
-                    v-tooltip.top="'Zoom out (−)'"
-                    aria-label="Zoom out"
+                    v-tooltip.top="t(`ui.imageView.zoomOut`)"
+                    :aria-label="t(`ui.imageView.zoomOut2`)"
                     @mousedown.prevent
                     @click="step(-1)"
                 >
                     −
                 </button>
-                <span
-                    class="w-10 cursor-help text-center tabular-nums text-content"
-                    v-tooltip.top="'Ctrl + scroll to zoom · drag to pan · double-click to fit'"
-                >
+                <span class="w-10 cursor-help text-center tabular-nums text-content" v-tooltip.top="t(`ui.imageView.ctrlScrollToZoom`)">
                     {{ percent }}%
                 </span>
                 <button
                     type="button"
                     :class="ui.iconButton(`h-5 w-5 rounded text-sm leading-none`)"
                     :disabled="nextStop(1) === undefined"
-                    v-tooltip.top="'Zoom in (+)'"
-                    aria-label="Zoom in"
+                    v-tooltip.top="t(`ui.imageView.zoomIn`)"
+                    :aria-label="t(`ui.imageView.zoomIn2`)"
                     @mousedown.prevent
                     @click="step(1)"
                 >
@@ -359,17 +359,17 @@ const showDimensions = computed(() => natural.value !== undefined && box.value.w
                     type="button"
                     :class="ui.iconButton(`h-5 w-auto rounded px-1.5`)"
                     :disabled="fitted"
-                    v-tooltip.top="'Fit to the pane (0)'"
+                    v-tooltip.top="t(`ui.imageView.fitToPane0`)"
                     @mousedown.prevent
                     @click="fit()"
                 >
-                    Fit
+                    {{ t(`ui.imageView.fit`) }}
                 </button>
                 <button
                     type="button"
                     :class="ui.iconButton(`h-5 w-auto rounded px-1.5 tabular-nums`)"
                     :disabled="atNatural"
-                    v-tooltip.top="'Actual size (1)'"
+                    v-tooltip.top="t(`ui.imageView.actualSize1`)"
                     @mousedown.prevent
                     @click="zoomCentre(1)"
                 >

@@ -1,10 +1,13 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import { relativeTime } from "../features/chat/models/catalog";
+import { useT } from "@intentic/ui/i18n";
 
 // Mark for words still sitting in the composer, shared by the fleet board card and chat rail row. The words
 // show only on hover, not the face, since a board is often read over someone's shoulder. Opens downward: the
 // mark sits under a session title in both frames, so an upward hover would cover it.
+
+const t = useT();
 
 const props = defineProps<{
     // Opening words of the unsent message; absent for an attachment or queued message, hover then omits the words.
@@ -33,6 +36,6 @@ const hint = computed<string>(() => {
         class="ui-status-pill flex w-fit shrink-0 items-center gap-1 bg-primary-600/15 text-2xs font-semibold text-link"
     >
         <Icon name="send" class="shrink-0 text-2xs" />
-        Unsent
+        {{ t(`common.unsentMark.unsent`) }}
     </span>
 </template>

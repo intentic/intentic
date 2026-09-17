@@ -4,10 +4,13 @@ import { type LoopDesign, type Workflow, loopDesignLine } from "@intentic/sandbo
 import { computed } from "vue";
 import { useLoopDesigns } from "../../agents/fleet/useLoopDesigns";
 import { useWorkflowRuns } from "../../agents/fleet/useWorkflowRuns";
+import { useT } from "@intentic/ui/i18n";
 
 // One control, one list, two headed sections: a loop and a workflow answer the same question (what happens to this
 // message on send), so picking one replaces the other. A loop row keeps its stop condition and ceilings; a workflow row
 // keeps its shape and pinned models, since that's why either is kept.
+
+const t = useT();
 
 const { loop, workflow } = defineProps<{ loop?: string; workflow?: string }>();
 const emit = defineEmits<{ loop: [design: LoopDesign | undefined]; workflow: [design: Workflow | undefined]; manage: [] }>();
@@ -35,14 +38,15 @@ const empty = computed(() => loops.value.length === 0 && workflows.value.length 
 
 <template>
     <div class="flex flex-col p-1">
-<!-- An empty workspace is ordinary, not an error, so the sentence says what a loop and workflow ARE rather than just reporting absence. -->
+        <!-- An empty workspace is ordinary, not an error, so the sentence says what a loop and workflow ARE rather than just reporting absence. -->
         <p v-if="empty" class="px-2.5 py-3 text-2xs text-subtle">
-            Nothing saved yet. A <strong class="font-medium text-muted">loop</strong> sends your message over and over: fixing, checking, fixing:
-            until something you can state is true. A <strong class="font-medium text-muted">workflow</strong> hands it to a design of several sessions
-            instead of to this chat.
+            {{ t(`chat.chatRunThroughMenu.nothingSavedYet`) }} <strong class="font-medium text-muted">{{ t(`chat.chatRunThroughMenu.loop`) }}</strong>
+            {{ t(`chat.chatRunThroughMenu.sendsMessageOverOver`) }}
+            <strong class="font-medium text-muted">{{ t(`chat.chatRunThroughMenu.workflow`) }}</strong>
+            {{ t(`chat.chatRunThroughMenu.handsToDesignSeveral`) }}
         </p>
 
-<!-- The way back to an ordinary message; must be a row in this list, since the pill itself is just a badge. -->
+        <!-- The way back to an ordinary message; must be a row in this list, since the pill itself is just a badge. -->
         <button
             v-if="picked"
             type="button"
@@ -54,14 +58,14 @@ const empty = computed(() => loops.value.length === 0 && workflows.value.length 
         >
             <Icon name="times" class="mt-0.5 shrink-0 text-xs text-subtle" />
             <span class="flex min-w-0 flex-col">
-                <span class="text-sm text-content md:text-xs">Just this chat</span>
-                <span class="text-2xs text-subtle">Send once, as an ordinary message.</span>
+                <span class="text-sm text-content md:text-xs">{{ t(`chat.chatRunThroughMenu.justChat`) }}</span>
+                <span class="text-2xs text-subtle">{{ t(`chat.chatRunThroughMenu.sendOnceOrdinaryMessage`) }}</span>
             </span>
         </button>
 
-<!-- Each section's heading is a sentence, not a label: it teaches the difference at the moment of choosing. -->
+        <!-- Each section's heading is a sentence, not a label: it teaches the difference at the moment of choosing. -->
         <template v-if="loops.length > 0">
-            <p class="px-2.5 pt-2 pb-1 text-2xs font-medium text-subtle">Repeat it here, until it's done</p>
+            <p class="px-2.5 pt-2 pb-1 text-2xs font-medium text-subtle">{{ t(`chat.chatRunThroughMenu.repeatHereUntilDone`) }}</p>
             <button
                 v-for="design in loops"
                 :key="design.id"
@@ -73,7 +77,7 @@ const empty = computed(() => loops.value.length === 0 && workflows.value.length 
                 <Icon name="repeat" class="mt-0.5 shrink-0 text-xs text-subtle" />
                 <span class="flex min-w-0 flex-col">
                     <span class="truncate text-sm text-content md:text-xs">{{ design.name }}</span>
-<!-- How it ends and how far it may go, computed from the loop; a control starting paid work must say what stops it up front. -->
+                    <!-- How it ends and how far it may go, computed from the loop; a control starting paid work must say what stops it up front. -->
                     <span class="truncate text-2xs text-subtle">{{ loopDesignLine(design) }}</span>
                     <span v-if="design.description" class="line-clamp-2 text-2xs text-subtle">{{ design.description }}</span>
                 </span>
@@ -81,7 +85,7 @@ const empty = computed(() => loops.value.length === 0 && workflows.value.length 
         </template>
 
         <template v-if="workflows.length > 0">
-            <p class="px-2.5 pt-2 pb-1 text-2xs font-medium text-subtle">Hand it to other sessions</p>
+            <p class="px-2.5 pt-2 pb-1 text-2xs font-medium text-subtle">{{ t(`chat.chatRunThroughMenu.handToOtherSessions`) }}</p>
             <button
                 v-for="design in workflows"
                 :key="design.id"
@@ -97,12 +101,14 @@ const empty = computed(() => loops.value.length === 0 && workflows.value.length 
                         <span class="shrink-0 text-2xs text-subtle">{{ shapeOf(design) }}</span>
                     </span>
                     <span v-if="design.description" class="line-clamp-2 text-2xs text-subtle">{{ design.description }}</span>
-                    <span v-if="pinned(design).length > 0" class="truncate text-2xs text-subtle">on {{ pinned(design).join(` · `) }}</span>
+                    <span v-if="pinned(design).length > 0" class="truncate text-2xs text-subtle">{{
+                        t(`chat.chatRunThroughMenu.onPinned`, { pinned: pinned(design).join(` · `) })
+                    }}</span>
                 </span>
             </button>
         </template>
 
-<!-- The one door to the page that owns both kinds (and the long loop form). -->
+        <!-- The one door to the page that owns both kinds (and the long loop form). -->
         <button
             type="button"
             class="ui-row-select mt-0.5 flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-left max-md:py-3"
@@ -110,7 +116,7 @@ const empty = computed(() => loops.value.length === 0 && workflows.value.length 
         >
             <Icon :name="empty ? `plus` : `cog`" class="shrink-0 text-xs text-subtle" />
             <span :class="empty ? `text-sm text-content md:text-xs` : `text-2xs text-subtle`">{{
-                empty ? `Set one up` : `Manage loops and workflows`
+                empty ? t(`chat.chatRunThroughMenu.setOneUp`) : t(`chat.chatRunThroughMenu.manageLoopsWorkflows`)
             }}</span>
         </button>
     </div>

@@ -5,6 +5,9 @@ import { onMounted, onUnmounted, useTemplateRef } from "vue";
 import { useChatFloating } from "./chatFloating";
 import { useLayout } from "../../../shell/window/useLayout";
 import { chatFullDock } from "../../../shell/window/dockSlots";
+import { useT } from "@intentic/ui/i18n";
+
+const t = useT();
 
 const { floats, dock } = useChatFloating();
 
@@ -22,17 +25,17 @@ onUnmounted(() => {
 
 <template>
     <div class="relative h-full w-full">
-<!-- Published even while another window holds the panel, so "Bring it back here" lands it in this slot the instant the window goes. -->
+        <!-- Published even while another window holds the panel, so "Bring it back here" lands it in this slot the instant the window goes. -->
         <div class="grid h-full w-full" style="grid-template-areas: &quot;chat&quot;; grid-template-columns: 1fr; grid-template-rows: 1fr">
             <div ref="slot" class="contents"></div>
         </div>
         <div v-if="floats" class="absolute inset-0 flex flex-col items-center justify-center gap-4 p-6 text-center">
             <Icon name="external-link" class="text-3xl text-subtle" />
             <div>
-                <p class="text-sm font-medium text-content">Your chat is in its own window</p>
-                <p class="mt-1 text-xs text-muted">Bring it back to fill this one, or keep using the floating window.</p>
+                <p class="text-sm font-medium text-content">{{ t(`chat.chatArea.chatInOwnWindow`) }}</p>
+                <p class="mt-1 text-xs text-muted">{{ t(`chat.chatArea.bringBackToFill`) }}</p>
             </div>
-            <Button size="small" @click="dock()"> <Icon name="sign-in" />Bring it back here </Button>
+            <Button size="small" @click="dock()"> <Icon name="sign-in" />{{ t(`chat.chatArea.bringBackHere`) }} </Button>
         </div>
     </div>
 </template>

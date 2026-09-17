@@ -2,6 +2,7 @@ import type { PushRun } from "@intentic/sandbox-contract";
 import { jsonBody } from "../../sandbox/client/jsonBody";
 import { sandboxJsonVia } from "../../sandbox/client/sandboxClient";
 import { createRunWatcher, type RunWatcher } from "./runWatcher";
+import { t } from "@intentic/ui/i18n";
 
 // Same watcher the pre-push check rides, over the daemon's push verbs, one per repository. A push runs the
 // repo's own hook, which can take minutes, so it's a run, not one request dying at the header deadline. `at`
@@ -24,7 +25,7 @@ export const usePushRun = (repo: string, at?: string): RunWatcher<PushRun> => {
         cancel: () => sandboxJsonVia(at, `${path}/cancel`, { method: `POST` }),
         // The terminal panel shows only the active sandbox's sessions, so a push on another box has no panel to open
         // here; its row reports the verdict instead.
-        reveal: at === undefined ? (run) => ({ title: `Pushing ${repo}`, detail: run.command }) : () => undefined,
+        reveal: at === undefined ? (run) => ({ title: t(`workspace.usePushRun.pushing`, { repo }), detail: run.command }) : () => undefined,
         subject: `push`,
     });
     watchers.set(key, watcher);

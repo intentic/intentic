@@ -5,10 +5,13 @@ import type { WorkflowRun } from "@intentic/sandbox-contract";
 import { computed, ref, watch } from "vue";
 import type { RunSession } from "../run/chatRun";
 import { RUN_NODE_HEIGHT, RUN_NODE_WIDTH, runColumns } from "../run/runColumns";
+import { useT } from "@intentic/ui/i18n";
 
 // The run's diagram in the chat panel, drawn from the same derivation and card as the workflows page (workflowDag,
 // WorkflowNodeCard), so the two never disagree about what's running. Clicking a node opens its whole column, not just
 // that node: a fanned-out run wants its parallel branches compared side by side.
+
+const t = useT();
 
 const { run } = defineProps<{ run: WorkflowRun }>();
 const emit = defineEmits<{ open: [sessions: RunSession[]] }>();
@@ -42,8 +45,8 @@ const anyOpenable = computed(() => [...columns.value.values()].some((column) => 
     <div class="flex h-full min-h-0 flex-col">
         <p class="flex shrink-0 items-center gap-1.5 border-b border-line px-3 py-1.5 text-2xs text-subtle">
             <Icon name="sitemap" class="shrink-0 text-2xs" />
-            <span v-if="anyOpenable">Pick a step: its whole column opens side by side.</span>
-            <span v-else>No step in this run ran, so there is nothing to open.</span>
+            <span v-if="anyOpenable">{{ t(`chat.chatRunGraph.pickStepWholeColumn`) }}</span>
+            <span v-else>{{ t(`chat.chatRunGraph.noStepInRun`) }}</span>
         </p>
         <div class="min-h-0 flex-1">
             <!-- magnify off: a small run stays natural-sized here rather than stretched to fill this floating window. -->

@@ -25,7 +25,7 @@ import {
     DeviceDetail,
     type DeviceFolderRow,
     DeviceRunLog,
-    RESTART_AGENT,
+    restartAgent,
     mirroringOff,
     type DevicePortRow,
     type DeviceSandboxRow,
@@ -160,7 +160,7 @@ const KIT_AGENT: AgentPanel = {
     notes: [{ text: `Newest agent this sandbox knows of.`, icon: `check-circle` }],
     actions: [
         { op: `upgrade`, label: `Update agent`, hint: `Fetches the newest agent onto this device, installs it, and restarts its loop.` },
-        RESTART_AGENT,
+        restartAgent(),
     ],
     blocked: undefined,
 };
@@ -715,12 +715,24 @@ const pickedTier = ref(`collaborator`);
                     </div>
                     <div class="flex flex-col gap-1">
                         <span class="ui-field-label">InlineRename · title, row, read-only, refusing</span>
-<!-- Typography is the caller's and the field takes it: the same component reads as a heading here and as a row's name below it. -->
+                        <!-- Typography is the caller's and the field takes it: the same component reads as a heading here and as a row's name below it. -->
                         <div class="flex flex-col gap-2">
-                            <InlineRename :value="renamed" :write="saveRename" label="Sandbox name" action="Rename sandbox" class="text-lg font-semibold" />
+                            <InlineRename
+                                :value="renamed"
+                                :write="saveRename"
+                                label="Sandbox name"
+                                action="Rename sandbox"
+                                class="text-lg font-semibold"
+                            />
                             <InlineRename :value="renamed" :write="saveRename" label="Sandbox name" action="Rename sandbox" class="text-sm" />
                             <InlineRename :value="undefined" :write="saveRename" label="Sandbox name" fallback="Unnamed" class="text-sm" />
-                            <InlineRename :value="renamedRefused" :write="refuseRename" label="Account name" class="text-sm" failure="Couldn't rename that account." />
+                            <InlineRename
+                                :value="renamedRefused"
+                                :write="refuseRename"
+                                label="Account name"
+                                class="text-sm"
+                                failure="Couldn't rename that account."
+                            />
                             <InlineRename :value="renamed" :write="saveRename" label="Sandbox name" :editable="false" class="text-sm" />
                         </div>
                     </div>

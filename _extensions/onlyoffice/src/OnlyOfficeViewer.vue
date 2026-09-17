@@ -5,6 +5,7 @@ import type { DocsState } from "./contract.js";
 import { openDocument, startDocs } from "./docs.js";
 import { host } from "./host.js";
 import { AUTO_START } from "./settings.js";
+import { t } from "./i18n.js";
 
 /* A document in ONLYOFFICE Docs: an iframe on the editor's own origin once the document server answers, and until then a card saying what stands between the reader and it. */
 
@@ -33,7 +34,12 @@ const load = async (): Promise<void> => {
     clearTimeout(pending);
     failure.value = undefined;
     try {
-        const result = await openDocument({ path, ...(agent === undefined ? {} : { agent }), mode: editable.value ? `edit` : `view`, theme: theme() });
+        const result = await openDocument({
+            path,
+            ...(agent === undefined ? {} : { agent }),
+            mode: editable.value ? `edit` : `view`,
+            theme: theme(),
+        });
         if (mine !== generation) {
             return;
         }
@@ -112,48 +118,50 @@ const capabilitiesLink = appLink(host().href(`/capabilities`), () => host().navi
         <template v-if="failure">
             <Icon name="exclamation-circle" class="text-4xl text-subtle" />
             <p class="max-w-sm text-sm text-muted">{{ failure }}</p>
-            <Button severity="secondary" class="mt-1" @click="load">Try again</Button>
+            <Button severity="secondary" class="mt-1" @click="load">{{ t(`onlyOfficeViewer.tryAgain`) }}</Button>
         </template>
         <template v-else-if="status?.state === 'docker-off'">
             <Icon name="file-edit" class="text-4xl text-subtle" />
-            <p class="max-w-sm text-sm text-muted">ONLYOFFICE Docs runs as a container in this sandbox's Docker engine, which isn't on. {{ status.detail }}</p>
-            <a v-bind="capabilitiesLink" :class="ui.linkButton(`mt-1`)">Open capabilities</a>
+            <p class="max-w-sm text-sm text-muted">{{ t(`onlyOfficeViewer.onlyofficeDocsRunsContainer`, { detail: status.detail }) }}</p>
+            <a v-bind="capabilitiesLink" :class="ui.linkButton(`mt-1`)">{{ t(`onlyOfficeViewer.openCapabilities`) }}</a>
         </template>
         <template v-else-if="status?.state === 'not-started'">
             <Icon name="file-edit" class="text-4xl text-subtle" />
-            <p class="max-w-sm text-sm text-muted">Open, edit and save this document in ONLYOFFICE Docs. The first start downloads the document server, about 2 GB, once.</p>
-            <Button class="mt-1" @click="start">Start ONLYOFFICE Docs</Button>
+            <p class="max-w-sm text-sm text-muted">{{ t(`onlyOfficeViewer.openEditSaveDocument`) }}</p>
+            <Button class="mt-1" @click="start">{{ t(`onlyOfficeViewer.startOnlyofficeDocs`) }}</Button>
             <label class="mt-2 flex cursor-pointer items-center gap-2 text-xs text-muted">
                 <Checkbox :model-value="autoStart" binary @update:model-value="setAutoStart" />
-                Start it with the sandbox from now on
+                {{ t(`onlyOfficeViewer.startSandboxNowOn`) }}
             </label>
-            <a v-bind="settingsLink" class="text-xs text-subtle hover:underline">Extension settings</a>
+            <a v-bind="settingsLink" class="text-xs text-subtle hover:underline">{{ t(`onlyOfficeViewer.extensionSettings`) }}</a>
         </template>
         <template v-else-if="status?.state === 'pulling'">
             <ProgressRing :value="percent ?? 0" :size="40" :stroke="3" />
-            <p class="max-w-sm text-sm text-muted">Downloading ONLYOFFICE Docs{{ percent === undefined ? `` : `, ${percent}%` }}…</p>
+            <p class="max-w-sm text-sm text-muted">
+                {{ percent === undefined ? t(`onlyOfficeViewer.downloading`) : t(`onlyOfficeViewer.downloadingPercent`, { percent }) }}
+            </p>
         </template>
         <template v-else-if="status?.state === 'starting'">
             <Icon name="spinner" spin class="text-4xl text-subtle" />
-            <p class="max-w-sm text-sm text-muted">Starting the document server… A cold start takes about two minutes: it regenerates its fonts and themes every time. It stays up afterwards.</p>
+            <p class="max-w-sm text-sm text-muted">{{ t(`onlyOfficeViewer.startingDocumentServerCold`) }}</p>
             <label class="mt-2 flex cursor-pointer items-center gap-2 text-xs text-muted">
                 <Checkbox :model-value="autoStart" binary @update:model-value="setAutoStart" />
-                Start it with the sandbox from now on
+                {{ t(`onlyOfficeViewer.startSandboxNowOn`) }}
             </label>
         </template>
         <template v-else-if="status?.state === 'no-address'">
             <Icon name="exclamation-circle" class="text-4xl text-subtle" />
-            <p class="max-w-sm text-sm text-muted">The editor needs an address the browser can reach. Your sandbox isn't reachable from outside yet: finish setup so it registers its address.</p>
-            <Button severity="secondary" class="mt-1" @click="load">Try again</Button>
+            <p class="max-w-sm text-sm text-muted">{{ t(`onlyOfficeViewer.editorNeedsAddressBrowser`) }}</p>
+            <Button severity="secondary" class="mt-1" @click="load">{{ t(`onlyOfficeViewer.tryAgain`) }}</Button>
         </template>
         <template v-else-if="status?.state === 'error'">
             <Icon name="exclamation-circle" class="text-4xl text-subtle" />
             <p class="max-w-sm text-sm text-muted">{{ status.detail }}</p>
-            <Button severity="secondary" class="mt-1" @click="load">Try again</Button>
+            <Button severity="secondary" class="mt-1" @click="load">{{ t(`onlyOfficeViewer.tryAgain`) }}</Button>
         </template>
         <template v-else>
             <Icon name="spinner" spin class="text-4xl text-subtle" />
-            <p class="max-w-sm text-sm text-muted">Opening in ONLYOFFICE Docs…</p>
+            <p class="max-w-sm text-sm text-muted">{{ t(`onlyOfficeViewer.openingInOnlyofficeDocs`) }}</p>
         </template>
     </div>
 </template>

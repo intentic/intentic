@@ -3,6 +3,7 @@ import { Notice, ui } from "@intentic/ui";
 import { computed, nextTick, ref, watch } from "vue";
 import type { RunEvent } from "../desktop";
 import type { ProgressView } from "../setupPlan";
+import { useT } from "@intentic/ui/i18n";
 
 // ONE THING IS HAPPENING, AND THIS SAYS WHICH. The step under way is the only sentence at reading size; the plan
 // behind it is the bar's own divisions (setupPlan.ts weights it in seconds, so the long steps are visibly long),
@@ -10,6 +11,8 @@ import type { ProgressView } from "../setupPlan";
 //
 // `awaiting` is a deliberate stop for the requirements card above; this component just must not call it a crash.
 // `blocked`: that card is on screen, so this one is not the thing to read.
+const t = useT();
+
 const props = defineProps<{ events: RunEvent[]; view: ProgressView; running: boolean; reason?: string; awaiting?: boolean; blocked?: boolean }>();
 
 // Owned by the card's own action bar (App.vue), which holds every other verb about this transcript.
@@ -37,7 +40,9 @@ const at = computed(() => props.view.steps.find((step) => step.state === `runnin
 // Nothing has reported yet: the first step is next, not under way.
 const started = computed(() => props.view.steps.some((step) => step.state !== `waiting`));
 // Survives a stop, unlike `view.position`, which is the wire report's and goes quiet the moment a run ends.
-const position = computed(() => (at.value === undefined ? undefined : `Step ${props.view.steps.indexOf(at.value) + 1} of ${props.view.steps.length}`));
+const position = computed(() =>
+    at.value === undefined ? undefined : `Step ${props.view.steps.indexOf(at.value) + 1} of ${props.view.steps.length}`,
+);
 const heading = computed(() => {
     const step = at.value;
     if (parked.value) {
@@ -137,16 +142,22 @@ watch(
             aria-valuemin="0"
             aria-valuemax="100"
         >
-            <span class="absolute inset-y-0 left-0 rounded-full transition-[width] duration-500 ease-out" :class="fillClass" :style="{ width: `${view.percent}%` }" />
+            <span
+                class="absolute inset-y-0 left-0 rounded-full transition-[width] duration-500 ease-out"
+                :class="fillClass"
+                :style="{ width: `${view.percent}%` }"
+            />
             <span v-for="mark in marks" :key="mark" class="absolute inset-y-0 w-px bg-canvas/35" :style="{ left: `${mark * 100}%` }" />
         </div>
 
         <div class="flex flex-wrap items-baseline gap-x-3 gap-y-1 text-xs text-subtle">
-            <span v-if="position && !done && !failed">{{ blocked ? `Paused at ${position.toLowerCase()}` : position }}</span>
+            <span v-if="position && !done && !failed">{{
+                blocked ? t(`desktop.setupProgress.pausedAt`, { toLowerCase: position.toLowerCase() }) : position
+            }}</span>
             <span v-if="live && view.remaining">{{ view.remaining }}</span>
             <span class="flex-1" />
             <button type="button" :class="ui.textAction(`shrink-0`)" @click="listOpen = !listOpen">
-                {{ listOpen ? `Hide the steps` : `See all ${view.steps.length} steps` }}
+                {{ listOpen ? t(`desktop.setupProgress.hideSteps`) : t(`desktop.setupProgress.seeAllSteps`, { count: view.steps.length }) }}
             </button>
         </div>
 

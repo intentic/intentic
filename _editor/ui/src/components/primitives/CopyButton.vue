@@ -53,7 +53,7 @@ const copy = async (): Promise<void> => {
 <template>
     <Button v-if="label && (cta || stretch)" ref="root" size="small" :class="chrome" @click="copy">
         <Icon :name="copied ? 'check' : 'copy'" :class="[stretch ? `` : `text-2xs`, copied ? `text-success` : ``]" />
-        {{ copied ? `Copied` : label }}
+        {{ copied ? t(`ui.action.copied`) : label }}
     </Button>
     <button v-else-if="label" ref="root" type="button" :class="ui.overlayChip()" v-action="copy">
         <Icon :name="copied ? 'check' : 'copy'" :class="[`text-2xs`, copied ? `text-success` : ``]" />

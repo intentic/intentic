@@ -7,6 +7,7 @@ import {
     type WorkflowStepRun,
     type WorkflowStepState,
 } from "@intentic/sandbox-contract";
+import { t } from "./i18n.js";
 
 // Shared graph derivation for both the designer and the run view, so what's authored and what's watched can never be
 // different pictures of the same workflow. `run` is absent on a node in the designer; that absence is what makes it the
@@ -29,19 +30,19 @@ export interface StepTone {
 }
 
 // `skipped` and `stopped` are muted, not red, since neither is a failure.
-export const STEP_TONE: Record<WorkflowStepState, StepTone> = {
-    pending: { icon: `clock`, text: `text-subtle`, bar: `bg-line`, spin: false, label: `Waiting` },
-    running: { icon: `spinner`, text: `text-link`, bar: `bg-link`, spin: true, label: `Running` },
-    done: { icon: `check-circle`, text: `text-success`, bar: `bg-success`, spin: false, label: `Done` },
-    failed: { icon: `exclamation-triangle`, text: `text-danger`, bar: `bg-danger`, spin: false, label: `Did not finish` },
-    skipped: { icon: `times`, text: `text-subtle`, bar: `bg-line`, spin: false, label: `Skipped` },
-    stopped: { icon: `stop`, text: `text-subtle`, bar: `bg-line`, spin: false, label: `Stopped` },
-};
+export const stepTone = (): Record<WorkflowStepState, StepTone> => ({
+    pending: { icon: `clock`, text: `text-subtle`, bar: `bg-line`, spin: false, label: t(`workflowDag.waiting`) },
+    running: { icon: `spinner`, text: `text-link`, bar: `bg-link`, spin: true, label: t(`workflowDag.running`) },
+    done: { icon: `check-circle`, text: `text-success`, bar: `bg-success`, spin: false, label: t(`workflowDag.done`) },
+    failed: { icon: `exclamation-triangle`, text: `text-danger`, bar: `bg-danger`, spin: false, label: t(`workflowDag.didNotFinish`) },
+    skipped: { icon: `times`, text: `text-subtle`, bar: `bg-line`, spin: false, label: t(`workflowDag.skipped`) },
+    stopped: { icon: `stop`, text: `text-subtle`, bar: `bg-line`, spin: false, label: t(`workflowDag.stopped`) },
+});
 
 // Neutral, not `pending`: an unrun step in the designer has no state to lie about waiting on.
 const DESIGN_TONE: StepTone = { icon: `sitemap`, text: `text-subtle`, bar: `bg-line`, spin: false, label: `` };
 
-export const toneFor = (node: WorkflowNode): StepTone => (node.run === undefined ? DESIGN_TONE : STEP_TONE[node.run.state]);
+export const toneFor = (node: WorkflowNode): StepTone => (node.run === undefined ? DESIGN_TONE : stepTone()[node.run.state]);
 
 export interface WorkflowDag {
     readonly nodes: readonly DagNode<WorkflowNode>[];

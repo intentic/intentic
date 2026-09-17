@@ -6,6 +6,9 @@ import { useRoute } from "vue-router";
 import { markPreviewOpened, selectPreviewTarget } from "./previewSurface";
 import { usePreviewFloating } from "./previewFloating";
 import { previewDock } from "../../shell/window/dockSlots";
+import { useT } from "@intentic/ui/i18n";
+
+const t = useT();
 
 const { floats, dock } = usePreviewFloating();
 const route = useRoute();
@@ -39,15 +42,15 @@ onUnmounted(() => {
 
 <template>
     <div class="relative h-full w-full">
-<!-- Published even while another window holds the panel, so "Bring it back here" lands it in this slot the instant the window goes. -->
+        <!-- Published even while another window holds the panel, so "Bring it back here" lands it in this slot the instant the window goes. -->
         <div ref="slot" class="contents"></div>
         <div v-if="floats" class="absolute inset-0 flex flex-col items-center justify-center gap-4 p-6 text-center">
             <Icon name="external-link" class="text-3xl text-subtle" />
             <div>
-                <p class="text-sm font-medium text-content">Your preview is in its own window</p>
-                <p class="mt-1 text-xs text-muted">Bring it back to fill this one, or keep the app beside your code on another screen.</p>
+                <p class="text-sm font-medium text-content">{{ t(`preview.previewArea.previewInOwnWindow`) }}</p>
+                <p class="mt-1 text-xs text-muted">{{ t(`preview.previewArea.bringBackToFill`) }}</p>
             </div>
-            <Button size="small" @click="dock()"> <Icon name="sign-in" />Bring it back here </Button>
+            <Button size="small" @click="dock()"> <Icon name="sign-in" />{{ t(`preview.previewArea.bringBackHere`) }} </Button>
         </div>
     </div>
 </template>

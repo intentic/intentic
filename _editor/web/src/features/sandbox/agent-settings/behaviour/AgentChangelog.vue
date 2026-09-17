@@ -4,10 +4,13 @@ import ToggleSwitch from "primevue/toggleswitch";
 import { computed } from "vue";
 import { useSandboxSettings } from "../../overview/useSandboxSettings";
 import { useRepos } from "../../../workspace/explorer/useRepos";
+import { useT } from "@intentic/ui/i18n";
 
 // Per-repo switch for whether a commit gets a release note; the only place this feature turns on. A commit
 // message's style is learned from repo history, but a release note has nothing to learn from, so it needs an
 // explicit per-repo choice. Off by default: no repo changes until switched on here.
+
+const t = useT();
 
 const { settings, patch } = useSandboxSettings();
 const { options: repos } = useRepos();
@@ -25,15 +28,9 @@ const repoLabel = (repo: string): string => (repo === `root` ? `Workspace reposi
 </script>
 
 <template>
-    <RowGroup label="Changelog">
+    <RowGroup :label="t(`sandbox.agentChangelog.changelog`)">
         <!-- One row per repo, `root` first (ordered by useRepos). -->
-        <Row
-            v-for="repo in repos"
-            :key="repo"
-            icon="book"
-            :title="repoLabel(repo)"
-            description="Include a release note with each commit."
-        >
+        <Row v-for="repo in repos" :key="repo" icon="book" :title="repoLabel(repo)" :description="t(`sandbox.agentChangelog.includeReleaseNoteEach`)">
             <template #control>
                 <ToggleSwitch
                     :model-value="enabled.includes(repo)"

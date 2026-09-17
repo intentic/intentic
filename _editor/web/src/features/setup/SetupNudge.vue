@@ -1,6 +1,7 @@
 <!-- Nudges the user after inactivity on the run step — the only trigger available, since not running the command is silent. -->
 <script setup lang="ts">
 import { CopyButton, Notice } from "@intentic/ui";
+import { useT } from "@intentic/ui/i18n";
 
 // Reader this is addressed to:
 //   `emailed` : a phone that mailed itself the link, not yet opened on the other computer
@@ -10,6 +11,8 @@ import { CopyButton, Notice } from "@intentic/ui";
 //   `downloaded`: the installer was taken from this page
 //   `app` : the desktop app was handed the setup and its own window has the log
 //   `button` : in the app, with nothing pressed yet
+const t = useT();
+
 const {
     variant,
     stalled = false,
@@ -32,36 +35,41 @@ const emit = defineEmits<{ copied: [] }>();
         <span class="flex flex-col gap-2">
             <p>
                 <span v-if="variant === `emailed`" class="min-w-0">
-                    <span class="font-medium">Still nothing.</span> Open the link we emailed you on the computer that will host your sandbox. The
-                    command is waiting there.
+                    <span class="font-medium">{{ t(`setup.setupNudge.stillNothing`) }}</span> {{ t(`setup.setupNudge.openLinkWeEmailed`) }}
                 </span>
                 <span v-else-if="variant === `terminal`" class="min-w-0">
-                    <span class="font-medium">Still nothing.</span> This has to be pasted into a terminal on the machine that will run your sandbox.
+                    <span class="font-medium">{{ t(`setup.setupNudge.stillNothing`) }}</span> {{ t(`setup.setupNudge.toPastedIntoTerminal`) }}
                 </span>
                 <span v-else-if="variant === `phone`" class="min-w-0">
-                    <span class="font-medium">Still nothing.</span> Email yourself the link above and open it on the computer that will host your
-                    sandbox.
+                    <span class="font-medium">{{ t(`setup.setupNudge.stillNothing`) }}</span> {{ t(`setup.setupNudge.emailYourselfLinkAbove`) }}
                 </span>
                 <span v-else-if="variant === `install`" class="min-w-0">
-                    <span class="font-medium">Still nothing.</span> Nothing starts until you install the app above and open it.
+                    <span class="font-medium">{{ t(`setup.setupNudge.stillNothing`) }}</span> {{ t(`setup.setupNudge.nothingStartsUntilInstall`) }}
                 </span>
                 <!-- The one variant that is not a correction: this reader did the right thing and is in Windows' half of the flow. -->
                 <span v-else-if="variant === `downloaded`" class="min-w-0">
-                    <span class="font-medium">Waiting on the installer.</span> Run the file your browser downloaded, then open Intentic and press "Set
-                    it up now". This page picks it up on its own, so you can leave it.
+                    <span class="font-medium">{{ t(`setup.setupNudge.waitingOnInstaller`) }}</span>
+                    {{ t(`setup.setupNudge.runFileBrowserDownloaded`) }}
                 </span>
                 <span v-else-if="variant === `app`" class="min-w-0">
-                    <span class="font-medium">Still nothing.</span> Check the Intentic window. It shows what the setup is doing, and any error it hit.
+                    <span class="font-medium">{{ t(`setup.setupNudge.stillNothing`) }}</span> {{ t(`setup.setupNudge.checkIntenticWindowShows`) }}
                 </span>
                 <span v-else class="min-w-0">
-                    <span class="font-medium">Still nothing.</span> Nothing starts until you press "Set it up now" above.
+                    <span class="font-medium">{{ t(`setup.setupNudge.stillNothing`) }}</span> {{ t(`setup.setupNudge.nothingStartsUntilPress`) }}
                 </span>
             </p>
             <p v-if="stalled && variant === `terminal`" class="opacity-90">
-                Already ran it? Check that terminal: an error there stops the sandbox before it can report in. Safe to run again.
+                {{ t(`setup.setupNudge.alreadyRanCheckTerminal`) }}
             </p>
             <!-- `cta`: copying again is the way out here. `self-start`, or the column flex stretches it edge to edge. -->
-            <CopyButton v-if="copyable" class="self-start" :text="command" label="Copy again" :cta="true" @copied="emit(`copied`)" />
+            <CopyButton
+                v-if="copyable"
+                class="self-start"
+                :text="command"
+                :label="t(`setup.setupNudge.copyAgain`)"
+                :cta="true"
+                @copied="emit(`copied`)"
+            />
         </span>
     </Notice>
 </template>

@@ -5,10 +5,13 @@ import { computed, ref } from "vue";
 import { devFillGet } from "../../setup/devFill";
 import { useCapabilitySecret } from "./useCapabilities";
 import { useSecrets } from "./useSecrets";
+import { useT } from "@intentic/ui/i18n";
 
 // The one way a secret value enters the app: masked input + eye toggle, writing KEY=value to the sandbox daemon's
 // .env (never the platform), with a shared provenance line, used by every credential form so wording stays
 // identical. `collect` mode skips the write and only emits the value, for a caller that writes it itself.
+
+const t = useT();
 
 const props = withDefaults(
     defineProps<{
@@ -82,7 +85,7 @@ const onEnter = (event: KeyboardEvent): void => {
                 autocomplete="off"
                 autocapitalize="off"
                 spellcheck="false"
-                :placeholder="placeholder ?? `Paste the value for ${secretKey}`"
+                :placeholder="placeholder ?? t(`capabilities.secretField.pasteValue`, { secretKey })"
                 :class="[ui.inputSm('flex-1 resize-y font-mono'), show ? '' : 'blur-mask focus:blur-none']"
             ></textarea>
             <input
@@ -92,24 +95,30 @@ const onEnter = (event: KeyboardEvent): void => {
                 autocomplete="off"
                 autocapitalize="off"
                 spellcheck="false"
-                :placeholder="placeholder ?? `Paste the value for ${secretKey}`"
+                :placeholder="placeholder ?? t(`capabilities.secretField.pasteValue`, { secretKey })"
                 :class="ui.input('flex-1')"
                 @keydown.enter="onEnter"
             />
-            <Button severity="secondary" :text="true" :aria-label="show ? 'Hide value' : 'Show value'" @click="show = !show">
+            <Button
+                severity="secondary"
+                :text="true"
+                :aria-label="show ? t(`capabilities.secretField.hideValue`) : t(`capabilities.secretField.showValue`)"
+                @click="show = !show"
+            >
                 <template #icon><Icon :name="show ? 'eye-slash' : 'eye'" /></template>
             </Button>
-            <Button v-if="!collect" label="Save" :disabled="!canSave" :loading="saving" @click="save">
+            <Button v-if="!collect" :label="t(`ui.action.save`)" :disabled="!canSave" :loading="saving" @click="save">
                 <template #icon><Icon name="check" /></template>
             </Button>
-            <Button v-if="cancellable" severity="secondary" :text="true" aria-label="Cancel" @click="emit(`cancel`)">
+            <Button v-if="cancellable" severity="secondary" :text="true" :aria-label="t(`ui.action.cancel`)" @click="emit(`cancel`)">
                 <template #icon><Icon name="times" /></template>
             </Button>
         </div>
         <Notice v-if="notice" :of="notice" />
         <p v-else-if="!noHint" class="text-xs text-muted">
-            Stored in your sandbox's <span class="font-mono">.env</span> as <span class="font-mono">{{ secretKey }}</span
-            >: never on the platform.
+            {{ t(`capabilities.secretField.storedInSandboxs`) }} <span class="font-mono">.env</span> {{ t(`capabilities.secretField.as`) }}
+            <span class="font-mono">{{ secretKey }}</span
+            >{{ t(`capabilities.secretField.neverOnPlatform`) }}
         </p>
     </div>
 </template>

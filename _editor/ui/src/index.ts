@@ -81,7 +81,7 @@ export { default as DeviceAgentGroup } from "./components/sandbox/DeviceAgentGro
 // Just the column of lines, for a surface that lists several agents and can't give each one a group.
 export { default as DeviceAgentNotes } from "./components/sandbox/DeviceAgentNotes.vue";
 export {
-    AGENT_DUTIES,
+    agentDuties,
     type AgentAction,
     type AgentNote,
     type AgentPanel,
@@ -93,7 +93,7 @@ export {
     agentLoopState,
     agentSkewNote,
     type DeviceAgentState,
-    RESTART_AGENT,
+    restartAgent,
 } from "./components/sandbox/deviceAgent.js";
 // Verbatim machine output pane under a working row; shared by the desktop app and web, which drive the same
 // containers.
@@ -232,7 +232,7 @@ export {
     timeAgo,
 } from "./lib/format.js";
 // Time-window vocabulary (1h/24h/7d/All): the cutoff each pill means and the words to show for it.
-export { sinceOf, TIME_WINDOWS, type TimeWindow, timeWindowWords, withinWindow } from "./lib/timeWindow.js";
+export { sinceOf, timeWindows, type TimeWindow, timeWindowWords, withinWindow } from "./lib/timeWindow.js";
 // Path splitting, the Shiki grammar table and `seriesColor` also ship as plain-TypeScript subpaths
 // (`@intentic/ui/path`, `@intentic/ui/langs`, `@intentic/ui/series`) so DOM-free callers and tests avoid this
 // barrel's component graph. Icon names live at `@intentic/ui/icons` for the same reason; render with <Icon name="…">.
@@ -247,7 +247,7 @@ export {
     iconForEntry,
 } from "./icons/fileIcon.js";
 export { useExplorerStyle } from "./composables/useExplorerStyle.js";
-export { commandLang, type CommandOs, OS_OPTIONS, useOsPreference } from "./composables/useOsPreference.js";
+export { commandLang, type CommandOs, osOptions, useOsPreference } from "./composables/useOsPreference.js";
 export { type Device, useDevice } from "./composables/useDevice.js";
 // Whether this element, not the screen, is too narrow for its layout; useDevice answers about the screen only.
 export { useNarrow } from "./composables/useNarrow.js";

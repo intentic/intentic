@@ -6,6 +6,9 @@ import { continueList, indentLines, insertLink, onListLine, outdentLines, type T
 import { createMarkdownHistory, type EditKind } from "../../markdown/history.js";
 import { splitMarkdownBlocks } from "../../markdown/index.js";
 import { blockBody, buildBlockElement, caretAtOffset, offsetOfCaret } from "../../markdown/sourceDom.js";
+import { useT } from "../../i18n/index.js";
+
+const t = useT();
 
 const { source, caretAt, placeholder = `` } = defineProps<{ source: string; caretAt?: number; placeholder?: string }>();
 const emit = defineEmits<{ change: [value: string]; save: [value: string] }>();
@@ -594,12 +597,12 @@ defineExpose({ text, focus: (): void => host.value?.focus() });
 </script>
 
 <template>
-<!-- The caller supplies the prose measure so both halves align. -->
-<!-- Ghost text for a document with nothing in it, drawn by the editing skin off this attribute; a blank line alone looks like a pane that failed to load. -->
+    <!-- The caller supplies the prose measure so both halves align. -->
+    <!-- Ghost text for a document with nothing in it, drawn by the editing skin off this attribute; a blank line alone looks like a pane that failed to load. -->
     <div
         ref="host"
         class="md-prose md-editing"
-        aria-label="Document"
+        :aria-label="t(`ui.markdownDocumentSurface.document`)"
         :data-placeholder="placeholder === `` ? undefined : placeholder"
         @input="onInput"
         @beforeinput="onBeforeInput"

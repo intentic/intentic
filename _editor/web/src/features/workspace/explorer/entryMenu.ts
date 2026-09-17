@@ -1,6 +1,7 @@
 import type { WorkspaceTreeEntry } from "@intentic/api-contract";
 import { archiveFormat } from "@intentic/sandbox-contract";
 import type { MenuItem } from "primevue/menuitem";
+import { t } from "@intentic/ui/i18n";
 
 // The right-click menu both file surfaces (the tree, the desk) build: one list, so a verb never exists in one and not
 // the other, and the wording of a bulk verb ("Delete 3 items") is decided once. Each surface supplies its own rows in
@@ -45,15 +46,15 @@ export interface EntryMenuInput {
     readonly verbs: EntryVerbs;
 }
 
-const LOCKED_NOTE: MenuItem = { label: `Kept private by the sandbox`, icon: `lock`, disabled: true };
-const READ_ONLY_NOTE: MenuItem = { label: `Read-only: changing files needs maintainer access`, icon: `lock`, disabled: true };
-const ARCHIVE_NOTE: MenuItem = { label: `Inside an archive: extract it to change anything`, icon: `box`, disabled: true };
+const lockedNote = (): MenuItem => ({ label: t(`workspace.entryMenu.keptPrivateBySandbox`), icon: `lock`, disabled: true });
+const readOnlyNote = (): MenuItem => ({ label: t(`workspace.entryMenu.readOnlyChangingFiles`), icon: `lock`, disabled: true });
+const archiveNote = (): MenuItem => ({ label: t(`workspace.entryMenu.insideArchiveExtractTo`), icon: `box`, disabled: true });
 
 const withSeparator = (items: readonly MenuItem[]): MenuItem[] => (items.length === 0 ? [] : [{ separator: true }, ...items]);
 
 const readOnlyMenu = ({ head = [], lead = [], tail = [] }: EntryMenuInput): MenuItem[] => {
     const readable = [...head, ...lead, ...tail];
-    return [...readable, ...withSeparator([READ_ONLY_NOTE])];
+    return [...readable, ...withSeparator([readOnlyNote()])];
 };
 
 // Joins the groups that have rows, a rule between them, so a menu never opens or closes on a separator.
@@ -63,24 +64,21 @@ const joinGroups = (...groups: readonly (readonly MenuItem[])[]): MenuItem[] =>
 // An archive's contents: what can be read, plus the one verb that gets something out of it. A folder's own rows
 // (`lead`) are dropped with the rest, since none of them mean anything about a copy the daemon keeps out of sight.
 const archiveMenu = ({ target, multi, count, head = [], tail = [], verbs }: EntryMenuInput): MenuItem[] =>
-    joinGroups(
-        head,
-        target === undefined ? [] : [{ label: multi ? `Copy ${count} items` : `Copy`, icon: `copy`, command: verbs.copy }],
-        tail,
-        [ARCHIVE_NOTE],
-    );
+    joinGroups(head, target === undefined ? [] : [{ label: multi ? `Copy ${count} items` : `Copy`, icon: `copy`, command: verbs.copy }], tail, [
+        archiveNote(),
+    ]);
 
 // The rows that can only ever name one entry, which is why a bulk selection has none of them.
 const soleVerbs = (target: WorkspaceTreeEntry, barren: boolean, verbs: EntryVerbs): MenuItem[] => {
     const items: MenuItem[] = [];
     // Offered by the same rule the daemon unpacks by, so the row can't promise what it would then refuse.
     if (target.type === `file` && archiveFormat(target.name) !== undefined) {
-        items.push({ label: `Extract`, icon: `box`, command: verbs.extract });
+        items.push({ label: t(`workspace.entryMenu.extract`), icon: `box`, command: verbs.extract });
     }
-    items.push({ label: `Rename`, icon: `pencil`, command: verbs.rename });
+    items.push({ label: t(`ui.action.rename`), icon: `pencil`, command: verbs.rename });
     // Marks a barren folder intentional via a placeholder: durable, visible to git, not a private exclusion flag.
     if (target.type === `dir` && barren) {
-        items.push({ label: `Keep folder`, icon: `check-circle`, command: verbs.keepFolder });
+        items.push({ label: t(`workspace.entryMenu.keepFolder`), icon: `check-circle`, command: verbs.keepFolder });
     }
     return items;
 };
@@ -101,7 +99,7 @@ const entryVerbs = ({ target, multi, count, barren, verbs }: EntryMenuInput): Me
 
 export const entryMenuItems = (input: EntryMenuInput): MenuItem[] => {
     if (input.locked) {
-        return [LOCKED_NOTE];
+        return [lockedNote()];
     }
     if (!input.canEdit) {
         return readOnlyMenu(input);
@@ -113,11 +111,11 @@ export const entryMenuItems = (input: EntryMenuInput): MenuItem[] => {
     return [
         ...head,
         ...(head.length > 0 ? [{ separator: true }] : []),
-        { label: `New File`, icon: `file`, command: verbs.newFile },
-        { label: `New Folder`, icon: `folder`, command: verbs.newFolder },
+        { label: t(`workspace.entryMenu.newFile`), icon: `file`, command: verbs.newFile },
+        { label: t(`workspace.entryMenu.newFolder`), icon: `folder`, command: verbs.newFolder },
         ...lead,
         ...entryVerbs(input),
-        ...(clipboardFull ? [{ label: `Paste`, icon: `clone`, command: verbs.paste }] : []),
+        ...(clipboardFull ? [{ label: t(`workspace.entryMenu.paste`), icon: `clone`, command: verbs.paste }] : []),
         ...withSeparator(tail),
     ];
 };

@@ -1,12 +1,15 @@
 <script setup lang="ts">
 import { Icon } from "@intentic/ui";
 import { onScopeDispose, ref } from "vue";
+import { useT } from "@intentic/ui/i18n";
 
 // Placeholder for a transcript that hasn't arrived: previews the layout (prompt, tool rows, answer) content will
 // occupy, so arrival fills its own outline instead of replacing a spinner. Anchored to the bottom, since that's where a
 // restored transcript lands (useStickToBottom).
 
 // Per-turn skeleton shapes, newest last; fixed uneven widths so the outline doesn't reshuffle on re-render.
+const t = useT();
+
 const TURNS = [
     { bubble: `w-[52%]`, prompt: [`w-full`, `w-1/2`], tools: [`w-1/3`], answer: [`w-full`, `w-5/6`] },
     { bubble: `w-[34%]`, prompt: [`w-full`], tools: [`w-2/5`, `w-1/4`], answer: [`w-full`, `w-full`, `w-3/4`, `w-2/5`] },
@@ -27,7 +30,7 @@ onScopeDispose(() => clearTimeout(timer));
     <!-- Bars are decoration; role=status plus the sr-only line carry the announcement for screen readers. -->
     <!-- Absolutely positioned so it adds no intrinsic size; in flow it would grow the shared scroller. -->
     <div class="relative min-h-0 flex-1" role="status" aria-busy="true">
-        <span class="sr-only">Loading conversation…</span>
+        <span class="sr-only">{{ t(`chat.chatTranscriptSkeleton.loadingConversation`) }}</span>
         <div class="chat-skeleton absolute inset-0 flex flex-col justify-end gap-1 overflow-hidden pb-2">
             <div v-for="(turn, index) in OUTLINE" :key="index" class="flex shrink-0 flex-col gap-1" aria-hidden="true">
                 <!-- Padding here matches .chat-prompt's own vertical padding. -->
@@ -49,7 +52,7 @@ onScopeDispose(() => clearTimeout(timer));
                 </div>
             </div>
             <p v-if="slow" class="flex shrink-0 items-center justify-center gap-2 pt-2 text-2xs text-subtle">
-                <Icon name="spinner" spin class="text-2xs" />Still fetching this conversation from your sandbox…
+                <Icon name="spinner" spin class="text-2xs" />{{ t(`chat.chatTranscriptSkeleton.stillFetchingConversationSandbox`) }}
             </p>
         </div>
     </div>

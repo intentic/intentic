@@ -7,12 +7,15 @@ import { FILE_WINDOW_BYTES, readFileWindow } from "../files/fileWindow";
 import { changeEpochOf } from "../changes/live/useWorkspaceLive";
 import { RAW_MAX_BYTES } from "../explorer/fileType";
 import CodeView from "./CodeView.vue";
+import { useT } from "@intentic/ui/i18n";
 
 // Read-only, windowed surface for text too big for an editable buffer (a build log, data dump, generated bundle).
 // Monaco itself can hold 120MB; the daemon and wire can't, so text arrives one window at a time (head, `Load more`,
 // `Follow`). Following appends only the bytes added since the last read, not a full re-read on every change.
 
 // `first`: window the dispatcher already fetched for the file's size; reusing it saves a second read.
+const t = useT();
+
 const { path, first, lang } = defineProps<{ path: string; first: WorkspaceFileWindow; lang?: string }>();
 const emit = defineEmits<{ download: [] }>();
 
@@ -141,7 +144,7 @@ watch(
     <div class="flex h-full min-h-0 flex-col">
         <div class="flex shrink-0 items-center gap-2 border-b border-line px-3 py-1.5 text-2xs text-muted">
             <Icon name="eye" class="shrink-0 text-[0.7rem]" />
-            <span class="shrink-0">Read-only: {{ position }}</span>
+            <span class="shrink-0">{{ t(`workspace.bigTextView.readOnly`, { position }) }}</span>
             <span v-if="error" class="min-w-0 flex-1 truncate text-danger">{{ error }}</span>
             <span v-else class="flex-1"></span>
             <Button
@@ -152,9 +155,9 @@ watch(
                 class="shrink-0"
                 :disabled="busy"
                 @click="loadMore"
-                v-tooltip.bottom="`Read the next ${formatBytes(Math.min(remaining, FILE_WINDOW_BYTES))}`"
+                v-tooltip.bottom="t(`workspace.bigTextView.readNext`, { file_window_bytes: formatBytes(Math.min(remaining, FILE_WINDOW_BYTES)) })"
             >
-                <Icon :name="busy ? `spinner` : `download`" :spin="busy" class="text-[0.7rem]" /> Load more
+                <Icon :name="busy ? `spinner` : `download`" :spin="busy" class="text-[0.7rem]" /> {{ t(`workspace.bigTextView.loadMore`) }}
             </Button>
             <Button
                 size="small"
@@ -163,11 +166,11 @@ watch(
                 class="shrink-0"
                 :class="following ? `text-primary-500` : ``"
                 @click="toggleFollow"
-                v-tooltip.bottom="'Jump to the end and append new lines as they are written'"
+                v-tooltip.bottom="t(`workspace.bigTextView.jumpToEndAppend`)"
             >
-                <Icon :name="following ? `wave-pulse` : `chevron-down`" class="text-[0.7rem]" /> Follow
+                <Icon :name="following ? `wave-pulse` : `chevron-down`" class="text-[0.7rem]" /> {{ t(`workspace.bigTextView.follow`) }}
             </Button>
-<!-- Shown only when download would work: /workspace/raw 413s past RAW_MAX_BYTES, and a button whose only job is to fail is worse than none. -->
+            <!-- Shown only when download would work: /workspace/raw 413s past RAW_MAX_BYTES, and a button whose only job is to fail is worse than none. -->
             <Button
                 v-if="size <= RAW_MAX_BYTES"
                 size="small"
@@ -175,9 +178,9 @@ watch(
                 :text="true"
                 class="shrink-0"
                 @click="emit(`download`)"
-                v-tooltip.bottom="'Download the whole file'"
+                v-tooltip.bottom="t(`workspace.bigTextView.downloadWholeFile`)"
             >
-                <Icon name="download" class="text-[0.7rem]" /> Download
+                <Icon name="download" class="text-[0.7rem]" /> {{ t(`ui.action.download`) }}
             </Button>
         </div>
         <div class="min-h-0 flex-1">

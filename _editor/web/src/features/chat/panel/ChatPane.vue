@@ -86,12 +86,15 @@ import ComposerMoreMenu from "../composer/ComposerMoreMenu.vue";
 import ComposerTierChip from "../composer/ComposerTierChip.vue";
 import { type ComposerControl, overflowRows, ridesRow } from "../composer/composerMore";
 import { startingMode } from "../run/turnDefaults";
+import { useT } from "@intentic/ui/i18n";
 
 // One chat on screen: the transcript, its composer, and the pickers/banners for one conversation (ChatPanel owns
 // the surrounding frame — list, pop-out, resize, shell commands). Takes its conversation as a prop rather than
 // reading the focused one, and provides `conversationView` once so everything under it answers for the same chat.
 // Wiring only: what a press means lives in composerIntent.ts; the mic, attachments, run-through and scroll
 // warm-up are composables; banners and status are their own components.
+
+const t = useT();
 
 const props = defineProps<{
     conversation: Conversation;
@@ -1166,7 +1169,7 @@ watch(
 </script>
 
 <template>
-<!-- Everything the panel's chat list is not; carries the @container so composer density keys off this pane's own share of the width, not the panel's. -->
+    <!-- Everything the panel's chat list is not; carries the @container so composer density keys off this pane's own share of the width, not the panel's. -->
     <div
         class="chat-pane @container relative flex min-h-0 min-w-0 flex-1 flex-col"
         :class="{ 'chat-pane-on': focused }"
@@ -1181,48 +1184,48 @@ watch(
             v-if="dragDepth > 0"
             class="pointer-events-none absolute inset-1 z-30 rounded-xl border-2 border-dashed border-primary-500 bg-primary-500/10"
         ></div>
-<!-- Floats over the transcript's corner rather than a header, since a pane has no header of its own and the panel above already names the chats. -->
+        <!-- Floats over the transcript's corner rather than a header, since a pane has no header of its own and the panel above already names the chats. -->
         <button
             v-if="closable"
             type="button"
             class="absolute top-2 right-2 z-20 flex h-6 w-6 cursor-pointer items-center justify-center rounded-lg bg-card/70 text-subtle backdrop-blur-sm transition-colors hover:bg-overlay hover:text-content"
             v-tooltip.bottom="closeHint"
-            aria-label="Close pane"
+            :aria-label="t(`chat.chatPane.closePane`)"
             @pointerdown.stop
             @focusin.stop
             @click.stop="emit(`close`)"
         >
             <Icon name="times" class="text-2xs" />
         </button>
-<!-- One scroller for the transcript and the composer under it, so the composer's height is reserved by layout, not measured back into it. -->
-<!-- `.chat-scroller` is the IntersectionObserver root each prompt uses to tell if it's pinned. -->
+        <!-- One scroller for the transcript and the composer under it, so the composer's height is reserved by layout, not measured back into it. -->
+        <!-- `.chat-scroller` is the IntersectionObserver root each prompt uses to tell if it's pinned. -->
         <div
             ref="scroller"
             class="chat-scroller flex flex-1 flex-col"
             :class="[bare ? 'overflow-visible' : 'overflow-x-hidden overflow-y-auto', { 'chat-realize': realizing }]"
         >
             <div ref="content" class="flex min-w-0 flex-1 flex-col">
-<!-- Bare: the turns are the one part withheld, so no message component mounts and the scroller shrinks to the composer. -->
+                <!-- Bare: the turns are the one part withheld, so no message component mounts and the scroller shrinks to the composer. -->
                 <div v-if="!bare" class="chat-turns flex flex-1 flex-col pt-4">
-<!-- The rest of the conversation, above the window it opened on (a long chat starts mid-history); drawn only where more exists. -->
+                    <!-- The rest of the conversation, above the window it opened on (a long chat starts mid-history); drawn only where more exists. -->
                     <div v-if="conversation.historyMore.value" class="flex justify-center py-2">
-<!-- The press is the words, not the row — a full-width button would light up on any pointer crossing the top with no visible edges. -->
+                        <!-- The press is the words, not the row — a full-width button would light up on any pointer crossing the top with no visible edges. -->
                         <button
                             type="button"
                             class="cursor-pointer text-2xs text-subtle transition-colors hover:text-content disabled:cursor-default disabled:text-subtle"
                             :disabled="conversation.loadingOlder.value"
                             @click="conversation.loadOlder()"
                         >
-                            {{ conversation.loadingOlder.value ? `Loading earlier turns…` : `Load earlier turns` }}
+                            {{ conversation.loadingOlder.value ? t(`chat.chatPane.loadingEarlierTurns`) : t(`chat.chatPane.loadEarlierTurns`) }}
                         </button>
                     </div>
-<!-- Where a forked chat says so, above its inherited turns; held back until the reader reaches that point. -->
+                    <!-- Where a forked chat says so, above its inherited turns; held back until the reader reaches that point. -->
                     <ChatForkLine v-if="!conversation.historyMore.value" />
                     <template v-if="messages.length > 0">
-<!-- One section per turn, so each prompt's sticky range ends where its own answer does. -->
+                        <!-- One section per turn, so each prompt's sticky range ends where its own answer does. -->
                         <!-- `index` is for the day marker below, the one row that cares about its column position, not its turn. -->
                         <template v-for="(turn, index) in turns" :key="turn.id">
-<!-- The day this stretch was sent, drawn only where the date changes (dayMarks), between sections rather than inside one (a boundary, not part of a turn). -->
+                            <!-- The day this stretch was sent, drawn only where the date changes (dayMarks), between sections rather than inside one (a boundary, not part of a turn). -->
                             <div
                                 v-if="dayMarks.get(turn.id)"
                                 class="flex justify-center pb-0.5 text-2xs text-subtle"
@@ -1267,31 +1270,31 @@ watch(
                             </section>
                         </template>
                     </template>
-<!-- The transcript is on its way (a history open, an empty local mirror); without this it briefly reads as data loss, not loading. -->
+                    <!-- The transcript is on its way (a history open, an empty local mirror); without this it briefly reads as data loss, not loading. -->
                     <ChatTranscriptSkeleton v-else-if="activeLoading" />
-<!-- Names the provider because that's the fact worth having on every provider but the trial. -->
+                    <!-- Names the provider because that's the fact worth having on every provider but the trial. -->
                     <p v-else class="m-auto max-w-[80%] text-center text-xs text-muted">
-                        {{ onTrial ? `Ask anything, this chat is free and needs nothing connected.` : `Start a conversation with ${providerName}.` }}
+                        {{ onTrial ? t(`chat.chatPane.askAnythingChatFree`) : t(`chat.chatPane.startConversation`, { providerName }) }}
                     </p>
-<!-- The live turn before it's written anything (showTurnStatus); outside the turn sections since it belongs to no message yet. -->
+                    <!-- The live turn before it's written anything (showTurnStatus); outside the turn sections since it belongs to no message yet. -->
                     <ChatTurnStatus v-if="showTurnStatus" />
                     <p v-if="activeError" class="text-xs text-danger">{{ activeError }}</p>
                 </div>
 
-<!-- The composer and its gating notices; last row of the transcript, stuck to the bottom edge, rather than a separate band. -->
-<!-- `bare` has no transcript above it and no scroller edge below, so it drops both the padding and the strip that masks them. -->
+                <!-- The composer and its gating notices; last row of the transcript, stuck to the bottom edge, rather than a separate band. -->
+                <!-- `bare` has no transcript above it and no scroller edge below, so it drops both the padding and the strip that masks them. -->
                 <div
                     ref="footer"
                     class="chat-footer sticky bottom-0 z-10 mx-auto flex w-full max-w-[51rem] flex-col gap-2"
                     :class="bare ? 'chat-footer-bare' : 'px-2 py-3'"
                 >
-<!-- The composer is hidden only when another notice explains a blocked or unavailable state. -->
-                    <Notice v-if="denied" tone="danger">This Google account has no access to this sandbox, so chat is unavailable.</Notice>
-                    <Notice v-else-if="blocked" tone="info" icon="clock">Chat is available after this sandbox finishes setup.</Notice>
+                    <!-- The composer is hidden only when another notice explains a blocked or unavailable state. -->
+                    <Notice v-if="denied" tone="danger">{{ t(`chat.chatPane.googleAccountNoAccess`) }}</Notice>
+                    <Notice v-else-if="blocked" tone="info" icon="clock">{{ t(`chat.chatPane.chatAvailableAfterSandbox`) }}</Notice>
                     <template v-if="!blocked">
-<!-- This chat's standing: archived, the account gate, the trial, a credential to renew, an outage resuming (ChatPaneNotices). -->
+                        <!-- This chat's standing: archived, the account gate, the trial, a credential to renew, an outage resuming (ChatPaneNotices). -->
                         <ChatPaneNotices />
-<!-- The turn stopped before finishing, and the way on (ChatContinueStrip). -->
+                        <!-- The turn stopped before finishing, and the way on (ChatContinueStrip). -->
                         <ChatContinueStrip :visible="continueStrip" :ready="continueOffer" @continue="continueTurn" />
                         <template v-if="connected">
                             <!-- Queued messages stay outside the transcript until the agent receives them. -->
@@ -1313,24 +1316,26 @@ watch(
                                         type="button"
                                         class="composer-ghost h-5 w-5 shrink-0"
                                         @click="removeQueued(message.id)"
-                                        v-tooltip.top="'Remove: this message will not be sent'"
-                                        aria-label="Remove queued message"
+                                        v-tooltip.top="t(`chat.chatPane.removeMessageNotSent`)"
+                                        :aria-label="t(`chat.chatPane.removeQueuedMessage`)"
                                     >
                                         <Icon name="times" class="text-2xs" />
                                     </button>
                                 </div>
                                 <p class="px-1 text-2xs text-subtle">{{ queuedHint }}</p>
                             </div>
-<!-- The edit notice identifies the message and its two actions. -->
+                            <!-- The edit notice identifies the message and its two actions. -->
                             <div
                                 v-if="editing !== undefined"
                                 class="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-xl border border-primary-500/40 bg-primary-600/10 px-3 py-2 text-2xs text-muted"
                             >
                                 <Icon name="pencil" class="shrink-0 text-link" />
                                 <span class="min-w-0 flex-1">
-                                    Editing this message:
-                                    <template v-if="editDropped > 1">it and the {{ editDropped - 1 }} below it are replaced when you send.</template>
-                                    <template v-else>it is replaced when you send.</template>
+                                    {{ t(`chat.chatPane.editingMessage`) }}
+                                    <template v-if="editDropped > 1">{{
+                                        t(`chat.chatPane.belowReplacedSend`, { editDropped: editDropped - 1 })
+                                    }}</template>
+                                    <template v-else>{{ t(`chat.chatPane.replacedSend`) }}</template>
                                 </span>
                                 <!-- The keep-answer action precedes Cancel so the answer is read first. -->
                                 <Button
@@ -1338,22 +1343,22 @@ watch(
                                     severity="secondary"
                                     :text="true"
                                     class="shrink-0"
-                                    v-tooltip.top="'Open a new chat from here with what you have typed: this one keeps its answer'"
+                                    v-tooltip.top="t(`chat.chatPane.openNewChatHere`)"
                                     @click="forkInsteadOfEdit"
                                 >
-                                    Keep both instead
+                                    {{ t(`chat.chatPane.keepBothInstead`) }}
                                 </Button>
                                 <Button
                                     size="small"
                                     :text="true"
                                     class="shrink-0"
-                                    v-tooltip.top="'Leave everything as it is: nothing has been changed yet'"
+                                    v-tooltip.top="t(`chat.chatPane.leaveEverythingNothingChanged`)"
                                     @click="cancelEdit"
                                 >
-                                    Cancel
+                                    {{ t(`ui.action.cancel`) }}
                                 </Button>
                             </div>
-<!-- The whole box changes standing when the agent's voice is armed (.composer-voice); being in this mode by accident is the one mistake worth painting. -->
+                            <!-- The whole box changes standing when the agent's voice is armed (.composer-voice); being in this mode by accident is the one mistake worth painting. -->
                             <form
                                 class="ui-field-shell composer-frame relative flex flex-col rounded-2xl border-line-strong bg-overlay shadow-lg"
                                 :class="{ 'composer-voice': voiceAgent }"
@@ -1378,7 +1383,7 @@ watch(
                                         :class="includeEditorContext ? `ui-chip-on` : `border-dashed border-line`"
                                         @click="includeEditorContext = !includeEditorContext"
                                         :aria-pressed="includeEditorContext"
-                                        aria-label="Attach editor context"
+                                        :aria-label="t(`chat.chatPane.attachEditorContext`)"
                                     >
                                         <Icon name="code" class="shrink-0 text-2xs" />
                                         <span class="max-w-36 truncate">{{ editorChipLabel }}</span>
@@ -1439,7 +1444,7 @@ watch(
                                             :class="{ 'composer-steered': pickedWorkflow !== undefined, 'composer-flash': flashed === 'model' }"
                                             :disabled="pickedWorkflow !== undefined"
                                             :expanded="modelOpen"
-                                            :aria-label="`Provider and model: ${providerName} · ${modelLabelText}`"
+                                            :aria-label="t(`chat.chatPane.providerModel`, { providerName, modelLabelText })"
                                             label-class="@max-md:hidden"
                                             @click="modelOpen = !modelOpen"
                                         />
@@ -1467,7 +1472,7 @@ watch(
                                             :disabled="pickedWorkflow !== undefined"
                                             @click="modeOpen = !modeOpen"
                                             :aria-expanded="modeOpen"
-                                            aria-label="Agent mode"
+                                            :aria-label="t(`chat.chatPane.agentMode`)"
                                         >
                                             <Icon :name="modeIcon" class="text-2xs text-link" />
                                             <span class="@max-md:hidden">{{ modeLabel }}</span>
@@ -1483,7 +1488,7 @@ watch(
                                             :class="{ 'composer-flash': flashed === 'placement' }"
                                             @click="placementOpen = !placementOpen"
                                             :aria-expanded="placementOpen"
-                                            aria-label="Where this runs"
+                                            :aria-label="t(`chat.chatPane.whereRuns`)"
                                         >
                                             <Icon :name="remote ? `boxes` : `desktop`" class="text-2xs text-link" />
                                             <span class="@max-lg:hidden">{{ placementLabel }}</span>
@@ -1503,9 +1508,9 @@ watch(
                                             }"
                                             :disabled="pickedWorkflow !== undefined"
                                             @click="personaOpen = !personaOpen"
-                                            v-tooltip.top="`This chat acts as ${personaName}: only its accounts are in reach`"
+                                            v-tooltip.top="t(`chat.chatPane.chatActsOnlyAccounts`, { personaName })"
                                             :aria-expanded="personaOpen"
-                                            :aria-label="`Acts as: ${personaName}`"
+                                            :aria-label="t(`chat.chatPane.acts`, { personaName })"
                                         >
                                             <!-- The persona control shows its face when a persona is selected. -->
                                             <PersonaFace v-if="pickedPersona !== undefined" :persona="pickedPersona" :size="16" />
@@ -1548,14 +1553,14 @@ watch(
                                             @click="voiceAgent = false"
                                             v-tooltip.top="
                                                 editing !== undefined
-                                                    ? `Finish or cancel the edit first: this box is holding a message to replace`
-                                                    : `Writing as the agent: Send places the words into the transcript, no reply. Press to write as yourself again`
+                                                    ? t(`chat.chatPane.finishCancelEditFirst`)
+                                                    : t(`chat.chatPane.writingAgentSendPlaces`)
                                             "
                                             :aria-pressed="true"
-                                            aria-label="Writing as the agent"
+                                            :aria-label="t(`chat.chatPane.writingAgent`)"
                                         >
                                             <Icon name="robot" class="text-2xs text-link" />
-                                            <span>As agent</span>
+                                            <span>{{ t(`chat.chatPane.agent`) }}</span>
                                         </button>
 
                                         <!-- Files from this device; the same chips as a drop or a paste, since one `attach` serves all three. -->
@@ -1565,12 +1570,20 @@ watch(
                                             class="composer-ghost h-8 w-8 shrink-0 max-md:h-11 max-md:w-11"
                                             :disabled="!reachable || !connected"
                                             @click="filePicker?.click()"
-                                            v-tooltip.top="'Attach files from this device'"
-                                            aria-label="Attach files"
+                                            v-tooltip.top="t(`chat.chatPane.attachFilesDevice`)"
+                                            :aria-label="t(`chat.chatPane.attachFiles`)"
                                         >
                                             <Icon name="paperclip" class="text-xs max-md:text-base" />
                                         </button>
-                                        <input ref="filePicker" type="file" multiple class="hidden" tabindex="-1" aria-hidden="true" @change="pickFiles" />
+                                        <input
+                                            ref="filePicker"
+                                            type="file"
+                                            multiple
+                                            class="hidden"
+                                            tabindex="-1"
+                                            aria-hidden="true"
+                                            @change="pickFiles"
+                                        />
 
                                         <!-- The overflow lists shaping controls that remain at their defaults. -->
                                         <button
@@ -1583,7 +1596,7 @@ watch(
                                             @click="moreOpen = !moreOpen"
                                             v-tooltip.top="moreHint"
                                             :aria-expanded="moreOpen"
-                                            aria-label="More composer settings"
+                                            :aria-label="t(`chat.chatPane.moreComposerSettings`)"
                                         >
                                             <Icon name="sliders-h" class="text-xs max-md:text-base" />
                                         </button>
@@ -1598,7 +1611,7 @@ watch(
                                             @click="toggleVoice"
                                             v-tooltip.top="voiceHint"
                                             :aria-pressed="voiceOn"
-                                            aria-label="Talk hands-free"
+                                            :aria-label="t(`chat.chatPane.talkHandsFree`)"
                                         >
                                             <Icon
                                                 name="microphone"
@@ -1630,7 +1643,7 @@ watch(
                                             class="composer-send shrink-0 max-md:h-11 max-md:w-11"
                                             :disabled="!canSend || !reachable"
                                             v-tooltip.top="sendHint"
-                                            aria-label="Send"
+                                            :aria-label="t(`ui.action.send`)"
                                         >
                                             <Icon name="send" class="text-sm" />
                                         </button>
@@ -1641,14 +1654,14 @@ watch(
                             <p v-if="voiceErrorMessage" class="px-1 text-2xs text-danger">{{ voiceErrorMessage }}</p>
                             <p v-if="workflowFailure" class="px-1 text-2xs text-danger">{{ workflowFailure }}</p>
                             <p v-else-if="loopFailure" class="px-1 text-2xs text-danger">{{ loopFailure }}</p>
-<!-- What the badge changes about the press, said under the box about to do it: the message goes to a design, not this chat. -->
+                            <!-- What the badge changes about the press, said under the box about to do it: the message goes to a design, not this chat. -->
                             <p v-else-if="pickedWorkflow" class="flex items-center gap-1.5 px-1 text-2xs text-muted">
-                                <Icon name="sitemap" class="shrink-0 text-2xs text-link" />Send starts "{{ pickedWorkflow.name }}": this message is
-                                what every step is asked to do. Model, effort, mode and looping are each step's own.
+                                <Icon name="sitemap" class="shrink-0 text-2xs text-link" />{{ t(`chat.chatPane.sendStarts`) }}{{ pickedWorkflow.name
+                                }}{{ t(`chat.chatPane.messageWhatEveryStep`) }}
                             </p>
                             <!-- The loop badge includes its stop condition. -->
                             <p v-else-if="runThroughState === 'loop' && pickedLoop" class="flex items-center gap-1.5 px-1 text-2xs text-muted">
-                                <Icon name="repeat" class="shrink-0 text-2xs text-link" />Send loops this message until it's met: ends on
+                                <Icon name="repeat" class="shrink-0 text-2xs text-link" />{{ t(`chat.chatPane.sendLoopsMessageUntil`) }}
                                 {{ loopDesignLine(pickedLoop) }}.
                             </p>
                             <!-- Persona capability text appears where the message is written. -->
@@ -1661,25 +1674,31 @@ watch(
             </div>
         </div>
 
-<!-- The pane's status bar, the one part of the footer outside the scroller: it's about the pane (context, subscription, daemon liveness), not the message. -->
-<!-- Withheld from the strip, peek or no peek: floating over another page, readouts about a chat are a second row of text
-     around a box asked for as one. -->
+        <!-- The pane's status bar, the one part of the footer outside the scroller: it's about the pane (context, subscription, daemon liveness), not the message. -->
+        <!-- Withheld from the strip, peek or no peek: floating over another page, readouts about a chat are a second row of text
+             around a box asked for as one. -->
         <ChatPaneStatus v-if="connected && !strip" :block="refusal" :hint="composerHint" />
 
-<!-- The four composer menus, each in the app's standard desktop-panel/mobile-sheet swap (ResponsiveOverlay), uncapped in height. -->
-        <ResponsiveOverlay v-model="modelOpen" :anchor="modelPill?.el" header="Model" panel-class="w-[26rem]">
+        <!-- The four composer menus, each in the app's standard desktop-panel/mobile-sheet swap (ResponsiveOverlay), uncapped in height. -->
+        <ResponsiveOverlay v-model="modelOpen" :anchor="modelPill?.el" :header="t(`chat.chatPane.model`)" panel-class="w-[26rem]">
             <ChatModelPicker :conversation="conversation" @selected="modelOpen = false" />
         </ResponsiveOverlay>
-        <ResponsiveOverlay v-model="modeOpen" :anchor="modeAnchor" cross="end" header="Agent mode" panel-class="w-56 p-1">
+        <ResponsiveOverlay v-model="modeOpen" :anchor="modeAnchor" cross="end" :header="t(`chat.chatPane.agentMode`)" panel-class="w-56 p-1">
             <ChatModeMenu @selected="modeOpen = false" />
         </ResponsiveOverlay>
-        <ResponsiveOverlay v-model="personaOpen" :anchor="personaAnchor" cross="end" header="Acts as" panel-class="w-80 p-1">
+        <ResponsiveOverlay v-model="personaOpen" :anchor="personaAnchor" cross="end" :header="t(`chat.chatPane.acts2`)" panel-class="w-80 p-1">
             <ChatPersonaMenu :picked="conversation.actsAs.value" @picked="pickPersona($event)" />
         </ResponsiveOverlay>
-        <ResponsiveOverlay v-model="placementOpen" :anchor="placementPill" cross="end" header="Where this runs" panel-class="w-80 p-1">
+        <ResponsiveOverlay v-model="placementOpen" :anchor="placementPill" cross="end" :header="t(`chat.chatPane.whereRuns`)" panel-class="w-80 p-1">
             <ChatPlacementMenu :conversation="conversation" @selected="placementOpen = false" />
         </ResponsiveOverlay>
-        <ResponsiveOverlay v-model="runThroughOpen" :anchor="runThroughAnchor" cross="end" header="Run this message through" panel-class="w-80 p-1">
+        <ResponsiveOverlay
+            v-model="runThroughOpen"
+            :anchor="runThroughAnchor"
+            cross="end"
+            :header="t(`chat.chatPane.runMessageThrough`)"
+            panel-class="w-80 p-1"
+        >
             <ChatRunThroughMenu
                 :loop="conversation.loopId.value"
                 :workflow="conversation.workflowId.value"
@@ -1688,8 +1707,8 @@ watch(
                 @manage="manageRunThrough()"
             />
         </ResponsiveOverlay>
-<!-- The overflow itself; its rows hand off to the three panels above. -->
-        <ResponsiveOverlay v-model="moreOpen" :anchor="morePill" cross="end" header="This message" panel-class="w-80 p-1">
+        <!-- The overflow itself; its rows hand off to the three panels above. -->
+        <ResponsiveOverlay v-model="moreOpen" :anchor="morePill" cross="end" :header="t(`chat.chatPane.message`)" panel-class="w-80 p-1">
             <ComposerMoreMenu :rows="moreRows" @pick="openFromMore($event)" />
         </ResponsiveOverlay>
     </div>

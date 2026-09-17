@@ -3,7 +3,7 @@
 import type { AgentProvider, Persona } from "@intentic/sandbox-contract";
 import { expect, it, vi } from "vitest";
 import type { PickerEntry } from "../models/modelPickerState";
-import { DRILLED_ROWS, FLAT_MODEL_ROWS, KIND_META, type QuickPickSources, quickRows } from "./composerQuickPick";
+import { DRILLED_ROWS, FLAT_MODEL_ROWS, kindMeta, type QuickPickSources, quickRows } from "./composerQuickPick";
 import { QUICK_KINDS } from "./useMentions";
 
 // modelPickerState imports conversation.ts for the live catalogs; stub its side-effects so the import is inert.
@@ -40,7 +40,7 @@ it(`lists one summary row per offered kind, in kind order, each carrying the cur
     const rows = quickRows(ALL, { kind: undefined, query: `` });
     expect(rows.map((row) => row.kind)).toEqual([`drill`, `drill`, `drill`, `drill`]);
     expect(rows.map((row) => (row.kind === `drill` ? row.into : undefined))).toEqual([...QUICK_KINDS]);
-    expect(rows.map((row) => row.label)).toEqual(QUICK_KINDS.map((kind) => KIND_META[kind].label));
+    expect(rows.map((row) => row.label)).toEqual(QUICK_KINDS.map((kind) => kindMeta()[kind].label));
     expect(rows.map((row) => row.detail)).toEqual([`Intentic`, `Here`, `Claude Opus 5`, `High`]);
 });
 
@@ -52,12 +52,18 @@ it(`names a raw id when the current pick is on no list, never an empty value`, (
         model: { entries: [], provider: `claude`, model: `claude-opus-9`, isReady: () => true },
     };
     expect(quickRows(gone, { kind: undefined, query: `` }).map((row) => row.detail)).toEqual([`deleted`, `Another sandbox`, `claude-opus-9`, `High`]);
-    expect(quickRows({ ...ALL, sandbox: { runners: [], boxes: [], box: undefined, runner: `omen` } }, { kind: undefined, query: `` })[1]?.detail).toBe(`omen`);
+    expect(
+        quickRows({ ...ALL, sandbox: { runners: [], boxes: [], box: undefined, runner: `omen` } }, { kind: undefined, query: `` })[1]?.detail,
+    ).toBe(`omen`);
 });
 
 it(`offers a kind in neither the summary nor a search once its source is withheld`, () => {
     const noPersona: QuickPickSources = { ...ALL, persona: undefined };
-    expect(quickRows(noPersona, { kind: undefined, query: `` }).map((row) => (row.kind === `drill` ? row.into : row.kind))).toEqual([`sandbox`, `model`, `effort`]);
+    expect(quickRows(noPersona, { kind: undefined, query: `` }).map((row) => (row.kind === `drill` ? row.into : row.kind))).toEqual([
+        `sandbox`,
+        `model`,
+        `effort`,
+    ]);
     expect(quickRows(noPersona, { kind: undefined, query: `int` })).toEqual([]);
     expect(quickRows(noPersona, { kind: `persona`, query: `` })).toEqual([]);
     expect(quickRows({ persona: undefined, sandbox: undefined, model: undefined, effort: undefined }, { kind: undefined, query: `` })).toEqual([]);

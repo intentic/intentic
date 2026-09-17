@@ -3,10 +3,13 @@ import { Button } from "@intentic/ui";
 import { ref } from "vue";
 import { requestModelPick } from "./hostModelPicker";
 import { usePaneView } from "../panel/useChat-view";
+import { useT } from "@intentic/ui/i18n";
 
 // Stand-in for the composer's model picker when the composer itself is not rendered (account gate, trial-spent
 // strip): opens the shell's picker anchored to itself, and applies the answer to this pane's conversation, same
 // as a pick from the composer would.
+
+const t = useT();
 
 const view = usePaneView();
 
@@ -32,5 +35,7 @@ const chooseModel = async (): Promise<void> => {
 </script>
 
 <template>
-    <Button ref="listButton" size="small" class="shrink-0" @click="chooseModel"> <Icon name="th-large" />Choose a model </Button>
+    <Button ref="listButton" size="small" class="shrink-0" @click="chooseModel">
+        <Icon name="th-large" />{{ t(`chat.chatChooseModelButton.chooseModel`) }}
+    </Button>
 </template>

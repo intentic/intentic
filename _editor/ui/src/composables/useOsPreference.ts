@@ -1,6 +1,7 @@
 import type { Ref } from "vue";
 import type { ShikiLang } from "@intentic/code-read/langs";
 import { definePreference } from "./preference.js";
+import { t } from "../i18n/index.js";
 
 export type CommandOs = "unix" | "windows";
 
@@ -28,9 +29,9 @@ export function useOsPreference() {
 // The two options every command block offers, and the Shiki grammar each implies, shared here since
 // three call sites otherwise guess at the label and lang id. Mutable, since <SegmentedControl> takes
 // its options array as-is.
-export const OS_OPTIONS: { label: string; value: CommandOs }[] = [
-    { label: `Linux / macOS`, value: `unix` },
-    { label: `Windows (PowerShell)`, value: `windows` },
+export const osOptions = (): { label: string; value: CommandOs }[] => [
+    { label: t(`ui.useOsPreference.linuxMacos`), value: `unix` },
+    { label: t(`ui.useOsPreference.windowsPowershell`), value: `windows` },
 ];
 
 export const commandLang = (os: CommandOs): ShikiLang => (os === `windows` ? `powershell` : `bash`);

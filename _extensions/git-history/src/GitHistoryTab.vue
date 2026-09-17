@@ -28,6 +28,7 @@ import { useWorking } from "./useWorking.js";
 import { buildFileTree, flattenFileTree } from "./commitFileTree.js";
 import { computeGraphLayout, type GraphRow } from "./graphLayout.js";
 import { matchesSearch, searchWords } from "./searchCommits.js";
+import { t } from "./i18n.js";
 
 // One repo's git-history graph: the committed-side story (Changes panel is uncommitted, Checkpoints the safety
 // timeline). A tab in the main editor, mirroring VSCode's graph/SCM split; graphLayout.ts computes lanes, this file
@@ -354,20 +355,20 @@ const menuItems = computed<MenuItem[]>(() => {
         return [];
     }
     return [
-        { label: `Create Branch…`, command: () => start(`branch`) },
-        { label: `Add Tag…`, command: () => start(`tag`) },
+        { label: t(`gitHistoryTab.createBranch`), command: () => start(`branch`) },
+        { label: t(`gitHistoryTab.addTag`), command: () => start(`tag`) },
         { separator: true },
-        { label: `Checkout…`, command: () => start(`checkout`) },
-        { label: `Cherry Pick…`, command: () => start(`cherry-pick`) },
-        { label: `Revert…`, command: () => start(`revert`) },
-        { label: `Drop…`, command: () => start(`drop`) },
+        { label: t(`gitHistoryTab.checkout`), command: () => start(`checkout`) },
+        { label: t(`gitHistoryTab.cherryPick`), command: () => start(`cherry-pick`) },
+        { label: t(`gitHistoryTab.revert`), command: () => start(`revert`) },
+        { label: t(`gitHistoryTab.drop`), command: () => start(`drop`) },
         { separator: true },
-        { label: `Merge into current branch…`, command: () => start(`merge`) },
-        { label: `Rebase current branch on this Commit…`, command: () => start(`rebase`) },
-        { label: `Reset current branch to this Commit…`, command: () => start(`reset`) },
+        { label: t(`gitHistoryTab.mergeIntoCurrentBranch`), command: () => start(`merge`) },
+        { label: t(`gitHistoryTab.rebaseCurrentBranchOn`), command: () => start(`rebase`) },
+        { label: t(`gitHistoryTab.resetCurrentBranchTo`), command: () => start(`reset`) },
         { separator: true },
-        { label: `Copy Commit Hash`, command: () => copy(commit.sha) },
-        { label: `Copy Commit Subject`, command: () => copy(commit.subject) },
+        { label: t(`gitHistoryTab.copyCommitHash`), command: () => copy(commit.sha) },
+        { label: t(`gitHistoryTab.copyCommitSubject`), command: () => copy(commit.subject) },
     ];
 });
 
@@ -402,23 +403,26 @@ const refMenuItems = computed<MenuItem[]>(() => {
     if (kind === `tag`) {
         return [
             // One remote is a verb, several are a choice; a submenu names the choice rather than picking one silently.
-            ...remoteNames.value.map((remote) => ({ label: `Push to ${remote}`, command: () => void log.pushTag(label, remote) })),
+            ...remoteNames.value.map((remote) => ({ label: t(`gitHistoryTab.pushTo`, { remote }), command: () => void log.pushTag(label, remote) })),
             { separator: true },
-            { label: `Delete tag`, command: () => void log.deleteTag(label) },
-            ...remoteNames.value.map((remote) => ({ label: `Delete tag on ${remote}`, command: () => void log.deleteTag(label, remote) })),
+            { label: t(`gitHistoryTab.deleteTag`), command: () => void log.deleteTag(label) },
+            ...remoteNames.value.map((remote) => ({
+                label: t(`gitHistoryTab.deleteTagOn`, { remote }),
+                command: () => void log.deleteTag(label, remote),
+            })),
         ];
     }
     if (kind === `remote`) {
         // `git checkout <branch>` creates the tracking local branch when exactly one remote has that name.
         const local = target.decoration.slice(target.decoration.indexOf(`/`) + 1);
-        return [{ label: `Checkout ${local}`, command: () => void log.checkout(local) }];
+        return [{ label: t(`gitHistoryTab.checkout3`, { local }), command: () => void log.checkout(local) }];
     }
     return [
-        { label: `Checkout`, command: () => void log.checkout(label) },
-        { label: `New branch from here…`, command: () => start(`branch`, target.commit) },
+        { label: t(`gitHistoryTab.checkout2`), command: () => void log.checkout(label) },
+        { label: t(`gitHistoryTab.newBranchHere`), command: () => start(`branch`, target.commit) },
         { separator: true },
-        { label: `Push`, command: () => void branchState.push(label) },
-        { label: `Delete branch`, command: () => void branchState.remove(label) },
+        { label: t(`gitHistoryTab.push`), command: () => void branchState.push(label) },
+        { label: t(`gitHistoryTab.deleteBranch`), command: () => void branchState.remove(label) },
     ];
 });
 
@@ -514,19 +518,15 @@ const runPending = async (): Promise<void> => {
             <BranchSwitcher :repo="repoRef" />
             <!-- Rows drawn, and while searching, out of how many are loaded; scoped to fetched pages, not the whole history. -->
             <span class="ui-status-pill shrink-0 bg-overlay text-2xs text-muted">{{
-                searching ? `${matched.length} of ${commits.length}` : commits.length
+                searching ? t(`gitHistoryTab.of`, { count: matched.length, count2: commits.length }) : commits.length
             }}</span>
             <div class="relative min-w-0 flex-1 max-w-44">
-                <Icon
-                    name="search"
-                    class="pointer-events-none absolute top-1/2 left-2 -translate-y-1/2 text-2xs text-subtle"
-                    aria-hidden="true"
-                />
+                <Icon name="search" class="pointer-events-none absolute top-1/2 left-2 -translate-y-1/2 text-2xs text-subtle" aria-hidden="true" />
                 <input
                     v-model="search"
                     type="text"
-                    placeholder="Filter commits…"
-                    aria-label="Filter commits by message, author, or sha"
+                    :placeholder="t(`gitHistoryTab.filterCommits`)"
+                    :aria-label="t(`gitHistoryTab.filterCommitsByMessage`)"
                     :class="ui.inputSm('w-full min-w-0 pl-7', search ? 'pr-7' : 'pr-2')"
                     @keydown.esc="search = ''"
                 />
@@ -534,7 +534,7 @@ const runPending = async (): Promise<void> => {
                     v-if="search"
                     type="button"
                     class="absolute top-1/2 right-1.5 flex -translate-y-1/2 items-center rounded text-2xs text-subtle transition-colors hover:text-content"
-                    aria-label="Clear filter"
+                    :aria-label="t(`gitHistoryTab.clearFilter`)"
                     @click="search = ''"
                 >
                     <Icon name="times" />
@@ -550,7 +550,10 @@ const runPending = async (): Promise<void> => {
                 :disabled="undo.busy.value"
                 @click="runUndo"
                 v-tooltip.bottom="
-                    `${undo.action.value?.description ?? ''}: moves ${undo.action.value?.branch ?? 'the branch'} back. A restore point is saved first.`
+                    t(`gitHistoryTab.undoMoves`, {
+                        what: undo.action.value?.description ?? ``,
+                        branch: undo.action.value?.branch ?? t(`gitHistoryTab.theBranch`),
+                    })
                 "
             >
                 <Icon name="undo" class="mr-0.5 text-3xs" />{{ undo.label.value }}
@@ -567,11 +570,8 @@ const runPending = async (): Promise<void> => {
         <div v-if="operation.operation.value" class="flex shrink-0 items-start gap-1.5 border-b border-warning/40 bg-warning/10 px-3 py-1.5">
             <Icon name="exclamation-triangle" class="mt-0.5 shrink-0 text-2xs text-warning" />
             <div class="min-w-0 flex-1">
-                <p class="text-2xs font-medium text-warning">A {{ operation.operation.value }} is in progress</p>
-                <p class="text-2xs text-muted">
-                    Resolve the conflicts in the Changes panel and stage them to continue, or abort to return this repository to where the
-                    {{ operation.operation.value }} began.
-                </p>
+                <p class="text-2xs font-medium text-warning">{{ t(`gitHistoryTab.inProgress`, { operation: operation.operation.value }) }}</p>
+                <p class="text-2xs text-muted">{{ t(`gitHistoryTab.resolveConflictsInChanges`, { operation: operation.operation.value }) }}</p>
                 <p v-if="operation.actionError.value" class="text-2xs text-danger">{{ operation.actionError.value }}</p>
             </div>
             <Button
@@ -580,9 +580,9 @@ const runPending = async (): Promise<void> => {
                 class="shrink-0"
                 :disabled="operation.busy.value"
                 @click="operation.abort()"
-                v-tooltip.bottom="'A restore point is saved first, so this is reversible from Restore points'"
+                v-tooltip.bottom="t(`gitHistoryTab.restorePointSavedFirst`)"
             >
-                Abort
+                {{ t(`gitHistoryTab.abort`) }}
             </Button>
         </div>
 
@@ -590,7 +590,7 @@ const runPending = async (): Promise<void> => {
         <div class="min-h-0 flex-1 overflow-auto">
             <!-- Skeleton rows stand in for the ones about to load: a gutter dot, a subject line, an author line. -->
             <div v-if="loading && commits.length === 0" role="status" aria-busy="true">
-                <span class="sr-only">Reading this repository's history…</span>
+                <span class="sr-only">{{ t(`gitHistoryTab.readingRepositorysHistory`) }}</span>
                 <div v-for="row in outline ? 8 : 0" :key="row" class="flex items-center gap-2 px-3 py-1.5" aria-hidden="true">
                     <span class="skeleton block h-2 w-2 shrink-0 rounded-full" />
                     <div class="flex min-w-0 flex-1 flex-col gap-1">
@@ -599,9 +599,9 @@ const runPending = async (): Promise<void> => {
                     </div>
                 </div>
             </div>
-            <p v-else-if="commits.length === 0" class="px-3 py-3 text-2xs text-subtle">No commits yet in this repository.</p>
+            <p v-else-if="commits.length === 0" class="px-3 py-3 text-2xs text-subtle">{{ t(`gitHistoryTab.noCommitsYetIn`) }}</p>
             <p v-else-if="searching && matched.length === 0" class="px-3 py-3 text-2xs text-subtle">
-                No loaded commit matches. Scroll to load more of the history, then search again.
+                {{ t(`gitHistoryTab.noLoadedCommitMatches`) }}
             </p>
             <!-- A @container per row: which columns fit depends on this panel's width, which the reader controls. -->
             <div v-for="{ row, commit } in graphRows" :key="commit.sha" class="@container">
@@ -653,17 +653,19 @@ const runPending = async (): Promise<void> => {
                     <span
                         v-if="stashBySha.get(commit.sha)"
                         class="shrink-0 rounded bg-info/15 px-1 font-mono text-3xs text-info"
-                        v-tooltip.top="'Work set aside without committing it'"
+                        v-tooltip.top="t(`gitHistoryTab.workSetAsideWithout`)"
                         >{{ stashBySha.get(commit.sha)!.ref }}</span
                     >
-                    <span v-if="commit.head" class="shrink-0 rounded bg-primary-600/20 px-1 text-3xs font-semibold text-link">HEAD</span>
+                    <span v-if="commit.head" class="shrink-0 rounded bg-primary-600/20 px-1 text-3xs font-semibold text-link">{{
+                        t(`gitHistoryTab.head`)
+                    }}</span>
                     <!-- Right-clickable, so acting on a ref doesn't mean hunting for it in the commit's own menu. -->
                     <span
                         v-for="ref in commit.refs.slice(0, 3)"
                         :key="ref"
                         class="shrink-0 cursor-context-menu rounded px-1 text-3xs"
                         :class="refBadge(ref).tag ? 'bg-warning/15 text-warning' : 'bg-overlay text-muted'"
-                        v-tooltip.top="`Right-click for ${refBadge(ref).label} actions`"
+                        v-tooltip.top="t(`gitHistoryTab.rightClickActions`, { label: refBadge(ref).label })"
                         @contextmenu.prevent.stop="openRefMenu($event, ref, commit)"
                         >{{ refBadge(ref).label }}</span
                     >
@@ -672,10 +674,10 @@ const runPending = async (): Promise<void> => {
                     }}</span>
                     <!-- Row zero has no author, date or sha yet; instead it shows how much is uncommitted and whether any is blocking. -->
                     <template v-if="commit.sha === WORKING">
-                        <span v-if="working.conflicted.value > 0" class="shrink-0 text-2xs text-danger"
-                            >{{ working.conflicted.value }} conflicted</span
-                        >
-                        <span class="shrink-0 text-2xs text-subtle">{{ working.changes.value.length }} changed</span>
+                        <span v-if="working.conflicted.value > 0" class="shrink-0 text-2xs text-danger">{{
+                            t(`gitHistoryTab.conflicted`, { conflicted: working.conflicted.value })
+                        }}</span>
+                        <span class="shrink-0 text-2xs text-subtle">{{ t(`gitHistoryTab.changed`, { count: working.changes.value.length }) }}</span>
                     </template>
                     <!-- A stash's three verbs sit on the row, not a menu nobody would open for them; Pop leads as the common case. -->
                     <template v-else-if="stashBySha.get(commit.sha)">
@@ -717,32 +719,37 @@ const runPending = async (): Promise<void> => {
                 <div v-if="commit.sha === openSha" class="border-y border-line bg-card px-3 py-2">
                     <!-- Row zero has no sha, parents, author or date; it opens straight to its file list, the rest lives in Changes. -->
                     <dl v-if="commit.sha !== WORKING" class="grid grid-cols-facts gap-x-3 gap-y-0.5 text-2xs">
-                        <dt class="text-subtle">Commit</dt>
+                        <dt class="text-subtle">{{ t(`gitHistoryTab.commit`) }}</dt>
                         <dd class="flex items-center gap-1 font-mono text-muted">
                             {{ commit.sha }}
-                            <button type="button" class="text-subtle hover:text-content" @click="copy(commit.sha)" v-tooltip.top="'Copy full SHA'">
+                            <button
+                                type="button"
+                                class="text-subtle hover:text-content"
+                                @click="copy(commit.sha)"
+                                v-tooltip.top="t(`gitHistoryTab.copyFullSha`)"
+                            >
                                 <Icon name="copy" class="text-3xs" />
                             </button>
                         </dd>
                         <template v-if="commit.parents.length > 0">
-                            <dt class="text-subtle">Parents</dt>
+                            <dt class="text-subtle">{{ t(`gitHistoryTab.parents`) }}</dt>
                             <dd class="font-mono text-muted">{{ commit.parents.map((parent) => parent.slice(0, 8)).join(", ") }}</dd>
                         </template>
-                        <dt class="text-subtle">Author</dt>
+                        <dt class="text-subtle">{{ t(`gitHistoryTab.author`) }}</dt>
                         <dd class="text-muted">
                             {{ commit.author }}<span v-if="commit.email" class="text-subtle"> &lt;{{ commit.email }}&gt;</span>
                         </dd>
-                        <dt class="text-subtle">Date</dt>
+                        <dt class="text-subtle">{{ t(`gitHistoryTab.date`) }}</dt>
                         <dd class="text-muted">{{ timeAgo(commit.at) }}</dd>
                     </dl>
                     <pre v-if="commit.body" class="mt-1.5 whitespace-pre-wrap font-sans text-2xs text-muted">{{ commit.body }}</pre>
 
                     <div class="mt-2 pt-1.5" :class="commit.sha === WORKING ? '' : 'border-t border-line-subtle'">
                         <p v-if="filesError" class="text-2xs text-danger">{{ filesError }}</p>
-                        <p v-else-if="filesLoading" class="text-2xs text-subtle">Loading changed files…</p>
+                        <p v-else-if="filesLoading" class="text-2xs text-subtle">{{ t(`gitHistoryTab.loadingChangedFiles`) }}</p>
                         <template v-else>
                             <p class="mb-1 text-2xs font-medium uppercase tracking-wide text-subtle">
-                                {{ files.length }} changed {{ files.length === 1 ? "file" : "files" }}
+                                {{ t(`gitHistoryTab.changedFiles`, { count: files.length }, files.length) }}
                             </p>
                             <!-- Changed files form a collapsible tree beside the diff. -->
                             <div class="max-h-64 overflow-auto">
@@ -766,7 +773,7 @@ const runPending = async (): Promise<void> => {
                                             'ui-row-select-on': showing?.sha === commit.sha && showing?.path === row.file.path,
                                         }"
                                         :style="{ paddingLeft: `${0.25 + row.depth * 0.85}rem` }"
-                                        v-tooltip.top="'Click to peek · double-click to keep the tab'"
+                                        v-tooltip.top="t(`gitHistoryTab.clickToPeekDouble`)"
                                         @click="openFileDiff(commit, row.file)"
                                         @dblclick="openFileDiff(commit, row.file, 'keep')"
                                     >
@@ -784,7 +791,7 @@ const runPending = async (): Promise<void> => {
             <!-- Pulls in the next page when this comes into view; absent on the last page, which is how the observer knows to stop. -->
             <div v-if="hasMore" ref="sentinel" class="px-3 py-2 text-2xs text-subtle">
                 <Icon v-if="fetchingMore" name="spinner" class="mr-1 text-2xs" spin />{{
-                    fetchingMore ? "Loading older commits…" : "Scroll for older commits"
+                    fetchingMore ? t(`gitHistoryTab.loadingOlderCommits`) : t(`gitHistoryTab.scrollOlderCommits`)
                 }}
             </div>
         </div>
@@ -825,21 +832,21 @@ const runPending = async (): Promise<void> => {
                     <p class="text-2xs text-subtle">
                         {{
                             resetMode === "hard"
-                                ? "Hard: discards uncommitted changes in the worktree."
+                                ? t(`gitHistoryTab.hardDiscardsUncommittedChanges`)
                                 : resetMode === "soft"
-                                  ? "Soft: keeps your changes staged."
-                                  : "Mixed: keeps your changes unstaged."
+                                  ? t(`gitHistoryTab.softKeepsChangesStaged`)
+                                  : t(`gitHistoryTab.mixedKeepsChangesUnstaged`)
                         }}
                     </p>
                 </div>
 
                 <p v-if="ACTIONS[pending.kind].danger" class="mt-3 text-2xs text-subtle">
-                    <Icon name="shield" class="mr-0.5 text-3xs" />A restore point is saved first, so this is reversible from Restore points.
+                    <Icon name="shield" class="mr-0.5 text-3xs" />{{ t(`gitHistoryTab.restorePointSavedFirst2`) }}
                 </p>
                 <p v-if="actionError" class="mt-2 text-2xs text-danger">{{ actionError }}</p>
             </template>
             <template #footer>
-                <Button size="small" severity="secondary" :text="true" label="Cancel" @click="cancelAction" />
+                <Button size="small" severity="secondary" :text="true" :label="t(`gitHistoryTab.cancel`)" @click="cancelAction" />
                 <Button
                     v-if="pending"
                     size="small"

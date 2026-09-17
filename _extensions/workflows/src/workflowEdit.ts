@@ -1,4 +1,5 @@
 import type { Workflow, WorkflowStep } from "@intentic/sandbox-contract";
+import { t } from "./i18n.js";
 
 // Pure functions over the workflow document; each returns a new workflow rather than mutating its input. Invariants
 // held across all: `needs` only names a step that exists, the graph stays acyclic, and a `continue` step has exactly
@@ -52,7 +53,7 @@ const withSteps = (workflow: Workflow, steps: readonly WorkflowStep[]): Workflow
 export const addStep = (workflow: Workflow, after?: string): { workflow: Workflow; stepId: string } => {
     const id = mintId(workflow);
     const needs = after !== undefined && workflow.steps.some((step) => step.id === after) ? [after] : [];
-    const step: WorkflowStep = { id, title: `Step ${workflow.steps.length + 1}`, needs, ...DEFAULTS };
+    const step: WorkflowStep = { id, title: t(`workflowEdit.step`, { count: workflow.steps.length + 1 }), needs, ...DEFAULTS };
     return { workflow: withSteps(workflow, [...workflow.steps, step]), stepId: id };
 };
 

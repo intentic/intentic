@@ -154,7 +154,7 @@ describe(`rail glyphs`, () => {
             return views;
         });
         const owners = new Map<string, string[]>();
-        for (const view of [...registrations, ...coreViews].filter((registered) => registered.surface === `rail`)) {
+        for (const view of [...registrations, ...coreViews()].filter((registered) => registered.surface === `rail`)) {
             for (const { icon } of view.detect([richRepo], richCapabilities)) {
                 if (icon === undefined) {
                     continue;

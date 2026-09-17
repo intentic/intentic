@@ -7,6 +7,9 @@ import { Button, ContextMenu, CopyButton, type IconName, Row, StatusBadge, ui } 
 import type { MenuItem } from "primevue/menuitem";
 import { computed, ref } from "vue";
 import { type ConnectionState, rebuildStep, signsInByHand } from "../model/connections";
+import { useT } from "@intentic/ui/i18n";
+
+const t = useT();
 
 const props = defineProps<{
     entry: CapabilityCatalogEntry;
@@ -58,11 +61,11 @@ const primary = computed<{ label: string; icon: IconName; run: () => void } | un
     }
     if (signsIn.value) {
         return connected.value
-            ? { label: `Open browser`, icon: `globe`, run: () => emit(`browse`) }
-            : { label: `Log in`, icon: `sign-in`, run: () => emit(`login`) };
+            ? { label: t(`capabilities.capabilityInstanceRow.openBrowser`), icon: `globe`, run: () => emit(`browse`) }
+            : { label: t(`capabilities.capabilityInstanceRow.logIn`), icon: `sign-in`, run: () => emit(`login`) };
     }
     if (agentSignIn.value) {
-        return { label: `Sign in`, icon: `sign-in`, run: () => emit(`agentLogin`) };
+        return { label: t(`capabilities.capabilityInstanceRow.signIn`), icon: `sign-in`, run: () => emit(`agentLogin`) };
     }
     return undefined;
 });
@@ -75,19 +78,19 @@ const items = computed<MenuItem[]>(() => {
     const kindActions: MenuItem[] = [];
     // Also how to re-log-in once a session expires; an identity's window points at its email provider instead.
     if (signsIn.value && connected.value) {
-        kindActions.push({ label: `Re-log in`, icon: `sign-in`, command: () => emit(`login`) });
+        kindActions.push({ label: t(`capabilities.capabilityInstanceRow.reLogIn`), icon: `sign-in`, command: () => emit(`login`) });
     }
     // Revoke cuts the machine off without removing the capability (name and permissions stay, Connect re-pairs);
     // removing does both.
     if (pairs.value && paired.value) {
-        kindActions.push({ label: `Revoke access`, icon: `sign-out`, command: () => emit(`revoke`) });
+        kindActions.push({ label: t(`capabilities.capabilityInstanceRow.revokeAccess`), icon: `sign-out`, command: () => emit(`revoke`) });
     }
     return [
         ...kindActions,
         ...(kindActions.length > 0 ? [{ separator: true }] : []),
-        { label: `Settings…`, icon: `cog`, command: () => emit(`edit`) },
-        { label: `Rename…`, icon: `pencil`, command: () => emit(`rename`) },
-        ...(removable.value ? [{ label: `Remove`, icon: `trash`, danger: true, command: () => emit(`remove`) }] : []),
+        { label: t(`capabilities.capabilityInstanceRow.settings`), icon: `cog`, command: () => emit(`edit`) },
+        { label: t(`capabilities.capabilityInstanceRow.rename`), icon: `pencil`, command: () => emit(`rename`) },
+        ...(removable.value ? [{ label: t(`ui.action.remove`), icon: `trash`, danger: true, command: () => emit(`remove`) }] : []),
     ];
 });
 </script>
@@ -95,22 +98,26 @@ const items = computed<MenuItem[]>(() => {
 <template>
     <!-- One divided cell: the row, and, while something's outstanding, the step it's waiting on beneath it. -->
     <div>
-<!-- Tinted while the form below is over this connection, so a pre-filled live gateway isn't mistaken for the card's defaults. -->
+        <!-- Tinted while the form below is over this connection, so a pre-filled live gateway isn't mistaken for the card's defaults. -->
         <Row :selected="editing">
             <template #title>
                 <span class="flex flex-wrap items-center gap-2">
-<!-- Mono: an identifier the agent's skill/tools/env vars are named after, compared character by character. -->
+                    <!-- Mono: an identifier the agent's skill/tools/env vars are named after, compared character by character. -->
                     <span class="truncate font-mono">{{ instance.id }}</span>
                     <StatusBadge size="xs" :dot="true" :variant="state.tone" :label="state.label" />
                 </span>
             </template>
-<!-- What tells this connection apart, given its own line and the full width rather than a capped trailing cluster. -->
+            <!-- What tells this connection apart, given its own line and the full width rather than a capped trailing cluster. -->
             <template v-if="facts || needsRebuild" #description>
-<!-- `block`: an inline span can't ellipsise, so a long value would run under the row's button; the full value is one hover away. -->
+                <!-- `block`: an inline span can't ellipsise, so a long value would run under the row's button; the full value is one hover away. -->
                 <span v-if="facts" class="block truncate font-mono" :title="facts">{{ facts }}</span>
-<!-- Wraps where the address truncates: the tail is the way out of the state it describes, so it must stay visible. -->
+                <!-- Wraps where the address truncates: the tail is the way out of the state it describes, so it must stay visible. -->
                 <RouterLink v-if="needsRebuild" to="/sandbox/environment" class="block text-warning hover:underline">
-                    {{ instance.status.detail ?? "Needs a sandbox rebuild" }}: Finish setup →
+                    {{
+                        t(`capabilities.capabilityInstanceRow.finishSetup`, {
+                            detail: instance.status.detail ?? t(`capabilities.capabilityInstanceRow.needsSandboxRebuild`),
+                        })
+                    }}
                 </RouterLink>
             </template>
             <template #control>
@@ -118,7 +125,12 @@ const items = computed<MenuItem[]>(() => {
                     <Button v-if="primary" :label="primary.label" size="small" :text="true" @click="primary.run()">
                         <template #icon><Icon :name="primary.icon" /></template>
                     </Button>
-                    <button type="button" :class="ui.iconButton()" aria-label="More actions" @click="menu?.show($event)">
+                    <button
+                        type="button"
+                        :class="ui.iconButton()"
+                        :aria-label="t(`capabilities.capabilityInstanceRow.moreActions`)"
+                        @click="menu?.show($event)"
+                    >
                         <Icon name="ellipsis" />
                     </button>
                     <ContextMenu ref="menu" :model="items" :min-width="11" />
@@ -126,12 +138,12 @@ const items = computed<MenuItem[]>(() => {
             </template>
         </Row>
 
-<!-- Connection codes use selectable, fixed-width digits. -->
+        <!-- Connection codes use selectable, fixed-width digits. -->
         <!-- Recessed against the group's surface so this reads as a step on the row, not a second row. -->
         <div v-if="pendingStep" class="flex flex-col gap-2 border-t border-line-subtle bg-canvas px-3 py-2.5">
             <div v-if="pairingCode" class="flex flex-wrap items-center gap-3">
                 <span class="select-all font-mono text-xl font-semibold tracking-[0.3em] text-content tabular-nums">{{ pairingCode }}</span>
-                <CopyButton :text="pairingCode" label="Copy" />
+                <CopyButton :text="pairingCode" :label="t(`ui.action.copy`)" />
             </div>
             <!-- Shows whatever the daemon actually said: the phone's menu path, a refusal, or "waiting…" in between. -->
             <span class="text-xs text-warning">{{ pendingStep }}</span>

@@ -33,10 +33,13 @@ import { presenceActivity, presenceOthers } from "../../../shell/presence/usePre
 import { useAccessInventory } from "./useAccessInventory";
 import ControlTokensSection from "./ControlTokensSection.vue";
 import PasskeysSection from "./PasskeysSection.vue";
+import { useT } from "@intentic/ui/i18n";
 
 // Owner-only invites: daemon's enforced /members list first, fail-closed (sandboxJson throws on non-2xx), then the
 // platform's record + email, each with its own error. A declined or refused send isn't a failure, since the grant is
 // already recorded; the owner gets the link instead. Members get read-only; presence is for everyone.
+
+const t = useT();
 
 const { user } = useAuth();
 const sandbox = useSandbox();
@@ -48,22 +51,22 @@ const members = ref<InviteRecord[]>([]);
 const email = ref(``);
 
 // Tiers an invite can grant, nested order, shared by the invite form and every roster row's <Picker>.
-const ROLE_OPTIONS: readonly PickerOption<GrantedRole>[] = [
-    { label: `Viewer`, value: `viewer`, icon: `eye`, hint: `Can watch everything, agents, chats, files. Can't change anything.` },
+const ROLE_OPTIONS = computed((): readonly PickerOption<GrantedRole>[] => [
+    { label: t(`sandbox.sandboxAccess.viewer`), value: `viewer`, icon: `eye`, hint: t(`sandbox.sandboxAccess.watchEverythingAgentsChats`) },
     {
-        label: `Collaborator`,
+        label: t(`sandbox.sandboxAccess.collaborator`),
         value: `collaborator`,
         icon: `users`,
         // Files-through-agents is the clause people miss; collaborators land and publish only as requests.
-        hint: `Can drive agents and review work. Files change through agents, not by hand; landing and publishing become requests.`,
+        hint: t(`sandbox.sandboxAccess.driveAgentsReviewWork`),
     },
     {
-        label: `Maintainer`,
+        label: t(`sandbox.sandboxAccess.maintainer`),
         value: `maintainer`,
         icon: `wrench`,
-        hint: `Can operate everything the owner can. The owner can revoke this access; the owner can't be revoked.`,
+        hint: t(`sandbox.sandboxAccess.operateEverythingOwnerOwner`),
     },
-];
+]);
 const inviteRole = ref<GrantedRole>(`collaborator`);
 const busy = ref(false);
 // The one thing this tab has to say right now: a failure, or an invite whose link the owner must carry.
@@ -162,7 +165,7 @@ const showDelivery = (result: { link: string; delivery: InviteDelivery; reason?:
                   title: DELIVERY_NOTE[result.delivery],
                   detail: result.reason,
                   action: {
-                      label: `Copy link`,
+                      label: t(`sandbox.sandboxAccess.copyLink`),
                       // Uses the clicked element's own window; best-effort, so a refusal here isn't the invite failing.
                       run: () => void Promise.resolve(clipboardOf(document.activeElement)?.writeText(result.link)).catch(() => undefined),
                   },
@@ -306,14 +309,14 @@ const revoke = async (target: string): Promise<void> => {
     <div class="flex flex-col gap-6">
         <!-- Members + invites (owner) / read-only note (member). -->
         <!-- Rows use <Row>, taking the group's own tier, like every other list in the app. -->
-        <RowGroup label="Access">
+        <RowGroup :label="t(`sandbox.sandboxAccess.access`)">
             <template v-if="isOwner">
                 <Row icon="user" :title="user?.email">
-                    <template #meta><StatusBadge variant="primary" label="owner" size="xs" /></template>
+                    <template #meta><StatusBadge variant="primary" :label="t(`sandbox.sandboxAccess.owner`)" size="xs" /></template>
                 </Row>
                 <div v-if="listing" role="status" aria-busy="true">
                     <template v-if="outline">
-                        <span class="sr-only">Reading who has access…</span>
+                        <span class="sr-only">{{ t(`sandbox.sandboxAccess.readingWhoAccess`) }}</span>
                         <SkeletonRows :rows="2" control />
                     </template>
                 </div>
@@ -335,20 +338,27 @@ const revoke = async (target: string): Promise<void> => {
                             variant="ghost"
                             :disabled="busy"
                             class="shrink-0"
-                            :aria-label="`Role for ${member.email}`"
-                            :header="`Role for ${member.email}`"
+                            :aria-label="t(`sandbox.sandboxAccess.role`, { email: member.email })"
+                            :header="t(`sandbox.sandboxAccess.role`, { email: member.email })"
                             @update:model-value="(role: GrantedRole | undefined) => role !== undefined && setRole(member.email, role)"
                         />
                         <Button
                             v-if="member.status !== 'accepted'"
-                            label="Resend"
+                            :label="t(`sandbox.sandboxAccess.resend`)"
                             size="small"
                             severity="secondary"
                             :text="true"
                             :disabled="busy"
                             @click="resend(member.email)"
                         />
-                        <Button size="small" severity="danger" :text="true" :disabled="busy" aria-label="Revoke access" @click="revoke(member.email)">
+                        <Button
+                            size="small"
+                            severity="danger"
+                            :text="true"
+                            :disabled="busy"
+                            :aria-label="t(`sandbox.sandboxAccess.revokeAccess`)"
+                            @click="revoke(member.email)"
+                        >
                             <template #icon><Icon name="times" /></template>
                         </Button>
                     </template>
@@ -384,13 +394,13 @@ const revoke = async (target: string): Promise<void> => {
                                         :options="ROLE_OPTIONS"
                                         variant="input"
                                         :disabled="busy"
-                                        aria-label="Invite role"
-                                        header="Invite as"
+                                        :aria-label="t(`sandbox.sandboxAccess.inviteRole`)"
+                                        :header="t(`sandbox.sandboxAccess.invite`)"
                                         class="ui-field-sm w-36 min-w-0"
                                     />
                                     <Button
                                         type="submit"
-                                        label="Invite"
+                                        :label="t(`sandbox.sandboxAccess.invite2`)"
                                         size="small"
                                         :loading="busy"
                                         :disabled="busy || !validEmail(email.trim().toLowerCase())"
@@ -402,7 +412,7 @@ const revoke = async (target: string): Promise<void> => {
                             </div>
                             <span v-if="emailTouched && email.trim().length > 0 && !validEmail(email.trim().toLowerCase())" class="ui-field-error">
                                 <Icon name="exclamation-triangle" class="text-2xs" />
-                                Enter a valid email address.
+                                {{ t(`sandbox.sandboxAccess.enterValidEmailAddress`) }}
                             </span>
                         </form>
                     </div>
@@ -413,10 +423,10 @@ const revoke = async (target: string): Promise<void> => {
                 <Row icon="user" :title="user?.email">
                     <template #meta>
                         <StatusBadge variant="primary" :label="sandbox.active.value?.role ?? `viewer`" size="xs" />
-                        <StatusBadge variant="neutral" label="you" size="xs" />
+                        <StatusBadge variant="neutral" :label="t(`sandbox.sandboxAccess.you`)" size="xs" />
                     </template>
                 </Row>
-                <RowNote>Only the sandbox owner can invite people or change roles.</RowNote>
+                <RowNote>{{ t(`sandbox.sandboxAccess.onlySandboxOwnerInvite`) }}</RowNote>
             </template>
         </RowGroup>
 
@@ -427,26 +437,26 @@ const revoke = async (target: string): Promise<void> => {
         <ControlTokensSection />
 
         <!-- Credential revocation answers whether any access remains active. -->
-        <RowGroup v-if="isOwner" label="Signed-in browsers">
+        <RowGroup v-if="isOwner" :label="t(`sandbox.sandboxAccess.signedInBrowsers`)">
             <!-- The one signed-in browser the app can name, because it is running in it. -->
-            <Row icon="desktop" title="This browser" :description="thisBrowser">
-                <template #meta><StatusBadge variant="success" label="signed in" size="xs" /></template>
+            <Row icon="desktop" :title="t(`sandbox.sandboxAccess.browser`)" :description="thisBrowser">
+                <template #meta><StatusBadge variant="success" :label="t(`sandbox.sandboxAccess.signedIn`)" size="xs" /></template>
             </Row>
 
             <!-- The empty list, explained where the reader asks about it, rather than left as a blank surface. -->
             <Row
                 icon="shield"
-                title="Other browsers aren't listed"
-                description="The sandbox doesn't track devices — each browser holds its own pass. Sign out everywhere still covers all of them."
+                :title="t(`sandbox.sandboxAccess.otherBrowsersArentListed`)"
+                :description="t(`sandbox.sandboxAccess.sandboxDoesntTrackDevices`)"
             />
 
-            <Row icon="sign-out" tone="danger" title="Sign out everywhere">
-                <template #description>Revokes every pass. You stay signed in here; everyone else must sign in again.</template>
+            <Row icon="sign-out" tone="danger" :title="t(`sandbox.sandboxAccess.signOutEverywhere`)">
+                <template #description>{{ t(`sandbox.sandboxAccess.revokesEveryPassStay`) }}</template>
                 <template #control>
                     <!-- Clears the last run's receipt; the row says one thing at a time, not a stale result under a live confirm. -->
                     <Button
                         v-if="!confirmingRevoke"
-                        label="Sign out all browsers"
+                        :label="t(`sandbox.sandboxAccess.signOutAllBrowsers`)"
                         severity="danger"
                         size="small"
                         :disabled="revokingSessions"
@@ -460,42 +470,48 @@ const revoke = async (target: string): Promise<void> => {
                 </template>
                 <template v-if="confirmingRevoke || sessionsRevoked" #below>
                     <div v-if="confirmingRevoke" class="flex flex-wrap items-center justify-end gap-2">
-                        <span class="mr-auto text-2xs text-subtle">Sure? Everyone working in this sandbox right now has to sign in again.</span>
+                        <span class="mr-auto text-2xs text-subtle">{{ t(`sandbox.sandboxAccess.sureEveryoneWorkingIn`) }}</span>
                         <Button
-                            label="Cancel"
+                            :label="t(`ui.action.cancel`)"
                             severity="secondary"
                             :text="true"
                             size="small"
                             :disabled="revokingSessions"
                             @click="confirmingRevoke = false"
                         />
-                        <Button label="Sign out all browsers" severity="danger" size="small" :loading="revokingSessions" @click="revokeSessions" />
+                        <Button
+                            :label="t(`sandbox.sandboxAccess.signOutAllBrowsers`)"
+                            severity="danger"
+                            size="small"
+                            :loading="revokingSessions"
+                            @click="revokeSessions"
+                        />
                     </div>
                     <p v-if="sessionsRevoked" class="flex items-center gap-1.5 text-xs font-semibold text-success">
-                        <Icon name="check-circle" /> Every browser has been signed out. Any device still holding a pass is locked out now.
+                        <Icon name="check-circle" /> {{ t(`sandbox.sandboxAccess.everyBrowserSignedOut`) }}
                     </p>
                 </template>
             </Row>
         </RowGroup>
 
         <!-- Machine access other than sign-ins and tokens is listed separately. -->
-        <RowGroup v-if="isOwner" label="Other ways in">
+        <RowGroup v-if="isOwner" :label="t(`sandbox.sandboxAccess.otherWaysIn`)">
             <div v-if="inventoryLoading" role="status" aria-busy="true"><SkeletonRows :rows="3" /></div>
             <template v-else>
-                <Row icon="bolt" title="Webhooks" :description="webhooksLine" />
-                <Row icon="shield" title="Release gates" :description="gatesLine" />
-                <Row icon="sitemap" title="CI notifications" :description="ciLine" />
+                <Row icon="bolt" :title="t(`sandbox.sandboxAccess.webhooks`)" :description="webhooksLine" />
+                <Row icon="shield" :title="t(`sandbox.sandboxAccess.releaseGates`)" :description="gatesLine" />
+                <Row icon="sitemap" :title="t(`sandbox.sandboxAccess.ciNotifications`)" :description="ciLine" />
                 <Row
                     icon="desktop"
-                    title="Paired devices and runners"
-                    description="Each holds its own enrollment key, revoked per device on Devices."
+                    :title="t(`sandbox.sandboxAccess.pairedDevicesRunners`)"
+                    :description="t(`sandbox.sandboxAccess.eachHoldsOwnEnrollment`)"
                 />
             </template>
         </RowGroup>
 
         <!-- Live presence: who else is connected right now (everyone sees this). -->
-        <RowGroup label="Here now">
-            <RowNote v-if="presenceOthers.length === 0" variant="empty">No one else is connected right now.</RowNote>
+        <RowGroup :label="t(`sandbox.sandboxAccess.hereNow`)">
+            <RowNote v-if="presenceOthers.length === 0" variant="empty">{{ t(`sandbox.sandboxAccess.noOneElseConnected`) }}</RowNote>
             <template v-else>
                 <Row
                     v-for="member in presenceOthers"
@@ -511,7 +527,7 @@ const revoke = async (target: string): Promise<void> => {
                     <template #meta>
                         <!-- The role rides presence: who may do what is a fact every member gets to see. -->
                         <StatusBadge variant="neutral" :label="member.role" size="xs" />
-                        <span v-if="member.idle">idle</span>
+                        <span v-if="member.idle">{{ t(`sandbox.sandboxAccess.idle`) }}</span>
                     </template>
                 </Row>
             </template>

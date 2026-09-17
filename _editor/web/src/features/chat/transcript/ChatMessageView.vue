@@ -38,9 +38,12 @@ import ChatTodoList from "./ChatTodoList.vue";
 import ChatTurnAsides from "./asides/ChatTurnAsides.vue";
 import ChatTurnStatus from "./ChatTurnStatus.vue";
 import { present } from "../tools/toolPresentation";
+import { useT } from "@intentic/ui/i18n";
 
 // Renders one transcript entry (user bubble, notice line, or assistant turn stack). Card decisions go through the
 // useChat singleton; per-message UI state lives here.
+
+const t = useT();
 
 const props = defineProps<{
     message: ChatMessage;
@@ -94,7 +97,7 @@ const helpBrowserAt = (session: string): string => `/browsers/${session}`;
 
 // Opens the terminal-help card's target: a panel, not a route, focused on the agent's session.
 const openHelpTerminal = (help: TranscriptTerminalHelp): void =>
-    useTerminalPanel().openFocused(help.session, { title: `The agent needs you at this terminal`, detail: help.message });
+    useTerminalPanel().openFocused(help.session, { title: t(`chat.chatMessageView.agentNeedsAtTerminal`), detail: help.message });
 
 // Connect is both a decision (un-parks the daemon) and a navigation to the Capabilities page, opened to this card.
 const capabilitySetupAt = (card: string): string => `/capabilities/${card}`;
@@ -293,9 +296,7 @@ const defers = computed(() => foldsIntoTurn(props.message));
 // An errand is a prompt the app sent on the user's behalf (errands.ts): named in one quiet line, since a turn nobody
 // typed still has to appear as a turn, with the words it actually sent out on the mark beside it.
 const errand = computed(() => errandOf(props.message));
-const errandMarks = computed(() =>
-    errand.value === undefined ? [] : [{ key: `errand`, icon: errand.value.icon, label: errand.value.label }],
-);
+const errandMarks = computed(() => (errand.value === undefined ? [] : [{ key: `errand`, icon: errand.value.icon, label: errand.value.label }]));
 
 // Trailer naming the latest thing keeping this turn going, and how many said the same; shown in-flow so it can't shift
 // the pinned row's height.
@@ -501,7 +502,7 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
                         type="button"
                         class="chat-prompt-toggle"
                         :aria-expanded="expanded"
-                        :aria-label="expanded ? 'Collapse message' : 'Expand message'"
+                        :aria-label="expanded ? t(`chat.chatMessageView.collapseMessage`) : t(`chat.chatMessageView.expandMessage`)"
                         @click="toggleExpanded"
                     >
                         <Icon :name="expanded ? 'chevron-up' : 'chevron-down'" class="text-2xs" />
@@ -521,8 +522,8 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
                 type="button"
                 class="absolute top-0 left-full flex h-7 w-[var(--chat-gutter)] cursor-pointer items-center justify-center rounded-md text-subtle transition-opacity hover:bg-overlay hover:text-content"
                 :class="mobile ? `opacity-40` : `opacity-0 focus-visible:opacity-100 group-hover:opacity-100`"
-                v-tooltip.right="`Edit this message: replaces it and everything after`"
-                aria-label="Edit this message"
+                v-tooltip.right="t(`chat.chatMessageView.editMessageReplacesEverything`)"
+                :aria-label="t(`chat.chatMessageView.editMessage`)"
                 @click.stop="startEdit"
             >
                 <Icon name="pencil" class="text-2xs" />
@@ -533,7 +534,7 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
             class="flex flex-wrap items-center justify-center gap-x-2 gap-y-0.5 self-center py-0.5 text-2xs"
             :class="watchGaveUp ? `text-danger` : `text-subtle`"
         >
-<!-- Mark, sentence and clock are one non-wrapping group inside the wrapping row: a sentence wider than the pane must wrap inside its own span. -->
+            <!-- Mark, sentence and clock are one non-wrapping group inside the wrapping row: a sentence wider than the pane must wrap inside its own span. -->
             <span class="flex min-w-0 items-center gap-x-2">
                 <!-- Spins and shows the wait's clock while it runs, then settles to a plain line (ChatMessage.noticeWait). -->
                 <!-- A mark set at the row's own 11px has no counter left to read; both glyphs take a step up from the sentence. -->
@@ -544,8 +545,10 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
                 <span v-if="waitClock" class="shrink-0 tabular-nums">{{ waitClock }}</span>
             </span>
             <template v-if="watchStopOffer">
-                <button type="button" class="shrink-0 font-medium text-link hover:underline" @click="stopThisWatch">Stop watching</button>
-                <span class="shrink-0">(this chat stays put instead of picking itself back up)</span>
+                <button type="button" class="shrink-0 font-medium text-link hover:underline" @click="stopThisWatch">
+                    {{ t(`chat.chatMessageView.stopWatching`) }}
+                </button>
+                <span class="shrink-0">{{ t(`chat.chatMessageView.chatStaysPutInstead`) }}</span>
             </template>
             <!-- Nobody typed the wake, so what the model was told is one press away rather than taken on trust. -->
             <button
@@ -555,32 +558,35 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
                 :aria-expanded="watchEvidence"
                 @click="watchEvidence = !watchEvidence"
             >
-                {{ watchEvidence ? `Hide the check` : `Show the check` }}
+                {{ watchEvidence ? t(`chat.chatMessageView.hideCheck`) : t(`chat.chatMessageView.showCheck`) }}
             </button>
             <pre
                 v-if="watchEvidence && message.watchWake"
                 class="chat-inset max-h-64 w-full overflow-auto px-2.5 py-1.5 text-left text-2xs leading-relaxed whitespace-pre-wrap text-subtle"
-                >{{ message.watchWake.sent }}</pre
-            >
+                >{{ message.watchWake.sent }}</pre>
             <!-- Optional follow-up offer on a notice (see holdOffer): a link, not a button, stated as a trailing clause. -->
             <template v-if="holdOffer">
                 <button type="button" class="shrink-0 font-medium text-link hover:underline" @click="holdFutureLands">
-                    Keep future work on the branch
+                    {{ t(`chat.chatMessageView.keepFutureWorkOn`) }}
                 </button>
-                <span class="shrink-0">(it waits as "Ready to land" until you land it)</span>
+                <span class="shrink-0">{{ t(`chat.chatMessageView.waitsReadyToLand`) }}</span>
             </template>
             <template v-if="outageOptOutOffer">
                 <button type="button" class="shrink-0 font-medium text-link hover:underline" @click="stopResumingOutages">
-                    Stop resuming this chat
+                    {{ t(`chat.chatMessageView.stopResumingChat`) }}
                 </button>
-                <span class="shrink-0">(a turn the provider kills stops and waits for you)</span>
+                <span class="shrink-0">{{ t(`chat.chatMessageView.turnProviderKillsStops`) }}</span>
             </template>
             <template v-if="depsInstallOffer">
-                <button type="button" class="shrink-0 font-medium text-link hover:underline" @click="watchDepsInstall">Watch the install</button>
+                <button type="button" class="shrink-0 font-medium text-link hover:underline" @click="watchDepsInstall">
+                    {{ t(`chat.chatMessageView.watchInstall`) }}
+                </button>
             </template>
             <template v-if="tierHoldOffer">
-                <button type="button" class="shrink-0 font-medium text-link hover:underline" @click="holdTier">Keep this chat on my pick</button>
-                <span class="shrink-0">(later turns run the model you chose, even when they look simple)</span>
+                <button type="button" class="shrink-0 font-medium text-link hover:underline" @click="holdTier">
+                    {{ t(`chat.chatMessageView.keepChatOnMy`) }}
+                </button>
+                <span class="shrink-0">{{ t(`chat.chatMessageView.laterTurnsRunModel`) }}</span>
             </template>
         </div>
         <template v-else>
@@ -601,9 +607,9 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
             <p
                 v-if="message.placed"
                 class="flex items-center gap-1 px-1 text-2xs text-subtle"
-                v-tooltip.top="`You wrote this in the agent's voice: the agent reads it as its own words`"
+                v-tooltip.top="t(`chat.chatMessageView.wroteInAgentsVoice`)"
             >
-                <Icon name="pencil" class="text-2xs" />Placed by you
+                <Icon name="pencil" class="text-2xs" />{{ t(`chat.chatMessageView.placedBy`) }}
             </p>
 
             <!-- The plan's own heading, not prose; the body below repeats it. -->
@@ -620,7 +626,7 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
                         <MarkdownFigure v-else :figure="part.figure" />
                     </template>
                 </div>
-<!-- Shown only when the model wrote the plan to a file and summarized it in the adjacent prose (agent.ts). -->
+                <!-- Shown only when the model wrote the plan to a file and summarized it in the adjacent prose (agent.ts). -->
                 <ChatDocumentBody
                     v-if="message.plan.document"
                     :document="message.plan.document"
@@ -633,12 +639,12 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
                 />
                 <template v-if="message.plan.status === 'pending'" #actions>
                     <!-- Single approval, not a posture menu: approving a plan approves the work inside the isolation boundary. -->
-                    <ChatDecisionButton tone="primary" icon="check" :disabled="settling" @click="decidePlan(message, true)"
-                        >Approve</ChatDecisionButton
-                    >
-                    <ChatDecisionButton tone="secondary" icon="pencil" :disabled="settling" @click="decidePlan(message, false)"
-                        >No, keep planning</ChatDecisionButton
-                    >
+                    <ChatDecisionButton tone="primary" icon="check" :disabled="settling" @click="decidePlan(message, true)">{{
+                        t(`ui.action.approve`)
+                    }}</ChatDecisionButton>
+                    <ChatDecisionButton tone="secondary" icon="pencil" :disabled="settling" @click="decidePlan(message, false)">{{
+                        t(`chat.chatMessageView.noKeepPlanning`)
+                    }}</ChatDecisionButton>
                 </template>
             </ChatCard>
 
@@ -668,21 +674,21 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
                             @click="commandOpen = !commandOpen"
                         >
                             <Icon :name="commandOpen ? 'chevron-up' : 'chevron-down'" class="text-2xs" />
-                            {{ commandOpen ? "Hide the command" : "Show the command" }}
+                            {{ commandOpen ? t(`chat.chatMessageView.hideCommand`) : t(`chat.chatMessageView.showCommand`) }}
                         </button>
                         <ChatCommandBlock v-if="commandOpen" :program="message.permission.program" />
                     </template>
 
                     <span v-if="message.permission.path" class="font-mono text-2xs leading-snug text-subtle">{{ message.permission.path }}</span>
-                    <span v-if="message.permission.reason" class="text-2xs leading-snug text-subtle"
-                        >Requested because: {{ message.permission.reason }}</span
-                    >
+                    <span v-if="message.permission.reason" class="text-2xs leading-snug text-subtle">{{
+                        t(`chat.chatMessageView.requestedBecause`, { reason: message.permission.reason })
+                    }}</span>
                 </div>
 
                 <template v-if="message.permission.status === 'pending'" #actions>
-                    <ChatDecisionButton tone="primary" icon="check" :disabled="settling" @click="decidePermission(message, 'once')"
-                        >Allow once</ChatDecisionButton
-                    >
+                    <ChatDecisionButton tone="primary" icon="check" :disabled="settling" @click="decidePermission(message, 'once')">{{
+                        t(`chat.chatMessageView.allowOnce`)
+                    }}</ChatDecisionButton>
                     <!-- Secondary tone, since a second filled button beside Allow once would read as a coin flip. -->
                     <ChatDecisionButton
                         v-if="message.permission.alwaysLabel"
@@ -697,9 +703,9 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
                         tone="secondary"
                         icon="times"
                         :disabled="settling"
-                        v-tooltip.bottom="'Also stops the turn'"
+                        v-tooltip.bottom="t(`chat.chatMessageView.alsoStopsTurn`)"
                         @click="decidePermission(message, 'deny')"
-                        >No</ChatDecisionButton
+                        >{{ t(`chat.chatMessageView.no`) }}</ChatDecisionButton
                     >
                 </template>
             </ChatCard>
@@ -709,7 +715,7 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
                 v-if="message.browserHelp"
                 icon="desktop"
                 icon-class="text-warning"
-                :title="`The agent's browser needs you: ${message.browserHelp.account}`"
+                :title="t(`chat.chatMessageView.agentsBrowserNeeds`, { account: message.browserHelp.account })"
                 :status="helpStatus(message.browserHelp)"
             >
                 <div class="chat-card-body flex flex-col gap-1">
@@ -717,12 +723,12 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
                 </div>
 
                 <template v-if="message.browserHelp.status === 'pending'" #actions>
-                    <ChatDecisionButton tone="primary" icon="desktop" :to="helpBrowserAt(message.browserHelp.session)"
-                        >Open the browser</ChatDecisionButton
-                    >
-                    <ChatDecisionButton tone="secondary" icon="times" :disabled="settling" @click="declineBrowserHelp(message)"
-                        >Can't help now</ChatDecisionButton
-                    >
+                    <ChatDecisionButton tone="primary" icon="desktop" :to="helpBrowserAt(message.browserHelp.session)">{{
+                        t(`chat.chatMessageView.openBrowser`)
+                    }}</ChatDecisionButton>
+                    <ChatDecisionButton tone="secondary" icon="times" :disabled="settling" @click="declineBrowserHelp(message)">{{
+                        t(`chat.chatMessageView.cantHelpNow`)
+                    }}</ChatDecisionButton>
                 </template>
             </ChatCard>
 
@@ -731,7 +737,7 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
                 v-if="message.terminalHelp"
                 icon="terminal"
                 icon-class="text-warning"
-                title="The agent's terminal needs you"
+                :title="t(`chat.chatMessageView.agentsTerminalNeeds`)"
                 :status="helpStatus(message.terminalHelp)"
             >
                 <div class="chat-card-body flex flex-col gap-1">
@@ -739,12 +745,12 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
                 </div>
 
                 <template v-if="message.terminalHelp.status === 'pending'" #actions>
-                    <ChatDecisionButton tone="primary" icon="terminal" @click="openHelpTerminal(message.terminalHelp)"
-                        >Open the terminal</ChatDecisionButton
-                    >
-                    <ChatDecisionButton tone="secondary" icon="times" :disabled="settling" @click="declineTerminalHelp(message)"
-                        >Can't help now</ChatDecisionButton
-                    >
+                    <ChatDecisionButton tone="primary" icon="terminal" @click="openHelpTerminal(message.terminalHelp)">{{
+                        t(`chat.chatMessageView.openTerminal`)
+                    }}</ChatDecisionButton>
+                    <ChatDecisionButton tone="secondary" icon="times" :disabled="settling" @click="declineTerminalHelp(message)">{{
+                        t(`chat.chatMessageView.cantHelpNow`)
+                    }}</ChatDecisionButton>
                 </template>
             </ChatCard>
 
@@ -752,7 +758,12 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
             <ChatCard
                 v-if="message.paymentOffer"
                 icon="credit-card"
-                :title="`Pay $${message.paymentOffer.offer.amountUsd} ${message.paymentOffer.offer.assetName}?`"
+                :title="
+                    t(`chat.chatMessageView.pay`, {
+                        amountUsd: message.paymentOffer.offer.amountUsd,
+                        assetName: message.paymentOffer.offer.assetName,
+                    })
+                "
                 :status="offerStatus(message.paymentOffer)"
             >
                 <div class="chat-card-body flex flex-col gap-1">
@@ -763,45 +774,48 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
                     <span class="truncate font-mono text-2xs text-subtle" v-tooltip.left.overflow="message.paymentOffer.offer.url">{{
                         message.paymentOffer.offer.url
                     }}</span>
-                    <span class="truncate font-mono text-2xs text-subtle" v-tooltip.left.overflow="message.paymentOffer.offer.payTo"
-                        >To {{ message.paymentOffer.offer.payTo }}</span
-                    >
-                    <span v-if="message.paymentOffer.offer.why" class="text-2xs text-subtle"
-                        >The agent's case: {{ message.paymentOffer.offer.why }}</span
-                    >
-                    <span class="pt-1 font-mono text-xs text-content">
-                        ${{ message.paymentOffer.offer.amountUsd }} · ${{ message.paymentOffer.offer.spentTodayUsd }} of ${{
-                            message.paymentOffer.offer.dailyCapUsd
-                        }}
-                        spent today
-                    </span>
+                    <span class="truncate font-mono text-2xs text-subtle" v-tooltip.left.overflow="message.paymentOffer.offer.payTo">{{
+                        t(`chat.chatMessageView.to`, { payTo: message.paymentOffer.offer.payTo })
+                    }}</span>
+                    <span v-if="message.paymentOffer.offer.why" class="text-2xs text-subtle">{{
+                        t(`chat.chatMessageView.agentsCase`, { why: message.paymentOffer.offer.why })
+                    }}</span>
+                    <span class="pt-1 font-mono text-xs text-content">{{
+                        t(`chat.chatMessageView.spentToday`, {
+                            amountUsd: message.paymentOffer.offer.amountUsd,
+                            spentTodayUsd: message.paymentOffer.offer.spentTodayUsd,
+                            dailyCapUsd: message.paymentOffer.offer.dailyCapUsd,
+                        })
+                    }}</span>
                 </div>
 
                 <!-- A receipt is shown only after the endpoint settles the payment. -->
                 <div v-if="message.paymentOffer.receipt" class="chat-card-row">
-                    <span v-if="message.paymentOffer.receipt.outcome === 'paid'" class="truncate font-mono text-2xs text-muted"
-                        >Paid ${{ message.paymentOffer.receipt.amountUsd
-                        }}<template v-if="message.paymentOffer.receipt.transaction"> · {{ message.paymentOffer.receipt.transaction }}</template></span
+                    <span v-if="message.paymentOffer.receipt.outcome === 'paid'" class="truncate text-2xs text-muted"
+                        >{{ t(`chat.chatMessageView.paid`, { amount: message.paymentOffer.receipt.amountUsd })
+                        }}<template v-if="message.paymentOffer.receipt.transaction"
+                            ><span class="font-mono"> · {{ message.paymentOffer.receipt.transaction }}</span></template
+                        ></span
                     >
-                    <span v-else class="text-2xs text-muted">The payment didn't go through: nothing was spent.</span>
+                    <span v-else class="text-2xs text-muted">{{ t(`chat.chatMessageView.paymentDidntGoThrough`) }}</span>
                 </div>
 
                 <template v-if="message.paymentOffer.status === 'pending'" #actions>
-                    <ChatDecisionButton tone="primary" icon="check" :disabled="settling" @click="decidePaymentOffer(message, true)"
-                        >Pay ${{ message.paymentOffer.offer.amountUsd }}</ChatDecisionButton
-                    >
+                    <ChatDecisionButton tone="primary" icon="check" :disabled="settling" @click="decidePaymentOffer(message, true)">{{
+                        t(`chat.chatMessageView.pay2`, { amountUsd: message.paymentOffer.offer.amountUsd })
+                    }}</ChatDecisionButton>
                     <!-- Free and final: the agent is told to continue without it; nothing stops the turn. -->
-                    <ChatDecisionButton tone="secondary" icon="times" :disabled="settling" @click="decidePaymentOffer(message, false)"
-                        >Skip: free</ChatDecisionButton
-                    >
+                    <ChatDecisionButton tone="secondary" icon="times" :disabled="settling" @click="decidePaymentOffer(message, false)">{{
+                        t(`chat.chatMessageView.skipFree`)
+                    }}</ChatDecisionButton>
                 </template>
             </ChatCard>
 
-<!-- The only card addressed to named approvers, not whoever's reading: the daemon verifies identity against that list (secrets/credential-gate.ts). -->
+            <!-- The only card addressed to named approvers, not whoever's reading: the daemon verifies identity against that list (secrets/credential-gate.ts). -->
             <ChatCard
                 v-if="message.credentialOffer"
                 icon="key"
-                :title="`Release ${message.credentialOffer.offer.subject} to the agent?`"
+                :title="t(`chat.chatMessageView.releaseToAgent`, { subject: message.credentialOffer.offer.subject })"
                 :status="offerStatus(message.credentialOffer)"
             >
                 <div class="chat-card-body flex flex-col gap-1">
@@ -814,29 +828,31 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
                         v-tooltip.left.overflow="message.credentialOffer.offer.detail"
                         >{{ message.credentialOffer.offer.detail }}</span
                     >
-                    <span v-if="message.credentialOffer.offer.why" class="text-2xs text-subtle"
-                        >The agent's case: {{ message.credentialOffer.offer.why }}</span
-                    >
-                    <span class="truncate text-2xs text-subtle" v-tooltip.left.overflow="message.credentialOffer.offer.approvers.join(`, `)"
-                        >Approvers: {{ message.credentialOffer.offer.approvers.join(`, `) }}</span
-                    >
+                    <span v-if="message.credentialOffer.offer.why" class="text-2xs text-subtle">{{
+                        t(`chat.chatMessageView.agentsCase`, { why: message.credentialOffer.offer.why })
+                    }}</span>
+                    <span class="truncate text-2xs text-subtle" v-tooltip.left.overflow="message.credentialOffer.offer.approvers.join(`, `)">{{
+                        t(`chat.chatMessageView.approvers`, { approvers: message.credentialOffer.offer.approvers.join(`, `) })
+                    }}</span>
                     <!-- Scope comes from policy, not the click, so the label never overstates what one yes covers. -->
                     <span class="pt-1 text-xs text-content">{{
                         message.credentialOffer.offer.scope === `conversation`
-                            ? `Releasing it covers the rest of this conversation.`
-                            : `Releasing it covers this one use. The next one asks again.`
+                            ? t(`chat.chatMessageView.releasingCoversRestConversation`)
+                            : t(`chat.chatMessageView.releasingCoversOneUse`)
                     }}</span>
                 </div>
 
                 <!-- Nothing shown for an unanswered card; the header chip already says so. -->
                 <div v-if="message.credentialOffer.receipt" class="chat-card-row">
-                    <span v-if="message.credentialOffer.receipt.outcome === 'released'" class="truncate text-2xs text-muted"
-                        >Released by {{ message.credentialOffer.receipt.approvedBy }}</span
-                    >
+                    <span v-if="message.credentialOffer.receipt.outcome === 'released'" class="truncate text-2xs text-muted">{{
+                        t(`chat.chatMessageView.releasedBy`, { approvedBy: message.credentialOffer.receipt.approvedBy })
+                    }}</span>
                     <span v-else class="text-2xs text-muted"
-                        >Refused<template v-if="message.credentialOffer.receipt.approvedBy">
-                            by {{ message.credentialOffer.receipt.approvedBy }}</template
-                        >: the agent was told to carry on without it.</span
+                        >{{ t(`chat.chatMessageView.refused`)
+                        }}<template v-if="message.credentialOffer.receipt.approvedBy">{{
+                            t(`chat.chatMessageView.by`, { approvedBy: message.credentialOffer.receipt.approvedBy })
+                        }}</template
+                        >{{ t(`chat.chatMessageView.agentToldToCarry`) }}</span
                     >
                 </div>
 
@@ -845,18 +861,26 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
                         tone="primary"
                         icon="check"
                         :disabled="settling || !mayRelease"
-                        v-tooltip="mayRelease ? undefined : `Only ${message.credentialOffer.offer.approvers.join(`, `)} can release this`"
+                        v-tooltip="
+                            mayRelease
+                                ? undefined
+                                : t(`chat.chatMessageView.onlyCanRelease`, { approvers: message.credentialOffer.offer.approvers.join(`, `) })
+                        "
                         @click="decideCredentialOffer(message, true)"
-                        >Release</ChatDecisionButton
+                        >{{ t(`chat.chatMessageView.release`) }}</ChatDecisionButton
                     >
                     <!-- Declining is approver-only too, or anyone with a session could stop someone else's turn. -->
                     <ChatDecisionButton
                         tone="secondary"
                         icon="times"
                         :disabled="settling || !mayRelease"
-                        v-tooltip="mayRelease ? undefined : `Only ${message.credentialOffer.offer.approvers.join(`, `)} can answer this`"
+                        v-tooltip="
+                            mayRelease
+                                ? undefined
+                                : t(`chat.chatMessageView.onlyCanAnswer`, { approvers: message.credentialOffer.offer.approvers.join(`, `) })
+                        "
                         @click="decideCredentialOffer(message, false)"
-                        >Skip</ChatDecisionButton
+                        >{{ t(`chat.chatMessageView.skip`) }}</ChatDecisionButton
                     >
                 </template>
             </ChatCard>
@@ -865,14 +889,14 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
             <ChatCard
                 v-if="message.capabilityOffer"
                 icon="bolt"
-                :title="`${message.capabilityOffer.offer.name} isn't connected yet`"
+                :title="t(`chat.chatMessageView.isntConnectedYet`, { name: message.capabilityOffer.offer.name })"
                 :status="capabilityStatus(message.capabilityOffer)"
             >
                 <div class="chat-card-body flex flex-col gap-1">
                     <span v-if="capabilityDescription" class="text-xs text-content/85">{{ capabilityDescription }}</span>
-                    <span v-if="message.capabilityOffer.offer.why" class="text-2xs text-subtle"
-                        >The agent's case: {{ message.capabilityOffer.offer.why }}</span
-                    >
+                    <span v-if="message.capabilityOffer.offer.why" class="text-2xs text-subtle">{{
+                        t(`chat.chatMessageView.agentsCase`, { why: message.capabilityOffer.offer.why })
+                    }}</span>
                 </div>
 
                 <!-- Shown while the agent waits on setup, with a way back to the form if it was closed mid-flow. -->
@@ -881,29 +905,32 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
                     class="chat-card-row flex items-center gap-2"
                 >
                     <Icon name="spinner" class="text-2xs text-link" spin />
-                    <span class="min-w-0 flex-1 truncate text-2xs text-muted">Waiting for you to finish setup…</span>
-                    <ChatDecisionButton tone="secondary" icon="bolt" :to="capabilitySetupAt(message.capabilityOffer.offer.card)"
-                        >Open setup</ChatDecisionButton
-                    >
+                    <span class="min-w-0 flex-1 truncate text-2xs text-muted">{{ t(`chat.chatMessageView.waitingToFinishSetup`) }}</span>
+                    <ChatDecisionButton tone="secondary" icon="bolt" :to="capabilitySetupAt(message.capabilityOffer.offer.card)">{{
+                        t(`chat.chatMessageView.openSetup`)
+                    }}</ChatDecisionButton>
                 </div>
 
                 <!-- How the accepted ask resolved: what the agent did next. -->
                 <div v-if="message.capabilityOffer.outcome" class="chat-card-row">
                     <span v-if="message.capabilityOffer.outcome.outcome === 'connected'" class="text-2xs text-muted"
-                        >Connected<template v-if="message.capabilityOffer.outcome.id"> as "{{ message.capabilityOffer.outcome.id }}"</template>: the
-                        agent is continuing with it.</span
+                        >{{ t(`chat.chatMessageView.connected`)
+                        }}<template v-if="message.capabilityOffer.outcome.id">{{
+                            t(`chat.chatMessageView.as`, { id: message.capabilityOffer.outcome.id })
+                        }}</template
+                        >{{ t(`chat.chatMessageView.agentContinuing`) }}</span
                     >
-                    <span v-else class="text-2xs text-muted">The setup didn't finish while the agent waited: it continued without it.</span>
+                    <span v-else class="text-2xs text-muted">{{ t(`chat.chatMessageView.setupDidntFinishWhile`) }}</span>
                 </div>
 
                 <template v-if="message.capabilityOffer.status === 'pending'" #actions>
-                    <ChatDecisionButton tone="primary" icon="check" :disabled="settling" @click="connectCapability(message)"
-                        >Connect {{ message.capabilityOffer.offer.name }}</ChatDecisionButton
-                    >
+                    <ChatDecisionButton tone="primary" icon="check" :disabled="settling" @click="connectCapability(message)">{{
+                        t(`chat.chatMessageView.connect`, { name: message.capabilityOffer.offer.name })
+                    }}</ChatDecisionButton>
                     <!-- Final for this conversation: the agent continues without it and won't ask again. -->
-                    <ChatDecisionButton tone="secondary" icon="times" :disabled="settling" @click="decideCapabilityOffer(message, false)"
-                        >Not now</ChatDecisionButton
-                    >
+                    <ChatDecisionButton tone="secondary" icon="times" :disabled="settling" @click="decideCapabilityOffer(message, false)">{{
+                        t(`chat.chatMessageView.notNow`)
+                    }}</ChatDecisionButton>
                 </template>
             </ChatCard>
 

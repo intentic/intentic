@@ -3,7 +3,7 @@ import { QueryClient, VueQueryPlugin } from "@tanstack/vue-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { type App, createApp, h, nextTick, reactive } from "vue";
 import { type AgentWatch, verifyNudgePrompt, watchWakePrompt, watchWakeRow } from "@intentic/sandbox-contract";
-import { ERRANDS, errandPrompt } from "../run/errands";
+import { errands, errandPrompt } from "../run/errands";
 import type { ChatMessage } from "./transcript";
 import { IconStub } from "@intentic/ui/testing";
 
@@ -579,7 +579,7 @@ describe(`ChatMessageView answer body`, () => {
 });
 
 describe(`ChatMessageView errand row`, () => {
-    const errand = ERRANDS.landConflict;
+    const errand = errands().landConflict;
     const prompt = errandPrompt(errand, [`What blocked the land:\nroot\n  - src/auth/session.ts`]);
 
     it(`names the errand and keeps its prompt one press away rather than on screen`, async () => {
@@ -606,7 +606,7 @@ describe(`ChatMessageView errand row`, () => {
         const sent = verifyNudgePrompt([`This turn changed code and no check has passed since the last edit:\n- src/parser.ts`]);
         const element = mount({ id: 4, role: `user`, text: sent });
 
-        expect(element.textContent).toContain(ERRANDS.verifyNudge.label);
+        expect(element.textContent).toContain(errands().verifyNudge.label);
         expect(element.querySelector(`.chat-prompt`)).toBeNull();
         expect(element.querySelector(`button[aria-label="Edit this message"]`)).toBeNull();
         // The asks stay behind the mark: the row says what happened, not the whole of what was asked for.

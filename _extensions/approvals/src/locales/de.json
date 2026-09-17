@@ -1,0 +1,80 @@
+{
+    "actionBody": {
+        "hideWhatAgentTold": "Hide what the agent will be told",
+        "whatAgentTold": "What the agent will be told"
+    },
+    "approvalMeta": {
+        "as": "as"
+    },
+    "approvalRail": {
+        "approvalSlice": "Approval slice",
+        "approvalSlices": "Approval slices",
+        "show": "Show",
+        "slices": "Slices"
+    },
+    "approvalsView": {
+        "approvals": "Approvals",
+        "approve": "Approve",
+        "approve2": "Approve {count}",
+        "approveAll": "Approve all {count}",
+        "approveEverythingWaiting": "Approve everything waiting?",
+        "automation": "automation {automationId}",
+        "automations": "Automations",
+        "automationsHeld": "Automations held for you",
+        "backToReviewNothing": "Back to review: nothing happens",
+        "cancel": "Cancel",
+        "couldntReadApprovals": "Couldn't read your approvals.",
+        "couldntReadHeldAutomations": "Couldn't read the held automations.",
+        "couldntReadWontRun": "couldn't be read and won't run:",
+        "done": "Done",
+        "doneEditing": "Done editing",
+        "eachGoesAheadOn": "Each goes ahead on its own date, or after a short countdown if it has none.",
+        "edit": "Edit {item}",
+        "editPost": "Edit the post",
+        "failed": "Failed",
+        "file": "file",
+        "fileDeletedAgentWould": "The file is deleted. Your agent would have to propose it again.",
+        "fired": "fired",
+        "goingAhead": "Going ahead",
+        "inProgress": "in progress",
+        "needsReview": "Needs your review",
+        "nothingWaitingPostsAgent": "Nothing waiting. Posts your agent wants to publish, anything else it should not do unasked, and automations set to ask first all land here for you to approve.",
+        "open": "Open",
+        "postStaysUpOn": "The post stays up on {rejecting}: only this record of it is deleted.",
+        "proposed": "proposed {createdAt}",
+        "putBackInReview": "Put {item} back in review",
+        "putBackInReview2": "Put back in review",
+        "readingApprovalsQueue": "Reading the approvals queue…",
+        "reject": "Reject {item}",
+        "reject2": "Reject",
+        "reject3": "Reject this?",
+        "rejectDeletes": "Reject: deletes it",
+        "remove": "Remove",
+        "removeList": "Remove {item} from the list",
+        "removeListWhatDone": "Remove from this list: what was done stays done",
+        "removeRecord": "Remove this record?",
+        "retry": "Retry",
+        "scheduled": "Scheduled",
+        "startNow": "Start now",
+        "stop": "Stop",
+        "stopPutBackIn": "Stop {item} and put it back in review",
+        "whatDoneStaysDone": "What was done stays done: only this record of it is deleted."
+    },
+    "extension": {
+        "approvals": "Approvals",
+        "waitingOn": "{count} waiting on you"
+    },
+    "postBody": {
+        "showLess": "Show less",
+        "showWholePost": "Show the whole post"
+    },
+    "postEditor": {
+        "postText": "Post text",
+        "postTitle": "Post title"
+    },
+    "scheduleControl": {
+        "goAheadAt": "Go ahead with {label} at",
+        "goesAheadSoonExecutor": "Goes ahead as soon as the executor picks it up, click to pick a date",
+        "noDate": "No date"
+    }
+}

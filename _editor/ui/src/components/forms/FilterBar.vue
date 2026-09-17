@@ -1,10 +1,13 @@
 <!-- The instrument above a list: free text on the left, narrowing controls on the right, a bare action furthest right. -->
 <script setup lang="ts">
 import SearchBar from "./SearchBar.vue";
+import { useT } from "../../i18n/index.js";
+
+const t = useT();
 
 /* `busy` and `clearable` are the field's own two states, forwarded rather than re-implemented. */
 const {
-    placeholder = `Filter…`,
+    placeholder,
     busy = false,
     clearable = false,
 } = defineProps<{
@@ -27,7 +30,7 @@ const query = defineModel<string>({ required: true });
         <div class="ui-search-row flex h-8 min-w-40 flex-1 items-center overflow-hidden rounded-md border border-line bg-canvas">
             <SearchBar
                 v-model="query"
-                :placeholder="placeholder"
+                :placeholder="placeholder ?? t(`ui.filterBar.filter`)"
                 :busy="busy"
                 :clearable="clearable"
                 :aria-label="ariaLabel"

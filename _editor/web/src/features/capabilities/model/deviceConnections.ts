@@ -2,6 +2,7 @@ import { type Device, machinesOf } from "@intentic/sandbox-contract";
 import type { StatusVariant } from "@intentic/ui";
 import { hostCard, osLabel } from "../../sandbox/devices/deviceFacts";
 import { deviceState, deviceTone } from "../../sandbox/devices/deviceRows";
+import { t } from "@intentic/ui/i18n";
 
 // Machines this sandbox can see that no capability card accounts for. A device arrives through either of two doors:
 // a `host` capability, which is a card, and a desktop-sync enrollment, which deliberately is not — a laptop syncing
@@ -79,7 +80,7 @@ export const deviceConnections = (devices: readonly Device[], readAt: number): D
                 tone,
                 rank: RANKS[tone] ?? 2,
                 // Short on purpose: the row's own Connect button is what explains the rest.
-                note: `no command access`,
+                note: t(`capabilities.deviceConnections.noCommandAccess`),
                 machine: device.label,
             },
         ];

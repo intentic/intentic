@@ -1,9 +1,12 @@
 <!-- Desktop-sync toggle, presented as reference material rather than a decision the user must make. -->
 <script setup lang="ts">
 import Checkbox from "primevue/checkbox";
+import { useT } from "@intentic/ui/i18n";
 
 // The folder the sandbox mirrors to. Shown only while the switch is on: off, the label already says what the
 // switch does, and a sales line for the default option is the loudest thing in the quietest row.
+const t = useT();
+
 const { folder = `` } = defineProps<{ folder?: string }>();
 const enabled = defineModel<boolean>({ required: true });
 </script>
@@ -13,7 +16,7 @@ const enabled = defineModel<boolean>({ required: true });
         <!-- The label covers only the option name so folder clicks remain folder interactions. -->
         <label class="flex cursor-pointer items-center gap-2">
             <Checkbox v-model="enabled" :binary="true" size="small" />
-            <span>Also sync a local folder</span>
+            <span>{{ t(`setup.setupSyncOption.alsoSyncLocalFolder`) }}</span>
         </label>
         <code v-if="enabled && folder !== ``" class="min-w-0 truncate pl-6">{{ folder }}</code>
     </div>

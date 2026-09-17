@@ -2,6 +2,9 @@
 <script setup lang="ts">
 import { Button, Row, StatusBadge } from "@intentic/ui";
 import type { DeviceConnection } from "../model/deviceConnections";
+import { useT } from "@intentic/ui/i18n";
+
+const t = useT();
 
 defineProps<{ device: DeviceConnection }>();
 const emit = defineEmits<{ connect: []; disconnect: [] }>();
@@ -18,7 +21,7 @@ const emit = defineEmits<{ connect: []; disconnect: [] }>();
             </span>
         </template>
         <template #description>
-<!-- One line that gives way in a deliberate order. -->
+            <!-- One line that gives way in a deliberate order. -->
             <span class="flex min-w-0 items-baseline gap-1">
                 <span v-if="device.detail" class="min-w-0 truncate font-mono text-subtle" :title="device.detail">{{ device.detail }}</span>
                 <span v-if="device.detail" class="shrink-0 text-subtle">·</span>
@@ -26,13 +29,13 @@ const emit = defineEmits<{ connect: []; disconnect: [] }>();
             </span>
         </template>
         <template #control>
-<!-- Both verbs the row has, since a machine listed under "your connections" the reader cannot end is a dead end: this
+            <!-- Both verbs the row has, since a machine listed under "your connections" the reader cannot end is a dead end: this
              one holds no capability to remove, so ending its desktop sync is the only removal it has. -->
             <span class="flex items-center gap-1">
-                <Button label="Disconnect" size="small" :text="true" severity="danger" @click="emit(`disconnect`)">
+                <Button :label="t(`ui.action.disconnect`)" size="small" :text="true" severity="danger" @click="emit(`disconnect`)">
                     <template #icon><Icon name="times" /></template>
                 </Button>
-                <Button label="Connect" size="small" :text="true" @click="emit(`connect`)">
+                <Button :label="t(`ui.action.connect`)" size="small" :text="true" @click="emit(`connect`)">
                     <template #icon><Icon name="desktop" /></template>
                 </Button>
             </span>

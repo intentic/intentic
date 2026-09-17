@@ -15,11 +15,14 @@ import {
 } from "../../sandbox/personas/personaCard";
 import { usePersonas } from "../../sandbox/personas/usePersonas";
 import PersonaPowersFields from "../../sandbox/personas/PersonaPowersFields.vue";
+import { useT } from "@intentic/ui/i18n";
 
 // Who works in this folder, opened from a directory row: one question with three answers — write a new persona
 // starting here, point an existing one at this folder (which MOVES it, since a persona has one starting folder),
 // or edit one that already starts here. Every save is a whole-card upsert; a field this panel doesn't ask about must be
 // carried over, not dropped.
+
+const t = useT();
 
 const dir = defineModel<string | undefined>({ required: true });
 
@@ -188,17 +191,17 @@ const submit = async (): Promise<void> => {
 </script>
 
 <template>
-<!-- The header asks the folder's question, not claims its contents: "Personas in X" reads as an existing list, wrong on the folder's first use. -->
-    <Modal v-model:open="visible" size="md" :header="`Who works in ${folderName}`">
+    <!-- The header asks the folder's question, not claims its contents: "Personas in X" reads as an existing list, wrong on the folder's first use. -->
+    <Modal v-model:open="visible" size="md" :header="t(`workspace.directoryPersonas.whoWorksIn`, { folderName })">
         <div class="flex flex-col gap-4">
             <p class="text-xs text-subtle">
-                A persona that starts here opens its sessions in <code class="ui-code">{{ dir }}</code
+                {{ t(`workspace.directoryPersonas.personaStartsHereOpens`) }} <code class="ui-code">{{ dir }}</code
                 >. Everything else about it can stay as it is.
             </p>
 
             <!-- Existing cards first, since a folder can hold several; absent entirely (not an empty box) when there are none. -->
             <div v-if="cards.length > 0" class="flex flex-col gap-1">
-                <span :class="ui.sectionLabel()">Starting here</span>
+                <span :class="ui.sectionLabel()">{{ t(`workspace.directoryPersonas.startingHere`) }}</span>
                 <div
                     v-for="persona in cards"
                     :key="persona.id"
@@ -209,7 +212,12 @@ const submit = async (): Promise<void> => {
                     <PersonaFace :persona :size="32" />
                     <span class="min-w-0 flex-1 truncate text-sm text-content">{{ persona.label ?? persona.id }}</span>
                     <StatusBadge v-if="persona.powers !== undefined" variant="neutral" size="xs">{{ personaBounds(persona) }}</StatusBadge>
-                    <button type="button" :class="ui.iconButton()" :aria-label="`Edit ${persona.label ?? persona.id}`" @click="startEdit(persona)">
+                    <button
+                        type="button"
+                        :class="ui.iconButton()"
+                        :aria-label="t(`workspace.directoryPersonas.edit`, { id: persona.label ?? persona.id })"
+                        @click="startEdit(persona)"
+                    >
                         <Icon name="pencil" class="text-xs" />
                     </button>
                 </div>
@@ -219,14 +227,14 @@ const submit = async (): Promise<void> => {
             <div class="flex flex-col gap-3" :class="cards.length > 0 ? `border-t border-line pt-4` : ``">
                 <div class="flex items-center gap-2">
                     <span :class="ui.sectionLabel()">{{ heading }}</span>
-<!-- Always the same corner, and only ever one link at a time — two side by side would turn this into a three-way choice. -->
+                    <!-- Always the same corner, and only ever one link at a time — two side by side would turn this into a three-way choice. -->
                     <button
                         v-if="mode !== `new`"
                         type="button"
                         :class="ui.linkButton('ml-auto text-xs text-muted hover:text-content')"
                         @click="startAdd"
                     >
-                        Add a new one instead
+                        {{ t(`workspace.directoryPersonas.addNewOneInstead`) }}
                     </button>
                     <button
                         v-else-if="elsewhere.length > 0"
@@ -234,13 +242,19 @@ const submit = async (): Promise<void> => {
                         :class="ui.linkButton('ml-auto text-xs text-muted hover:text-content')"
                         @click="startExisting"
                     >
-                        Use one I already have
+                        {{ t(`workspace.directoryPersonas.useOneIAlready`) }}
                     </button>
                 </div>
 
-<!-- Rows styled like the ones above on purpose — same kind of thing, one folder along. -->
+                <!-- Rows styled like the ones above on purpose — same kind of thing, one folder along. -->
                 <template v-if="mode === `existing`">
-                    <input v-if="filterable" v-model="filter" :class="ui.input('w-full')" placeholder="Find a persona…" aria-label="Find a persona" />
+                    <input
+                        v-if="filterable"
+                        v-model="filter"
+                        :class="ui.input('w-full')"
+                        :placeholder="t(`workspace.directoryPersonas.findPersona`)"
+                        :aria-label="t(`workspace.directoryPersonas.findPersona2`)"
+                    />
                     <div class="flex max-h-56 flex-col gap-1 overflow-y-auto">
                         <button
                             v-for="persona in shown"
@@ -248,23 +262,30 @@ const submit = async (): Promise<void> => {
                             type="button"
                             class="flex items-center gap-2.5 rounded-lg border px-2.5 py-2 text-left transition-colors"
                             :class="chosen === persona.id ? `border-link bg-link/10` : `border-line hover:border-line-strong`"
-                            :aria-label="`Start ${persona.label ?? persona.id} here`"
+                            :aria-label="t(`workspace.directoryPersonas.startHere`, { id: persona.label ?? persona.id })"
                             :aria-pressed="chosen === persona.id"
                             @click="chosen = persona.id"
                         >
                             <PersonaFace :persona :size="32" />
                             <span class="min-w-0 flex-1 truncate text-sm text-content">{{ persona.label ?? persona.id }}</span>
                             <span class="max-w-[45%] shrink-0 truncate text-xs text-subtle">
-                                {{ persona.workspace?.startIn === undefined ? `no starting folder` : `starts in ${persona.workspace.startIn}` }}
+                                {{
+                                    persona.workspace?.startIn === undefined
+                                        ? t(`workspace.directoryPersonas.noStartingFolder`)
+                                        : t(`workspace.directoryPersonas.startsIn2`, { startIn: persona.workspace.startIn })
+                                }}
                             </span>
                             <Icon v-if="chosen === persona.id" name="check" class="shrink-0 text-xs text-link" />
                         </button>
-                        <p v-if="shown.length === 0" class="px-0.5 py-1 text-xs text-subtle">No persona goes by that.</p>
+                        <p v-if="shown.length === 0" class="px-0.5 py-1 text-xs text-subtle">
+                            {{ t(`workspace.directoryPersonas.noPersonaGoesBy`) }}
+                        </p>
                     </div>
                     <!-- Stated in words too, since the folder that loses the card isn't shown on this screen. -->
                     <p v-if="movedFrom !== undefined" class="text-xs text-warning">
-                        This moves it: <span class="font-medium">{{ chosenCard?.label ?? chosenCard?.id }}</span> starts in
-                        <code class="ui-code">{{ movedFrom }}</code> today, and a persona has one starting folder.
+                        {{ t(`workspace.directoryPersonas.moves`) }} <span class="font-medium">{{ chosenCard?.label ?? chosenCard?.id }}</span>
+                        {{ t(`workspace.directoryPersonas.startsIn`) }} <code class="ui-code">{{ movedFrom }}</code>
+                        {{ t(`workspace.directoryPersonas.todayPersonaOneStarting`) }}
                     </p>
                 </template>
 
@@ -273,15 +294,15 @@ const submit = async (): Promise<void> => {
                         <input
                             v-model="label"
                             :class="ui.input('w-full font-medium')"
-                            :placeholder="`Name this persona: ${folderName}, Docs bot, Refactor crew…`"
-                            aria-label="Name"
+                            :placeholder="t(`workspace.directoryPersonas.namePersonaDocsBot`, { folderName })"
+                            :aria-label="t(`workspace.directoryPersonas.name`)"
                             autofocus
                             @keyup.enter="submit()"
                         />
                         <span v-if="nameHint !== undefined" class="text-xs text-warning">{{ nameHint }}</span>
                     </div>
 
-<!-- Folded, since most cards keep the full toolbox; the badge keeps a limited card visible even closed. -->
+                    <!-- Folded, since most cards keep the full toolbox; the badge keeps a limited card visible even closed. -->
                     <div class="flex flex-col gap-3">
                         <div class="flex items-center gap-2">
                             <button
@@ -291,7 +312,7 @@ const submit = async (): Promise<void> => {
                                 @click="advanced = !advanced"
                             >
                                 <Icon name="angle-right" class="transition-transform" :class="advanced ? `rotate-90` : ``" />
-                                Advanced: what it may do
+                                {{ t(`workspace.directoryPersonas.advancedWhatMayDo`) }}
                             </button>
                             <StatusBadge v-if="bounds !== undefined" variant="neutral" size="xs">{{ bounds }}</StatusBadge>
                         </div>
@@ -306,12 +327,18 @@ const submit = async (): Promise<void> => {
         <template #footer>
             <!-- The rest of a card lives on the page that owns it; this link is the way there, not a second copy of it. -->
             <RouterLink to="/sandbox/personas" :class="ui.linkButton('mr-auto gap-1 text-xs text-muted hover:text-content')">
-                Full editor <Icon name="arrow-right" class="text-2xs" />
+                {{ t(`workspace.directoryPersonas.fullEditor`) }} <Icon name="arrow-right" class="text-2xs" />
             </RouterLink>
-            <Button label="Cancel" text size="small" @click="dir = undefined" />
+            <Button :label="t(`ui.action.cancel`)" text size="small" @click="dir = undefined" />
             <!-- The verb follows the mode, so the button never promises "add" while the panel is actually moving a card. -->
             <Button
-                :label="mode === `new` ? `Add persona` : mode === `existing` ? `Start here` : `Save`"
+                :label="
+                    mode === `new`
+                        ? t(`workspace.directoryPersonas.addPersona`)
+                        : mode === `existing`
+                          ? t(`workspace.directoryPersonas.startHere2`)
+                          : t(`ui.action.save`)
+                "
                 size="small"
                 :loading="save.isPending.value"
                 :disabled="!valid"

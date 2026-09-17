@@ -5,6 +5,7 @@ import { ui, Markdown } from "@intentic/extension-ui";
 import { computed, ref } from "vue";
 import { attachmentPreview } from "./attachmentPreviews";
 import { LONG_POST, postsATitle } from "./postText";
+import { t } from "./i18n.js";
 
 const { post, tone = `full` } = defineProps<{
     post: PostApprovalSummary;
@@ -25,7 +26,7 @@ const fileName = (path: string): string => path.split(`/`).at(-1) ?? path;
 
 <template>
     <div :class="tone === `full` ? `max-w-read` : `max-w-read-lg`">
-<!-- Quiet sections show only enough post text to identify the row. -->
+        <!-- Quiet sections show only enough post text to identify the row. -->
         <template v-if="tone === `quiet`">
             <p v-if="title" class="truncate text-sm font-medium text-content">{{ title }}</p>
             <div class="max-h-10 overflow-hidden" :class="title ? `mt-0.5` : ``">
@@ -52,7 +53,7 @@ const fileName = (path: string): string => path.split(`/`).at(-1) ?? path;
                 :class="ui.linkButton(`mt-1 gap-1 text-2xs text-muted hover:text-content`)"
                 @click="expanded = !expanded"
             >
-                {{ expanded ? `Show less` : `Show the whole post` }}
+                {{ expanded ? t(`postBody.showLess`) : t(`postBody.showWholePost`) }}
                 <Icon :name="expanded ? `chevron-up` : `chevron-down`" />
             </button>
 

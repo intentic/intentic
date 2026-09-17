@@ -2,7 +2,7 @@
 import type { ViewBadge } from "@intentic/extension-api";
 import type { NavGroup } from "@intentic/ui";
 import { computed } from "vue";
-import { SANDBOX_BUILT_IN_SLUGS, SANDBOX_DEFAULT_SECTION, SANDBOX_SECTION_GROUPS } from "./sandboxNav";
+import { sandboxBuiltInSlugs, SANDBOX_DEFAULT_SECTION, sandboxSectionGroups } from "./sandboxNav";
 import { useCapabilities } from "../capabilities/connect/useCapabilities";
 import { useExtensions } from "../extensions/useExtensions";
 import { usePanels } from "../extensions/usePanels";
@@ -26,11 +26,14 @@ import SandboxPersonas from "./personas/SandboxPersonas.vue";
 import SandboxOverview from "./overview/SandboxOverview.vue";
 import SandboxSecrets from "./secrets/SandboxSecrets.vue";
 import SandboxUsage from "./usage/SandboxUsage.vue";
+import { useT } from "@intentic/ui/i18n";
 
 // One home for the active sandbox, reached from the rail's chip; the selected section lives in the URL, and only it
 // mounts (composables are module singletons, so remounting is cheap). Index is the hub's own sections (sandboxNav.ts,
 // shared with the palette's "Sandbox: …" destinations), then extension-contributed `sandbox`-surface views, which
 // render a body through ExtensionView rather than their own Page.
+
+const t = useT();
 
 const DEFAULT = SANDBOX_DEFAULT_SECTION;
 // The route these sections live on, and half of the address their long-running work reports under.
@@ -65,12 +68,13 @@ const updatable = computed(() => updateCount(listedExtensions.value.map((entry) 
 const hosted = computed(() => (sandbox.active.value?.hosted ? sandbox.active.value.id : undefined));
 const { build: hostedBuild } = useHostedBuild(() => hosted.value);
 const runningIn = (slug: string): string | undefined =>
-    hubWorkRunning(hubWorkKey(HUB, slug)) ?? (slug === `environment` && hostedBuild.value?.state === `building` ? `Building your environment` : undefined);
+    hubWorkRunning(hubWorkKey(HUB, slug)) ??
+    (slug === `environment` && hostedBuild.value?.state === `building` ? `Building your environment` : undefined);
 
 // A colliding activation key is dropped, not shadowed by the v-if chain; built-ins own their names.
 const contributed = computed<readonly ActiveExtension[]>(() =>
     detectActivations(panels.value, capabilities.value).filter(
-        ({ extension, activation }) => extension.surface === `sandbox` && !SANDBOX_BUILT_IN_SLUGS.has(activation.key),
+        ({ extension, activation }) => extension.surface === `sandbox` && !sandboxBuiltInSlugs().has(activation.key),
     ),
 );
 const extensionFor = (slug: string): ActiveExtension | undefined => contributed.value.find(({ activation }) => activation.key === slug);
@@ -87,22 +91,32 @@ const contributedRow = (active: ActiveExtension): HubTab => ({
 // The table's own grouping, kept intact, with this reader's gating, the two live counts and whatever is running
 // laid over it.
 const groups = computed<readonly NavGroup<HubTab>[]>(() => [
-    ...SANDBOX_SECTION_GROUPS.map((group) => ({
-        key: group.key,
-        label: group.label,
-        items: group.items
-            .filter((section) => canShip.value || section.maintainer !== true)
-            .map((section) => ({
-                ...section,
-                badge: sectionBadge(section.slug, updatable.value, contendedPorts.value.length, runningIn(section.slug)),
-            })),
-    })).filter((group) => group.items.length > 0),
-    ...(contributed.value.length === 0 ? [] : [{ key: `contributed`, label: `Added by extensions`, items: contributed.value.map(contributedRow) }]),
+    ...sandboxSectionGroups()
+        .map((group) => ({
+            key: group.key,
+            label: group.label,
+            items: group.items
+                .filter((section) => canShip.value || section.maintainer !== true)
+                .map((section) => ({
+                    ...section,
+                    badge: sectionBadge(section.slug, updatable.value, contendedPorts.value.length, runningIn(section.slug)),
+                })),
+        }))
+        .filter((group) => group.items.length > 0),
+    ...(contributed.value.length === 0
+        ? []
+        : [{ key: `contributed`, label: t(`sandbox.sandboxHub.addedByExtensions`), items: contributed.value.map(contributedRow) }]),
 ]);
 </script>
 
 <template>
-    <HubLayout :title="sandbox.active.value?.name ?? `Sandbox`" :route-name="HUB" :default-slug="DEFAULT" :groups="groups" :ready="!isLoading">
+    <HubLayout
+        :title="sandbox.active.value?.name ?? t(`sandbox.sandboxHub.sandbox`)"
+        :route-name="HUB"
+        :default-slug="DEFAULT"
+        :groups="groups"
+        :ready="!isLoading"
+    >
         <template #default="{ slug }">
             <SandboxOverview v-if="slug === `overview`" />
             <SandboxUsage v-else-if="slug === `usage`" />

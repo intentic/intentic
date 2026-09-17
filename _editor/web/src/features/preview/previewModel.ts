@@ -1,5 +1,6 @@
 import type { PanelSummary, RepoApp, PanelLaunch } from "@intentic/api-contract";
 import type { PortSummary, PublicFile } from "@intentic/sandbox-contract";
+import { t } from "@intentic/ui/i18n";
 
 // Everything the workspace can show live, as one flat list both the rail tile and the panel build from (so a count can
 // never disagree with what the panel shows). Pure: contract types in, targets out, no app imports.
@@ -103,7 +104,7 @@ export const portTargets = (ports: readonly PortSummary[]): PreviewTarget[] =>
         .map((port) => ({
             id: portTargetId(port.port),
             kind: `port`,
-            label: `Port ${port.port}`,
+            label: t(`preview.previewModel.port`, { port: port.port }),
             // What's answering there, in the daemon's own words (ports/port-identity.ts).
             detail: port.title,
             repo: undefined,
@@ -129,7 +130,7 @@ export const publicTarget = (files: readonly PublicFile[]): PreviewTarget | unde
         : {
               id: `public`,
               kind: `public`,
-              label: `Public site`,
+              label: t(`preview.previewModel.publicSite`),
               detail: undefined,
               repo: undefined,
               app: undefined,

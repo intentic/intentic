@@ -8,10 +8,13 @@ import { Button, ChangeStatusMark, ui, type IconName, Notice, timeAgo } from "@i
 import { useWorkspaceTabs } from "../../tabs/useWorkspaceTabs";
 import type { DiffPayload } from "@intentic/extension-api";
 import type { OpenMode } from "../../tabs/workspaceTabs";
+import { useT } from "@intentic/ui/i18n";
 
 // Restore-point timeline: daemon checkpoints of /work (not git), from agent turns, user changes, and restore markers.
 // Selecting one lazy-loads what changed since the previous checkpoint; a file opens a diff tab. Restore rewrites /work
 // to that point, leaving secrets and git branches untouched, after saving a safety checkpoint first.
+
+const t = useT();
 
 const { snapshots, error, isLoading, refetch, diff, fileDiff, restore, busy, actionError } = useHistory();
 const words = useVocabulary();
@@ -29,10 +32,10 @@ const confirmRestoreId = ref<string | undefined>(undefined);
 // Fallback title/icon per trigger; a snapshot's own label wins as the row title. `interval` never appears here.
 const TRIGGER_META = computed<Record<SnapshotTrigger, { title: string; icon: IconName }>>(() => ({
     turn: { title: words.value.agentTurn, icon: `sparkles` },
-    user: { title: `Your changes`, icon: `user` },
-    "pre-restore": { title: `Before going back`, icon: `shield` },
-    restore: { title: `Files restored`, icon: `undo` },
-    interval: { title: `Auto capture`, icon: `clock` },
+    user: { title: t(`workspace.historyPanel.changes`), icon: `user` },
+    "pre-restore": { title: t(`workspace.historyPanel.beforeGoingBack`), icon: `shield` },
+    restore: { title: t(`workspace.historyPanel.filesRestored`), icon: `undo` },
+    interval: { title: t(`workspace.historyPanel.autoCapture`), icon: `clock` },
 }));
 
 const changeLabel = (change: SnapshotChange): string => (change.scope === `root` ? change.path : `${change.scope}/${change.path}`);
@@ -86,8 +89,14 @@ const confirmRestore = (id: string): void => {
         <div class="flex shrink-0 items-center gap-1 border-b border-line px-2 py-1.5">
             <span class="text-2xs font-medium uppercase tracking-wide text-subtle">{{ words.restorePoints }}</span>
             <span class="flex-1"></span>
-            <Icon name="spinner" v-if="busy" class="text-xs text-muted" spin aria-label="Working" />
-            <button type="button" :class="ui.iconButton()" @click="refetch()" v-tooltip.right="'Refresh'" :aria-label="`Refresh ${words.restorePoints.toLowerCase()}`">
+            <Icon name="spinner" v-if="busy" class="text-xs text-muted" spin :aria-label="t(`workspace.historyPanel.working`)" />
+            <button
+                type="button"
+                :class="ui.iconButton()"
+                @click="refetch()"
+                v-tooltip.right="t(`ui.action.refresh`)"
+                :aria-label="t(`workspace.historyPanel.refresh`, { toLowerCase: words.restorePoints.toLowerCase() })"
+            >
                 <Icon name="refresh" class="text-xs" :spin="isLoading" />
             </button>
         </div>
@@ -113,8 +122,8 @@ const confirmRestore = (id: string): void => {
                 </button>
 
                 <div v-if="selectedId === snapshot.id" class="pb-1.5 pl-4 pr-2">
-                    <p v-if="diffLoading" class="py-1 text-2xs text-subtle">Loading changes…</p>
-                    <p v-else-if="changes.length === 0" class="py-1 text-2xs text-subtle">No file changes recorded.</p>
+                    <p v-if="diffLoading" class="py-1 text-2xs text-subtle">{{ t(`workspace.historyPanel.loadingChanges`) }}</p>
+                    <p v-else-if="changes.length === 0" class="py-1 text-2xs text-subtle">{{ t(`workspace.historyPanel.noFileChangesRecorded`) }}</p>
                     <button
                         v-for="change in changes"
                         :key="`${change.scope}/${change.path}`"
@@ -135,7 +144,13 @@ const confirmRestore = (id: string): void => {
                             <!-- Not decoration: an open chat is reasoning about these files and must be told they moved. -->
                             <span class="flex-1 text-2xs text-warning">{{ words.restoreConfirm }}</span>
                             <Button size="small" severity="danger" @click="confirmRestore(snapshot.id)">{{ words.restore }}</Button>
-                            <Button size="small" severity="secondary" :text="true" label="Cancel" @click="confirmRestoreId = undefined" />
+                            <Button
+                                size="small"
+                                severity="secondary"
+                                :text="true"
+                                :label="t(`ui.action.cancel`)"
+                                @click="confirmRestoreId = undefined"
+                            />
                         </template>
                         <Button
                             v-else

@@ -8,6 +8,7 @@ import { type DeviceRow, isSelfMachine, type MachineRow, managerOf } from "./dev
 import { manageDeviceSandbox, revokeSyncDevice, runDeviceAgentFlow, runDeviceCommand } from "./useDevices";
 import { useSandbox } from "../client/useSandbox";
 import { type HubWork, useHubWork } from "../../../shell/hub/hubWork";
+import { t } from "@intentic/ui/i18n";
 
 // Everything one device page does TO its machine: the container verbs, the two sync switches, the agent's
 // own two ops, and revoking the enrollment. One op at a time per machine, since a mirroring switch racing a
@@ -223,7 +224,12 @@ export function useDeviceOps(machine: () => MachineRow, refetch: () => void): De
     // `agentEvery` is read too, not just the flow in flight: between two environments of one machine nothing is on the
     // wire for an instant, and the page's buttons must not come back to life inside it.
     const working = computed(
-        () => busy.value !== undefined || syncBusy.value !== undefined || agentOp.value !== undefined || agentEvery.value !== undefined || revoking.value,
+        () =>
+            busy.value !== undefined ||
+            syncBusy.value !== undefined ||
+            agentOp.value !== undefined ||
+            agentEvery.value !== undefined ||
+            revoking.value,
     );
 
     const failure = ref<OpFailure | undefined>();
@@ -318,9 +324,9 @@ export function useDeviceOps(machine: () => MachineRow, refetch: () => void): De
                 key: rowKey(group),
                 notice: {
                     tone: `warning`,
-                    title: `That device didn't report this sandbox's share of it.`,
+                    title: t(`sandbox.deviceOps.deviceDidntReportSandboxs`),
                     // Names the button on this very page, not a command: the agent flow does the upgrade from here.
-                    detail: `Refresh and try again. If it keeps happening, its agent is too old to report a share — Update agent, above, fixes that from here.`,
+                    detail: t(`sandbox.deviceOps.refreshTryAgainKeeps`),
                 },
             };
             return;
@@ -516,7 +522,9 @@ export function useDeviceOps(machine: () => MachineRow, refetch: () => void): De
     watch(
         () =>
             machine()
-                .environments.map((environment) => `${environment.agent?.build ?? ``}:${environment.chip?.installed ?? ``}:${environment.chip?.available ?? ``}`)
+                .environments.map(
+                    (environment) => `${environment.agent?.build ?? ``}:${environment.chip?.installed ?? ``}:${environment.chip?.available ?? ``}`,
+                )
                 .join(`|`),
         () => {
             const done = new Set(machine().environments.filter(arrived).map(agentKey));
@@ -545,7 +553,7 @@ export function useDeviceOps(machine: () => MachineRow, refetch: () => void): De
         outcome.value = undefined;
         try {
             await revokeSyncDevice(enrollment.machine);
-            outcome.value = { key, message: `${label} no longer has access to this sandbox.` };
+            outcome.value = { key, message: t(`sandbox.deviceOps.noLongerAccessTo`, { label }) };
         } catch (error) {
             failure.value = { key, notice: noticeFrom(error, `Couldn't revoke that device's access.`) };
         } finally {

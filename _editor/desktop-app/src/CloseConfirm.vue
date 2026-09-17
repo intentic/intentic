@@ -6,6 +6,9 @@ import { onMounted, onUnmounted, ref } from "vue";
 import { closeWorkspace, type CloseAction } from "./desktop";
 import { dragWindow } from "./dragWindow";
 import { useFitToContent } from "./fitWindow";
+import { useT } from "@intentic/ui/i18n";
+
+const t = useT();
 
 /* WHAT THE × DOES: asked before it does it. */
 const remember = ref(false);
@@ -41,15 +44,15 @@ onUnmounted(() => window.removeEventListener(`keydown`, onKey));
             <!-- The header is the title bar: every press on it that isn't the × moves the window (dragWindow.ts). -->
             <header class="flex items-start gap-3 select-none" @mousedown="dragWindow">
                 <div class="flex min-w-0 flex-1 flex-col gap-1">
-                    <h1 class="text-base font-semibold">Close Intentic?</h1>
-                    <p class="text-2xs text-muted">Your sandboxes keep running either way: they live in Docker, not in this window.</p>
+                    <h1 class="text-base font-semibold">{{ t(`desktop.closeConfirm.closeIntentic`) }}</h1>
+                    <p class="text-2xs text-muted">{{ t(`desktop.closeConfirm.sandboxesKeepRunningEither`) }}</p>
                 </div>
-                <button type="button" :class="ui.iconButton(`-my-0.5 h-7 w-7`)" aria-label="Cancel" @click="cancel">
+                <button type="button" :class="ui.iconButton(`-my-0.5 h-7 w-7`)" :aria-label="t(`ui.action.cancel`)" @click="cancel">
                     <Icon name="times" />
                 </button>
             </header>
 
-<!-- Two answers as two things to press, not a radio group and a confirm button. -->
+            <!-- Two answers as two things to press, not a radio group and a confirm button. -->
             <div class="flex flex-col gap-2">
                 <button
                     ref="keep"
@@ -59,10 +62,10 @@ onUnmounted(() => window.removeEventListener(`keydown`, onKey));
                 >
                     <Icon name="compress" class="mt-0.5 shrink-0 text-primary-400" />
                     <span class="min-w-0 flex-1">
-                        <span class="block text-xs font-medium">Keep Intentic in the tray</span>
-                        <span class="block text-2xs text-muted">Keeps running in the background: reopening is instant, still signed in.</span>
+                        <span class="block text-xs font-medium">{{ t(`desktop.closeConfirm.keepIntenticInTray`) }}</span>
+                        <span class="block text-2xs text-muted">{{ t(`desktop.closeConfirm.keepsRunningInBackground`) }}</span>
                         <span v-if="onWindows" class="mt-1 block text-2xs text-subtle">
-                            Look for its icon by the clock, or behind the ^ arrow next to it.
+                            {{ t(`desktop.closeConfirm.lookIconByClock`) }}
                         </span>
                     </span>
                 </button>
@@ -74,16 +77,16 @@ onUnmounted(() => window.removeEventListener(`keydown`, onKey));
                 >
                     <Icon name="sign-out" class="mt-0.5 shrink-0 text-muted" />
                     <span class="min-w-0 flex-1">
-                        <span class="block text-xs font-medium">Quit Intentic</span>
-                        <span class="block text-2xs text-muted">Closes it completely. Start it again whenever you need it.</span>
+                        <span class="block text-xs font-medium">{{ t(`desktop.closeConfirm.quitIntentic`) }}</span>
+                        <span class="block text-2xs text-muted">{{ t(`desktop.closeConfirm.closesCompletelyStartAgain`) }}</span>
                     </span>
                 </button>
             </div>
 
-<!-- The one control that retires this dialog for good, which is what makes asking at all defensible. -->
+            <!-- The one control that retires this dialog for good, which is what makes asking at all defensible. -->
             <label class="flex cursor-pointer items-center gap-2 text-2xs text-muted">
                 <Checkbox v-model="remember" :binary="true" />
-                <span>Always do this: don't ask again</span>
+                <span>{{ t(`desktop.closeConfirm.alwaysDoDontAsk`) }}</span>
             </label>
         </div>
     </div>

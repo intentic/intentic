@@ -28,12 +28,15 @@ import type { LineJump } from "../tabs/workspaceTabs";
 import MarkdownViewer from "./MarkdownViewer.vue";
 import { resolveOpenFile, type OpenFile } from "./openFile";
 import type { RegisteredViewer } from "../../../core-views/viewerRegistry";
+import { useT } from "@intentic/ui/i18n";
 
 // Dispatches an open file to its surface (editor, an extension's viewer, or a can't-show state) and owns the
 // fetch, since daemon routes are Bearer-authenticated and a browser can't do that itself. The read's true size,
 // not the tree entry's, decides editable vs. windowed text; a seq + AbortController drop stale reads.
 
 // `line` = jump the viewer to this line (a content-search match); undefined for a plain open.
+const t = useT();
+
 const { path, meta, line } = defineProps<{ path: string; meta?: WorkspaceTreeEntry; line?: LineJump }>();
 // Fires when the file is gone on disk, so the parent closes the tab; skipped for a dirty file (staleOnDisk).
 const emit = defineEmits<{ gone: [path: string] }>();
@@ -44,7 +47,9 @@ const lang = ref<string | undefined>(undefined);
 const text = ref<string | null>(null);
 // Held in the shape produced, not split into optional props: an unset prop still falls through as an attr. A `path`
 // viewer gets only the scope it is viewed in (beside the path every viewer gets), and nothing when there is none.
-const viewerContent = shallowRef<{ text: string } | { blob: Blob } | { src: string } | { agent: string } | Record<never, never> | undefined>(undefined);
+const viewerContent = shallowRef<{ text: string } | { blob: Blob } | { src: string } | { agent: string } | Record<never, never> | undefined>(
+    undefined,
+);
 // The extension viewer component itself, lazily imported alongside its content.
 const viewerComponent = shallowRef<Component | undefined>(undefined);
 const loading = ref(false);
@@ -64,7 +69,11 @@ const readBlob = (target: string): Promise<Blob> => sandboxBlob(`/workspace/raw?
 
 // The one content prop a viewer's manifest `fetch` kind asks for; a `path` viewer reads through its own backend, so
 // it gets the scope it is viewed in and nothing when there is none.
-const viewerContentFor = (fetch: RegisteredViewer[`fetch`], target: string, agent: string | undefined): Promise<NonNullable<typeof viewerContent.value>> => {
+const viewerContentFor = (
+    fetch: RegisteredViewer[`fetch`],
+    target: string,
+    agent: string | undefined,
+): Promise<NonNullable<typeof viewerContent.value>> => {
     switch (fetch) {
         case `text`:
             return readText(target).then(({ content: body }) => ({ text: body }));
@@ -371,7 +380,7 @@ const onEditorSave = (value: string): void =>
     <div class="group/viewer relative flex h-full min-h-0 flex-col">
         <!-- Top bar actions teleported into tab row header -->
         <FileBreadcrumb :path="path">
-<!-- Same Comments toggle as the diff surface, one habit across both; starts shown here, since opening a file asks what it says. -->
+            <!-- Same Comments toggle as the diff surface, one habit across both; starts shown here, since opening a file asks what it says. -->
             <button
                 v-if="canHideComments"
                 type="button"
@@ -379,12 +388,12 @@ const onEditorSave = (value: string): void =>
                 :class="hideFileComments ? `ui-chip-on` : ``"
                 :aria-pressed="hideFileComments"
                 @click="toggleHideFileComments()"
-                v-tooltip.bottom="hideFileComments ? 'Comments hidden, click to show them' : 'Hide comments, read the code alone'"
+                v-tooltip.bottom="hideFileComments ? t(`workspace.fileViewer.commentsHiddenClickTo`) : t(`workspace.fileViewer.hideCommentsReadCode`)"
             >
                 <Icon :name="hideFileComments ? 'eye-slash' : 'eye'" class="text-2xs" />
-                <span class="max-md:hidden">Comments</span>
+                <span class="max-md:hidden">{{ t(`workspace.fileViewer.comments`) }}</span>
             </button>
-<!-- Second reading of the same file, one click away: what a pdf, a spreadsheet or a picture becomes as text. -->
+            <!-- Second reading of the same file, one click away: what a pdf, a spreadsheet or a picture becomes as text. -->
             <button
                 v-if="derivedOffered"
                 type="button"
@@ -392,18 +401,18 @@ const onEditorSave = (value: string): void =>
                 :class="textWanted ? `ui-chip-on` : ``"
                 :aria-pressed="textWanted"
                 @click="textWanted = !textWanted"
-                v-tooltip.bottom="textWanted ? 'Back to the file itself' : 'Read this file as text, the way an agent does'"
+                v-tooltip.bottom="textWanted ? t(`workspace.fileViewer.backToFileItself`) : t(`workspace.fileViewer.readFileTextWay`)"
             >
                 <Icon :name="textWanted ? 'file' : 'align-left'" class="text-2xs" />
-                <span class="max-md:hidden">Text</span>
+                <span class="max-md:hidden">{{ t(`workspace.fileViewer.text`) }}</span>
             </button>
-<!-- Tab row's chip says the view shows an agent's copy; this says this file specifically came from the shared workspace. -->
+            <!-- Tab row's chip says the view shows an agent's copy; this says this file specifically came from the shared workspace. -->
             <span
                 v-if="workspaceAgent !== undefined && fromShared"
                 class="inline-flex shrink-0 items-center gap-1 rounded-md bg-overlay px-1.5 py-0.5 text-2xs text-muted"
-                v-tooltip.bottom="'This agent has no copy of this file, so you are seeing the shared workspace version.'"
+                v-tooltip.bottom="t(`workspace.fileViewer.agentNoCopyFile`)"
             >
-                <Icon name="folder" class="text-[0.65rem]" /> Shared
+                <Icon name="folder" class="text-[0.65rem]" /> {{ t(`workspace.fileViewer.shared`) }}
             </span>
             <!-- Edit status while the scope keeps it read-only. -->
             <span
@@ -412,7 +421,7 @@ const onEditorSave = (value: string): void =>
                 v-tooltip.bottom="readOnlyReason"
             >
                 <Icon name="lock" class="text-xs" />
-                <span class="max-md:hidden">Read-only</span>
+                <span class="max-md:hidden">{{ t(`workspace.fileViewer.readOnly`) }}</span>
             </span>
             <!-- Save icon with top-right dirty dot badge -->
             <button
@@ -421,8 +430,8 @@ const onEditorSave = (value: string): void =>
                 :class="ui.iconButton('relative text-muted hover:text-content')"
                 :disabled="!dirtyThis"
                 @click="saveNow()"
-                v-tooltip.bottom="dirtyThis ? 'Save changes (Ctrl+S)' : 'Saved (Ctrl+S)'"
-                aria-label="Save file"
+                v-tooltip.bottom="dirtyThis ? t(`workspace.fileViewer.saveChangesCtrlS`) : t(`workspace.fileViewer.savedCtrlS`)"
+                :aria-label="t(`workspace.fileViewer.saveFile`)"
             >
                 <Icon name="save" class="text-xs" />
                 <span
@@ -440,24 +449,24 @@ const onEditorSave = (value: string): void =>
         >
             <CopyButton
                 :text="editorSeed"
-                label="Copy"
+                :label="t(`ui.action.copy`)"
                 class="bg-card/90 shadow-sm backdrop-blur"
-                v-tooltip.bottom="'Copy file content'"
-                aria-label="Copy file content"
+                v-tooltip.bottom="t(`workspace.fileViewer.copyFileContent`)"
+                :aria-label="t(`workspace.fileViewer.copyFileContent`)"
             />
         </div>
 
         <!-- The open file changed on disk under unsaved edits: the buffer is kept; Reload adopts disk (discards edits). -->
         <div v-if="staleOnDisk" class="flex shrink-0 items-center gap-2 border-b border-warning/40 bg-warning/10 px-3 py-1.5 text-2xs text-warning">
             <Icon name="exclamation-triangle" class="text-[0.7rem]" />
-            <span class="flex-1">This file changed on disk. Your unsaved edits are preserved.</span>
+            <span class="flex-1">{{ t(`workspace.fileViewer.fileChangedOnDisk`) }}</span>
             <Button size="small" severity="warn" :text="true" @click="reloadFromDisk">
-                <Icon name="refresh" class="text-[0.7rem]" /> Reload from disk
+                <Icon name="refresh" class="text-[0.7rem]" /> {{ t(`workspace.fileViewer.reloadDisk`) }}
             </Button>
         </div>
 
         <div class="relative min-h-0 flex-1">
-<!-- Ahead of every other surface, including the editor's: this is the reader's own choice for formats that have another view. -->
+            <!-- Ahead of every other surface, including the editor's: this is the reader's own choice for formats that have another view. -->
             <DerivedTextView v-if="showDerived" :path="path" :downloadable="derivedDownloadable" @download="download" />
             <div v-else-if="error" class="flex h-full flex-col items-center justify-center gap-2 px-6 text-center">
                 <Icon name="exclamation-triangle" class="text-3xl text-danger" />
@@ -479,7 +488,7 @@ const onEditorSave = (value: string): void =>
                 @change="onEditorChange"
                 @save="onEditorSave"
             />
-<!-- Seeded and re-keyed like CodeView above: the surface owns its text after mount, replaced only by a reload, a clean external write. -->
+            <!-- Seeded and re-keyed like CodeView above: the surface owns its text after mount, replaced only by a reload, a clean external write. -->
             <MarkdownViewer
                 v-else-if="open.kind === 'markdown' && text !== null"
                 ref="markdownView"
@@ -493,13 +502,13 @@ const onEditorSave = (value: string): void =>
             />
             <!-- Over the editable cap: windowed, read-only, seeded with the window the read above already got. -->
             <BigTextView v-else-if="open.kind === 'big-text' && firstWindow" :path="path" :first="firstWindow" @download="download" />
-<!-- Extension-contributed viewer: gets the path plus exactly one content prop (the manifest's `fetch` kind, never the others as undefined); a `path` viewer gets the scope instead, or nothing. -->
+            <!-- Extension-contributed viewer: gets the path plus exactly one content prop (the manifest's `fetch` kind, never the others as undefined); a `path` viewer gets the scope instead, or nothing. -->
             <component :is="viewerComponent" v-else-if="viewerComponent" :path="path" v-bind="viewerContent" @download="download" />
             <FileUnsupported v-else-if="open.kind === 'too-large'" mode="too-large" :size="meta?.size" @download="download" />
             <FileUnsupported v-else-if="open.kind === 'empty'" mode="empty" />
             <!-- Sandbox keeps this one to itself; resolveOpenFile knows from the path alone, no fetch needed. -->
             <FileLocked v-else-if="open.kind === 'locked'" :path="path" />
-<!-- Everything left: a known binary, or the unreachable case of a viewer that resolved with no component; both just hand over bytes. -->
+            <!-- Everything left: a known binary, or the unreachable case of a viewer that resolved with no component; both just hand over bytes. -->
             <FileUnsupported v-else mode="binary" @download="download" />
         </div>
     </div>

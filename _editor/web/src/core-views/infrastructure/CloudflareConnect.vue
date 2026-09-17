@@ -6,6 +6,9 @@ import CloudflareTokenField from "../../features/capabilities/connect/Cloudflare
 import { CF_TOKEN_KEY, useCloudflareZones } from "../../features/extensions/useCloudflareZones";
 import { useInventory } from "../../features/extensions/useInventory";
 import { useSecretKeys, useSecrets } from "../../features/capabilities/connect/useSecrets";
+import { useT } from "@intentic/ui/i18n";
+
+const t = useT();
 
 /* The reusable "Connect Cloudflare" step. */
 
@@ -59,10 +62,12 @@ const connect = async (): Promise<void> => {
 
         <!-- Token already in the sandbox: just declare the backend. -->
         <template v-if="tokenAlreadySet">
-            <p class="text-sm text-muted">Your sandbox already has a Cloudflare token. Enable it so this service can be reached on your domain.</p>
+            <p class="text-sm text-muted">{{ t(`views.cloudflareConnect.sandboxAlreadyCloudflareToken`) }}</p>
             <div class="flex items-center justify-between gap-3">
-                <RouterLink to="/sandbox/secrets" class="text-xs text-link hover:underline">Replace the token in Sandbox Secrets</RouterLink>
-                <Button label="Enable Cloudflare" :loading="submitting" @click="connect">
+                <RouterLink to="/sandbox/secrets" class="text-xs text-link hover:underline">{{
+                    t(`views.cloudflareConnect.replaceTokenInSandbox`)
+                }}</RouterLink>
+                <Button :label="t(`views.cloudflareConnect.enableCloudflare`)" :loading="submitting" @click="connect">
                     <template #icon><Icon name="check" /></template>
                 </Button>
             </div>
@@ -71,22 +76,22 @@ const connect = async (): Promise<void> => {
         <!-- No token yet: collect token + zone, then write it to the sandbox and declare the backend. -->
         <form v-else class="flex flex-col gap-3" @submit.prevent="connect">
             <div class="flex items-center gap-2.5">
-                <h3 class="text-sm font-semibold text-content">Connect Cloudflare</h3>
-                <InfoHint class="ml-auto" label="Why the Cloudflare API token is required">
-                    <p class="mb-1 text-sm font-semibold text-content">Why this token?</p>
+                <h3 class="text-sm font-semibold text-content">{{ t(`views.cloudflareConnect.connectCloudflare`) }}</h3>
+                <InfoHint class="ml-auto" :label="t(`views.cloudflareConnect.whyCloudflareApiToken`)">
+                    <p class="mb-1 text-sm font-semibold text-content">{{ t(`views.cloudflareConnect.whyToken`) }}</p>
                     <p class="mb-3 text-2xs leading-relaxed text-muted">
-                        Your service is put on your domain through a Cloudflare tunnel: no open inbound ports.
+                        {{ t(`views.cloudflareConnect.servicePutOnDomain`) }}
                     </p>
                     <ul class="flex flex-col gap-2 text-2xs text-muted">
                         <li class="flex items-start gap-2">
                             <Icon name="bolt" class="mt-0.5 text-link" />
-                            <span>Creates the tunnel and DNS route for your service</span>
+                            <span>{{ t(`views.cloudflareConnect.createsTunnelDnsRoute`) }}</span>
                         </li>
                         <li class="flex items-start gap-2">
                             <Icon name="lock" class="mt-0.5 text-success" />
                             <span
-                                ><span class="text-content">Stored only in your sandbox</span>: used once here to list zones, never on the
-                                platform</span
+                                ><span class="text-content">{{ t(`views.cloudflareConnect.storedOnlyInSandbox`) }}</span
+                                >{{ t(`views.cloudflareConnect.usedOnceHereTo`) }}</span
                             >
                         </li>
                     </ul>
@@ -98,13 +103,18 @@ const connect = async (): Promise<void> => {
             >
                 <template #zone-confirmed>
                     <p v-if="cf.zones.value.length === 1 && selectedZone" class="text-xs text-success">
-                        ✓ Using <span class="font-mono">{{ selectedZone }}</span>
+                        {{ t(`views.cloudflareConnect.using`) }} <span class="font-mono">{{ selectedZone }}</span>
                     </p>
                 </template>
             </CloudflareTokenField>
 
             <div class="flex justify-end">
-                <Button type="submit" label="Connect Cloudflare" :disabled="!canConnect || submitting" :loading="submitting">
+                <Button
+                    type="submit"
+                    :label="t(`views.cloudflareConnect.connectCloudflare`)"
+                    :disabled="!canConnect || submitting"
+                    :loading="submitting"
+                >
                     <template #icon><Icon name="check" /></template>
                 </Button>
             </div>

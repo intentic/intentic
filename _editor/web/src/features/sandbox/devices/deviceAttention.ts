@@ -4,6 +4,7 @@ import type { NoticeTone } from "@intentic/ui/notice";
 import { timeAgo } from "@intentic/ui/format";
 import { deviceQuiet, deviceReconnecting, type ManageBlock } from "./deviceFacts";
 import type { DeviceRow } from "./deviceRows";
+import { t } from "@intentic/ui/i18n";
 
 // Everything a device wants from the reader, as one ordered list: the gap that stops it answering, the age
 // of the reading, and the switch standing between its sandboxes and their buttons. A healthy machine yields
@@ -106,17 +107,17 @@ const BLOCK_ACTION: Partial<Record<ManageBlock[`kind`], string>> = {
 
 // The one remedy that works on a machine holding no connection: the same fresh, single-use command its capability
 // card hands out, which installs or re-enrolls the agent and registers it to come back after a reboot.
-const RECONNECT: DeviceConnectFix = {
+const reconnect = (): DeviceConnectFix => ({
     kind: `connect`,
-    label: `Reconnect`,
-    hint: `Hands you a fresh one-time command to run on that machine. It installs or re-enrolls its agent and brings the device back — it can't wake a machine that is asleep.`,
-};
+    label: t(`sandbox.deviceAttention.reconnect`),
+    hint: t(`sandbox.deviceAttention.handsFreshOneTime`),
+});
 
 // `connect` opens the card that adds a device; two more open the existing connection's own form; `offline` has no
 // card worth opening.
 const blockFix = (block: ManageBlock, reconnectable: boolean): DeviceFix | undefined => {
     if (block.kind === `offline`) {
-        return reconnectable ? RECONNECT : undefined;
+        return reconnectable ? reconnect() : undefined;
     }
     const label = BLOCK_ACTION[block.kind];
     // No card for this platform (a Mac, an unrecognised slug) means nowhere to send anyone: the sentence
@@ -146,7 +147,7 @@ const gapConcern = (device: Device, reconnectable: boolean): DeviceConcern | und
         icon: GAP_ICON[device.gap],
         text: GAP_TEXT[device.gap],
         ...(command === undefined ? {} : { command }),
-        ...(device.gap === `offline` && reconnectable ? { fix: RECONNECT } : {}),
+        ...(device.gap === `offline` && reconnectable ? { fix: reconnect() } : {}),
     };
 };
 

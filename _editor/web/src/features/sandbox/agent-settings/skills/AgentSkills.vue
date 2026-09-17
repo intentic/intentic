@@ -11,10 +11,13 @@ import SkillRow from "./SkillRow.vue";
 import SkillsInfo from "./SkillsInfo.vue";
 import { bySection, isTunable, matchesSkill } from "./skillList";
 import type { SkillSources } from "./skillVisual";
+import { useT } from "@intentic/ui/i18n";
 
 // Every skill the agent carries, from any source (image, owner, connections, extensions, plugins, loose files),
 // including disabled built-ins and unclaimed files. Split into tunable (this app can enable/delete) and borrowed
 // rows; a row's controls come only from what the daemon reports for it, never a rule restated here.
+
+const t = useT();
 
 const FILTERABLE_FROM = 8;
 // Below this many borrowed rows, the fold saves nothing worth a click.
@@ -104,7 +107,7 @@ const count = computed<number | undefined>(() => (filtering.value ? matches.valu
 </script>
 
 <template>
-    <RowGroup label="Skills" :count="count">
+    <RowGroup :label="t(`sandbox.agentSkills.skills`)" :count="count">
         <template #info><SkillsInfo /></template>
         <!-- One field, not a toolbar: a full bar for a single control would look like it belongs to more than this group. -->
         <template v-if="filterable" #actions>
@@ -112,8 +115,8 @@ const count = computed<number | undefined>(() => (filtering.value ? matches.valu
                 v-model="query"
                 variant="field"
                 clearable
-                placeholder="Name, trigger or origin…"
-                aria-label="Filter skills"
+                :placeholder="t(`sandbox.agentSkills.nameTriggerOrigin`)"
+                :aria-label="t(`sandbox.agentSkills.filterSkills`)"
                 autocapitalize="off"
                 spellcheck="false"
                 class="w-full max-w-64"
@@ -139,24 +142,24 @@ const count = computed<number | undefined>(() => (filtering.value ? matches.valu
         <!-- No settings yet means no skills to show and no grounds to say the list is empty; shows a loading state instead. -->
         <div v-else-if="settings === undefined" role="status" aria-busy="true">
             <template v-if="outline">
-                <span class="sr-only">Reading this sandbox's skills…</span>
+                <span class="sr-only">{{ t(`sandbox.agentSkills.readingSandboxsSkills`) }}</span>
                 <SkeletonRows :rows="3" description control />
             </template>
         </div>
-        <Row v-else-if="skills.length === 0 && !adding" icon="book" description="No skills added yet." />
+        <Row v-else-if="skills.length === 0 && !adding" icon="book" :description="t(`sandbox.agentSkills.noSkillsAddedYet`)" />
         <!-- Distinct from an empty list or from hits hidden inside the closed fold below. -->
-        <Row v-else-if="matches.length === 0" icon="search" description="Nothing matches that filter." />
+        <Row v-else-if="matches.length === 0" icon="search" :description="t(`sandbox.agentSkills.nothingMatchesFilter`)" />
 
         <!-- Adding uses the same row surface a written skill is read on. -->
         <!-- Padding and tint values mirror <DisclosureRow>'s own; keep them in sync if that component's spacing changes. -->
-        <DisclosureRow v-if="adding" open body="drawer" icon="plus" title="New skill" @update:open="close">
+        <DisclosureRow v-if="adding" open body="drawer" icon="plus" :title="t(`sandbox.agentSkills.newSkill`)" @update:open="close">
             <template #below>
                 <SkillForm :disabled="settings === undefined" @save="saveDraft" @cancel="close" />
             </template>
         </DisclosureRow>
 
-<!-- Hidden while a row is open, so only one skill is written or read at a time. -->
-        <RowNote v-else-if="openId === undefined" variant="action" label="Write a skill" @click="startAdd" />
+        <!-- Hidden while a row is open, so only one skill is written or read at a time. -->
+        <RowNote v-else-if="openId === undefined" variant="action" :label="t(`sandbox.agentSkills.writeSkill`)" @click="startAdd" />
 
         <!-- Borrowed skills come last, inside the same list rather than a separate section. -->
         <details v-if="borrowed.length > 0" class="group/fold" :open="borrowedOpen" @toggle="rememberFold">
@@ -164,9 +167,9 @@ const count = computed<number | undefined>(() => (filtering.value ? matches.valu
                 class="flex cursor-pointer list-none items-center gap-2.5 py-2.5 pl-2.5 pr-3 transition-colors hover:bg-content/4 [&::-webkit-details-marker]:hidden"
             >
                 <Icon name="chevron-right" aria-hidden="true" class="shrink-0 text-2xs text-subtle transition-transform group-open/fold:rotate-90" />
-                <span class="text-sm text-muted">{{ borrowed.length }} came with what you installed and connected</span>
+                <span class="text-sm text-muted">{{ t(`sandbox.agentSkills.cameWhatInstalledConnected`, { count: borrowed.length }) }}</span>
                 <!-- Hidden in a narrow pane rather than wrapped, since it's a footnote to the line above, not a second fact. -->
-                <span class="hidden min-w-0 truncate text-2xs text-subtle @xl:inline">to drop one, drop the thing that ships it</span>
+                <span class="hidden min-w-0 truncate text-2xs text-subtle @xl:inline">{{ t(`sandbox.agentSkills.toDropOneDrop`) }}</span>
             </summary>
             <div class="divide-y divide-line-subtle border-t border-line-subtle">
                 <SkillRow

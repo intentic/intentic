@@ -6,11 +6,14 @@ import { codeLangForPath } from "@intentic/code-read";
 import { type SnippetPiece, snippetPieces, snippetTokens, snippetWindow } from "./searchSnippet";
 import type { OpenMode } from "../tabs/workspaceTabs";
 import { basename, parentDir } from "@intentic/ui/path";
+import { useT } from "@intentic/ui/i18n";
 
 // Workspace search results for the explorer sidebar: file header rows plus indented match rows, styled and
 // keyboard-navigable like WorkspaceTree but flat. Virtualization is load-bearing: colouring every row overflows the
 // highlighter's LRU and the re-render loop never converges, so only the visible window is painted. A row's colour
 // comes from the file's own grammar (codeLangForPath); marked spans are pieces from searchSnippet.ts, not v-html.
+
+const t = useT();
 
 const { groups, total, files, partial, truncated, searching, pending, loadingMore, error, note, query } = defineProps<{
     groups: readonly WorkspaceSearchGroup[];
@@ -196,7 +199,7 @@ const onKeydown = (event: KeyboardEvent): void => {
             ref="scroller"
             class="min-h-0 flex-1 overflow-auto"
             role="listbox"
-            aria-label="Search results"
+            :aria-label="t(`workspace.workspaceSearchResults.searchResults`)"
             @scroll.passive="onScroll"
             @keydown="onKeydown"
         >
@@ -236,7 +239,7 @@ const onKeydown = (event: KeyboardEvent): void => {
                         @focus="lead = painted.row.key"
                     >
                         <span class="w-7 shrink-0 text-right font-mono text-2xs text-subtle">{{ painted.row.hit.line }}</span>
-<!-- One span per colour token; the matched run is a `<mark>` (see searchSnippet.ts). -->
+                        <!-- One span per colour token; the matched run is a `<mark>` (see searchSnippet.ts). -->
                         <span class="ws-snippet min-w-0 flex-1 truncate font-mono text-xs text-content/90"
                             ><span v-if="painted.elided" class="text-subtle">…</span
                             ><template v-for="(piece, index) in painted.pieces" :key="index"
@@ -256,18 +259,20 @@ const onKeydown = (event: KeyboardEvent): void => {
                     @click="emit('loadMore')"
                 >
                     <Icon :name="loadingMore ? `spinner` : `chevron-down`" :spin="loadingMore" class="text-[0.6rem]" />
-                    {{ loadingMore ? `Loading…` : `Show more matches` }}
+                    {{ loadingMore ? t(`workspace.workspaceSearchResults.loading`) : t(`workspace.workspaceSearchResults.showMoreMatches`) }}
                 </button>
             </div>
         </div>
         <p v-if="error" class="shrink-0 px-3 py-3 text-center text-2xs text-danger">{{ error }}</p>
         <p v-else-if="query.trim().length < 2" class="shrink-0 px-3 py-3 text-center text-2xs text-subtle">
-            Type at least 2 characters to search file contents.
+            {{ t(`workspace.workspaceSearchResults.typeAtLeast2`) }}
         </p>
         <p v-else-if="rows.length === 0 && (searching || pending)" class="shrink-0 px-3 py-3 text-center text-2xs text-subtle">
             <Icon name="spinner" spin />
         </p>
-        <p v-else-if="rows.length === 0" class="shrink-0 px-3 py-3 text-center text-2xs text-subtle">No matches in file contents.</p>
+        <p v-else-if="rows.length === 0" class="shrink-0 px-3 py-3 text-center text-2xs text-subtle">
+            {{ t(`workspace.workspaceSearchResults.noMatchesInFile`) }}
+        </p>
     </div>
 </template>
 

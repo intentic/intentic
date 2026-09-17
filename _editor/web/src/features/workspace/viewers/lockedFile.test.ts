@@ -1,12 +1,12 @@
 import { LOCKED_STATE_ENTRIES, PLAN_DOCUMENTS_DIR, STATE_DIR } from "@intentic/sandbox-contract";
 import { describe, expect, it } from "vitest";
-import { LOCKED_FILE_ENTRIES, lockedFile } from "./lockedFile";
+import { lockedFileEntries, lockedFile } from "./lockedFile";
 
 describe(`lockedFile`, () => {
-/* THE ASSERTION THIS TABLE EXISTS FOR. */
+    /* THE ASSERTION THIS TABLE EXISTS FOR. */
     it(`has a sentence for every entry the contract locks`, () => {
         for (const entry of LOCKED_STATE_ENTRIES) {
-            expect([entry, LOCKED_FILE_ENTRIES[entry] !== undefined]).toEqual([entry, true]);
+            expect([entry, lockedFileEntries()[entry] !== undefined]).toEqual([entry, true]);
         }
     });
 

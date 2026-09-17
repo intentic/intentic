@@ -33,7 +33,12 @@ const clamp = (px: number): number => Math.min(max, Math.max(min, px));
 const along = (event: PointerEvent): number => (axis === `x` ? event.clientX : event.clientY);
 
 // usePointerResize owns text selection, capture, and safe double-release; this adds only the seam's arithmetic.
-const { resizing, start, move, end: endPointer } = usePointerResize(
+const {
+    resizing,
+    start,
+    move,
+    end: endPointer,
+} = usePointerResize(
     (event) => {
         const moved = along(event) - origin;
         size.value = clamp(began + (pane === `before` ? moved : -moved));
@@ -78,7 +83,7 @@ const shape = computed<string>(() => (place === `between` ? SHAPE[`between-${axi
 </script>
 
 <template>
-<!-- `between`: 6px to hit, 0px to lay out—the negative margin cancels the width so a seam never moves the panes. -->
+    <!-- `between`: 6px to hit, 0px to lay out—the negative margin cancels the width so a seam never moves the panes. -->
     <div
         role="separator"
         :aria-orientation="axis === `x` ? `vertical` : `horizontal`"

@@ -28,6 +28,7 @@ import PipelinesTally from "./PipelinesTally.vue";
 import { type RepoStanding, repoStandings, standingNote } from "./repoStandings";
 import { host } from "./host";
 import { usePipelines } from "./usePipelines";
+import { t } from "./i18n.js";
 
 // A DevOps-grade CI dashboard: a top-bar picker scopes the board to one repository or all of them, counts ride the
 // title row, runs group by repo, and each row auto-fetches its jobs and renders an inline connected-circles graph. A
@@ -75,9 +76,9 @@ const repoOptions = computed<PickerOptions>(() => {
     const failing = standings.value.reduce((sum, standing) => sum + standing.failing, 0);
     const everywhere = failing === 0 ? `Nothing failing` : `${failing} branch${failing === 1 ? `` : `es`} failing`;
     return [
-        { options: [{ value: ALL_REPOS, label: `All repositories`, icon: `bolt`, description: everywhere }] },
+        { options: [{ value: ALL_REPOS, label: t(`pipelinesView.allRepositories`), icon: `bolt`, description: everywhere }] },
         ...(reporting.length > 0 ? [{ options: reporting.map(repoOption) }] : []),
-        ...(silent.length > 0 ? [{ label: `No runs yet`, options: silent.map(repoOption) }] : []),
+        ...(silent.length > 0 ? [{ label: t(`pipelinesView.noRunsYet2`), options: silent.map(repoOption) }] : []),
     ];
 });
 
@@ -198,7 +199,7 @@ const fixRun = async (run: PipelineRun, pick: AgentRunChoice | undefined, resume
 
 <template>
     <!-- `scroll="page"`: this body is a report read top-down once, not a document paired with an index worth preserving position in. -->
-    <SplitView title="Pipelines" scroll="page" :scroll-key="scopeRepo">
+    <SplitView :title="t(`pipelinesView.pipelines`)" scroll="page" :scroll-key="scopeRepo">
         <!-- Pipeline totals belong in the information slot, not the action group. -->
         <template #info>
             <!-- `min-w-0 flex-1`: the tally is what gives here. -->
@@ -207,15 +208,20 @@ const fixRun = async (run: PipelineRun, pick: AgentRunChoice | undefined, resume
 
         <template #actions>
             <!-- The open project, and the way out of it: the same scope every other area narrows by. -->
-            <ProjectChip :project="api.workspace.project()" :hidden="projectHidden" noun="repositories" @clear="api.workspace.setProject(undefined)" />
+            <ProjectChip
+                :project="api.workspace.project()"
+                :hidden="projectHidden"
+                noun="repositories"
+                @clear="api.workspace.setProject(undefined)"
+            />
             <!-- Only where there's a choice: over one repository this would point at the only thing on screen. -->
             <Picker
                 v-if="repos.length > 1"
                 :model-value="scopeRepo ?? ALL_REPOS"
                 :options="repoOptions"
                 variant="ghost"
-                aria-label="Repository"
-                placeholder="Repository"
+                :aria-label="t(`pipelinesView.repository`)"
+                :placeholder="t(`pipelinesView.repository`)"
                 @update:model-value="(next) => (scopeRepo = next === ALL_REPOS ? undefined : next)"
             />
             <!-- No `hint`: the glyph already names the vendor, the label already names the project. -->
@@ -223,7 +229,7 @@ const fixRun = async (run: PipelineRun, pick: AgentRunChoice | undefined, resume
                 v-for="standing in sections"
                 :key="standing.repo.repo"
                 :icon="standing.repo.host"
-                :label="`Open ${standing.repo.project} pipelines`"
+                :label="t(`pipelinesView.openPipelines`, { project: standing.repo.project })"
                 :href="ciUrl(standing.repo)"
             />
         </template>
@@ -247,17 +253,19 @@ const fixRun = async (run: PipelineRun, pick: AgentRunChoice | undefined, resume
                     <div v-if="recurring.length > 0" class="mb-5 rounded-lg border border-danger/20 bg-danger/5 px-4 py-3">
                         <div class="flex items-center gap-2">
                             <Icon name="exclamation-circle" class="text-sm text-danger" />
-                            <span class="text-sm font-semibold text-content">Failing repeatedly</span>
+                            <span class="text-sm font-semibold text-content">{{ t(`pipelinesView.failingRepeatedly`) }}</span>
                         </div>
                         <div class="mt-2 flex flex-wrap gap-1.5">
                             <span
                                 v-for="item in recurring"
                                 :key="`${item.repo}:${item.branch}:${item.job}`"
                                 class="inline-flex items-center gap-1.5 rounded-md border border-danger/20 bg-canvas px-2 py-1 text-xs"
-                                v-tooltip.top="`${item.job} has failed the last ${item.runs} runs on ${item.repo} ${item.branch}`"
+                                v-tooltip.top="
+                                    t(`pipelinesView.failedLastRunsOn`, { job: item.job, runs: item.runs, repo: item.repo, branch: item.branch })
+                                "
                             >
                                 <span class="font-medium text-danger">{{ item.job }}</span>
-                                <span class="text-2xs text-subtle">{{ item.runs }} runs</span>
+                                <span class="text-2xs text-subtle">{{ t(`pipelinesView.runs`, { runs: item.runs }) }}</span>
                             </span>
                         </div>
                     </div>
@@ -272,7 +280,12 @@ const fixRun = async (run: PipelineRun, pick: AgentRunChoice | undefined, resume
                                     target="_blank"
                                     rel="noopener"
                                     class="touch-target flex items-center gap-1.5 text-subtle hover:text-link"
-                                    v-tooltip.top="`Open ${standing.repo.project} on ${standing.repo.host === `github` ? `GitHub` : `GitLab`}`"
+                                    v-tooltip.top="
+                                        t(`pipelinesView.openProjectOn`, {
+                                            project: standing.repo.project,
+                                            host: standing.repo.host === `github` ? `GitHub` : `GitLab`,
+                                        })
+                                    "
                                 >
                                     <Icon :name="standing.repo.host" />
                                     <span class="truncate font-mono text-2xs">{{ standing.repo.project }}</span>
@@ -301,18 +314,23 @@ const fixRun = async (run: PipelineRun, pick: AgentRunChoice | undefined, resume
                                 @fix="fixRun"
                             />
 
-                            <p v-if="standing.runs.length === 0" class="py-4 text-center text-sm text-muted">No runs yet for this repo.</p>
+                            <p v-if="standing.runs.length === 0" class="py-4 text-center text-sm text-muted">
+                                {{ t(`pipelinesView.noRunsYetRepo`) }}
+                            </p>
                         </RowGroup>
 
                         <p v-if="repos.length === 0" class="py-8 text-center text-sm text-muted">
-                            No workspace repo maps to a connected GitHub/GitLab account: clone a repo from your connected host, or connect the
-                            matching capability on the + page.
+                            {{ t(`pipelinesView.noWorkspaceRepoMaps`) }}
                         </p>
 
                         <!-- Every connected repo is silent; distinct from 'nothing is connected' and must not read like it. -->
                         <p v-else-if="sections.length === 0" class="py-8 text-center text-sm text-muted">
-                            No pipeline has run yet on {{ repos.length === 1 ? `this repo` : `any of the ${repos.length} connected repos` }}. Runs
-                            land here as soon as one does.
+                            {{
+                                t(`pipelinesView.noRunsYet`, {
+                                    where:
+                                        repos.length === 1 ? t(`pipelinesView.thisRepo`) : t(`pipelinesView.connectedRepos`, { count: repos.length }),
+                                })
+                            }}
                         </p>
                     </div>
                 </template>

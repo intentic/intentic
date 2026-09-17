@@ -7,11 +7,14 @@ import { HOST_DOOR, usePeerConnect } from "../../sandbox/devices/usePeerConnect"
 import { useSandbox } from "../../sandbox/client/useSandbox";
 import { bashCommand, psCommand } from "../../../app/environments/scriptCommand";
 import ScriptSourceSwitch from "./ScriptSourceSwitch.vue";
+import { useT } from "@intentic/ui/i18n";
 
 // Connect-this-device dialog for a host-kind capability: a tab can't install anything on another machine, so this
 // hands over a command instead. States the command and the exact permissions the machine will enforce. Flips to a
 // live confirmation once the machine connects, no refresh needed. A Linux device that is a WSL distro of a Windows
 // PC already connected can take its command from PowerShell, where a reader on that PC is sitting.
+
+const t = useT();
 
 const props = defineProps<{ visible: boolean; id: string; platform: string; permissions: string }>();
 const emit = defineEmits<{ (event: "update:visible", value: boolean): void; (event: "connected"): void }>();
@@ -22,14 +25,16 @@ const { daemonUrl } = useSandbox();
 // The distros every connected Windows PC lists, read off the fleet already held (no poll): the Linux one-liner can
 // be run inside one from PowerShell, so a reader on that PC never has to open the distro's own terminal first.
 const { devices } = useDevices({ poll: false });
-const distros = computed(() =>
-    props.platform === `linux` ? [...new Set(devices.value.flatMap((device) => device.facts?.wslDistros ?? []))] : [],
-);
+const distros = computed(() => (props.platform === `linux` ? [...new Set(devices.value.flatMap((device) => device.facts?.wslDistros ?? []))] : []));
 type Via = `terminal` | `powershell`;
-const VIA_OPTIONS: { label: string; value: Via; title: string }[] = [
-    { label: `A terminal in the distro`, value: `terminal`, title: `Run it inside the Linux environment itself` },
-    { label: `PowerShell`, value: `powershell`, title: `Run it from Windows, inside the distro, through wsl.exe` },
-];
+const VIA_OPTIONS = computed((): { label: string; value: Via; title: string }[] => [
+    {
+        label: t(`capabilities.hostConnectDialog.terminalInDistro`),
+        value: `terminal`,
+        title: t(`capabilities.hostConnectDialog.runInsideLinuxEnvironment`),
+    },
+    { label: t(`capabilities.hostConnectDialog.powershell`), value: `powershell`, title: t(`capabilities.hostConnectDialog.runWindowsInsideDistro`) },
+]);
 const via = ref<Via>(`terminal`);
 const distro = ref(``);
 // A device named for a distro (`<pc>-wsl-<distro>`, the name the machine page connects it under) opens on the
@@ -46,7 +51,9 @@ watch(
     },
     { immediate: true },
 );
-const distroOptions = computed(() => distros.value.map((name) => ({ label: name, value: name, title: `Run it inside ${name}` })));
+const distroOptions = computed(() =>
+    distros.value.map((name) => ({ label: name, value: name, title: t(`capabilities.hostConnectDialog.runInside`, { name }) })),
+);
 
 const host = computed(() => peerFor(props.id));
 const online = computed(() => host.value?.online === true);
@@ -91,49 +98,50 @@ onBeforeUnmount(stop);
 </script>
 
 <template>
-    <Modal :open="visible" size="lg" :header="`Connect ${id}`" @update:open="emit(`update:visible`, $event)">
+    <Modal :open="visible" size="lg" :header="t(`capabilities.hostConnectDialog.connect`, { id })" @update:open="emit(`update:visible`, $event)">
         <div class="flex flex-col gap-4">
             <p class="text-sm text-content">
-                Run this on <b>{{ id }}</b
-                >: in {{ shell }}, as yourself. It installs a small agent that dials this sandbox and keeps one outbound connection open. No ports are
-                opened on your network and there is nothing to configure on your router.
+                {{ t(`capabilities.hostConnectDialog.runOn`) }} <b>{{ id }}</b
+                >{{ t(`capabilities.hostConnectDialog.in`) }} {{ shell }}{{ t(`capabilities.hostConnectDialog.yourselfInstallsSmallAgent`) }}
             </p>
 
             <div v-if="online" class="rounded-md border border-success/40 bg-success/10 px-3 py-2 text-sm text-content">
-                <b>{{ id }}</b> is connected. The agent can work on it from its next turn.
+                <b>{{ id }}</b> {{ t(`capabilities.hostConnectDialog.connectedAgentWorkOn`) }}
             </div>
 
             <div v-else-if="error" class="rounded-md border border-danger/40 bg-danger/10 px-3 py-2 text-sm text-content">{{ error }}</div>
 
-            <div v-else-if="minting || pairToken === undefined" class="text-sm text-muted">Preparing a one-time connection code…</div>
+            <div v-else-if="minting || pairToken === undefined" class="text-sm text-muted">
+                {{ t(`capabilities.hostConnectDialog.preparingOneTimeConnection`) }}
+            </div>
 
             <template v-else>
                 <!-- Above the command, because they rewrite it: where to run it on a PC that has both, then the script source. -->
                 <div v-if="distros.length > 0" class="flex flex-wrap items-center gap-2 text-2xs text-muted">
-                    <span>Run it from</span>
+                    <span>{{ t(`capabilities.hostConnectDialog.run`) }}</span>
                     <SegmentedControl v-model="via" :options="VIA_OPTIONS" size="xs" />
                     <template v-if="via === `powershell` && distroOptions.length > 1">
-                        <span>inside</span>
+                        <span>{{ t(`capabilities.hostConnectDialog.inside`) }}</span>
                         <SegmentedControl v-model="distro" :options="distroOptions" size="xs" />
                     </template>
                 </div>
                 <ScriptSourceSwitch />
                 <Code :code="command" :lang="platform === `windows` || fromPowerShell ? `powershell` : `bash`" :wrap="true" />
                 <p class="text-2xs text-subtle">
-                    The code in this command works once and expires in about ten minutes. This window updates by itself when the device connects.
+                    {{ t(`capabilities.hostConnectDialog.codeInCommandWorks`) }}
                 </p>
             </template>
 
             <div class="rounded-md border border-subtle px-3 py-2">
                 <p class="text-2xs text-muted">
-                    Once connected, the agent may: <b>{{ permissions }}</b
-                    >, and nothing else. Those switches live on this card, the device enforces them itself, and Revoke here cuts it off immediately.
+                    {{ t(`capabilities.hostConnectDialog.onceConnectedAgentMay`) }} <b>{{ permissions }}</b
+                    >{{ t(`capabilities.hostConnectDialog.nothingElseThoseSwitches`) }}
                 </p>
             </div>
         </div>
 
         <template #footer>
-            <Button :label="online ? `Done` : `Close`" size="small" @click="emit(`update:visible`, false)" />
+            <Button :label="online ? t(`ui.action.done`) : t(`ui.action.close`)" size="small" @click="emit(`update:visible`, false)" />
         </template>
     </Modal>
 </template>

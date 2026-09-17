@@ -3,10 +3,13 @@ import { formatBytes } from "@intentic/ui";
 import Checkbox from "primevue/checkbox";
 import { computed, onBeforeUnmount, watch } from "vue";
 import { useUploadQueue } from "./useUploadQueue";
+import { useT } from "@intentic/ui/i18n";
 
 // Detail under an import's headline: progress bar, per-folder breakdown, failures, dependency offer. Phase and its
 // headline sentence live in notificationSources.ts; retirement timers live here: a clean finish dismisses quickly, one
 // that started an install stays longer, a failure never retires.
+
+const t = useT();
 
 const {
     files,
@@ -104,7 +107,7 @@ onBeforeUnmount(() => {
     <div v-if="drawn" v-bind="$attrs" class="text-xs text-content">
         <!-- Still scanning while files are already uploading; the headline belongs to the upload by then. -->
         <p v-if="scanning && files.length > 0" class="mb-2 truncate border-b border-line pb-2 text-2xs text-subtle">
-            Scanning… {{ scannedCount }} {{ scannedCount === 1 ? `file` : `files`
+            {{ t(`workspace.uploadProgressBody.scanning`) }} {{ scannedCount }} {{ scannedCount === 1 ? `file` : `files`
             }}<template v-if="scanningName !== ``"> · {{ scanningName }}</template>
         </p>
         <!-- Nothing sent yet: the headline already carries the count; this just says where the walk has got to. -->
@@ -150,7 +153,7 @@ onBeforeUnmount(() => {
                         @update:model-value="setInstallAfterUpload($event as boolean)"
                         input-id="install-after-upload"
                     />
-                    <span class="flex-1 font-medium">Install dependencies after upload</span>
+                    <span class="flex-1 font-medium">{{ t(`workspace.uploadProgressBody.installDependenciesAfterUpload`) }}</span>
                 </label>
                 <ul class="mt-1 space-y-0.5">
                     <li v-for="project in setupSummary" :key="project.dir" class="flex items-center gap-2 text-2xs text-subtle">
@@ -168,24 +171,24 @@ onBeforeUnmount(() => {
 
             <div v-else-if="!installSettled" class="flex items-center gap-2">
                 <Icon name="spinner" class="text-sm text-muted" spin />
-                <span class="flex-1 font-medium">Starting install…</span>
+                <span class="flex-1 font-medium">{{ t(`workspace.uploadProgressBody.startingInstall`) }}</span>
             </div>
 
             <!-- Queued through the workspace lease; may start immediately, or after active turns drain. -->
             <template v-else-if="installQueued.length > 0">
                 <div class="flex items-center gap-2">
                     <Icon name="clock" class="text-sm text-muted" />
-                    <span class="flex-1 font-medium">Dependency install queued</span>
+                    <span class="flex-1 font-medium">{{ t(`workspace.uploadProgressBody.dependencyInstallQueued`) }}</span>
                 </div>
                 <p class="mt-0.5 text-2xs text-subtle">
-                    It starts after active agent turns finish, then appears in Work terminals; checks and the outcome appear in Activity.
+                    {{ t(`workspace.uploadProgressBody.startsAfterActiveAgent`) }}
                 </p>
             </template>
 
             <!-- No-installable state stays neutral when nothing changed. -->
             <div v-else-if="installAfterUpload" class="flex items-center gap-2 text-2xs text-subtle">
                 <Icon name="info-circle" class="text-sm text-muted" />
-                <span class="flex-1">No dependency install queued</span>
+                <span class="flex-1">{{ t(`workspace.uploadProgressBody.noDependencyInstallQueued`) }}</span>
             </div>
         </div>
     </div>

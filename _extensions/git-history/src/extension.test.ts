@@ -1,6 +1,14 @@
 import type { DocumentProviderRegistration, IntenticApi, RepoFacts, ViewRegistration } from "@intentic/extension-api";
 import { describe, expect, it, vi } from "vitest";
 import { activate } from "./extension.js";
+import { registerExtensionMessages } from "@intentic/extension-ui/i18n";
+import { extensionIdOf } from "@intentic/extension-manifest";
+import { messages } from "./i18n";
+import { manifest } from "./manifest";
+
+// The host registers this before it calls `activate`; a test that calls `activate` itself has to, or every label
+// it asserts on reads as its own dotted key.
+await registerExtensionMessages(extensionIdOf(manifest), messages);
 
 // Pins which repositories get a Git tab and what the palette command opens; both fail silently, a wrong `detect()` or
 // an empty command looks like nothing went wrong.

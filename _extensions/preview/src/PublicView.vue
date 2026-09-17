@@ -4,6 +4,7 @@ import { computed, ref } from "vue";
 import SharedConversations from "./SharedConversations.vue";
 import SharePreview from "./SharePreview.vue";
 import { usePublic } from "./usePublic";
+import { t } from "./i18n.js";
 
 // Public view: the workspace's outbox, with no auth in front, so nothing exposed can be a surprise. Refused files are
 // listed as loudly as served ones (with why); the empty state explains the publishing convention itself; a shareable
@@ -56,31 +57,29 @@ const size = (bytes: number): string => {
 
         <section>
             <div class="mb-2 flex items-center gap-2">
-                <h3 :class="ui.sectionLabel()">Published</h3>
-                <InfoHint label="Public files">
-                    <span class="block text-sm font-medium text-content">Your public folder</span>
+                <h3 :class="ui.sectionLabel()">{{ t(`publicView.published`) }}</h3>
+                <InfoHint :label="t(`publicView.publicFiles`)">
+                    <span class="block text-sm font-medium text-content">{{ t(`publicView.publicFolder`) }}</span>
                     <span class="mt-1 block text-xs text-muted">
-                        Anything inside <b>public/</b> in your workspace is served on the internet at the address below: no sign-in, no running
-                        server. Drop a file in and it has a link; delete it and the link stops working. The folder disappears when the last file
-                        leaves, so an empty workspace publishes nothing.
+                        {{ t(`publicView.anythingInside`) }} <b>public/</b> {{ t(`publicView.inWorkspaceServedOn`) }}
                     </span>
                 </InfoHint>
-                <StatusBadge v-if="servedCount > 0" variant="success" :label="`${servedCount} public`" size="xs" />
+                <StatusBadge v-if="servedCount > 0" variant="success" :label="t(`publicView.public2`, { servedCount })" size="xs" />
             </div>
 
             <!-- Shown even with nothing published: makes the empty state actionable and gives something to copy. -->
             <div v-if="url" class="mb-3 flex items-center gap-2 rounded-lg border border-line bg-card px-4 py-2">
                 <Icon name="globe" class="shrink-0 text-subtle" />
                 <span class="min-w-0 flex-1 truncate font-mono text-xs text-muted" :title="url">{{ url }}</span>
-                <CopyButton :text="url" label="Copy address" />
+                <CopyButton :text="url" :label="t(`publicView.copyAddress`)" />
             </div>
             <div v-else class="mb-3 rounded-lg border border-line bg-card px-4 py-3 text-xs text-muted">
-                This sandbox has no public address, so files can't be published from it.
+                {{ t(`publicView.sandboxNoPublicAddress`) }}
             </div>
 
             <!-- Empty list reads as 'nothing published' too quietly; skeleton rows (icon, path, size) stand in while loading. -->
             <div v-if="isLoading && outline" class="rounded-lg border border-line bg-card" role="status" aria-busy="true">
-                <span class="sr-only">Reading your published files…</span>
+                <span class="sr-only">{{ t(`publicView.readingPublishedFiles`) }}</span>
                 <div class="flex flex-col divide-y divide-line-subtle" aria-hidden="true">
                     <div v-for="row in 3" :key="row" class="flex items-center gap-3 px-4 py-2">
                         <span class="skeleton block h-3.5 w-3.5 shrink-0" />
@@ -98,10 +97,10 @@ const size = (bytes: number): string => {
                 class="flex flex-col items-center gap-2 rounded-lg border border-line bg-card py-10 text-center"
             >
                 <Icon name="globe" class="text-2xl text-subtle" />
-                <p class="text-sm text-muted">Nothing is published.</p>
+                <p class="text-sm text-muted">{{ t(`publicView.nothingPublished`) }}</p>
                 <p class="text-2xs text-subtle">
-                    Create a <span class="font-mono">public/</span> folder in your workspace and put a file in it, or ask the agent to publish
-                    something for you.
+                    {{ t(`publicView.create`) }} <span class="font-mono">public/</span>
+                    {{ t(`publicView.folderInWorkspacePut`) }}
                 </p>
             </div>
 
@@ -112,23 +111,31 @@ const size = (bytes: number): string => {
                         <div class="min-w-0 flex-1">
                             <p class="truncate font-mono text-xs text-content" :title="file.path">{{ file.path }}</p>
                             <!-- A blocked file sits in the folder looking published; this line is the only thing that says otherwise. -->
-                            <p v-if="file.blocked" class="truncate text-2xs text-danger">Not served: {{ file.blocked }}</p>
+                            <p v-if="file.blocked" class="truncate text-2xs text-danger">
+                                {{ t(`publicView.notServed`, { blocked: file.blocked }) }}
+                            </p>
                             <p v-else class="text-2xs text-subtle">{{ size(file.size) }}</p>
                         </div>
-                        <StatusBadge v-if="file.blocked" variant="danger" label="blocked" size="xs" />
+                        <StatusBadge v-if="file.blocked" variant="danger" :label="t(`publicView.blocked`)" size="xs" />
                         <a
                             v-if="file.url"
                             :href="file.url"
                             target="_blank"
                             rel="noopener"
                             class="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted hover:bg-overlay hover:text-content"
-                            :aria-label="`Open ${file.path} in a new tab`"
-                            v-tooltip.bottom="'Open in new tab'"
+                            :aria-label="t(`publicView.openInNewTab`, { path: file.path })"
+                            v-tooltip.bottom="t(`publicView.openInNewTab2`)"
                         >
                             <Icon name="external-link" />
                         </a>
-                        <SharePreview v-if="file.url" :url="file.url" label="Share" />
-                        <Button label="Unpublish" size="small" severity="secondary" :disabled="busy !== undefined" @click="withdraw(file.path)">
+                        <SharePreview v-if="file.url" :url="file.url" :label="t(`publicView.share`)" />
+                        <Button
+                            :label="t(`publicView.unpublish`)"
+                            size="small"
+                            severity="secondary"
+                            :disabled="busy !== undefined"
+                            @click="withdraw(file.path)"
+                        >
                             <template #icon><Icon name="trash" /></template>
                         </Button>
                     </div>

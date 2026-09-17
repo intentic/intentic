@@ -4,8 +4,16 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 // Both columns are read through the same table, so the checks below are about the table's shape rather than any one
 // word: a key present in one column and not the other would be a maker screen with a developer word on it.
 
+// `vi.resetModules()` below gives each case a fresh audience preference — and a fresh i18n layer, which has no
+// catalog until this registers the app's own. Without it every word here reads as its key.
 const load = async () => {
-    const [{ vocabularyFor, useVocabulary }, { useAudience }] = await Promise.all([import("./vocabulary"), import("../app/useAudience")]);
+    const [{ vocabularyFor, useVocabulary }, { useAudience }, { registerCatalog }, { appCatalog }] = await Promise.all([
+        import("./vocabulary"),
+        import("../app/useAudience"),
+        import("@intentic/ui/i18n"),
+        import("../app/i18n"),
+    ]);
+    await registerCatalog(appCatalog);
     return { vocabularyFor, useVocabulary, useAudience };
 };
 

@@ -3,6 +3,7 @@ import { Icon, Popover, StatusBadge } from "@intentic/extension-ui";
 import { ref } from "vue";
 import { type PipelineStage, stageLabel } from "./pipelineDag";
 import { formatDuration, STATUS_TONE } from "./statusVisual";
+import { t } from "./i18n.js";
 
 /* The mini pipeline graph that sits in a run row: one circle per stage, connected left→right, each coloured by the worst status inside it. */
 
@@ -91,7 +92,7 @@ const stageTooltip = (stage: PipelineStage, index: number): string => {
                             <span
                                 v-if="recurring.get(job.name)"
                                 class="shrink-0 rounded bg-danger/10 px-1 text-2xs font-semibold text-danger"
-                                v-tooltip.top="`Failing for ${recurring.get(job.name)} runs in a row`"
+                                v-tooltip.top="t(`pipelineGraph.failingRunsInRow`, { name: recurring.get(job.name) })"
                                 >×{{ recurring.get(job.name) }}</span
                             >
                             <span v-if="formatDuration(job.durationSeconds)" class="shrink-0 text-2xs text-subtle">

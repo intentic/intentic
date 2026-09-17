@@ -1,33 +1,37 @@
 <!-- The app's colour picker: a fixed row of swatches, not a wheel or hex field, since the accent is always used at one fixed lightness (themeColor.ts). -->
 <script setup lang="ts">
 import { type Accent, accentHex } from "../../lib/themeColor.js";
+import { useT } from "../../i18n/index.js";
+import { computed } from "vue";
+
+const t = useT();
 
 /** The accent, as `#rrggbb`: always one of the swatches below. */
 const model = defineModel<string>({ required: true });
 
-const PRESETS: readonly (Accent & { readonly label: string })[] = [
+const PRESETS = computed((): readonly (Accent & { readonly label: string })[] => [
     // Ember is at full saturation on purpose: it is DEFAULT_ACCENT exactly, so a workspace nobody has
     // recoloured shows this swatch as the selected one rather than none of them.
-    { label: `Ember`, hue: 55, saturation: 1 },
-    { label: `Vermilion`, hue: 25, saturation: 0.85 },
-    { label: `Rose`, hue: 350, saturation: 0.78 },
-    { label: `Orchid`, hue: 320, saturation: 0.8 },
-    { label: `Iris`, hue: 290, saturation: 0.85 },
-    { label: `Cobalt`, hue: 260, saturation: 0.9 },
-    { label: `Azure`, hue: 230, saturation: 0.95 },
-    { label: `Lagoon`, hue: 200, saturation: 1 },
-    { label: `Emerald`, hue: 172, saturation: 0.95 },
-    { label: `Fern`, hue: 145, saturation: 0.85 },
-    { label: `Moss`, hue: 115, saturation: 0.9 },
-    { label: `Brass`, hue: 85, saturation: 0.95 },
-    { label: `Graphite`, hue: 250, saturation: 0.14 },
-];
-const presets = PRESETS.map((preset) => ({ label: preset.label, hex: accentHex(preset) }));
+    { label: t(`ui.colorPicker.ember`), hue: 55, saturation: 1 },
+    { label: t(`ui.colorPicker.vermilion`), hue: 25, saturation: 0.85 },
+    { label: t(`ui.colorPicker.rose`), hue: 350, saturation: 0.78 },
+    { label: t(`ui.colorPicker.orchid`), hue: 320, saturation: 0.8 },
+    { label: t(`ui.colorPicker.iris`), hue: 290, saturation: 0.85 },
+    { label: t(`ui.colorPicker.cobalt`), hue: 260, saturation: 0.9 },
+    { label: t(`ui.colorPicker.azure`), hue: 230, saturation: 0.95 },
+    { label: t(`ui.colorPicker.lagoon`), hue: 200, saturation: 1 },
+    { label: t(`ui.colorPicker.emerald`), hue: 172, saturation: 0.95 },
+    { label: t(`ui.colorPicker.fern`), hue: 145, saturation: 0.85 },
+    { label: t(`ui.colorPicker.moss`), hue: 115, saturation: 0.9 },
+    { label: t(`ui.colorPicker.brass`), hue: 85, saturation: 0.95 },
+    { label: t(`ui.colorPicker.graphite`), hue: 250, saturation: 0.14 },
+]);
+const presets = PRESETS.value.map((preset) => ({ label: preset.label, hex: accentHex(preset) }));
 </script>
 
 <template>
     <!-- The swatches form one exclusive, keyboard-focusable choice. -->
-    <div role="radiogroup" aria-label="Accent colour" class="flex flex-wrap items-center gap-2.5">
+    <div role="radiogroup" :aria-label="t(`ui.colorPicker.accentColour`)" class="flex flex-wrap items-center gap-2.5">
         <button
             v-for="preset in presets"
             :key="preset.label"

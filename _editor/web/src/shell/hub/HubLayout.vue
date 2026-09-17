@@ -8,6 +8,9 @@ import { badgeSpeaks, RUNNING_MARK_CLASS } from "../../core-views/viewBadge";
 import ViewBadgeChip from "../../core-views/ViewBadgeChip.vue";
 import type { HubTab } from "./hubNav";
 import { hubWorkKey, provideHubSection } from "./hubWork";
+import { useT } from "@intentic/ui/i18n";
+
+const t = useT();
 
 const {
     groups,
@@ -22,7 +25,7 @@ const {
     /** The section the param-less URL shows. Its row writes no param, so no section has two URLs. */
     defaultSlug: string;
     groups: readonly NavGroup<HubTab>[];
-/** Holds the unknown-slug redirect while the set is still filling in. */
+    /** Holds the unknown-slug redirect while the set is still filling in. */
     ready?: boolean;
 }>();
 
@@ -79,10 +82,10 @@ watch(
 </script>
 
 <template>
-<!-- Wide because the index spends 14rem of it: at the 56rem default the body would be left narrower than it was before the column arrived. -->
+    <!-- Wide because the index spends 14rem of it: at the 56rem default the body would be left narrower than it was before the column arrived. -->
     <SplitView :title="title" :description="description" scroll="page">
-<!-- Mobile keeps the strip. -->
-<!-- It wraps rather than scrolls: this is the index of everything the hub holds, and a section a reader can't see is a section they won't look for. -->
+        <!-- Mobile keeps the strip. -->
+        <!-- It wraps rather than scrolls: this is the index of everything the hub holds, and a section a reader can't see is a section they won't look for. -->
         <template #compact>
             <div class="border-b border-line-subtle pb-2">
                 <SegmentedControl :model-value="activeSlug" :options="options" wrap @update:model-value="select" />
@@ -90,7 +93,7 @@ watch(
         </template>
 
         <template #rail>
-            <NavRail aria-label="Sections" :groups="groups">
+            <NavRail :aria-label="t(`shell.hubLayout.sections`)" :groups="groups">
                 <template #row="{ item: tab }">
                     <!-- Internal navigation wraps the presentational row to provide its href. -->
                     <RouterLink :key="tab.slug" :to="linkTo(tab.slug)" class="block">
@@ -102,10 +105,10 @@ watch(
                             :selected="tab.slug === activeSlug"
                             class="rounded-lg"
                         >
-<!-- A fact about the section, so it rides the row's #meta cluster. -->
-<!-- The test stays out here, unlike the corner badges, because `#meta` is a slot Row only draws when it is filled. -->
+                            <!-- A fact about the section, so it rides the row's #meta cluster. -->
+                            <!-- The test stays out here, unlike the corner badges, because `#meta` is a slot Row only draws when it is filled. -->
                             <template v-if="tab.badge !== undefined && badgeSpeaks(tab.badge)" #meta>
-<!-- Work in flight behind the section, in the rail tiles' own mark and ink: a hub mounts one section at a time,
+                                <!-- Work in flight behind the section, in the rail tiles' own mark and ink: a hub mounts one section at a time,
      so this is all that is left on screen of a run the reader walked away from. The sentence rides the tooltip
      and the reader's screen reader — a 14rem row has no width to spend on it. -->
                                 <span

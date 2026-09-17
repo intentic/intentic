@@ -2,11 +2,14 @@
 import { Button, Icon } from "@intentic/ui";
 import { type RouteLocationRaw, RouterLink } from "vue-router";
 import type { DeviceConcern } from "./deviceAttention";
+import { useT } from "@intentic/ui/i18n";
 
 // One thing a machine wants from the reader, drawn as a line rather than a slab: the glyph says which kind of want
 // it is, the sentence carries it, and the one control that closes it sits at the end, where this page keeps its
 // actions. The tone tints the edge and the glyph, never the sentence — a paragraph printed entirely in a signal
 // colour is harder to read than the fact it is signalling, and these sentences are long enough to need reading.
+
+const t = useT();
 
 const { concern } = defineProps<{
     concern: DeviceConcern;
@@ -41,8 +44,9 @@ const GLYPH: Record<DeviceConcern[`tone`], string> = { info: `text-muted`, warni
             {{ concern.text }}
             <!-- Kept on one line and in the content ink: a command broken across a wrap can't be copied by eye. -->
             <template v-if="concern.command">
-                Run <code class="rounded bg-content/10 px-1 py-0.5 font-mono text-2xs whitespace-nowrap text-content">{{ concern.command }}</code> on
-                that device.
+                {{ t(`sandbox.deviceConcern.run`) }}
+                <code class="rounded bg-content/10 px-1 py-0.5 font-mono text-2xs whitespace-nowrap text-content">{{ concern.command }}</code>
+                {{ t(`sandbox.deviceConcern.onDevice`) }}
             </template>
         </p>
         <!-- A link wearing the button's clothes, since this fix has an address: hoverable and Ctrl/⌘-clickable. -->

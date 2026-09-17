@@ -7,6 +7,9 @@ import type { IconName } from "../../icons/iconSets.js";
 import ContextMenu from "../overlays/ContextMenu.vue";
 import Icon from "../primitives/Icon.vue";
 import { DESTRUCTIVE_VERB, menuVerbs, primaryVerb, type SandboxVerb, VERB_LABEL } from "./sandboxVerbs.js";
+import { useT } from "../../i18n/index.js";
+
+const t = useT();
 
 const {
     running,
@@ -74,8 +77,8 @@ const items = computed<MenuItem[]>(() => [
             :loading="menuBusy"
             :disabled="disabled"
             aria-haspopup="menu"
-            aria-label="More actions"
-            v-tooltip.top="`More actions`"
+            :aria-label="t(`ui.sandboxVerbs.moreActions`)"
+            v-tooltip.top="t(`ui.sandboxVerbs.moreActions`)"
             @click="menu?.show($event)"
         >
             <template #icon><Icon name="ellipsis" /></template>

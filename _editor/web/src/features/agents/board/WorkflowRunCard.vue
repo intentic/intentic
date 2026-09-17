@@ -4,6 +4,7 @@ import type { WorkflowRun } from "@intentic/sandbox-contract";
 import { computed } from "vue";
 import { laneOfRun, runningTitles, spentOn } from "../fleet/useWorkflowRuns";
 import { liveSessions } from "../../chat/run/chatRun";
+import { useT } from "@intentic/ui/i18n";
 
 // A workflow run's row on the board, an agent card's sibling, not one: same shell (radius, border, lane bar, hover)
 // since it shares the column, but no provider/branch/worktree/transcript, so Land/Archive/diff don't apply.
@@ -13,6 +14,8 @@ import { liveSessions } from "../../chat/run/chatRun";
 
 // `dense` is the stacked, narrow board, exactly as AgentCard means it: it does not change what this row says, only
 // that it is drawn at the ledger's weight, since a stacked board's lanes are told apart by their order.
+const t = useT();
+
 const { run, dense } = defineProps<{ run: WorkflowRun; dense?: boolean; selected?: boolean; needsYou?: boolean; stopping?: boolean }>();
 const emit = defineEmits<{ open: []; stop: []; graph: []; archive: []; restore: [] }>();
 
@@ -45,12 +48,12 @@ const TONE: Record<WorkflowRun["state"], string> = {
     <div
         role="button"
         tabindex="0"
-        :aria-label="`Open the sessions of ${run.workflow.name}`"
+        :aria-label="t(`agents.workflowRunCard.openSessions`, { name: run.workflow.name })"
         class="session-card group flex w-full select-none flex-col rounded-xl border border-dashed text-left outline-none focus-visible:ring-2 focus-visible:ring-primary-500/25"
         :class="[
             // Same step the agent cards take (AgentCard's `live`), so a lane draws one card size.
             bigLane ? 'gap-2.5 p-4' : 'gap-2 p-3.5',
-/* Dashed, and that is the whole visual claim: this is a container of the solid cards around it rather than one of them. */
+            /* Dashed, and that is the whole visual claim: this is a container of the solid cards around it rather than one of them. */
             lane === 'attention' ? 'session-card-attention' : '',
             // The agent card's selection, on the agent card's channel: the chat panel is showing THIS run, and
             // a board that says so about a session but not about a run makes the run look like a thing you
@@ -63,7 +66,7 @@ const TONE: Record<WorkflowRun["state"], string> = {
         @keydown.space.self.prevent="emit(`open`)"
     >
         <div class="flex items-center gap-2.5">
-<!-- Graph glyph where an agent card has its identity tile: one look says this row is a shape, not a session. -->
+            <!-- Graph glyph where an agent card has its identity tile: one look says this row is a shape, not a session. -->
             <span class="flex h-7 w-7 shrink-0 items-center justify-center rounded-full ring-(length:--ring-track) ring-inset ring-content/12">
                 <span class="flex h-5.5 w-5.5 shrink-0 items-center justify-center rounded-full bg-primary-600/15">
                     <Icon name="sitemap" class="text-2xs text-link" />
@@ -78,14 +81,14 @@ const TONE: Record<WorkflowRun["state"], string> = {
             <!-- Waiting runs use the agent card's attention chip. -->
             <span
                 v-if="needsYou"
-                v-tooltip.top="`A step is waiting on you: open the run to answer it`"
+                v-tooltip.top="t(`agents.workflowRunCard.stepWaitingOnOpen`)"
                 class="ui-status-pill shrink-0 bg-warning/15 text-2xs font-semibold text-warning"
-                >needs you</span
+                >{{ t(`agents.workflowRunCard.needs`) }}</span
             >
             <button
                 type="button"
-                aria-label="Open the run's graph"
-                v-tooltip.top="`Open the graph: every step, and what each one decided`"
+                :aria-label="t(`agents.workflowRunCard.openRunsGraph`)"
+                v-tooltip.top="t(`agents.workflowRunCard.openGraphEveryStep`)"
                 class="shrink-0 rounded p-1 text-subtle opacity-0 transition-opacity hover:text-content focus-visible:opacity-100 group-hover:opacity-100"
                 @click.stop="emit(`graph`)"
             >
@@ -95,8 +98,8 @@ const TONE: Record<WorkflowRun["state"], string> = {
             <button
                 v-if="run.state !== `running` && run.archivedAt === undefined"
                 type="button"
-                aria-label="Archive this run"
-                v-tooltip.top="`Archive: takes the run and its sessions off the board. Branches and transcripts are kept.`"
+                :aria-label="t(`agents.workflowRunCard.archiveRun`)"
+                v-tooltip.top="t(`agents.workflowRunCard.archiveTakesRunSessions`)"
                 class="shrink-0 rounded p-1 text-subtle opacity-0 transition-opacity hover:bg-content/10 hover:text-content focus-visible:opacity-100 group-hover:opacity-100"
                 @click.stop="emit(`archive`)"
             >
@@ -106,8 +109,8 @@ const TONE: Record<WorkflowRun["state"], string> = {
             <button
                 v-if="run.archivedAt !== undefined"
                 type="button"
-                aria-label="Restore this run"
-                v-tooltip.top="`Put the run and its sessions back on the board`"
+                :aria-label="t(`agents.workflowRunCard.restoreRun`)"
+                v-tooltip.top="t(`agents.workflowRunCard.putRunSessionsBack`)"
                 class="shrink-0 rounded p-1 text-subtle opacity-0 transition-opacity hover:bg-content/10 hover:text-content focus-visible:opacity-100 group-hover:opacity-100"
                 @click.stop="emit(`restore`)"
             >
@@ -117,8 +120,8 @@ const TONE: Record<WorkflowRun["state"], string> = {
             <button
                 v-if="run.state === `running`"
                 type="button"
-                aria-label="Stop this workflow run"
-                v-tooltip.top="`Stop the run: its steps are cut off where they are and nothing new starts.`"
+                :aria-label="t(`agents.workflowRunCard.stopWorkflowRun`)"
+                v-tooltip.top="t(`agents.workflowRunCard.stopRunStepsCut`)"
                 :disabled="stopping"
                 :class="ui.iconButton(`h-auto w-auto shrink-0 rounded p-1 text-subtle hover:bg-danger/10 hover:text-danger`)"
                 @click.stop="emit(`stop`)"
@@ -132,11 +135,11 @@ const TONE: Record<WorkflowRun["state"], string> = {
         <p v-if="run.request" class="line-clamp-2 text-2xs italic leading-4 text-muted">{{ run.request }}</p>
 
         <div class="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-2xs text-muted">
-            <span :class="TONE[run.state]">{{ run.state === `running` ? `${live.length} live` : run.state }}</span>
-            <span>{{ done }}/{{ run.steps.length }} steps</span>
+            <span :class="TONE[run.state]">{{ run.state === `running` ? t(`agents.workflowRunCard.live`, { count: live.length }) : run.state }}</span>
+            <span>{{ t(`agents.workflowRunCard.steps`, { done, count: run.steps.length }) }}</span>
             <span v-if="spent > 0">${{ spent.toFixed(2) }}</span>
             <!-- Archived rows date by filing, not start, like the agent card: "when" means "when I put it away". -->
-            <span v-if="run.archivedAt !== undefined">Archived {{ timeAgo(run.archivedAt) }}</span>
+            <span v-if="run.archivedAt !== undefined">{{ t(`agents.workflowRunCard.archived`, { archivedAt: timeAgo(run.archivedAt) }) }}</span>
             <span v-else>{{ timeAgo(run.startedAt) }}</span>
         </div>
 

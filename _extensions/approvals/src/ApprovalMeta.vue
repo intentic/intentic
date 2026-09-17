@@ -2,12 +2,13 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import { destinationOf } from "./postText";
+import { t } from "./i18n.js";
 
 const { name, target, actsAs, note } = defineProps<{
     /** The platform's display name, or "Action": capitalized here, since an unknown platform arrives as its bare id. */
     name: string;
     target?: string;
-/* The metadata identifies the persona acting on the item. */
+    /* The metadata identifies the persona acting on the item. */
     actsAs?: string;
     /** One trailing fact the section cares about ("proposed 3h ago"). */
     note?: string;
@@ -30,7 +31,7 @@ const full = computed<string | undefined>(() =>
             </a>
             <template v-else>{{ destination.label }}</template>
         </template>
-        <template v-if="actsAs"> <span class="text-subtle"> · </span>as {{ actsAs }} </template>
+        <template v-if="actsAs"> <span class="text-subtle"> · </span>{{ t(`approvalMeta.as`) }} {{ actsAs }} </template>
         <template v-if="note"> <span class="text-subtle"> · </span>{{ note }} </template>
     </span>
 </template>

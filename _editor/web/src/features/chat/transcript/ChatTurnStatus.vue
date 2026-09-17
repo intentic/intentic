@@ -5,10 +5,13 @@ import { formatElapsed } from "../../agents/fleet/agentStatus";
 import { useAgents } from "../../agents/fleet/useAgents";
 import { usePaneView } from "../panel/useChat-view";
 import ThinkingRosette from "./ThinkingRosette.vue";
+import { useT } from "@intentic/ui/i18n";
 
 // The live turn's status line (spinner, activity, elapsed), keyed off the conversation rather than a message bubble, so
 // it can render before the turn's first frame opens one. Mounted in two places, ChatMessageView under a live bubble and
 // ChatPane before one exists, exactly one of which is ever active.
+
+const t = useT();
 
 const { conversation, streaming } = usePaneView();
 const { agentById } = useAgents();
@@ -70,8 +73,8 @@ const retryReason = computed(() =>
     <div class="flex items-center gap-2 self-start rounded-lg bg-overlay px-3 py-2 text-2xs text-muted">
         <ThinkingRosette class="text-2xs text-link" />
         <span v-if="providerRetry"
-            >The model provider is {{ retryReason }}: {{ retryWait }}
-            <span class="text-subtle">(attempt {{ providerRetry.attempt }}, nothing lost)</span></span
+            >{{ t(`chat.chatTurnStatus.modelProvider`) }} {{ retryReason }}: {{ retryWait }}
+            <span class="text-subtle">{{ t(`chat.chatTurnStatus.attemptNothingLost`, { attempt: providerRetry.attempt }) }}</span></span
         >
         <span v-else
             >{{ loaderWord }}… <span v-if="loaderElapsed" class="text-subtle">({{ loaderElapsed }})</span></span

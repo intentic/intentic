@@ -3,6 +3,7 @@ import { Icon, SegmentedControl } from "@intentic/extension-ui";
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import type { SheetRows } from "./sheetProtocol";
 import { createSheetWorkerClient } from "./sheetWorkerClient";
+import { t } from "./i18n.js";
 
 /* XLSX preview: transfers a workbook to a dedicated worker, which parses it once and hands back the selected sheet's VALUES. */
 
@@ -120,7 +121,9 @@ onBeforeUnmount(() => {
                 <Icon name="exclamation-triangle" class="text-3xl text-danger" />
                 <p class="text-sm text-danger">{{ error }}</p>
             </div>
-            <div v-else-if="columnCount === 0" class="flex h-full items-center justify-center text-sm text-muted">This sheet is empty.</div>
+            <div v-else-if="columnCount === 0" class="flex h-full items-center justify-center text-sm text-muted">
+                {{ t(`sheetViewer.sheetEmpty`) }}
+            </div>
             <div v-else class="xlsx-sheet h-full overflow-auto p-4">
                 <table>
                     <thead v-if="headerRow !== undefined">

@@ -1,4 +1,5 @@
 import type { GitDiffSide, LandedMessage, LandedMessageDraft, LandedMessageStep, RepoChanges } from "@intentic/api-contract";
+import { t } from "@intentic/ui/i18n";
 
 // Attribution layer over each repo's `origins` map (path -> agent ids that landed it, newest first); cleared on commit.
 // Only agents are ever named — an unlanded change carries no origin, and absence is the signal, not a "you" badge.
@@ -177,7 +178,14 @@ export const draftReport = (draft: LandedMessageDraft | undefined, now: number):
         return [];
     }
     if (draft.steps.length === 0 && draft.outcome === undefined) {
-        return [{ key: `reading`, status: `reading`, detail: `Reading the landed diff…`, title: `Reading the landed diff…` }];
+        return [
+            {
+                key: `reading`,
+                status: `reading`,
+                detail: t(`workspace.changeOrigins.readingLandedDiff`),
+                title: t(`workspace.changeOrigins.readingLandedDiff`),
+            },
+        ];
     }
     const rows = draft.steps.map((step, index) => stepRow(step, index, now));
     if (draft.outcome === `failed` && draft.reason !== undefined && !draft.steps.some((step) => step.reason === draft.reason)) {

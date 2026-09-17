@@ -9,6 +9,7 @@ import type {
     TranscriptQuestion,
     TranscriptTerminalHelp,
 } from "@intentic/sandbox-contract";
+import { t } from "@intentic/ui/i18n";
 
 // How each decision card signals it is over, replacing per-card v-if chains in ChatMessageView. `undefined` means still
 // live. `done` means the thing happened, `gone` means it didn't: a denied permission and any cancelled card are `gone`,
@@ -17,11 +18,11 @@ import type {
 export const planStatus = (plan: TranscriptPlan): CardStatus | undefined => {
     switch (plan.status) {
         case "approved":
-            return { label: "Approved", tone: "done" };
+            return { label: t(`chat.cardStatus.approved`), tone: "done" };
         case "rejected":
-            return { label: "Kept planning", tone: "gone" };
+            return { label: t(`chat.cardStatus.keptPlanning`), tone: "gone" };
         case "cancelled":
-            return { label: "Stopped", tone: "gone" };
+            return { label: t(`chat.cardStatus.stopped`), tone: "gone" };
         default:
             return undefined;
     }
@@ -30,9 +31,9 @@ export const planStatus = (plan: TranscriptPlan): CardStatus | undefined => {
 export const questionStatus = (question: TranscriptQuestion): CardStatus | undefined => {
     switch (question.status) {
         case "answered":
-            return { label: "Answered", tone: "done" };
+            return { label: t(`chat.cardStatus.answered`), tone: "done" };
         case "cancelled":
-            return { label: "Dismissed", tone: "gone" };
+            return { label: t(`chat.cardStatus.dismissed`), tone: "gone" };
         default:
             return undefined;
     }
@@ -41,14 +42,14 @@ export const questionStatus = (question: TranscriptQuestion): CardStatus | undef
 export const permissionStatus = (permission: TranscriptPermission): CardStatus | undefined => {
     switch (permission.status) {
         case "allowed":
-            return { label: "Allowed", tone: "done" };
+            return { label: t(`chat.cardStatus.allowed`), tone: "done" };
         // An always-allow still counts as a yes; the grant lasts the rest of the turn without asking again.
         case "always":
-            return { label: "Always allowed", tone: "done" };
+            return { label: t(`chat.cardStatus.alwaysAllowed`), tone: "done" };
         case "denied":
-            return { label: "Denied", tone: "gone" };
+            return { label: t(`chat.cardStatus.denied`), tone: "gone" };
         case "cancelled":
-            return { label: "Stopped", tone: "gone" };
+            return { label: t(`chat.cardStatus.stopped`), tone: "gone" };
         default:
             return undefined;
     }
@@ -59,11 +60,11 @@ export const permissionStatus = (permission: TranscriptPermission): CardStatus |
 export const helpStatus = (help: TranscriptBrowserHelp | TranscriptTerminalHelp): CardStatus | undefined => {
     switch (help.status) {
         case "helped":
-            return { label: "You helped", tone: "done" };
+            return { label: t(`chat.cardStatus.helped`), tone: "done" };
         case "declined":
-            return { label: "Couldn't help", tone: "gone" };
+            return { label: t(`chat.cardStatus.couldntHelp`), tone: "gone" };
         case "cancelled":
-            return { label: "Stopped", tone: "gone" };
+            return { label: t(`chat.cardStatus.stopped`), tone: "gone" };
         default:
             return undefined;
     }
@@ -74,11 +75,11 @@ export const helpStatus = (help: TranscriptBrowserHelp | TranscriptTerminalHelp)
 export const offerStatus = (offer: TranscriptPaymentOffer | TranscriptCredentialOffer): CardStatus | undefined => {
     switch (offer.status) {
         case "approved":
-            return { label: "Approved", tone: "done" };
+            return { label: t(`chat.cardStatus.approved`), tone: "done" };
         case "skipped":
-            return { label: "Skipped", tone: "gone" };
+            return { label: t(`chat.cardStatus.skipped`), tone: "gone" };
         case "cancelled":
-            return { label: "Not answered", tone: "gone" };
+            return { label: t(`chat.cardStatus.notAnswered`), tone: "gone" };
         default:
             return undefined;
     }
@@ -107,13 +108,15 @@ export const credentialLane = (offer: TranscriptCredentialOffer["offer"]): strin
 // chip: the card isn't finished, it's waiting, and its own row shows a spinner.
 export const capabilityStatus = (offer: TranscriptCapabilityOffer): CardStatus | undefined => {
     if (offer.outcome) {
-        return offer.outcome.outcome === "connected" ? { label: "Connected", tone: "done" } : { label: "Setup didn't finish", tone: "gone" };
+        return offer.outcome.outcome === "connected"
+            ? { label: t(`chat.cardStatus.connected`), tone: "done" }
+            : { label: t(`chat.cardStatus.setupDidntFinish`), tone: "gone" };
     }
     switch (offer.status) {
         case "skipped":
-            return { label: "Skipped", tone: "gone" };
+            return { label: t(`chat.cardStatus.skipped`), tone: "gone" };
         case "cancelled":
-            return { label: "Not answered", tone: "gone" };
+            return { label: t(`chat.cardStatus.notAnswered`), tone: "gone" };
         default:
             return undefined;
     }

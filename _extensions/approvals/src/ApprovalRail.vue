@@ -20,6 +20,7 @@ export interface ApprovalScope {
 <script setup lang="ts">
 import { BrandMark, type NavGroup, NavRail, Picker, type PickerOptions, Row, useDevice, useRailMemory } from "@intentic/extension-ui";
 import { computed } from "vue";
+import { t } from "./i18n.js";
 
 const { all, scopes } = defineProps<{
     /** The pinned everything row: the state the rail returns to. */
@@ -57,7 +58,7 @@ const { mobile } = useDevice();
 const options = computed<PickerOptions<string>>(() => [
     { options: [{ value: ``, label: all.label, description: String(all.total), icon: all.icon }] },
     {
-        label: `Slices`,
+        label: t(`approvalRail.slices`),
         options: scopes.map((scope) => ({ value: scope.key, label: scope.label, description: String(scope.total), icon: scope.icon })),
     },
 ]);
@@ -65,7 +66,14 @@ const scopeOf = (value: string | undefined): ApprovalScope | undefined => scopes
 </script>
 
 <template>
-    <Picker v-if="mobile" v-model="selected" :options="options" aria-label="Approval slice" header="Show" class="w-full text-xs">
+    <Picker
+        v-if="mobile"
+        v-model="selected"
+        :options="options"
+        :aria-label="t(`approvalRail.approvalSlice`)"
+        :header="t(`approvalRail.show`)"
+        class="w-full text-xs"
+    >
         <template #icon="{ option }">
             <BrandMark v-if="scopeOf(option?.value)?.logo" :size="16" :name="option?.label ?? ``" :logo="scopeOf(option?.value)?.logo" />
             <Icon v-else-if="option?.icon !== undefined" :name="option.icon" class="shrink-0 text-xs text-muted" aria-hidden="true" />
@@ -73,7 +81,7 @@ const scopeOf = (value: string | undefined): ApprovalScope | undefined => scopes
         </template>
     </Picker>
 
-    <NavRail v-else aria-label="Approval slices" :groups="groups">
+    <NavRail v-else :aria-label="t(`approvalRail.approvalSlices`)" :groups="groups">
         <!-- Ungrouped so it can't be pushed out of reach: this is the state the rail always returns to. -->
         <template #pinned>
             <Row

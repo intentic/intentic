@@ -2,6 +2,7 @@ import type { IconName } from "@intentic/ui";
 import { briefDuration } from "@intentic/base/format";
 import { formatWeekdayTime } from "@intentic/ui/format";
 import type { AgentAttention, AgentOrigin, AgentStatus, AgentSummary, AgentWatch, LandConflictReason, LoopState } from "@intentic/sandbox-contract";
+import { t } from "@intentic/ui/i18n";
 
 // Every projection of a fleet agent's state (lane, attention label, drill-in verb, glyphs). Nothing else may
 // derive these from `status` alone: a parked turn is `idle` with an attention flag raised. Pure functions over
@@ -76,51 +77,52 @@ export const unregistered = (status: AgentStatus | ClientAgentStatus): boolean =
 
 // One entry per status, no fallthrough. A table rather than an if-chain: `satisfies` over the full union makes an
 // unhandled status a build error instead of silently drawing it as idle.
-const STATUS_META = {
-    // Not `pencil`, that's the card's rename affordance; the draft glyph is a not-yet-started marker.
-    draft: { icon: `circle`, label: `Draft`, class: `text-subtle` },
-    // Says where it came from, not how it ended (that's unknowable, the registry entry that would say is gone). Glyph
-    // matches the search footer's "In earlier chats".
-    resumed: { icon: `history`, label: `Earlier chat`, class: `text-subtle` },
-    // Send was refused: nothing of the user's is at risk, so warning rather than `error`'s danger. This agent doesn't
-    // exist; the card is for work that never started.
-    failed: { icon: `exclamation-triangle`, label: `Didn't start`, class: `text-warning` },
-    // The turn has gone but the daemon hasn't filed it yet; drawn from what this browser knows, not the registry.
-    starting: { icon: `spinner`, spin: true, label: `Starting…`, class: `text-link` },
-    running: { icon: `spinner`, spin: true, label: `Running`, class: `text-link` },
-    // The Stop press landed and the turn is unwinding. Muted rather than a spinner: this is the tail of something
-    // ending, not new work.
-    stopping: { icon: `stop`, label: `Stopping…`, class: `text-subtle` },
-    // The other way a person ends a turn (waving away what it was parked on). Wears the finish it's about to become
-    // rather than a second kind of halt.
-    dismissing: { icon: `check-circle`, label: `Finishing…`, class: `text-subtle` },
-    // The turn stopped without ending (something underneath broke) and the daemon is already restarting it; running
-    // spinner and blue since nothing failed and work is still in progress.
-    resuming: { icon: `spinner`, spin: true, label: `Resuming…`, class: `text-link` },
-    // The daemon is rebasing the branch and carrying its work into the workspace; nothing has finished yet, nothing has
-    // failed, and nothing may act on the branch until it settles, so the running spinner and blue.
-    landing: { icon: `spinner`, spin: true, label: `Landing…`, class: `text-link` },
-    awaiting: { icon: `exclamation-circle`, label: `Needs you`, class: `text-primary-500` },
-    landed: { icon: `check-circle`, label: `Landed`, class: `text-success` },
-    // Finished with auto-land off: work is safe on the branch, waiting for a deliberate Land. Link-blue, not an
-    // attention hue, since the user chose this.
-    ready: { icon: `download`, label: `Ready to land`, class: `text-link` },
-    conflict: { icon: `exclamation-triangle`, label: `Conflict`, class: `text-warning` },
-    error: { icon: `exclamation-triangle`, label: `Error`, class: `text-danger` },
-    // Warning, not danger: the daemon died underneath it (rebuild, crash), a fact about the sandbox rather than the
-    // work. Glyph matches the Stop button.
-    interrupted: { icon: `stop`, label: `Interrupted`, class: `text-warning` },
-    // Same kind of ending, by the user's own hand, so quieter than `interrupted`: the reader already knows, since they
-    // pressed Stop.
-    stopped: { icon: `stop`, label: `Stopped`, class: `text-subtle` },
-    idle: { icon: `circle-fill`, label: `Idle`, class: `text-subtle` },
-} as const satisfies Record<AgentStatus | ClientAgentStatus, { icon: IconName; spin?: boolean; label: string; class: string }>;
+const statusMeta = () =>
+    ({
+        // Not `pencil`, that's the card's rename affordance; the draft glyph is a not-yet-started marker.
+        draft: { icon: `circle`, label: t(`agents.agentStatus.draft`), class: `text-subtle` },
+        // Says where it came from, not how it ended (that's unknowable, the registry entry that would say is gone). Glyph
+        // matches the search footer's "In earlier chats".
+        resumed: { icon: `history`, label: t(`agents.agentStatus.earlierChat`), class: `text-subtle` },
+        // Send was refused: nothing of the user's is at risk, so warning rather than `error`'s danger. This agent doesn't
+        // exist; the card is for work that never started.
+        failed: { icon: `exclamation-triangle`, label: t(`agents.agentStatus.didntStart`), class: `text-warning` },
+        // The turn has gone but the daemon hasn't filed it yet; drawn from what this browser knows, not the registry.
+        starting: { icon: `spinner`, spin: true, label: t(`agents.agentStatus.starting`), class: `text-link` },
+        running: { icon: `spinner`, spin: true, label: t(`agents.agentStatus.running`), class: `text-link` },
+        // The Stop press landed and the turn is unwinding. Muted rather than a spinner: this is the tail of something
+        // ending, not new work.
+        stopping: { icon: `stop`, label: t(`agents.agentStatus.stopping`), class: `text-subtle` },
+        // The other way a person ends a turn (waving away what it was parked on). Wears the finish it's about to become
+        // rather than a second kind of halt.
+        dismissing: { icon: `check-circle`, label: t(`agents.agentStatus.finishing`), class: `text-subtle` },
+        // The turn stopped without ending (something underneath broke) and the daemon is already restarting it; running
+        // spinner and blue since nothing failed and work is still in progress.
+        resuming: { icon: `spinner`, spin: true, label: t(`agents.agentStatus.resuming`), class: `text-link` },
+        // The daemon is rebasing the branch and carrying its work into the workspace; nothing has finished yet, nothing has
+        // failed, and nothing may act on the branch until it settles, so the running spinner and blue.
+        landing: { icon: `spinner`, spin: true, label: t(`agents.agentStatus.landing`), class: `text-link` },
+        awaiting: { icon: `exclamation-circle`, label: t(`agents.agentStatus.needs`), class: `text-primary-500` },
+        landed: { icon: `check-circle`, label: t(`agents.agentStatus.landed`), class: `text-success` },
+        // Finished with auto-land off: work is safe on the branch, waiting for a deliberate Land. Link-blue, not an
+        // attention hue, since the user chose this.
+        ready: { icon: `download`, label: t(`agents.agentStatus.readyToLand`), class: `text-link` },
+        conflict: { icon: `exclamation-triangle`, label: t(`agents.agentStatus.conflict`), class: `text-warning` },
+        error: { icon: `exclamation-triangle`, label: t(`agents.agentStatus.error`), class: `text-danger` },
+        // Warning, not danger: the daemon died underneath it (rebuild, crash), a fact about the sandbox rather than the
+        // work. Glyph matches the Stop button.
+        interrupted: { icon: `stop`, label: t(`agents.agentStatus.interrupted`), class: `text-warning` },
+        // Same kind of ending, by the user's own hand, so quieter than `interrupted`: the reader already knows, since they
+        // pressed Stop.
+        stopped: { icon: `stop`, label: t(`agents.agentStatus.stopped`), class: `text-subtle` },
+        idle: { icon: `circle-fill`, label: t(`agents.agentStatus.idle`), class: `text-subtle` },
+    }) as const satisfies Record<AgentStatus | ClientAgentStatus, { icon: IconName; spin?: boolean; label: string; class: string }>;
 
 // The `??` is unreachable by types but kept: an unhandled status here is `undefined.icon` in a render, which takes
 // down the whole board, worse than one card reading `Idle`. The wire isn't runtime-typed, so a newer daemon can
 // send a status this build has never heard of.
 export const agentStatusMeta = (status: AgentStatus | ClientAgentStatus): { icon: IconName; spin?: boolean; label: string; class: string } =>
-    STATUS_META[status] ?? STATUS_META.idle;
+    statusMeta()[status] ?? statusMeta().idle;
 
 // A turn is in flight: running, unwinding after a Stop, or repairing itself after its daemon died. Every hands-off
 // guard (its worktree is a live turn's working state) and the live readouts (elapsed, activity line) key off this.
@@ -171,39 +173,43 @@ export const blocked = (agent: AgentStanding): boolean =>
 // than `blocked`: dead ends (a failed turn, an unlandable conflict) want looking at but owe the user nothing, so
 // ending the agent loses no answer.
 export const awaitingUser = (agent: AgentStanding): boolean =>
-    agent.attention.plan ||
-    agent.attention.question ||
-    agent.attention.permission ||
-    agent.attention.capability ||
-    agent.status === `awaiting`;
+    agent.attention.plan || agent.attention.question || agent.attention.permission || agent.attention.capability || agent.status === `awaiting`;
 
 // One table for the chip word and drill-in verb per attention flag, in display rank order, so the two can't drift
 // apart as they did before. `satisfies Record<keyof AgentAttention, …>` makes a new wire flag a build error until
 // both words exist. Kept short: the chip is `shrink-0` beside the title, so every character taken grows at the
 // agent name's expense.
-const ATTENTION_WORDS = {
-    plan: { chip: `Approval needed`, verb: `Review plan` },
-    // Outranks a question: parked on a setup only the user can do. Verb names the work, since this click leads into a
-    // flow rather than a one-press approval.
-    capability: { chip: `Setup needed`, verb: `Set up` },
-    // Waits for an exact list of addresses the owner named; the daemon refuses everybody else
-    // (secrets/credential-gate.ts). Ranked above a question, below setup: it blocks outright like a setup but is a
-    // yes/no rather than a decision to read. Verb names the destination, not the action ("Release" would promise
-    // something the reader may be unable to do).
-    credential: { chip: `Release needed`, verb: `See the request` },
-    question: { chip: `Question for you`, verb: `Answer` },
-    // Ranked last, the most routine and cheapest park to clear: a plan, a spend or a setup wants reading first. Chip
-    // reads "Permission" alone, not "Approval needed" (a plan's word) or "Permission needed" (too long at the card's
-    // lane width, and the only thing naming the state on mobile where the drill-in verb doesn't render).
-    permission: { chip: `Permission`, verb: `Approve` },
-    // Verb names the report, not the fix: the fix is its own button one line above the drill-in (AgentCard). Two
-    // controls both promising to resolve the conflict, only one of which does, is worse than one of each.
-    conflict: { chip: `Land conflict`, verb: `See what blocked it` },
-} as const satisfies Record<keyof AgentAttention, { chip: string; verb: string }>;
+const attentionWords = () =>
+    ({
+        plan: { chip: t(`agents.agentStatus.approvalNeeded`), verb: t(`agents.agentStatus.reviewPlan`) },
+        // Outranks a question: parked on a setup only the user can do. Verb names the work, since this click leads into a
+        // flow rather than a one-press approval.
+        capability: { chip: t(`agents.agentStatus.setupNeeded`), verb: t(`agents.agentStatus.setUp`) },
+        // Waits for an exact list of addresses the owner named; the daemon refuses everybody else
+        // (secrets/credential-gate.ts). Ranked above a question, below setup: it blocks outright like a setup but is a
+        // yes/no rather than a decision to read. Verb names the destination, not the action ("Release" would promise
+        // something the reader may be unable to do).
+        credential: { chip: t(`agents.agentStatus.releaseNeeded`), verb: t(`agents.agentStatus.seeRequest`) },
+        question: { chip: t(`agents.agentStatus.question`), verb: t(`agents.agentStatus.answer`) },
+        // Ranked last, the most routine and cheapest park to clear: a plan, a spend or a setup wants reading first. Chip
+        // reads "Permission" alone, not "Approval needed" (a plan's word) or "Permission needed" (too long at the card's
+        // lane width, and the only thing naming the state on mobile where the drill-in verb doesn't render).
+        permission: { chip: t(`agents.agentStatus.permission`), verb: t(`ui.action.approve`) },
+        // Verb names the report, not the fix: the fix is its own button one line above the drill-in (AgentCard). Two
+        // controls both promising to resolve the conflict, only one of which does, is worse than one of each.
+        conflict: { chip: t(`agents.agentStatus.landConflict`), verb: t(`agents.agentStatus.seeWhatBlocked`) },
+    }) as const satisfies Record<keyof AgentAttention, { chip: string; verb: string }>;
 
-// The rank for both readings, taken from `Object.keys` rather than a second hand-kept list that could disagree
-// with the table above.
-const ATTENTION_RANK = Object.keys(ATTENTION_WORDS) as readonly (keyof AgentAttention)[];
+// The rank for both readings. Spelled out rather than read off the table above, which is a function now: calling it
+// here, while this module is still being imported, would ask for words before any catalog is registered.
+const ATTENTION_RANK = [
+    `plan`,
+    `capability`,
+    `credential`,
+    `question`,
+    `permission`,
+    `conflict`,
+] as const satisfies readonly (keyof AgentAttention)[];
 
 // The flag this card leads with, read once so the chip and verb are always about the same park. Raised flags are
 // checked before the `conflict` status; a live park with someone waiting outranks a fact about where work came to
@@ -218,33 +224,33 @@ export const attentionReason = (agent: AgentStanding): string | undefined => {
     // whole fix; the card's body is left to say what the card is rather than what happened to it. Short, since the
     // chip is `shrink-0` beside the agent's name.
     if (limited(agent)) {
-        return `Usage limit`;
+        return t(`agents.agentStatus.usageLimit`);
     }
     const park = leadingPark(agent);
     if (park !== undefined) {
         // Same length as the generic word it replaces, and it names the half of the report the reader can act on:
         // "Land conflict" beside a button only they can press read as the agent's problem.
-        return park === `conflict` && conflictIsYours(agent) ? `Your edits` : ATTENTION_WORDS[park].chip;
+        return park === `conflict` && conflictIsYours(agent) ? t(`agents.agentStatus.edits`) : attentionWords()[park].chip;
     }
     // A park the attention block can't name: `awaiting` covers a browser or terminal hand-off, neither of which raises
     // a wire flag, so it arrives as a bare status. Checked last, only once nothing more specific applies.
-    return ENDING_REASONS[agent.status] ?? (agent.status === `awaiting` ? `Waiting on you` : undefined);
+    return endingReasons()[agent.status] ?? (agent.status === `awaiting` ? t(`agents.agentStatus.waitingOn`) : undefined);
 };
 
 // The endings, tabled rather than chained since a sixth condition (`limited`) has to be checked ahead of them.
 // Absent means the card isn't in Attention for a reason worth a chip.
-const ENDING_REASONS: Partial<Record<AgentStatus | ClientAgentStatus, string>> = {
-    error: `Error`,
+const endingReasons = (): Partial<Record<AgentStatus | ClientAgentStatus, string>> => ({
+    error: t(`agents.agentStatus.error`),
     // Names the whole of what happened, in the right tense: not "failed" (nothing ran) or "error" (no agent to have
     // erred). Stops the card reading as a live agent at all.
-    failed: `Didn't start`,
+    failed: t(`agents.agentStatus.didntStart`),
     // The turn didn't fail or finish, its daemon went away. Sending a message starts a fresh turn on the same session.
-    interrupted: `Interrupted`,
+    interrupted: t(`agents.agentStatus.interrupted`),
     // The user's own decision, so the chip reports it rather than addressing them ("Stopped", not "Stopped by you").
     // `stopping` is the same ending a beat earlier, in the tense it's actually in: still unwinding.
-    stopping: `Stopping`,
-    stopped: `Stopped`,
-};
+    stopping: t(`agents.agentStatus.stopping2`),
+    stopped: t(`agents.agentStatus.stopped`),
+});
 
 export type FleetLane = "attention" | "active" | "finished";
 
@@ -333,9 +339,9 @@ export const landedAway = (agent: {
     // The common shape: the whole of it, one discard, no arithmetic to read.
     if (presence.present === 0) {
         return {
-            text: `Removed`,
-            hint: `on branch`,
-            title: `Removed from your workspace (still on its branch)`,
+            text: t(`agents.agentStatus.removed`),
+            hint: t(`agents.agentStatus.onBranch`),
+            title: t(`agents.agentStatus.removedWorkspaceStillOn`),
             icon: `link-broken`,
         };
     }
@@ -343,7 +349,7 @@ export const landedAway = (agent: {
     // hover.
     return {
         text: `${presence.present}/${presence.landed}`,
-        title: `${presence.present} of ${presence.landed} files still in your workspace (the rest is on its branch)`,
+        title: t(`agents.agentStatus.filesStillInWorkspace`, { present: presence.present, landed: presence.landed }),
         icon: `arrows-h`,
     };
 };
@@ -370,7 +376,7 @@ export const unfinishedMark = (agent: AgentStanding | undefined): { dot: string;
            * same reason STATUS_META keeps its `??`: a lane is decided by a status off an untyped wire, so a
            * build one version behind can be handed a standing it has no word for, and a chip reading
            * `undefined` in a legend is worse than one reading the plainest true thing. */
-          { dot: `bg-primary-500`, label: attentionReason(agent) ?? `Waiting on you` };
+          { dot: `bg-primary-500`, label: attentionReason(agent) ?? t(`agents.agentStatus.waitingOn`) };
 };
 
 // "Working" would be wrong for the two Active cards that aren't: one is waiting on the world, one on a clock. Both
@@ -378,9 +384,11 @@ export const unfinishedMark = (agent: AgentStanding | undefined): { dot: string;
 const activeLabel = (agent: AgentStanding): string => {
     if (limitScheduled(agent)) {
         // A booked move names its destination; the hour is shown separately, in the corner.
-        return agent.limitMoving === undefined ? `Sends itself again` : `Moving to ${agent.limitMoving}`;
+        return agent.limitMoving === undefined
+            ? t(`agents.agentStatus.sendsItselfAgain`)
+            : t(`agents.agentStatus.movingTo`, { account: agent.limitMoving });
     }
-    return watching(agent) && !turnInFlight(agent) ? `Waiting on a condition` : `Still working`;
+    return watching(agent) && !turnInFlight(agent) ? t(`agents.agentStatus.waitingOnCondition`) : t(`agents.agentStatus.stillWorking`);
 };
 
 // The card's drill-in label (desktop): names the destination rather than a generic "Open". A draft has no
@@ -393,28 +401,31 @@ export const reviewAction = (agent: AgentStanding & { readonly branch?: string; 
     // The same flag the chip led with, so the corner's noun and the card's verb are always about the same park.
     const park = leadingPark(agent);
     if (park !== undefined) {
-        return ATTENTION_WORDS[park].verb;
+        return attentionWords()[park].verb;
     }
     // A spent allowance is not an error to view: there's nothing to diagnose in the transcript, and the destination is
     // the conversation itself. Checked before the `error` branch below, which it would otherwise fall into.
     if (limited(agent)) {
-        return `Open chat`;
+        return t(`agents.agentStatus.openChat`);
     }
-    return ENDING_ACTIONS[agent.status] ?? (agent.diff !== undefined && agent.diff.files > 0 ? `Review changes` : `Review`);
+    return (
+        endingActions()[agent.status] ??
+        (agent.diff !== undefined && agent.diff.files > 0 ? t(`agents.agentStatus.reviewChanges`) : t(`agents.agentStatus.review`))
+    );
 };
 
 // Endings whose destination is named by the ending itself rather than by the diff; tabled for the same reason as
-// `ENDING_REASONS`. Anything absent falls to the diff reading below.
-const ENDING_ACTIONS: Partial<Record<AgentStatus | ClientAgentStatus, string>> = {
-    error: `View error`,
+// `endingReasons`. Anything absent falls to the diff reading below.
+const endingActions = (): Partial<Record<AgentStatus | ClientAgentStatus, string>> => ({
+    error: t(`agents.agentStatus.viewError`),
     // Destination is the transcript, where the cut-off tool call is itself the report. One label for both endings:
     // whether the daemon died or the user stopped it, the question is the same, how far did it get?
-    interrupted: `See where it stopped`,
-    stopped: `See where it stopped`,
+    interrupted: t(`agents.agentStatus.seeWhereStopped`),
+    stopped: t(`agents.agentStatus.seeWhereStopped`),
     // Names both halves of the destination: reading the held work and landing it. The card's own primary button lands
     // without the trip (AgentCard).
-    ready: `Review & land`,
-};
+    ready: t(`agents.agentStatus.reviewLand`),
+});
 
 // Whether a clean turn's work lands by itself, folding the agent's own override, the sandbox default, and the
 // schema default (off) into one answer every surface must agree on. Takes plain values rather than reaching for
@@ -437,33 +448,37 @@ export const effectiveLimitMove = (agent: { readonly moveAfterLimit?: boolean } 
 
 // Sources an agent can be opened by, keyed on `AgentOrigin.provider` (an open string; listener sources are
 // extension-declared), so an unrecognized one falls back to its own name rather than disappearing.
-const ORIGIN_SOURCES: Record<string, { icon: IconName; label: string }> = {
+const originSources = (): Record<string, { icon: IconName; label: string }> => ({
     discord: { icon: `comments`, label: `Discord` },
     slack: { icon: `comments`, label: `Slack` },
-    imap: { icon: `envelope`, label: `Email` },
-    webchat: { icon: `globe`, label: `Front Desk` },
-    webhook: { icon: `bolt`, label: `Webhook` },
-};
+    imap: { icon: `envelope`, label: t(`agents.agentStatus.email`) },
+    webchat: { icon: `globe`, label: t(`agents.agentStatus.frontDesk`) },
+    webhook: { icon: `bolt`, label: t(`agents.agentStatus.webhook`) },
+});
 
 // The card's "came in from outside" line: what opened it, who sent it, and which automation was configured to
 // answer. The hint carries only what OriginMark doesn't already print (source and sender), so nothing is said
 // twice.
 export const originMeta = (origin: AgentOrigin): { icon: IconName; label: string; detail: string | undefined; hint: string } => {
-    const source = ORIGIN_SOURCES[origin.provider] ?? { icon: `wave-pulse` as IconName, label: origin.provider };
+    const source = originSources()[origin.provider] ?? { icon: `wave-pulse` as IconName, label: origin.provider };
     const where = origin.channelId !== undefined ? ` in ${origin.channelId}` : ``;
     return {
         icon: source.icon,
         label: source.label,
         detail: origin.author,
-        hint: `Opened by the "${origin.automationId}" automation${where}, its first prompt is not yours`,
+        hint: t(`agents.agentStatus.openedByAutomationFirst`, { automationId: origin.automationId, where }),
     };
 };
 
 // "New" (never opened) vs. "Updated" (opened, then worked on since); the marker lives on the daemon entry so
 // opening it anywhere clears it everywhere. `seenAt` is returned raw for the caller to format; this module owns no
 // clock.
-export const unreadBadge = (agent: { unread: boolean; seenAt?: number }): { label: "New" | "Updated"; seenAt?: number } | undefined =>
-    !agent.unread ? undefined : agent.seenAt === undefined ? { label: `New` } : { label: `Updated`, seenAt: agent.seenAt };
+export const unreadBadge = (agent: { unread: boolean; seenAt?: number }): { label: string; seenAt?: number } | undefined =>
+    !agent.unread
+        ? undefined
+        : agent.seenAt === undefined
+          ? { label: t(`agents.agentStatus.new`) }
+          : { label: t(`agents.agentStatus.updated`), seenAt: agent.seenAt };
 
 // The unread chip's hover, one sentence wherever that chip is drawn; takes the formatted instant, since this module
 // owns no clock (see `unreadBadge`).
@@ -584,7 +599,7 @@ export const activityIcon = (tool: string | undefined): IconName => {
     if (tool === undefined) {
         return `list-check`; // a todo line without a tool
     }
-    if (tool === `Edit` || tool === `Write` || tool.startsWith(`mcp__hashline`)) {
+    if (tool === `Edit` || tool === `Write` || tool.startsWith(`mcp__`)) {
         return `pencil`;
     }
     if (tool === `Bash` || tool === `BashOutput`) {
@@ -637,7 +652,10 @@ export const limitCountdown = (agent: AgentStanding, now: number): string | unde
 // The watch a card's clock counts to: the first deadline to arrive is the next moment the card definitely moves. One
 // definition, since the chat's own watch row asks the same question about the same conversation.
 export const soonestWatch = (agent: AgentStanding): AgentWatch | undefined =>
-    agent.watches?.reduce((first: AgentWatch | undefined, next) => (first === undefined || next.deadlineAt < first.deadlineAt ? next : first), undefined);
+    agent.watches?.reduce(
+        (first: AgentWatch | undefined, next) => (first === undefined || next.deadlineAt < first.deadlineAt ? next : first),
+        undefined,
+    );
 
 // Glyph, phrase and clock, matching the shape a running turn's own readout uses (`Bash · 1m 12s`), so the board
 // has one grammar for "what is this doing and for how long". The phrase is the agent's own note, not the word
@@ -664,6 +682,6 @@ export const watchLine = (
     return {
         text: watches.length === 1 ? soonest.note : `Watching ${watches.length} conditions`,
         countdown,
-        hint: `Watching for ${detail}. The first of those to happen wakes this conversation, and it carries on by itself. Stop watching and it stays put.`,
+        hint: t(`agents.agentStatus.watchingFirstThoseTo`, { detail }),
     };
 };

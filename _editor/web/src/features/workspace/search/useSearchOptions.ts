@@ -1,5 +1,6 @@
 import type { Ref } from "vue";
 import { definePreference } from "@intentic/ui/preference";
+import { t } from "@intentic/ui/i18n";
 
 // Workspace search settings: persisted module-level singleton for the three match switches (Aa/ab/.*), search
 // scope, and file glob. Lives outside useLayout because these change what a query means, not how it looks; both
@@ -30,8 +31,8 @@ export function useSearchOptions() {
 }
 
 // Each row carries the live ref itself: callers read and assign `state.value` directly, no setter.
-export const MATCH_TOGGLES: readonly { label: string; title: string; state: Ref<boolean> }[] = [
-    { label: `Aa`, title: `Match case`, state: matchCase },
-    { label: `ab`, title: `Match whole word`, state: wholeWord },
-    { label: `.*`, title: `Use regular expression`, state: useRegex },
+export const matchToggles = (): readonly { label: string; title: string; state: Ref<boolean> }[] => [
+    { label: t(`workspace.useSearchOptions.aa`), title: t(`workspace.useSearchOptions.matchCase`), state: matchCase },
+    { label: `ab`, title: t(`workspace.useSearchOptions.matchWholeWord`), state: wholeWord },
+    { label: `.*`, title: t(`workspace.useSearchOptions.useRegularExpression`), state: useRegex },
 ];

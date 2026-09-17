@@ -19,6 +19,7 @@ import { useWorkspaceTree } from "../explorer/useWorkspaceTree";
 import { archiveAbove, isArchiveContent } from "../files/archiveEntries";
 import { isLeaving, provisionalAt } from "../files/provisionalEntries";
 import { useUploadQueue } from "../files/upload/useUploadQueue";
+import { t } from "@intentic/ui/i18n";
 
 // What can be done to the desk's tiles: the tree's file management (select several, rename, create, delete, cut, copy,
 // paste, drag) over the same daemon calls (useWorkspaceTree) and the same clipboard, so a cut in the tree pastes on the
@@ -476,7 +477,9 @@ export function useDeskActions(ctx: DeskActionsContext) {
             : [];
     // The desk's own first row: what a double-click does, for the keyboard and touch.
     const openItem = (target: WorkspaceTreeEntry | undefined, multi: boolean): MenuItem[] =>
-        target === undefined || multi ? [] : [{ label: `Open`, icon: target.type === `dir` ? `folder-open` : `file`, command: () => ctx.open(target) }];
+        target === undefined || multi
+            ? []
+            : [{ label: t(`ui.action.open`), icon: target.type === `dir` ? `folder-open` : `file`, command: () => ctx.open(target) }];
     // A folder tile takes a paste itself; creates always land in the open folder, where the new tile can be seen.
     const menuVerbs = (target: WorkspaceTreeEntry | undefined) => ({
         newFile: () => beginCreate(`file`),

@@ -1,5 +1,6 @@
 import type { CapabilityCatalogEntry } from "@intentic/capability-catalog";
 import type { CapabilityField } from "@intentic/extension-manifest";
+import { t } from "@intentic/ui/i18n";
 
 // Repairs what a person pastes or types into what the daemon's schema accepts, visibly (the box's
 // value changes, or a one-line summary appears). Pure functions over (field, value); the page runs
@@ -202,7 +203,7 @@ const parseImapAddress = (entry: CapabilityCatalogEntry, values: Readonly<Record
     }
     expansion[`host`] = host;
     expansion[`port`] = `993`;
-    return { values: expansion, summary: `${domain}'s mail server is ${host}:993, filled in for you.` };
+    return { values: expansion, summary: t(`capabilities.normalize.sMailServer993`, { domain, host }) };
 };
 
 // Routes one paste to whichever expansion recognises it; which field it landed in is part of the

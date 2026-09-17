@@ -1,6 +1,7 @@
 import { extensionIdOf } from "@intentic/extension-manifest";
 import { isShaPinned, type RegistryEntry } from "@intentic/registry";
 import type { ExtensionSummary } from "@intentic/sandbox-contract";
+import { t } from "@intentic/ui/i18n";
 
 // What a registry row becomes once this sandbox is checked against it: installable, installed, an update, blocked,
 // or unavailable. Joined on the manifest identity (`publisher.name`), not the capability id, since that can be
@@ -47,16 +48,16 @@ export const listingState = (entry: RegistryEntry, installed: readonly Extension
     }
     const here = installed.find((extension) => extensionIdOf(extension.manifest) === entry.name);
     if (entry.install === undefined) {
-        return { kind: `unavailable`, reason: `Published somewhere this sandbox can't clone from.` };
+        return { kind: `unavailable`, reason: t(`sandbox.discoverListing.publishedSomewhereSandboxCant`) };
     }
     if (!isShaPinned(entry.install)) {
         // Reads and links fine; not a one-click install, since code runs trusted here and a branch isn't a promise.
-        return { kind: `unavailable`, reason: `The listing names no exact commit, so it can't be installed in one click.` };
+        return { kind: `unavailable`, reason: t(`sandbox.discoverListing.listingNamesNoExact`) };
     }
     if (!entry.admitted) {
         return {
             kind: `unavailable`,
-            reason: `This exact commit has not passed the official registry's current security audit, so it cannot be installed from discovery.`,
+            reason: t(`sandbox.discoverListing.exactCommitNotPassed`),
         };
     }
     if (here === undefined) {
@@ -102,13 +103,13 @@ export const listingSections = (listings: readonly DiscoverListing[]): readonly 
     [
         {
             id: `verified`,
-            label: `Verified`,
+            label: t(`sandbox.discoverListing.verified`),
             caption: ``,
             listings: listings.filter((listing) => listing.entry.trust === `verified`),
         },
         {
             id: `listed`,
-            label: `Everything published`,
+            label: t(`sandbox.discoverListing.everythingPublished`),
             caption: ``,
             listings: listings.filter((listing) => listing.entry.trust !== `verified`),
         },

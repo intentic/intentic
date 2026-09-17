@@ -2,9 +2,18 @@
 import { useTheme } from "@intentic/ui";
 import { onMounted, onUnmounted, ref, watch } from "vue";
 import { useRoute } from "vue-router";
-import { announceDesktopMode, DESKTOP_WINDOW_EVENT, type DesktopWindowEvent, desktopFrameless, workDesktopWindow } from "../../app/environments/desktop";
+import {
+    announceDesktopMode,
+    DESKTOP_WINDOW_EVENT,
+    type DesktopWindowEvent,
+    desktopFrameless,
+    workDesktopWindow,
+} from "../../app/environments/desktop";
 import { BAR, type BarEdges, barsChanged, type Corner, cornerBar } from "./controlsReserve";
 import { domLayout, pressOf, windowGesture } from "./windowGesture";
+import { useT } from "@intentic/ui/i18n";
+
+const t = useT();
 
 /* THE WINDOW'S OWN THREE BUTTONS, FLOATING IN THE TOP-RIGHT CORNER OF A WINDOW THAT HAS NO FRAME — and the page under
    them read as the handle the frame used to be (windowGesture.ts). Nothing else is drawn: no bar, no strip, no fill. */
@@ -215,15 +224,20 @@ onUnmounted(() => {
 </script>
 
 <template>
-<!-- Fixed to the viewport, which is what keeps a press on them from being the window's (windowGesture.ts `inOverlay`). -->
+    <!-- Fixed to the viewport, which is what keeps a press on them from being the window's (windowGesture.ts `inOverlay`). -->
     <div v-if="frameless" ref="controls" class="window-controls">
-        <button type="button" class="window-control" aria-label="Minimise" @click="workDesktopWindow(`minimize`)">
+        <button type="button" class="window-control" :aria-label="t(`shell.windowControls.minimise`)" @click="workDesktopWindow(`minimize`)">
             <Icon name="minus" class="text-sm" />
         </button>
-        <button type="button" class="window-control" :aria-label="maximized ? `Restore` : `Maximise`" @click="workDesktopWindow(`maximize`)">
+        <button
+            type="button"
+            class="window-control"
+            :aria-label="maximized ? t(`shell.windowControls.restore`) : t(`shell.windowControls.maximise`)"
+            @click="workDesktopWindow(`maximize`)"
+        >
             <Icon :name="maximized ? `restore` : `square`" class="text-sm" />
         </button>
-        <button type="button" class="window-control window-control-close" aria-label="Close" @click="workDesktopWindow(`close`)">
+        <button type="button" class="window-control window-control-close" :aria-label="t(`ui.action.close`)" @click="workDesktopWindow(`close`)">
             <Icon name="times" class="text-sm" />
         </button>
     </div>

@@ -19,6 +19,9 @@ export interface CapabilityScope {
 <script setup lang="ts">
 import { type NavGroup, NavRail, Picker, type PickerOptions, Row, useCompact, useRailMemory } from "@intentic/ui";
 import { computed } from "vue";
+import { useT } from "@intentic/ui/i18n";
+
+const t = useT();
 
 const { pinned, categories } = defineProps<{
     /** Slices that cut across every category: all, connected, recommended. */
@@ -45,16 +48,23 @@ const compact = useCompact();
 const options = computed<PickerOptions<string>>(() => [
     { options: pinned.map((scope) => ({ value: scope.key, label: scope.label, description: String(scope.total), icon: scope.icon })) },
     {
-        label: `Categories`,
+        label: t(`capabilities.capabilityRail.categories`),
         options: categories.map((scope) => ({ value: scope.key, label: scope.label, description: String(scope.total), icon: scope.icon })),
     },
 ]);
 </script>
 
 <template>
-    <Picker v-if="compact" v-model="selected" :options="options" aria-label="Capability category" header="Category" class="w-full text-xs" />
+    <Picker
+        v-if="compact"
+        v-model="selected"
+        :options="options"
+        :aria-label="t(`capabilities.capabilityRail.capabilityCategory`)"
+        :header="t(`capabilities.capabilityRail.category`)"
+        class="w-full text-xs"
+    />
 
-    <NavRail v-else aria-label="Capability categories" :groups="groups">
+    <NavRail v-else :aria-label="t(`capabilities.capabilityRail.capabilityCategories`)" :groups="groups">
         <!-- Not members of any group, so "all" can't be grouped away: it's the row a cleared filter returns to. -->
         <template #pinned>
             <Row

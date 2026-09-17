@@ -1,18 +1,18 @@
 import { describe, expect, it } from "vitest";
-import { DEFAULT_PHONE_ID, PHONE_MODELS, phoneById, phoneOuterSize, phonePickerGroups, phoneScale } from "./phoneModels";
+import { DEFAULT_PHONE_ID, phoneModels, phoneById, phoneOuterSize, phonePickerGroups, phoneScale } from "./phoneModels";
 
 // The phone catalogue: what the stage is asked to draw, and how big it draws it. Pure, so the arithmetic is pinned
 // without a DOM.
 
 describe(`the catalogue`, () => {
     it(`names every phone once and ships the default it points at`, () => {
-        const ids = PHONE_MODELS.map((phone) => phone.id);
+        const ids = phoneModels().map((phone) => phone.id);
         expect(new Set(ids).size).toBe(ids.length);
         expect(ids).toContain(DEFAULT_PHONE_ID);
     });
 
     it(`describes portrait CSS viewports, not physical pixels`, () => {
-        for (const phone of PHONE_MODELS) {
+        for (const phone of phoneModels()) {
             expect(phone.height).toBeGreaterThan(phone.width);
             // A physical-pixel row would be 2-3x this; anything outside the range is a transcription slip.
             expect(phone.width).toBeGreaterThanOrEqual(320);
@@ -22,7 +22,11 @@ describe(`the catalogue`, () => {
 
     it(`offers every phone through the picker, grouped by make`, () => {
         const offered = phonePickerGroups().flatMap((group) => group.options.map((option) => option.value));
-        expect(offered.toSorted()).toEqual(PHONE_MODELS.map((phone) => phone.id).toSorted());
+        expect(offered.toSorted()).toEqual(
+            phoneModels()
+                .map((phone) => phone.id)
+                .toSorted(),
+        );
         expect(phonePickerGroups().every((group) => group.label !== undefined)).toBe(true);
     });
 

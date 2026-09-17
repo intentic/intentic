@@ -146,14 +146,19 @@ export const installI18n = (app: App): void => {
     app.use(i18n);
 };
 
-/** Translating one of this app's own keys: checked against the `en` schema, so a typo cannot reach a reader. */
+/**
+ * Translating one of this app's own keys. Not a checked union, whatever the schema suggests — vue-i18n's `t` takes any
+ * string — so the gate on a key no catalog has is `_tools/checks/i18n-keys.mjs`.
+ */
 export type TypedT = typeof i18n.global.t;
 
 /**
  * Translating someone else's. An extension's catalog belongs to its own package, so the host's schema has never seen
  * its keys and no amount of typing here could check them — the honest shape is a string.
+ *
+ * `plural` picks between the forms a message separates with `|`, and is the count the message also interpolates.
  */
-export type LooseT = (key: string, values?: Record<string, unknown>) => string;
+export type LooseT = (key: string, values?: Record<string, unknown>, plural?: number) => string;
 
 /**
  * The translator. With no argument it is the app's own, typed against `en`; with a namespace it is bound to someone
@@ -171,10 +176,15 @@ export function useT(namespace?: string): TypedT | LooseT {
     // The one cast in this module, and it buys the line above: `t` is typed to the app's own key union, and an
     // extension's keys are by definition outside it.
     const translate = i18n.global.t as unknown as LooseT;
-    // `values` is passed only when there is one: vue-i18n reads a present-but-undefined second argument as an empty
-    // interpolation set, not as an absent one.
-    return (key: string, values?: Record<string, unknown>): string =>
-        values === undefined ? translate(`${namespace}.${key}`) : translate(`${namespace}.${key}`, values);
+    // Each argument is passed only when there is one: vue-i18n reads a present-but-undefined second argument as an
+    // empty interpolation set, not as an absent one, and a third as plural form zero.
+    return (key: string, values?: Record<string, unknown>, plural?: number): string => {
+        const path = `${namespace}.${key}`;
+        if (plural !== undefined) {
+            return translate(path, values ?? {}, plural);
+        }
+        return values === undefined ? translate(path) : translate(path, values);
+    };
 }
 
 /** Translate outside a component — a router guard, a notice, a plain module. Reads the language live at call time. */

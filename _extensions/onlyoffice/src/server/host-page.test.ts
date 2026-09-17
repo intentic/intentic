@@ -35,9 +35,16 @@ describe(`editor config`, () => {
         expect(editorConfig(input(`edit`))).toMatchObject({
             documentType: `word`,
             document: { key: `k`, fileType: `docx`, permissions: { edit: true, download: true } },
-            editorConfig: { mode: `edit`, callbackUrl: `http://host.docker.internal:1/callback/k`, customization: { forcesave: true, uiTheme: `theme-dark` } },
+            editorConfig: {
+                mode: `edit`,
+                callbackUrl: `http://host.docker.internal:1/callback/k`,
+                customization: { forcesave: true, uiTheme: `theme-dark` },
+            },
         });
-        expect(editorConfig(input(`view`))).toMatchObject({ document: { permissions: { edit: false, review: false } }, editorConfig: { mode: `view` } });
+        expect(editorConfig(input(`view`))).toMatchObject({
+            document: { permissions: { edit: false, review: false } },
+            editorConfig: { mode: `view` },
+        });
     });
 });
 

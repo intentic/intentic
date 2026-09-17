@@ -2,6 +2,9 @@
 // Per-group "viewed" tick: reader place-keeping, not an approval gate. Two states only; partial progress shows as
 // a count instead of a third glyph. Toggling acts on rows under the current filter, not the whole group.
 import { ui } from "@intentic/ui";
+import { useT } from "@intentic/ui/i18n";
+
+const t = useT();
 
 const { name, total, viewed } = defineProps<{
     // Heading this belongs to (repo id or module name); named in the tooltip so a sweep states its target.
@@ -31,8 +34,16 @@ const emit = defineEmits<{ toggle: [] }>();
             )
         "
         @click="emit('toggle')"
-        v-tooltip.right="viewed === total ? `Unmark all ${total} in ${name}` : `Mark all ${total} in ${name} as reviewed`"
-        :aria-label="viewed === total ? `Unmark all ${total} files in ${name} as reviewed` : `Mark all ${total} files in ${name} as reviewed`"
+        v-tooltip.right="
+            viewed === total
+                ? t(`agents.reviewGroupCheck.unmarkAllIn`, { total, name })
+                : t(`agents.reviewGroupCheck.markAllInReviewed`, { total, name })
+        "
+        :aria-label="
+            viewed === total
+                ? t(`agents.reviewGroupCheck.unmarkAllFilesIn`, { total, name })
+                : t(`agents.reviewGroupCheck.markAllFilesIn`, { total, name })
+        "
     >
         <Icon :name="viewed === total ? 'check-square' : 'check'" class="text-2xs" />
     </button>

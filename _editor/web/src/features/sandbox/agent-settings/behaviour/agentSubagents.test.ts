@@ -6,7 +6,7 @@ import { SandboxSettingsSchema } from "@intentic/api-contract";
 import PrimeVue from "primevue/config";
 import { afterEach, expect, test, vi } from "vitest";
 import { type App, createApp, h, nextTick, ref } from "vue";
-import { postureOf, POSTURES, SPAWN_KEY, withPosture } from "../safety/spawnPosture";
+import { postureOf, postures, SPAWN_KEY, withPosture } from "../safety/spawnPosture";
 import { IconStub } from "@intentic/ui/testing";
 
 const settings = ref<SandboxSettings>(SandboxSettingsSchema.parse({}));
@@ -41,12 +41,10 @@ afterEach(() => {
     patch.mockClear();
 });
 
-const numberBox = (host: HTMLElement, label: string): HTMLInputElement =>
-    host.querySelector<HTMLInputElement>(`input[aria-label="${label}"]`)!;
+const numberBox = (host: HTMLElement, label: string): HTMLInputElement => host.querySelector<HTMLInputElement>(`input[aria-label="${label}"]`)!;
 
 // Reached by its aria-label, not `numberBox`: the posture control isn't a number input.
-const postureTrigger = (host: HTMLElement): HTMLElement =>
-    host.querySelector<HTMLElement>(`[aria-label="Start agents of its own"]`)!;
+const postureTrigger = (host: HTMLElement): HTMLElement => host.querySelector<HTMLElement>(`[aria-label="Start agents of its own"]`)!;
 
 test("draws the posture and all three ceilings together", () => {
     const host = mount();
@@ -95,14 +93,14 @@ test("an absent rule reads back as Default, not as allow", () => {
     expect(postureOf({ "agents.spawn": `allow` })).toBe(`allow`);
 });
 
-// Checked against the exported `POSTURES` list, not the rendered row: <Picker> draws options into an overlay
+// Checked against the exported `postures()` list, not the rendered row: <Picker> draws options into an overlay
 // jsdom never opens.
 test("offers exactly the four postures, and Default is one of them", () => {
-    expect(POSTURES.map((option) => option.value)).toEqual([`default`, `allow`, `hold`, `deny`]);
+    expect(postures().map((option) => option.value)).toEqual([`default`, `allow`, `hold`, `deny`]);
 });
 
 test("puts Default first and says what it actually does", () => {
-    const fallback = POSTURES[0];
+    const fallback = postures()[0];
 
     expect(fallback?.value).toBe(`default`);
     // Guards that the outside-content nuance is described on this option, not filed elsewhere.
@@ -110,7 +108,7 @@ test("puts Default first and says what it actually does", () => {
 });
 
 test("every posture round-trips through the write", () => {
-    for (const option of POSTURES) {
+    for (const option of postures()) {
         const rules = withPosture({}, option.value);
         expect(postureOf(rules), option.value).toBe(option.value);
     }

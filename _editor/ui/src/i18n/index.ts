@@ -15,9 +15,10 @@ void registerCatalog({
     load: (locale) => import(`./locales/${locale}.json`),
 });
 
-// Keys are typed off the `en` files, so `$t("ui.acton.save")` is a build error and not a blank label a reader finds.
-// Every package that registers a catalog adds its slice to this same interface; TypeScript merges the declarations,
-// so the app's own augmentation and this one compose rather than compete.
+// The shape of the `en` file, as the tree a key resolves against. Every package that registers a catalog adds its
+// slice to this same interface; TypeScript merges the declarations, so the app's own augmentation and this one
+// compose rather than compete. It is NOT a check on the key: vue-i18n's `t` takes any string, so a typo is a dotted
+// path in front of a reader until `_tools/checks/i18n-keys.mjs` refuses it.
 declare module "vue-i18n" {
     interface DefineLocaleMessage {
         readonly ui: typeof base;

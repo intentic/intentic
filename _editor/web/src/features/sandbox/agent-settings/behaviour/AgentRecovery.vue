@@ -2,9 +2,12 @@
 import { Row, RowGroup } from "@intentic/ui";
 import ToggleSwitch from "primevue/toggleswitch";
 import { useSandboxSettings } from "../../overview/useSandboxSettings";
+import { useT } from "@intentic/ui/i18n";
 
 // Who resumes a turn that died through no fault of its own, and who stops one that will only die again.
 // Every resume defaults to off: a re-run spends the owner's allowance on a turn already sent once.
+
+const t = useT();
 
 const { settings, patch } = useSandboxSettings();
 
@@ -32,12 +35,12 @@ const setAutomationFailureLimit = (event: Event): void => {
 </script>
 
 <template>
-    <RowGroup label="When a turn breaks">
-<!-- The default; a chat's own retry banner doesn't touch this switch, since "finish this turn" and "this is how the board behaves" are different questions. -->
+    <RowGroup :label="t(`sandbox.agentRecovery.turnBreaks`)">
+        <!-- The default; a chat's own retry banner doesn't touch this switch, since "finish this turn" and "this is how the board behaves" are different questions. -->
         <Row
             icon="refresh"
-            title="Resume after provider outages, by default"
-            description="Retry turns failed by the provider (500, capacity, connection drops)."
+            :title="t(`sandbox.agentRecovery.resumeAfterProviderOutages`)"
+            :description="t(`sandbox.agentRecovery.retryTurnsFailedBy`)"
         >
             <template #control>
                 <ToggleSwitch
@@ -48,12 +51,8 @@ const setAutomationFailureLimit = (event: Event): void => {
             </template>
         </Row>
 
-<!-- Known provider reopen times are shown as "send again". -->
-        <Row
-            icon="clock"
-            title="Send again when the allowance comes back, by default"
-            description="Re-run turns a spent usage limit refused, at the reset the provider named."
-        >
+        <!-- Known provider reopen times are shown as "send again". -->
+        <Row icon="clock" :title="t(`sandbox.agentRecovery.sendAgainAllowanceComes`)" :description="t(`sandbox.agentRecovery.reRunTurnsSpent`)">
             <template #control>
                 <ToggleSwitch
                     :model-value="settings?.resumeAfterLimit ?? false"
@@ -63,12 +62,8 @@ const setAutomationFailureLimit = (event: Event): void => {
             </template>
         </Row>
 
-<!-- The non-waiting answer to the same limit: moves to another connected account of the same provider with room. -->
-        <Row
-            icon="user"
-            title="Continue on another account when the allowance is spent, by default"
-            description="Move a refused turn to a connected account of the same provider that has room, at once. With none, it waits as above."
-        >
+        <!-- The non-waiting answer to the same limit: moves to another connected account of the same provider with room. -->
+        <Row icon="user" :title="t(`sandbox.agentRecovery.continueOnAnotherAccount`)" :description="t(`sandbox.agentRecovery.moveRefusedTurnTo`)">
             <template #control>
                 <ToggleSwitch
                     :model-value="settings?.moveAfterLimit ?? false"
@@ -78,18 +73,14 @@ const setAutomationFailureLimit = (event: Event): void => {
             </template>
         </Row>
 
-<!-- Carrying re-reads the whole context once and keeps what the model knew; starting fresh costs the measured brief plus a capped copy and loses the rest. -->
-        <Row
-            icon="clock"
-            title="Carry the session when its context is under"
-            description="Tokens. Under this a move keeps the session (re-reads it once, cold); at or above it a fresh session starts from the measured brief. 0 always starts fresh."
-        >
+        <!-- Carrying re-reads the whole context once and keeps what the model knew; starting fresh costs the measured brief plus a capped copy and loses the rest. -->
+        <Row icon="clock" :title="t(`sandbox.agentRecovery.carrySessionContextUnder`)" :description="t(`sandbox.agentRecovery.tokensUnderMoveKeeps`)">
             <template #control>
                 <input
                     type="number"
                     min="0"
                     step="1000"
-                    aria-label="Context size, in tokens, under which a moved turn keeps its session"
+                    :aria-label="t(`sandbox.agentRecovery.contextSizeInTokens`)"
                     class="ui-field-box ui-field-sm w-24 text-right"
                     :value="settings?.limitMoveCarryUnder ?? 100000"
                     :disabled="settings === undefined"
@@ -98,12 +89,8 @@ const setAutomationFailureLimit = (event: Event): void => {
             </template>
         </Row>
 
-<!-- Covers a turn killed by the sandbox's own restart: an update, an environment approval, or an image rebuild. -->
-        <Row
-            icon="refresh"
-            title="Resume turns after a restart"
-            description="Pick up in-flight turns when the sandbox restarts."
-        >
+        <!-- Covers a turn killed by the sandbox's own restart: an update, an environment approval, or an image rebuild. -->
+        <Row icon="refresh" :title="t(`sandbox.agentRecovery.resumeTurnsAfterRestart`)" :description="t(`sandbox.agentRecovery.pickUpInFlight`)">
             <template #control>
                 <ToggleSwitch
                     :model-value="settings?.autoResumeOnRestart ?? false"
@@ -113,18 +100,18 @@ const setAutomationFailureLimit = (event: Event): void => {
             </template>
         </Row>
 
-<!-- Jobs failing every run stop instead of consuming another scheduled turn. -->
+        <!-- Jobs failing every run stop instead of consuming another scheduled turn. -->
         <Row
             icon="stop"
-            title="Stop a failing automation"
-            description="Disable an automation after consecutive failures (0 never disables)."
+            :title="t(`sandbox.agentRecovery.stopFailingAutomation`)"
+            :description="t(`sandbox.agentRecovery.disableAutomationAfterConsecutive`)"
         >
             <template #control>
                 <input
                     type="number"
                     min="0"
                     max="20"
-                    aria-label="Consecutive failures before an automation is disabled"
+                    :aria-label="t(`sandbox.agentRecovery.consecutiveFailuresBeforeAutomation`)"
                     class="ui-field-box ui-field-sm w-16 text-right"
                     :value="settings?.automationFailureLimit ?? 0"
                     :disabled="settings === undefined"

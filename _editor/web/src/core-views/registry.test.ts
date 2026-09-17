@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 import { useAudience } from "../app/useAudience";
 import {
     activationBadge,
-    RAIL_GROUPS,
+    railGroups,
     detectActivations,
     homeViewId,
     railGroupsFor,
@@ -38,7 +38,8 @@ registerView(`intentic.acceptance`, {
     id: `acceptance`,
     label: `Acceptance`,
     surface: `rail`,
-    detect: (repos) => (repos.some((repo) => repo.userStories || repo.hasPanel) ? [{ key: `acceptance`, title: `Acceptance`, icon: `list-check` }] : []),
+    detect: (repos) =>
+        repos.some((repo) => repo.userStories || repo.hasPanel) ? [{ key: `acceptance`, title: `Acceptance`, icon: `list-check` }] : [],
     view: async () => ({}),
 });
 registerView(`intentic.documentation`, {
@@ -221,7 +222,7 @@ describe(`re-activation`, () => {
 });
 
 // The rail's order is a product decision, not an accident of registration order (Acceptance landed between
-// Automations and Documentation for no reason). RAIL_GROUPS declares it; checked here since the rail and mobile menu
+// Automations and Documentation for no reason). railGroups() declares it; checked here since the rail and mobile menu
 // must agree.
 describe(`rail order`, () => {
     const railIds = (): string[] =>
@@ -237,9 +238,9 @@ describe(`rail order`, () => {
         expect(rank(`acceptance`)).toBeLessThan(rank(`documentation`));
     });
 
-    // Keep every compiled-in rail view listed in RAIL_GROUPS.
+    // Keep every compiled-in rail view listed in railGroups().
     it(`ranks every compiled-in rail view, so none falls through to the end unnoticed`, () => {
-        const listed = new Set(RAIL_GROUPS.flatMap((group) => group.items.map((item) => item.id)));
+        const listed = new Set(railGroups().flatMap((group) => group.items.map((item) => item.id)));
         const capabilities: CapabilityFacts[] = [
             { id: `bot`, kind: `cli`, config: { provider: `discord` } },
             { id: `repos`, kind: `cli`, config: { provider: `github` } },
@@ -273,7 +274,7 @@ describe(`rail order`, () => {
     });
 
     it(`heads the decisions band with Approvals, the only one where nothing moves until the owner acts`, () => {
-        const judge = RAIL_GROUPS.find((group) => group.id === `judge`);
+        const judge = railGroups().find((group) => group.id === `judge`);
         expect(judge?.items[0]?.id).toBe(`approvals`);
     });
 
@@ -292,9 +293,9 @@ describe(`rail order`, () => {
     });
 
     it(`keeps the seat table and the rank table naming the same ids, so no tile sorts into a band it can't sit in`, () => {
-        // Both are read off RAIL_GROUPS, so this fails only if an id is added to one derived list, not the other.
-        for (const item of RAIL_GROUPS.flatMap((group) => group.items)) {
-            expect(railRank(item.id)).toBeLessThan(RAIL_GROUPS.flatMap((group) => group.items).length);
+        // Both are read off railGroups(), so this fails only if an id is added to one derived list, not the other.
+        for (const item of railGroups().flatMap((group) => group.items)) {
+            expect(railRank(item.id)).toBeLessThan(railGroups().flatMap((group) => group.items).length);
             expect([`always`, `signal`]).toContain(seatPolicy(item.id));
         }
     });
@@ -394,7 +395,8 @@ describe(`rail seats`, () => {
     it(`spends permanent seats on the work loop and nowhere else`, () => {
         // The count is the point: five fits above the fold, room for what lights up. A sixth means editing this. The
         // first is the project scope's seat, the only place the shell says which project it is looking at.
-        const permanent = RAIL_GROUPS.flatMap((group) => group.items)
+        const permanent = railGroups()
+            .flatMap((group) => group.items)
             .filter((item) => item.seat === `always`)
             .map((item) => item.id);
         expect(permanent).toEqual([`projects`, `chat`, `agents`, `workspace`, `preview`]);

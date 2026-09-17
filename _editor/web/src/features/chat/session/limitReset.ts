@@ -2,6 +2,7 @@ import type { LimitResetClaim, LimitResetStatus } from "@intentic/sandbox-contra
 import { ref } from "vue";
 import { jsonBody } from "../../sandbox/client/jsonBody";
 import { sandboxJsonVia } from "../../sandbox/client/sandboxClient";
+import { t } from "@intentic/ui/i18n";
 
 // Client side of the session-limit reset: the provider can reopen a spent five-hour window once a week per account
 // without touching the weekly allowance. Asked once per account, never on a timer — the endpoint rate-limits hard.
@@ -44,7 +45,7 @@ const RETRYABLE = new Set([`unavailable`, `error`]);
 
 export const claimLimitReset = async (account: string, at?: string): Promise<LimitResetClaim> => {
     const claim = await sandboxJsonVia<LimitResetClaim>(at, `/usage/limit-reset/${encodeURIComponent(account)}/claim`, jsonBody(`POST`, {})).catch(
-        (): LimitResetClaim => ({ result: `error`, detail: `Your sandbox didn't answer.` }),
+        (): LimitResetClaim => ({ result: `error`, detail: t(`chat.limitReset.sandboxDidntAnswer`) }),
     );
     if (!RETRYABLE.has(claim.result)) {
         answers.value.delete(account);

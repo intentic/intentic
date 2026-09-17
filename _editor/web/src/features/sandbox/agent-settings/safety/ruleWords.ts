@@ -1,5 +1,6 @@
 import type { Rule, RuleMoment } from "@intentic/api-contract";
 import type { IconName } from "@intentic/ui";
+import { t } from "@intentic/ui/i18n";
 
 // Vocabulary shared by the rule form and the row that displays a rule, so a row never re-describes what the form
 // wrote. Cost sits on each moment option; outcome is keyed by moment+action, since the same action means
@@ -20,12 +21,12 @@ interface MomentWords {
 }
 
 // Non-empty by type: callers always get a first moment and a first action without checking for undefined.
-export const MOMENTS: readonly [MomentWords, ...MomentWords[]] = [
-    { value: `file.edited`, label: `After it edits a file`, icon: `pencil`, cost: `Once per edited file` },
-    { value: `turn.ending`, label: `Before the assistant finishes`, icon: `clock`, cost: `Once per turn` },
-    { value: `push.starting`, label: `Before you push`, icon: `cloud-upload`, cost: `Once per push` },
-    { value: `agent.finished`, label: `When an agent finishes`, icon: `robot`, cost: `Once per finished agent` },
-    { value: `agent.landed`, label: `After its work is accepted`, icon: `check`, cost: `Once per accepted change` },
+export const moments = (): readonly [MomentWords, ...MomentWords[]] => [
+    { value: `file.edited`, label: t(`sandbox.ruleWords.afterEditsFile`), icon: `pencil`, cost: `Once per edited file` },
+    { value: `turn.ending`, label: t(`sandbox.ruleWords.beforeAssistantFinishes`), icon: `clock`, cost: `Once per turn` },
+    { value: `push.starting`, label: t(`sandbox.ruleWords.beforePush`), icon: `cloud-upload`, cost: `Once per push` },
+    { value: `agent.finished`, label: t(`sandbox.ruleWords.agentFinishes`), icon: `robot`, cost: `Once per finished agent` },
+    { value: `agent.landed`, label: t(`sandbox.ruleWords.afterWorkAccepted`), icon: `check`, cost: `Once per accepted change` },
 ];
 
 interface ActionWords {
@@ -37,47 +38,47 @@ interface ActionWords {
 }
 
 // Only actions the daemon schema accepts at a moment are offered, so saving can't fail after the fact.
-export const ACTIONS: Record<RuleMoment, readonly [ActionWords, ...ActionWords[]]> = {
+export const actions = (): Record<RuleMoment, readonly [ActionWords, ...ActionWords[]]> => ({
     "file.edited": [
         {
             value: `command`,
-            label: `Run a command`,
+            label: t(`sandbox.ruleWords.runCommand`),
             outcome: `Runs on the file it just wrote, with {file} standing for the path. If it fails, its output goes back with the edit, while the file is still in mind.`,
         },
     ],
     "turn.ending": [
         {
             value: `instruct`,
-            label: `Tell it something`,
+            label: t(`sandbox.ruleWords.tellSomething`),
             outcome: `The assistant is told this before it stops, and carries on to act on it.`,
         },
         {
             value: `command`,
-            label: `Run a command`,
+            label: t(`sandbox.ruleWords.runCommand`),
             outcome: `It has to pass. If it fails, its output goes back to the assistant to repair before finishing.`,
         },
     ],
     "push.starting": [
         {
             value: `command`,
-            label: `Run a command`,
+            label: t(`sandbox.ruleWords.runCommand`),
             outcome: `The push waits on it. Pass and it goes; fail and it does not, and you get the output.`,
         },
     ],
     "agent.finished": [
-        { value: `hold`, label: `Hold the work`, outcome: `Its work stays on its branch until you land it yourself.` },
-        { value: `allow`, label: `Land the work`, outcome: `Its work lands in your workspace as soon as the agent finishes.` },
+        { value: `hold`, label: t(`sandbox.ruleWords.holdWork`), outcome: `Its work stays on its branch until you land it yourself.` },
+        { value: `allow`, label: t(`sandbox.ruleWords.landWork`), outcome: `Its work lands in your workspace as soon as the agent finishes.` },
     ],
     "agent.landed": [
         {
             value: `version`,
-            label: `Save a version`,
+            label: t(`sandbox.ruleWords.saveVersion`),
             outcome: `What it changed is committed under a subject written for it, and your own edits are committed before the next agent starts, so every agent sees the latest tree.`,
         },
     ],
-};
+});
 
-export const momentOf = (moment: RuleMoment): MomentWords => MOMENTS.find((entry) => entry.value === moment) ?? MOMENTS[0];
+export const momentOf = (moment: RuleMoment): MomentWords => moments().find((entry) => entry.value === moment) ?? moments()[0];
 
 /* THE WHOLE WORKSPACE, as the repository picker's own value. */
 export const ANYWHERE = `*`;

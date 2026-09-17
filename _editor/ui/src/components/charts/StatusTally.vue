@@ -41,7 +41,7 @@ const { items = [], skeleton = 0 } = defineProps<{
 
 <template>
     <div class="flex flex-wrap items-center gap-x-4 gap-y-1.5">
-<!-- h-5 is the line box of the count above (`text-sm`), so the board does not lift when the numbers arrive; the bars are decoration. -->
+        <!-- h-5 is the line box of the count above (`text-sm`), so the board does not lift when the numbers arrive; the bars are decoration. -->
         <span v-for="index in skeleton" :key="index" class="flex h-5 items-center gap-1.5" aria-hidden="true">
             <span class="skeleton h-2 w-2 shrink-0 rounded-full"></span>
             <span class="skeleton h-3 w-4"></span>
@@ -54,7 +54,7 @@ const { items = [], skeleton = 0 } = defineProps<{
                 <span class="text-xs text-muted">{{ item.label }}</span>
             </span>
         </template>
-<!-- Whatever else belongs on the orientation line: a pass-rate ring, a "last checked" stamp. -->
+        <!-- Whatever else belongs on the orientation line: a pass-rate ring, a "last checked" stamp. -->
         <slot />
     </div>
 </template>

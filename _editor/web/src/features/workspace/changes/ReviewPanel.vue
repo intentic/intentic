@@ -44,11 +44,14 @@ import ChangeRowName from "../../../components/ChangeRowName.vue";
 import OtherSandboxChanges from "./OtherSandboxChanges.vue";
 import ModuleLabel from "../../../components/ModuleLabel.vue";
 import { useVocabulary } from "../../../core-views/vocabulary";
+import { useT } from "@intentic/ui/i18n";
 
 // VSCode's SCM pattern over the real repos: uncommitted work grouped by repo, then by git's staged/unstaged
 // sides (a path can be on both with different content). Staging IS the selection — no checkboxes; git already
 // has one selection mechanism (the index), so Commit records it. Built for a ~270px sidebar: one primary button per
 // row, icons+tooltips for the rest.
+
+const t = useT();
 
 const changes = useChanges();
 const words = useVocabulary();
@@ -206,8 +209,13 @@ const showOrigins = (event: MouseEvent, ids: readonly string[]): void => {
     hoverCard.value?.show(
         event,
         ids.length === 1
-            ? { label: `Landed by`, title: originLabel(ids[0]!), note: originNote(ids[0]!), ...(prompt === undefined ? {} : { messages: [prompt] }) }
-            : { label: `Landed by`, title: ids.map((id) => originLabel(id)).join(`\n`) },
+            ? {
+                  label: t(`workspace.reviewPanel.landedBy`),
+                  title: originLabel(ids[0]!),
+                  note: originNote(ids[0]!),
+                  ...(prompt === undefined ? {} : { messages: [prompt] }),
+              }
+            : { label: t(`workspace.reviewPanel.landedBy`), title: ids.map((id) => originLabel(id)).join(`\n`) },
     );
 };
 // The name rides the row only once the panel is wide enough to hold it without evicting the path (or on mobile).
@@ -269,9 +277,9 @@ const sidesByRepo = computed<ReadonlyMap<string, readonly SideView[]>>(
             scannable.value.map((repo) => [
                 repo.repo,
                 [
-                    { side: `conflicted` as const, label: `Conflicts`, changes: repo.conflicted },
-                    { side: `staged` as const, label: `Staged`, changes: repo.staged },
-                    { side: `unstaged` as const, label: `Unstaged`, changes: repo.unstaged },
+                    { side: `conflicted` as const, label: t(`workspace.reviewPanel.conflicts`), changes: repo.conflicted },
+                    { side: `staged` as const, label: t(`workspace.reviewPanel.staged2`), changes: repo.staged },
+                    { side: `unstaged` as const, label: t(`workspace.reviewPanel.unstaged`), changes: repo.unstaged },
                 ].flatMap((section) => {
                     const shown = section.changes.filter((change) => matchesFilter(repo, change));
                     return shown.length === 0 ? [] : [{ side: section.side, label: section.label, changes: shown }];
@@ -465,9 +473,7 @@ const scoped = (repo: string, side?: GitDiffSide): RepoTarget => ({
 // Which repos: read off the visible (filtered) rows. What each commits: that session's whole landed scope in
 // the repo, truncated rows included, not just what's drawn.
 const filteredGroups = computed<readonly RepoTarget[]>(() =>
-    scannable.value
-        .filter((repo) => sidesOf(repo).some((section) => section.changes.length > 0))
-        .map((repo) => scoped(repo.repo)),
+    scannable.value.filter((repo) => sidesOf(repo).some((section) => section.changes.length > 0)).map((repo) => scoped(repo.repo)),
 );
 // The one shape both `commitRepos` and the AI draft take: an empty target for a whole-repo commit ("Commit
 // all" and plain Commit), a scope for the filtered one.
@@ -484,8 +490,7 @@ const truncatedIn = (id: string): number => {
     return repo === undefined ? 0 : truncatedTotal(repo);
 };
 // Distinct paths a repo is showing: a file staged and edited again is two rows over one path.
-const visibleIn = (repo: RepoChanges): number =>
-    new Set(sidesOf(repo).flatMap((section) => section.changes.map((change) => change.path))).size;
+const visibleIn = (repo: RepoChanges): number => new Set(sidesOf(repo).flatMap((section) => section.changes.map((change) => change.path))).size;
 // Files the filtered shape covers, for the button's label; 0 for every other shape. Counted off the drawn
 // rows, so it's a lower bound wherever the review truncated — `commitCountable` says when to hide the number rather
 // than undercount it.
@@ -645,8 +650,7 @@ const sideVerbHint = (repo: RepoChanges, side: GitDiffSide): string => {
 const stageRow = (row: Row): Promise<void> => changes.stageGroups(byRepo(actingRows(row, true)), movesIntoIndex(row.side));
 // Section action: the whole side, sent as a scope rather than the rows drawn — the change that ended staging
 // a truncated repo five hundred files at a time.
-const stageSide = (repo: RepoChanges, side: GitDiffSide): Promise<void> =>
-    changes.stageGroups([scoped(repo.repo, side)], movesIntoIndex(side));
+const stageSide = (repo: RepoChanges, side: GitDiffSide): Promise<void> => changes.stageGroups([scoped(repo.repo, side)], movesIntoIndex(side));
 
 // A modal confirm, like every other destructive git action here. The target is resolved when the user arms
 // it, so the prompt's wording and the action can never disagree with a poll landing in between.
@@ -750,10 +754,13 @@ const syncVerb = computed<"push" | "pull" | "sync" | "publish" | undefined>(() =
 // No hover hint on this one, deliberately: the label is already Push/Pull/etc, and `syncSummary` beside it
 // already states what will move — a tooltip repeating the label would fire on every pointer pass in a narrow sidebar.
 const SYNC_VERB = computed<
-    Record<"push" | "pull" | "sync" | "publish", { readonly label: string; readonly icon: "arrow-up-right" | "arrow-down-left" | "sync" | "cloud-upload" }>
+    Record<
+        "push" | "pull" | "sync" | "publish",
+        { readonly label: string; readonly icon: "arrow-up-right" | "arrow-down-left" | "sync" | "cloud-upload" }
+    >
 >(() => ({
     push: { label: words.value.push, icon: `arrow-up-right` },
-    pull: { label: `Pull`, icon: `arrow-down-left` },
+    pull: { label: t(`workspace.reviewPanel.pull`), icon: `arrow-down-left` },
     sync: { label: words.value.sync, icon: `sync` },
     publish: { label: words.value.publish, icon: `cloud-upload` },
 }));
@@ -907,20 +914,20 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
 
 <template>
     <div class="flex min-h-0 flex-1 flex-col">
-<!-- No header row of its own: the mode switch above already reads "Changes" with the count. -->
+        <!-- No header row of its own: the mode switch above already reads "Changes" with the count. -->
 
-<!-- The one genuinely panel-wide failure: the review set itself couldn't be read, so nothing below is trustworthy. -->
+        <!-- The one genuinely panel-wide failure: the review set itself couldn't be read, so nothing below is trustworthy. -->
         <div v-if="changes.error.value" :class="[NOTICE, 'mx-2 mt-2 shrink-0']">
             <Icon name="exclamation-triangle" class="mt-0.5 shrink-0 text-2xs text-danger" />
             <div class="min-w-0 flex-1">
-                <p class="text-2xs font-medium text-danger">Couldn't read changes</p>
+                <p class="text-2xs font-medium text-danger">{{ t(`workspace.reviewPanel.couldntReadChanges`) }}</p>
                 <p class="break-words text-2xs text-muted">{{ changes.error.value }}</p>
             </div>
         </div>
 
         <!-- Commit box first (VSCode's placement). It records the index — staging is the selection. -->
         <div v-if="changes.count.value > 0" class="flex shrink-0 flex-col gap-1.5 p-2">
-<!-- A textarea: a landed sentence's trailer, or a hand-typed body, needs somewhere to go. -->
+            <!-- A textarea: a landed sentence's trailer, or a hand-typed body, needs somewhere to go. -->
             <textarea
                 ref="commitBox"
                 v-model="commitMessage"
@@ -940,7 +947,7 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                         class="shrink-0 text-3xs"
                         :class="STEP_MARKS[row.status].tone"
                     />
-<!-- The model stays ahead of the reason and is capped at the chips' own width. -->
+                    <!-- The model stays ahead of the reason and is capped at the chips' own width. -->
                     <span
                         v-if="row.model !== undefined"
                         class="max-w-28 shrink-0 truncate text-2xs"
@@ -958,12 +965,12 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
             <!-- The commit summary is a readout, not a set of checkboxes. -->
             <div class="flex items-center gap-1">
                 <span v-if="blockedByConflicts" class="min-w-0 flex-1 truncate whitespace-nowrap text-2xs text-danger">
-                    Resolve conflicts first
+                    {{ t(`workspace.reviewPanel.resolveConflictsFirst`) }}
                 </span>
                 <!-- Where the commit is happening — the one thing the button beside it can't say. -->
-                <span v-else-if="commitRunning" class="min-w-0 flex-1 truncate whitespace-nowrap text-2xs text-muted">
-                    Committing {{ committingNow.join(`, `) }}…
-                </span>
+                <span v-else-if="commitRunning" class="min-w-0 flex-1 truncate whitespace-nowrap text-2xs text-muted">{{
+                    t(`workspace.reviewPanel.committingNow`, { repos: committingNow.join(`, `) })
+                }}</span>
                 <!-- Why Ctrl+Enter just refused: takes the readout's place, since it answers the same question the readout does. -->
                 <span
                     v-else-if="blockerNotice"
@@ -972,7 +979,7 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                 >
                     {{ blockerNotice }}
                 </span>
-<!-- The lit chip's answer, for the one case the placeholder can't show: the box holds the user's own text. -->
+                <!-- The lit chip's answer, for the one case the placeholder can't show: the box holds the user's own text. -->
                 <span
                     v-else-if="boxIsYours && chipNotice"
                     class="min-w-0 flex-1 truncate whitespace-nowrap text-2xs text-muted"
@@ -982,9 +989,10 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                 </span>
                 <span v-else class="min-w-0 flex-1 truncate whitespace-nowrap text-2xs text-muted">
                     <template v-if="changes.stagedCount.value > 0"
-                        >{{ changes.stagedCount.value }} staged<span v-if="stagedRepos.length > 1"> · {{ stagedRepos.length }} repos</span></template
+                        >{{ changes.stagedCount.value }} {{ t(`workspace.reviewPanel.staged`)
+                        }}<span v-if="stagedRepos.length > 1">{{ t(`workspace.reviewPanel.repos`, { count: stagedRepos.length }) }}</span></template
                     >
-                    <template v-else>nothing staged</template>
+                    <template v-else>{{ t(`workspace.reviewPanel.nothingStaged`) }}</template>
                 </span>
                 <!-- The commit action reports progress while stages, hooks, and reads run. -->
                 <Button
@@ -995,26 +1003,27 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                     @click="doCommit"
                     v-tooltip.right="
                         commitRunning
-                            ? `Recording ${committingNow.join(', ')}: the rows clear when git is done`
+                            ? t(`workspace.reviewPanel.recordingNow`, { repos: committingNow.join(`, `) })
                             : blockedByConflicts
-                              ? 'A path is unmerged: stage each conflicted file to mark it resolved'
+                              ? t(`workspace.reviewPanel.pathUnmergedStageEach`)
                               : commitAll
-                                ? 'Stages every change, then commits'
+                                ? t(`workspace.reviewPanel.stagesEveryChangeCommits`)
                                 : commitFiles > 0
-                                  ? `Stages the ${plural(commitFiles, 'file')} from ${filterLabel}, then commits: nothing else goes in`
-                                  : 'One commit per repo'
+                                  ? t(`workspace.reviewPanel.stagesFilesFrom`, { count: commitFiles, filter: filterLabel }, commitFiles)
+                                  : t(`workspace.reviewPanel.oneCommitPerRepo`)
                     "
                 >
-                    <Icon :name="commitRunning ? `spinner` : `check`" :spin="commitRunning" />{{ commitRunning ? `Committing…` : commitLabel }}
+                    <Icon :name="commitRunning ? `spinner` : `check`" :spin="commitRunning" />{{
+                        commitRunning ? t(`workspace.reviewPanel.committing`) : commitLabel
+                    }}
                 </Button>
             </div>
-<!-- A warning, not a gate — the commit is the user's to make, and `reset --soft` undoes it. -->
+            <!-- A warning, not a gate — the commit is the user's to make, and `reset --soft` undoes it. -->
             <div v-if="atRisk.length > 0" :class="WARNING">
                 <Icon name="exclamation-triangle" class="mt-0.5 shrink-0 text-2xs text-warning" />
                 <div class="min-w-0 flex-1">
                     <p class="break-words text-2xs text-warning">
-                        An agent is editing {{ atRisk.join(`, `) }} right now. "{{ commitLabel }}" records
-                        {{ atRisk.length === 1 ? `it` : `them` }} mid-write.
+                        {{ t(`workspace.reviewPanel.agentEditing`, { paths: atRisk.join(`, `), action: commitLabel }, atRisk.length) }}
                     </p>
                     <Button
                         v-if="unaffected.length > 0"
@@ -1023,10 +1032,10 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                         class="mt-1 whitespace-nowrap"
                         :disabled="!commitReady"
                         @click="() => runCommit(unaffected)"
-                        v-tooltip.right="`Commits ${unaffected.map((group) => group.repo).join(`, `)}`"
+                        v-tooltip.right="t(`workspace.reviewPanel.commitsRepos`, { repos: unaffected.map((group) => group.repo).join(`, `) })"
                     >
-                        <Icon name="check" class="mr-1 text-2xs" />Commit
-                        {{ unaffected.length === 1 ? unaffected[0]!.repo : `the other ${unaffected.length} repos` }}
+                        <Icon name="check" class="mr-1 text-2xs" />{{ t(`workspace.reviewPanel.commit`) }}
+                        {{ unaffected.length === 1 ? unaffected[0]!.repo : t(`workspace.reviewPanel.otherRepos`, { count: unaffected.length }) }}
                     </Button>
                 </div>
             </div>
@@ -1034,9 +1043,20 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
             <div v-if="unfinished.length > 0" :class="WARNING">
                 <Icon name="wave-pulse" class="mt-0.5 shrink-0 text-2xs text-warning" />
                 <p class="min-w-0 flex-1 break-words text-2xs text-warning">
-                    {{ unfinished.map((entry) => originLabel(entry.id)).join(`, `) }}
-                    {{ unfinished.length === 1 ? `hasn't` : `haven't` }} finished, this commit records the
-                    {{ unfinished.reduce((total, entry) => total + entry.files, 0) === 1 ? `file` : `files` }} landed so far.
+                    {{
+                        t(
+                            `workspace.reviewPanel.unfinishedOrigins`,
+                            {
+                                origins: unfinished.map((entry) => originLabel(entry.id)).join(`, `),
+                                files: t(
+                                    `workspace.reviewPanel.fileWord`,
+                                    {},
+                                    unfinished.reduce((total, entry) => total + entry.files, 0),
+                                ),
+                            },
+                            unfinished.length,
+                        )
+                    }}
                 </p>
             </div>
             <!-- A commit spans every staged repo, so its failure belongs to the box that fired it, message still in the input. -->
@@ -1052,15 +1072,15 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                     type="button"
                     class="shrink-0 rounded p-0.5 text-muted transition-colors hover:text-content"
                     @click="changes.dismissFailure(COMMIT_SCOPE)"
-                    v-tooltip.right="'Dismiss'"
-                    aria-label="Dismiss commit error"
+                    v-tooltip.right="t(`ui.action.dismiss`)"
+                    :aria-label="t(`workspace.reviewPanel.dismissCommitError`)"
                 >
                     <Icon name="times" class="text-2xs" />
                 </button>
             </div>
         </div>
 
-<!-- One block, two states, never both: at rest the sync every repo needs, in flight the run in the button's own place. -->
+        <!-- One block, two states, never both: at rest the sync every repo needs, in flight the run in the button's own place. -->
         <div
             v-if="outgoing !== undefined"
             class="relative flex shrink-0 items-center gap-1.5 px-2 py-1.5"
@@ -1084,31 +1104,26 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                     type="button"
                     :class="[ICON_BUTTON, 'max-md:h-8 max-md:w-8']"
                     @click="pushFlow.showTerminal"
-                    v-tooltip.top="'Watch it run'"
-                    aria-label="Watch the checks run"
+                    v-tooltip.top="t(`workspace.reviewPanel.watchRun`)"
+                    :aria-label="t(`workspace.reviewPanel.watchChecksRun`)"
                 >
                     <Icon name="terminal" class="text-2xs" />
                 </button>
-<!-- Stopping the suite isn't cancelling the push — it settles as stopped and the push still waits on an answer. -->
+                <!-- Stopping the suite isn't cancelling the push — it settles as stopped and the push still waits on an answer. -->
                 <Button
                     v-if="pushFlow.stage.value === `checking`"
                     size="small"
                     severity="secondary"
                     class="shrink-0 whitespace-nowrap"
                     @click="pushFlow.stopChecks"
-                    v-tooltip.top="'Stop the checks. The push stays waiting on your answer'"
+                    v-tooltip.top="t(`workspace.reviewPanel.stopChecksPushStays`)"
                 >
-                    Stop
+                    {{ t(`ui.action.stop`) }}
                 </Button>
             </template>
-<!-- The verdict the card was closed on, kept where the press that raised it lives. -->
+            <!-- The verdict the card was closed on, kept where the press that raised it lives. -->
             <template v-else-if="outgoing === `held`">
-                <Icon
-                    name="exclamation-triangle"
-                    class="shrink-0 text-2xs"
-                    :class="heldReruns ? `text-muted` : `text-danger`"
-                    aria-hidden="true"
-                />
+                <Icon name="exclamation-triangle" class="shrink-0 text-2xs" :class="heldReruns ? `text-muted` : `text-danger`" aria-hidden="true" />
                 <button
                     type="button"
                     class="flex min-w-0 flex-1 flex-col text-left transition-colors"
@@ -1118,7 +1133,9 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                 >
                     <span class="truncate whitespace-nowrap text-2xs">{{ heldLine }}</span>
                     <!-- Its own line, not a third clause: truncated to "files c…" this says nothing. -->
-                    <span v-if="pushFlow.heldStale.value" class="truncate whitespace-nowrap text-3xs text-subtle">files changed since</span>
+                    <span v-if="pushFlow.heldStale.value" class="truncate whitespace-nowrap text-3xs text-subtle">{{
+                        t(`workspace.reviewPanel.filesChangedSince`)
+                    }}</span>
                 </button>
                 <Button
                     v-if="syncMeta"
@@ -1134,14 +1151,14 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
             </template>
             <template v-else>
                 <span class="min-w-0 flex-1 truncate whitespace-nowrap text-2xs text-muted" v-tooltip.right="syncHint">{{ syncSummary }}</span>
-<!-- Fetch lives with the number it refreshes, and there's one of it now: its scope is every repo with a remote. -->
+                <!-- Fetch lives with the number it refreshes, and there's one of it now: its scope is every repo with a remote. -->
                 <button
                     type="button"
                     :class="[ICON_BUTTON, 'max-md:h-8 max-md:w-8']"
                     :disabled="changes.actionBusy.value"
                     @click="changes.fetchRepos(fetchable)"
-                    v-tooltip.top="'Fetch: refresh what every repo knows about its remote'"
-                    aria-label="Fetch every repo"
+                    v-tooltip.top="t(`workspace.reviewPanel.fetchRefreshWhatEvery`)"
+                    :aria-label="t(`workspace.reviewPanel.fetchEveryRepo`)"
                 >
                     <Icon name="sync" class="text-2xs" />
                 </button>
@@ -1151,7 +1168,7 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                 </Button>
             </template>
 
-<!-- The block's own bottom edge doubles as the progress bar, so the wait is drawn in pixels the panel already spends. -->
+            <!-- The block's own bottom edge doubles as the progress bar, so the wait is drawn in pixels the panel already spends. -->
             <div v-if="pushFlow.stage.value === `checking`" class="pointer-events-none absolute inset-x-0 -bottom-px h-0.5 overflow-hidden">
                 <div
                     v-if="checkFill !== undefined"
@@ -1166,23 +1183,23 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
         <div v-for="failure in strayFailures" :key="failure.repo" :class="[NOTICE, 'mx-2 mt-1 shrink-0']">
             <Icon name="exclamation-triangle" class="mt-0.5 shrink-0 text-2xs text-danger" />
             <div class="min-w-0 flex-1">
-                <p class="text-2xs font-medium text-danger">{{ failure.action }} in {{ failure.repo }}</p>
+                <p class="text-2xs font-medium text-danger">{{ t(`workspace.reviewPanel.in`, { action: failure.action, repo: failure.repo }) }}</p>
                 <p class="line-clamp-4 break-words text-2xs text-muted" v-tooltip.top.overflow="failure.detail">{{ failure.detail }}</p>
             </div>
             <button
                 type="button"
                 class="shrink-0 rounded p-0.5 text-muted transition-colors hover:text-content"
                 @click="changes.dismissFailure(failure.repo)"
-                v-tooltip.right="'Dismiss'"
-                :aria-label="`Dismiss error for ${failure.repo}`"
+                v-tooltip.right="t(`ui.action.dismiss`)"
+                :aria-label="t(`workspace.reviewPanel.dismissError`, { repo: failure.repo })"
             >
                 <Icon name="times" class="text-2xs" />
             </button>
         </div>
 
-<!-- Whose work is in the tree, one line, only when an agent landed something; each chip is a filter. -->
+        <!-- Whose work is in the tree, one line, only when an agent landed something; each chip is a filter. -->
         <div v-if="legend.agents.length > 0" class="flex shrink-0 flex-wrap items-center gap-1 px-2 py-1.5">
-            <span class="shrink-0 text-2xs uppercase tracking-wide text-subtle">From</span>
+            <span class="shrink-0 text-2xs uppercase tracking-wide text-subtle">{{ t(`workspace.reviewPanel.from`) }}</span>
             <button
                 v-for="entry in legend.agents"
                 :key="entry.id"
@@ -1200,7 +1217,7 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                     originMark(entry.id) ? `, ${originMark(entry.id)!.label.toLowerCase()}` : ``
                 }${originDrafting(entry.id) ? `; its commit message is being written` : originTitle(entry.id) ? `; names the commit` : ``}`"
             >
-<!-- A dot before the logo means the session hasn't finished — its count above is an instalment, not a total. -->
+                <!-- A dot before the logo means the session hasn't finished — its count above is an instalment, not a total. -->
                 <span v-if="originMark(entry.id)" class="h-1.5 w-1.5 shrink-0 rounded-full" :class="originMark(entry.id)!.dot"></span>
                 <!-- The same slot, spent on a different wait: the chip's commit-message sentence still being written. -->
                 <span v-else-if="originDrafting(entry.id)" class="h-1.5 w-1.5 shrink-0 rounded-full bg-current opacity-60"></span>
@@ -1208,7 +1225,7 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                 <Icon v-else name="sparkles" class="shrink-0 text-2xs" />
                 <span v-if="originFilter === entry.id" class="min-w-0 truncate">{{ originLabel(entry.id) }}</span>
                 <span class="shrink-0 opacity-70">{{ entry.files }}</span>
-<!-- The way out, drawn only on the chip that's hiding rows: a cross means "clear this" without a word. -->
+                <!-- The way out, drawn only on the chip that's hiding rows: a cross means "clear this" without a word. -->
                 <Icon v-if="originFilter === entry.id" name="times" class="shrink-0 text-[0.6rem] opacity-70" />
             </button>
             <button
@@ -1217,9 +1234,9 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                 class="ui-chip shrink-0 gap-1 transition-opacity"
                 :class="originFilter !== undefined && originFilter !== YOURS ? 'opacity-40' : ''"
                 @click="toggleOrigin(YOURS)"
-                v-tooltip.right="'Your own edits, the terminal, a main-tree chat'"
+                v-tooltip.right="t(`workspace.reviewPanel.ownEditsTerminalMain`)"
             >
-                you <span class="opacity-70">{{ legend.yours }}</span>
+                {{ t(`workspace.reviewPanel.you`) }} <span class="opacity-70">{{ legend.yours }}</span>
                 <Icon v-if="originFilter === YOURS" name="times" class="shrink-0 text-[0.6rem] opacity-70" />
             </button>
         </div>
@@ -1235,15 +1252,17 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                      on hover; the verb leads so what survives the cut is the part that answers "where is my work". -->
                 <span class="min-w-0 truncate" v-tooltip.right.overflow="`${changes.landing.value}…`">{{ changes.landing.value }}…</span>
             </p>
-            <p v-if="!changes.loaded.value && !changes.error.value" class="px-3 py-2 text-2xs text-subtle">Loading changes…</p>
+            <p v-if="!changes.loaded.value && !changes.error.value" class="px-3 py-2 text-2xs text-subtle">
+                {{ t(`workspace.reviewPanel.loadingChanges`) }}
+            </p>
             <!-- An explicitly clean tree distinguishes empty results from missing data — but only once it is a claim
                  anyone can make: mid-land the tree is being written, and the line above already says so. -->
             <p v-else-if="changes.loaded.value && changes.count.value === 0 && !changes.landing.value" class="px-3 py-2 text-2xs text-subtle">
-                No uncommitted changes.
+                {{ t(`workspace.reviewPanel.noUncommittedChanges`) }}
             </p>
             <!-- A lit chip over an empty list says so too — otherwise a filtered-to-nothing tree reads as having lost its files. -->
             <p v-else-if="dirty.length === 0 && filterLabel" class="px-3 py-2 text-2xs text-subtle">
-                Nothing from {{ filterLabel }} is left in the tree.
+                {{ t(`workspace.reviewPanel.nothingLeftInTree`, { filterLabel }) }}
             </p>
 
             <!-- Unscannable repositories remain visible with Git's reason and no actions. -->
@@ -1255,7 +1274,7 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                 </div>
                 <div :class="[NOTICE, 'mb-1.5']">
                     <div class="min-w-0 flex-1">
-                        <p class="text-2xs font-medium text-danger">Couldn't read this repo</p>
+                        <p class="text-2xs font-medium text-danger">{{ t(`workspace.reviewPanel.couldntReadRepo`) }}</p>
                         <p class="line-clamp-4 break-words text-2xs text-muted" v-tooltip.top.overflow="group.error">{{ group.error }}</p>
                     </div>
                 </div>
@@ -1268,7 +1287,7 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                 class="group/repo mt-1 px-1 transition-opacity first:mt-0"
                 :class="changes.committing.value.includes(group.repo) && `pointer-events-none opacity-50`"
             >
-<!-- One row per repo, about the files under it: identity, then the sole side's rank/verb, then discard. -->
+                <!-- One row per repo, about the files under it: identity, then the sole side's rank/verb, then discard. -->
                 <div class="ui-row-select flex items-center gap-1 rounded-md pr-1">
                     <button
                         type="button"
@@ -1277,7 +1296,7 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                     >
                         <!-- The chevron is the repository row's only leading icon. -->
                         <Icon class="shrink-0 text-2xs text-subtle" :name="collapsed.has(group.repo) ? 'chevron-right' : 'chevron-down'" />
-<!-- Both names truncate together, the branch three times as fast — it's the annotation, the repo is the heading. -->
+                        <!-- Both names truncate together, the branch three times as fast — it's the annotation, the repo is the heading. -->
                         <span class="min-w-0 truncate text-xs font-medium text-content" v-tooltip.top.overflow="group.repo">{{ group.repo }}</span>
                         <span v-if="group.branch !== undefined" class="flex min-w-0 max-w-24 shrink-3 items-center gap-0.5 text-2xs text-subtle">
                             <Icon name="fork" class="shrink-0 text-[0.6rem]" />
@@ -1305,7 +1324,7 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                         :disabled="changes.actionBusy.value"
                         v-action="() => stageSide(group, soleSide(group)!.side)"
                         v-tooltip.right="sideVerbHint(group, soleSide(group)!.side)"
-                        :aria-label="`${sideVerbHint(group, soleSide(group)!.side)} in ${group.repo}`"
+                        :aria-label="t(`workspace.reviewPanel.in2`, { side: sideVerbHint(group, soleSide(group)!.side), repo: group.repo })"
                     >
                         <Icon :name="INDEX_VERB[soleSide(group)!.side].icon" class="text-2xs" />
                     </button>
@@ -1314,8 +1333,8 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                         :class="[ICON_BUTTON, ROW_ACTION, 'max-md:h-8 max-md:w-8']"
                         :disabled="changes.actionBusy.value"
                         @click="askDiscardRepo(group)"
-                        v-tooltip.top="'Discard all changes in this repo'"
-                        aria-label="Discard all changes in this repo"
+                        v-tooltip.top="t(`workspace.reviewPanel.discardAllChangesIn`)"
+                        :aria-label="t(`workspace.reviewPanel.discardAllChangesIn`)"
                     >
                         <Icon name="trash" class="text-2xs" />
                     </button>
@@ -1334,22 +1353,19 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                         type="button"
                         class="shrink-0 rounded p-0.5 text-muted transition-colors hover:text-content"
                         @click="changes.dismissFailure(group.repo)"
-                        v-tooltip.right="'Dismiss'"
-                        :aria-label="`Dismiss error for ${group.repo}`"
+                        v-tooltip.right="t(`ui.action.dismiss`)"
+                        :aria-label="t(`workspace.reviewPanel.dismissError`, { repo: group.repo })"
                     >
                         <Icon name="times" class="text-2xs" />
                     </button>
                 </div>
 
-<!-- Conflicts come from operations left by an external terminal. -->
+                <!-- Conflicts come from operations left by an external terminal. -->
                 <div v-if="group.operation" :class="[NOTICE, 'mb-1.5 mt-0.5 border-warning/40 bg-warning/10']">
                     <Icon name="exclamation-triangle" class="mt-0.5 shrink-0 text-2xs text-warning" />
                     <div class="min-w-0 flex-1">
-                        <p class="text-2xs font-medium text-warning">A {{ group.operation }} is in progress</p>
-                        <p class="text-2xs text-muted">
-                            Resolve the conflicts and stage them to continue, or abort to return this repository to where the
-                            {{ group.operation }} began.
-                        </p>
+                        <p class="text-2xs font-medium text-warning">{{ t(`workspace.reviewPanel.inProgress`, { operation: group.operation }) }}</p>
+                        <p class="text-2xs text-muted">{{ t(`workspace.reviewPanel.resolveConflictsStageTo`, { operation: group.operation }) }}</p>
                     </div>
                     <Button
                         size="small"
@@ -1357,15 +1373,15 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                         class="shrink-0"
                         :disabled="changes.actionBusy.value"
                         @click="changes.abortOperation(group.repo)"
-                        v-tooltip.top="'A restore point is saved first, so this is reversible from Restore points'"
+                        v-tooltip.top="t(`workspace.reviewPanel.restorePointSavedFirst`)"
                     >
-                        Abort
+                        {{ t(`workspace.reviewPanel.abort`) }}
                     </Button>
                 </div>
 
                 <!-- No empty-repo guard needed here — `dirty` is the list, and a repo with no rows isn't in it. -->
                 <div v-if="!collapsed.has(group.repo)" class="pb-1 pl-1">
-<!-- One block per git side (conflicts, staged, unstaged); the header's action is whole-side, ignoring selection. -->
+                    <!-- One block per git side (conflicts, staged, unstaged); the header's action is whole-side, ignoring selection. -->
                     <template v-for="section in sidesOf(group)" :key="`${group.repo}/${section.side}`">
                         <div v-if="sidesSplit(group)" class="flex items-center gap-1 pl-2 pt-1">
                             <span
@@ -1382,21 +1398,21 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                                 :packaged="soleBucket(group.repo, section.side)!.packaged"
                             />
                             <span class="flex-1"></span>
-<!-- Always drawn: what moves a row across the index stays on screen, what destroys work waits for a hover. -->
+                            <!-- Always drawn: what moves a row across the index stays on screen, what destroys work waits for a hover. -->
                             <button
                                 type="button"
                                 :class="[ICON_BUTTON, 'max-md:h-8 max-md:w-8']"
                                 :disabled="changes.actionBusy.value"
                                 v-action="() => stageSide(group, section.side)"
                                 v-tooltip.right="sideVerbHint(group, section.side)"
-                                :aria-label="`${sideVerbHint(group, section.side)} in ${group.repo}`"
+                                :aria-label="t(`workspace.reviewPanel.in2`, { side: sideVerbHint(group, section.side), repo: group.repo })"
                             >
                                 <Icon :name="INDEX_VERB[section.side].icon" class="text-2xs" />
                             </button>
                         </div>
 
                         <template v-for="bucket in viewOf(group.repo, section.side).buckets" :key="`${group.repo}/${section.side}/${bucket.key}`">
-                                <!-- Each module label is shown once for its row group. -->
+                            <!-- Each module label is shown once for its row group. -->
                             <div v-if="moduleRow(group, section.side)" class="flex items-center pt-2" :class="moduleIndent(group)">
                                 <ModuleLabel :name="bucket.name" :packaged="bucket.packaged" />
                             </div>
@@ -1456,12 +1472,7 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                                             </span>
                                         </span>
                                         <!-- The `of` value scales the badge against the largest addition. -->
-                                        <ReviewStat
-                                            :code="change.code"
-                                            :additions="change.additions"
-                                            :deletions="change.deletions"
-                                            :of="heaviest"
-                                        />
+                                        <ReviewStat :code="change.code" :additions="change.additions" :deletions="change.deletions" :of="heaviest" />
                                     </button>
                                     <!-- Index verbs stay quieter than file names so repeated rows read as texture. -->
                                     <button
@@ -1486,8 +1497,8 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                                         "
                                         :disabled="changes.actionBusy.value"
                                         @click="askDiscardRow({ repo: group.repo, side: section.side, path: change.path }, change)"
-                                        v-tooltip.top="'Discard'"
-                                        :aria-label="`Discard ${change.path}`"
+                                        v-tooltip.top="t(`workspace.reviewPanel.discard`)"
+                                        :aria-label="t(`workspace.reviewPanel.discard2`, { path: change.path })"
                                     >
                                         <Icon name="trash" class="text-2xs" />
                                     </button>
@@ -1497,8 +1508,12 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                     </template>
                     <!-- The daemon's per-repo cap, said plainly so the list doesn't read as complete when it isn't. -->
                     <p v-if="truncatedTotal(group) > 0" class="py-1 pl-4 text-2xs text-subtle">
-                        …and {{ truncatedTotal(group) }} more: showing the first {{ repoCount(group) - truncatedTotal(group) }}. Stage all, commit and
-                        discard cover every file here, listed or not.
+                        {{
+                            t(`workspace.reviewPanel.moreShowingFirstStage`, {
+                                group: truncatedTotal(group),
+                                group2: repoCount(group) - truncatedTotal(group),
+                            })
+                        }}
                     </p>
                 </div>
             </div>
@@ -1508,22 +1523,27 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
         </div>
 
         <!-- Tracked and untracked discard outcomes are reported separately. -->
-        <Modal :open="pendingDiscard !== undefined" size="sm" header="Discard changes" @update:open="pendingDiscard = undefined">
+        <Modal
+            :open="pendingDiscard !== undefined"
+            size="sm"
+            :header="t(`workspace.reviewPanel.discardChanges`)"
+            @update:open="pendingDiscard = undefined"
+        >
             <template v-if="pendingDiscard">
-                <p class="break-words text-xs text-content">Discard {{ pendingDiscard.what }}?</p>
+                <p class="break-words text-xs text-content">{{ t(`workspace.reviewPanel.discard3`, { what: pendingDiscard.what }) }}</p>
                 <!-- The counts are a floor when daemon truncation hides additional files. -->
                 <p v-if="pendingDiscard.partial" class="mt-2 text-xs text-warning">
-                    More files are pending here than the panel is listing, and this covers all of them. The figures below count only the listed ones.
+                    {{ t(`workspace.reviewPanel.moreFilesPendingHere`) }}
                 </p>
-<!-- The verb agrees with the count (`plural`), since a lone file misreading as plural is the one line here that must be read carefully. -->
+                <!-- The verb agrees with the count (`plural`), since a lone file misreading as plural is the one line here that must be read carefully. -->
                 <p v-if="pendingDiscard.restores > 0" class="mt-2 text-xs text-muted">
-                    {{ pendingDiscard.partial ? `At least ` : `` }}{{ plural(pendingDiscard.restores, "file") }}
-                    {{ pendingDiscard.restores === 1 ? `returns` : `return` }} to their last committed state.
+                    {{ pendingDiscard.partial ? t(`workspace.reviewPanel.atLeast`) : `` }}
+                    {{ t(`workspace.reviewPanel.filesReturn`, { count: pendingDiscard.restores }, pendingDiscard.restores) }}
                 </p>
                 <div v-if="pendingDiscard.deletes.length > 0" class="mt-2">
                     <p class="text-xs text-danger">
-                        {{ pendingDiscard.partial ? `At least ` : `` }}{{ plural(pendingDiscard.deletes.length, "untracked file") }}
-                        {{ pendingDiscard.deletes.length === 1 ? `leaves` : `leave` }} the disk: they were never committed, so git has no copy:
+                        {{ pendingDiscard.partial ? t(`workspace.reviewPanel.atLeast`) : `` }}
+                        {{ t(`workspace.reviewPanel.untrackedLeave`, { count: pendingDiscard.deletes.length }, pendingDiscard.deletes.length) }}
                     </p>
                     <ul class="mt-1 max-h-24 overflow-auto">
                         <li v-for="path in pendingDiscard.deletes" :key="path" class="truncate font-mono text-2xs text-muted" dir="rtl">
@@ -1532,12 +1552,18 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                     </ul>
                 </div>
                 <p class="mt-3 text-2xs text-subtle">
-                    <Icon name="shield" class="mr-0.5 text-[0.6rem]" />A restore point is saved first, so this is reversible from Restore points.
+                    <Icon name="shield" class="mr-0.5 text-[0.6rem]" />{{ t(`workspace.reviewPanel.restorePointSavedFirst2`) }}
                 </p>
             </template>
             <template #footer>
-                <Button size="small" severity="secondary" :text="true" label="Cancel" @click="pendingDiscard = undefined" />
-                <Button size="small" severity="danger" label="Discard" :disabled="changes.actionBusy.value" @click="confirmDiscard" />
+                <Button size="small" severity="secondary" :text="true" :label="t(`ui.action.cancel`)" @click="pendingDiscard = undefined" />
+                <Button
+                    size="small"
+                    severity="danger"
+                    :label="t(`workspace.reviewPanel.discard`)"
+                    :disabled="changes.actionBusy.value"
+                    @click="confirmDiscard"
+                />
             </template>
         </Modal>
 

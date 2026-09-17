@@ -31,7 +31,8 @@ export const memoryBounds = (engine: EngineFacts | undefined): CapBounds =>
         ? { min: MEMORY_FLOOR_GIB }
         : { min: MEMORY_FLOOR_GIB, max: Math.max(MEMORY_FLOOR_GIB, Math.floor(engine.memoryBytes / GIB) - HOST_RESERVE_GIB) };
 
-export const cpuBounds = (engine: EngineFacts | undefined): CapBounds => (engine === undefined ? { min: 1 } : { min: 1, max: Math.max(1, Math.floor(engine.cpus)) });
+export const cpuBounds = (engine: EngineFacts | undefined): CapBounds =>
+    engine === undefined ? { min: 1 } : { min: 1, max: Math.max(1, Math.floor(engine.cpus)) };
 
 // What the form holds. `null` is the default, shown as an empty field. The switches hold the ASK rather
 // than docker's answer, since a dropped GPU is still asked for (see `gpuDropped`).
@@ -43,7 +44,8 @@ export interface ResourcesForm {
 }
 
 // Whether either asker put this token on the container: the owner (`hostRuntime`) or the approved environment.
-const asked = (current: DeviceSandboxResources, token: string): boolean => current.hostRuntime.includes(token) || current.overlayRuntime.includes(token);
+const asked = (current: DeviceSandboxResources, token: string): boolean =>
+    current.hostRuntime.includes(token) || current.overlayRuntime.includes(token);
 
 // The form a dialog opens on. Caps round down to whole units, the contract's own direction; a switch is
 // on when the container has the privilege or somebody asked for it.
@@ -97,7 +99,13 @@ const capProblem = (value: number | null, bounds: CapBounds, unit: string, floor
 };
 
 export const formProblems = (form: ResourcesForm, engine: EngineFacts | undefined): FormProblems => {
-    const memory = capProblem(form.memoryGib, memoryBounds(engine), `GiB`, `below that the sandbox's own toolchain stops fitting.`, `the rest is what it keeps for itself.`);
+    const memory = capProblem(
+        form.memoryGib,
+        memoryBounds(engine),
+        `GiB`,
+        `below that the sandbox's own toolchain stops fitting.`,
+        `the rest is what it keeps for itself.`,
+    );
     const cpus = capProblem(form.cpus, cpuBounds(engine), `CPUs`, `a sandbox needs a core to run on.`, `that is every core its engine has.`);
     return { ...(memory === undefined ? {} : { memory }), ...(cpus === undefined ? {} : { cpus }) };
 };

@@ -1,5 +1,6 @@
 import type { IconName } from "@intentic/extension-ui";
 import type { Workflow, WorkflowStep } from "@intentic/sandbox-contract";
+import { t } from "./i18n.js";
 
 // Ready-made workflow shapes, pure prefill: picking one opens the designer with a real workflow, and nothing is created
 // or run until Save. The first races two models on one request in separate worktrees and merges the diffs; the second
@@ -41,14 +42,14 @@ const SYNTHESIS_PROMPT =
     `itself and leave it passing. What lands must read as one change somebody made on purpose, not as two ` +
     `stitched together, and say, in a sentence each, what you took from where.`;
 
-export const WORKFLOW_TEMPLATES: readonly WorkflowTemplate[] = [
+export const workflowTemplates = (): readonly WorkflowTemplate[] => [
     {
         icon: `clone`,
-        summary: `What you type goes to Claude and to GPT at the same moment, each building it on a branch of its own. A third session then reads both diffs, keeps what each got right, and writes the merged version.`,
+        summary: t(`templates.whatTypeGoesTo`),
         workflow: {
             id: `two-models-one-task`,
             name: `Two models, one task`,
-            description: `One request, built twice at once by different models in their own worktrees, then read side by side and merged into the version worth keeping.`,
+            description: t(`templates.oneRequestBuiltTwice`),
             // Both attempts must start at once; 1 here would silently turn this into a race with a false start.
             maxParallel: 2,
             steps: [
@@ -65,11 +66,11 @@ export const WORKFLOW_TEMPLATES: readonly WorkflowTemplate[] = [
     },
     {
         icon: `list-check`,
-        summary: `The same race, graded: a third model scores both diffs without knowing who wrote them, and the merge cannot finish until an independent judge accepts its verification.`,
+        summary: t(`templates.sameRaceGradedThird`),
         workflow: {
             id: `two-models-scored`,
             name: `Two models, scored and merged`,
-            description: `One request built twice at once, then scored blind by a third model against the repository, and merged under a completion check that reads the score's requirements back.`,
+            description: t(`templates.oneRequestBuiltTwice2`),
             maxParallel: 2,
             steps: [
                 ...attempts(),
@@ -96,31 +97,31 @@ export const WORKFLOW_TEMPLATES: readonly WorkflowTemplate[] = [
                             {
                                 name: `attempt_a_score`,
                                 type: `number`,
-                                description: `0 to 100 score for Attempt A against the request and repository evidence`,
+                                description: t(`templates.n0To100Score`),
                                 required: true,
                             },
                             {
                                 name: `attempt_b_score`,
                                 type: `number`,
-                                description: `0 to 100 score for Attempt B against the request and repository evidence`,
+                                description: t(`templates.n0To100Score2`),
                                 required: true,
                             },
                             {
                                 name: `strengths`,
                                 type: `string[]`,
-                                description: `specific strengths worth preserving, each prefixed with A or B`,
+                                description: t(`templates.specificStrengthsWorthPreserving`),
                                 required: true,
                             },
                             {
                                 name: `risks`,
                                 type: `string[]`,
-                                description: `specific defects, omissions, or regression risks, each prefixed with A or B`,
+                                description: t(`templates.specificDefectsOmissionsRegression`),
                                 required: true,
                             },
                             {
                                 name: `synthesis_requirements`,
                                 type: `string[]`,
-                                description: `concrete requirements the final synthesis must satisfy, including verification still needed`,
+                                description: t(`templates.concreteRequirementsFinalSynthesis`),
                                 required: true,
                             },
                         ],
@@ -155,11 +156,11 @@ export const WORKFLOW_TEMPLATES: readonly WorkflowTemplate[] = [
     // than an actual request.
     {
         icon: `shield`,
-        summary: `The intelligent step for a CI pipeline. The pipeline POSTs what it knows, commit, branch, preview URL, to this workflow's own webhook, one session exercises the change and judges it, and the pipeline reads back pass, fail or blocked.`,
+        summary: t(`templates.intelligentStepCiPipeline`),
         workflow: {
             id: `release-gate`,
             name: `Release gate`,
-            description: `Called by a pipeline over its webhook: a session inspects the change the pipeline named, judges whether it should ship, and answers with a verdict the pipeline can gate the release on.`,
+            description: t(`templates.calledByPipelineOver`),
             maxParallel: 1,
             steps: [
                 step(`judge`, `Judge the change`, {
@@ -184,7 +185,7 @@ export const WORKFLOW_TEMPLATES: readonly WorkflowTemplate[] = [
                             {
                                 name: `reason`,
                                 type: `string`,
-                                description: `one sentence on why, the only line of this the pipeline log will show`,
+                                description: t(`templates.oneSentenceOnWhy`),
                                 required: true,
                             },
                         ],
@@ -199,11 +200,11 @@ export const WORKFLOW_TEMPLATES: readonly WorkflowTemplate[] = [
     // Nth dynamically. Notes travel as each step's closing message, not files; unpinned throughout.
     {
         icon: `search`,
-        summary: `Your question becomes a plan with three angles; three researchers each take one, in parallel, and write sourced notes; one writer reads all three and delivers a report that answers the question, citations inline.`,
+        summary: t(`templates.questionBecomesPlanThree`),
         workflow: {
             id: `research-report`,
             name: `Research report`,
-            description: `A question decomposed into three subtopics, researched in parallel with every claim sourced, and synthesised into one report with inline citations and an honest account of what could not be found.`,
+            description: t(`templates.questionDecomposedIntoThree`),
             maxParallel: 3,
             steps: [
                 step(`plan`, `Plan`, {
@@ -217,31 +218,31 @@ export const WORKFLOW_TEMPLATES: readonly WorkflowTemplate[] = [
                             {
                                 name: `title`,
                                 type: `string`,
-                                description: `3 to 6 words, sentence case, letters and numbers only: names the report and the notes folder`,
+                                description: t(`templates.n3To6Words`),
                                 required: true,
                             },
                             {
                                 name: `constraints`,
                                 type: `string`,
-                                description: `the bounds every researcher must respect: time window, geography, scope, or "none"`,
+                                description: t(`templates.boundsEveryResearcherMust`),
                                 required: true,
                             },
                             {
                                 name: `subtopic_1`,
                                 type: `string`,
-                                description: `the first researcher's brief: objective, key questions, preferred sources`,
+                                description: t(`templates.firstResearchersBriefObjective`),
                                 required: true,
                             },
                             {
                                 name: `subtopic_2`,
                                 type: `string`,
-                                description: `the second researcher's brief, disjoint from the first`,
+                                description: t(`templates.secondResearchersBriefDisjoint`),
                                 required: true,
                             },
                             {
                                 name: `subtopic_3`,
                                 type: `string`,
-                                description: `the third researcher's brief, disjoint from the other two`,
+                                description: t(`templates.thirdResearchersBriefDisjoint`),
                                 required: true,
                             },
                         ],

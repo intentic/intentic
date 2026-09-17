@@ -2,6 +2,7 @@
 import { Button, ui, Modal, SegmentedControl } from "@intentic/extension-ui";
 import type { LoopCheck, LoopDesign, LoopOutput } from "@intentic/sandbox-contract";
 import { computed, ref, watch } from "vue";
+import { t } from "./i18n.js";
 
 // Form for a saved loop's machinery (how it ends, memory, ceilings), asked once per loop rather than per use; the goal
 // itself is typed in the message box, not here. A full page rather than a modal, since none of this fits mid-message.
@@ -50,15 +51,15 @@ watch(
     { immediate: true },
 );
 
-const contextOptions = [
-    { value: `fresh` as const, label: `Fresh context` },
-    { value: `continue` as const, label: `Keep context` },
-];
-const stopOptions = [
-    { value: `command` as const, label: `A command passes` },
-    { value: `claim` as const, label: `The agent says so` },
-    { value: `judge` as const, label: `A reviewer agrees` },
-];
+const contextOptions = computed(() => [
+    { value: `fresh` as const, label: t(`loopForm.freshContext`) },
+    { value: `continue` as const, label: t(`loopForm.keepContext`) },
+]);
+const stopOptions = computed(() => [
+    { value: `command` as const, label: t(`loopForm.commandPasses`) },
+    { value: `claim` as const, label: t(`loopForm.agentSays`) },
+    { value: `judge` as const, label: t(`loopForm.reviewerAgrees`) },
+]);
 
 // "Keep context" sounds strictly better but risks a loop agreeing with itself for many rounds.
 const contextNote = computed(() =>
@@ -110,77 +111,77 @@ const submit = (): void => {
 </script>
 
 <template>
-    <Modal v-model:open="open" size="md" :header="editing ? `Edit loop` : `New loop`">
+    <Modal v-model:open="open" size="md" :header="editing ? t(`loopForm.editLoop`) : t(`loopForm.newLoop`)">
         <div class="flex flex-col gap-4">
             <label class="flex flex-col gap-1">
-                <span :class="ui.sectionLabel()">Name it</span>
-                <input v-model="name" :class="ui.input()" placeholder="Until the tests pass" autofocus />
+                <span :class="ui.sectionLabel()">{{ t(`loopForm.name`) }}</span>
+                <input v-model="name" :class="ui.input()" :placeholder="t(`loopForm.untilTestsPass`)" autofocus />
                 <!-- Shown at pill width on the composer badge, so length matters here more than for other fields. -->
-                <span v-if="clash" class="text-2xs text-danger">You already have a loop with that name.</span>
-                <span v-else class="text-2xs text-subtle">What you'll pick from the message box. Short enough to read on a button.</span>
+                <span v-if="clash" class="text-2xs text-danger">{{ t(`loopForm.alreadyLoopName`) }}</span>
+                <span v-else class="text-2xs text-subtle">{{ t(`loopForm.whatYoullPickMessage`) }}</span>
             </label>
 
             <label class="flex flex-col gap-1">
-                <span :class="ui.sectionLabel()">What it's for</span>
-                <input v-model="description" :class="ui.input()" placeholder="fixes failures one at a time until the suite is green" />
-                <span class="text-2xs text-subtle">Optional. One line under the name in the picker.</span>
+                <span :class="ui.sectionLabel()">{{ t(`loopForm.what`) }}</span>
+                <input v-model="description" :class="ui.input()" :placeholder="t(`loopForm.fixesFailuresOneAt`)" />
+                <span class="text-2xs text-subtle">{{ t(`loopForm.optionalOneLineUnder`) }}</span>
             </label>
 
             <label class="flex flex-col gap-1">
-                <span :class="ui.sectionLabel()">What each round does</span>
-                <input v-model="instruction" :class="ui.input()" placeholder="run the tests, pick the top failure, fix it" />
+                <span :class="ui.sectionLabel()">{{ t(`loopForm.whatEachRoundDoes`) }}</span>
+                <input v-model="instruction" :class="ui.input()" :placeholder="t(`loopForm.runTestsPickTop`)" />
                 <span class="text-2xs text-subtle">
-                    Optional. Leave it empty and the agent works towards whatever you type in the message box, however it sees fit.
+                    {{ t(`loopForm.optionalLeaveEmptyAgent`) }}
                 </span>
             </label>
 
             <div class="flex flex-col gap-1.5">
-                <span :class="ui.sectionLabel()">How it ends</span>
+                <span :class="ui.sectionLabel()">{{ t(`loopForm.howEnds`) }}</span>
                 <SegmentedControl v-model="stopKind" :options="stopOptions" />
-                <input v-if="stopKind === `command`" v-model="command" :class="[ui.input(), `font-mono`]" placeholder="pnpm test" />
+                <input v-if="stopKind === `command`" v-model="command" :class="[ui.input(), `font-mono`]" :placeholder="t(`loopForm.pnpmTest`)" />
                 <textarea
                     v-else-if="stopKind === `judge`"
                     v-model="rubric"
                     :class="ui.input()"
                     rows="2"
-                    placeholder="Every public function has a doc comment explaining why it exists."
+                    :placeholder="t(`loopForm.everyPublicFunctionDoc`)"
                 ></textarea>
                 <span class="text-2xs text-subtle">{{ stopNote }}</span>
             </div>
 
             <div class="flex flex-col gap-1.5">
-                <span :class="ui.sectionLabel()">Memory between rounds</span>
+                <span :class="ui.sectionLabel()">{{ t(`loopForm.memoryBetweenRounds`) }}</span>
                 <SegmentedControl v-model="context" :options="contextOptions" />
                 <span class="text-2xs text-subtle">{{ contextNote }}</span>
             </div>
 
             <!-- Ceilings are grouped and pre-filled, so a loop saved untouched still can't run unbounded. -->
             <div class="flex flex-col gap-1.5">
-                <span :class="ui.sectionLabel()">Stop it anyway after</span>
+                <span :class="ui.sectionLabel()">{{ t(`loopForm.stopAnywayAfter`) }}</span>
                 <div class="grid grid-cols-3 gap-2">
                     <label class="flex flex-col gap-1">
                         <input v-model.number="maxIterations" type="number" min="1" max="50" :class="ui.input()" />
-                        <span class="text-2xs text-subtle">rounds</span>
+                        <span class="text-2xs text-subtle">{{ t(`loopForm.rounds`) }}</span>
                     </label>
                     <label class="flex flex-col gap-1">
                         <input v-model.number="maxSpendUsd" type="number" min="0.5" step="0.5" :class="ui.input()" />
-                        <span class="text-2xs text-subtle">dollars</span>
+                        <span class="text-2xs text-subtle">{{ t(`loopForm.dollars`) }}</span>
                     </label>
                     <label class="flex flex-col gap-1">
                         <input v-model.number="stallLimit" type="number" min="1" max="10" :class="ui.input()" />
-                        <span class="text-2xs text-subtle">idle rounds</span>
+                        <span class="text-2xs text-subtle">{{ t(`loopForm.idleRounds`) }}</span>
                     </label>
                 </div>
                 <!-- Stall limit catches an agent looping without progress, which raises no error on its own. -->
                 <span class="text-2xs text-subtle">
-                    An idle round is one that changed nothing in the tree: that, not an error, is how a loop usually goes wrong.
+                    {{ t(`loopForm.idleRoundOneChanged`) }}
                 </span>
             </div>
         </div>
 
         <template #footer>
-            <button type="button" :class="ui.linkButton()" @click="open = false">Cancel</button>
-            <Button size="small" :label="editing ? `Save` : `Create loop`" :disabled="!ready" @click="submit()" />
+            <button type="button" :class="ui.linkButton()" @click="open = false">{{ t(`loopForm.cancel`) }}</button>
+            <Button size="small" :label="editing ? t(`loopForm.save`) : t(`loopForm.createLoop`)" :disabled="!ready" @click="submit()" />
         </template>
     </Modal>
 </template>

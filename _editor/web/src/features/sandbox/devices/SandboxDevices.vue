@@ -12,6 +12,9 @@ import { useDevices } from "./useDevices";
 import { useSandbox } from "../client/useSandbox";
 import { useSandboxOutline } from "../overview/useSandboxOutline";
 import { useSandboxVersion } from "../overview/useSandboxVersion";
+import { useT } from "@intentic/ui/i18n";
+
+const t = useT();
 
 // The Sandbox hub's Devices tab: what is on the other end of this sandbox. Two screens, one URL — the
 // board of every machine, and `?device=<key>` for one of them — so a machine is deep-linkable and the back
@@ -33,7 +36,7 @@ const adding = ref(route.query[`enable`] === `desktop-sync`);
 const outline = useSandboxOutline(isLoading);
 // The list query's bare error, in the words of the screen that asked for it.
 const notice = computed<NoticeModel | undefined>(() =>
-    error.value === undefined ? undefined : { tone: `danger`, title: `Couldn't list your devices.`, detail: error.value },
+    error.value === undefined ? undefined : { tone: `danger`, title: t(`sandbox.sandboxDevices.couldntListDevices`), detail: error.value },
 );
 
 // The release this sandbox knows about, from the shared /info query (same value as its own update badge);
@@ -87,12 +90,11 @@ watch(
     },
     { immediate: true },
 );
-
 </script>
 
 <template>
     <div class="flex flex-col gap-4">
-<!-- Setup faults qualify both device and sandbox screens. -->
+        <!-- Setup faults qualify both device and sandbox screens. -->
         <ContainerHealthCard />
 
         <DevicePage

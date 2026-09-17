@@ -7,10 +7,13 @@ import { computed } from "vue";
 import AddModelButton from "./AddModelButton.vue";
 import type { PinnedList } from "./modelPinList";
 import ModelPinList from "./ModelPinList.vue";
+import { useT } from "@intentic/ui/i18n";
 
 // One job's row (name, mark, tick, ordered model list), componentized since eighteen of these are drawn from the
 // catalog. The lead glyph and the selection tick share one slot, swapping on hover, focus or selection rather than
 // sitting side by side; the whole row is a `<label>`, so `#below` must stop clicks from ticking the job by accident.
+
+const t = useT();
 
 const { role, icon, list, selected, disabled, loaded } = defineProps<{
     role: ModelRoleSpec;
@@ -53,10 +56,10 @@ const chip = computed<{ readonly label: string; readonly hint: string } | undefi
         return undefined;
     }
     return role.kind === `helper`
-        ? { label: `off`, hint: `Not set: this job does not run, and no model is chosen for you. Add a model to switch it on.` }
+        ? { label: t(`sandbox.modelRoleRow.off`), hint: t(`sandbox.modelRoleRow.notSetJobDoes`) }
         : {
-              label: `chat default`,
-              hint: `Nothing is pinned, so this runs on whatever your chat is set to and keeps following it as you change it. Add a model to pin this job to a tier of its own.`,
+              label: t(`sandbox.modelRoleRow.chatDefault`),
+              hint: t(`sandbox.modelRoleRow.nothingPinnedRunsOn`),
           };
 });
 </script>
@@ -75,7 +78,7 @@ const chip = computed<{ readonly label: string; readonly hint: string } | undefi
                     size="small"
                     class="absolute transition-opacity"
                     :class="boxClass"
-                    :aria-label="`Select ${role.label.toLowerCase()}`"
+                    :aria-label="t(`sandbox.modelRoleRow.select`, { toLowerCase: role.label.toLowerCase() })"
                     @update:model-value="(value: unknown) => emit(`select`, value === true)"
                 />
             </span>
@@ -91,7 +94,7 @@ const chip = computed<{ readonly label: string; readonly hint: string } | undefi
 
         <template #control>
             <AddModelButton
-                :label="`Add a model for ${role.label.toLowerCase()}`"
+                :label="t(`sandbox.modelRoleRow.addModel`, { toLowerCase: role.label.toLowerCase() })"
                 :disabled="disabled"
                 @open="(anchor: HTMLElement) => emit(`open`, undefined, anchor)"
             />

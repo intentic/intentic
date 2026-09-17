@@ -4,6 +4,9 @@
 import type { MatchSnippet } from "@intentic/sandbox-contract";
 import { computed } from "vue";
 import { markSegments } from "../features/agents/review/markSegments";
+import { useT } from "@intentic/ui/i18n";
+
+const t = useT();
 
 const props = defineProps<{
     snippet: MatchSnippet;
@@ -18,7 +21,9 @@ const runs = computed(() => markSegments(props.snippet.text, props.needle ?? ``,
 
 <template>
     <span class="italic">
-        <span class="pr-1 font-medium not-italic text-subtle">{{ snippet.speaker === `user` ? `You:` : `Agent:` }}</span>
+        <span class="pr-1 font-medium not-italic text-subtle">{{
+            snippet.speaker === `user` ? t(`common.matchLine.you`) : t(`common.matchLine.agent`)
+        }}</span>
         <span v-for="(run, at) in runs" :key="at" :class="run.hit ? 'rounded-sm bg-primary-600/30 not-italic text-content' : ''">{{ run.text }}</span>
     </span>
 </template>

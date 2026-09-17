@@ -4,6 +4,9 @@ import { useNow } from "@intentic/ui/async";
 import { type ComponentPublicInstance, computed, ref } from "vue";
 import { shellModelPicking } from "../../features/chat/models/shellModelPicking";
 import { usePushFlow } from "../../features/workspace/push/usePushFlow";
+import { useT } from "@intentic/ui/i18n";
+
+const t = useT();
 
 /* WHAT THE PUSH QUESTION CARRIES THAT TWO STRINGS CANNOT: the command in monospace, and the way back to the terminal it all came out of. */
 
@@ -25,7 +28,9 @@ const memoryLine = computed<string | undefined>(() => {
         return undefined;
     }
     const when = `From ${timeAgo(at, { now: clock.value })}.`;
-    return pushFlow.heldStale.value ? `${when} Files have changed since, so this may no longer be what happens.` : `${when} Nothing has changed since.`;
+    return pushFlow.heldStale.value
+        ? `${when} Files have changed since, so this may no longer be what happens.`
+        : `${when} Nothing has changed since.`;
 });
 
 // A red suite is the one failure a reader can legitimately doubt (flaky, or a fix landed elsewhere), and after a
@@ -63,7 +68,7 @@ const openStartOver = (): void => {
 </script>
 
 <template>
-<!-- ONE UNCONDITIONAL ROOT ELEMENT, so the lane's own class lands somewhere. -->
+    <!-- ONE UNCONDITIONAL ROOT ELEMENT, so the lane's own class lands somewhere. -->
     <div>
         <!-- The command that failed in a 1-line syntax-highlighted code block. -->
         <div v-if="pushFlow.question.value" class="flex flex-col gap-1.5">
@@ -77,7 +82,7 @@ const openStartOver = (): void => {
             <p v-if="memoryLine" class="break-words text-2xs text-subtle">{{ memoryLine }}</p>
         </div>
 
-<!-- ONE ROW FOR ALL ANSWERS: the way back to the output on the left, the actions on the right. -->
+        <!-- ONE ROW FOR ALL ANSWERS: the way back to the output on the left, the actions on the right. -->
         <div class="mt-2 flex flex-wrap items-center justify-end gap-2">
             <!-- Ways back to the truth, not answers to the question: what actually happened, and measuring it again. -->
             <div class="mr-auto flex items-center gap-3">
@@ -88,30 +93,30 @@ const openStartOver = (): void => {
                     @click="pushFlow.showTerminal"
                 >
                     <Icon name="terminal" class="text-2xs" />
-                    Show terminal
+                    {{ t(`shell.pushQuestionBody.showTerminal`) }}
                 </button>
 
                 <button
                     v-if="canRerun"
                     type="button"
                     class="flex items-center gap-1.5 rounded text-2xs text-muted transition-colors hover:text-content"
-                    v-tooltip.top="`Run the check again on the tree as it is now`"
+                    v-tooltip.top="t(`shell.pushQuestionBody.runCheckAgainOn`)"
                     @click="pushFlow.runAgain"
                 >
                     <Icon name="refresh" class="text-2xs" />
-                    Run again
+                    {{ t(`shell.pushQuestionBody.runAgain`) }}
                 </button>
             </div>
 
-<!-- Hand the failure to an agent. -->
+            <!-- Hand the failure to an agent. -->
             <template v-if="pushFlow.proposedFix.value && attempt && look && inPlay">
-<!-- The kit's chip, which is what this is: state, not rank (ui.ts's vocabulary). -->
+                <!-- The kit's chip, which is what this is: state, not rank (ui.ts's vocabulary). -->
                 <button
                     type="button"
                     class="ui-chip shrink-0 rounded px-2 py-1 text-xs font-medium"
                     :class="[look.ink, look.chip]"
                     v-tooltip.top="attempt.stance.hint"
-                    :aria-label="`Fix agent: ${attempt.stance.label.toLowerCase()} — open the conversation`"
+                    :aria-label="t(`shell.pushQuestionBody.fixAgentOpenConversation`, { toLowerCase: attempt.stance.label.toLowerCase() })"
                     @click="pushFlow.openAttempt"
                 >
                     <Icon :name="look.icon" :spin="look.spin" class="text-2xs" />
@@ -122,10 +127,10 @@ const openStartOver = (): void => {
                     size="small"
                     severity="secondary"
                     text
-                    label="Start over"
+                    :label="t(`shell.pushQuestionBody.startOver`)"
                     icon-pos="right"
                     :loading="pushFlow.fixBusy.value"
-                    v-tooltip.top="`Set this attempt aside and start a fresh one — opens the picker first`"
+                    v-tooltip.top="t(`shell.pushQuestionBody.setAttemptAsideStart`)"
                     @click="openStartOver"
                 >
                     <template #icon><Icon name="chevron-down" class="text-2xs" /></template>
@@ -140,7 +145,7 @@ const openStartOver = (): void => {
                 @run="startFix"
             />
 
-<!-- Push anyway, and it never asks twice. -->
+            <!-- Push anyway, and it never asks twice. -->
             <Button size="small" severity="warn" :label="pushAnywayLabel" @click="pushFlow.pushAnyway" />
         </div>
         <!-- Why the last press started nothing, in the daemon's words; the question stays up above it. -->

@@ -61,10 +61,13 @@ import PresenceAvatars from "./presence/PresenceAvatars.vue";
 import QuickOpen from "./commands/QuickOpen.vue";
 import SandboxGate from "../features/sandbox/gates/SandboxGate.vue";
 import SandboxSwitcher from "../features/sandbox/gates/SandboxSwitcher.vue";
+import { useT } from "@intentic/ui/i18n";
 
 // A rail element; the identity half (id, route, label, icon) is RailSeat, shared with the rail's memory.
 // - id: the tile's own name or contributing extension's id — what RAIL_GROUPS ranks and groups by.
 // - icon: undefined for a repository tile, which renders initials instead.
+const t = useT();
+
 interface AreaTile extends RailSeat {
     // Same shape core areas and extensions both fill, so the rail renders one badge element.
     readonly badge?: ViewBadge;
@@ -169,7 +172,7 @@ const previewTile = computed<AreaTile | undefined>(() => {
         to: `/preview`,
         label: words.value.preview,
         icon: `eye`,
-        ...(healthy > 0 ? { badge: { count: healthy, tone: `neutral` as const, tooltip: `${healthy} running` } } : {}),
+        ...(healthy > 0 ? { badge: { count: healthy, tone: `neutral` as const, tooltip: t(`shell.shellDesktop.running`, { healthy }) } } : {}),
     };
 });
 
@@ -195,7 +198,7 @@ const fixedTiles = computed<readonly AreaTile[]>(() => [
               {
                   id: `chat`,
                   to: `/chat`,
-                  label: `Chat`,
+                  label: t(`shell.shellDesktop.chat`),
                   icon: `comments` as IconName,
               },
           ]
@@ -203,7 +206,7 @@ const fixedTiles = computed<readonly AreaTile[]>(() => [
     {
         id: `agents`,
         to: `/agents`,
-        label: `Agents`,
+        label: t(`shell.shellDesktop.agents`),
         // RailIcon draws by area identity; these generic names remain the fallback vocabulary.
         icon: `robot`,
         // Both come from agentsTile.ts, shared with the phone tab bar; the note names the scope when it's wide.
@@ -229,13 +232,13 @@ const browserTile = computed<AreaTile | undefined>(() => {
     return {
         id: `browsers`,
         to: `/browsers`,
-        label: `Browsers`,
+        label: t(`shell.shellDesktop.browsers`),
         icon: `desktop`,
         // Neutral: an open browser is inventory, not a debt; warning only when the agent is waiting on the user.
         ...(helping > 0
-            ? { badge: { count: helping, tone: `warning` as const, tooltip: `the agent needs your help` } }
+            ? { badge: { count: helping, tone: `warning` as const, tooltip: t(`shell.shellDesktop.agentNeedsHelp`) } }
             : live > 0
-              ? { badge: { count: live, tone: `neutral` as const, tooltip: `${live} open` } }
+              ? { badge: { count: live, tone: `neutral` as const, tooltip: t(`shell.shellDesktop.open`, { live }) } }
               : {}),
     };
 });
@@ -249,10 +252,10 @@ const subagentTile = computed<AreaTile | undefined>(() => {
     return {
         id: `subagents`,
         to: `/subagents`,
-        label: `Subagents`,
+        label: t(`shell.shellDesktop.subagents`),
         icon: `users`,
         // Neutral, as with browsers: a subagent still working is the turn's own doing, not an errand.
-        ...(live > 0 ? { badge: { count: live, tone: `neutral` as const, tooltip: `${live} still working` } } : {}),
+        ...(live > 0 ? { badge: { count: live, tone: `neutral` as const, tooltip: t(`shell.shellDesktop.stillWorking`, { live }) } } : {}),
     };
 });
 // Same AreaTile shape as the nav tiles, so badges render through one path instead of per hand-rolled link.
@@ -337,7 +340,7 @@ onMounted(() => {
         registerCommand({
             owner: `builtin`,
             command: `view.previousArea`,
-            title: `Previous Rail Area`,
+            title: t(`shell.shellDesktop.previousRailArea`),
             category: GO_TO,
             icon: `chevron-up`,
             keybinding: `Alt+ArrowUp`,
@@ -346,7 +349,7 @@ onMounted(() => {
         registerCommand({
             owner: `builtin`,
             command: `view.nextArea`,
-            title: `Next Rail Area`,
+            title: t(`shell.shellDesktop.nextRailArea`),
             category: GO_TO,
             icon: `chevron-down`,
             keybinding: `Alt+ArrowDown`,
@@ -393,7 +396,7 @@ const tileMenuItems = computed<MenuItem[]>(() => {
     if (tile.id === `chat`) {
         return [
             {
-                label: `Dock chat back to the side`,
+                label: t(`shell.shellDesktop.dockChatBackTo`),
                 shortcut: commandShortcut(`chat.toggleHome`),
                 command: (): void => toggleChatHome(router),
             },
@@ -406,7 +409,7 @@ const tileMenuItems = computed<MenuItem[]>(() => {
     }
     return [
         {
-            label: `Keep on the rail`,
+            label: t(`shell.shellDesktop.keepOnRail2`),
             // States what happens either way, since this is the one place the seat rule is explained.
             hint: pins.isPinned(tile.to) ? `Always seated, badge or not` : `Otherwise it shows only when it needs you`,
             checked: pins.isPinned(tile.to),
@@ -558,7 +561,7 @@ useKeybindings();
             <!-- Same overlay as the switcher and account avatar: AnchoredOverlay rows, not PrimeVue's ContextMenu. -->
             <AnchoredOverlay v-model="moreOpen" :anchor="moreTrigger ?? undefined" side="right" cross="start">
                 <div class="flex w-48 flex-col gap-0.5 p-1">
-                    <p v-if="moreTiles.length === 0" class="px-2 py-1.5 text-xs text-subtle">Every area is on the rail</p>
+                    <p v-if="moreTiles.length === 0" class="px-2 py-1.5 text-xs text-subtle">{{ t(`shell.shellDesktop.everyAreaOnRail`) }}</p>
                     <!-- Two controls per row — go there, and pin it (keepOnRail) — as siblings, not nested. -->
                     <div
                         v-for="tile in moreTiles"
@@ -584,8 +587,8 @@ useKeybindings();
                                 ui.iconButton(`mr-1 h-5 w-5 rounded text-subtle transition`),
                                 `opacity-0 pointer-coarse:opacity-100 group-focus-within:opacity-100 group-hover:opacity-100`,
                             ]"
-                            :aria-label="`Keep ${tile.label} on the rail`"
-                            v-tooltip.top="`Keep on the rail`"
+                            :aria-label="t(`shell.shellDesktop.keepOnRail`, { label: tile.label })"
+                            v-tooltip.top="t(`shell.shellDesktop.keepOnRail2`)"
                             @click="keepOnRail(tile)"
                         >
                             <Icon name="pin" class="text-xs" />
@@ -664,8 +667,8 @@ useKeybindings();
                     ui.addTile(`icon-rail-tile rounded-lg hover:bg-overlay`),
                     { 'border-link bg-primary-600/15 text-link': isNavActive('/capabilities') },
                 ]"
-                aria-label="Add a capability"
-                v-tooltip.right="'Add a capability'"
+                :aria-label="t(`shell.shellDesktop.addCapability`)"
+                v-tooltip.right="t(`shell.shellDesktop.addCapability`)"
             >
                 <RailIcon area="capabilities" class="icon-rail-glyph" />
             </RouterLink>

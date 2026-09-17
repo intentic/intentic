@@ -8,6 +8,7 @@ import { apiClient } from "../../lib/useApi";
 import { useAuth } from "./useAuth";
 import { useGoogleIdentity } from "./useGoogleIdentity";
 import { environment } from "../../app/environments/environment";
+import { useT } from "@intentic/ui/i18n";
 
 // This page runs inside the desktop app's webview, which starts with no session.
 // 1. Redeem the row the browser parked (single use).
@@ -15,6 +16,8 @@ import { environment } from "../../app/environments/environment";
 //    session over an ordinary HTTP round trip, nothing injected from Rust.
 // 3. Adopt the Google ID token into the shared cache, so the first daemon call gets a session that renews silently.
 // A failure is terminal for this link; retry means signing in again, not reloading the link.
+
+const t = useT();
 
 const route = useRoute();
 const router = useRouter();
@@ -71,7 +74,7 @@ onMounted(() => void complete());
                     <span class="entry-seal-sweep"></span>
                     <AppBrand shape="mark" class="entry-seal-mark" />
                 </div>
-                <p class="say" role="status">Signing you in…</p>
+                <p class="say" role="status">{{ t(`auth.desktopAuthComplete.signingIn`) }}</p>
             </template>
 
             <!-- A failure is terminal for this link, so the frame comes up around the one thing left to do. -->
@@ -81,7 +84,12 @@ onMounted(() => void complete());
                 <span class="entry-corner entry-corner-bl"></span>
                 <span class="entry-corner entry-corner-br"></span>
                 <Notice :of="error" class="rounded-none text-left" />
-                <Button label="Back to sign in" severity="secondary" class="mt-4 self-center" @click="void router.replace(`/login`)" />
+                <Button
+                    :label="t(`auth.desktopAuthComplete.backToSignIn`)"
+                    severity="secondary"
+                    class="mt-4 self-center"
+                    @click="void router.replace(`/login`)"
+                />
             </section>
         </main>
     </div>

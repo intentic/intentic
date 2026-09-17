@@ -4,6 +4,7 @@ import type { PostApprovalSummary } from "@intentic/sandbox-contract";
 import { ProseField } from "@intentic/extension-ui";
 import { type ComponentPublicInstance, computed, onBeforeUnmount } from "vue";
 import { postsATitle } from "./postText";
+import { t } from "./i18n.js";
 
 const { post } = defineProps<{ post: PostApprovalSummary }>();
 const emit = defineEmits<{ close: []; touch: [] }>();
@@ -35,7 +36,7 @@ onBeforeUnmount(() => emit(`touch`));
             v-if="headlined"
             v-model="title"
             variant="heading"
-            aria-label="Post title"
+            :aria-label="t(`postEditor.postTitle`)"
             @input="emit(`touch`)"
             @keydown.escape="emit(`close`)"
         />
@@ -43,7 +44,7 @@ onBeforeUnmount(() => emit(`touch`));
             :ref="headlined ? undefined : caretAtEnd"
             v-model="content"
             variant="post"
-            aria-label="Post text"
+            :aria-label="t(`postEditor.postText`)"
             @input="emit(`touch`)"
             @keydown.escape="emit(`close`)"
         />

@@ -2,30 +2,31 @@ import type { IconName } from "@intentic/ui";
 import { formatDate } from "@intentic/ui/format";
 import { type AgentCapabilities, type ModelBadge, modesFor, type PermissionMode } from "@intentic/sandbox-contract";
 import type { ConversationStatus } from "../session/conversation";
+import { t } from "@intentic/ui/i18n";
 
 // Chat UI metadata shared across surfaces: permission modes and small presentational helpers (tab status icon,
 // relative time). Model/provider/harness catalog lives in @intentic/sandbox-contract; live per-provider state
 // and effort scale live in conversation.ts.
 
 // Icon-only chips, label on the tooltip; the set matches the flags a provider actually reports.
-export const BADGE_META: Record<ModelBadge, { label: string; icon: IconName }> = {
-    reasoning: { label: `Reasoning`, icon: `sparkles` },
-    fast: { label: `Fast`, icon: `bolt` },
-};
+export const badgeMeta = (): Record<ModelBadge, { label: string; icon: IconName }> => ({
+    reasoning: { label: t(`chat.catalog.reasoning`), icon: `sparkles` },
+    fast: { label: t(`chat.catalog.fast`), icon: `bolt` },
+});
 
 // How each mode reads in the selector; which modes a runtime may pick is `modesFor(capabilities)`, not here.
-const MODE_META: Record<PermissionMode, { label: string; icon: IconName; description: string }> = {
-    default: { label: `Manual`, icon: `question-circle`, description: `Ask before each edit and command.` },
-    plan: { label: `Plan`, icon: `list-check`, description: `Propose a plan and wait for your approval before running.` },
-    bypassPermissions: { label: `Auto`, icon: `forward`, description: `Run everything without asking.` },
-};
+const modeTable = (): Record<PermissionMode, { label: string; icon: IconName; description: string }> => ({
+    default: { label: t(`chat.catalog.manual`), icon: `question-circle`, description: t(`chat.catalog.askBeforeEachEdit`) },
+    plan: { label: t(`chat.catalog.plan`), icon: `list-check`, description: t(`chat.catalog.proposePlanWaitApproval`) },
+    bypassPermissions: { label: t(`chat.catalog.auto`), icon: `forward`, description: t(`chat.catalog.runEverythingWithoutAsking`) },
+});
 
-export const modeMeta = (mode: PermissionMode): { label: string; icon: IconName; description: string } => MODE_META[mode];
+export const modeMeta = (mode: PermissionMode): { label: string; icon: IconName; description: string } => modeTable()[mode];
 
 // The modes this conversation's runtime can actually be put in, in the contract's order, dressed for the menu.
 export const modeOptions = (capabilities: AgentCapabilities): { value: PermissionMode; label: string; icon: IconName; description: string }[] =>
     modesFor(capabilities).map((value) => {
-        const meta = MODE_META[value];
+        const meta = modeMeta(value);
         return { value, label: meta.label, icon: meta.icon, description: meta.description };
     });
 

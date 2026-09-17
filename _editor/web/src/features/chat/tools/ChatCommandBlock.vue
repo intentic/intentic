@@ -4,6 +4,9 @@ import type { ProgramAsk } from "@intentic/sandbox-contract";
 import { type CodeToken, CopyButton, Icon, ui, useHighlighter } from "@intentic/ui";
 import { computed, ref, watch } from "vue";
 import { commandLines } from "./commandPieces.js";
+import { useT } from "@intentic/ui/i18n";
+
+const t = useT();
 
 const { program } = defineProps<{ program: ProgramAsk }>();
 
@@ -40,15 +43,15 @@ const shown = computed(() => (clamped.value ? lines.value.slice(0, CLAMP_LINES) 
 <template>
     <div class="flex flex-col gap-1.5">
         <div class="relative">
-<!-- `pre-wrap`, not a scroller: a command being judged must show its tail, not hide it off the right edge. -->
-<!-- Reserve right padding so the copy button cannot cover wrapped command text. -->
+            <!-- `pre-wrap`, not a scroller: a command being judged must show its tail, not hide it off the right edge. -->
+            <!-- Reserve right padding so the copy button cannot cover wrapped command text. -->
             <pre
                 class="chat-command-block overflow-hidden rounded-md border border-line bg-canvas py-2 pr-16 pl-3 font-mono text-xs leading-relaxed break-all whitespace-pre-wrap"
             ><code><template v-for="(line, index) in shown" :key="index"><span v-for="(piece, at) in line.pieces" :key="at" :style="piece.style" :class="piece.marked ? 'chat-command-mark' : 'chat-command-dim'">{{ piece.text }}</span>{{ index === shown.length - 1 ? "" : "\n" }}</template></code></pre>
-<!-- Copies the whole program, never the clamped rendering: half a command is worse than none. -->
-<!-- Positioned in its own box: the button's own root is `relative` for its press spinner, so `absolute` has to come from here instead. -->
+            <!-- Copies the whole program, never the clamped rendering: half a command is worse than none. -->
+            <!-- Positioned in its own box: the button's own root is `relative` for its press spinner, so `absolute` has to come from here instead. -->
             <div class="absolute top-1.5 right-1.5 flex">
-                <CopyButton :text="program.text" label="Copy" class="bg-canvas" />
+                <CopyButton :text="program.text" :label="t(`ui.action.copy`)" class="bg-canvas" />
             </div>
             <!-- The fade signals more content; a hard cut mid-command would read as a rendering fault. -->
             <div
@@ -63,12 +66,12 @@ const shown = computed(() => (clamped.value ? lines.value.slice(0, CLAMP_LINES) 
                 :class="ui.linkButton(`gap-1 text-2xs text-muted hover:text-content`)"
                 @click="expanded = !expanded"
             >
-                {{ expanded ? `Show less` : `Show all ${lines.length} lines` }}
+                {{ expanded ? t(`chat.chatCommandBlock.showLess`) : t(`chat.chatCommandBlock.showAllLines`, { count: lines.length }) }}
                 <Icon :name="expanded ? `chevron-up` : `chevron-down`" />
             </button>
-<!-- Says there's more rather than ending mid-word; nothing to expand to here, since the rest was never sent (see the transcript). -->
+            <!-- Says there's more rather than ending mid-word; nothing to expand to here, since the rest was never sent (see the transcript). -->
             <span v-if="program.truncated" class="text-2xs text-subtle">{{
-                program.spans.length > 0 ? `Shortened for this card, kept around the flagged part.` : `Shortened for this card.`
+                program.spans.length > 0 ? t(`chat.chatCommandBlock.shortenedCardKeptAround`) : t(`chat.chatCommandBlock.shortenedCard`)
             }}</span>
         </div>
     </div>

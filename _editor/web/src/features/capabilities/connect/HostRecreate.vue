@@ -22,11 +22,14 @@ import ConnectDeviceHint from "../../sandbox/devices/ConnectDeviceHint.vue";
 import { desktopRecreateLink, desktopVersion, openDesktopLink } from "../../../app/environments/desktop";
 import { DESKTOP_DOWNLOADS } from "../../../app/environments/desktopDownloads";
 import { bashCommand, psCommand } from "../../../app/environments/scriptCommand";
+import { useT } from "@intentic/ui/i18n";
 
 // Recreating needs the host machine (the daemon has no host Docker socket for its own container), so this renders
 // across four surfaces: a button on a connected device or the desktop app, else a copyable per-OS command. Mode
 // rides the argument shape (a hash rebuilds that pinned overlay, no hash pulls :stable), not a flag. `Download` runs
 // the same flow but stops before the container is touched.
+
+const t = useT();
 
 type Action = `Download` | `Update` | `Rebuild` | `Roll back`;
 
@@ -50,26 +53,31 @@ const desktop = computed(() => desktopVersion() !== undefined);
 const hostId = useHostRunning(() => props.slug);
 const OP: Record<Action, DeviceSandboxOp> = { Download: `prepare`, Update: `update`, Rebuild: `rebuild`, "Roll back": `rollback` };
 
+// The action as a reader sees it. `Action` is the enum this component switches on and the script it runs, so its
+// members are not the words on screen: every label takes this instead.
+const VERBS: Record<Action, string> = { Download: `download`, Update: `update`, Rebuild: `rebuild`, "Roll back": `rollBack` };
+const verb = computed(() => t(`capabilities.hostRecreate.${VERBS[props.action]}Verb` as `capabilities.hostRecreate.updateVerb`));
+
 // What this action costs, read by all four renderings: the sandbox stays up through the download and rebuild, and
 // only the final restart interrupts anything.
 const cost = computed(() => {
     if (props.action === `Download`) {
-        return `It downloads and builds the update in the background. Nothing restarts and nothing is interrupted: your sandbox keeps working throughout.`;
+        return t(`capabilities.hostRecreate.costDownload`);
     }
     if (props.ready === true) {
-        return `It is already downloaded, so this is just the restart: about half a minute. Your files (in /work) are kept.`;
+        return t(`capabilities.hostRecreate.costRestartOnly`);
     }
-    return `It downloads and builds first, which interrupts nothing, then restarts your sandbox for about half a minute. Your files (in /work) are kept.`;
+    return t(`capabilities.hostRecreate.costBuildThenRestart`);
 });
 
 // What the hub row this is rendered on says while the machine works: the same button sits on Environment and on
 // Overview's update card, and each reports where it was pressed.
-const WORKING: Record<Action, string> = {
-    Download: `Downloading the update`,
-    Update: `Updating this sandbox`,
-    Rebuild: `Rebuilding this sandbox`,
-    "Roll back": `Rolling this sandbox back`,
-};
+const workingWords = (): Record<Action, string> => ({
+    Download: t(`capabilities.hostRecreate.workingDownload`),
+    Update: t(`capabilities.hostRecreate.workingUpdate`),
+    Rebuild: t(`capabilities.hostRecreate.workingRebuild`),
+    "Roll back": t(`capabilities.hostRecreate.workingRollBack`),
+});
 const hubWork = useHubWork();
 
 const running = ref(false);
@@ -94,34 +102,38 @@ const runOnMachine = (): void => {
 
 // Every sentence keeps the sandbox as the subject, not the device (a bare "it restarts on that device" reads as the
 // device restarting); the device is named once, to say it's left alone.
-const confirmHeader = computed(() => (props.action === `Roll back` ? `Roll this sandbox back?` : `${props.action} this sandbox?`));
+const confirmHeader = computed(() =>
+    props.action === `Roll back`
+        ? t(`capabilities.hostRecreate.rollBackHeader`)
+        : t(`capabilities.hostRecreate.actionHeader`, { action: verb.value }),
+);
 const confirmBody = computed(() => {
     if (props.action === `Roll back`) {
-        return `Your sandbox restarts onto the image it ran before its last update — about half a minute of downtime, then this page reconnects on its own.`;
+        return t(`capabilities.hostRecreate.confirmRollBack`);
     }
     if (props.ready === true) {
-        return `The update is already downloaded, so this is just the restart: your sandbox is down for about half a minute, then this page reconnects on its own.`;
+        return t(`capabilities.hostRecreate.confirmRestartOnly`);
     }
-    const work = props.action === `Rebuild` ? `Your environment is rebuilt first` : `The update is downloaded and built first`;
-    return `${work} — your sandbox keeps working through that — and then your sandbox restarts for about half a minute, after which this page reconnects on its own.`;
+    const work = props.action === `Rebuild` ? t(`capabilities.hostRecreate.workRebuilt`) : t(`capabilities.hostRecreate.workDownloaded`);
+    return t(`capabilities.hostRecreate.confirmBuildThenRestart`, { work });
 });
 
 // What the sandbox going quiet means while this runs, for every surface that isn't this card. `Download` is absent
 // on purpose: it never touches the container, so a silence during one is not this button's doing.
-const QUIET: Partial<Record<Action, RestartQuiet>> = {
+const QUIET = computed((): Partial<Record<Action, RestartQuiet>> => ({
     Update: {
-        title: `Restarting onto the update`,
-        detail: `The update you applied replaces this sandbox's container — about half a minute, then this page reconnects on its own. Your files in /work are kept.`,
+        title: t(`capabilities.hostRecreate.restartingOntoUpdate`),
+        detail: t(`capabilities.hostRecreate.updateAppliedReplacesSandboxs`),
     },
     Rebuild: {
-        title: `Restarting onto your rebuilt environment`,
-        detail: `The environment you approved is being swapped in — about half a minute, then this page reconnects on its own. Your files in /work are kept.`,
+        title: t(`capabilities.hostRecreate.restartingOntoRebuiltEnvironment`),
+        detail: t(`capabilities.hostRecreate.environmentApprovedBeingSwapped`),
     },
     "Roll back": {
-        title: `Rolling this sandbox back`,
-        detail: `It is restarting onto the image it ran before its last update — about half a minute, then this page reconnects on its own. Your files in /work are kept.`,
+        title: t(`capabilities.hostRecreate.rollingSandboxBack`),
+        detail: t(`capabilities.hostRecreate.restartingOntoImageRan`),
     },
-};
+}));
 
 const execute = async (): Promise<void> => {
     confirming.value = false;
@@ -135,13 +147,13 @@ const execute = async (): Promise<void> => {
     lines.value = [];
     // Armed for the whole op, not just its restart: the machine gives no sign of which minute the swap falls in, and
     // an expectation costs nothing while the sandbox is still answering.
-    const quiet = QUIET[props.action];
+    const quiet = QUIET.value[props.action];
     const sandbox = activeSandboxId.value;
     const expecting = quiet !== undefined && sandbox !== undefined;
-    const working = expecting ? expectRestart({ sandbox, id: `recreate`, what: WORKING[props.action], quiet }) : undefined;
+    const working = expecting ? expectRestart({ sandbox, id: `recreate`, what: workingWords()[props.action], quiet }) : undefined;
     let swapping = false;
     try {
-        done.value = await hubWork.track(WORKING[props.action], () =>
+        done.value = await hubWork.track(workingWords()[props.action], () =>
             manageDeviceSandbox(id, props.slug, OP[props.action], {
                 ...(props.hash === undefined ? {} : { hash: props.hash }),
                 onLine: (line) => lines.value.push(line),
@@ -160,7 +172,7 @@ const execute = async (): Promise<void> => {
         // Handed to the sandbox's own return: this page cannot see the container come up, and the ledger's record is
         // what every other surface reads the silence by until it does.
         if (swapping && expecting) {
-            expectRestart({ sandbox, id: `recreate`, what: WORKING[props.action], quiet, untilAnswered: true });
+            expectRestart({ sandbox, id: `recreate`, what: workingWords()[props.action], quiet, untilAnswered: true });
         }
     }
 };
@@ -196,7 +208,7 @@ const command = computed(() => {
         <!-- Machine is reachable from here, so this is a button wherever you're reading it, even a phone elsewhere. -->
         <template v-if="hostId">
             <Button
-                :label="running ? `${action} running…` : `${action} now`"
+                :label="running ? t(`capabilities.hostRecreate.running`, { action: verb }) : t(`capabilities.hostRecreate.now`, { action: verb })"
                 size="small"
                 class="self-start"
                 :severity="action === `Download` ? `secondary` : undefined"
@@ -205,13 +217,13 @@ const command = computed(() => {
             >
                 <template #icon><Icon :name="action === `Download` ? `download` : `bolt`" /></template>
             </Button>
-            <p class="text-2xs text-subtle">Runs on the device hosting this sandbox. {{ cost }}</p>
+            <p class="text-2xs text-subtle">{{ t(`capabilities.hostRecreate.runsOnDeviceHosting`, { cost }) }}</p>
             <DeviceRunLog
                 v-if="running || lines.length > 0"
                 :lines="lines"
                 :running="running"
-                empty="Starting on that device…"
-                note="Running on that device: it keeps going even if you leave this page."
+                :empty="t(`capabilities.hostRecreate.startingOnDevice`)"
+                :note="t(`capabilities.hostRecreate.runningOnDeviceKeeps`)"
             />
             <Notice v-if="failure" :of="failure" />
             <p v-else-if="done" class="text-2xs text-muted">{{ done }}</p>
@@ -220,7 +232,7 @@ const command = computed(() => {
             <ConfirmDialog
                 :open="confirming"
                 :header="confirmHeader"
-                :confirm-label="`${action} now`"
+                :confirm-label="t(`capabilities.hostRecreate.now`, { action: verb })"
                 confirm-icon="bolt"
                 :destructive="false"
                 @cancel="confirming = false"
@@ -228,28 +240,28 @@ const command = computed(() => {
             >
                 <p>{{ confirmBody }}</p>
                 <p class="mt-3 text-xs text-muted">
-                    Only the sandbox restarts — nothing else on that device is touched. Your files (in /work) are kept.
+                    {{ t(`capabilities.hostRecreate.onlySandboxRestartsNothing`) }}
                 </p>
             </ConfirmDialog>
         </template>
 
-<!-- Desktop deep link covers all three swaps including rollback. -->
+        <!-- Desktop deep link covers all three swaps including rollback. -->
         <template v-else-if="desktop && action !== `Download`">
             <Button
-                :label="`${action} now`"
+                :label="t(`capabilities.hostRecreate.now`, { action: verb })"
                 size="small"
                 class="self-start"
                 @click="openDesktopLink(desktopRecreateLink(slug, hash, action === `Roll back`))"
             >
                 <template #icon><Icon name="bolt" /></template>
             </Button>
-            <p class="text-2xs text-subtle">Runs here, on this device. {{ cost }}</p>
+            <p class="text-2xs text-subtle">{{ t(`capabilities.hostRecreate.runsHereOnDevice`, { cost }) }}</p>
         </template>
 
         <template v-else>
             <ol class="ml-4 list-decimal text-2xs text-subtle">
-                <li>Open a terminal on the device that runs your sandbox.</li>
-                <li>Copy and run the command below. {{ cost }}</li>
+                <li>{{ t(`capabilities.hostRecreate.openTerminalOnDevice`) }}</li>
+                <li>{{ t(`capabilities.hostRecreate.copyRunCommandBelow`, { cost }) }}</li>
             </ol>
             <SegmentedControl
                 v-model="cmdOs"
@@ -260,16 +272,16 @@ const command = computed(() => {
                     { label: `Windows`, value: `windows` },
                 ]"
             />
-            <Code :code="command" :lang="commandLang(cmdOs)" :label="`${action} command`" :wrap="true" />
-<!-- The cheaper way out where it exists: the machine is already talking to this sandbox, and one card turns that into the button above. -->
-            <ConnectDeviceHint :slug="slug" :gains="`${action.toLowerCase()} becomes a button here.`" />
-<!-- Offered here, not just at setup, since this is the moment reaching for the app repeatedly starts to pay off. -->
+            <Code :code="command" :lang="commandLang(cmdOs)" :label="t(`capabilities.hostRecreate.command`, { action: verb })" :wrap="true" />
+            <!-- The cheaper way out where it exists: the machine is already talking to this sandbox, and one card turns that into the button above. -->
+            <ConnectDeviceHint :slug="slug" :gains="t(`capabilities.hostRecreate.becomesButtonHere`, { action: verb })" />
+            <!-- Offered here, not just at setup, since this is the moment reaching for the app repeatedly starts to pay off. -->
             <p class="flex flex-wrap items-center gap-x-2 gap-y-1 text-2xs text-subtle">
-                <span>Skip the terminal next time:</span>
-                <a :href="DESKTOP_DOWNLOADS.windows" class="text-link hover:underline">Intentic for Windows</a>
+                <span>{{ t(`capabilities.hostRecreate.skipTerminalNextTime`) }}</span>
+                <a :href="DESKTOP_DOWNLOADS.windows" class="text-link hover:underline">{{ t(`capabilities.hostRecreate.intenticWindows`) }}</a>
                 <span>·</span>
                 <a :href="DESKTOP_DOWNLOADS.linuxAppImage" class="text-link hover:underline">Linux</a>
-                <span>does this with a button.</span>
+                <span>{{ t(`capabilities.hostRecreate.doesButton`) }}</span>
             </p>
         </template>
     </div>

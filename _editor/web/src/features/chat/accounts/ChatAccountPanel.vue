@@ -9,10 +9,13 @@ import { usePaneView } from "../panel/useChat-view";
 import ConnectFlow from "../../sandbox/secrets/ConnectFlow.vue";
 import ChatChooseModelButton from "../models/ChatChooseModelButton.vue";
 import ProviderLogo from "./ProviderLogo.vue";
+import { useT } from "@intentic/ui/i18n";
 
 // The one strip above the composer when this chat has nothing to send with; it never pitches a
 // subscription, only opens the model picker. Waits for `accessKnown` (both accounts and endpoints)
 // before claiming "not connected", and stands down for a spent trial, which is connected but metered out.
+
+const t = useT();
 
 const view = usePaneView();
 const { connected, provider, harness } = view;
@@ -45,9 +48,7 @@ const abandon = (): void => (live.value?.kind === `native` ? cancelConnect() : c
 // What the user brought back is being redeemed: there is nothing left to abandon, and the strip's own panel
 // reports the wait.
 const finishing = computed(
-    () =>
-        live.value !== undefined &&
-        accountBusy.value === (live.value.kind === `native` ? live.value.provider : translatorKey(live.value.provider)),
+    () => live.value !== undefined && accountBusy.value === (live.value.kind === `native` ? live.value.provider : translatorKey(live.value.provider)),
 );
 
 // Named as what to connect, not the runtime; `pitch` is absent where there's no account to connect.
@@ -66,35 +67,37 @@ const connect = async (): Promise<void> => {
 </script>
 
 <template>
-<!-- Shown until `accessKnown`: "not connected" is a claim this panel can't make before both account and endpoint reads land. -->
+    <!-- Shown until `accessKnown`: "not connected" is a claim this panel can't make before both account and endpoint reads land. -->
     <p v-if="!accessKnown" class="flex items-center justify-center gap-2 px-4 py-3 text-center text-2xs text-subtle">
-        <Icon name="spinner" spin class="shrink-0" />Checking your AI accounts…
+        <Icon name="spinner" spin class="shrink-0" />{{ t(`chat.chatAccountPanel.checkingAiAccounts`) }}
     </p>
 
-<!-- The sign-in, once running, takes the whole strip; Cancel is the only other control, and abandoning it restores the line below. -->
+    <!-- The sign-in, once running, takes the whole strip; Cancel is the only other control, and abandoning it restores the line below. -->
     <div v-else-if="live" class="flex flex-col gap-2 rounded-2xl border border-line bg-card px-4 py-3">
         <div class="flex items-center gap-2">
             <ProviderLogo :provider="live.provider" class="shrink-0 text-link" />
-            <span class="min-w-0 flex-1 truncate text-left text-xs font-medium text-body">Connecting {{ providerDisplayLabel(live.provider) }}</span>
+            <span class="min-w-0 flex-1 truncate text-left text-xs font-medium text-body">{{
+                t(`chat.chatAccountPanel.connecting`, { provider: providerDisplayLabel(live.provider) })
+            }}</span>
             <button
                 type="button"
                 :disabled="finishing"
                 :class="ui.linkButton(`shrink-0 text-2xs text-subtle hover:text-content hover:no-underline`)"
                 @click="abandon"
             >
-                Cancel
+                {{ t(`ui.action.cancel`) }}
             </button>
         </div>
         <ConnectFlow :kind="live.kind" :provider="live.provider" />
     </div>
 
-<!-- Names what this chat is pointed at; the model list leads (free to look at, holds every option), the provider's own sign-in follows. -->
+    <!-- Names what this chat is pointed at; the model list leads (free to look at, holds every option), the provider's own sign-in follows. -->
     <div
         v-else-if="!connected && !trialSpent"
         class="flex flex-wrap items-center gap-x-2 gap-y-1.5 rounded-2xl border border-line bg-card px-4 py-3 text-2xs text-muted"
     >
         <Icon name="lock" class="shrink-0 text-subtle" />
-        <span class="min-w-0 flex-1 text-left">{{ providerName }} isn't connected in this sandbox.</span>
+        <span class="min-w-0 flex-1 text-left">{{ t(`chat.chatAccountPanel.isntConnectedInSandbox`, { providerName }) }}</span>
         <ChatChooseModelButton />
         <button
             v-if="pitch"

@@ -19,6 +19,7 @@ import ChatSideRail from "./ChatSideRail.vue";
 import ChatRunGraph from "../transcript/ChatRunGraph.vue";
 import ChatTabs from "../tabs/ChatTabs.vue";
 import ChatTabsMobile from "../tabs/ChatTabsMobile.vue";
+import { useT } from "@intentic/ui/i18n";
 
 // The shared assistant: the frame around one or more chats (each conversation is a ChatPane). Owns what belongs
 // to the panel, not any one chat: the switcher bar, the pop-out-window button, the resize handle. All state lives
@@ -31,6 +32,8 @@ import ChatTabsMobile from "../tabs/ChatTabsMobile.vue";
 // `bar` is the quick strip's presentation (ChatQuickBar): the focused chat's composer and nothing else, in a row the
 // shell sizes to its content. It implies no header, since the strip draws its own.
 const { tabs = true, bar = false } = defineProps<{ tabs?: boolean; bar?: boolean }>();
+
+const t = useT();
 
 const { active, activeId, conversations, panes, setActive, closePane, closeTabs, openConversation, tabReveal } = useChat();
 const layout = useLayout();
@@ -236,17 +239,17 @@ const seamWidth = computed<number>({
 </script>
 
 <template>
-<!-- Docked, the panel is a column (bar on top, pane below); on a wide surface the bar becomes a rail on the left. -->
-<!-- `--capacity-rail` reserves the out-of-flow rail width without widening the transcript. -->
-<!-- The strip paints no surface of its own: it is one composer floating over a page, and the box draws its own edge.
-     Nor does it clip, so the `@` and `/` lists can stand above a composer that has no room over it. -->
+    <!-- Docked, the panel is a column (bar on top, pane below); on a wide surface the bar becomes a rail on the left. -->
+    <!-- `--capacity-rail` reserves the out-of-flow rail width without widening the transcript. -->
+    <!-- The strip paints no surface of its own: it is one composer floating over a page, and the box draws its own edge.
+         Nor does it clip, so the `@` and `/` lists can stand above a composer that has no room over it. -->
     <div
         ref="root"
         class="chat-panel relative flex min-h-0"
         :class="[chatWide ? 'flex-row' : 'flex-col', ground]"
         :style="{ '--capacity-rail': showsRail ? uiLength(CAPACITY_RAIL_PX) : `0px` }"
     >
-<!-- An overlay seam (`place="edge"`), not in-flow, since docked the panel's own axis is the bar-then-panes column, not this border. -->
+        <!-- An overlay seam (`place="edge"`), not in-flow, since docked the panel's own axis is the bar-then-panes column, not this border. -->
         <ResizeSeam
             v-if="!chatWide && !mobile && !bar"
             v-model="seamWidth"
@@ -255,7 +258,7 @@ const seamWidth = computed<number>({
             :min="toScreenPx(MIN_CHAT_WIDTH)"
             :max="toScreenPx(maxChatWidth())"
             :reset="toScreenPx(defaultChatWidth())"
-            title="Drag to resize · double-click to reset"
+            :title="t(`chat.chatPanel.dragToResizeDouble`)"
         />
 
         <template v-if="tabs && !bar">
@@ -264,7 +267,7 @@ const seamWidth = computed<number>({
         </template>
 
         <div class="flex min-h-0 min-w-0 flex-1 flex-col">
-<!-- The run bar: drawn wherever a run drives the panes (barRun), not only where its diagram can show. -->
+            <!-- The run bar: drawn wherever a run drives the panes (barRun), not only where its diagram can show. -->
             <div v-if="barRun && !bar" class="flex shrink-0 items-center gap-2 border-b border-line px-2 py-1">
                 <Button
                     v-if="shownRun && !showingGraph"
@@ -272,8 +275,8 @@ const seamWidth = computed<number>({
                     severity="secondary"
                     :text="true"
                     class="shrink-0"
-                    v-tooltip.bottom="`Back to the diagram: every step of this run`"
-                    aria-label="Back to the run's diagram"
+                    v-tooltip.bottom="t(`chat.chatPanel.backToDiagramEvery`)"
+                    :aria-label="t(`chat.chatPanel.backToRunsDiagram`)"
                     @click="showRun(shownRun.runId, `graph`)"
                 >
                     <Icon name="arrow-left" class="text-2xs" />
@@ -286,20 +289,20 @@ const seamWidth = computed<number>({
                 <button
                     type="button"
                     :class="ui.iconButton(`rounded`)"
-                    v-tooltip.bottom="`Leave the run: the chats stay open`"
-                    aria-label="Leave the run"
+                    v-tooltip.bottom="t(`chat.chatPanel.leaveRunChatsStay`)"
+                    :aria-label="t(`chat.chatPanel.leaveRun`)"
                     @click="closeRun()"
                 >
                     <Icon name="times" class="text-2xs" />
                 </button>
             </div>
 
-<!-- The diagram takes the whole pane area — it's the map of those columns, so showing both answers one question twice. -->
+            <!-- The diagram takes the whole pane area — it's the map of those columns, so showing both answers one question twice. -->
             <ChatRunGraph v-if="showingGraph && shownRun" :run="shownRun" class="min-h-0 flex-1" @open="openRunColumn" />
 
-<!-- The panes share the room equally (mirroring the terminal panel's split cells) until the floor, then scroll sideways instead of crushing. -->
-<!-- The strip holds one pane and so needs no sideways scroll — which would clip the `@` and `/` lists standing above a
-     composer whose box is the whole panel. -->
+            <!-- The panes share the room equally (mirroring the terminal panel's split cells) until the floor, then scroll sideways instead of crushing. -->
+            <!-- The strip holds one pane and so needs no sideways scroll — which would clip the `@` and `/` lists standing above a
+                 composer whose box is the whole panel. -->
             <div
                 v-else
                 ref="paneRow"
@@ -307,7 +310,7 @@ const seamWidth = computed<number>({
                 :class="bar ? 'overflow-visible' : 'overflow-x-auto'"
                 :style="{ '--min-pane': minPaneLength }"
             >
-<!-- A pane's own × only appears in a split: with one column, closing it is the panel's job, not a control living inside the pane. -->
+                <!-- A pane's own × only appears in a split: with one column, closing it is the panel's job, not a control living inside the pane. -->
                 <ChatPane
                     v-for="conversation in shown"
                     :key="conversation.conversationId"
@@ -322,7 +325,7 @@ const seamWidth = computed<number>({
             </div>
         </div>
 
-<!-- The focused chat's checklist and what the reader can run next, in room the panes have no use for. -->
+        <!-- The focused chat's checklist and what the reader can run next, in room the panes have no use for. -->
         <ChatSideRail v-if="showsRail" />
     </div>
 </template>

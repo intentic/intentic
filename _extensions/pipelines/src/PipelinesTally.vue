@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import { ProgressRing, StatusTally, type TallyItem } from "@intentic/extension-ui";
+import { t } from "./i18n.js";
 
 // Orientation line (how runs went, and the pass rate), drawn in three places (title row, above the list on a narrow
 // pane, its own skeleton) that must stay one shape. Counts are `<StatusTally>`'s; this adds the pass rate riding its
@@ -36,7 +37,7 @@ const rateTone = computed(() => {
         </div>
         <span v-else-if="rate !== undefined" class="flex items-center gap-2">
             <ProgressRing :value="rate" :size="20" :stroke="2.5" :class="rateTone" />
-            <span class="text-xs text-muted">{{ rate }}% pass rate</span>
+            <span class="text-xs text-muted">{{ t(`pipelinesTally.passRate`, { rate }) }}</span>
         </span>
     </StatusTally>
 </template>

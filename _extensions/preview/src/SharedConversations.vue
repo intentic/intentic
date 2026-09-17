@@ -2,6 +2,7 @@
 import { Button, ui, CopyButton, Icon, InfoHint, Notice, noticeOf, StatusBadge } from "@intentic/extension-ui";
 import { ref } from "vue";
 import { useShares } from "./useShares";
+import { t } from "./i18n.js";
 
 // Owner's complete picture of which chats a stranger can read: how current the snapshot is, how much travelled, and how
 // deep. `sharedAt` marks the freeze point; only Update moves it, so it is the line between what's public and what's
@@ -41,15 +42,15 @@ const when = (at: number): string => {
 <template>
     <section v-if="shares.length > 0 || isLoading">
         <div class="mb-2 flex items-center gap-2">
-            <h3 :class="ui.sectionLabel()">Shared conversations</h3>
-            <InfoHint label="Shared conversations">
-                <span class="block text-sm font-medium text-content">Chats you've published</span>
+            <h3 :class="ui.sectionLabel()">{{ t(`sharedConversations.sharedConversations`) }}</h3>
+            <InfoHint :label="t(`sharedConversations.sharedConversations`)">
+                <span class="block text-sm font-medium text-content">{{ t(`sharedConversations.chatsYouvePublished`) }}</span>
                 <span class="mt-1 block text-xs text-muted">
-                    Each of these is a read-only page anyone with the link can open: no sign-in. It shows the conversation as it was when you shared
-                    it, so anything said since stays private until you press <b>Update</b>. Share a chat from its right-click menu in the chat list.
+                    {{ t(`sharedConversations.eachReadOnlyPage`) }} <b>{{ t(`sharedConversations.update`) }}</b
+                    >. Share a chat from its right-click menu in the chat list.
                 </span>
             </InfoHint>
-            <StatusBadge v-if="shares.length > 0" variant="warning" :label="`${shares.length} public`" size="xs" />
+            <StatusBadge v-if="shares.length > 0" variant="warning" :label="t(`sharedConversations.public`, { count: shares.length })" size="xs" />
         </div>
 
         <Notice v-if="actionError" :of="noticeOf(actionError)" class="mb-2" />
@@ -64,8 +65,20 @@ const when = (at: number): string => {
                             <p class="truncate text-xs font-medium text-content" :title="share.title">{{ share.title }}</p>
                             <!-- Order matters: how current, how much, how deep. -->
                             <p class="truncate text-2xs text-subtle">
-                                shared {{ when(share.sharedAt) }} · {{ share.messages }} message{{ share.messages === 1 ? `` : `s` }} ·
-                                {{ share.detail === "messages" ? "messages only" : "with the agent's work" }}
+                                {{
+                                    t(
+                                        `sharedConversations.summary`,
+                                        {
+                                            when: when(share.sharedAt),
+                                            count: share.messages,
+                                            detail:
+                                                share.detail === `messages`
+                                                    ? t(`sharedConversations.messagesOnly`)
+                                                    : t(`sharedConversations.withAgentWork`),
+                                        },
+                                        share.messages,
+                                    )
+                                }}
                             </p>
                         </div>
                         <a
@@ -74,25 +87,25 @@ const when = (at: number): string => {
                             target="_blank"
                             rel="noopener"
                             class="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted hover:bg-overlay hover:text-content"
-                            :aria-label="`Open ${share.title} in a new tab`"
-                            v-tooltip.bottom="'Open in new tab'"
+                            :aria-label="t(`sharedConversations.openInNewTab`, { title: share.title })"
+                            v-tooltip.bottom="t(`sharedConversations.openInNewTab2`)"
                         >
                             <Icon name="external-link" />
                         </a>
-                        <CopyButton v-if="share.url" :text="share.url" label="Copy link" />
+                        <CopyButton v-if="share.url" :text="share.url" :label="t(`sharedConversations.copyLink`)" />
                         <!-- Update, not re-share: the link stays the same, since it's already in someone's messages. -->
                         <Button
-                            label="Update"
+                            :label="t(`sharedConversations.update`)"
                             size="small"
                             severity="secondary"
                             :disabled="busy !== undefined"
-                            v-tooltip.bottom="'Publish everything said since you shared it'"
+                            v-tooltip.bottom="t(`sharedConversations.publishEverythingSaidSince`)"
                             @click="act(share.id, update.mutateAsync)"
                         >
                             <template #icon><Icon name="refresh" /></template>
                         </Button>
                         <Button
-                            label="Stop sharing"
+                            :label="t(`sharedConversations.stopSharing`)"
                             size="small"
                             severity="secondary"
                             :disabled="busy !== undefined"
@@ -103,7 +116,7 @@ const when = (at: number): string => {
                     </div>
                     <span v-if="share.url" class="truncate font-mono text-2xs text-subtle" :title="share.url">{{ share.url }}</span>
                     <!-- No tunnel means the page exists but nothing can reach it; worth flagging instead of looking fine. -->
-                    <span v-else class="text-2xs text-danger">This sandbox has no public address, so this page can't be reached.</span>
+                    <span v-else class="text-2xs text-danger">{{ t(`sharedConversations.sandboxNoPublicAddress`) }}</span>
                 </div>
             </div>
         </div>

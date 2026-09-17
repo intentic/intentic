@@ -9,6 +9,9 @@ import { markSegments } from "../features/agents/review/markSegments";
 import { relativeTime } from "../features/chat/models/catalog";
 import IdentityTile from "../features/capabilities/connect/IdentityTile.vue";
 import MatchLine from "./MatchLine.vue";
+import { useT } from "@intentic/ui/i18n";
+
+const t = useT();
 
 const props = defineProps<{
     title: string;
@@ -70,7 +73,7 @@ const chipHint = computed(() => (props.chip?.seenAt === undefined ? undefined : 
         <slot name="aside" />
         <span class="flex min-w-0 flex-1 flex-col gap-1.5">
             <span class="flex w-full min-w-0 items-start gap-2">
-<!-- THE MARK, on the board's construction at the rail's scale (AgentCard argues the proportion at length): a disc inside a rim. -->
+                <!-- THE MARK, on the board's construction at the rail's scale (AgentCard argues the proportion at length): a disc inside a rim. -->
                 <span
                     v-if="provider !== undefined || icon !== undefined"
                     class="relative -mt-1 flex h-6 w-6 shrink-0 items-center justify-center rounded-full"
@@ -93,7 +96,13 @@ const chipHint = computed(() => (props.chip?.seenAt === undefined ? undefined : 
                         class="absolute inset-0"
                         :class="rim.tone"
                     />
-                    <IdentityTile v-if="provider !== undefined" :title="title" :action="titleAction" :provider="provider" class="h-4.5 w-4.5 text-2xs" />
+                    <IdentityTile
+                        v-if="provider !== undefined"
+                        :title="title"
+                        :action="titleAction"
+                        :provider="provider"
+                        class="h-4.5 w-4.5 text-2xs"
+                    />
                     <!-- A row that is not a session (a workflow run, a search hit) wears its glyph on the same disc. -->
                     <span v-else class="flex h-4.5 w-4.5 shrink-0 items-center justify-center rounded-full bg-primary-600/15">
                         <Icon :name="icon!" class="text-2xs" :class="quiet ? 'text-subtle' : 'text-link'" />
@@ -107,21 +116,17 @@ const chipHint = computed(() => (props.chip?.seenAt === undefined ? undefined : 
                     <span v-for="(run, at) in titleRuns" :key="at" :class="run.hit ? 'rounded-sm bg-primary-600/30 text-content' : ''">{{
                         run.text
                     }}</span>
-<!-- Italic is invisible to screen readers; stated in text since this element's role doesn't accept aria-label. -->
-                    <span v-if="peek" class="sr-only">, temporary</span>
+                    <!-- Italic is invisible to screen readers; stated in text since this element's role doesn't accept aria-label. -->
+                    <span v-if="peek" class="sr-only">{{ t(`common.railCard.temporary`) }}</span>
                 </span>
                 <slot name="trailing" />
-<!-- THE CORNER SAYS IT IN WORDS WHEN THERE ARE WORDS, exactly as the board's card does: a glyph in this seat can say
+                <!-- THE CORNER SAYS IT IN WORDS WHEN THERE ARE WORDS, exactly as the board's card does: a glyph in this seat can say
      "something ended" but never "Usage limit", and the two surfaces drawing the same standing differently was the
      whole complaint. The resting glyph gets the seat back the moment there is nothing to say. -->
-                <span
-                    v-if="chip !== undefined"
-                    v-tooltip.top="chipHint"
-                    class="ui-status-pill shrink-0 text-2xs font-semibold"
-                    :class="chip.tone"
-                    >{{ chip.label }}</span
-                >
-<!-- Fixed-height box so a row's title never shifts between a spinning glyph and a resting one. -->
+                <span v-if="chip !== undefined" v-tooltip.top="chipHint" class="ui-status-pill shrink-0 text-2xs font-semibold" :class="chip.tone">{{
+                    chip.label
+                }}</span>
+                <!-- Fixed-height box so a row's title never shifts between a spinning glyph and a resting one. -->
                 <span v-else-if="status !== undefined" class="flex h-4 shrink-0 items-center">
                     <Icon v-bind="status" />
                 </span>
@@ -133,7 +138,7 @@ const chipHint = computed(() => (props.chip?.seenAt === undefined ? undefined : 
                 class="flex w-full min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-2xs text-muted"
             >
                 <slot name="meta" />
-<!-- Tight card's live readout, held at the end of the facts line; same corner a settled card's age uses. -->
+                <!-- Tight card's live readout, held at the end of the facts line; same corner a settled card's age uses. -->
                 <span v-if="tight && live !== undefined" class="ml-auto flex min-w-0 items-center gap-1 font-medium text-link">
                     <Icon :name="live.icon" class="shrink-0 text-2xs" />
                     <span class="min-w-0 truncate">{{ live.text }}</span>

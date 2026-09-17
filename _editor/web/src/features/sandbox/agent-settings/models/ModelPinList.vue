@@ -3,10 +3,13 @@ import { ui } from "@intentic/ui";
 import { namesThinking } from "@intentic/sandbox-contract";
 import type { DescribedPin } from "../../../chat/models/modelPins";
 import ProviderLogo from "../../../chat/accounts/ProviderLogo.vue";
+import { useT } from "@intentic/ui/i18n";
 
 // Ordered list of pinned models (numbered in try order); the shared body of every role row in Sandbox > Agent > Models.
 // The row label is itself the button back into the model picker (re-point the pin, adjust its effort); per-row
 // differences (`noteThinking`, `detail`) stay on the row rather than a shared control beside the list.
+
+const t = useT();
 
 const { entries, noteThinking = false } = defineProps<{
     // As written, not resolved: a disconnected pin still shows, greyed. `detail` names how it runs, if set.
@@ -30,7 +33,7 @@ const emit = defineEmits<{ promote: [number]; remove: [number]; edit: [number, H
             <button
                 type="button"
                 class="flex min-w-0 flex-1 items-center gap-2 rounded text-left transition-colors hover:text-link"
-                :aria-label="`Change ${entry.label}`"
+                :aria-label="t(`sandbox.modelPinList.change`, { label: entry.label })"
                 @click="emit(`edit`, entry.index, $event.currentTarget as HTMLElement)"
             >
                 <ProviderLogo v-if="entry.choice" :provider="entry.choice.provider" class="shrink-0 text-xs text-muted" />
@@ -41,7 +44,7 @@ const emit = defineEmits<{ promote: [number]; remove: [number]; edit: [number, H
                     entry.detail
                 }}</span>
             </button>
-<!-- Stays listed rather than dropped: the resolver skips it at runtime, but hiding it would look like a lost setting.
+            <!-- Stays listed rather than dropped: the resolver skips it at runtime, but hiding it would look like a lost setting.
                  A pin can be written for a provider with no credential (the picker's locked rows are pickable), so this
                  is the one place that state is ever seen: it carries the way out rather than only naming the fault. -->
             <RouterLink
@@ -49,26 +52,24 @@ const emit = defineEmits<{ promote: [number]; remove: [number]; edit: [number, H
                 :to="{ path: `/sandbox/agent`, query: { connect: entry.choice.provider } }"
                 class="shrink-0 text-2xs text-warning underline-offset-2 hover:underline"
             >
-                Not connected
+                {{ t(`sandbox.modelPinList.notConnected`) }}
             </RouterLink>
-            <span v-else-if="!entry.ready" class="shrink-0 text-2xs text-warning">Not connected</span>
+            <span v-else-if="!entry.ready" class="shrink-0 text-2xs text-warning">{{ t(`sandbox.modelPinList.notConnected`) }}</span>
             <!-- A one-shot pin reasons before answering; routed ids do not show native account controls. -->
             <span
                 v-else-if="noteThinking && entry.choice && namesThinking(entry.choice.model)"
                 class="shrink-0 text-2xs text-subtle"
-                v-tooltip.top="
-                    'This model reasons before it answers: better judgement, and seconds slower on a job that usually lands while you are still looking at it. Run as written.'
-                "
+                v-tooltip.top="t(`sandbox.modelPinList.modelReasonsBeforeAnswers`)"
             >
-                Thinks
+                {{ t(`sandbox.modelPinList.thinks`) }}
             </span>
             <button
                 type="button"
                 :class="ui.iconButton(`h-auto w-auto shrink-0 rounded p-1 text-subtle`)"
                 :disabled="entry.index === 0"
                 @click="emit(`promote`, entry.index)"
-                v-tooltip.top="'Try this one earlier'"
-                :aria-label="`Move ${entry.label} earlier`"
+                v-tooltip.top="t(`sandbox.modelPinList.tryOneEarlier`)"
+                :aria-label="t(`sandbox.modelPinList.moveEarlier`, { label: entry.label })"
             >
                 <Icon name="chevron-up" class="text-2xs" />
             </button>
@@ -76,8 +77,8 @@ const emit = defineEmits<{ promote: [number]; remove: [number]; edit: [number, H
                 type="button"
                 class="shrink-0 rounded p-1 text-subtle transition-colors hover:bg-overlay hover:text-danger"
                 @click="emit(`remove`, entry.index)"
-                v-tooltip.top="'Remove from the order'"
-                :aria-label="`Remove ${entry.label}`"
+                v-tooltip.top="t(`sandbox.modelPinList.removeOrder`)"
+                :aria-label="t(`sandbox.modelPinList.remove`, { label: entry.label })"
             >
                 <Icon name="times" class="text-2xs" />
             </button>

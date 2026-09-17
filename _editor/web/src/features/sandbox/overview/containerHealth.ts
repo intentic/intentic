@@ -1,4 +1,5 @@
 import type { SandboxSummary } from "@intentic/api-contract";
+import { t } from "@intentic/ui/i18n";
 
 // Order is significant: drift outranks unreachable, which outranks refused.
 export type ContainerFault = "drift" | "unreachable" | "refused";
@@ -23,7 +24,7 @@ export const containerNotices = (sandbox: ContainerEvidence): readonly Container
     // Drift outranks the others: a recreate replays the same missing env, so restarting cannot clear it.
     const drift: ContainerNotice[] = (report?.drift ?? []).map((gap) => ({
         fault: "drift",
-        title: `This sandbox was set up before it needed ${gap.enables}`,
+        title: t(`sandbox.containerHealth.sandboxSetUpBefore`, { enables: gap.enables }),
         detail: gap.lost,
         repair: gap.repair,
         keys: gap.missing,
@@ -37,7 +38,7 @@ export const containerNotices = (sandbox: ContainerEvidence): readonly Container
         return [
             {
                 fault: "unreachable",
-                title: `This sandbox does not answer at its public address`,
+                title: t(`sandbox.containerHealth.sandboxDoesNotAnswer`),
                 detail: report.detail ?? `Its public address did not answer when the sandbox checked it from the inside.`,
             },
         ];
@@ -48,8 +49,8 @@ export const containerNotices = (sandbox: ContainerEvidence): readonly Container
         return [
             {
                 fault: "refused",
-                title: `This sandbox is checking in under an address the platform does not hold for it`,
-                detail: `It announced ${refusal.announced}, while the platform has ${refusal.expected} on record. Until the two agree, anything sent to the recorded address misses it.`,
+                title: t(`sandbox.containerHealth.sandboxCheckingInUnder`),
+                detail: t(`sandbox.containerHealth.announcedWhilePlatformOn`, { announced: refusal.announced, expected: refusal.expected }),
             },
         ];
     }

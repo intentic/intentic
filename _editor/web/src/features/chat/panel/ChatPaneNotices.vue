@@ -13,11 +13,14 @@ import { hoursLeftLine } from "../../settings/hosted-plan/hostedHours";
 import { useHostedPlan } from "../../settings/hosted-plan/useHostedPlan";
 import ChatAccountPanel from "../accounts/ChatAccountPanel.vue";
 import ChatChooseModelButton from "../models/ChatChooseModelButton.vue";
+import { useT } from "@intentic/ui/i18n";
 
 // What this chat's standing is, above the composer: strips for a state the conversation arrived at by itself
 // (archived; then what it can send with — account gate, trial, expired credential), each with its one answering
 // press. The composer's own state stays with the composer; reads this pane's conversation via the injected view,
 // never the focused one.
+
+const t = useT();
 
 const { conversation, provider, account, accounts, streaming } = usePaneView();
 const { reachable, active } = useSandbox();
@@ -105,40 +108,42 @@ const activeAccountReauth = computed(() => {
 </script>
 
 <template>
-<!-- This conversation's agent is off the board. -->
+    <!-- This conversation's agent is off the board. -->
     <div v-if="activeArchived !== undefined" class="flex items-center gap-2 rounded-xl border border-line bg-card px-3 py-2 text-2xs text-muted">
         <Icon name="box" class="shrink-0" />
-        <span class="min-w-0 flex-1">Archived: off the board. Sending a message restores it.</span>
+        <span class="min-w-0 flex-1">{{ t(`chat.chatPaneNotices.archivedOffBoardSending`) }}</span>
         <Button
             size="small"
             :text="true"
             class="shrink-0"
             :disabled="!reachable || busyIds.includes(activeArchived.id)"
-            v-tooltip.top="'Put this agent back on the board now'"
+            v-tooltip.top="t(`chat.chatPaneNotices.putAgentBackOn`)"
             @click="restore([activeArchived.id])"
         >
-            Restore
+            {{ t(`chat.chatPaneNotices.restore`) }}
         </Button>
     </div>
     <ChatAccountPanel />
-<!-- The free lane's last hours: the meter's own line, amber, with the door to Billing. -->
+    <!-- The free lane's last hours: the meter's own line, amber, with the door to Billing. -->
     <div
         v-if="hoursNotice"
         class="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-xl border border-warning/40 bg-warning/10 px-3 py-2 text-left text-2xs text-warning"
     >
         <Icon name="clock" class="shrink-0" />
         <span class="min-w-[14rem] flex-1">{{ hoursNotice }}</span>
-        <Button v-if="planOffered" :as="RouterLink" to="/settings/billing" size="small" severity="secondary" :text="true" class="shrink-0">Billing</Button>
+        <Button v-if="planOffered" :as="RouterLink" to="/settings/billing" size="small" severity="secondary" :text="true" class="shrink-0">{{
+            t(`chat.chatPaneNotices.billing`)
+        }}</Button>
     </div>
-<!-- The trial's standing disclosure: the picker says it once at the moment of choosing. -->
+    <!-- The trial's standing disclosure: the picker says it once at the moment of choosing. -->
     <div
         v-if="trialNotice"
         class="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-xl border border-line bg-card px-3 py-2 text-left text-2xs text-muted"
     >
         <Icon name="sparkles" class="shrink-0 text-link" />
-<!-- A floor, not `min-w-0` (ChatContinueStrip's own lesson): every control beside this is `shrink-0`. -->
+        <!-- A floor, not `min-w-0` (ChatContinueStrip's own lesson): every control beside this is `shrink-0`. -->
         <span class="min-w-[14rem] flex-1">{{ trialNotice }}</span>
-<!-- Notice actions share one button style and baseline. -->
+        <!-- Notice actions share one button style and baseline. -->
         <div class="flex shrink-0 items-center gap-1">
             <Button
                 v-if="trialUnavailable"
@@ -146,26 +151,26 @@ const activeAccountReauth = computed(() => {
                 severity="secondary"
                 :text="true"
                 :disabled="!reachable || streaming"
-                v-tooltip.top="'Ask the platform again, and pick this chat back up if the trial answers'"
+                v-tooltip.top="t(`chat.chatPaneNotices.askPlatformAgainPick`)"
                 @click="retryTrial"
             >
-                Retry
+                {{ t(`ui.action.retry`) }}
             </Button>
-<!-- The door the account gate used to hold, standing here while this strip does: spent, the model list is every other way to send. -->
+            <!-- The door the account gate used to hold, standing here while this strip does: spent, the model list is every other way to send. -->
             <ChatChooseModelButton v-if="trialSpent" />
-<!-- A place, so a link, drawn as a button: the sign-in has an address, and Ctrl/Cmd-click opens it in another tab rather than losing this conversation. -->
+            <!-- A place, so a link, drawn as a button: the sign-in has an address, and Ctrl/Cmd-click opens it in another tab rather than losing this conversation. -->
             <Button
                 :as="RouterLink"
                 :to="{ path: '/sandbox/agent', query: { connect: 'gemini' } }"
                 size="small"
                 :text="true"
-                v-tooltip.top="'Sign in with Google: no daily cap, still no subscription'"
+                v-tooltip.top="t(`chat.chatPaneNotices.signInGoogleNo`)"
             >
-                Connect Google
+                {{ t(`chat.chatPaneNotices.connectGoogle`) }}
             </Button>
         </div>
     </div>
-<!-- Proactive re-auth: the credential exists but can no longer refresh, surfaced here (before an opaque mid-turn failure) with a jump to reconnect. -->
+    <!-- Proactive re-auth: the credential exists but can no longer refresh, surfaced here (before an opaque mid-turn failure) with a jump to reconnect. -->
     <RouterLink
         v-if="activeAccountReauth"
         :to="{ path: '/sandbox/agent', query: { connect: provider } }"
@@ -173,7 +178,8 @@ const activeAccountReauth = computed(() => {
     >
         <Icon name="exclamation-triangle" class="mt-0.5 shrink-0" />
         <span
-            >{{ activeAccountReauth.detail ?? `This account needs to be reconnected.` }} <span class="font-semibold underline">Reconnect</span></span
+            >{{ activeAccountReauth.detail ?? t(`chat.chatPaneNotices.accountNeedsToReconnected`) }}
+            <span class="font-semibold underline">{{ t(`chat.chatPaneNotices.reconnect`) }}</span></span
         >
     </RouterLink>
 </template>

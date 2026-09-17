@@ -1,5 +1,6 @@
 import type { Activation, ExtensionContext, IntenticApi } from "@intentic/extension-api";
 import { bindHost } from "./host";
+import { t } from "./i18n.js";
 
 /* ext-apps activation: bind the host handle, then register two directory views. */
 export const activate = (api: IntenticApi, context: ExtensionContext): void => {
@@ -7,7 +8,7 @@ export const activate = (api: IntenticApi, context: ExtensionContext): void => {
     context.subscriptions.push(
         api.views.register({
             id: `apps`,
-            label: `Apps`,
+            label: t(`extension.apps`),
             surface: `directory`,
             detect: (repos) =>
                 repos.flatMap((repo): Activation[] => {
@@ -23,7 +24,7 @@ export const activate = (api: IntenticApi, context: ExtensionContext): void => {
         }),
         api.views.register({
             id: `dependencies`,
-            label: `Dependencies`,
+            label: t(`extension.dependencies`),
             surface: `directory`,
             detect: (repos) =>
                 repos

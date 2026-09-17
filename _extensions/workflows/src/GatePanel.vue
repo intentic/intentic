@@ -3,6 +3,7 @@ import { Button, ui, Icon, Picker } from "@intentic/extension-ui";
 import { GATE_DAILY_MAX_DEFAULT, type Workflow, type WorkflowGate } from "@intentic/sandbox-contract";
 import { computed } from "vue";
 import GateAccess from "./GateAccess.vue";
+import { t } from "./i18n.js";
 
 // Form for a workflow's release gate: which step decides, which field carries the verdict, which values ship, and the
 // daily run cap. The webhook token isn't a field here; the daemon mints and returns it, and the panel only displays it
@@ -71,16 +72,14 @@ const setDailyMax = (raw: string): void => {
 <template>
     <div class="flex w-pop-sm flex-col gap-3 p-1">
         <p class="text-2xs text-subtle">
-            A gate gives this workflow a webhook a CI pipeline can call: the pipeline POSTs what it knows, the whole design runs, and the reply is
-            pass, fail or blocked: read off one declared field, never scraped out of prose.
+            {{ t(`gatePanel.gateGivesWorkflowWebhook`) }}
         </p>
 
         <template v-if="gate === undefined">
             <p v-if="eligible.length === 0" class="text-2xs text-warning">
-                A gate reads a declared output field, and no step declares one yet. Give the deciding step a data field first: select it on the
-                canvas and add one under Advanced.
+                {{ t(`gatePanel.gateReadsDeclaredOutput`) }}
             </p>
-            <Button v-else label="Add a gate" size="small" severity="secondary" class="self-start" @click="add()">
+            <Button v-else :label="t(`gatePanel.addGate`)" size="small" severity="secondary" class="self-start" @click="add()">
                 <template #icon><Icon name="plus" /></template>
             </Button>
         </template>
@@ -88,40 +87,40 @@ const setDailyMax = (raw: string): void => {
         <template v-else>
             <div class="grid grid-cols-2 gap-2">
                 <label class="flex min-w-0 flex-col gap-1">
-                    <span :class="ui.sectionLabel()">Deciding step</span>
+                    <span :class="ui.sectionLabel()">{{ t(`gatePanel.decidingStep`) }}</span>
                     <Picker
                         :model-value="gate.step"
                         :options="stepOptions"
-                        aria-label="Step the gate reads"
+                        :aria-label="t(`gatePanel.stepGateReads`)"
                         class="min-w-0 text-xs"
                         @update:model-value="setStep"
                     />
                 </label>
                 <label class="flex min-w-0 flex-col gap-1">
-                    <span :class="ui.sectionLabel()">Field</span>
+                    <span :class="ui.sectionLabel()">{{ t(`gatePanel.field`) }}</span>
                     <Picker
                         :model-value="gate.field"
                         :options="fieldOptions"
-                        aria-label="Field the gate reads"
+                        :aria-label="t(`gatePanel.fieldGateReads`)"
                         class="min-w-0 text-xs"
                         @update:model-value="setField"
                     />
                 </label>
             </div>
             <label class="flex flex-col gap-1">
-                <span :class="ui.sectionLabel()">Ships when it says</span>
+                <span :class="ui.sectionLabel()">{{ t(`gatePanel.shipsSays`) }}</span>
                 <input
                     :value="gate.pass.join(`, `)"
                     :class="ui.input()"
-                    placeholder="pass"
+                    :placeholder="t(`gatePanel.pass`)"
                     @change="setPass(($event.target as HTMLInputElement).value)"
                 />
                 <span class="text-2xs text-subtle">
-                    An allowlist, comma-separated. Anything else the field says fails the gate: "mostly-pass" does not ship.
+                    {{ t(`gatePanel.allowlistCommaSeparatedAnything`) }}
                 </span>
             </label>
             <label class="flex flex-col gap-1">
-                <span :class="ui.sectionLabel()">Runs per day</span>
+                <span :class="ui.sectionLabel()">{{ t(`gatePanel.runsPerDay`) }}</span>
                 <input
                     :value="gate.dailyMax ?? ``"
                     type="number"
@@ -131,15 +130,15 @@ const setDailyMax = (raw: string): void => {
                     @input="setDailyMax(($event.target as HTMLInputElement).value)"
                 />
                 <span class="text-2xs text-subtle">
-                    The spend ceiling. Every call runs the whole graph, and a push-triggered pipeline calls on every commit.
+                    {{ t(`gatePanel.spendCeilingEveryCall`) }}
                 </span>
             </label>
 
             <GateAccess v-if="gateToken !== undefined" :workflow="{ id: workflow.id, name: workflow.name, gateToken }" />
-            <p v-else class="text-2xs text-subtle">Saving mints the webhook URL: it appears here and under the gate badge on the workflow's card.</p>
+            <p v-else class="text-2xs text-subtle">{{ t(`gatePanel.savingMintsWebhookUrl`) }}</p>
 
             <button type="button" :class="ui.linkButton(`self-start text-danger`)" @click="emit(`patch`, undefined)">
-                Remove the gate: its URL stops working, and a future gate gets a new one
+                {{ t(`gatePanel.removeGateUrlStops`) }}
             </button>
         </template>
     </div>

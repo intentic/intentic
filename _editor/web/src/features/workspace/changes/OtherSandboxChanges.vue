@@ -17,10 +17,13 @@ import {
 } from "./changesAcross";
 import { landOnAfterSwitch } from "../../sandbox/client/sandboxScreen";
 import { useSandbox } from "../../sandbox/client/useSandbox";
+import { useT } from "@intentic/ui/i18n";
 
 // Ledger of what other sandboxes hold: one line per repo, showing unpushed or uncommitted work with no merged tree to
 // diff against. Folded at the foot of the Changes panel by default, staying open once opened, so it never pushes the
 // panel above off screen. Renders nothing on a single-sandbox account, or when every box is clean.
+
+const t = useT();
 
 const open = ref(false);
 const release = subscribeChanges();
@@ -93,7 +96,9 @@ const detail = (row: LedgerRow): string => {
         >
             <Icon :name="open ? 'chevron-down' : 'chevron-right'" class="w-2.5 shrink-0 text-[0.6rem] text-subtle" />
             <Icon name="server" class="shrink-0 text-2xs text-subtle" />
-            <span class="min-w-0 flex-1 truncate text-2xs font-semibold uppercase tracking-wide text-muted">In other sandboxes</span>
+            <span class="min-w-0 flex-1 truncate text-2xs font-semibold uppercase tracking-wide text-muted">{{
+                t(`workspace.otherSandboxChanges.inOtherSandboxes`)
+            }}</span>
             <span v-if="summary" class="shrink-0 text-2xs text-warning">{{ summary }}</span>
         </button>
 
@@ -101,14 +106,19 @@ const detail = (row: LedgerRow): string => {
         <p v-if="silentLine !== undefined" class="flex items-center gap-1.5 py-0.5 pl-4 pr-1 text-2xs text-subtle">
             <span class="min-w-0 flex-1 truncate">{{ silentLine }}</span>
             <button type="button" class="shrink-0 rounded px-1 py-0.5 text-link transition-colors hover:bg-overlay" @click="refreshChangesAcross()">
-                Retry
+                {{ t(`ui.action.retry`) }}
             </button>
         </p>
 
         <template v-if="open">
             <p v-if="pushRowError !== undefined" class="mt-1 flex items-start gap-1.5 rounded-md bg-danger/10 px-2 py-1 text-2xs text-danger">
                 <span class="min-w-0 flex-1">{{ pushRowError }}</span>
-                <button type="button" aria-label="Dismiss" class="shrink-0 rounded p-0.5 hover:bg-overlay" @click="dismissPushError()">
+                <button
+                    type="button"
+                    :aria-label="t(`ui.action.dismiss`)"
+                    class="shrink-0 rounded p-0.5 hover:bg-overlay"
+                    @click="dismissPushError()"
+                >
                     <Icon name="times" class="text-2xs" />
                 </button>
             </p>
@@ -128,16 +138,16 @@ const detail = (row: LedgerRow): string => {
                     severity="secondary"
                     class="shrink-0"
                     :disabled="pushingRow !== undefined"
-                    :label="pushingRow === rowKey(row) ? 'Sending…' : sendVerb(row)"
-                    v-tooltip.top="`${sendVerb(row)} straight from here. Its own pre-push checks run in that sandbox, not this one`"
+                    :label="pushingRow === rowKey(row) ? t(`workspace.otherSandboxChanges.sending`) : sendVerb(row)"
+                    v-tooltip.top="t(`workspace.otherSandboxChanges.straightHereOwnPre`, { row: sendVerb(row) })"
                     @click="pushRow(row)"
                 />
                 <!-- Unsupported actions remain on the owning machine. -->
                 <button
                     type="button"
                     class="shrink-0 rounded-md p-1 text-subtle transition-colors hover:bg-overlay hover:text-content"
-                    :aria-label="`Open ${row.sandboxName}`"
-                    v-tooltip.top="`Switch this window to ${row.sandboxName}`"
+                    :aria-label="t(`workspace.otherSandboxChanges.open`, { sandboxName: row.sandboxName })"
+                    v-tooltip.top="t(`workspace.otherSandboxChanges.switchWindowTo`, { sandboxName: row.sandboxName })"
                     @click="openWorkspaceIn(row.sandboxId)"
                 >
                     <Icon name="arrow-right" class="text-2xs" />

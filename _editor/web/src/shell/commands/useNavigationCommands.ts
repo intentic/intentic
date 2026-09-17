@@ -6,12 +6,13 @@ import { useVocabulary } from "../../core-views/vocabulary";
 import { useCapabilities } from "../../features/capabilities/connect/useCapabilities";
 import { usePanels } from "../../features/extensions/usePanels";
 import { openPreview } from "../../features/preview/previewSurface";
-import { SANDBOX_BUILT_IN_SLUGS, sandboxSectionPath, sandboxSections } from "../../features/sandbox/sandboxNav";
+import { sandboxBuiltInSlugs, sandboxSectionPath, sandboxSections } from "../../features/sandbox/sandboxNav";
 import { useRole } from "../../features/sandbox/secrets/useRole";
 import { useHostedPlan } from "../../features/settings/hosted-plan/useHostedPlan";
 import { settingsSectionPath, settingsSections } from "../../features/settings/settingsNav";
 import { GO_TO, SANDBOX, SETTINGS } from "./categories";
 import { registerCommand } from "./useCommands";
+import { t } from "@intentic/ui/i18n";
 
 // Every place the shell can take you, as a command. Derived from the same tables the rail and the two hubs draw
 // themselves from, never a second list, so a section or an extension area is reachable by name the moment it is
@@ -41,15 +42,15 @@ export function useNavigationCommands(): void {
     // The rail's own seats, which are shell routes rather than registered views, so no detect() reports them. Named as
     // the rail names them, including the two the maker's vocabulary renames.
     const shellAreas = computed<readonly NavCommand[]>(() => [
-        { command: `view.chat`, title: `Chat`, category: GO_TO, icon: `comments`, to: `/chat` },
-        { command: `view.agents`, title: `Agents`, category: GO_TO, icon: `robot`, to: `/agents` },
+        { command: `view.chat`, title: t(`shell.useNavigationCommands.chat`), category: GO_TO, icon: `comments`, to: `/chat` },
+        { command: `view.agents`, title: t(`shell.useNavigationCommands.agents`), category: GO_TO, icon: `robot`, to: `/agents` },
         { command: `view.workspace`, title: words.value.workspace, category: GO_TO, icon: `file-tree`, to: `/workspace` },
         // Marks the preview as opened on the way, which a bare push would not.
         { command: `view.preview`, title: words.value.preview, category: GO_TO, icon: `eye`, to: `/preview`, run: () => openPreview(router) },
         // Both tiles leave the rail when nothing is running; the palette is how you get back to a finished session.
-        { command: `view.browsers`, title: `Browsers`, category: GO_TO, icon: `desktop`, to: `/browsers` },
-        { command: `view.subagents`, title: `Subagents`, category: GO_TO, icon: `users`, to: `/subagents` },
-        { command: `view.capabilities`, title: `Capabilities`, category: GO_TO, icon: `plus`, to: `/capabilities` },
+        { command: `view.browsers`, title: t(`shell.useNavigationCommands.browsers`), category: GO_TO, icon: `desktop`, to: `/browsers` },
+        { command: `view.subagents`, title: t(`shell.useNavigationCommands.subagents`), category: GO_TO, icon: `users`, to: `/subagents` },
+        { command: `view.capabilities`, title: t(`shell.useNavigationCommands.capabilities`), category: GO_TO, icon: `plus`, to: `/capabilities` },
     ]);
 
     // One command per rail-surface activation (not per view); the id carries the activation key unless it is a
@@ -77,7 +78,7 @@ export function useNavigationCommands(): void {
             to: sandboxSectionPath(section.slug),
         })),
         ...detectActivations(panels.value, capabilities.value)
-            .filter(({ extension, activation }) => extension.surface === `sandbox` && !SANDBOX_BUILT_IN_SLUGS.has(activation.key))
+            .filter(({ extension, activation }) => extension.surface === `sandbox` && !sandboxBuiltInSlugs().has(activation.key))
             .map(({ activation }) => ({
                 command: `view.sandbox.${activation.key}`,
                 title: activation.title,
@@ -86,7 +87,7 @@ export function useNavigationCommands(): void {
                 to: sandboxSectionPath(activation.key),
             })),
         // The one sandbox errand that is a place rather than a section: where the switcher's "Add sandbox" goes.
-        { command: `sandbox.add`, title: `Add…`, category: SANDBOX, icon: `plus`, to: `/setup` },
+        { command: `sandbox.add`, title: t(`shell.useNavigationCommands.add`), category: SANDBOX, icon: `plus`, to: `/setup` },
     ]);
 
     const settingsDestinations = computed<readonly NavCommand[]>(() =>

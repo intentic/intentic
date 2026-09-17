@@ -5,12 +5,15 @@ import { RouterLink } from "vue-router";
 import { boardBody, deviceState, deviceTone, type MachineRow, manySided } from "./deviceRows";
 import { deviceRoute } from "./deviceLinks";
 import { lastSeenNote, osLabel, osTitle } from "./deviceFacts";
+import { useT } from "@intentic/ui/i18n";
 
 // One machine on the board: what it is, whether it wants anything, and a line per sandbox it holds. Nothing
 // here expands and nothing here is a control — the whole card is one link into that machine's own page —
 // so a reader answering "which machine has 8788" never has to press anything. A PC with several environments
 // (Windows and the distros on it) is one card whose environments are lines of their own, each with its own
 // state, and whose sandboxes are listed once.
+
+const t = useT();
 
 const { machine, needle, ownSlug, readAt } = defineProps<{
     machine: MachineRow;
@@ -22,7 +25,9 @@ const { machine, needle, ownSlug, readAt } = defineProps<{
 }>();
 
 const body = computed(() => boardBody(machine, needle, ownSlug, readAt));
-const hasBelow = computed(() => body.value.environments.length > 0 || body.value.warnings.length > 0 || body.value.lines.length > 0 || body.value.more > 0);
+const hasBelow = computed(
+    () => body.value.environments.length > 0 || body.value.warnings.length > 0 || body.value.lines.length > 0 || body.value.more > 0,
+);
 // The one device of a one-environment machine, whose facts and state ride the card itself.
 const lone = computed(() => (manySided(machine) ? undefined : machine.environments[0]?.device));
 </script>
@@ -48,7 +53,9 @@ const lone = computed(() => (manySided(machine) ? undefined : machine.environmen
                         {{ osLabel(lone) }}
                     </span>
                     <!-- A many-sided machine says how many sides it has; each is a line below. -->
-                    <span v-else-if="!lone" class="shrink-0 truncate text-xs font-normal text-muted">{{ machine.environments.length }} environments</span>
+                    <span v-else-if="!lone" class="shrink-0 truncate text-xs font-normal text-muted">{{
+                        t(`sandbox.deviceBoardCard.environments`, { count: machine.environments.length })
+                    }}</span>
                 </span>
             </template>
 
@@ -101,9 +108,11 @@ const lone = computed(() => (manySided(machine) ? undefined : machine.environmen
                         ></span>
                         <Icon v-else name="box" class="shrink-0 text-2xs text-subtle" />
                         <span class="min-w-0 truncate text-xs text-content">{{ line.title }}</span>
-                        <span v-if="line.running === false" class="shrink-0 text-2xs text-muted">stopped</span>
-                        <span v-else-if="line.running === undefined" class="shrink-0 text-2xs text-muted">not running here</span>
-                        <StatusBadge v-if="line.self" variant="info" size="xs" label="the one you're using" class="shrink-0" />
+                        <span v-if="line.running === false" class="shrink-0 text-2xs text-muted">{{ t(`sandbox.deviceBoardCard.stopped`) }}</span>
+                        <span v-else-if="line.running === undefined" class="shrink-0 text-2xs text-muted">{{
+                            t(`sandbox.deviceBoardCard.notRunningHere`)
+                        }}</span>
+                        <StatusBadge v-if="line.self" variant="info" size="xs" :label="t(`sandbox.deviceBoardCard.oneYoureUsing`)" class="shrink-0" />
                         <!-- Facts are counted and uncoloured; a warning keeps its ink and is the reason to open this machine. -->
                         <span class="ml-auto flex min-w-0 shrink items-center gap-x-2 pl-2">
                             <span v-for="fact in line.facts" :key="fact" class="shrink-0 text-2xs text-subtle">{{ fact }}</span>
@@ -111,7 +120,7 @@ const lone = computed(() => (manySided(machine) ? undefined : machine.environmen
                         </span>
                     </div>
                     <!-- Counted against what the machine reported, so a capped list never reads as the whole of it. -->
-                    <p v-if="body.more > 0" class="text-2xs text-subtle">… and {{ body.more }} more</p>
+                    <p v-if="body.more > 0" class="text-2xs text-subtle">{{ t(`sandbox.deviceBoardCard.more`, { more: body.more }) }}</p>
                 </div>
             </template>
         </Row>

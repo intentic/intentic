@@ -1,8 +1,9 @@
 import type { Activation, CapabilityFacts, Disposable, RepoFacts, ViewBadge, ViewRegistration } from "@intentic/extension-api";
-import { shallowRef } from "vue";
+import { computed, shallowRef } from "vue";
 import { type Audience, useAudience } from "../app/useAudience";
 import { coreViews } from "./coreViews";
 import { badgeSpeaks } from "./viewBadge";
+import { t } from "@intentic/ui/i18n";
 
 // Runtime extension registry: core views seed it at load, third-party bundles join via api.views.register.
 // Module-level singleton ref, so every host (rail, mobile menu, ExtensionHost, DirectoryOperator) recomputes
@@ -14,7 +15,15 @@ export interface RegisteredView {
     readonly registration: ViewRegistration;
 }
 
-const views = shallowRef<readonly RegisteredView[]>(coreViews.map((registration) => ({ owner: `builtin`, registration })));
+// The core views are READ rather than seeded: their labels are words, and at import time — which is when a
+// module-level seed would run — no message catalog is registered yet, so every label taken then would be a dotted
+// key for the life of the tab. Extension registrations are the ref; the core list is recomputed beside it, which
+// also means a language change reaches the rail.
+const contributed = shallowRef<readonly RegisteredView[]>([]);
+const views = computed<readonly RegisteredView[]>(() => [
+    ...coreViews().map((registration) => ({ owner: `builtin`, registration })),
+    ...contributed.value,
+]);
 
 // Every live registration regardless of detection, read by the background loader to warm what each view
 // wants. Not filtered by detection: that needs panels/capabilities, which are themselves being warmed.
@@ -24,12 +33,12 @@ export const registeredViews = (): readonly RegisteredView[] => views.value;
 // it in place (a hot-reloaded or re-activated extension), so the rail never grows a duplicate icon.
 export const registerView = (owner: string, registration: ViewRegistration): Disposable => {
     const entry: RegisteredView = { owner, registration };
-    const index = views.value.findIndex((existing) => existing.owner === owner && existing.registration.id === registration.id);
-    views.value = index === -1 ? [...views.value, entry] : views.value.with(index, entry);
+    const index = contributed.value.findIndex((existing) => existing.owner === owner && existing.registration.id === registration.id);
+    contributed.value = index === -1 ? [...contributed.value, entry] : contributed.value.with(index, entry);
     return {
         // Filtered by this entry, so a stale disposable from a superseded activation finds nothing to remove.
         dispose: (): void => {
-            views.value = views.value.filter((existing) => existing !== entry);
+            contributed.value = contributed.value.filter((existing) => existing !== entry);
         },
     };
 };
@@ -77,49 +86,53 @@ export const WORKSPACE_VIEW_ID = `workspace`;
 // seated by lighting up costs them nothing. acceptance, deployments, maintenance and documentation (below) are LISTED
 // first-party extensions, installed from the registry: their seats are declared here so an install lands them in the
 // band a product decision put them in, not at the end of the column like an unlisted stranger.
-const JUDGE: RailGroup = {
+const judge = (): RailGroup => ({
     id: `judge`,
-    label: `Judge`,
+    label: t(`views.registry.judge`),
     items: [signal(`approvals`), signal(`acceptance`), signal(`pipelines`), signal(`deployments`), signal(`maintenance`)],
-};
+});
 // Authored once, then left alone. Automations never badges: a held wake is counted by Approvals instead.
-const SETUP: RailGroup = { id: `setup`, label: `Set up`, items: [signal(`workflows`), signal(`automations`)] };
+const setup = (): RailGroup => ({ id: `setup`, label: t(`views.registry.setUp`), items: [signal(`workflows`), signal(`automations`)] });
 // Consulted deliberately, not summoned; Documentation badges rarely and meaningfully, the others don't at all.
-const KNOW: RailGroup = { id: `know`, label: `Know`, items: [signal(`documentation`), signal(`infrastructure`), signal(`live-status`)] };
+const know = (): RailGroup => ({
+    id: `know`,
+    label: t(`views.registry.know`),
+    items: [signal(`documentation`), signal(`infrastructure`), signal(`live-status`)],
+});
 
 // One table per audience; only the Work band differs. Preview is `always` for being visited constantly, not for its
 // badge, which counts an inventory, not a claim.
 // The Projects tile is seated for everyone and heads the rail: it is where the project scope (app/projectScope.ts) is
 // read and changed, and every tile below it is narrowed by what it says, so it sits above them the way a switcher
 // sits above what it switches. For a maker the file tree stands in for it when the extension is off.
-const RAIL_GROUPS_BY_AUDIENCE: Record<Audience, readonly RailGroup[]> = {
+const railGroupsByAudience = (): Record<Audience, readonly RailGroup[]> => ({
     developer: [
         {
             id: `work`,
-            label: `Work`,
+            label: t(`views.registry.work`),
             items: [always(PROJECTS_VIEW_ID), always(`chat`), always(`agents`), always(WORKSPACE_VIEW_ID), always(`preview`)],
         },
-        JUDGE,
-        SETUP,
-        KNOW,
+        judge(),
+        setup(),
+        know(),
     ],
     // The file tree keeps a rank of its own below the work loop, so a maker who opens it finds it in the same seat.
     maker: [
         {
             id: `work`,
-            label: `Work`,
+            label: t(`views.registry.work`),
             items: [always(PROJECTS_VIEW_ID, WORKSPACE_VIEW_ID), always(`chat`), always(`agents`), signal(WORKSPACE_VIEW_ID), always(`preview`)],
         },
-        JUDGE,
-        SETUP,
-        KNOW,
+        judge(),
+        setup(),
+        know(),
     ],
-};
+});
 
-export const railGroupsFor = (audience: Audience): readonly RailGroup[] => RAIL_GROUPS_BY_AUDIENCE[audience];
+export const railGroupsFor = (audience: Audience): readonly RailGroup[] => railGroupsByAudience()[audience];
 
 // The developer's table, which is also what every surface read before there were two.
-export const RAIL_GROUPS: readonly RailGroup[] = RAIL_GROUPS_BY_AUDIENCE.developer;
+export const railGroups = (): readonly RailGroup[] => railGroupsByAudience().developer;
 
 // The table for whoever is looking; reactive when read inside a computed, like everything below that reads it.
 const activeGroups = (): readonly RailGroup[] => railGroupsFor(useAudience().audience.value);

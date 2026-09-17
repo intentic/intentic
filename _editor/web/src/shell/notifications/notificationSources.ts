@@ -17,6 +17,7 @@ import { useSandboxSession } from "../../features/sandbox/client/sandboxSession"
 import { usePushFlow } from "../../features/workspace/push/usePushFlow";
 import { useUploadQueue } from "../../features/workspace/files/upload/useUploadQueue";
 import { useWorkspaceTree } from "../../features/workspace/explorer/useWorkspaceTree";
+import { t } from "@intentic/ui/i18n";
 
 // Every standing fact and open question this app floats, declared in one place as pure conditions fed to `hold`;
 // the lane draws them, in this file's registration order. Registered once from the root, above the router and
@@ -77,7 +78,7 @@ const uploadHeadline = (phase: UploadPhase, state: UploadState): UploadHeadline 
     switch (phase) {
         case `nothing`:
             return {
-                title: `Nothing to upload`,
+                title: t(`shell.notificationSources.nothingToUpload`),
                 detail:
                     (state.skipped ?? 0) > 0
                         ? `Skipped ${plural(state.skipped ?? 0, `item`, `items`)} that couldn't be read (symlink or special file).`
@@ -87,19 +88,28 @@ const uploadHeadline = (phase: UploadPhase, state: UploadState): UploadHeadline 
             };
         case `unchanged`:
             return {
-                title: `Already up to date`,
+                title: t(`shell.notificationSources.alreadyUpToDate`),
                 detail: `Skipped ${plural(state.unchanged, `unchanged file`, `unchanged files`)}.`,
                 tone: `done`,
                 spin: false,
             };
         case `scanning`:
-            return { title: `Scanning dropped folder…`, detail: `${plural(state.scanned, `file`, `files`)} so far.`, tone: `info`, spin: true };
+            return {
+                title: t(`shell.notificationSources.scanningDroppedFolder`),
+                detail: `${plural(state.scanned, `file`, `files`)} so far.`,
+                tone: `info`,
+                spin: true,
+            };
         case `uploading`:
-            return { title: `Uploading ${state.done} of ${state.count}`, tone: `info`, spin: true };
+            return { title: t(`shell.notificationSources.uploading`, { done: state.done, count: state.count }), tone: `info`, spin: true };
         case `uploaded`:
             return { title: `Uploaded ${plural(state.count, `file`, `files`)}`, tone: `done`, spin: false };
         case `partial`:
-            return { title: `Uploaded ${state.done} of ${state.count} · ${state.failed} failed`, tone: `problem`, spin: false };
+            return {
+                title: t(`shell.notificationSources.uploadedFailed`, { done: state.done, count: state.count, failed: state.failed }),
+                tone: `problem`,
+                spin: false,
+            };
     }
 };
 
@@ -114,11 +124,7 @@ const QUIET: ReadonlySet<SandboxAvailability> = new Set([`stale`, `busy`, `detac
 // minutes ago, on a screen they have since left. No action, because there is nothing to press: the swap is already
 // under way and the page reconnects itself. Past the patience window it says nothing rather than keep promising half
 // a minute, and the causes that were always here speak again.
-export const restartCard = (
-    restart: RestartWork | undefined,
-    availability: SandboxAvailability,
-    outageMs: number,
-): NotificationInput | undefined =>
+export const restartCard = (restart: RestartWork | undefined, availability: SandboxAvailability, outageMs: number): NotificationInput | undefined =>
     restart !== undefined && QUIET.has(availability) && outageMs < RESTART_PATIENCE_MS
         ? { kind: `condition`, tone: `info`, icon: `refresh`, spin: true, title: restart.quiet.title, detail: restart.quiet.detail }
         : undefined;
@@ -182,8 +188,8 @@ export const startNotificationSources = (): void => {
                   kind: `condition`,
                   tone: `info`,
                   icon: `wifi`,
-                  title: `Limited connection to this sandbox`,
-                  detail: `Live agent output may lag. It clears when you are back online.`,
+                  title: t(`shell.notificationSources.limitedConnectionToSandbox`),
+                  detail: t(`shell.notificationSources.liveAgentOutputMay`),
                   hint:
                       `Nothing but your own machine can be reached right now, so the browser is talking to the sandbox over plain HTTP on ` +
                       `127.0.0.1. That is HTTP/1.1, which a browser allows only six of at a time across every window of this app, and each ` +
@@ -204,9 +210,9 @@ export const startNotificationSources = (): void => {
         return {
             kind: `condition`,
             tone: `warning`,
-            title: `Signed into Google as ${presented}`,
-            detail: `Your intentic account is ${account}. Switch before this sandbox binds, or the wrong one becomes its owner.`,
-            actions: [{ label: `Switch account`, severity: `secondary` as const, run: signInAgain }],
+            title: t(`shell.notificationSources.signedIntoGoogle`, { presented }),
+            detail: t(`shell.notificationSources.intenticAccountSwitchBefore`, { account }),
+            actions: [{ label: t(`shell.notificationSources.switchAccount`), severity: `secondary` as const, run: signInAgain }],
         };
     });
 
@@ -233,7 +239,9 @@ export const startNotificationSources = (): void => {
             title: needsSignin ? `This browser's sandbox session needs attention` : `The sandbox is busy`,
             detail: needsSignin ? `Your workspace is still here.` : `Your workspace stays open while it catches up automatically.`,
             // No button for a stall the app is already healing; only an expired session needs the user to act.
-            actions: needsSignin ? [{ label: `Sign in again`, severity: `secondary` as const, run: signInAgain }] : undefined,
+            actions: needsSignin
+                ? [{ label: t(`shell.notificationSources.signInAgain`), severity: `secondary` as const, run: signInAgain }]
+                : undefined,
         };
     });
 
@@ -244,14 +252,22 @@ export const startNotificationSources = (): void => {
     // closes the window and a reload drops anything unsent.
     const updateWords = (update: AppUpdate): { title: string; detail: string; action: string } => {
         if (update.kind === `app`) {
-            return { title: `Intentic ${update.version} is ready`, detail: `It is downloaded. Restarting takes a few seconds.`, action: `Restart` };
+            return {
+                title: t(`shell.notificationSources.intenticReady`, { version: update.version }),
+                detail: t(`shell.notificationSources.downloadedRestartingTakesFew`),
+                action: `Restart`,
+            };
         }
         if (update.kind === `web`) {
-            return { title: `A new version of Intentic is out`, detail: `Reload to pick it up.`, action: `Reload` };
+            return {
+                title: t(`shell.notificationSources.newVersionIntenticOut`),
+                detail: t(`shell.notificationSources.reloadToPickUp`),
+                action: `Reload`,
+            };
         }
         return {
-            title: `Part of Intentic did not load`,
-            detail: `Something it fetches as it goes never arrived, so a file may show without its colours or a viewer may stay blank. Reload to get it.`,
+            title: t(`shell.notificationSources.partIntenticDidNot`),
+            detail: t(`shell.notificationSources.somethingFetchesGoesNever`),
             action: `Reload`,
         };
     };
@@ -284,12 +300,12 @@ export const startNotificationSources = (): void => {
             kind: `question`,
             tone: `info`,
             icon: `bolt`,
-            title: `Faster if this sandbox runs on this device`,
-            detail: `Your browser will ask to allow it.`,
+            title: t(`shell.notificationSources.fasterSandboxRunsOn`),
+            detail: t(`shell.notificationSources.browserAskToAllow`),
             actions: [
-                { label: `No`, severity: `secondary` as const, run: (): void => decline(sandboxId) },
+                { label: t(`shell.notificationSources.no`), severity: `secondary` as const, run: (): void => decline(sandboxId) },
                 {
-                    label: `Allow`,
+                    label: t(`shell.notificationSources.allow`),
                     // Probes immediately, inside the click: the friendliest moment to ask a browser for a device
                     // permission.
                     run: async (): Promise<void> => {

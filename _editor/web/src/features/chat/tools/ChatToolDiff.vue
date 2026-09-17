@@ -2,6 +2,9 @@
 import { computed } from "vue";
 import { DiffStat } from "@intentic/ui";
 import { type DiffRow, diffRows, diffStat } from "./chatToolDiff";
+import { useT } from "@intentic/ui/i18n";
+
+const t = useT();
 
 /* Inline unified diff for one structured diff content entry of a tool card. */
 
@@ -43,13 +46,13 @@ const rowClass = (row: DiffRow): string => {
             :type="openable ? 'button' : undefined"
             class="chat-inset-rule flex w-full items-center gap-1.5 px-2.5 py-1.5 text-2xs text-muted transition-colors"
             :class="openable && 'hover:bg-overlay hover:text-content'"
-            v-tooltip.top="openable ? 'Open in workspace' : undefined"
+            v-tooltip.top="openable ? t(`chat.chatToolDiff.openInWorkspace`) : undefined"
             @click="openable && emit('open')"
         >
             <Icon name="file-edit" class="text-2xs text-subtle" />
             <span class="min-w-0 flex-1 truncate font-mono">{{ path }}</span>
             <DiffStat :additions="stat.additions" :deletions="stat.deletions" />
-            <span v-if="truncated" class="shrink-0 text-subtle">truncated</span>
+            <span v-if="truncated" class="shrink-0 text-subtle">{{ t(`chat.chatToolDiff.truncated`) }}</span>
         </component>
         <pre
             class="max-h-56 overflow-auto py-0.5 text-2xs leading-relaxed"

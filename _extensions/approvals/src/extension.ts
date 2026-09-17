@@ -3,6 +3,7 @@ import { sandboxPoll } from "@intentic/extension-api";
 import { bindHost, host } from "./host";
 import { approvalsQuery, owedOf } from "./useApprovals";
 import { heldWakesQuery, waitingOf } from "./useHeldWakes";
+import { t } from "./i18n.js";
 
 // Binds the host, then registers the Approvals rail view. Detection is unconditional (it's always in More, the palette,
 // and mobile Review); the rail seat itself is decided by the badge below, driven by module state rather than the view,
@@ -27,7 +28,7 @@ export const approvalsAttention = sandboxPoll<ViewBadge | undefined>({
             : {
                   count,
                   // Phrased to follow the tile's name in the rail: "Approvals · 3 waiting on you".
-                  tooltip: `${count} waiting on you`,
+                  tooltip: t(`extension.waitingOn`, { count }),
                   // `danger` only when something's actually wrong; a mere proposal is the resting `info` tone.
                   tone: broken > 0 ? `danger` : `info`,
               };
@@ -40,9 +41,9 @@ export const activate = (api: IntenticApi, context: ExtensionContext): void => {
     context.subscriptions.push(
         api.views.register({
             id: `approvals`,
-            label: `Approvals`,
+            label: t(`extension.approvals`),
             surface: `rail`,
-            detect: () => [{ key: `approvals`, title: `Approvals`, icon: `check-square` }],
+            detect: () => [{ key: `approvals`, title: t(`extension.approvals`), icon: `check-square` }],
             badge: () => approvalsAttention.state.value,
             // The two reads the badge already made, so the page opens on the queue rather than on a spinner.
             warm: () => [approvalsQuery(), heldWakesQuery()],

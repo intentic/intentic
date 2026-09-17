@@ -3,6 +3,9 @@
 import { computed } from "vue";
 import type { Conversation } from "../session/conversation";
 import { useTierPreview } from "../models/tierPreview";
+import { useT } from "@intentic/ui/i18n";
+
+const t = useT();
 
 const props = defineProps<{ conversation: Conversation }>();
 
@@ -46,9 +49,9 @@ const press = (): void => {
             <span class="@max-lg:hidden">{{ preview.cheap }}</span>
         </template>
         <template v-else>
-            <span class="@max-lg:hidden">Kept on {{ preview.pick }}</span>
+            <span class="@max-lg:hidden">{{ t(`chat.composerTierChip.keptOn`, { pick: preview.pick }) }}</span>
             <span class="text-subtle @max-lg:hidden" aria-hidden="true">·</span>
-            <span class="text-link @max-lg:hidden">Undo</span>
+            <span class="text-link @max-lg:hidden">{{ t(`chat.composerTierChip.undo`) }}</span>
         </template>
     </button>
 </template>

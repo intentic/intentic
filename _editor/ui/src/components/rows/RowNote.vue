@@ -37,7 +37,7 @@ const TEXT = { comfortable: `text-sm`, compact: `text-xs`, dense: `text-2xs` } a
         <slot>{{ label }}</slot>
     </div>
 
-<!-- `mark` for the same reason <Row> hands it out: a block at the tail of a list often previews the row it's about to add. -->
+    <!-- `mark` for the same reason <Row> hands it out: a block at the tail of a list often previews the row it's about to add. -->
     <div v-else-if="variant === `block`" :class="ROW_BLOCK_PAD[tier]"><slot :mark="ROW_TIERS[tier].mark" /></div>
 
     <!-- The pressable one; `ui-row-select` is the app's one hover-and-focus treatment for a row you can press. -->

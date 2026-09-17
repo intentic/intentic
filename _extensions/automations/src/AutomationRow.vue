@@ -9,6 +9,7 @@ import AutomationFields from "./AutomationFields.vue";
 import RunStrip from "./RunStrip.vue";
 import { embedSnippet, useAutomations, webhookUrl } from "./useAutomations";
 import { useAutomationForm } from "./useAutomationForm";
+import { t } from "./i18n.js";
 
 // Two lines only: what it's called, and what it does when; everything else (prompt, URL, wake settings, run ledger,
 // edit form) sits behind the disclosure, so a page of thirty reads as states, not paragraphs. The trigger glyph doubles
@@ -191,12 +192,12 @@ const answers = computed<string | undefined>(() => {
     return [...(named.length > 0 ? [`${named.join(` and `)} named`] : [`nobody named`]), OTHERS_PHRASE[senders.others]].join(` · `);
 });
 const settings = computed<readonly { label: string; value: string }[]>(() => [
-    { label: `Runs on`, value: runsOn.value },
-    ...(props.automation.actsAs !== undefined ? [{ label: `Runs as`, value: props.automation.actsAs }] : []),
-    ...(answers.value !== undefined ? [{ label: `Answers`, value: answers.value }] : []),
-    ...(props.automation.requireApproval === true ? [{ label: `Approval`, value: `held for you` }] : []),
+    { label: t(`automationRow.runsOn`), value: runsOn.value },
+    ...(props.automation.actsAs !== undefined ? [{ label: t(`automationRow.runs2`), value: props.automation.actsAs }] : []),
+    ...(answers.value !== undefined ? [{ label: t(`automationRow.answers`), value: answers.value }] : []),
+    ...(props.automation.requireApproval === true ? [{ label: t(`automationRow.approval`), value: `held for you` }] : []),
     ...(props.automation.holdForSeconds !== undefined && props.automation.holdForSeconds > 0
-        ? [{ label: `Hold`, value: `${props.automation.holdForSeconds}s before each run` }]
+        ? [{ label: t(`automationRow.hold`), value: `${props.automation.holdForSeconds}s before each run` }]
         : []),
 ]);
 
@@ -227,13 +228,13 @@ const VERB = ui.iconButton(`md:opacity-0 md:group-hover/row:opacity-100 md:focus
                 <Icon
                     v-if="automation.guard"
                     name="shield"
-                    v-tooltip.top="`Wakes only when its own check finds something`"
+                    v-tooltip.top="t(`automationRow.wakesOnlyOwnCheck`)"
                     class="shrink-0 text-2xs text-subtle"
                 />
                 <Icon
                     v-if="automation.requireApproval"
                     name="lock"
-                    v-tooltip.top="`Held for your approval before it runs`"
+                    v-tooltip.top="t(`automationRow.heldApprovalBeforeRuns`)"
                     class="shrink-0 text-2xs text-subtle"
                 />
                 <!-- Answers only the people its rules name. -->
@@ -245,7 +246,7 @@ const VERB = ui.iconButton(`md:opacity-0 md:group-hover/row:opacity-100 md:focus
         <template #description>
             <span class="flex min-w-0 items-baseline gap-1.5">
                 <span class="shrink-0">{{ triggerLabel }}</span>
-<!-- A hairline, not a middle dot: the trigger phrase is itself dot-separated, so one more dot would just extend that list. -->
+                <!-- A hairline, not a middle dot: the trigger phrase is itself dot-separated, so one more dot would just extend that list. -->
                 <span class="hidden min-w-0 flex-1 items-center gap-2 truncate text-subtle @xl:flex" aria-hidden="true">
                     <span class="h-2.5 w-px shrink-0 bg-line-strong"></span>
                     <span class="min-w-0 truncate">{{ automation.prompt }}</span>
@@ -265,13 +266,17 @@ const VERB = ui.iconButton(`md:opacity-0 md:group-hover/row:opacity-100 md:focus
             >
                 {{ OUTCOME_VERB[lastRun.outcome] }} {{ since(lastRun.at) }}
             </span>
-            <span v-else class="hidden w-20 shrink-0 text-right @xl:block">never run</span>
+            <span v-else class="hidden w-20 shrink-0 text-right @xl:block">{{ t(`automationRow.neverRun`) }}</span>
 
             <!-- An em dash distinguishes “no schedule” from missing data. -->
             <span
                 class="hidden w-12 shrink-0 truncate text-right @xl:block"
                 :class="nextLabel === undefined ? `text-subtle/50` : ``"
-                v-tooltip.top="automation.nextRun !== undefined ? `Next: ${formatDateTime(automation.nextRun)}` : `Fires on its trigger, not a clock`"
+                v-tooltip.top="
+                    automation.nextRun !== undefined
+                        ? t(`automationRow.next`, { nextRun: formatDateTime(automation.nextRun) })
+                        : t(`automationRow.firesOnTriggerNot`)
+                "
             >
                 {{ nextLabel ?? `—` }}
             </span>
@@ -286,8 +291,8 @@ const VERB = ui.iconButton(`md:opacity-0 md:group-hover/row:opacity-100 md:focus
                     v-if="frontDesk"
                     type="button"
                     :class="ui.iconButton()"
-                    :aria-label="`Install ${automation.id} on a website`"
-                    v-tooltip.top="`Embed code & install status`"
+                    :aria-label="t(`automationRow.installOnWebsite`, { id: automation.id })"
+                    v-tooltip.top="t(`automationRow.embedCodeInstallStatus`)"
                     @click="emit(`install`)"
                 >
                     <Icon name="globe" class="text-xs" />
@@ -295,7 +300,13 @@ const VERB = ui.iconButton(`md:opacity-0 md:group-hover/row:opacity-100 md:focus
             </span>
 
             <!-- Place verbs before the switch so the right edge stays fixed. -->
-            <button type="button" :class="VERB" :aria-label="`Edit ${automation.id}`" v-tooltip.top="`Edit`" @click="startEdit">
+            <button
+                type="button"
+                :class="VERB"
+                :aria-label="t(`automationRow.edit`, { id: automation.id })"
+                v-tooltip.top="t(`automationRow.edit2`)"
+                @click="startEdit"
+            >
                 <Icon name="pencil" class="text-xs" />
             </button>
 
@@ -306,8 +317,8 @@ const VERB = ui.iconButton(`md:opacity-0 md:group-hover/row:opacity-100 md:focus
                     type="button"
                     :class="VERB"
                     :disabled="busy"
-                    :aria-label="`Run ${automation.id} now`"
-                    v-tooltip.top="`Run now`"
+                    :aria-label="t(`automationRow.runNow`, { id: automation.id })"
+                    v-tooltip.top="t(`automationRow.runNow2`)"
                     @click="emit(`run`)"
                 >
                     <Icon name="play" class="text-xs" />
@@ -318,8 +329,8 @@ const VERB = ui.iconButton(`md:opacity-0 md:group-hover/row:opacity-100 md:focus
             <button
                 type="button"
                 :class="ui.iconButton(`hover:text-danger md:opacity-0 md:group-hover/row:opacity-100 md:focus-visible:opacity-100`)"
-                :aria-label="`Delete ${automation.id}`"
-                v-tooltip.top="`Delete`"
+                :aria-label="t(`automationRow.delete`, { id: automation.id })"
+                v-tooltip.top="t(`automationRow.delete2`)"
                 @click="emit(`remove`)"
             >
                 <Icon name="trash" class="text-xs" />
@@ -328,7 +339,7 @@ const VERB = ui.iconButton(`md:opacity-0 md:group-hover/row:opacity-100 md:focus
             <ToggleSwitch
                 :model-value="automation.enabled"
                 :disabled="busy"
-                :aria-label="`Enable ${automation.id}`"
+                :aria-label="t(`automationRow.enable`, { id: automation.id })"
                 @update:model-value="emit(`toggle`, $event)"
             />
         </template>
@@ -341,8 +352,8 @@ const VERB = ui.iconButton(`md:opacity-0 md:group-hover/row:opacity-100 md:focus
                 <AutomationFields :state="editForm" :name-locked="true" />
                 <!-- Match the composer's footer size because this is a form submit. -->
                 <div class="flex items-center justify-end gap-2 border-t border-line-subtle pt-3">
-                    <Button label="Cancel" severity="secondary" :text="true" @click="cancelEdit" />
-                    <Button label="Save" :loading="saving" @click="saveEdit">
+                    <Button :label="t(`automationRow.cancel`)" severity="secondary" :text="true" @click="cancelEdit" />
+                    <Button :label="t(`automationRow.save`)" :loading="saving" @click="saveEdit">
                         <template #icon><Icon name="check" /></template>
                     </Button>
                 </div>
@@ -352,47 +363,61 @@ const VERB = ui.iconButton(`md:opacity-0 md:group-hover/row:opacity-100 md:focus
             <div v-else class="grid gap-x-6 gap-y-4 pr-3 @3xl:grid-cols-3">
                 <div class="flex min-w-0 flex-col gap-3 @3xl:col-span-2">
                     <div class="flex flex-col gap-1">
-                        <span :class="ui.sectionLabel(`text-2xs`)">Prompt</span>
+                        <span :class="ui.sectionLabel(`text-2xs`)">{{ t(`automationRow.prompt`) }}</span>
                         <p class="max-h-32 overflow-auto text-2xs leading-relaxed whitespace-pre-wrap text-muted">
                             {{ automation.prompt }}
                         </p>
                     </div>
 
                     <div v-if="trigger.kind === `event`" class="flex flex-col gap-1">
-                        <span :class="ui.sectionLabel(`text-2xs`)">Webhook</span>
+                        <span :class="ui.sectionLabel(`text-2xs`)">{{ t(`automationRow.webhook`) }}</span>
                         <!-- The URL carries the door's token; the daemon hands it to a maintainer or owner only, never a viewer. -->
                         <div v-if="webhookUrl(automation) !== undefined" class="flex items-center gap-1.5">
                             <code class="min-w-0 flex-1 truncate font-mono text-2xs text-subtle">{{ webhookUrl(automation) }}</code>
                             <CopyButton
                                 :text="webhookUrl(automation) ?? ``"
-                                :aria-label="`Copy webhook URL for ${automation.id}`"
-                                v-tooltip.top="`Copy URL`"
+                                :aria-label="t(`automationRow.copyWebhookUrl`, { id: automation.id })"
+                                v-tooltip.top="t(`automationRow.copyUrl`)"
                             />
                             <Button
                                 v-if="!confirmingRotate"
-                                label="Rotate"
+                                :label="t(`automationRow.rotate`)"
                                 size="small"
                                 severity="secondary"
                                 :text="true"
                                 :disabled="rotateToken.isPending.value"
-                                v-tooltip.top="`Mint a new token; the current URL stops working`"
+                                v-tooltip.top="t(`automationRow.mintNewTokenCurrent`)"
                                 @click="confirmingRotate = true"
                             />
                         </div>
-                        <p v-else class="text-2xs text-subtle">Its URL is shown to maintainers and the owner.</p>
+                        <p v-else class="text-2xs text-subtle">{{ t(`automationRow.urlShownToMaintainers`) }}</p>
                         <div v-if="confirmingRotate" class="flex flex-wrap items-center justify-end gap-2">
-                            <span class="mr-auto text-2xs text-subtle">Sure? Every sender wired to this URL has to be handed the new one.</span>
-                            <Button label="Cancel" size="small" severity="secondary" :text="true" @click="confirmingRotate = false" />
-                            <Button label="Rotate token" size="small" severity="danger" :loading="rotateToken.isPending.value" @click="rotate" />
+                            <span class="mr-auto text-2xs text-subtle">{{ t(`automationRow.sureEverySenderWired`) }}</span>
+                            <Button
+                                :label="t(`automationRow.cancel`)"
+                                size="small"
+                                severity="secondary"
+                                :text="true"
+                                @click="confirmingRotate = false"
+                            />
+                            <Button
+                                :label="t(`automationRow.rotateToken`)"
+                                size="small"
+                                severity="danger"
+                                :loading="rotateToken.isPending.value"
+                                @click="rotate"
+                            />
                         </div>
                     </div>
 
                     <!-- The two settings deciding whether the widget works at all. -->
                     <div v-if="frontDesk" class="flex flex-col gap-1.5">
-                        <span :class="ui.sectionLabel(`text-2xs`)">Front desk</span>
+                        <span :class="ui.sectionLabel(`text-2xs`)">{{ t(`automationRow.frontDesk`) }}</span>
                         <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-2xs text-subtle">
-                            <span v-if="frontDesk.origins.length > 0">on {{ frontDesk.origins.join(`, `) }}</span>
-                            <span v-else class="text-danger">no sites allowed: nobody can chat</span>
+                            <span v-if="frontDesk.origins.length > 0">{{
+                                t(`automationRow.onOrigins`, { origins: frontDesk.origins.join(`, `) })
+                            }}</span>
+                            <span v-else class="text-danger">{{ t(`automationRow.noSitesAllowedNobody`) }}</span>
                             <span>{{ frontDesk.access }}</span>
                             <span>{{ frontDesk.botCheck }}</span>
                         </div>
@@ -401,8 +426,8 @@ const VERB = ui.iconButton(`md:opacity-0 md:group-hover/row:opacity-100 md:focus
                             size="small"
                             severity="secondary"
                             class="self-start"
-                            label="Get the embed code"
-                            :aria-label="`Install ${automation.id} on a website`"
+                            :label="t(`automationRow.getEmbedCode`)"
+                            :aria-label="t(`automationRow.installOnWebsite`, { id: automation.id })"
                             @click="emit(`install`)"
                         >
                             <template #icon><Icon name="globe" /></template>
@@ -420,8 +445,8 @@ const VERB = ui.iconButton(`md:opacity-0 md:group-hover/row:opacity-100 md:focus
 
                 <!-- Run history links to transcripts for runs that reached a turn. -->
                 <div class="flex min-w-0 flex-col gap-1">
-                    <span :class="ui.sectionLabel(`text-2xs`)">Runs</span>
-                    <p v-if="automation.runs.length === 0" class="text-2xs text-subtle">Nothing yet. Run now to try it.</p>
+                    <span :class="ui.sectionLabel(`text-2xs`)">{{ t(`automationRow.runs`) }}</span>
+                    <p v-if="automation.runs.length === 0" class="text-2xs text-subtle">{{ t(`automationRow.nothingYetRunNow`) }}</p>
                     <div v-else class="-mx-1 flex max-h-40 flex-col overflow-y-auto">
                         <component
                             :is="run.conversationId ? `button` : `div`"
@@ -430,7 +455,7 @@ const VERB = ui.iconButton(`md:opacity-0 md:group-hover/row:opacity-100 md:focus
                             :type="run.conversationId ? `button` : undefined"
                             class="flex items-baseline gap-2 rounded px-1 py-0.5 text-left text-2xs"
                             :class="run.conversationId ? `cursor-pointer hover:bg-content/5` : undefined"
-                            :aria-label="run.conversationId ? `Open the transcript of the run from ${formatDateTime(run.at)}` : undefined"
+                            :aria-label="run.conversationId ? t(`automationRow.openTranscriptRun`, { at: formatDateTime(run.at) }) : undefined"
                             @click="openRun(run)"
                         >
                             <span class="w-16 shrink-0 text-subtle" v-tooltip.top="formatDateTime(run.at)">{{ since(run.at) }}</span>

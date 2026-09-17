@@ -10,9 +10,12 @@ import { asPercent } from "../models/numberInputs";
 import { verdictsOf } from "../../usage/savingsChart";
 import CodeSearchInfo from "./CodeSearchInfo.vue";
 import MeasurementPanel, { type PanelReading } from "../models/MeasurementPanel.vue";
+import { useT } from "@intentic/ui/i18n";
 
 // Three composing settings, ordered by when each acts: iq search (on demand), the project map (before there's
 // a question), and document shadows (a background pass rendering non-text files so both others can reach them).
+
+const t = useT();
 
 const { settings, patch } = useSandboxSettings();
 const { savings } = useSavings({});
@@ -61,12 +64,12 @@ const shadowSummary = computed<string>(() => {
 </script>
 
 <template>
-    <RowGroup label="Code search">
+    <RowGroup :label="t(`sandbox.agentCodeSearch.codeSearch`)">
         <template #info><CodeSearchInfo /></template>
 
-<!-- Loads the iq plugin so the assistant searches with the iq CLI instead of grep/find/glob. -->
+        <!-- Loads the iq plugin so the assistant searches with the iq CLI instead of grep/find/glob. -->
         <!-- `spine` hangs the measurement block off this row's name rather than the group's edge. -->
-        <Row spine icon="search" title="iq code search" description="Use iq search CLI instead of grep/find/glob.">
+        <Row spine icon="search" :title="t(`sandbox.agentCodeSearch.iqCodeSearch`)" :description="t(`sandbox.agentCodeSearch.useIqSearchCli`)">
             <template #control>
                 <ToggleSwitch
                     :model-value="settings?.iqSearch ?? false"
@@ -79,7 +82,7 @@ const shadowSummary = computed<string>(() => {
                 <MeasurementPanel
                     :percent="iqSearchHoldoutPercent"
                     :readings="searchReadings"
-                    note="Runs this share of conversations without it, as a control."
+                    :note="t(`sandbox.agentCodeSearch.runsShareConversationsWithout`)"
                     on-label="taught"
                     off-label="cold"
                     @commit="(iqSearchHoldout: number) => patch({ iqSearchHoldout })"
@@ -87,8 +90,13 @@ const shadowSummary = computed<string>(() => {
             </template>
         </Row>
 
-<!-- Answers "what is this and where am I in it", one question earlier than search. -->
-        <Row spine icon="sitemap" title="Project map" description="Provide project structure overview to new conversations.">
+        <!-- Answers "what is this and where am I in it", one question earlier than search. -->
+        <Row
+            spine
+            icon="sitemap"
+            :title="t(`sandbox.agentCodeSearch.projectMap`)"
+            :description="t(`sandbox.agentCodeSearch.provideProjectStructureOverview`)"
+        >
             <template #control>
                 <ToggleSwitch
                     :model-value="settings?.workspaceMap ?? false"
@@ -96,12 +104,12 @@ const shadowSummary = computed<string>(() => {
                     @update:model-value="(value: boolean) => patch({ workspaceMap: value })"
                 />
             </template>
-<!-- The map switches between list and document views. -->
+            <!-- The map switches between list and document views. -->
             <template v-if="settings?.workspaceMap === true" #below>
                 <MeasurementPanel
                     :percent="mapHoldoutPercent"
                     :readings="mapReadings"
-                    note="Opens this share of conversations without it, as a control."
+                    :note="t(`sandbox.agentCodeSearch.opensShareConversationsWithout`)"
                     on-label="mapped"
                     off-label="unmapped"
                     @commit="(workspaceMapHoldout: number) => patch({ workspaceMapHoldout })"
@@ -109,12 +117,8 @@ const shadowSummary = computed<string>(() => {
             </template>
         </Row>
 
-<!-- Background pass that pre-renders binary files (docx, pdf, images, audio) as markdown as they land, so a later read is a file open, not a parse. -->
-        <Row
-            icon="file"
-            title="Document shadows"
-            description="Keep documents, images, audio and archives pre-rendered as text, updated as files change. Open any of them in Workspace to read what an agent reads."
-        >
+        <!-- Background pass that pre-renders binary files (docx, pdf, images, audio) as markdown as they land, so a later read is a file open, not a parse. -->
+        <Row icon="file" :title="t(`sandbox.agentCodeSearch.documentShadows`)" :description="t(`sandbox.agentCodeSearch.keepDocumentsImagesAudio`)">
             <template #control>
                 <ToggleSwitch
                     :model-value="settings?.sidecars ?? false"

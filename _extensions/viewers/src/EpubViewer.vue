@@ -3,6 +3,7 @@ import { Button, Icon } from "@intentic/extension-ui";
 import { computed, onMounted, ref, watch } from "vue";
 import { openEpub, type EpubBook } from "./epub/book";
 import { renderChapter } from "./epub/page";
+import { t } from "./i18n.js";
 
 /* EPUB preview: the book's own chapters, each rendered with its own stylesheet inside a frame that can neither run
    a script nor reach the network. */
@@ -74,7 +75,7 @@ watch(
                 :aria-pressed="showContents"
                 @click="showContents = !showContents"
             >
-                <Icon name="file-tree" class="text-2xs" /> Contents
+                <Icon name="file-tree" class="text-2xs" /> {{ t(`epubViewer.contents`) }}
             </button>
             <span class="min-w-0 flex-1 truncate text-muted">
                 <span class="text-content">{{ book.title }}</span>
@@ -95,7 +96,9 @@ watch(
                 <Icon name="exclamation-triangle" class="text-3xl text-danger" />
                 <p class="text-sm text-danger">{{ error }}</p>
             </div>
-            <div v-else-if="chapters.length === 0" class="flex h-full items-center justify-center text-sm text-muted">This book has no chapters in it.</div>
+            <div v-else-if="chapters.length === 0" class="flex h-full items-center justify-center text-sm text-muted">
+                {{ t(`epubViewer.bookNoChaptersIn`) }}
+            </div>
             <div v-else class="flex h-full min-h-0">
                 <!-- The book's own table of contents, beside the text rather than over it. -->
                 <nav v-if="showContents" class="w-64 shrink-0 overflow-auto border-r border-line-subtle py-2">
@@ -116,7 +119,7 @@ watch(
                     :srcdoc="source"
                     sandbox=""
                     referrerpolicy="no-referrer"
-                    :title="current?.title ?? `Chapter`"
+                    :title="current?.title ?? t(`epubViewer.chapter`)"
                     class="h-full min-w-0 flex-1 border-0 bg-white"
                 ></iframe>
             </div>

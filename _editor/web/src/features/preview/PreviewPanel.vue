@@ -27,10 +27,13 @@ import { togglePreviewFloating, usePreviewFloating } from "./previewFloating";
 import { phoneById, phonePickerGroups, storePhoneId, storedPhoneId } from "./phoneModels";
 import PreviewStage from "./PreviewStage.vue";
 import { useTerminalPanel } from "../terminal/useTerminalPanel";
+import { useT } from "@intentic/ui/i18n";
 
 // Real iframe onto the dev server's own public hostname, not a streamed screenshot. Teleported between the /preview
 // area, a floating window and the parking stage; state survives every move except into its own window, which is a fresh
 // instance. Everything below one h-10 strip belongs to the app under preview.
+
+const t = useT();
 
 const router = useRouter();
 // Mounted ⇔ opened (PoppablePanels), so the panel's own lifetime gates the per-monorepo apps fan-out.
@@ -57,9 +60,9 @@ const pickerGroups = computed<readonly PickerGroup[]>(() => {
         options: targets.value.filter((entry) => entry.repo === repo).map(rowOf),
     }));
     const grouped: readonly { readonly label: string; readonly kind: PreviewTarget[`kind`] }[] = [
-        { label: `Forwarded ports`, kind: `port` },
-        { label: `Workspace`, kind: `public` },
-        { label: `Address`, kind: `address` },
+        { label: t(`preview.previewPanel.forwardedPorts`), kind: `port` },
+        { label: t(`preview.previewPanel.workspace`), kind: `public` },
+        { label: t(`preview.previewPanel.address`), kind: `address` },
     ];
     for (const { label, kind } of grouped) {
         const rows = targets.value.filter((entry) => entry.kind === kind);
@@ -369,14 +372,14 @@ onUnmounted(stopStartingPoll);
                     type="url"
                     inputmode="url"
                     spellcheck="false"
-                    placeholder="localhost:3000, or any address"
-                    aria-label="Address to preview"
+                    :placeholder="t(`preview.previewPanel.localhost3000AnyAddress`)"
+                    :aria-label="t(`preview.previewPanel.addressToPreview`)"
                     class="ui-field-box ui-field-sm min-w-0 flex-1 font-mono"
                     @keydown.enter.prevent="commitAddress"
                     @keydown.esc.prevent="addressOpen = false"
                 />
-                <Button label="Go" size="small" :disabled="addressDraft.trim().length === 0" @click="commitAddress" />
-                <button type="button" :class="ui.iconButton(`h-8 w-8`)" aria-label="Cancel" @click="addressOpen = false">
+                <Button :label="t(`preview.previewPanel.go`)" size="small" :disabled="addressDraft.trim().length === 0" @click="commitAddress" />
+                <button type="button" :class="ui.iconButton(`h-8 w-8`)" :aria-label="t(`ui.action.cancel`)" @click="addressOpen = false">
                     <Icon name="times" />
                 </button>
             </template>
@@ -386,8 +389,8 @@ onUnmounted(stopStartingPoll);
                     v-model="selected"
                     :options="pickerGroups"
                     variant="ghost"
-                    aria-label="Which app to preview"
-                    header="Preview"
+                    :aria-label="t(`preview.previewPanel.appToPreview`)"
+                    :header="t(`preview.previewPanel.preview`)"
                 />
                 <!-- Repository and app targets always show their kind. -->
                 <StatusBadge
@@ -400,8 +403,8 @@ onUnmounted(stopStartingPoll);
                 <button
                     type="button"
                     :class="ui.iconButton(`h-8 w-8`)"
-                    aria-label="Preview another address"
-                    v-tooltip.bottom="'Preview another address'"
+                    :aria-label="t(`preview.previewPanel.previewAnotherAddress`)"
+                    v-tooltip.bottom="t(`preview.previewPanel.previewAnotherAddress`)"
                     @click="openAddress"
                 >
                     <Icon name="link" />
@@ -414,7 +417,7 @@ onUnmounted(stopStartingPoll);
                 <!-- Tooltip names target and command, since "Start" alone says neither in a multi-repo workspace. -->
                 <Button
                     v-if="target.startable && !target.running"
-                    label="Start"
+                    :label="t(`ui.action.start`)"
                     size="small"
                     :disabled="busy"
                     v-tooltip.bottom="startHint"
@@ -422,7 +425,14 @@ onUnmounted(stopStartingPoll);
                 >
                     <template #icon><Icon name="play" /></template>
                 </Button>
-                <Button v-else-if="target.startable" label="Stop" size="small" severity="secondary" :disabled="busy" @click="act(stop)">
+                <Button
+                    v-else-if="target.startable"
+                    :label="t(`ui.action.stop`)"
+                    size="small"
+                    severity="secondary"
+                    :disabled="busy"
+                    @click="act(stop)"
+                >
                     <template #icon><Icon name="stop" /></template>
                 </Button>
 
@@ -441,16 +451,16 @@ onUnmounted(stopStartingPoll);
                     :options="phoneOptions"
                     variant="ghost"
                     :search-threshold="12"
-                    aria-label="Which phone to frame the preview in"
-                    header="Phone"
+                    :aria-label="t(`preview.previewPanel.phoneToFramePreview`)"
+                    :header="t(`preview.previewPanel.phone`)"
                 />
 
                 <button
                     v-if="previewSrc"
                     type="button"
                     :class="ui.iconButton(`h-8 w-8`)"
-                    aria-label="Reload the preview"
-                    v-tooltip.bottom="'Reload'"
+                    :aria-label="t(`preview.previewPanel.reloadPreview`)"
+                    v-tooltip.bottom="t(`preview.previewPanel.reload`)"
                     @click="reload"
                 >
                     <Icon name="refresh" />
@@ -459,8 +469,8 @@ onUnmounted(stopStartingPoll);
                     v-if="target.session"
                     type="button"
                     :class="ui.iconButton(`h-8 w-8`)"
-                    aria-label="Open this dev server's terminal"
-                    v-tooltip.bottom="'Terminal'"
+                    :aria-label="t(`preview.previewPanel.openDevServersTerminal`)"
+                    v-tooltip.bottom="t(`preview.previewPanel.terminal`)"
                     @click="terminal.openFocused(target.session!)"
                 >
                     <Icon name="code" />
@@ -473,8 +483,8 @@ onUnmounted(stopStartingPoll);
                         target="_blank"
                         rel="noopener"
                         :class="ui.iconButton(`h-8 w-8`)"
-                        :aria-label="`Open ${target.label} in a new tab`"
-                        v-tooltip.bottom="'Open in new tab'"
+                        :aria-label="t(`preview.previewPanel.openInNewTab`, { label: target.label })"
+                        v-tooltip.bottom="t(`preview.previewPanel.openInNewTab2`)"
                     >
                         <Icon name="arrow-up-right" />
                     </a>
@@ -485,8 +495,8 @@ onUnmounted(stopStartingPoll);
             <button
                 type="button"
                 :class="ui.iconButton(`h-8 w-8`)"
-                :aria-label="floats ? `Dock the preview back` : `Move the preview into its own window`"
-                v-tooltip.bottom="floats ? 'Dock back' : 'Move into new window'"
+                :aria-label="floats ? t(`preview.previewPanel.dockPreviewBack`) : t(`preview.previewPanel.movePreviewIntoOwn`)"
+                v-tooltip.bottom="floats ? t(`preview.previewPanel.dockBack`) : t(`preview.previewPanel.moveIntoNewWindow`)"
                 @click="togglePreviewFloating()"
             >
                 <Icon :name="floats ? 'sign-in' : 'external-link'" />
@@ -500,16 +510,16 @@ onUnmounted(stopStartingPoll);
             <!-- Claimed only once the lists have answered; always offers a typed address, the one preview needing nothing discovered. -->
             <div v-if="!target && settled" class="flex flex-1 flex-col items-center justify-center gap-3 px-6 text-center">
                 <Icon name="eye" class="text-2xl text-subtle" />
-                <p class="text-sm text-muted">Nothing to preview yet.</p>
+                <p class="text-sm text-muted">{{ t(`preview.previewPanel.nothingToPreviewYet`) }}</p>
                 <p class="max-w-sm text-2xs text-subtle">
-                    Start a dev server in a repository, or ask the agent to build an app: its live preview appears here the moment it answers.
+                    {{ t(`preview.previewPanel.startDevServerIn`) }}
                 </p>
-                <Button label="Preview an address" size="small" severity="secondary" @click="openAddress">
+                <Button :label="t(`preview.previewPanel.previewAddress`)" size="small" severity="secondary" @click="openAddress">
                     <template #icon><Icon name="link" /></template>
                 </Button>
             </div>
             <div v-else-if="!target" class="flex flex-1 items-center justify-center" role="status" aria-busy="true">
-                <span class="sr-only">Reading what can be previewed…</span>
+                <span class="sr-only">{{ t(`preview.previewPanel.readingWhatPreviewed`) }}</span>
                 <Icon name="spinner" spin class="text-2xl text-subtle" aria-hidden="true" />
             </div>
 
@@ -519,7 +529,7 @@ onUnmounted(stopStartingPoll);
                     <iframe
                         :key="`${previewEpoch}-${previewSrc}`"
                         :src="previewSrc"
-                        :title="`${target.label} preview`"
+                        :title="t(`preview.previewPanel.preview2`, { label: target.label })"
                         :sandbox="frameSandbox(target.kind)"
                         :style="frame"
                         class="block border-0 bg-white"
@@ -530,18 +540,17 @@ onUnmounted(stopStartingPoll);
             <!-- A missing route means this sandbox has no preview proxy. -->
             <div v-else-if="reach?.outcome === `unreachable`" class="flex flex-1 flex-col items-center justify-center gap-3 px-6 text-center">
                 <Icon name="exclamation-triangle" class="text-2xl text-subtle" />
-                <p class="text-sm text-muted">This preview address doesn't reach your sandbox.</p>
+                <p class="text-sm text-muted">{{ t(`preview.previewPanel.previewAddressDoesntReach`) }}</p>
                 <p class="max-w-sm text-2xs text-subtle">
-                    <span class="font-mono">{{ target.url }}</span> answers from somewhere that isn't this sandbox's preview proxy: its name may still
-                    be propagating, or this sandbox publishes no preview hostnames at all.
+                    <span class="font-mono">{{ target.url }}</span> {{ t(`preview.previewPanel.answersSomewhereIsntSandboxs`) }}
                 </p>
                 <div class="flex items-center gap-2">
-                    <Button label="Try again" size="small" severity="secondary" @click="resolvePreview()" />
+                    <Button :label="t(`ui.action.tryAgain`)" size="small" severity="secondary" @click="resolvePreview()" />
                     <RouterLink
                         to="/sandbox/ports"
                         class="rounded-md border border-line px-2.5 py-1 text-xs text-content transition-colors hover:border-line-strong hover:bg-overlay"
                     >
-                        Open Ports
+                        {{ t(`preview.previewPanel.openPorts`) }}
                     </RouterLink>
                 </div>
             </div>
@@ -550,10 +559,15 @@ onUnmounted(stopStartingPoll);
             <div v-else-if="!target.url && target.servers.length > 0" class="flex flex-1 flex-col items-center justify-center gap-3 px-6 text-center">
                 <Icon name="globe" class="text-2xl text-subtle" />
                 <p class="text-sm text-muted">
-                    <span class="font-mono">{{ target.label }}</span> is running
-                    {{ target.servers.length === 1 ? `a dev server` : `${target.servers.length} dev servers` }} on
-                    {{ target.servers.length === 1 ? `a port` : `ports` }} of {{ target.servers.length === 1 ? `its` : `their` }} own, so one preview
-                    address can't stand for it. Pick the one you mean:
+                    <span class="font-mono">{{ target.label }}</span> {{ t(`preview.previewPanel.running`) }}
+                    {{
+                        target.servers.length === 1
+                            ? t(`preview.previewPanel.devServer`)
+                            : t(`preview.previewPanel.devServers`, { count: target.servers.length })
+                    }}
+                    {{ t(`preview.previewPanel.on`) }} {{ target.servers.length === 1 ? t(`preview.previewPanel.port`) : `ports` }}
+                    {{ t(`preview.previewPanel.of`) }} {{ target.servers.length === 1 ? `its` : `their` }}
+                    {{ t(`preview.previewPanel.ownOnePreviewAddress`) }}
                 </p>
                 <ul class="flex w-full max-w-md flex-col gap-1">
                     <li
@@ -565,7 +579,7 @@ onUnmounted(stopStartingPoll);
                             {{ server.dir ? `${server.dir} · ` : `` }}{{ server.url }}
                         </span>
                         <Button
-                            :label="forwarding === server.port ? `Opening…` : `Preview`"
+                            :label="forwarding === server.port ? t(`preview.previewPanel.opening`) : t(`preview.previewPanel.preview`)"
                             size="small"
                             severity="secondary"
                             :disabled="forwarding !== undefined"
@@ -574,24 +588,29 @@ onUnmounted(stopStartingPoll);
                     </li>
                 </ul>
                 <p class="max-w-sm text-2xs text-subtle">
-                    Previewing one forwards its port, which publishes it at an address anyone with the link can open. The Ports view lists every
-                    forward and takes them back.
+                    {{ t(`preview.previewPanel.previewingOneForwardsPort`) }}
                 </p>
             </div>
 
-<!-- STARTED, NOT YET SERVING: installing, compiling, or failing in its terminal, which is the one place that says which. -->
+            <!-- STARTED, NOT YET SERVING: installing, compiling, or failing in its terminal, which is the one place that says which. -->
             <div v-else-if="probing || target.running" class="flex flex-1 flex-col items-center justify-center gap-2 px-6 text-center">
                 <Icon v-if="target.launch === `exited` || waitingLong" name="exclamation-triangle" class="text-2xl text-subtle" />
                 <Icon v-else name="spinner" class="text-muted" spin />
                 <!-- The heading identifies the preview's verdict, timeout, or active wait state. -->
                 <p class="text-sm text-muted">
-                    {{ target.launch === `exited` ? `Its dev server stopped.` : waitingLong ? `This is taking too long.` : `Preparing the preview…` }}
+                    {{
+                        target.launch === `exited`
+                            ? t(`preview.previewPanel.devServerStopped`)
+                            : waitingLong
+                              ? t(`preview.previewPanel.takingTooLong`)
+                              : t(`preview.previewPanel.preparingPreview`)
+                    }}
                 </p>
                 <p v-if="launchHint" class="max-w-sm text-2xs text-subtle">{{ launchHint }}</p>
                 <div class="flex flex-wrap items-center justify-center gap-2">
                     <Button
                         v-if="target.session"
-                        label="Open its terminal"
+                        :label="t(`preview.previewPanel.openTerminal`)"
                         size="small"
                         severity="secondary"
                         @click="terminal.openFocused(target.session!)"
@@ -599,7 +618,7 @@ onUnmounted(stopStartingPoll);
                     <!-- Restart appears only after the wait becomes a verdict. -->
                     <Button
                         v-if="target.startable && (waitingLong || target.launch === `exited`)"
-                        label="Restart"
+                        :label="t(`preview.previewPanel.restart`)"
                         size="small"
                         :disabled="busy"
                         @click="restart"
@@ -612,14 +631,15 @@ onUnmounted(stopStartingPoll);
             <!-- The stopped state explains the next action and its destination. -->
             <div v-else class="flex flex-1 flex-col items-center justify-center gap-2 px-6 text-center">
                 <p class="text-sm text-muted">
-                    <span class="font-mono">{{ target.label }}</span> isn't running.
+                    <span class="font-mono">{{ target.label }}</span> {{ t(`preview.previewPanel.isntRunning`) }}
                 </p>
                 <p v-if="startHint" class="max-w-md text-2xs text-subtle">{{ startHint }}</p>
                 <p v-else class="max-w-md text-2xs text-subtle">
-                    It has no dev server this panel can start: no <span class="font-mono">operator/</span> panel and no
-                    <span class="font-mono">dev</span> script at its root. Anything it runs from a terminal shows up under Forwarded ports.
+                    {{ t(`preview.previewPanel.noDevServerPanel`) }} <span class="font-mono">operator/</span> {{ t(`preview.previewPanel.panelNo`) }}
+                    <span class="font-mono">dev</span>
+                    {{ t(`preview.previewPanel.scriptAtRootAnything`) }}
                 </p>
-                <Button v-if="target.startable" label="Start" size="small" :disabled="busy" class="mt-1" @click="act(start)">
+                <Button v-if="target.startable" :label="t(`ui.action.start`)" size="small" :disabled="busy" class="mt-1" @click="act(start)">
                     <template #icon><Icon name="play" /></template>
                 </Button>
             </div>

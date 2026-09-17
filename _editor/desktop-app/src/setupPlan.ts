@@ -1,4 +1,5 @@
 import { parseStep, type RunEvent } from "./desktop";
+import { t } from "@intentic/ui/i18n";
 
 // Models the run as a full plan drawn up front, with steps that won't happen on this machine left out; the
 // script's own `intentic: [phase]` markers move a cursor down it. Weights are seconds, only ever compared to each
@@ -26,7 +27,7 @@ export interface PlanInput {
 // check needs the installer binary. Drawing them in real order is this screen's whole contract.
 export const setupPlan = (input: PlanInput): readonly PlanStep[] => {
     const windows = input.os === `windows`;
-    const fetch: PlanStep = { phase: `fetching-ic`, label: `Fetch the installer`, weight: 15 };
+    const fetch: PlanStep = { phase: `fetching-ic`, label: t(`desktop.setupPlan.fetchInstaller`), weight: 15 };
     const check: PlanStep = {
         phase: `checking-docker`,
         label: windows ? `Check what Docker needs` : `Check Docker`,
@@ -38,16 +39,16 @@ export const setupPlan = (input: PlanInput): readonly PlanStep[] => {
         : [{ phase: `installing-docker`, label: windows ? `Set up Docker` : `Install Docker`, weight: windows ? 600 : 420 }];
     return [
         ...(windows ? [fetch, check, ...install] : [check, ...install, fetch]),
-        { phase: `preflight`, label: `Check this device`, weight: 10 },
-        { phase: `claiming-code`, label: `Redeem your setup code`, weight: 5 },
+        { phase: `preflight`, label: t(`desktop.setupPlan.checkDevice`), weight: 10 },
+        { phase: `claiming-code`, label: t(`desktop.setupPlan.redeemSetupCode`), weight: 5 },
         // Reports real progress via docker's layer names, so this weight only needs to be right about its share.
-        { phase: `pulling-image`, label: `Download the sandbox image`, weight: 240 },
-        { phase: `starting-sandbox`, label: `Start your sandbox`, weight: 25 },
-        { phase: `waiting-health`, label: `Wait for it to come up`, weight: 40 },
-        { phase: `verifying`, label: `Check it answers`, weight: 20 },
-        ...(input.syncing ? [{ phase: `desktop-sync`, label: `Set up folder sync`, weight: 45 }] : []),
+        { phase: `pulling-image`, label: t(`desktop.setupPlan.downloadSandboxImage`), weight: 240 },
+        { phase: `starting-sandbox`, label: t(`desktop.setupPlan.startSandbox`), weight: 25 },
+        { phase: `waiting-health`, label: t(`desktop.setupPlan.waitToComeUp`), weight: 40 },
+        { phase: `verifying`, label: t(`desktop.setupPlan.checkAnswers`), weight: 20 },
+        ...(input.syncing ? [{ phase: `desktop-sync`, label: t(`desktop.setupPlan.setUpFolderSync`), weight: 45 }] : []),
         // Covers a silent ~100 MB agent download; sized against pulling-image so the bar doesn't stall near 99%.
-        { phase: `connecting-machine`, label: `Connect this device`, weight: 75 },
+        { phase: `connecting-machine`, label: t(`desktop.setupPlan.connectDevice`), weight: 75 },
     ];
 };
 

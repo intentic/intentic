@@ -4,6 +4,7 @@ import { DagGraph, Icon, ui, type DagNode } from "@intentic/extension-ui";
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import { pipelineDag, type PipelineJobCluster, type PipelineStage, stageOfNode } from "./pipelineDag";
 import { formatDuration, STATUS_TONE, type StatusTone } from "./statusVisual";
+import { t } from "./i18n.js";
 
 // Job graph: one card per group of identically-wired jobs, so parallel jobs sharing every edge collapse into one set of
 // arrows. Below `readableZoom` the canvas stops shrinking rather than crop or blur past legibility. Hover traces one
@@ -182,7 +183,7 @@ const focusedCard = computed(() => dag.value.nodes.find((node) => node.data.jobs
                         <span
                             v-if="recurring.get(member.job.name)"
                             class="shrink-0 rounded bg-danger/10 px-1 text-3xs font-semibold text-danger"
-                            v-tooltip.top="`Failing for ${recurring.get(member.job.name)} runs in a row`"
+                            v-tooltip.top="t(`pipelineDagGraph.failingRunsInRow`, { name: recurring.get(member.job.name) })"
                             >×{{ recurring.get(member.job.name) }}</span
                         >
                         <span v-if="formatDuration(member.job.durationSeconds)" class="shrink-0 text-3xs tabular-nums text-subtle">
@@ -200,8 +201,8 @@ const focusedCard = computed(() => dag.value.nodes.find((node) => node.data.jobs
                         <button
                             type="button"
                             :class="ui.iconButton(`h-7 w-7`)"
-                            aria-label="Fit"
-                            v-tooltip.top="`Zoom out until the whole run is in frame`"
+                            :aria-label="t(`pipelineDagGraph.fit`)"
+                            v-tooltip.top="t(`pipelineDagGraph.zoomOutUntilWhole`)"
                             @click="fitAll()"
                         >
                             <Icon name="collapse-all" class="text-sm" />
@@ -210,8 +211,8 @@ const focusedCard = computed(() => dag.value.nodes.find((node) => node.data.jobs
                             v-if="!fill"
                             type="button"
                             :class="ui.iconButton(`h-7 w-7`)"
-                            aria-label="Expand"
-                            v-tooltip.top="`Open the job graph full screen`"
+                            :aria-label="t(`pipelineDagGraph.expand`)"
+                            v-tooltip.top="t(`pipelineDagGraph.openJobGraphFull`)"
                             @click="$emit(`expand`)"
                         >
                             <Icon name="expand" class="text-sm" />

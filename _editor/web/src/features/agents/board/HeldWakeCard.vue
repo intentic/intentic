@@ -3,6 +3,7 @@ import { Button, Icon, timeAgo } from "@intentic/ui";
 import type { AutomationApproval } from "@intentic/sandbox-contract";
 import { computed, onMounted, onUnmounted, ref } from "vue";
 import OriginMark from "../../../components/OriginMark.vue";
+import { useT } from "@intentic/ui/i18n";
 
 // Approvals-queue row drawn on the board, a sibling of an agent card, not one: no conversation exists until Approve is
 // pressed.
@@ -12,6 +13,8 @@ import OriginMark from "../../../components/OriginMark.vue";
 
 // `dense` is the stacked, narrow board, as AgentCard means it: same facts, drawn at the ledger's weight, since a
 // stacked board's lanes are told apart by their order rather than by how heavy their cards are.
+const t = useT();
+
 const { entry, dense } = defineProps<{ entry: AutomationApproval; busy?: boolean; dense?: boolean }>();
 const emit = defineEmits<{ approve: []; reject: [] }>();
 
@@ -43,47 +46,47 @@ const autoRunLabel = computed(() => {
         :class="[dense ? 'gap-2 p-3.5' : 'gap-2.5 p-4', busy ? 'pointer-events-none opacity-60' : '']"
     >
         <div class="flex items-center gap-2.5">
-<!-- Pause glyph where an agent card has its identity tile: a held wake, not a session, nothing running yet. -->
+            <!-- Pause glyph where an agent card has its identity tile: a held wake, not a session, nothing running yet. -->
             <span class="flex h-7 w-7 shrink-0 items-center justify-center rounded-full ring-(length:--ring-track) ring-inset ring-content/12">
                 <span class="flex h-5.5 w-5.5 shrink-0 items-center justify-center rounded-full bg-warning/15">
                     <Icon name="pause" class="text-2xs text-warning" />
                 </span>
             </span>
             <!-- Holds use the live card's weight outside the Attention lane. -->
-<!-- `break-words` for the reason AgentCard's title states: a clamp only ellipsises a VERTICAL overrun. -->
+            <!-- `break-words` for the reason AgentCard's title states: a clamp only ellipsises a VERTICAL overrun. -->
             <span
                 class="min-w-0 flex-1 font-semibold text-content"
                 :class="dense ? 'truncate text-xs' : 'line-clamp-2 break-words text-sm leading-snug'"
                 >{{ entry.title ?? entry.automationId }}</span
             >
-            <span class="ui-status-pill shrink-0 bg-warning/15 text-2xs font-semibold text-warning">held</span>
+            <span class="ui-status-pill shrink-0 bg-warning/15 text-2xs font-semibold text-warning">{{ t(`agents.heldWakeCard.held`) }}</span>
         </div>
         <div v-if="snippet !== undefined" class="truncate text-2xs text-muted">{{ snippet }}</div>
         <div class="flex items-center gap-2.5">
             <OriginMark :origin="entry.origin" />
             <span class="min-w-0 flex-1 truncate text-2xs text-subtle">
-                {{ autoRunLabel ?? `waiting for you` }} · {{ timeAgo(entry.createdAt) }}
+                {{ autoRunLabel ?? t(`agents.heldWakeCard.waiting`) }} · {{ timeAgo(entry.createdAt) }}
             </span>
-<!-- Compact action buttons use a 44px touch target on coarse pointers. -->
+            <!-- Compact action buttons use a 44px touch target on coarse pointers. -->
             <Button
                 size="small"
                 severity="danger"
                 :text="true"
                 class="ui-button-thumb shrink-0"
-                aria-label="Reject this held wake"
-                v-tooltip.top="`Drop it: the wake never runs, the automation stays as it is`"
+                :aria-label="t(`agents.heldWakeCard.rejectHeldWake`)"
+                v-tooltip.top="t(`agents.heldWakeCard.dropWakeNeverRuns`)"
                 @click.stop="emit(`reject`)"
             >
-                Reject
+                {{ t(`agents.heldWakeCard.reject`) }}
             </Button>
             <Button
                 size="small"
                 class="ui-button-thumb shrink-0"
-                aria-label="Approve this held wake"
-                v-tooltip.top="`Run it now, with exactly what fired: the session lands on this board`"
+                :aria-label="t(`agents.heldWakeCard.approveHeldWake`)"
+                v-tooltip.top="t(`agents.heldWakeCard.runNowExactlyWhat`)"
                 @click.stop="emit(`approve`)"
             >
-                Approve
+                {{ t(`ui.action.approve`) }}
             </Button>
         </div>
     </div>

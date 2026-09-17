@@ -3,6 +3,9 @@
 import { ui, SearchBar } from "@intentic/ui";
 import { computed, ref, watch } from "vue";
 import { matchHeadings, type OutlineHeading } from "./markdownOutline";
+import { useT } from "@intentic/ui/i18n";
+
+const t = useT();
 
 const { headings, active } = defineProps<{
     headings: readonly OutlineHeading[];
@@ -36,9 +39,9 @@ watch(
 </script>
 
 <template>
-    <nav aria-label="Document outline" class="flex min-h-0 w-full flex-col gap-2">
+    <nav :aria-label="t(`workspace.markdownOutline.documentOutline`)" class="flex min-h-0 w-full flex-col gap-2">
         <div class="flex shrink-0 items-baseline justify-between gap-2 pl-3">
-            <span :class="ui.sectionLabel(`text-2xs`)">Outline</span>
+            <span :class="ui.sectionLabel(`text-2xs`)">{{ t(`workspace.markdownOutline.outline`) }}</span>
             <span class="text-2xs tabular-nums text-subtle">{{ headings.length }}</span>
         </div>
 
@@ -47,8 +50,8 @@ watch(
             v-model="query"
             variant="field"
             clearable
-            placeholder="Filter headings…"
-            aria-label="Filter headings"
+            :placeholder="t(`workspace.markdownOutline.filterHeadings`)"
+            :aria-label="t(`workspace.markdownOutline.filterHeadings2`)"
             class="shrink-0"
         />
 
@@ -66,7 +69,7 @@ watch(
             >
                 {{ row.heading.text }}
             </button>
-            <p v-if="rows.length === 0" class="px-3 py-1 text-2xs text-subtle">No heading matches.</p>
+            <p v-if="rows.length === 0" class="px-3 py-1 text-2xs text-subtle">{{ t(`workspace.markdownOutline.noHeadingMatches`) }}</p>
         </div>
     </nav>
 </template>

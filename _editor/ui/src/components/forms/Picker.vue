@@ -7,12 +7,15 @@ import { normalizePickerGroups, type PickerOption, type PickerOptions } from "./
 import PersonaFace from "../brand/PersonaFace.vue";
 import PickerPanel from "./PickerPanel.vue";
 import ResponsiveOverlay from "../overlays/ResponsiveOverlay.vue";
+import { useT } from "../../i18n/index.js";
+
+const t = useT();
 
 defineOptions({ inheritAttrs: false });
 
 const {
     options,
-    placeholder = `Select…`,
+    placeholder,
     disabled = false,
     variant = `input`,
     searchThreshold = 8,
@@ -55,7 +58,7 @@ const passAttrs = computed(() => {
 const triggerClass = computed(() =>
     twMerge(
         `touch-target inline-flex cursor-pointer select-none items-center gap-2 transition-colors disabled:cursor-default`,
-/* THE BORDERED TRIGGER IS THE FIELD, not a copy of it. */
+        /* THE BORDERED TRIGGER IS THE FIELD, not a copy of it. */
         variant === `input`
             ? `ui-field-box`
             : `ui-off rounded-md px-1.5 py-0.5 text-xs font-medium text-content hover:bg-overlay focus:outline-none focus-visible:bg-overlay`,
@@ -116,18 +119,18 @@ const applyPick = (option: PickerOption<T>): void => {
     >
         <template v-if="selected !== undefined">
             <slot name="icon" :option="selected">
-<!-- A face, not a glyph, in the closed trigger too, since it's the only thing shown once the panel shuts. -->
+                <!-- A face, not a glyph, in the closed trigger too, since it's the only thing shown once the panel shuts. -->
                 <PersonaFace v-if="selected.face !== undefined" :persona="selected.face" :size="variant === `ghost` ? 16 : 20" />
                 <Icon v-else-if="selected.icon !== undefined" :name="selected.icon" class="shrink-0 text-sm text-muted" aria-hidden="true" />
             </slot>
         </template>
-<!-- Tooltip fires only on overflow; a native `title` just repeated visible text and stayed silent when truncated. -->
+        <!-- Tooltip fires only on overflow; a native `title` just repeated visible text and stayed silent when truncated. -->
         <span
             class="min-w-0 flex-1 truncate text-left"
             :class="[selected === undefined ? `text-subtle` : ``, selected?.mono === true ? `font-mono` : ``, labelClass]"
             v-tooltip.bottom.overflow="selected?.label"
         >
-            {{ selected?.label ?? placeholder }}
+            {{ selected?.label ?? placeholder ?? t(`ui.picker.select`) }}
         </span>
         <Icon name="chevron-down" class="shrink-0 text-subtle" :class="variant === `ghost` ? `text-4xs` : `text-2xs`" aria-hidden="true" />
     </button>

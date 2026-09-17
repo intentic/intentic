@@ -5,6 +5,7 @@ import { computed, nextTick, ref, useTemplateRef } from "vue";
 import { host } from "./host.js";
 import { freeProjectName, previewPath, slugOf, WORKSPACE_PATH } from "./projects.js";
 import { useProjects } from "./useProjects.js";
+import { t } from "./i18n.js";
 
 const api = host();
 const { tiles, ids, isLoading, create } = useProjects();
@@ -66,15 +67,13 @@ const cancelNaming = (): void => {
 <template>
     <Page width="wide">
         <PageHeader
-            title="Projects"
-            :description="
-                current === undefined
-                    ? `Every project is a repository in this workspace. Open one and the files, the agents and the checks narrow to it.`
-                    : `Working in ${current}: its files, its agents, its checks. Open another to switch, or show them all.`
-            "
+            :title="t(`projectsView.projects`)"
+            :description="current === undefined ? t(`projectsView.everyProjectRepositoryIn`) : t(`projectsView.workingInFilesAgents`, { current })"
         >
             <template v-if="current !== undefined" #actions>
-                <Button size="small" severity="secondary" @click="showAll"><Icon name="th-large" class="mr-1" />All projects</Button>
+                <Button size="small" severity="secondary" @click="showAll"
+                    ><Icon name="th-large" class="mr-1" />{{ t(`projectsView.allProjects`) }}</Button
+                >
             </template>
         </PageHeader>
 
@@ -102,19 +101,30 @@ const cancelNaming = (): void => {
                     <a
                         v-bind="openProject(tile.id)"
                         class="absolute inset-0 rounded-xl"
-                        :aria-label="`Open ${tile.name}`"
+                        :aria-label="t(`projectsView.open`, { name: tile.name })"
                         :aria-current="tile.id === current ? `true` : undefined"
                     ></a>
 
                     <div class="flex items-start gap-3">
                         <!-- Decoration, not information: the name it stands for is read out beside it. -->
-                        <span class="flex size-9 shrink-0 items-center justify-center rounded-lg text-sm font-semibold uppercase" aria-hidden="true" :style="plate(tile.accent)">{{
-                            tile.monogram
-                        }}</span>
+                        <span
+                            class="flex size-9 shrink-0 items-center justify-center rounded-lg text-sm font-semibold uppercase"
+                            aria-hidden="true"
+                            :style="plate(tile.accent)"
+                            >{{ tile.monogram }}</span
+                        >
                         <div class="min-w-0 flex-1">
                             <div class="flex items-center gap-2">
-                                <span class="min-w-0 truncate text-sm font-semibold text-content transition-colors group-hover/tile:text-link" :title="tile.id">{{ tile.name }}</span>
-                                <span v-if="tile.id === current" class="shrink-0 rounded-full bg-link/10 px-2 py-0.5 text-2xs font-medium text-link">Open</span>
+                                <span
+                                    class="min-w-0 truncate text-sm font-semibold text-content transition-colors group-hover/tile:text-link"
+                                    :title="tile.id"
+                                    >{{ tile.name }}</span
+                                >
+                                <span
+                                    v-if="tile.id === current"
+                                    class="shrink-0 rounded-full bg-link/10 px-2 py-0.5 text-2xs font-medium text-link"
+                                    >{{ t(`projectsView.open2`) }}</span
+                                >
                             </div>
                             <span v-if="tile.id !== tile.name" class="block truncate text-2xs text-subtle">{{ tile.id }}</span>
                         </div>
@@ -122,10 +132,12 @@ const cancelNaming = (): void => {
 
                     <!-- Two lines whether or not there are two, so a row of tiles is one height and not four. -->
                     <p v-if="tile.summary !== ``" class="line-clamp-2 min-h-8 text-xs text-muted">{{ tile.summary }}</p>
-                    <p v-else class="min-h-8 text-xs text-subtle">No description in its README yet.</p>
+                    <p v-else class="min-h-8 text-xs text-subtle">{{ t(`projectsView.noDescriptionInReadme`) }}</p>
 
                     <div v-if="tile.hasPanel" class="mt-auto border-t border-line-subtle pt-2">
-                        <a v-bind="linkTo(previewPath(tile.id))" :class="ui.linkButton(`relative z-1 my-0 min-h-0`)"><Icon name="play" />See it running</a>
+                        <a v-bind="linkTo(previewPath(tile.id))" :class="ui.linkButton(`relative z-1 my-0 min-h-0`)"
+                            ><Icon name="play" />{{ t(`projectsView.seeRunning`) }}</a
+                        >
                     </div>
                 </div>
 
@@ -133,13 +145,20 @@ const cancelNaming = (): void => {
                 <button
                     v-if="!naming"
                     type="button"
-                    :class="ui.addTile(`group/tile min-h-28 w-full flex-col items-center justify-center gap-2 rounded-xl p-4 text-center`, noneYet ? `@xl:col-span-2 @3xl:col-span-3` : ``)"
+                    :class="
+                        ui.addTile(
+                            `group/tile min-h-28 w-full flex-col items-center justify-center gap-2 rounded-xl p-4 text-center`,
+                            noneYet ? `@xl:col-span-2 @3xl:col-span-3` : ``,
+                        )
+                    "
                     @click="startNaming"
                 >
                     <span class="flex size-9 items-center justify-center rounded-lg bg-primary-500/10 text-link"><Icon name="plus" /></span>
-                    <span class="text-sm font-semibold text-content transition-colors group-hover/tile:text-link">{{ noneYet ? `Start your first project` : `New project` }}</span>
+                    <span class="text-sm font-semibold text-content transition-colors group-hover/tile:text-link">{{
+                        noneYet ? t(`projectsView.startFirstProject`) : t(`projectsView.newProject`)
+                    }}</span>
                     <span class="max-w-read-xs text-2xs text-muted">{{
-                        noneYet ? `A project is a repository in this workspace. Make one and an agent can get to work in it.` : `A fresh repository, ready for an agent.`
+                        noneYet ? t(`projectsView.projectRepositoryInWorkspace`) : t(`projectsView.freshRepositoryReadyAgent`)
                     }}</span>
                 </button>
                 <div
@@ -148,7 +167,7 @@ const cancelNaming = (): void => {
                     :class="noneYet ? `@xl:col-span-2 @3xl:col-span-3` : ``"
                 >
                     <form class="flex flex-col gap-2" @submit.prevent="createProject">
-                        <label class="text-2xs font-semibold text-content" for="projects-new-name">Name</label>
+                        <label class="text-2xs font-semibold text-content" for="projects-new-name">{{ t(`projectsView.name`) }}</label>
                         <input
                             id="projects-new-name"
                             ref="field"
@@ -159,13 +178,15 @@ const cancelNaming = (): void => {
                             autocomplete="off"
                             @keydown.escape="cancelNaming"
                         />
-                        <p v-if="slug !== `` && slug !== name.trim()" class="text-2xs text-subtle">Folder: {{ slug }}</p>
+                        <p v-if="slug !== `` && slug !== name.trim()" class="text-2xs text-subtle">{{ t(`projectsView.folder`, { slug }) }}</p>
                         <Notice v-if="creating.notice.value" :of="creating.notice.value" />
                         <div class="flex items-center gap-2">
                             <Button size="small" type="submit" :disabled="!canCreate">
-                                <Icon :name="creating.busy.value ? `spinner` : `plus`" :spin="creating.busy.value" class="mr-1" />{{ creating.busy.value ? `Starting…` : `Create` }}
+                                <Icon :name="creating.busy.value ? `spinner` : `plus`" :spin="creating.busy.value" class="mr-1" />{{
+                                    creating.busy.value ? t(`projectsView.starting`) : t(`projectsView.create`)
+                                }}
                             </Button>
-                            <Button size="small" severity="secondary" :text="true" label="Cancel" @click="cancelNaming" />
+                            <Button size="small" severity="secondary" :text="true" :label="t(`projectsView.cancel`)" @click="cancelNaming" />
                         </div>
                     </form>
                 </div>

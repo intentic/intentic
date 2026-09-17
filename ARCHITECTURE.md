@@ -18,8 +18,8 @@ end almost never, because reading it cost more than the answer was worth.
 - [app-plane.md](docs/architecture/app-plane.md) — the editor and its surfaces: personas, the VPN, geo exits,
   and the two dependency islands that belong to nothing else.
 - [extensions.md](docs/architecture/extensions.md) — how a feature is added without touching the core.
-- [languages.md](docs/architecture/languages.md) — the five the interface speaks, how a string is written, and
-  the two rules that keep a language change from flickering or growing the download.
+- [languages.md](docs/architecture/languages.md) — the five the interface speaks, where the 4,869 messages live,
+  how a string is written, and the two rules that keep a language change from flickering or growing the download.
 - [capabilities.md](docs/architecture/capabilities.md) — what a capability is, and what the daemon does with
   one once it is connected.
 

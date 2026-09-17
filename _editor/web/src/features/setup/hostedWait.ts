@@ -1,4 +1,5 @@
 import type { AnnounceRefusal, BootReport, HostedStatus } from "@intentic/api-contract";
+import { t } from "@intentic/ui/i18n";
 
 // Decides what the hosted wait is waiting on, from three sources in boot order: machine power state (from the
 // provider), the daemon's own report of its public address, and a platform refusal of a check-in, each covering
@@ -16,17 +17,17 @@ export interface WaitStepView {
     readonly state: "done" | "active" | "todo";
 }
 
-const STEPS: readonly { key: WaitStep; label: string }[] = [
-    { key: `machine`, label: `Starting the machine` },
-    { key: `booting`, label: `Starting your sandbox` },
-    { key: `connecting`, label: `Putting it on the internet` },
-    { key: `ready`, label: `Ready` },
+const waitSteps = (): readonly { key: WaitStep; label: string }[] => [
+    { key: `machine`, label: t(`setup.hostedWait.startingMachine`) },
+    { key: `booting`, label: t(`setup.hostedWait.startingSandbox`) },
+    { key: `connecting`, label: t(`setup.hostedWait.puttingOnInternet`) },
+    { key: `ready`, label: t(`setup.hostedWait.ready`) },
 ];
 
 // A machine built to order spends its first boot pulling the sandbox image. Naming that stage keeps the same
 // minutes from reading as a hang.
 const coldSteps = (steps: readonly { key: WaitStep; label: string }[]): readonly { key: WaitStep; label: string }[] =>
-    steps.map((step) => (step.key === `machine` ? { ...step, label: `Starting the machine, downloading your sandbox` } : step));
+    steps.map((step) => (step.key === `machine` ? { ...step, label: t(`setup.hostedWait.startingMachineDownloadingSandbox`) } : step));
 
 // `remedy` is always present, never a diagnosis with no next move. `action` is `remake` for a sandbox that never
 // checked in (bad address baked in), `reboot` for one that has files and only needs restarting.
@@ -178,7 +179,7 @@ const finalFailure = (input: HostedWaitInput): Stall | undefined => {
 // `checking` counts here too, once spent.
 const unreachableFailure = (input: HostedWaitInput): Stall | undefined => {
     const failing = input.boot?.reach === `unreachable` || input.boot?.reach === `checking`;
-/* THE DAEMON'S OWN GIVE-UP OUTRANKS THIS PAGE'S CLOCK. */
+    /* THE DAEMON'S OWN GIVE-UP OUTRANKS THIS PAGE'S CLOCK. */
     const spent = input.boot?.retrying === false || input.waitedMs > UNREACHABLE_MS;
     if (!failing || !spent) {
         return undefined;
@@ -187,7 +188,7 @@ const unreachableFailure = (input: HostedWaitInput): Stall | undefined => {
         step: `connecting`,
         failure: {
             problem: input.boot?.detail ?? `Your sandbox is running, but it can't be reached at its address.`,
-/* PROMISES NOTHING A RESTART CANNOT KEEP. */
+            /* PROMISES NOTHING A RESTART CANNOT KEEP. */
             remedy: `Nothing on your side causes this and nothing on the sandbox is lost: it's the connection in front of it that isn't routing. Starting it over is worth one try. If it comes back, it's ours to fix and we're already being told.`,
             // Box and files are healthy; only the boot's networking half could need rerunning.
             action: `reboot`,
@@ -255,11 +256,13 @@ export const hostedWaitView = (input: HostedWaitInput): HostedWaitView => {
     const reachable = input.boot === null ? undefined : input.boot.reach === `reachable`;
     const chain = converging(input);
     // Step labels are origin-first, clock-second; when the daemon names its step, the booting row echoes it.
-    const origin = input.warm === false ? coldSteps(STEPS) : STEPS;
+    const origin = input.warm === false ? coldSteps(waitSteps()) : waitSteps();
     const steps =
         chain?.step === undefined
             ? origin
-            : origin.map((step) => (step.key === `booting` ? { ...step, label: `Starting your sandbox: ${chain.step}` } : step));
+            : origin.map((step) =>
+                  step.key === `booting` ? { ...step, label: t(`setup.hostedWait.startingSandbox2`, { step: chain.step }) } : step,
+              );
     const note = noteFor(input);
     const stall = finalFailure(input) ?? stalledFailure(input);
     const booting = chain !== undefined;

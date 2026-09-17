@@ -2,6 +2,7 @@
 import { Button, Icon, Popover, SearchBar, timeAgo, vAction, ui } from "@intentic/extension-ui";
 import { computed, ref } from "vue";
 import { useBranches } from "./useBranches.js";
+import { t } from "./i18n.js";
 
 // Graph header's branch control: current branch as a pill, a popover to switch, create or delete. Not a bare
 // `<select>`, since a row carries upstream/ahead-behind state and delete needs a confirm step. All git access is one
@@ -86,8 +87,8 @@ const confirmDelete = async (name: string): Promise<void> => {
             type="button"
             :disabled="busy"
             :class="ui.textAction('touch-target inline-flex min-w-0 select-none gap-1 font-medium text-content')"
-            v-tooltip.bottom="'Switch, create or delete a branch'"
-            aria-label="Branch"
+            v-tooltip.bottom="t(`branchSwitcher.switchCreateDeleteBranch`)"
+            :aria-label="t(`branchSwitcher.branch`)"
             @click="toggle"
         >
             <Icon name="code" class="shrink-0 text-3xs" />
@@ -99,7 +100,13 @@ const confirmDelete = async (name: string): Promise<void> => {
 
         <Popover ref="popover">
             <div class="flex w-72 flex-col gap-1.5">
-                <SearchBar v-model="filter" variant="field" clearable aria-label="Filter branches" placeholder="Filter branches…" />
+                <SearchBar
+                    v-model="filter"
+                    variant="field"
+                    clearable
+                    :aria-label="t(`branchSwitcher.filterBranches`)"
+                    :placeholder="t(`branchSwitcher.filterBranches2`)"
+                />
 
                 <p v-if="actionError" class="truncate text-2xs text-danger" v-tooltip.bottom.overflow="actionError">{{ actionError }}</p>
 
@@ -130,8 +137,11 @@ const confirmDelete = async (name: string): Promise<void> => {
                                     >{{ entry.remote }}</span
                                 >
                                 <!-- "gone" means the upstream was deleted, usually a merged PR; different from never having one. -->
-                                <span v-if="branch.local?.gone" class="shrink-0 text-2xs text-warning" v-tooltip.top="'Upstream branch was deleted'"
-                                    >gone</span
+                                <span
+                                    v-if="branch.local?.gone"
+                                    class="shrink-0 text-2xs text-warning"
+                                    v-tooltip.top="t(`branchSwitcher.upstreamBranchDeleted`)"
+                                    >{{ t(`branchSwitcher.gone`) }}</span
                                 >
                                 <span v-if="(branch.local?.behind ?? 0) > 0" class="shrink-0 text-2xs text-subtle">↓{{ branch.local!.behind }}</span>
                                 <span v-if="(branch.local?.ahead ?? 0) > 0" class="shrink-0 text-2xs text-subtle">↑{{ branch.local!.ahead }}</span>
@@ -149,23 +159,29 @@ const confirmDelete = async (name: string): Promise<void> => {
                                 "
                                 :disabled="busy"
                                 @click="askDelete(branch.name)"
-                                v-tooltip.top="'Delete branch'"
-                                aria-label="Delete branch"
+                                v-tooltip.top="t(`branchSwitcher.deleteBranch`)"
+                                :aria-label="t(`branchSwitcher.deleteBranch`)"
                             >
                                 <Icon name="trash" class="text-2xs" />
                             </button>
                         </div>
                         <div v-if="armedDelete === branch.name" class="flex items-center gap-2 px-1.5 pb-1">
                             <span class="flex-1 text-2xs text-warning">
-                                {{ forceFor === branch.name ? "Unmerged, force delete?" : `Delete ${branch.name}?` }}
+                                {{
+                                    forceFor === branch.name
+                                        ? t(`branchSwitcher.unmergedForceDelete`)
+                                        : t(`branchSwitcher.delete`, { name: branch.name })
+                                }}
                             </span>
-                            <button type="button" class="text-2xs text-muted hover:text-content" @click="armedDelete = undefined">Cancel</button>
+                            <button type="button" class="text-2xs text-muted hover:text-content" @click="armedDelete = undefined">
+                                {{ t(`branchSwitcher.cancel`) }}
+                            </button>
                             <Button size="small" severity="danger" :disabled="busy" @click="() => confirmDelete(branch.name)">
-                                {{ forceFor === branch.name ? "Force delete" : "Delete" }}
+                                {{ forceFor === branch.name ? t(`branchSwitcher.forceDelete`) : t(`branchSwitcher.delete2`) }}
                             </Button>
                         </div>
                     </template>
-                    <p v-if="shown.length === 0" class="px-1.5 py-2 text-2xs text-subtle">No branches match.</p>
+                    <p v-if="shown.length === 0" class="px-1.5 py-2 text-2xs text-subtle">{{ t(`branchSwitcher.noBranchesMatch`) }}</p>
                 </div>
 
                 <div class="border-t border-line-subtle pt-1.5">
@@ -176,7 +192,7 @@ const confirmDelete = async (name: string): Promise<void> => {
                         @click="creating = true"
                     >
                         <Icon name="plus" class="text-2xs" />
-                        New branch from here
+                        {{ t(`branchSwitcher.newBranchHere`) }}
                     </button>
                     <div v-else class="flex items-center gap-1.5">
                         <input
@@ -188,7 +204,9 @@ const confirmDelete = async (name: string): Promise<void> => {
                             @keyup.enter="submitCreate"
                             @keydown.escape="creating = false"
                         />
-                        <Button size="small" severity="secondary" :disabled="busy || newName.trim() === ''" @click="submitCreate"> Create </Button>
+                        <Button size="small" severity="secondary" :disabled="busy || newName.trim() === ''" @click="submitCreate">
+                            {{ t(`branchSwitcher.create`) }}
+                        </Button>
                     </div>
                 </div>
             </div>

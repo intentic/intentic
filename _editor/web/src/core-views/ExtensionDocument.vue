@@ -22,6 +22,9 @@ import { ui } from "@intentic/ui";
 import { computed } from "vue";
 import { documentProvider } from "./documentRegistry";
 import ExtensionErrorBoundary from "./ExtensionErrorBoundary.vue";
+import { useT } from "@intentic/ui/i18n";
+
+const t = useT();
 
 const { extension, provider, path, title } = defineProps<{ extension: string; provider: string; path: string; title: string }>();
 
@@ -36,12 +39,13 @@ const view = computed(() => {
     <ExtensionErrorBoundary v-if="view !== undefined && registered !== undefined" :key="`${extension}-${provider}-${path}`" :extension-id="extension">
         <component :is="view" :path="path" />
     </ExtensionErrorBoundary>
-<!-- The provider is gone: switched off from the Extensions tab, uninstalled, or simply not activated yet on a cold load. -->
+    <!-- The provider is gone: switched off from the Extensions tab, uninstalled, or simply not activated yet on a cold load. -->
     <div v-else :class="ui.emptyState(`m-6`)">
-        <p class="text-sm">{{ title }} is not available.</p>
+        <p class="text-sm">{{ t(`views.extensionDocument.notAvailable`, { title }) }}</p>
         <p class="mt-1 text-xs text-muted">
-            The extension that explains <span class="font-mono">{{ path === `` ? `the workspace root` : path }}</span> is not running. Switch it back
-            on in Sandbox → Extensions, and this tab will render again.
+            {{ t(`views.extensionDocument.extensionExplains`) }}
+            <span class="font-mono">{{ path === `` ? t(`views.extensionDocument.workspaceRoot`) : path }}</span>
+            {{ t(`views.extensionDocument.notRunningSwitchBack`) }}
         </p>
     </div>
 </template>

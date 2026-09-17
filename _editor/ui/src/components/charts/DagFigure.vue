@@ -33,7 +33,7 @@ const height = computed(() => Math.min(30, Math.max(12, figure.nodes.length * 3.
 <template>
     <figure class="my-4 flex flex-col gap-2">
         <figcaption v-if="figure.title !== undefined" class="text-xs font-medium text-content">{{ figure.title }}</figcaption>
-<!-- DagGraph requires its parent to size it (single root, h-full w-full). -->
+        <!-- DagGraph requires its parent to size it (single root, h-full w-full). -->
         <div class="w-full rounded-lg bg-content/[0.04]" :style="{ height: `${height}rem` }">
             <DagGraph :nodes="nodes" :edges="edges" :direction="figure.direction" :node-height="56">
                 <template #node="{ node }">

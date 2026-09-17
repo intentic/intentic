@@ -170,11 +170,7 @@ const applyFit = (store: VueFlowStore): void => {
         void store.fitView(FIT.value);
         return;
     }
-    const fitted = Math.min(
-        (frame.width * (1 - 2 * pad.x)) / box.width,
-        (frame.height * (1 - 2 * pad.y)) / box.height,
-        magnify ? 2 : 1,
-    );
+    const fitted = Math.min((frame.width * (1 - 2 * pad.x)) / box.width, (frame.height * (1 - 2 * pad.y)) / box.height, magnify ? 2 : 1);
     const place = (zoom: number): void => {
         void store.setViewport({
             x: frame.width * pad.x - box.x * zoom,
@@ -253,7 +249,7 @@ const toggle = (id: string): void => {
 
 <template>
     <div ref="root" class="relative h-full w-full">
-<!-- `elements-selectable` must stay true: Vue Flow gates pointer events on it, and with it false, clicks, hover, and tooltips inside #node all go dead. -->
+        <!-- `elements-selectable` must stay true: Vue Flow gates pointer events on it, and with it false, clicks, hover, and tooltips inside #node all go dead. -->
         <VueFlow
             :id="flowId"
             class="dag-graph h-full w-full text-subtle"
@@ -273,7 +269,7 @@ const toggle = (id: string): void => {
             @nodes-initialized="refit()"
             @move-start="hold()"
         >
-<!-- Elbow routing from dagre's own path (see lanePath), not the two endpoints; only used when `edgeShape` is `elbow`. -->
+            <!-- Elbow routing from dagre's own path (see lanePath), not the two endpoints; only used when `edgeShape` is `elbow`. -->
             <template #edge-lane="edge">
                 <BaseEdge
                     :id="edge.id"
@@ -289,7 +285,7 @@ const toggle = (id: string): void => {
                     @click="toggle(data.id)"
                 >
                     <Handle type="target" :position="targetPosition" />
-<!-- Fades the interior only, not the card: opacity on the card itself would let an edge behind it show through as a strikethrough. -->
+                    <!-- Fades the interior only, not the card: opacity on the card itself would let an edge behind it show through as a strikethrough. -->
                     <div class="h-full w-full transition-opacity" :class="data.dimmed === true ? `opacity-45` : ``">
                         <slot name="node" :node="data" :selected="data.id === selectedId" />
                     </div>

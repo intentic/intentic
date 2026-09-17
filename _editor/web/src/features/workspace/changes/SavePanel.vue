@@ -16,11 +16,14 @@ import { savedMessage, soleOrigin } from "./savedMessage";
 import { truncatedTotal } from "./truncation";
 import { COMMIT_SCOPE, useChanges } from "./useChanges";
 import type { OpenMode } from "../tabs/workspaceTabs";
+import { useT } from "@intentic/ui/i18n";
 
 // The maker's half of the Changes sidebar, over the same read the developer's ReviewPanel uses. Everything git asks a
 // developer to decide is decided here instead: there is no index (a save records the whole tree), no message to write
 // (savedMessage.ts picks one), and no per-repo remote dashboard. What is left is the two questions a maker actually
 // has — what changed, and do I keep it — plus the diff behind every row.
+
+const t = useT();
 
 const changes = useChanges();
 const words = useVocabulary();
@@ -112,7 +115,7 @@ const groups = computed<readonly OriginGroup[]>(() => {
     const landed = [...byOrigin]
         .toSorted(([leftId, left], [rightId, right]) => right.length - left.length || (leftId < rightId ? -1 : 1))
         .map(([id, files]) => ({ id, title: titleOf(id), files }));
-    return yours.length === 0 ? landed : [...landed, { id: YOURS, title: `Your own edits`, files: yours }];
+    return yours.length === 0 ? landed : [...landed, { id: YOURS, title: t(`workspace.savePanel.ownEdits`), files: yours }];
 });
 
 // What the tree holds, not what the list drew: the count includes conflicts and whatever the daemon truncated, which
@@ -239,7 +242,9 @@ const ROW_ACTION = `opacity-0 transition-opacity focus-visible:opacity-100 group
 <template>
     <div class="flex min-h-0 flex-1 flex-col">
         <!-- Nothing below is trustworthy when the read itself failed, so it leads. -->
-        <Notice v-if="changes.error.value" tone="danger" class="mx-2 mt-2 shrink-0">Couldn't read what changed. {{ changes.error.value }}</Notice>
+        <Notice v-if="changes.error.value" tone="danger" class="mx-2 mt-2 shrink-0">{{
+            t(`workspace.savePanel.couldntReadWhatChanged`, { error: changes.error.value })
+        }}</Notice>
 
         <!-- The one press, above the list it covers. -->
         <div v-if="pending > 0" class="flex shrink-0 flex-col gap-1.5 p-2">
@@ -250,22 +255,22 @@ const ROW_ACTION = `opacity-0 transition-opacity focus-visible:opacity-100 group
                 class="w-full"
                 :disabled="!saveReady"
                 @click="doSave"
-                v-tooltip.right="'Records everything below as one version you can come back to'"
+                v-tooltip.right="t(`workspace.savePanel.recordsEverythingBelowOne`)"
             >
                 <Icon :name="savingNow ? `spinner` : `save`" :spin="savingNow" class="mr-1 text-2xs" />{{
-                    savingNow ? `Saving…` : `Save ${plural(changes.count.value, `change`)}`
+                    savingNow
+                        ? t(`workspace.savePanel.saving`)
+                        : t(`workspace.savePanel.saveChanges`, { count: changes.count.value }, changes.count.value)
                 }}
             </Button>
-            <p v-if="blockedByConflicts" class="text-2xs text-danger">
-                Two edits to the same file clash. Ask your {{ words.agent }} to sort it out, or undo the changes below.
-            </p>
+            <p v-if="blockedByConflicts" class="text-2xs text-danger">{{ t(`workspace.savePanel.twoEditsToSame`, { agent: words.agent }) }}</p>
             <!-- The sentence is the assistant's own, written when its work arrived; naming who wrote it is why it isn't anonymous. -->
             <p v-else-if="describing" class="flex items-center gap-1.5 text-2xs text-subtle">
                 <Icon name="spinner" spin class="shrink-0 text-3xs" />
-                <span class="min-w-0 truncate">Writing a description of {{ describing }}'s work…</span>
+                <span class="min-w-0 truncate">{{ t(`workspace.savePanel.writingDescriptionSWork`, { describing }) }}</span>
             </p>
             <p v-else class="min-w-0 text-2xs text-subtle" v-tooltip.right.overflow="saving.message">
-                Saved as “<span class="text-muted">{{ saving.message.split(`\n`)[0] }}</span
+                {{ t(`workspace.savePanel.saved`) }}<span class="text-muted">{{ saving.message.split(`\n`)[0] }}</span
                 >”
             </p>
             <Notice v-if="saveFailure" tone="danger" dismissLabel="Dismiss" @dismiss="changes.dismissFailure(COMMIT_SCOPE)">
@@ -279,9 +284,9 @@ const ROW_ACTION = `opacity-0 transition-opacity focus-visible:opacity-100 group
                 <Icon name="spinner" spin class="shrink-0 text-3xs" />
                 <span class="min-w-0 truncate" v-tooltip.right.overflow="`${changes.landing.value}…`">{{ changes.landing.value }}…</span>
             </p>
-            <p v-if="!changes.loaded.value && !changes.error.value" class="px-3 py-2 text-2xs text-subtle">Looking…</p>
+            <p v-if="!changes.loaded.value && !changes.error.value" class="px-3 py-2 text-2xs text-subtle">{{ t(`workspace.savePanel.looking`) }}</p>
             <p v-else-if="changes.loaded.value && pending === 0 && !changes.landing.value" class="px-3 py-2 text-2xs text-subtle">
-                Everything is saved.
+                {{ t(`workspace.savePanel.everythingSaved`) }}
             </p>
 
             <section v-for="group in groups" :key="group.id" class="mt-1 first:mt-0">
@@ -300,7 +305,7 @@ const ROW_ACTION = `opacity-0 transition-opacity focus-visible:opacity-100 group
                         class="flex min-w-0 flex-1 items-center gap-1.5 text-left max-md:min-h-11"
                         @click="openDiff(file, 'preview')"
                         @dblclick="openDiff(file, 'keep')"
-                        v-tooltip.right="`${STATUS_MARK[file.status].word} — open it to see what changed`"
+                        v-tooltip.right="t(`workspace.savePanel.openToSeeWhat`, { word: STATUS_MARK[file.status].word })"
                     >
                         <Icon :name="STATUS_MARK[file.status].icon" class="shrink-0 text-3xs" :class="STATUS_MARK[file.status].tone" />
                         <!-- Bidi isolation keeps a path's segments in order; the tooltip carries it whole. -->
@@ -313,7 +318,7 @@ const ROW_ACTION = `opacity-0 transition-opacity focus-visible:opacity-100 group
                         :class="ui.iconButton(ROW_ACTION)"
                         :disabled="changes.actionBusy.value"
                         @click="pendingDiscard = file"
-                        v-tooltip.left="`${words.discard} the changes to this file`"
+                        v-tooltip.left="t(`workspace.savePanel.changesToFile`, { discard: words.discard })"
                         :aria-label="`${words.discard} ${file.label}`"
                     >
                         <Icon name="undo" class="text-2xs" />
@@ -323,7 +328,7 @@ const ROW_ACTION = `opacity-0 transition-opacity focus-visible:opacity-100 group
 
             <!-- Said, not hidden: Save still records these, so a list that silently stopped at 500 would undercount what the press does. -->
             <p v-if="notListed > 0" class="px-2 py-1 pl-4 text-2xs text-subtle">
-                …and {{ plural(notListed, `more file`) }}, too many to list. Saving takes them too.
+                {{ t(`workspace.savePanel.andMoreFiles`, { count: notListed }, notListed) }}
             </p>
 
             <!-- Repositories git refused to read: listed with its reason, and no button that would act on a guess. -->
@@ -344,9 +349,9 @@ const ROW_ACTION = `opacity-0 transition-opacity focus-visible:opacity-100 group
                     severity="secondary"
                     :disabled="changes.actionBusy.value || savingNow"
                     @click="pendingDiscard = `all`"
-                    v-tooltip.right="`Puts every file back the way it was at the last saved version`"
+                    v-tooltip.right="t(`workspace.savePanel.putsEveryFileBack`)"
                 >
-                    <Icon name="undo" class="mr-1 text-2xs" />{{ words.discard }} all
+                    <Icon name="undo" class="mr-1 text-2xs" />{{ words.discard }} {{ t(`workspace.savePanel.all`) }}
                 </Button>
                 <span class="flex-1"></span>
                 <span v-if="backupLine" class="min-w-0 truncate text-2xs text-subtle">{{ backupLine }}</span>
@@ -356,7 +361,7 @@ const ROW_ACTION = `opacity-0 transition-opacity focus-visible:opacity-100 group
                     severity="secondary"
                     :disabled="pushFlow.running.value || changes.actionBusy.value"
                     @click="doBackUp"
-                    v-tooltip.left="`Sends your saved versions to where this ${words.repo} came from`"
+                    v-tooltip.left="t(`workspace.savePanel.sendsSavedVersionsTo`, { repo: words.repo })"
                 >
                     <Icon name="cloud-upload" class="mr-1 text-2xs" />{{ words.push }}
                 </Button>
@@ -373,21 +378,26 @@ const ROW_ACTION = `opacity-0 transition-opacity focus-visible:opacity-100 group
             </Notice>
         </div>
 
-        <Modal :open="discardAsk !== undefined" size="sm" :header="`${words.discard} changes`" @update:open="pendingDiscard = undefined">
+        <Modal
+            :open="discardAsk !== undefined"
+            size="sm"
+            :header="t(`workspace.savePanel.changes`, { discard: words.discard })"
+            @update:open="pendingDiscard = undefined"
+        >
             <template v-if="discardAsk">
                 <p class="break-words text-xs text-content">{{ words.discard }} {{ discardAsk.what }}?</p>
                 <p v-if="discardAsk.partial" class="mt-2 text-xs text-warning">
-                    There are more changes here than the list is showing, and this covers all of them. The figures below count the listed ones.
+                    {{ t(`workspace.savePanel.moreChangesHereThan`) }}
                 </p>
                 <p v-if="discardAsk.back > 0" class="mt-2 text-xs text-muted">
-                    {{ discardAsk.partial ? `At least ` : `` }}{{ plural(discardAsk.back, `file`) }} {{ discardAsk.back === 1 ? `goes` : `go` }} back
-                    to the last saved version.
+                    {{ discardAsk.partial ? t(`workspace.savePanel.atLeast`) : `` }}
+                    {{ t(`workspace.savePanel.filesGoBack`, { count: discardAsk.back }, discardAsk.back) }}
                 </p>
                 <!-- The one genuinely lossy half, named file by file: nothing has a copy of these. -->
                 <div v-if="discardAsk.gone.length > 0" class="mt-2">
                     <p class="text-xs text-danger">
-                        {{ discardAsk.partial ? `At least ` : `` }}{{ plural(discardAsk.gone.length, `new file`) }}
-                        {{ discardAsk.gone.length === 1 ? `is deleted` : `are deleted` }}: no version holds them, so there is no copy to come back to.
+                        {{ discardAsk.partial ? t(`workspace.savePanel.atLeast`) : `` }}
+                        {{ t(`workspace.savePanel.newFilesDeleted`, { count: discardAsk.gone.length }, discardAsk.gone.length) }}
                     </p>
                     <!-- No `dir="rtl"` here, unlike the sidebar rows: these wrap rather than truncate, so reversing them
                          would only push the list to the right margin. `bdi` still holds each path's segments in order. -->
@@ -398,12 +408,11 @@ const ROW_ACTION = `opacity-0 transition-opacity focus-visible:opacity-100 group
                     </ul>
                 </div>
                 <p class="mt-3 text-2xs text-subtle">
-                    <Icon name="shield" class="mr-0.5 text-[0.6rem]" />A version of how things are now is saved first, under
-                    {{ words.restorePoints }}.
+                    <Icon name="shield" class="mr-0.5 text-[0.6rem]" />{{ t(`workspace.savePanel.versionHowThingsNow`) }} {{ words.restorePoints }}.
                 </p>
             </template>
             <template #footer>
-                <Button size="small" severity="secondary" :text="true" label="Keep it" @click="pendingDiscard = undefined" />
+                <Button size="small" severity="secondary" :text="true" :label="t(`workspace.savePanel.keep`)" @click="pendingDiscard = undefined" />
                 <Button size="small" severity="danger" @click="runDiscard">{{ words.discard }}</Button>
             </template>
         </Modal>

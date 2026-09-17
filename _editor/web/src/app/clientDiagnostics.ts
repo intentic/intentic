@@ -2,6 +2,7 @@ import type { ClientDiagnostic } from "@intentic/sandbox-contract";
 import { buildId } from "./buildEpoch";
 import { sandboxAuthenticatedFetch } from "../features/sandbox/client/sandboxAuthFetch";
 import { currentSandboxTarget } from "../features/sandbox/client/sandboxTarget";
+import { t } from "@intentic/ui/i18n";
 
 // Posts what the browser saw or measured to the daemon (logs/client.jsonl beside its own records), since
 // console-only diagnostics (perf.ts's ring buffer, Vue's errorHandler, selfHeal's wipe-and-reload) reach only
@@ -58,7 +59,7 @@ const flush = (): void => {
             seenAt: Date.now(),
             level: "warn",
             event: `client.dropped`,
-            message: `${dropped} further reports were dropped by the client's own cap.`,
+            message: t(`app.clientDiagnostics.furtherReportsDroppedBy`, { dropped }),
             build: buildId(),
         });
         dropped = 0;

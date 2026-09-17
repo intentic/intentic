@@ -1,10 +1,14 @@
 <script setup lang="ts">
 import { Button, Card, Icon } from "@intentic/ui";
 import { useHostedPlan } from "./useHostedPlan";
+import { useT } from "@intentic/ui/i18n";
+import { computed } from "vue";
 
 // The only thing this product charges for: a free hosted sandbox sleeps on an hour ceiling and gets removed after weeks
 // unopened; the plan keeps it always on and never collected, changing nothing else (docs/design/pricing-model.md).
 // Price comes from the plan state, not hardcoded, so a platform that charges differently is described correctly.
+
+const t = useT();
 
 const props = defineProps<{
     // Subscribe or Resubscribe: the last thing read before the decision.
@@ -17,18 +21,42 @@ const emit = defineEmits<{ checkout: [] }>();
 const { priceUsd } = useHostedPlan();
 
 // What the money buys, stated as facts: the three things the plan changes about the free machine.
-const buys = [
-    { icon: `bolt` as const, title: `Always on`, body: `No awake-hour ceiling. Agents and automations run around the clock, whether or not you are watching.` },
-    { icon: `shield` as const, title: `Never removed`, body: `The free machine is collected after a few weeks unopened. Yours stays, with everything on it.` },
-    { icon: `box` as const, title: `The same workspace`, body: `Every feature, capability, extension and teammate, exactly as on the free lane. Nothing is unlocked, because nothing was locked.` },
-];
+const buys = computed(() => [
+    {
+        icon: `bolt` as const,
+        title: t(`settings.hostedPlanOffer.alwaysOn`),
+        body: t(`settings.hostedPlanOffer.noAwakeHourCeiling`),
+    },
+    {
+        icon: `shield` as const,
+        title: t(`settings.hostedPlanOffer.neverRemoved`),
+        body: t(`settings.hostedPlanOffer.freeMachineCollectedAfter`),
+    },
+    {
+        icon: `box` as const,
+        title: t(`settings.hostedPlanOffer.sameWorkspace`),
+        body: t(`settings.hostedPlanOffer.everyFeatureCapabilityExtension`),
+    },
+]);
 
 // The questions asked at the button, answered next to it rather than in a help page.
-const assurances = [
-    { icon: `eye-slash` as const, title: `Nothing is metered`, body: `No tokens counted, no markup on your AI plans. The plan is a machine, not a meter.` },
-    { icon: `undo` as const, title: `Leave any time`, body: `Move the workspace to your own computer whenever you like; the plan is the only thing you cancel.` },
-    { icon: `credit-card` as const, title: `Cancel any time`, body: `One click in Stripe's own portal. Card details never touch this platform.` },
-];
+const assurances = computed(() => [
+    {
+        icon: `eye-slash` as const,
+        title: t(`settings.hostedPlanOffer.nothingMetered`),
+        body: t(`settings.hostedPlanOffer.noTokensCountedNo`),
+    },
+    {
+        icon: `undo` as const,
+        title: t(`settings.hostedPlanOffer.leaveAnyTime`),
+        body: t(`settings.hostedPlanOffer.moveWorkspaceToOwn`),
+    },
+    {
+        icon: `credit-card` as const,
+        title: t(`settings.hostedPlanOffer.cancelAnyTime`),
+        body: t(`settings.hostedPlanOffer.oneClickInStripes`),
+    },
+]);
 </script>
 
 <template>
@@ -38,12 +66,11 @@ const assurances = [
             <div class="min-w-0 flex-1">
                 <div class="flex items-center gap-2">
                     <Icon name="star" class="text-base text-link" />
-                    <span class="text-2xs font-semibold uppercase tracking-wider text-link">Hosted</span>
+                    <span class="text-2xs font-semibold uppercase tracking-wider text-link">{{ t(`settings.hostedPlanOffer.hosted`) }}</span>
                 </div>
-                <h2 class="mt-3 text-2xl font-semibold leading-tight text-content">Keep your hosted sandbox always on.</h2>
+                <h2 class="mt-3 text-2xl font-semibold leading-tight text-content">{{ t(`settings.hostedPlanOffer.keepHostedSandboxAlways`) }}</h2>
                 <p class="mt-2 text-sm text-muted">
-                    The free machine sleeps after its monthly hours and is removed after a few weeks unopened. On the plan it runs as long as you
-                    like and is never collected.
+                    {{ t(`settings.hostedPlanOffer.freeMachineSleepsAfter`) }}
                 </p>
             </div>
 
@@ -53,9 +80,9 @@ const assurances = [
                     <span class="text-sm text-muted">/month</span>
                 </div>
                 <!-- A slot is a machine: stated next to the price. -->
-                <p class="mt-1 text-2xs text-subtle">per hosted sandbox</p>
+                <p class="mt-1 text-2xs text-subtle">{{ t(`settings.hostedPlanOffer.perHostedSandbox`) }}</p>
                 <Button :label="props.subscribeLabel" :loading="props.working" class="ui-button-loud mt-3 w-full" @click="emit(`checkout`)" />
-                <p class="mt-2 text-center text-2xs text-subtle">Paid through Stripe · cancel any time</p>
+                <p class="mt-2 text-center text-2xs text-subtle">{{ t(`settings.hostedPlanOffer.paidThroughStripeCancel`) }}</p>
             </div>
         </div>
     </Card>
@@ -81,7 +108,9 @@ const assurances = [
         <div class="mt-7 flex flex-wrap items-center gap-x-4 gap-y-3">
             <Button :label="props.subscribeLabel" :loading="props.working" class="ui-button-loud" @click="emit(`checkout`)" />
             <!-- Not "leave": moving the workspace to your own machine costs nothing. -->
-            <RouterLink :to="{ name: `setup` }" class="text-xs text-link hover:underline">Or run it on your own computer, free</RouterLink>
+            <RouterLink :to="{ name: `setup` }" class="text-xs text-link hover:underline">{{
+                t(`settings.hostedPlanOffer.runOnOwnComputer`)
+            }}</RouterLink>
         </div>
     </Card>
 </template>

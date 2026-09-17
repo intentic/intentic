@@ -8,10 +8,13 @@ import ChatToolCard from "@intentic/web/features/chat/tools/ChatToolCard.vue";
 import { computed, provide, ref } from "vue";
 import { readPayload } from "./payload";
 import { shareSurface } from "./shareSurface";
+import { useT } from "@intentic/ui/i18n";
 
 // Renders the published conversation using the app's own markdown engine and tool card, adding only the bubble,
 // thinking fold and day markers around them. Deliberately not ChatMessageView (the live row): a record has no
 // pending card, no streaming, nobody to answer anything.
+
+const t = useT();
 
 const result = readPayload();
 const payload = computed(() => (result.ok ? result.payload : undefined));
@@ -69,13 +72,13 @@ const toggleThinking = (index: number): void => {
                 <h1 class="text-lg font-semibold text-content">{{ payload.title }}</h1>
                 <p class="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-2xs text-subtle">
                     <span :title="formatDateTime(payload.sharedAt)">{{ subtitle }}</span>
-<!-- Says plainly when work is left out, or a messages-only share reads as an agent that did nothing. -->
+                    <!-- Says plainly when work is left out, or a messages-only share reads as an agent that did nothing. -->
                     <span aria-hidden="true">·</span>
-                    <span>{{ payload.detail === "messages" ? "messages only" : "with the agent's work" }}</span>
+                    <span>{{ payload.detail === "messages" ? t(`share.shareApp.messagesOnly`) : t(`share.shareApp.agentsWork`) }}</span>
                 </p>
             </header>
 
-<!-- `chat-turns`/`chat-markdown` are the app's own stylesheet classes, so a shared page's type and spacing match the chat exactly. -->
+            <!-- `chat-turns`/`chat-markdown` are the app's own stylesheet classes, so a shared page's type and spacing match the chat exactly. -->
             <!-- No copy delegation here: <Markdown> binds its own code-block button; a second listener would double it. -->
             <main class="chat-turns flex flex-1 flex-col">
                 <template v-for="(message, index) in payload.messages" :key="index">
@@ -89,7 +92,7 @@ const toggleThinking = (index: number): void => {
                         <div class="chat-surface max-w-[85%] rounded-lg px-3 py-2 text-xs leading-relaxed whitespace-pre-wrap text-content">
                             {{ message.text }}
                         </div>
-<!-- Published beside the page: these are the actual bytes the agent looked at, not a filename standing in. -->
+                        <!-- Published beside the page: these are the actual bytes the agent looked at, not a filename standing in. -->
                         <div v-if="message.attachments?.length" class="flex flex-wrap justify-end gap-1">
                             <img
                                 v-for="path in message.attachments"
@@ -115,7 +118,7 @@ const toggleThinking = (index: number): void => {
                                 @click="toggleThinking(index)"
                             >
                                 <Icon class="text-2xs" :name="openThinking[index] === true ? 'chevron-down' : 'chevron-right'" />
-                                <span>Thinking</span>
+                                <span>{{ t(`share.shareApp.thinking`) }}</span>
                             </button>
                             <div
                                 v-if="openThinking[index] === true"
@@ -141,14 +144,14 @@ const toggleThinking = (index: number): void => {
 
         <!-- Empty state matches the outbox's own status pages: say what happened, offer one useful action. -->
         <div v-else class="flex flex-1 flex-col items-center justify-center gap-2 text-center">
-            <h1 class="text-sm font-semibold text-content">Nothing to show</h1>
+            <h1 class="text-sm font-semibold text-content">{{ t(`share.shareApp.nothingToShow`) }}</h1>
             <p class="text-xs text-muted">{{ result.ok ? "" : result.reason }}</p>
         </div>
 
         <!-- Same attribution volume as the outbox's status pages, placed after the content rather than before it. -->
         <footer class="chat-footer mt-2 border-t border-line pt-3 text-center text-2xs text-subtle">
             <a href="https://intentic.dev" target="_blank" rel="noopener" class="text-link hover:underline">
-                Shared from <b>Intentic</b>: run your own agents →
+                {{ t(`share.shareApp.shared`) }} <b>Intentic</b>{{ t(`share.shareApp.runOwnAgents`) }}
             </a>
         </footer>
     </div>

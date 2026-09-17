@@ -5,6 +5,7 @@ import { chatBarPeek, chatParked } from "./chatPanelLayout";
 import { chatBarDock } from "../../../shell/window/dockSlots";
 import { focusComposer } from "../tabs/useChat-tabs";
 import { useChat } from "../run/useChat";
+import { useT } from "@intentic/ui/i18n";
 
 // The chat's home while it is parked: a pill floating over the bottom of the area that grows into the focused chat's
 // own composer. The panel teleports here (PoppablePanels), so this is never a second composer — the words, the model,
@@ -15,6 +16,8 @@ import { useChat } from "../run/useChat";
 // second edge around a box that already has one, and none of them carried anything a reader writing one message needs.
 // The one thing the box cannot answer on its own — "what did it just say?" — is a handle on its top edge, and what
 // that reveals is this same pane's transcript, unfolding upward over the page (chatBarPeek).
+
+const t = useT();
 
 const router = useRouter();
 const { active, messages, streaming, draft, composerFocus, awaitingDecision } = useChat();
@@ -176,12 +179,14 @@ onBeforeUnmount(() => (chatBarDock.value = null));
 
 const restingLine = computed(() => {
     if (standing.value === `asking`) {
-        return title.value === undefined ? `Your agent is waiting for you` : `${title.value} · waiting for you`;
+        return title.value === undefined
+            ? t(`chat.chatQuickBar.agentWaitingForYou`)
+            : t(`chat.chatQuickBar.titleWaitingForYou`, { title: title.value });
     }
     if (standing.value === `unsent`) {
         return draft.value.trim();
     }
-    return title.value ?? (standing.value === `working` ? `Working…` : `Ask anything…`);
+    return title.value ?? (standing.value === `working` ? t(`chat.chatQuickBar.working`) : t(`chat.chatQuickBar.askAnything`));
 });
 
 // A question can only be answered where its card is drawn, so here the press is a door, not a disclosure.
@@ -200,13 +205,13 @@ const onPress = (): void => {
 </script>
 
 <template>
-<!-- Sits in the workspace cell rather than a row of its own, so it overlays the area instead of shortening it. -->
+    <!-- Sits in the workspace cell rather than a row of its own, so it overlays the area instead of shortening it. -->
     <div
         v-if="chatParked"
         class="chat-quick-seat pointer-events-none z-20 flex w-full justify-center self-end px-4 pb-4"
         style="grid-area: workspace"
     >
-<!-- NOTHING HERE TRANSITIONS. The swap is one render: an animated width reflowed the composer's own container queries
+        <!-- NOTHING HERE TRANSITIONS. The swap is one render: an animated width reflowed the composer's own container queries
      every frame of it, and the opacity crossfade between the two forms spent its first 100ms showing neither. -->
         <div
             ref="float"
@@ -218,9 +223,9 @@ const onPress = (): void => {
             @focusout="onFocusOut"
             @keydown.esc="onEscape"
         >
-<!-- WHICHEVER FORM IS NOT SHOWING LEAVES THE FLOW instead of being measured out of it: the box is the size of what is
+            <!-- WHICHEVER FORM IS NOT SHOWING LEAVES THE FLOW instead of being measured out of it: the box is the size of what is
      actually in it at both ends, so no reading can be stale and no frame can be left standing on air. -->
-<!-- It fades to nothing rather than to `display: none`, since the caret a summons sends arrives in the same render and
+            <!-- It fades to nothing rather than to `display: none`, since the caret a summons sends arrives in the same render and
      an unrendered box cannot take it. `inert` is a boolean attribute — present is inert whatever it says — and Vue
      strips a `false` only for the attributes it knows are boolean, which this is not. Hence `|| undefined` on both. -->
             <button
@@ -229,7 +234,7 @@ const onPress = (): void => {
                 :class="expanded ? `pointer-events-none absolute inset-x-0 bottom-0 opacity-0` : ``"
                 :inert="expanded || undefined"
                 :aria-expanded="standing === `asking` ? undefined : expanded"
-                :aria-label="standing === `asking` ? `Open the chat: your agent is waiting for an answer` : `Write to your agent from here`"
+                :aria-label="standing === `asking` ? t(`chat.chatQuickBar.openChatAgentWaiting`) : t(`chat.chatQuickBar.writeToAgentHere`)"
                 @click="onPress"
             >
                 <Icon v-if="standing === `asking`" name="exclamation-circle" class="shrink-0 text-2xs text-warning" />
@@ -242,7 +247,7 @@ const onPress = (): void => {
                 >
             </button>
 
-<!-- The grown form: the panel's own composer, and nothing of this component's around it. -->
+            <!-- The grown form: the panel's own composer, and nothing of this component's around it. -->
             <div
                 class="chat-quick-host w-full"
                 :class="expanded ? `` : `pointer-events-none absolute inset-x-0 bottom-0 opacity-0`"
@@ -251,16 +256,16 @@ const onPress = (): void => {
                 <div ref="slot" class="contents"></div>
             </div>
 
-<!-- The transcript's handle, straddling the edge the transcript comes out of: the box grows UPWARD from it, so the
+            <!-- The transcript's handle, straddling the edge the transcript comes out of: the box grows UPWARD from it, so the
      composer never moves under the pointer and the page it was opened to talk about stays where it was. Inside the
      float, so reading the turns is still "inside the box" and neither the peek nor the box closes under the pointer. -->
             <button
                 v-if="expanded && hasTranscript"
                 type="button"
                 class="chat-quick-handle absolute top-0 left-1/2 z-10 flex h-5 w-12 -translate-x-1/2 -translate-y-1/2 cursor-pointer items-center justify-center rounded-full border border-line-strong bg-card text-subtle shadow-md hover:text-content"
-                v-tooltip.top="chatBarPeek ? `Hide the conversation` : `What was said: hover to read, press to keep it open`"
+                v-tooltip.top="chatBarPeek ? t(`chat.chatQuickBar.hideConversation`) : t(`chat.chatQuickBar.whatWasSaidHover`)"
                 :aria-expanded="chatBarPeek"
-                aria-label="The conversation so far"
+                :aria-label="t(`chat.chatQuickBar.conversationSoFar`)"
                 @pointerenter="onPeekEnter"
                 @click="togglePeek"
             >

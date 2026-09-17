@@ -7,10 +7,13 @@ import { RouterLink, useRoute, useRouter } from "vue-router";
 import { apiClient } from "../../lib/useApi";
 import { useAuth } from "../auth/useAuth";
 import { useSandbox } from "../sandbox/client/useSandbox";
+import { useT } from "@intentic/ui/i18n";
 
 // Public accept-invite landing for /invite/:token: previews the token without a session, resolves the current session,
 // then routes the invitee (sign in as the invited address, accept, into the workspace). Accept is email-locked
 // server-side; this page only picks the right prompt for token × session.
+
+const t = useT();
 
 const route = useRoute();
 const router = useRouter();
@@ -103,59 +106,61 @@ const switchAccount = async (): Promise<void> => {
 
             <div v-if="view === 'loading'" class="flex items-center gap-3 text-sm text-muted">
                 <Icon name="spinner" spin />
-                <span>Loading your invite…</span>
+                <span>{{ t(`setup.acceptInvite.loadingInvite`) }}</span>
             </div>
 
             <template v-else-if="view === 'invalid'">
-                <h2 class="text-2xl font-semibold tracking-tight">Invite not found</h2>
-                <p class="mt-2 text-sm text-muted">This invite link is invalid or has been revoked. Ask whoever invited you for a fresh link.</p>
+                <h2 class="text-2xl font-semibold tracking-tight">{{ t(`setup.acceptInvite.inviteNotFound`) }}</h2>
+                <p class="mt-2 text-sm text-muted">{{ t(`setup.acceptInvite.inviteLinkInvalidRevoked`) }}</p>
             </template>
 
             <template v-else-if="view === 'expired'">
-                <h2 class="text-2xl font-semibold tracking-tight">Invite expired</h2>
-                <p class="mt-2 text-sm text-muted">This invite link has expired. Ask whoever invited you to send a new one.</p>
+                <h2 class="text-2xl font-semibold tracking-tight">{{ t(`setup.acceptInvite.inviteExpired`) }}</h2>
+                <p class="mt-2 text-sm text-muted">{{ t(`setup.acceptInvite.inviteLinkExpiredAsk`) }}</p>
             </template>
 
             <template v-else-if="view === 'signin'">
-                <h2 class="text-2xl font-semibold tracking-tight">You're invited</h2>
+                <h2 class="text-2xl font-semibold tracking-tight">{{ t(`setup.acceptInvite.youreInvited`) }}</h2>
                 <p class="mt-2 text-sm text-muted">
-                    You've been invited to open the <span class="font-medium text-content">{{ sandboxName }}</span> sandbox. Sign in with Google as
-                    <span class="font-medium text-content">{{ invitedEmail }}</span> to continue.
+                    {{ t(`setup.acceptInvite.youveInvitedToOpen`) }} <span class="font-medium text-content">{{ sandboxName }}</span>
+                    {{ t(`setup.acceptInvite.sandboxSignInGoogle`) }} <span class="font-medium text-content">{{ invitedEmail }}</span>
+                    {{ t(`setup.acceptInvite.toContinue`) }}
                 </p>
-                <Button label="Continue with Google" severity="secondary" class="mt-6 w-full justify-center" @click="signIn">
+                <Button :label="t(`setup.acceptInvite.continueGoogle`)" severity="secondary" class="mt-6 w-full justify-center" @click="signIn">
                     <template #icon><Icon name="google" /></template>
                 </Button>
             </template>
 
             <template v-else-if="view === 'accept'">
-                <h2 class="text-2xl font-semibold tracking-tight">You're invited</h2>
+                <h2 class="text-2xl font-semibold tracking-tight">{{ t(`setup.acceptInvite.youreInvited`) }}</h2>
                 <p class="mt-2 text-sm text-muted">
-                    You've been invited to the <span class="font-medium text-content">{{ sandboxName }}</span> sandbox, to {{ grantSentence }}.
+                    {{ t(`setup.acceptInvite.youveInvitedTo`) }} <span class="font-medium text-content">{{ sandboxName }}</span>
+                    {{ t(`setup.acceptInvite.sandboxTo`) }} {{ grantSentence }}.
                 </p>
-                <Button label="Accept invitation" class="mt-6 w-full justify-center" :loading="busy" @click="accept">
+                <Button :label="t(`setup.acceptInvite.acceptInvitation`)" class="mt-6 w-full justify-center" :loading="busy" @click="accept">
                     <template #icon><Icon name="check" /></template>
                 </Button>
             </template>
 
             <template v-else-if="view === 'wrong-account'">
-                <h2 class="text-2xl font-semibold tracking-tight">Wrong account</h2>
+                <h2 class="text-2xl font-semibold tracking-tight">{{ t(`setup.acceptInvite.wrongAccount`) }}</h2>
                 <p class="mt-2 text-sm text-muted">
-                    This invite is for <span class="font-medium text-content">{{ invitedEmail }}</span
-                    >, but you're signed in as <span class="font-medium text-content">{{ user?.email }}</span
+                    {{ t(`setup.acceptInvite.invite`) }} <span class="font-medium text-content">{{ invitedEmail }}</span
+                    >{{ t(`setup.acceptInvite.youreSignedIn`) }} <span class="font-medium text-content">{{ user?.email }}</span
                     >. Switch accounts to accept it.
                 </p>
-                <Button label="Switch account" severity="secondary" class="mt-6 w-full justify-center" @click="switchAccount">
+                <Button :label="t(`setup.acceptInvite.switchAccount`)" severity="secondary" class="mt-6 w-full justify-center" @click="switchAccount">
                     <template #icon><Icon name="sync" /></template>
                 </Button>
             </template>
 
             <template v-else>
-                <h2 class="text-2xl font-semibold tracking-tight">You're all set</h2>
+                <h2 class="text-2xl font-semibold tracking-tight">{{ t(`setup.acceptInvite.youreAllSet`) }}</h2>
                 <p class="mt-2 text-sm text-muted">
-                    You already have access to <span class="font-medium text-content">{{ sandboxName }}</span
+                    {{ t(`setup.acceptInvite.alreadyAccessTo`) }} <span class="font-medium text-content">{{ sandboxName }}</span
                     >.
                 </p>
-                <Button :as="RouterLink" to="/" label="Open sandbox" class="mt-6 w-full justify-center">
+                <Button :as="RouterLink" to="/" :label="t(`setup.acceptInvite.openSandbox`)" class="mt-6 w-full justify-center">
                     <template #icon><Icon name="arrow-right" /></template>
                 </Button>
             </template>

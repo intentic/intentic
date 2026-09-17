@@ -10,9 +10,12 @@ import { readFileWindow } from "../files/fileWindow";
 import { deskGroups, deskOrder } from "./deskOrder";
 import { kindLabel, PEEK_BYTES, type PeekKind, peekLines, peekPlan } from "./peekContent";
 import { thumbnailUrl } from "./thumbnails";
+import { useT } from "@intentic/ui/i18n";
 
 // `entry` undefined means closed. The card takes no pointer events: it overlaps the tiles beside its anchor, and the
 // pointer crossing onto one of them is how the look moves on.
+const t = useT();
+
 const { entry, anchor } = defineProps<{ entry: WorkspaceTreeEntry | undefined; anchor: HTMLElement | undefined }>();
 
 const { tree, entriesByPath, lazyChildren, loadChildren } = useWorkspaceTree();
@@ -205,7 +208,9 @@ onBeforeUnmount(() => controller?.abort());
                     :class="plan.kind === 'text' ? 'h-64' : plan.kind === 'folder' ? '' : 'max-h-[min(24rem,55vh)]'"
                 >
                     <template v-if="plan.kind === 'folder'">
-                        <p v-if="folderChildren !== undefined && folderChildren.length === 0" class="px-3 py-3 text-2xs text-subtle">Nothing inside.</p>
+                        <p v-if="folderChildren !== undefined && folderChildren.length === 0" class="px-3 py-3 text-2xs text-subtle">
+                            {{ t(`workspace.deskPeek.nothingInside`) }}
+                        </p>
                         <ul v-else-if="folderChildren !== undefined" class="flex flex-col gap-0.5 px-2 py-2">
                             <li v-for="child in folderNames" :key="child.path" class="flex items-center gap-2 truncate px-1 text-xs text-content/80">
                                 <Icon
@@ -216,12 +221,17 @@ onBeforeUnmount(() => controller?.abort());
                                 <span class="truncate">{{ child.name }}</span>
                             </li>
                             <li v-if="folderChildren.length > folderNames.length" class="px-1 pt-1 text-2xs text-subtle">
-                                and {{ (folderChildren.length - folderNames.length).toLocaleString() }} more
+                                {{ t(`workspace.deskPeek.more`, { count: (folderChildren.length - folderNames.length).toLocaleString() }) }}
                             </li>
                         </ul>
                     </template>
                     <template v-else-if="plan.kind === 'picture'">
-                        <img v-if="media !== undefined" :src="media" :alt="entry.name" class="block max-h-[min(24rem,55vh)] w-full object-contain p-2" />
+                        <img
+                            v-if="media !== undefined"
+                            :src="media"
+                            :alt="entry.name"
+                            class="block max-h-[min(24rem,55vh)] w-full object-contain p-2"
+                        />
                     </template>
                     <!-- Plays silently while looked at, the way a thumbnail strip does; the element streams by range. -->
                     <template v-else-if="plan.kind === 'video'">
@@ -237,7 +247,7 @@ onBeforeUnmount(() => controller?.abort());
                         ></video>
                     </template>
                     <template v-else-if="text !== undefined">
-                        <p v-if="text === ''" class="px-3 py-3 text-2xs text-subtle">Nothing in it yet.</p>
+                        <p v-if="text === ''" class="px-3 py-3 text-2xs text-subtle">{{ t(`workspace.deskPeek.nothingInYet`) }}</p>
                         <!-- The block's own frame and scrollbar are dropped: the body is already the window into the file, and a
                              card that takes no pointer can't be scrolled. -->
                         <div

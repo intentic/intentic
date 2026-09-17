@@ -5,12 +5,15 @@ import ChatModelPicker from "../../chat/models/ChatModelPicker.vue";
 import ComposerEffort from "../../chat/composer/ComposerEffort.vue";
 import ComposerModelPill from "../../chat/composer/ComposerModelPill.vue";
 import type { Conversation } from "../../chat/session/conversation";
+import { useT } from "@intentic/ui/i18n";
 
 // The chat composer's own controls (model picker, effort, fill ramp, composer-* classes) reused exactly over a
 // different Conversation, not a lookalike, so it can't drift from what the catalog actually offers.
 // The promise is that the proposed turn is one the user could have composed themselves.
 // Leaves out attachments, @-mentions, slash commands, dictation and the mode menu: those compose a task from nothing,
 // and this box opens with the task already written.
+
+const t = useT();
 
 const { conversation, action, busy = false } = defineProps<{ conversation: Conversation; action: string; busy?: boolean }>();
 const emit = defineEmits<{ start: [] }>();
@@ -68,8 +71,8 @@ onMounted(() => {
                 ref="codeField"
                 v-model="conversation.draft.value"
                 lang="markdown"
-                placeholder="What should the agent do?"
-                aria-label="What should the agent do?"
+                :placeholder="t(`agents.suggestedSessionBox.whatShouldAgentDo`)"
+                :aria-label="t(`agents.suggestedSessionBox.whatShouldAgentDo`)"
                 @keydown="onKeydown"
             />
         </div>
@@ -89,13 +92,13 @@ onMounted(() => {
                 :loading="busy"
                 :label="action"
                 icon="send"
-                v-tooltip.top="'Ctrl+Enter'"
+                v-tooltip.top="t(`agents.suggestedSessionBox.ctrlEnter`)"
                 @click="start"
             />
         </div>
 
         <!-- The model picker shares the composer's overlay and has no local height cap. -->
-        <ResponsiveOverlay v-model="modelOpen" :anchor="modelPill?.el" header="Model" panel-class="w-[26rem]">
+        <ResponsiveOverlay v-model="modelOpen" :anchor="modelPill?.el" :header="t(`agents.suggestedSessionBox.model`)" panel-class="w-[26rem]">
             <ChatModelPicker :conversation="conversation" @selected="modelOpen = false" />
         </ResponsiveOverlay>
     </div>

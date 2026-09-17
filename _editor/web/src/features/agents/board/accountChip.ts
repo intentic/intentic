@@ -1,4 +1,5 @@
 import type { OauthAccount } from "@intentic/sandbox-contract";
+import { t } from "@intentic/ui/i18n";
 
 // Which connected account a session's turns run on, as the card spells it (sessionChip.ts's companion); its own module
 // so the string rule stays testable.
@@ -49,6 +50,6 @@ export const accountBadge = (accounts: readonly OauthAccount[], ran: string | un
             entry.label,
             accounts.map((account) => account.label),
         ),
-        hint: `Runs on ${whole}`,
+        hint: t(`agents.accountChip.runsOn`, { whole }),
     };
 };

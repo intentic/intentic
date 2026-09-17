@@ -2,23 +2,30 @@
 import { COMMAND_RULE_CATALOG, type CommandLocus, type CommandRuleTier } from "@intentic/sandbox-contract";
 import { Row, RowGroup } from "@intentic/ui";
 import RuleCommand from "./RuleCommand.vue";
+import { useT } from "@intentic/ui/i18n";
+import { computed } from "vue";
 
 // Read-only table of COMMAND_RULE_CATALOG (safety-policy.ts): one row per command class, one column per machine
 // (sandbox, device), the same catalog both gates enforce. No controls: change a pattern in the catalog or write a rule
 // in the policy below, not here.
 
-const MACHINES = [
-    { locus: `sandbox`, label: `This sandbox`, track: `bg-content/[0.02]` },
-    { locus: `device`, label: `My devices`, track: `bg-content/[0.045]` },
-] as const satisfies readonly { locus: CommandLocus; label: string; track: string }[];
+const t = useT();
+
+const MACHINES = computed(
+    () =>
+        [
+            { locus: `sandbox`, label: t(`sandbox.agentSafetyRules.sandbox`), track: `bg-content/[0.02]` },
+            { locus: `device`, label: t(`sandbox.agentSafetyRules.myDevices`), track: `bg-content/[0.045]` },
+        ] as const satisfies readonly { locus: CommandLocus; label: string; track: string }[],
+);
 
 // ONE RECORD PER TIER, two views of it: the word and the tone it takes wherever it's shown, so a tier cannot end up
 // spelled two ways. "Judged" and "Always asks" name the consequence, not the mechanism; context already says what
 // judging means, and amber is the half a reader cannot waive.
-const TIERS: Readonly<Record<CommandRuleTier, { label: string; tone: string }>> = {
-    hard: { label: `Always asks`, tone: `font-medium text-warning` },
-    judged: { label: `Judged`, tone: `text-subtle` },
-};
+const TIERS = computed((): Readonly<Record<CommandRuleTier, { label: string; tone: string }>> => ({
+    hard: { label: t(`sandbox.agentSafetyRules.alwaysAsks`), tone: `font-medium text-warning` },
+    judged: { label: t(`sandbox.agentSafetyRules.judged`), tone: `text-subtle` },
+}));
 
 // ONE MACHINE'S COLUMN, WRITTEN ONCE. Its head, its track, every verdict in it and the empty spacer that holds the
 // patterns out of it are the same column seen four times, so a column that changes width stays a column.
@@ -31,24 +38,19 @@ const rowTitle = (label: string) => label.charAt(0).toUpperCase() + label.slice(
 
 <template>
     <!-- `@container`, not a viewport breakpoint: this panel's width is its containing pane, not the phone. -->
-    <RowGroup class="@container" label="What gets stopped">
-<!-- The heads, the rules and the two tracks behind the machine columns are ONE child of the group. -->
+    <RowGroup class="@container" :label="t(`sandbox.agentSafetyRules.whatGetsStopped`)">
+        <!-- The heads, the rules and the two tracks behind the machine columns are ONE child of the group. -->
         <div class="relative">
-<!-- TWO tracks, touching: each machine gets its own wash so the columns read apart without a gutter between them. -->
+            <!-- TWO tracks, touching: each machine gets its own wash so the columns read apart without a gutter between them. -->
             <div aria-hidden="true" class="pointer-events-none absolute inset-y-0 right-4 hidden @2xl:flex">
                 <span
                     v-for="(machine, index) in MACHINES"
                     :key="machine.locus"
-                    :class="[
-                        COLUMN,
-                        machine.track,
-                        index === 0 ? `rounded-l-md` : ``,
-                        index === MACHINES.length - 1 ? `rounded-r-md` : ``,
-                    ]"
+                    :class="[COLUMN, machine.track, index === 0 ? `rounded-l-md` : ``, index === MACHINES.length - 1 ? `rounded-r-md` : ``]"
                 />
             </div>
 
-<!-- Keep #meta rows unpadded so headings align with Row's tier. -->
+            <!-- Keep #meta rows unpadded so headings align with Row's tier. -->
             <div class="relative hidden @2xl:block">
                 <Row>
                     <template #meta>
@@ -92,7 +94,7 @@ const rowTitle = (label: string) => label.charAt(0).toUpperCase() + label.slice(
                         </div>
                     </template>
 
-<!-- self-stretch + h-full: badges stay centred on the row when the title wraps to several lines. -->
+                    <!-- self-stretch + h-full: badges stay centred on the row when the title wraps to several lines. -->
                     <template #meta>
                         <div class="hidden self-stretch items-center @2xl:flex">
                             <span

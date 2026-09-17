@@ -5,9 +5,12 @@ import { formatDate, timeAgo } from "@intentic/ui/format";
 import { computed, ref } from "vue";
 import { type ControlToken, useControlTokens } from "./useControlTokens";
 import { useSandbox } from "../client/useSandbox";
+import { useT } from "@intentic/ui/i18n";
 
 // Program credential minted here by the owner: every scope, every token against this sandbox, and the
 // paste-ready snippets for a shell, CI and an editor. Shown once — the daemon keeps only the hash.
+
+const t = useT();
 
 type Expiry = `30` | `90` | `365` | `never`;
 
@@ -42,16 +45,16 @@ const scopeOptions = computed<readonly PickerOption<ControlScope>[]>(() =>
     })),
 );
 
-const EXPIRY_OPTIONS: readonly PickerOption<Expiry>[] = [
-    { value: `30`, label: `30 days` },
-    { value: `90`, label: `90 days` },
-    { value: `365`, label: `1 year` },
+const EXPIRY_OPTIONS = computed((): readonly PickerOption<Expiry>[] => [
+    { value: `30`, label: t(`sandbox.controlTokensSection.n30Days`) },
+    { value: `90`, label: t(`sandbox.controlTokensSection.n90Days`) },
+    { value: `365`, label: t(`sandbox.controlTokensSection.n1Year`) },
     {
         value: `never`,
-        label: `Never`,
-        hint: `Lives until revoked. Right for an editor on your own laptop; wrong for a secret in someone else's store.`,
+        label: t(`sandbox.controlTokensSection.never`),
+        hint: t(`sandbox.controlTokensSection.livesUntilRevokedRight`),
     },
-];
+]);
 
 const label = ref(``);
 const scope = ref<ControlScope | undefined>(SCOPES[0]);
@@ -148,14 +151,14 @@ const describe = (token: ControlToken): string =>
 </script>
 
 <template>
-    <RowGroup v-if="isOwner" label="API tokens" :count="tokens.length === 0 ? undefined : tokens.length">
+    <RowGroup v-if="isOwner" :label="t(`sandbox.controlTokensSection.apiTokens`)" :count="tokens.length === 0 ? undefined : tokens.length">
         <Row v-for="token in tokens" :key="token.id" icon="key" :title="token.label" :description="describe(token)">
             <!-- Same pill the member roster uses for the same word, so "expired" doesn't get two spellings. -->
             <template v-if="expired(token)" #meta>
-                <StatusBadge variant="danger" label="expired" size="xs" />
+                <StatusBadge variant="danger" :label="t(`sandbox.controlTokensSection.expired`)" size="xs" />
             </template>
             <template #control>
-                <Button label="Revoke" size="small" severity="danger" :text="true" @click="revoke(token.id)" />
+                <Button :label="t(`sandbox.controlTokensSection.revoke`)" size="small" severity="danger" :text="true" @click="revoke(token.id)" />
             </template>
         </Row>
 
@@ -170,7 +173,7 @@ const describe = (token: ControlToken): string =>
                             v-model="label"
                             type="text"
                             autocomplete="off"
-                            placeholder="Label, e.g. nightly CI"
+                            :placeholder="t(`sandbox.controlTokensSection.labelEGNightly`)"
                             :class="ui.inputSm(`min-w-48 flex-1`)"
                         />
                         <div class="flex min-w-0 flex-wrap items-center gap-2">
@@ -179,8 +182,8 @@ const describe = (token: ControlToken): string =>
                                 v-model="scope"
                                 :options="scopeOptions"
                                 variant="input"
-                                aria-label="Token scope"
-                                header="Scope"
+                                :aria-label="t(`sandbox.controlTokensSection.tokenScope`)"
+                                :header="t(`sandbox.controlTokensSection.scope`)"
                                 label-class="capitalize"
                                 class="ui-field-sm w-32"
                             />
@@ -188,13 +191,13 @@ const describe = (token: ControlToken): string =>
                                 v-model="expiry"
                                 :options="EXPIRY_OPTIONS"
                                 variant="input"
-                                aria-label="Token expiry"
-                                header="Expires"
+                                :aria-label="t(`sandbox.controlTokensSection.tokenExpiry`)"
+                                :header="t(`sandbox.controlTokensSection.expires`)"
                                 class="ui-field-sm w-32"
                             />
                             <Button
                                 type="submit"
-                                label="Mint token"
+                                :label="t(`sandbox.controlTokensSection.mintToken`)"
                                 size="small"
                                 :loading="minting"
                                 :disabled="minting || scope === undefined"
@@ -209,23 +212,29 @@ const describe = (token: ControlToken): string =>
                 </form>
 
                 <div v-if="minted" class="flex flex-col gap-2 rounded-lg bg-canvas p-3">
-                    <p class="text-2xs text-subtle">Shown once: copy it now. The sandbox stores only a hash.</p>
+                    <p class="text-2xs text-subtle">{{ t(`sandbox.controlTokensSection.shownOnceCopyNow`) }}</p>
                     <div class="flex items-center gap-2">
                         <code class="min-w-0 flex-1 truncate font-mono text-xs text-content">{{ minted.token }}</code>
-                        <CopyButton :text="minted.token" label="Copy" />
+                        <CopyButton :text="minted.token" :label="t(`ui.action.copy`)" />
                     </div>
-                    <Code v-if="shownSnippets.includes(`curl`)" :code="curlSnippet" lang="bash" label="A shell, anywhere" :wrap="true" />
+                    <Code
+                        v-if="shownSnippets.includes(`curl`)"
+                        :code="curlSnippet"
+                        lang="bash"
+                        :label="t(`sandbox.controlTokensSection.shellAnywhere`)"
+                        :wrap="true"
+                    />
                     <Code
                         v-if="shownSnippets.includes(`github`)"
                         :code="githubSnippet"
                         lang="yaml"
-                        label="GitHub Actions: the token goes in a repository secret named INTENTIC_TOKEN"
+                        :label="t(`sandbox.controlTokensSection.githubActionsTokenGoes`)"
                     />
                     <Code
                         v-if="shownSnippets.includes(`acp`)"
                         :code="acpSnippet"
                         lang="json"
-                        label="Zed → settings.json (JetBrains takes the same command + env)"
+                        :label="t(`sandbox.controlTokensSection.zedSettingsJsonJetbrains`)"
                     />
                 </div>
             </div>

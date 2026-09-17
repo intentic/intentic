@@ -4,9 +4,12 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { createApp } from "vue";
 import App from "./App.vue";
 import CloseConfirm from "./CloseConfirm.vue";
+import { registerDesktopCatalog } from "./i18n";
 import "./styles.css";
 
 // The reader's language, before a single component renders in the wrong one; `installUi` below installs `$t` itself.
+// The shell's own words are registered first, so `startI18n` has them to fetch a language for.
+await registerDesktopCatalog();
 await startI18n();
 
 /* Two windows into one bundle. */

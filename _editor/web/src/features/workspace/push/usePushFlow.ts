@@ -35,6 +35,7 @@ import { type SyncTarget, useChanges } from "../changes/useChanges";
 import { workspaceChangedSince } from "../changes/live/useWorkspaceLive";
 import { usePrepush } from "./usePrepush";
 import { resetPushRuns, usePushRun } from "./usePushRun";
+import { t } from "@intentic/ui/i18n";
 
 // The push flow, from click to answer, kept at module level (not in the panel) so it outlives the surface
 // that started it: any view calling this gets the same instance. `askSync` is the one door every push goes
@@ -308,11 +309,15 @@ const refusalQuestion = (push: PendingPush, refused: readonly string[]): PushQue
     const only = refused.length === 1 ? git!.failures.value.get(refused[0]!) : undefined;
     if (only === undefined) {
         // Several can't share a line; each row in the panel already carries its own reason.
-        return { kind: `push`, title: `${push.verb} failed`, detail: `${refused.length} repos refused it, each row says why.` };
+        return {
+            kind: `push`,
+            title: t(`workspace.usePushFlow.failed`, { verb: push.verb }),
+            detail: t(`workspace.usePushFlow.reposRefusedEachRow`, { count: refused.length }),
+        };
     }
     if (only.run === undefined) {
         // No run: a pull that failed ahead of the push, so the line names the repo itself.
-        return { kind: `push`, title: `${push.verb} failed`, detail: `${refused[0]}: ${only.detail}` };
+        return { kind: `push`, title: t(`workspace.usePushFlow.failed`, { verb: push.verb }), detail: `${refused[0]}: ${only.detail}` };
     }
     // The run's own outcome names it; its command sits above the line, the predicate that follows, as a check's is.
     return { kind: `push`, title: commandRunOutcome(only.run, push.verb), command: only.run.command, detail: only.detail };
@@ -382,9 +387,7 @@ export function usePushFlow() {
     // declares for itself and the owner has switched on. Nothing standing means the push simply goes.
     const checksStandFor = (push: PendingPush): boolean => {
         const repos = pushedRepos(push);
-        return (
-            pushChecksOf(settings.value?.rules ?? [], repos).length > 0 || adoptedChecksFor(declaringRepos.value ?? [], `push`, repos).length > 0
-        );
+        return pushChecksOf(settings.value?.rules ?? [], repos).length > 0 || adoptedChecksFor(declaringRepos.value ?? [], `push`, repos).length > 0;
     };
 
     // What the waiting line names while nothing has been polled yet: the first command standing for whatever push is in

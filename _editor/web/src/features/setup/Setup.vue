@@ -52,12 +52,15 @@ import { type AttachOutcome, daemonUrlProblem, normalizeDaemonUrl, probeDaemon }
 import { autoSandboxName } from "./setupName";
 import { setupReportView } from "./setupReport";
 import { hostedWaitView, machineIsDown } from "./hostedWait";
+import { useT } from "@intentic/ui/i18n";
 
 // No identity or machine decision here: the surface (setupArrival.ts) decides those; this page is what's left
 // otherwise.
 // Two lanes share the same `created` row: provision mints a tunnel and a setup code the command redeems; attach records
 // an
 // already-reachable domain directly, skipping step 2.
+
+const t = useT();
 
 const sandbox = useSandbox();
 const router = useRouter();
@@ -149,12 +152,12 @@ const runTab = computed<`unix` | `windows` | `compose`>({
 });
 // Labels shed a qualifier on phone; Compose's own label lives in the panel's first line, not the tab.
 const runTabOptions = computed(() => [
-    { label: `Linux / macOS`, value: `unix` as const },
+    { label: t(`setup.setup.linuxMacos`), value: `unix` as const },
     { label: mobile.value ? `Windows` : `Windows (PowerShell)`, value: `windows` as const },
     {
         label: mobile.value ? `Compose` : `Docker Compose`,
         value: `compose` as const,
-        title: `No script runs: read the whole file, then start it yourself`,
+        title: t(`setup.setup.noScriptRunsRead`),
     },
 ]);
 
@@ -291,7 +294,7 @@ const ladderOptions = computed<readonly MachineOption[]>(() => [
               {
                   value: `hosted` as const,
                   // Title answers 'what do I do', not 'whose machine'; that fact lives in `note` instead.
-                  title: `Start instantly`,
+                  title: t(`setup.setup.startInstantly`),
                   // Badge carries the hour ceiling, never bare 'Free', and what happens after: unlimited reads 'always
                   // on'.
                   // When the fleet is full, the badge says so instead of a price; the rung stays on screen, not hidden.
@@ -306,7 +309,7 @@ const ladderOptions = computed<readonly MachineOption[]>(() => [
                             : hostedHours.value.rampUntil === undefined
                               ? `Free to try · ${hostedHours.value.allowance}h a month, always on with the plan`
                               : `Free to try · ${hostedHours.value.allowance}h to start, more after your first days`,
-                  note: `Runs on our servers`,
+                  note: t(`setup.setup.runsOnOurServers`),
               },
           ]
         : []),
@@ -315,7 +318,7 @@ const ladderOptions = computed<readonly MachineOption[]>(() => [
         ? [
               {
                   value: `mine` as const,
-                  title: `My own computer`,
+                  title: t(`setup.setup.myOwnComputer`),
                   meta: `Most power · no limits`,
                   // Note names the actual next step; reads off the same `installer` the step below uses, so they can't
                   // disagree.
@@ -754,7 +757,7 @@ const restartHosted = async (): Promise<void> => {
     const action = ++hostedAction;
     hostedBusy.value = true;
     hostedError.value = undefined;
-/* CLEARED BEFORE THE CALL, NOT AFTER IT. */
+    /* CLEARED BEFORE THE CALL, NOT AFTER IT. */
     bootReport.value = null;
     announceRefusal.value = null;
     announced.value = false;
@@ -1348,7 +1351,7 @@ const warmSandboxCredential = async (): Promise<void> => {
                         v-if="otherWorkspace"
                         :as="RouterLink"
                         to="/"
-                        label="Back to workspace"
+                        :label="t(`setup.setup.backToWorkspace`)"
                         severity="secondary"
                         :text="true"
                         class="mast-back shrink-0"
@@ -1360,22 +1363,25 @@ const warmSandboxCredential = async (): Promise<void> => {
                 <!-- Matches the sign-in rail's second beat verbatim; true in both lanes, since attach means already reachable. -->
                 <p class="entry-eyebrow mast-eyebrow">
                     <span class="entry-lozenge"></span>
-                    <span>Your sandbox is waiting</span>
+                    <span>{{ t(`setup.setup.sandboxWaiting`) }}</span>
                 </p>
 
                 <!-- One sentence only; the door's headline gets two, but here the loudest thing on screen has to be a rung. -->
-                <h1 class="mast-headline"><span class="entry-display">Set up your workspace</span><span class="entry-stop">.</span></h1>
+                <h1 class="mast-headline">
+                    <span class="entry-display">{{ t(`setup.setup.setUpWorkspace`) }}</span
+                    ><span class="entry-stop">.</span>
+                </h1>
 
                 <!-- Lede must match the lane and ask a question only when the picker actually shows, keyed on `ladderShown`. -->
                 <p class="mast-lede">
-                    <template v-if="lane === `attach`">Point intentic at the sandbox you're already running. One address, and you're in.</template>
+                    <template v-if="lane === `attach`">{{ t(`setup.setup.pointIntenticAtSandbox`) }}</template>
                     <!-- Nothing to start, so no promised minute or two; reads the same verdict the card below does. -->
-                    <template v-else-if="loaded && !laneTakeable">Here's what this platform can do for you.</template>
-                    <template v-else-if="ladderShown">Pick where it runs. You'll be working in it in a minute or two.</template>
-                    <template v-else-if="machine === `hosted`">We're starting a machine for you. You'll be working in it in about a minute.</template>
-                    <template v-else-if="desktop">Setting it up on this computer. You'll be working in it in a minute or two.</template>
+                    <template v-else-if="loaded && !laneTakeable">{{ t(`setup.setup.heresWhatPlatformDo`) }}</template>
+                    <template v-else-if="ladderShown">{{ t(`setup.setup.pickWhereRunsYoull`) }}</template>
+                    <template v-else-if="machine === `hosted`">{{ t(`setup.setup.startingMachineYoullWorking`) }}</template>
+                    <template v-else-if="desktop">{{ t(`setup.setup.settingUpOnComputer`) }}</template>
                     <!-- One rung, no picker, nothing started yet; names the lane without claiming work that hasn't begun. -->
-                    <template v-else>It runs on a computer of yours. You'll be working in it in a minute or two.</template>
+                    <template v-else>{{ t(`setup.setup.runsOnComputerYours`) }}</template>
                 </p>
             </header>
 
@@ -1383,7 +1389,12 @@ const warmSandboxCredential = async (): Promise<void> => {
             <div class="flex flex-col gap-3 md:gap-4 xl:flex-row xl:items-start xl:gap-6">
                 <div class="flex min-w-0 flex-1 flex-col gap-3 md:gap-4 xl:max-w-3xl">
                     <!-- Titled since it asks for something (a form needs a heading); an icon, not a number, since there's no step 2. -->
-                    <StepSection v-if="lane === `attach`" icon="link" title="Connect your sandbox" class="entry-frame rounded-none work-card">
+                    <StepSection
+                        v-if="lane === `attach`"
+                        icon="link"
+                        :title="t(`setup.setup.connectSandbox`)"
+                        class="entry-frame rounded-none work-card"
+                    >
                         <!-- The lane's corners are positioned against the shared entry frame. -->
                         <span class="entry-corner entry-corner-tl"></span>
                         <span class="entry-corner entry-corner-tr"></span>
@@ -1392,14 +1403,13 @@ const warmSandboxCredential = async (): Promise<void> => {
                         <!-- Explains why the page (not the reader) chose this lane; else 'give us your domain' reads as a missing step. -->
                         <p v-if="!provisionOffered" class="flex items-start gap-2 text-xs text-muted">
                             <Icon name="info-circle" class="mt-0.5 shrink-0" />
-                            <span>This platform doesn't start sandboxes or hand out addresses: it connects to one you're already running.</span>
+                            <span>{{ t(`setup.setup.platformDoesntStartSandboxes`) }}</span>
                         </p>
                         <p class="text-xs text-muted">
-                            Already running the sandbox container behind a domain of your own? Give us the address it answers on. We'll check it, then
-                            open your workspace. Nothing to install, nothing to provision.
+                            {{ t(`setup.setup.alreadyRunningSandboxContainer`) }}
                         </p>
                         <label class="ui-field">
-                            <span class="ui-field-label">Domain</span>
+                            <span class="ui-field-label">{{ t(`setup.setup.domain`) }}</span>
                             <!-- Stack the domain field on phones so its address remains readable. -->
                             <div class="flex flex-col gap-2 md:flex-row md:items-center">
                                 <input
@@ -1413,7 +1423,7 @@ const warmSandboxCredential = async (): Promise<void> => {
                                 />
                                 <!-- Attaching disables the action as well as showing progress. -->
                                 <Button
-                                    label="Connect"
+                                    :label="t(`ui.action.connect`)"
                                     class="w-full justify-center md:w-fit"
                                     :loading="attaching"
                                     :disabled="attaching || normalizedDomain === undefined"
@@ -1424,16 +1434,16 @@ const warmSandboxCredential = async (): Promise<void> => {
                             </div>
                             <span v-if="domainProblem" class="text-xs text-warning">{{ domainProblem }}</span>
                             <span v-else-if="normalizedDomain" class="text-xs text-muted"
-                                >We'll connect to <span>{{ normalizedDomain }}</span
+                                >{{ t(`setup.setup.wellConnectTo`) }} <span>{{ normalizedDomain }}</span
                                 >.</span
                             >
-                            <span v-else class="text-xs text-muted">The https address your sandbox already answers on (https:// is optional).</span>
+                            <span v-else class="text-xs text-muted">{{ t(`setup.setup.httpsAddressSandboxAlready`) }}</span>
                         </label>
 
                         <!-- Each probe failure names the one thing the user can do about it. -->
                         <Notice v-if="attachOutcome?.kind === `unreachable`" :of="{ tone: `danger`, title: `Nothing answered at that address.` }">
                             <span class="mt-0.5 block text-2xs">
-                                Check the sandbox is running and the domain points at it. The daemon's <code>WEB_ORIGIN</code> also has to name
+                                {{ t(`setup.setup.checkSandboxRunningDomain`) }} <code>WEB_ORIGIN</code> {{ t(`setup.setup.alsoToName`) }}
                                 <span>{{ webOrigin() ?? PLATFORM_WEB_ORIGIN }}</span
                                 >. Otherwise your browser blocks the call before it's sent.
                             </span>
@@ -1452,33 +1462,32 @@ const warmSandboxCredential = async (): Promise<void> => {
                             :of="{ tone: `danger`, title: `That domain is live, but no sandbox is running behind it.` }"
                         >
                             <span class="mt-0.5 block text-2xs">
-                                Its tunnel or reverse proxy answered {{ attachOutcome.status }} with nothing to forward to. Start the sandbox
-                                container<template v-if="created !== null"
-                                    >, or get a domain from intentic and run the install command instead</template
+                                {{ t(`setup.setup.tunnelReverseProxyAnswered`) }} {{ attachOutcome.status }} {{ t(`setup.setup.nothingToForwardTo`)
+                                }}<template v-if="created !== null">{{ t(`setup.setup.getDomainIntenticRun`) }}</template
                                 >.
                             </span>
                         </Notice>
                         <template v-else-if="attachOutcome?.kind === `needs-token`">
                             <Notice :of="{ tone: `warning`, title: `Your sandbox is up, but it wouldn't let us in yet.` }">
                                 <span class="mt-0.5 block text-2xs"
-                                    >It's waiting to be claimed with the connection token it was started with. Paste that
-                                    <code>CONNECT_TOKEN</code> to claim it as yours.</span
+                                    >{{ t(`setup.setup.waitingToClaimedConnection`) }} <code>CONNECT_TOKEN</code>
+                                    {{ t(`setup.setup.toClaimYours`) }}</span
                                 >
                             </Notice>
                             <label class="ui-field">
-                                <span class="ui-field-label">Connection token</span>
+                                <span class="ui-field-label">{{ t(`setup.setup.connectionToken`) }}</span>
                                 <input
                                     v-model="attachToken"
                                     type="password"
                                     autocomplete="off"
                                     autocapitalize="off"
                                     spellcheck="false"
-                                    placeholder="The CONNECT_TOKEN your sandbox runs with"
+                                    :placeholder="t(`setup.setup.connectTokenSandboxRuns`)"
                                     :class="ui.input('w-full')"
                                     @keydown.enter="connectDomain"
                                 />
                                 <span class="text-xs text-muted">
-                                    Used once to claim the sandbox. The daemon stops asking once you're bound, so intentic never stores it.
+                                    {{ t(`setup.setup.usedOnceToClaim`) }}
                                 </span>
                             </label>
                         </template>
@@ -1503,7 +1512,7 @@ const warmSandboxCredential = async (): Promise<void> => {
                             :class="ui.linkButton(`text-muted underline hover:text-content`)"
                             @click="setLane(`provision`)"
                         >
-                            {{ created === null ? `← Set one up for me instead` : `← Get a domain from intentic instead` }}
+                            {{ created === null ? t(`setup.setup.setOneUpMe`) : t(`setup.setup.getDomainIntenticInstead`) }}
                         </button>
                     </StepSection>
 
@@ -1514,27 +1523,23 @@ const warmSandboxCredential = async (): Promise<void> => {
                             <!-- Offers and row creation render as one loading state. -->
                             <p v-if="!loaded || creating" class="flex items-center gap-2 text-xs text-muted">
                                 <Icon name="spinner" spin class="text-info" />
-                                Setting one up for you. Nothing to fill in.
+                                {{ t(`setup.setup.settingOneUpNothing`) }}
                             </p>
                             <template v-else>
                                 <Notice v-if="error" :of="error" />
-                                <Button label="Try again" class="w-full justify-center md:w-fit" @click="autoCreate">
+                                <Button :label="t(`ui.action.tryAgain`)" class="w-full justify-center md:w-fit" @click="autoCreate">
                                     <template #icon><Icon name="refresh" /></template>
                                 </Button>
                             </template>
                             <!-- Attach is offered only after platform capabilities load. -->
                             <button v-if="loaded" type="button" :class="ui.linkButton()" @click="setLane(`attach`)">
-                                Already running a sandbox somewhere? Connect it by domain →
+                                {{ t(`setup.setup.alreadyRunningSandboxSomewhere`) }}
                             </button>
                         </template>
                         <p v-else class="text-xs text-muted">
-                            {{
-                                neverStarted
-                                    ? `Picking up where you left off: nothing has run yet.`
-                                    : `Still on the platform, the cleanup only cleared its local container.`
-                            }}
+                            {{ neverStarted ? t(`setup.setup.pickingUpWhereLeft`) : t(`setup.setup.stillOnPlatformCleanup`) }}
                             <button type="button" class="cursor-pointer text-link hover:underline" @click="startFresh">
-                                Use a new sandbox instead</button
+                                {{ t(`setup.setup.useNewSandboxInstead`) }}</button
                             >.
                         </p>
                     </div>
@@ -1550,7 +1555,7 @@ const warmSandboxCredential = async (): Promise<void> => {
                                     detail: `Nothing is wrong with your account — the check itself didn't get through.`,
                                 }"
                             />
-                            <Button label="Try again" class="w-full justify-center md:w-fit" @click="retryArrival">
+                            <Button :label="t(`ui.action.tryAgain`)" class="w-full justify-center md:w-fit" @click="retryArrival">
                                 <template #icon><Icon name="refresh" /></template>
                             </Button>
                         </template>
@@ -1577,11 +1582,11 @@ const warmSandboxCredential = async (): Promise<void> => {
                             />
                         </template>
                         <button type="button" :class="ui.linkButton()" @click="setLane(`attach`)">
-                            Already running a sandbox somewhere? Connect it by domain →
+                            {{ t(`setup.setup.alreadyRunningSandboxSomewhere`) }}
                         </button>
                     </div>
 
-<!-- Card is what you do (command, two switches, one state line); what it means moved to SetupRunDetails, docked or folded into (i). -->
+                    <!-- Card is what you do (command, two switches, one state line); what it means moved to SetupRunDetails, docked or folded into (i). -->
 
                     <!-- No heading: it could only name one of three answers below, and the chooser says it better than a title could. -->
                     <!-- Ladder is its own row outside every card, not nested in the run card, so it isn't read as a step's detail. -->
@@ -1591,7 +1596,7 @@ const warmSandboxCredential = async (): Promise<void> => {
                             class="grid gap-3"
                             :class="ladderOptions.length === 2 ? `sm:grid-cols-2` : `sm:grid-cols-3`"
                             role="radiogroup"
-                            aria-label="Where the sandbox runs"
+                            :aria-label="t(`setup.setup.whereSandboxRuns`)"
                         >
                             <!-- Selected rungs use gold corners as the page's selection signal. -->
                             <button
@@ -1635,7 +1640,7 @@ const warmSandboxCredential = async (): Promise<void> => {
                                 <span class="text-xs leading-snug text-subtle">{{ option.note }}</span>
                                 <!-- Spent allowances remain visible instead of hiding an unavailable rung. -->
                                 <span v-if="option.value === `hosted` && hostedSpent" class="text-xs text-warning">{{
-                                    hostedSuspended ? `Not available to this account` : `Already using yours`
+                                    hostedSuspended ? t(`setup.setup.notAvailableToAccount`) : t(`setup.setup.alreadyUsingYours`)
                                 }}</span>
                             </button>
                         </div>
@@ -1657,33 +1662,33 @@ const warmSandboxCredential = async (): Promise<void> => {
                                 v-if="addressFact !== `own`"
                                 class="grid min-w-0 grid-cols-1 gap-x-3 gap-y-1 sm:min-h-8 sm:grid-cols-facts sm:content-center sm:items-baseline"
                             >
-                                <span :class="factLabel">Address</span>
+                                <span :class="factLabel">{{ t(`setup.setup.address`) }}</span>
                                 <div class="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-1">
                                     <!-- Address facts are keyed by the selected rung, not machine state. -->
                                     <template v-if="addressFact === `hosted`">
                                         <span v-if="hostedHost" :class="factHost">{{ hostedHost }}</span>
                                         <span v-else-if="hostedRow !== null" :class="`${factSlot} gap-2 text-xs text-muted`">
-                                            <Icon name="spinner" spin class="self-center" /> Assigned as your machine starts…
+                                            <Icon name="spinner" spin class="self-center" /> {{ t(`setup.setup.assignedMachineStarts`) }}
                                         </span>
                                         <!-- A missing machine must not produce an address promise. -->
                                         <span v-else :class="`${factSlot} text-xs text-muted`">{{
-                                            hostedFull ? `Assigned when a machine frees up` : `Assigned when your machine starts`
+                                            hostedFull ? t(`setup.setup.assignedMachineFreesUp`) : t(`setup.setup.assignedMachineStarts2`)
                                         }}</span>
                                     </template>
                                     <!-- A platform without addresses shows a fact, not a waiting state. -->
                                     <span v-else-if="addressFact === `none`" :class="`${factSlot} text-xs text-muted`">
-                                        This platform doesn't set one up
+                                        {{ t(`setup.setup.platformDoesntSetOne`) }}
                                     </span>
                                     <template v-else>
                                         <!-- `.title`: interpolating the NoticeModel itself would render its JSON. -->
                                         <span v-if="setupError" :class="`${factSlot} text-xs text-danger`">{{ setupError.title }}</span>
                                         <span v-else-if="setup" :class="factHost">{{ setup.hostname }}</span>
                                         <span v-else :class="`${factSlot} gap-2 text-xs text-muted`">
-                                            <Icon name="spinner" spin class="self-center" /> Preparing your intentic domain…
+                                            <Icon name="spinner" spin class="self-center" /> {{ t(`setup.setup.preparingIntenticDomain`) }}
                                         </span>
                                         <!-- One escape hatch presents the available choices. -->
                                         <button type="button" :class="ui.linkButton()" @click="reaching = !reaching">
-                                            {{ reaching ? `Keep this address` : `Use a different address` }}
+                                            {{ reaching ? t(`setup.setup.keepAddress`) : t(`setup.setup.useDifferentAddress`) }}
                                         </button>
                                     </template>
                                 </div>
@@ -1691,18 +1696,18 @@ const warmSandboxCredential = async (): Promise<void> => {
 
                             <!-- Address overflow uses labels instead of a nested bordered panel. -->
                             <p v-if="addressFact === `none`" class="text-xs text-muted">
-                                Sandboxes here are reached at an address you already have. Already running one?
+                                {{ t(`setup.setup.sandboxesHereReachedAt`) }}
                                 <button type="button" class="cursor-pointer text-link hover:underline" @click="setLane(`attach`)">
-                                    Connect the domain it answers on</button
+                                    {{ t(`setup.setup.connectDomainAnswersOn`) }}</button
                                 >.
                             </p>
                             <p v-else-if="addressFact === `intentic` && reaching" class="text-xs text-muted">
-                                Use
+                                {{ t(`setup.setup.use`) }}
                                 <button type="button" class="cursor-pointer text-link hover:underline" @click="chooseOwnZone">
-                                    your own Cloudflare zone</button
-                                >, or connect
+                                    {{ t(`setup.setup.ownCloudflareZone`) }}</button
+                                >{{ t(`setup.setup.connect`) }}
                                 <button type="button" class="cursor-pointer text-link hover:underline" @click="setLane(`attach`)">
-                                    a domain it already answers on</button
+                                    {{ t(`setup.setup.domainAlreadyAnswersOn`) }}</button
                                 >.
                             </p>
 
@@ -1710,23 +1715,26 @@ const warmSandboxCredential = async (): Promise<void> => {
                             <template v-if="addressFact === `own`">
                                 <div class="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
                                     <button v-if="intenticAvailable" type="button" :class="ui.linkButton()" @click="mode = `intentic`">
-                                        ← Use intentic's domain
+                                        {{ t(`setup.setup.useIntenticsDomain`) }}
                                     </button>
-                                    <InfoHint label="Why the Cloudflare API token is required">
-                                        <p class="mb-1 text-sm font-medium text-content">Why this token?</p>
+                                    <InfoHint :label="t(`setup.setup.whyCloudflareApiToken`)">
+                                        <p class="mb-1 text-sm font-medium text-content">{{ t(`setup.setup.whyToken`) }}</p>
                                         <p class="mb-3 text-xs leading-relaxed text-muted">
-                                            intentic reaches your sandbox over a private Cloudflare tunnel, with no open inbound ports.
+                                            {{ t(`setup.setup.intenticReachesSandboxOver`) }}
                                         </p>
                                         <ul class="flex flex-col gap-2 text-xs text-muted">
                                             <li class="flex items-start gap-2">
                                                 <Icon name="bolt" class="mt-0.5 text-link" />
-                                                <span>Lets the install command <span class="text-content">create the tunnel</span></span>
+                                                <span
+                                                    >{{ t(`setup.setup.letsInstallCommand`) }}
+                                                    <span class="text-content">{{ t(`setup.setup.createTunnel`) }}</span></span
+                                                >
                                             </li>
                                             <li class="flex items-start gap-2">
                                                 <Icon name="lock" class="mt-0.5 text-success" />
                                                 <span
-                                                    ><span class="text-content">Never stored by intentic</span>: used once to list zones, then rides
-                                                    the command</span
+                                                    ><span class="text-content">{{ t(`setup.setup.neverStoredByIntentic`) }}</span
+                                                    >{{ t(`setup.setup.usedOnceToList`) }}</span
                                                 >
                                             </li>
                                         </ul>
@@ -1739,7 +1747,7 @@ const warmSandboxCredential = async (): Promise<void> => {
 
                                 <!-- The zone suffix wraps so the subdomain keeps phone width. -->
                                 <label v-if="selectedZone" class="ui-field">
-                                    <span class="ui-field-label">Domain</span>
+                                    <span class="ui-field-label">{{ t(`setup.setup.domain`) }}</span>
                                     <div class="flex flex-wrap items-center gap-x-2 gap-y-1">
                                         <input
                                             :value="subdomain"
@@ -1747,14 +1755,15 @@ const warmSandboxCredential = async (): Promise<void> => {
                                             autocomplete="off"
                                             autocapitalize="off"
                                             spellcheck="false"
-                                            placeholder="sandbox"
+                                            :placeholder="t(`setup.setup.sandbox`)"
                                             :class="ui.input('w-full md:w-auto md:min-w-0 md:flex-1')"
                                         />
                                         <span class="text-sm break-words text-subtle">.{{ selectedZone }}</span>
                                     </div>
-                                    <span v-if="!subdomainValid" class="text-xs text-warning">Use letters, numbers and hyphens only.</span>
+                                    <span v-if="!subdomainValid" class="text-xs text-warning">{{ t(`setup.setup.useLettersNumbersHyphens`) }}</span>
                                     <span v-else class="text-xs text-success"
-                                        >✓ Your sandbox will be reachable at <span class="break-words">{{ subdomain.trim() }}.{{ selectedZone }}</span
+                                        >{{ t(`setup.setup.sandboxReachableAt`) }}
+                                        <span class="break-words">{{ subdomain.trim() }}.{{ selectedZone }}</span
                                         >.</span
                                     >
                                 </label>
@@ -1775,7 +1784,7 @@ const warmSandboxCredential = async (): Promise<void> => {
                                     </p>
                                     <p class="text-xs text-muted">{{ hostedWait.failure.remedy }}</p>
                                     <Button
-                                        label="Start it over"
+                                        :label="t(`setup.setup.startOver`)"
                                         class="w-full justify-center md:w-fit"
                                         :disabled="hostedBusy"
                                         @click="restartHosted"
@@ -1809,35 +1818,30 @@ const warmSandboxCredential = async (): Promise<void> => {
                             </template>
                             <p v-else-if="hostedBusy" class="flex items-center gap-2 text-xs text-content">
                                 <Icon name="spinner" spin class="text-info" />
-                                Starting a machine for you…
+                                {{ t(`setup.setup.startingMachine`) }}
                             </p>
                             <!-- The action states the no-backup commitment at the decision point. -->
                             <!-- A full fleet offers only a capacity recheck. -->
                             <template v-else-if="hostedFull">
                                 <p class="flex items-start gap-2 text-xs text-content">
                                     <Icon name="exclamation-circle" class="mt-0.5 shrink-0 text-warning" />
-                                    <span>We're out of machines right now — every one we run is in use.</span>
+                                    <span>{{ t(`setup.setup.outMachinesRightNow`) }}</span>
                                 </p>
                                 <p class="text-xs leading-relaxed text-muted">
-                                    Nothing to do with your account, and we're adding more. Setting it up on your own computer takes a couple of
-                                    minutes and has no limits at all, or check back a little later and we'll have room.
+                                    {{ t(`setup.setup.nothingToDoAccount`) }}
                                 </p>
                                 <div class="flex flex-wrap items-center gap-3">
-                                    <Button
-                                        label="Set it up on my own computer"
-                                        class="w-full justify-center md:w-fit"
-                                        @click="chooseMachine(`mine`)"
-                                    >
+                                    <Button :label="t(`setup.setup.setUpOnMy`)" class="w-full justify-center md:w-fit" @click="chooseMachine(`mine`)">
                                         <template #icon><Icon name="desktop" /></template>
                                     </Button>
                                     <button type="button" :class="ui.linkButton()" :disabled="hostedBusy" @click="recheckCapacity">
-                                        Check again
+                                        {{ t(`setup.setup.checkAgain`) }}
                                     </button>
                                 </div>
                             </template>
                             <template v-else>
                                 <Button
-                                    :label="hostedError ? `Try again` : `Start my machine`"
+                                    :label="hostedError ? t(`ui.action.tryAgain`) : t(`setup.setup.startMyMachine`)"
                                     class="w-full justify-center md:w-fit"
                                     :disabled="hostedSpent"
                                     @click="provisionHosted"
@@ -1846,16 +1850,14 @@ const warmSandboxCredential = async (): Promise<void> => {
                                 </Button>
                                 <p class="text-xs leading-relaxed text-subtle">
                                     <template v-if="hostedSuspended">
-                                        Hosted sandboxes are switched off for this account; the email we sent says why and where to write. Running
-                                        it on your own computer is unaffected.
+                                        {{ t(`setup.setup.hostedSandboxesSwitchedOff`) }}
                                     </template>
                                     <template v-else-if="hostedSpent">
-                                        You already have the free machine your account comes with. Pick another rung above, or delete the sandbox
-                                        that's using it.
+                                        {{ t(`setup.setup.alreadyFreeMachineAccount`) }}
                                     </template>
                                     <template v-else>
-                                        It sleeps while you're away and wakes when you come back. We don't back it up: turn on desktop sync, or keep
-                                        your work in a git remote.<template v-if="hostedHours"> Unopened for a few weeks, it's removed.</template>
+                                        {{ t(`setup.setup.sleepsWhileYoureAway`)
+                                        }}<template v-if="hostedHours"> {{ t(`setup.setup.unopenedFewWeeksRemoved`) }}</template>
                                     </template>
                                 </p>
                             </template>
@@ -1863,11 +1865,11 @@ const warmSandboxCredential = async (): Promise<void> => {
                             <!-- Owed to a reader whose machine started unasked; reveals the rung, handed back only if actually chosen. -->
                             <nav
                                 v-if="otherMachinesFolded"
-                                aria-label="Other ways to set up"
+                                :aria-label="t(`setup.setup.otherWaysToSet`)"
                                 class="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted"
                             >
-                                <span>Other ways to set up:</span>
-                                <button type="button" :class="ui.linkButton()" @click="showOtherMachines">Run it on my own computer</button>
+                                <span>{{ t(`setup.setup.otherWaysToSet2`) }}</span>
+                                <button type="button" :class="ui.linkButton()" @click="showOtherMachines">{{ t(`setup.setup.runOnMyOwn`) }}</button>
                             </nav>
                         </template>
 
@@ -1875,7 +1877,7 @@ const warmSandboxCredential = async (): Promise<void> => {
                         <template v-else-if="!commandReady">
                             <template v-if="setupError">
                                 <Notice :of="setupError" />
-                                <Button label="Try again" class="w-full justify-center md:w-fit" @click="remint">
+                                <Button :label="t(`ui.action.tryAgain`)" class="w-full justify-center md:w-fit" @click="remint">
                                     <template #icon><Icon name="refresh" /></template>
                                 </Button>
                             </template>
@@ -1889,10 +1891,9 @@ const warmSandboxCredential = async (): Promise<void> => {
                             <!-- In-app setup hands the command to the app. -->
                             <template v-if="desktop">
                                 <p class="text-xs text-muted">
-                                    Installs Docker if you need it, starts your sandbox and its tunnel, and opens your workspace the moment it
-                                    answers. No terminal.
+                                    {{ t(`setup.setup.installsDockerNeedStarts`) }}
                                 </p>
-                                <Button label="Set it up now" class="w-full justify-center md:w-fit" @click="runHere">
+                                <Button :label="t(`setup.setup.setUpNow`)" class="w-full justify-center md:w-fit" @click="runHere">
                                     <template #icon><Icon name="bolt" /></template>
                                 </Button>
                             </template>
@@ -1902,7 +1903,7 @@ const warmSandboxCredential = async (): Promise<void> => {
                                 v-if="appFirst && installer"
                                 as="a"
                                 :href="installer.href"
-                                :label="`Download for ${installer.label}`"
+                                :label="t(`setup.setup.download`, { label: installer.label })"
                                 class="w-full justify-center md:w-fit"
                                 @click="onDownload"
                             >
@@ -1915,19 +1916,21 @@ const warmSandboxCredential = async (): Promise<void> => {
                             <!-- One row naming both alternatives by outcome, not stacked disclosures: one changes where, the other how. -->
                             <nav
                                 v-if="desktop || mobile || appFirst || otherMachinesFolded"
-                                aria-label="Other ways to set up"
+                                :aria-label="t(`setup.setup.otherWaysToSet`)"
                                 class="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted"
                             >
-                                <span>Other ways to set up:</span>
+                                <span>{{ t(`setup.setup.otherWaysToSet2`) }}</span>
                                 <!-- Show alternate setup links only while their rung is folded. -->
                                 <template v-if="otherMachinesFolded">
-                                    <button type="button" :class="ui.linkButton()" @click="showOtherMachines">Use a machine we host</button>
+                                    <button type="button" :class="ui.linkButton()" @click="showOtherMachines">
+                                        {{ t(`setup.setup.useMachineWeHost`) }}
+                                    </button>
                                     <span aria-hidden="true" class="text-subtle">·</span>
                                 </template>
                                 <button type="button" :class="ui.linkButton()" @click="showCommand = !showCommand">
-                                    <template v-if="showCommand">Hide the command</template>
-                                    <template v-else-if="desktop">Show the command for a server</template>
-                                    <template v-else>Show the command</template>
+                                    <template v-if="showCommand">{{ t(`setup.setup.hideCommand`) }}</template>
+                                    <template v-else-if="desktop">{{ t(`setup.setup.showCommandServer`) }}</template>
+                                    <template v-else>{{ t(`setup.setup.showCommand`) }}</template>
                                 </button>
                             </nav>
 
@@ -1936,10 +1939,8 @@ const warmSandboxCredential = async (): Promise<void> => {
                                 <p v-if="!mobile" class="flex items-center gap-2.5 text-xs text-muted">
                                     <Icon name="terminal" class="shrink-0 text-link" />
                                     <span class="min-w-0">
-                                        <template v-if="desktop"
-                                            >Copy it, then paste it into a terminal on the machine that will host your sandbox.</template
-                                        >
-                                        <template v-else>Paste it into a terminal: this computer, or any server you have a shell on.</template>
+                                        <template v-if="desktop">{{ t(`setup.setup.copyPasteIntoTerminal`) }}</template>
+                                        <template v-else>{{ t(`setup.setup.pasteIntoTerminalComputer`) }}</template>
                                     </span>
                                 </p>
                                 <!-- Copy stays beside the command on desktop and below it on phones. -->
@@ -1953,7 +1954,7 @@ const warmSandboxCredential = async (): Promise<void> => {
                                     <CopyButton
                                         v-if="!mobile && runTab !== `compose`"
                                         :text="selectedCommand"
-                                        label="Copy"
+                                        :label="t(`ui.action.copy`)"
                                         class="text-xs"
                                         @copied="onCopied"
                                     />
@@ -1972,7 +1973,7 @@ const warmSandboxCredential = async (): Promise<void> => {
                                     <CopyButton
                                         v-if="mobile"
                                         :text="selectedCommand"
-                                        label="Copy command"
+                                        :label="t(`setup.setup.copyCommand`)"
                                         :stretch="true"
                                         severity="secondary"
                                         @copied="onCopied"
@@ -1981,13 +1982,12 @@ const warmSandboxCredential = async (): Promise<void> => {
                                     <details v-if="buildsFromCheckout" class="text-xs text-warning">
                                         <summary class="flex cursor-pointer list-none items-center gap-2 [&::-webkit-details-marker]:hidden">
                                             <Icon name="box" class="shrink-0" />
-                                            <span class="min-w-0">Local dev: builds from your checkout</span>
+                                            <span class="min-w-0">{{ t(`setup.setup.localDevBuildsCheckout`) }}</span>
                                             <Icon name="chevron-down" class="shrink-0 text-subtle" />
                                         </summary>
                                         <p class="mt-1 pl-6">
-                                            This command builds <code>{{ DEV_SANDBOX_IMAGE }}</code> from your checkout and runs that. Every run
-                                            rebuilds, so sandbox edits are always picked up (cached when unchanged; the first build takes a few
-                                            minutes). For a live edit loop, keep <code>pnpm dev:sandbox</code> running.
+                                            {{ t(`setup.setup.commandBuilds`) }} <code>{{ DEV_SANDBOX_IMAGE }}</code>
+                                            {{ t(`setup.setup.checkoutRunsEveryRun`) }} <code>pnpm dev:sandbox</code> {{ t(`setup.setup.running`) }}
                                         </p>
                                     </details>
                                 </template>
@@ -2000,11 +2000,11 @@ const warmSandboxCredential = async (): Promise<void> => {
                             >
                                 <label class="flex cursor-pointer items-center gap-2">
                                     <Checkbox v-model="hasDocker" :binary="true" size="small" />
-                                    <span class="shrink-0 text-content">I already have Docker</span>
+                                    <span class="shrink-0 text-content">{{ t(`setup.setup.iAlreadyDocker`) }}</span>
                                 </label>
                                 <span class="min-w-0">
-                                    <template v-if="hasDocker">Runs as you, no <code>sudo</code>.</template>
-                                    <template v-else><code>sudo</code> is there for one job: installing Docker if it's missing.</template>
+                                    <template v-if="hasDocker">{{ t(`setup.setup.runsNo`) }} <code>sudo</code>.</template>
+                                    <template v-else><code>sudo</code> {{ t(`setup.setup.oneJobInstallingDocker`) }}</template>
                                 </span>
                             </div>
 
@@ -2029,49 +2029,51 @@ const warmSandboxCredential = async (): Promise<void> => {
                                 <span class="min-w-0">
                                     <!-- The machine's reported stage overrides the fallback label. -->
                                     <template v-if="handoff === `claimed` && buildStage !== undefined">
-                                        <span class="font-medium text-success">Your machine picked it up.</span> Right now: {{ buildStage }}.
+                                        <span class="font-medium text-success">{{ t(`setup.setup.machinePickedUp`) }}</span>
+                                        {{ t(`setup.setup.rightNow`) }} {{ buildStage }}.
                                     </template>
                                     <template v-else-if="handoff === `claimed`">
-                                        <span class="font-medium text-success">Your machine picked it up.</span> Starting Docker. The first run takes
-                                        a few minutes.
+                                        <span class="font-medium text-success">{{ t(`setup.setup.machinePickedUp`) }}</span>
+                                        {{ t(`setup.setup.startingDockerFirstRun`) }}
                                     </template>
-<!-- Copied commands require a paste; the app path opens its own window. -->
+                                    <!-- Copied commands require a paste; the app path opens its own window. -->
                                     <template v-else-if="handoff === `handed` && launched && desktopReport">
-                                        <span class="font-medium text-content">The app is setting it up.</span> This page opens your workspace the
-                                        moment it answers.
+                                        <span class="font-medium text-content">{{ t(`setup.setup.appSettingUp`) }}</span>
+                                        {{ t(`setup.setup.pageOpensWorkspaceMoment`) }}
                                     </template>
                                     <template v-else-if="handoff === `handed` && launched">
-                                        <span class="font-medium text-content">Handed to the app.</span> Follow it in the Intentic window. This page
-                                        opens your workspace the moment it answers.
+                                        <span class="font-medium text-content">{{ t(`setup.setup.handedToApp`) }}</span>
+                                        {{ t(`setup.setup.followInIntenticWindow`) }}
                                     </template>
                                     <template v-else-if="handoff === `handed`">
-                                        <span class="font-medium text-content">Copied.</span> Paste it into that terminal and press Enter.
+                                        <span class="font-medium text-content">{{ t(`setup.setup.copied`) }}</span>
+                                        {{ t(`setup.setup.pasteIntoTerminalPress`) }}
                                     </template>
                                     <!-- This names the actor responsible for the next setup step. -->
                                     <template v-else-if="desktop && !commandVisible">
-                                        <span class="font-medium text-content">Waiting for you to start it.</span> Nothing runs until you press "Set
-                                        it up now" above.
+                                        <span class="font-medium text-content">{{ t(`setup.setup.waitingToStart`) }}</span>
+                                        {{ t(`setup.setup.nothingRunsUntilPress`) }}
                                     </template>
                                     <!-- Browser and app setup use the same action sentence. -->
                                     <template v-else-if="installing">
-                                        <span class="font-medium text-content">Waiting for you to start it.</span> Nothing runs until you install the
-                                        app above.
+                                        <span class="font-medium text-content">{{ t(`setup.setup.waitingToStart`) }}</span>
+                                        {{ t(`setup.setup.nothingRunsUntilInstall`) }}
                                     </template>
                                     <template v-else>
-                                        <span class="font-medium text-content">Waiting for you to run the command.</span> We'll notice the moment your
-                                        sandbox starts.
+                                        <span class="font-medium text-content">{{ t(`setup.setup.waitingToRunCommand`) }}</span>
+                                        {{ t(`setup.setup.wellNoticeMomentSandbox`) }}
                                     </template>
                                 </span>
                             </p>
 
-<!-- THE APP'S OWN BAR, on this page: what "Back to your workspace" leaves behind. -->
+                            <!-- THE APP'S OWN BAR, on this page: what "Back to your workspace" leaves behind. -->
                             <DesktopSetupProgress
                                 v-if="launched && desktopReport && handoff !== `claimed`"
                                 :report="desktopReport"
                                 :heard-at="desktopHeardAt"
                             />
 
-<!-- The machine said exactly what broke: render it verbatim, problem and fix per check, and the one instruction that is always true. -->
+                            <!-- The machine said exactly what broke: render it verbatim, problem and fix per check, and the one instruction that is always true. -->
                             <Notice
                                 v-if="reportFailures !== null"
                                 :of="{ tone: `danger`, title: `Setup failed on your machine. Here is what it found:` }"
@@ -2079,10 +2081,10 @@ const warmSandboxCredential = async (): Promise<void> => {
                                 <ul class="mt-1.5 flex flex-col gap-1.5">
                                     <li v-for="failure in reportFailures" :key="failure.check" class="min-w-0 text-2xs">
                                         <span class="font-medium">{{ failure.check }}:</span> {{ failure.problem }}
-                                        <span v-if="failure.remedy !== ``"> Fix: {{ failure.remedy }}</span>
+                                        <span v-if="failure.remedy !== ``">{{ t(`setup.setup.fix`, { remedy: failure.remedy }) }}</span>
                                     </li>
                                 </ul>
-                                <p class="mt-1.5 text-2xs">Fix the above, then run the same command again. It stays valid.</p>
+                                <p class="mt-1.5 text-2xs">{{ t(`setup.setup.fixAboveRunSame`) }}</p>
                             </Notice>
 
                             <!-- Wide screens move this explanation into the reference column. -->
@@ -2100,17 +2102,18 @@ const warmSandboxCredential = async (): Promise<void> => {
                             <p v-if="slowBuild" class="flex items-start gap-2 text-xs text-warning">
                                 <Icon name="exclamation-circle" class="mt-0.5 shrink-0" />
                                 <!-- Check launch state, not visibility, before handing a command to the app. -->
-                                <span class="min-w-0"
-                                    >Picked up a while ago, still no sandbox. Check {{ launched ? `the Intentic window` : `that terminal` }} for an
-                                    error. It's safe to re-run.</span
-                                >
+                                <span class="min-w-0">{{
+                                    t(`setup.setup.pickedUpNoSandbox`, {
+                                        where: launched ? t(`setup.setup.theIntenticWindow`) : t(`setup.setup.thatTerminal`),
+                                    })
+                                }}</span>
                             </p>
                         </div>
                         <p v-if="status" class="text-xs text-warning">{{ status }}</p>
                     </section>
                 </div>
 
-<!-- Docked reference for the run step only; `xl:w-88` is measured to fit the longest cleanup one-liner on one line, not a guess. -->
+                <!-- Docked reference for the run step only; `xl:w-88` is measured to fit the longest cleanup one-liner on one line, not a guess. -->
                 <aside
                     v-if="created && lane === `provision` && laneTakeable && machine !== `hosted`"
                     class="hidden flex-col gap-3 xl:sticky xl:top-8 xl:flex xl:w-88 xl:shrink-0"

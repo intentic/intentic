@@ -1,8 +1,11 @@
 <script setup lang="ts">
 import type { TurnNote } from "@intentic/sandbox-contract";
-import { ref } from "vue";
+import { computed, ref } from "vue";
 import ChatAsideLane from "./ChatAsideLane.vue";
 import type { ChatAsideMark } from "./chatAsides";
+import { useT } from "@intentic/ui/i18n";
+
+const t = useT();
 
 // The context the sandbox added to a message, as one mark in the lane. Opened, it is the LIST of what was added, each
 // note opening to its own words: the titles answer "what went with this" without charging the reader for the text of
@@ -11,9 +14,9 @@ import type { ChatAsideMark } from "./chatAsides";
 
 const props = defineProps<{ notes: readonly TurnNote[] }>();
 
-const marks: readonly ChatAsideMark[] = [
-    { key: `notes`, icon: `paperclip`, label: `Sent with your message`, count: props.notes.length },
-];
+const marks = computed((): readonly ChatAsideMark[] => [
+    { key: `notes`, icon: `paperclip`, label: t(`chat.chatNotes.sentMessage`), count: props.notes.length },
+]);
 
 // One note open at a time: the list is what the mark is for, and two open notes bury it.
 const opened = ref<string>();

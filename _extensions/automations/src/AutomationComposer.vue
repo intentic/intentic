@@ -7,6 +7,7 @@ import type { AutomationTemplate } from "@intentic/sandbox-contract";
 import { availableTemplates, type AvailableSource, glyph } from "./catalog";
 import { embedSnippet, useAutomations, webhookUrl } from "./useAutomations";
 import { triggerKey, useAutomationForm } from "./useAutomationForm";
+import { t } from "./i18n.js";
 
 // Composes inline in the list, at page width, matching how editing already works (AutomationRow) rather than in a
 // modal. Mounted only while open, so fields, pick and error always start empty. Keeps the dialog's handoff: a webhook
@@ -57,8 +58,8 @@ const recipeGroups = computed(() => {
         [recipe.title, recipe.note, recipe.description, recipe.id, recipe.requires.join(` `)].some((field) => field?.toLowerCase().includes(needle)),
     );
     return [
-        { label: `Code chores`, items: matches.filter((recipe) => recipe.chore === true) },
-        { label: `Integrations`, items: matches.filter((recipe) => recipe.chore !== true) },
+        { label: t(`automationComposer.codeChores`), items: matches.filter((recipe) => recipe.chore === true) },
+        { label: t(`automationComposer.integrations`), items: matches.filter((recipe) => recipe.chore !== true) },
     ].filter((group) => group.items.length > 0);
 });
 
@@ -129,7 +130,7 @@ const finish = (id: string): void => {
         <div class="flex items-center gap-2">
             <Icon name="plus" class="shrink-0 text-2xs text-subtle" />
             <!-- Sized like the rail labels inside the panel, not smaller: it's the heading for everything below it. -->
-            <h2 class="flex-1 text-sm font-semibold text-content">New automation</h2>
+            <h2 class="flex-1 text-sm font-semibold text-content">{{ t(`automationComposer.newAutomation`) }}</h2>
 
             <!-- The selected template is shown beside the close control. -->
             <div v-if="recipes.length > 0" class="relative flex shrink-0 items-center">
@@ -144,7 +145,7 @@ const finish = (id: string): void => {
                     >
                         <img v-if="template?.logo" :src="`https://cdn.simpleicons.org/${template.logo}`" class="h-3.5 w-3.5 shrink-0" alt="" />
                         <Icon v-else :name="glyph(template?.icon) ?? 'bolt'" class="shrink-0" />
-                        <span class="min-w-0 truncate">{{ template?.title ?? `Start from a template` }}</span>
+                        <span class="min-w-0 truncate">{{ template?.title ?? t(`automationComposer.startTemplate`) }}</span>
                         <span v-if="!template" class="shrink-0 text-subtle">{{ recipes.length }}</span>
                         <Icon name="chevron-down" class="shrink-0" />
                     </button>
@@ -152,7 +153,7 @@ const finish = (id: string): void => {
                         v-if="template"
                         type="button"
                         class="shrink-0 cursor-pointer py-1 pr-2.5 pl-0.5 text-2xs opacity-70 transition-opacity hover:opacity-100"
-                        aria-label="Clear template"
+                        :aria-label="t(`automationComposer.clearTemplate`)"
                         @click="picked = undefined"
                     >
                         <Icon name="times" />
@@ -170,7 +171,7 @@ const finish = (id: string): void => {
                     <input
                         ref="recipeFilterInput"
                         v-model="recipeFilter"
-                        placeholder="Filter templates…"
+                        :placeholder="t(`automationComposer.filterTemplates`)"
                         :class="ui.inputSm()"
                         @keydown.enter.prevent="pickFirstMatch"
                     />
@@ -206,13 +207,15 @@ const finish = (id: string): void => {
                                 </button>
                             </div>
                         </template>
-                        <p v-if="recipeGroups.length === 0" class="px-1.5 py-2 text-2xs text-subtle">No template matches.</p>
+                        <p v-if="recipeGroups.length === 0" class="px-1.5 py-2 text-2xs text-subtle">
+                            {{ t(`automationComposer.noTemplateMatches`) }}
+                        </p>
                     </div>
                 </div>
             </div>
 
             <!-- The kit action uses the shared icon-button hit area and hover plate. -->
-            <button type="button" :class="ui.iconButton()" aria-label="Close" @click="emit(`close`)">
+            <button type="button" :class="ui.iconButton()" :aria-label="t(`automationComposer.close`)" @click="emit(`close`)">
                 <Icon name="times" class="text-xs" />
             </button>
         </div>
@@ -223,8 +226,8 @@ const finish = (id: string): void => {
             <AutomationFields ref="fields" :state="state" :recipe-note="template?.title" />
 
             <div :class="['flex justify-end gap-2 border-t border-line-subtle pt-3', shaking ? 'ui-shake' : '']" @animationend="shaking = false">
-                <Button label="Cancel" severity="secondary" :text="true" @click="emit(`close`)" />
-                <Button type="submit" label="Create" :loading="save.isPending.value">
+                <Button :label="t(`automationComposer.cancel`)" severity="secondary" :text="true" @click="emit(`close`)" />
+                <Button type="submit" :label="t(`automationComposer.create`)" :loading="save.isPending.value">
                     <template #icon><Icon name="check" /></template>
                 </Button>
             </div>
@@ -232,25 +235,35 @@ const finish = (id: string): void => {
 
         <!-- The handoff: what creating an automation doesn't finish by itself. -->
         <div v-else-if="savedAutomation && embedSnippet(savedAutomation)" class="flex flex-col gap-3">
-            <p class="text-sm text-content"><Icon name="check-circle" class="mr-1.5 text-success" />Front Desk created: drop this into your site:</p>
+            <p class="text-sm text-content">
+                <Icon name="check-circle" class="mr-1.5 text-success" />{{ t(`automationComposer.frontDeskCreatedDrop`) }}
+            </p>
             <div class="flex items-center gap-2 rounded-md border border-line bg-canvas px-3 py-2">
                 <code class="min-w-0 flex-1 break-all font-mono text-2xs text-content">{{ embedSnippet(savedAutomation) }}</code>
-                <CopyButton :text="embedSnippet(savedAutomation) ?? ''" :aria-label="`Copy the embed snippet for ${savedAutomation.id}`" />
+                <CopyButton
+                    :text="embedSnippet(savedAutomation) ?? ''"
+                    :aria-label="t(`automationComposer.copyEmbedSnippet`, { id: savedAutomation.id })"
+                />
             </div>
             <p class="text-xs text-muted">
-                Paste it before <span class="font-mono">&lt;/body&gt;</span> on any page you listed above. The launcher appears in the corner; visitor
-                conversations show up on your agents board, where you can watch and take over.
+                {{ t(`automationComposer.pasteBefore`) }} <span class="font-mono">&lt;/body&gt;</span>
+                {{ t(`automationComposer.onAnyPageListed`) }}
             </p>
-            <div class="flex justify-end"><Button label="Done" @click="finish(savedId ?? ``)" /></div>
+            <div class="flex justify-end"><Button :label="t(`automationComposer.done`)" @click="finish(savedId ?? ``)" /></div>
         </div>
         <div v-else class="flex flex-col gap-3">
-            <p class="text-sm text-content"><Icon name="check-circle" class="mr-1.5 text-success" />Automation created: wire up the webhook:</p>
+            <p class="text-sm text-content">
+                <Icon name="check-circle" class="mr-1.5 text-success" />{{ t(`automationComposer.automationCreatedWireUp`) }}
+            </p>
             <div v-if="savedAutomation" class="flex items-center gap-2 rounded-md border border-line bg-canvas px-3 py-2">
                 <code class="min-w-0 flex-1 break-all font-mono text-2xs text-content">{{ webhookUrl(savedAutomation) }}</code>
-                <CopyButton :text="webhookUrl(savedAutomation) ?? ''" :aria-label="`Copy webhook URL for ${savedAutomation.id}`" />
+                <CopyButton
+                    :text="webhookUrl(savedAutomation) ?? ''"
+                    :aria-label="t(`automationComposer.copyWebhookUrl`, { id: savedAutomation.id })"
+                />
             </div>
-            <p class="text-xs text-muted">{{ template?.setup ?? `Any external system can wake this automation by POSTing this URL.` }}</p>
-            <div class="flex justify-end"><Button label="Done" @click="finish(savedId ?? ``)" /></div>
+            <p class="text-xs text-muted">{{ template?.setup ?? t(`automationComposer.anyExternalSystemWake`) }}</p>
+            <div class="flex justify-end"><Button :label="t(`automationComposer.done`)" @click="finish(savedId ?? ``)" /></div>
         </div>
     </section>
 </template>

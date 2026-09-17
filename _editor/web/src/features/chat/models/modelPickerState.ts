@@ -11,6 +11,7 @@ import {
 import { computed } from "vue";
 import { type ModelOption, acpProviders, endpointProviders, modelOptionsFor, providerGroup, providerGroupLabel } from "../accounts/providerCatalog";
 import type { TurnPick } from "../run/turnDefaults";
+import { t } from "@intentic/ui/i18n";
 
 // Every provider's models flattened into one searchable list; pure derivation over the live catalogs, the picker
 // owns only transient UI state. Harness is a separate axis (footer chips), not a row here. Tier and recency come
@@ -119,7 +120,7 @@ export const customEntryFor = (entries: readonly PickerEntry[], query: string, p
     if (entries.some((entry) => entry.provider === provider && entry.value === value)) {
         return undefined;
     }
-    return { key: `${provider}:${value}`, provider, value, label: value, description: `use as custom model id` };
+    return { key: `${provider}:${value}`, provider, value, label: value, description: t(`chat.modelPickerState.useCustomModelId`) };
 };
 
 // Catalog rows group by family (newest first), tier-major, instead of raw catalog order. Family/recency/tier are

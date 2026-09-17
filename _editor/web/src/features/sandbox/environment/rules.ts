@@ -1,5 +1,6 @@
 import type { Rule } from "@intentic/api-contract";
 import type { RepoCheckMoment, RepoChecksSummary } from "@intentic/sandbox-contract";
+import { t } from "@intentic/ui/i18n";
 
 // Pure functions over a rule list, no browser imports. Split from useRules.ts so the agent menu, chat notice and push
 // dialog can read rules without pulling in a composable's queries. What the repositories themselves declare
@@ -19,20 +20,20 @@ export const NAMED_RULES = {
 
 // The two rows a maker's arrival writes together: finished work lands on its own, and what lands is committed. Also
 // what the Agent tab's own toggles write, so the two doors never disagree on the rule.
-export const AUTO_LAND_RULE: Rule = {
+export const autoLandRule = (): Rule => ({
     id: NAMED_RULES.land,
-    label: `Land finished work automatically`,
+    label: t(`sandbox.rules.landFinishedWorkAutomatically`),
     moment: `agent.finished`,
     action: { kind: `verdict`, verdict: `allow` },
     enabled: true,
-};
-export const AUTO_VERSION_RULE: Rule = {
+});
+export const autoVersionRule = (): Rule => ({
     id: NAMED_RULES.version,
-    label: `Save a version of accepted work`,
+    label: t(`sandbox.rules.saveVersionAcceptedWork`),
     moment: `agent.landed`,
     action: { kind: `builtin`, name: `version-landed` },
     enabled: true,
-};
+});
 
 // Resolves what the rules say before anything about the occasion is known: the first unconditional rule matching a
 // moment, since a conditional rule can't match the unknown.

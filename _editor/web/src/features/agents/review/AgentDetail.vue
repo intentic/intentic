@@ -21,12 +21,15 @@ import AgentReviewOutline from "./AgentReviewOutline.vue";
 import AgentSessionMenu from "../board/AgentSessionMenu.vue";
 import SessionChip from "../board/SessionChip.vue";
 import SessionIdentity from "../board/SessionIdentity.vue";
+import { useT } from "@intentic/ui/i18n";
 
 // Drill-in for one agent (/agents/:id): one canonical chat surface per form factor.
 // - mobile: this IS the chat surface, Chat | Changes segmented, chat by default
 // - desktop: the conversation lives only in the docked ChatPanel; this view is review-only (diff, Land, Discard)
 //
 // This row owns the session; the panel below owns the review.
+
+const t = useT();
 
 const route = useRoute();
 const router = useRouter();
@@ -168,10 +171,10 @@ watch(
 
 // Mode switch only exists on mobile; desktop always renders the review.
 const view = ref<`chat` | `changes`>(mobile.value ? `chat` : `changes`);
-const viewOptions: { label: string; value: `chat` | `changes` }[] = [
-    { label: `Chat`, value: `chat` },
-    { label: `Changes`, value: `changes` },
-];
+const viewOptions = computed((): { label: string; value: `chat` | `changes` }[] => [
+    { label: t(`agents.agentDetail.chat`), value: `chat` },
+    { label: t(`agents.agentDetail.changes`), value: `changes` },
+]);
 
 // The name this page can honestly print: the roster's, or the open conversation's. Absent while the id is still a
 // question, which the header draws as a bar rather than filling with the word "Agent".
@@ -316,7 +319,7 @@ const confirmDiscard = async (): Promise<void> => {
             <RouterLink
                 to="/agents"
                 class="touch-target flex h-7 w-7 items-center justify-center rounded-md text-muted transition-colors hover:bg-overlay hover:text-content"
-                aria-label="Back to agents"
+                :aria-label="t(`agents.agentDetail.backToAgents`)"
             >
                 <Icon name="arrow-left" class="text-sm" />
             </RouterLink>
@@ -325,7 +328,7 @@ const confirmDiscard = async (): Promise<void> => {
                 v-model="edit.draft"
                 type="text"
                 maxlength="80"
-                aria-label="Agent title"
+                :aria-label="t(`agents.agentDetail.agentTitle`)"
                 class="ui-field-box ui-field-inline min-w-0 flex-1 px-1 text-xs font-medium"
                 @keydown.enter.prevent="edit.commit()"
                 @keydown.esc.prevent="edit.cancel()"
@@ -337,7 +340,7 @@ const confirmDiscard = async (): Promise<void> => {
                 <span v-if="unnamed" class="flex min-w-0 flex-1 items-center" aria-hidden="true">
                     <span class="skeleton block h-3 w-40 max-w-full"></span>
                 </span>
-<!-- On a phone the title is the switcher's handle: the chats sheet opens from it, chevron and all. -->
+                <!-- On a phone the title is the switcher's handle: the chats sheet opens from it, chevron and all. -->
                 <button
                     v-else-if="mobile"
                     type="button"
@@ -346,32 +349,32 @@ const confirmDiscard = async (): Promise<void> => {
                     @click="switcherOpen = true"
                 >
                     <span class="min-w-0 truncate text-xs font-medium text-content">{{ title }}</span>
-                    <span class="sr-only">, switch chat</span>
+                    <span class="sr-only">{{ t(`agents.agentDetail.switchChat`) }}</span>
                     <Icon name="chevron-down" class="shrink-0 text-2xs text-subtle" aria-hidden="true" />
                 </button>
                 <span v-else class="min-w-0 flex-1 truncate text-xs font-medium text-content">{{ title }}</span>
-<!-- Desktop only: on a phone the row has no room, and Rename is the session menu's. -->
+                <!-- Desktop only: on a phone the row has no room, and Rename is the session menu's. -->
                 <button
                     v-if="localOnly && !unnamed && !mobile"
                     type="button"
-                    aria-label="Rename agent"
-                    v-tooltip.bottom="'Rename'"
+                    :aria-label="t(`agents.agentDetail.renameAgent`)"
+                    v-tooltip.bottom="t(`ui.action.rename`)"
                     :class="ui.iconButton()"
                     @click="edit.begin()"
                 >
                     <Icon name="pencil" class="text-xs" />
                 </button>
             </template>
-<!-- Which sandbox this agent is in, not decoration: every number below (diff, file count, what Land applies) is about a workspace on another machine. -->
+            <!-- Which sandbox this agent is in, not decoration: every number below (diff, file count, what Land applies) is about a workspace on another machine. -->
             <span
                 v-if="remoteName !== undefined"
                 class="ui-status-pill inline-flex shrink-0 items-center gap-1 bg-overlay text-2xs text-muted"
-                v-tooltip.bottom="`This agent is in ${remoteName}, not in the sandbox you're in`"
+                v-tooltip.bottom="t(`agents.agentDetail.agentInNotIn`, { remoteName })"
             >
                 <Icon name="server" class="text-2xs" />
                 <span class="max-w-[10rem] truncate">{{ remoteName }}</span>
             </span>
-<!-- Session name, pasteable: replaces a truncated, unclickable chip that forced retyping the id by eye. -->
+            <!-- Session name, pasteable: replaces a truncated, unclickable chip that forced retyping the id by eye. -->
             <span
                 v-if="fleetAgent?.branch !== undefined"
                 ref="identityAnchor"
@@ -379,7 +382,7 @@ const confirmDiscard = async (): Promise<void> => {
             >
                 <SessionChip :branch="fleetAgent.branch" reveal @reveal="identityOpen = !identityOpen" />
             </span>
-<!-- Status compresses to its glyph in a narrow header; words return once the header itself has room. -->
+            <!-- Status compresses to its glyph in a narrow header; words return once the header itself has room. -->
             <span
                 v-if="status !== undefined"
                 v-tooltip.top="status.label"
@@ -394,7 +397,7 @@ const confirmDiscard = async (): Promise<void> => {
             <span v-else-if="headerOutline" class="skeleton block h-2.5 w-14 shrink-0" aria-hidden="true"></span>
             <template v-if="reviewable">
                 <Icon v-if="changes.actionBusy.value" name="spinner" class="shrink-0 text-xs text-muted" spin />
-<!-- The page's one primary action: appearing only when something is pending is itself the "not landed" signal, replacing the toolbar's old pill. -->
+                <!-- The page's one primary action: appearing only when something is pending is itself the "not landed" signal, replacing the toolbar's old pill. -->
                 <Button
                     v-if="!mobile && changes.pending.value.length > 0 && canShip"
                     size="small"
@@ -431,41 +434,41 @@ const confirmDiscard = async (): Promise<void> => {
                     :class="ui.iconButton(`h-7 w-7`)"
                     :aria-expanded="menuOpen"
                     @click="menuOpen = !menuOpen"
-                    v-tooltip.bottom="'Session actions'"
-                    aria-label="Session actions"
+                    v-tooltip.bottom="t(`agents.agentDetail.sessionActions`)"
+                    :aria-label="t(`agents.agentDetail.sessionActions`)"
                 >
                     <Icon name="bars" class="text-xs" />
                 </button>
             </template>
-<!-- The one press that costs a window switch, and says so: everything else here reads or settles work in place. -->
+            <!-- The one press that costs a window switch, and says so: everything else here reads or settles work in place. -->
             <Button
                 v-if="remoteName !== undefined"
                 size="small"
                 severity="secondary"
                 class="shrink-0 whitespace-nowrap"
                 @click="crossToAgent"
-                v-tooltip.bottom="`Switches this window to ${remoteName}, where its conversation lives`"
+                v-tooltip.bottom="t(`agents.agentDetail.switchesWindowToWhere`, { remoteName })"
             >
-                <Icon name="arrow-right" />Open in {{ remoteName }}
+                <Icon name="arrow-right" />{{ t(`agents.agentDetail.openIn`) }} {{ remoteName }}
             </Button>
         </div>
         <p v-if="edit.error !== undefined" class="border-b border-line px-3 py-1 text-2xs text-danger">{{ edit.error }}</p>
-<!-- Chat|Changes gets its own row on a phone: crowding the header left too little width for the title. -->
+        <!-- Chat|Changes gets its own row on a phone: crowding the header left too little width for the title. -->
         <!-- Local-only like the chat below; a remote conversation lives elsewhere, so mobile gets the full review. -->
         <div v-if="mobile && reviewable && localOnly" class="shrink-0 border-b border-line px-2 py-1.5">
             <SegmentedControl v-model="view" :options="viewOptions" stretch />
         </div>
         <!-- `:tabs="false"`: this screen's header names the conversation, as does the panel's own mobile header. -->
         <ChatPanel v-if="mobile && localOnly && (view === 'chat' || !reviewable)" :tabs="false" class="min-h-0 flex-1" />
-<!-- Still asking about this id: the review's own shape stands in. -->
+        <!-- Still asking about this id: the review's own shape stands in. -->
         <template v-else-if="looking">
-            <AgentReviewOutline v-if="outline" label="Opening this agent's review…" />
+            <AgentReviewOutline v-if="outline" :label="t(`agents.agentDetail.openingAgentsReview`)" />
         </template>
-<!-- A remote agent with no review has three distinct reasons, told apart rather than collapsed into one guess. -->
+        <!-- A remote agent with no review has three distinct reasons, told apart rather than collapsed into one guess. -->
         <p v-else-if="remote && !reviewable" class="px-3.5 py-3 text-xs text-muted">
             {{ remoteUnavailable }}
         </p>
-<!-- `chat` is the review asking to swap for the conversation, raised when it hands a land conflict back to the agent. -->
+        <!-- `chat` is the review asking to swap for the conversation, raised when it hands a land conflict back to the agent. -->
         <AgentReviewPanel
             v-else-if="agentId !== '' && reviewable"
             :agent-id="agentId"
@@ -477,11 +480,18 @@ const confirmDiscard = async (): Promise<void> => {
             @chat="view = 'chat'"
         />
 
-<!-- The phone's switcher, from the title above; desktop switches chats on the docked panel's own strip. -->
+        <!-- The phone's switcher, from the title above; desktop switches chats on the docked panel's own strip. -->
         <ChatSwitcherSheet v-if="mobile" v-model="switcherOpen" @select="switchTo" @close="closeTabs" @open="openPast" @new="startAgent()" />
 
-<!-- Session menu: one body, anchored on desktop or a thumb sheet on a phone. -->
-        <ResponsiveOverlay v-model="menuOpen" :anchor="menuAnchor ?? undefined" header="Session" side="bottom" cross="end" panel-class="w-72">
+        <!-- Session menu: one body, anchored on desktop or a thumb sheet on a phone. -->
+        <ResponsiveOverlay
+            v-model="menuOpen"
+            :anchor="menuAnchor ?? undefined"
+            :header="t(`agents.agentDetail.session`)"
+            side="bottom"
+            cross="end"
+            panel-class="w-72"
+        >
             <AgentSessionMenu
                 :agent-id="agentId"
                 :changes="changes"
@@ -501,7 +511,7 @@ const confirmDiscard = async (): Promise<void> => {
         <ResponsiveOverlay
             v-model="identityOpen"
             :anchor="identityAnchor ?? undefined"
-            header="Session name"
+            :header="t(`agents.agentDetail.sessionName`)"
             side="bottom"
             cross="start"
             panel-class="w-96"
@@ -509,29 +519,33 @@ const confirmDiscard = async (): Promise<void> => {
             <SessionIdentity v-if="fleetAgent?.branch !== undefined" :agent-id="agentId" :branch="fleetAgent.branch" />
         </ResponsiveOverlay>
 
-<!-- Mid-write land warns about the recoverable overwrite risk. -->
+        <!-- Mid-write land warns about the recoverable overwrite risk. -->
         <Modal :open="pendingForceLand" size="sm" :header="words.landWhileWorking" @update:open="pendingForceLand = false">
             <p class="text-xs text-content">{{ words.landWhileWorkingBody }}</p>
             <p class="mt-2 text-xs text-muted">
-                Nothing is final: this arrives as uncommitted changes for you to review, and the rest of the turn lands on top of it when the agent
-                finishes.
+                {{ t(`agents.agentDetail.nothingFinalArrivesUncommitted`) }}
             </p>
             <template #footer>
-                <Button size="small" severity="secondary" :text="true" label="Cancel" @click="pendingForceLand = false" />
+                <Button size="small" severity="secondary" :text="true" :label="t(`ui.action.cancel`)" @click="pendingForceLand = false" />
                 <Button size="small" severity="warn" :label="words.landAnyway" :disabled="changes.actionBusy.value" @click="confirmForceLand" />
             </template>
         </Modal>
 
         <Modal :open="pendingDiscard" size="sm" :header="words.discardHeader" @update:open="pendingDiscard = false">
             <p class="text-xs text-content">
-                {{ words.discardBodyLead }} Its {{ changes.count.value }} changed file{{ changes.count.value === 1 ? "" : "s" }}
-                {{ words.discardBodyTail }}
+                {{
+                    t(
+                        `agents.agentDetail.discardBody`,
+                        { lead: words.discardBodyLead, count: changes.count.value, tail: words.discardBodyTail },
+                        changes.count.value,
+                    )
+                }}
             </p>
             <p v-if="changes.count.value > changes.pending.value.length" class="mt-2 text-xs text-muted">
-                Work that already landed stays in your workspace: only what is still on the branch is lost.
+                {{ t(`agents.agentDetail.workAlreadyLandedStays`) }}
             </p>
             <template #footer>
-                <Button size="small" severity="secondary" :text="true" label="Cancel" @click="pendingDiscard = false" />
+                <Button size="small" severity="secondary" :text="true" :label="t(`ui.action.cancel`)" @click="pendingDiscard = false" />
                 <Button size="small" severity="danger" :label="words.discard" :disabled="changes.actionBusy.value" @click="confirmDiscard" />
             </template>
         </Modal>

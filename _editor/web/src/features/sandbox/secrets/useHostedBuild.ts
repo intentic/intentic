@@ -4,6 +4,7 @@ import { computed, onScopeDispose, watch } from "vue";
 import { apiClient } from "../../../lib/useApi";
 import { ENVIRONMENT_KEY } from "../environment/useEnvironment";
 import { expectRestart, type RestartWork } from "../live/sandboxRestart";
+import { t } from "@intentic/ui/i18n";
 
 // A hosted sandbox's environment build, as followed by the Environment card: the platform builds the overlay
 // since there is no local host to run `ic sandbox rebuild`. Polls every 5s only while a build is in flight; keyed under
@@ -16,20 +17,20 @@ const POLL_MS = 5_000;
 const buildingWork = (sandbox: string): Omit<RestartWork, "startedAt"> => ({
     sandbox,
     id: `hosted-build`,
-    what: `Building your environment`,
+    what: t(`sandbox.useHostedBuild.buildingEnvironment`),
     quiet: {
-        title: `Building your environment`,
-        detail: `Your sandbox restarts onto the new image once the build is done — about half a minute of quiet, then this page reconnects on its own. Your files in /work are kept.`,
+        title: t(`sandbox.useHostedBuild.buildingEnvironment`),
+        detail: t(`sandbox.useHostedBuild.sandboxRestartsOntoNew`),
     },
 });
 
 const switchingWork = (sandbox: string): Omit<RestartWork, "startedAt"> => ({
     sandbox,
     id: `hosted-build`,
-    what: `Restarting onto your new environment`,
+    what: t(`sandbox.useHostedBuild.restartingOntoNewEnvironment`),
     quiet: {
-        title: `Restarting onto your new environment`,
-        detail: `The build is done and your sandbox is being swapped onto it — about half a minute, then this page reconnects on its own. Your files in /work are kept.`,
+        title: t(`sandbox.useHostedBuild.restartingOntoNewEnvironment`),
+        detail: t(`sandbox.useHostedBuild.buildDoneSandboxBeing`),
     },
     untilAnswered: true,
 });

@@ -43,6 +43,9 @@ import type { RowAction } from "./rowActions";
 import { selectRange, stepLead } from "./treeSelect";
 import type { OpenMode } from "../tabs/workspaceTabs";
 import { basename, parentDir } from "@intentic/ui/path";
+import { useT } from "@intentic/ui/i18n";
+
+const t = useT();
 
 interface Row {
     readonly entry: WorkspaceTreeEntry;
@@ -160,7 +163,6 @@ watch(
         lead.value = path ?? null;
     },
 );
-
 
 // Sandbox-private paths (isLockedWorkspacePath): no rename, delete, cut, copy, drag, or drop-into; a click opens an
 // explanation instead. Derived from the path, so children inherit it for free.
@@ -1052,7 +1054,7 @@ const menuItems = computed<MenuItem[]>(() => {
         barren: target?.type === `dir` && isBarren(target.path),
         clipboardFull: clipboard.value !== undefined,
         lead: dirActionItems(target, multi),
-        tail: expanded.value.size > 0 ? [{ label: `Collapse Folders`, icon: `collapse-all`, command: collapseAll }] : [],
+        tail: expanded.value.size > 0 ? [{ label: t(`workspace.workspaceTree.collapseFolders`), icon: `collapse-all`, command: collapseAll }] : [],
         verbs: {
             newFile: () => beginCreate(dir, `file`),
             newFolder: () => beginCreate(dir, `dir`),
@@ -1120,7 +1122,7 @@ const openMenu = (event: MouseEvent, entry: WorkspaceTreeEntry | undefined): voi
                     <input
                         v-model="createDraft"
                         type="text"
-                        :aria-label="creating.type === 'dir' ? 'New folder name' : 'New file name'"
+                        :aria-label="creating.type === 'dir' ? t(`workspace.workspaceTree.newFolderName`) : t(`workspace.workspaceTree.newFileName`)"
                         class="ui-field-box ui-field-inline min-w-0 flex-1 px-1 text-[0.8125rem]"
                         :class="createError !== undefined ? 'ui-field-error-box' : ''"
                         @click.stop
@@ -1137,12 +1139,12 @@ const openMenu = (event: MouseEvent, entry: WorkspaceTreeEntry | undefined): voi
                     v-if="'more' in row"
                     class="flex items-center gap-1.5 py-1 pr-2 text-2xs italic text-subtle select-none"
                     :style="{ paddingLeft: `${0.5 + row.depth * 0.75}rem` }"
-                    v-tooltip.top="'Search with Ctrl+P'"
+                    v-tooltip.top="t(`workspace.workspaceTree.searchCtrlP`)"
                 >
                     <span class="w-[0.7rem] shrink-0"></span>
-                    <span class="min-w-0 flex-1 truncate"
-                        >{{ row.more.toLocaleString() }} more {{ row.more === 1 ? "item" : "items" }}, search to reach them</span
-                    >
+                    <span class="min-w-0 flex-1 truncate">{{
+                        t(`workspace.workspaceTree.moreItems`, { count: row.more.toLocaleString() }, row.more)
+                    }}</span>
                 </div>
                 <template v-else>
                     <button
@@ -1157,7 +1159,8 @@ const openMenu = (event: MouseEvent, entry: WorkspaceTreeEntry | undefined): voi
                         :class="{
                             'ui-row-select-on': selection.has(row.entry.path),
                             'ui-row-select-pointed': row.entry.path === pointedBarren,
-                            'ui-row-select-drop': row.entry.path === dragOverPath || (dragOver !== undefined && dragOver !== '' && row.entry.path === dragOver),
+                            'ui-row-select-drop':
+                                row.entry.path === dragOverPath || (dragOver !== undefined && dragOver !== '' && row.entry.path === dragOver),
                             'ui-row-select-changed': isRecentlyChanged(row.entry.path),
                             'opacity-50': clipboard?.mode === 'cut' && clipboard.paths.includes(row.entry.path),
                             'opacity-40': rowDragging && dragPaths.includes(row.entry.path),
@@ -1186,7 +1189,7 @@ const openMenu = (event: MouseEvent, entry: WorkspaceTreeEntry | undefined): voi
                         <span
                             class="flex shrink-0 items-center justify-center"
                             :class="treat(row).slotClass"
-                            v-tooltip.right="locked(row.entry.path) ? 'Kept private by the sandbox' : undefined"
+                            v-tooltip.right="locked(row.entry.path) ? t(`workspace.workspaceTree.keptPrivateBySandbox`) : undefined"
                         >
                             <Icon :name="treat(row).icon" :class="[treat(row).sizeClass, treat(row).colorClass]" />
                         </span>
@@ -1229,7 +1232,9 @@ const openMenu = (event: MouseEvent, entry: WorkspaceTreeEntry | undefined): voi
                         <span
                             v-if="specialChip(row.entry.path, words)"
                             class="ui-status-pill shrink-0 text-2xs font-medium"
-                            :class="specialChip(row.entry.path, words)?.tone === `warning` ? `bg-warning/10 text-warning` : `bg-subtle/10 text-subtle`"
+                            :class="
+                                specialChip(row.entry.path, words)?.tone === `warning` ? `bg-warning/10 text-warning` : `bg-subtle/10 text-subtle`
+                            "
                             v-tooltip.right="specialChip(row.entry.path, words)?.tooltip"
                             >{{ specialChip(row.entry.path, words)?.label }}</span
                         >
@@ -1267,7 +1272,11 @@ const openMenu = (event: MouseEvent, entry: WorkspaceTreeEntry | undefined): voi
                             @click.stop="runAction(row.entry, action)"
                         />
                         <!-- Other members with this file open right now: live co-presence on the row. -->
-                        <PresenceAvatars v-if="row.entry.type === 'file'" :members="viewersOfPath(row.entry.path)" label="viewing this file" />
+                        <PresenceAvatars
+                            v-if="row.entry.type === 'file'"
+                            :members="viewersOfPath(row.entry.path)"
+                            :label="t(`workspace.workspaceTree.viewingFile`)"
+                        />
                         <!-- Transient "just changed" dot (a shape cue, not color-only) alongside the row tint. -->
                         <Icon
                             name="circle-fill"
@@ -1293,7 +1302,9 @@ const openMenu = (event: MouseEvent, entry: WorkspaceTreeEntry | undefined): voi
                             <input
                                 v-model="createDraft"
                                 type="text"
-                                :aria-label="creating.type === 'dir' ? 'New folder name' : 'New file name'"
+                                :aria-label="
+                                    creating.type === 'dir' ? t(`workspace.workspaceTree.newFolderName`) : t(`workspace.workspaceTree.newFileName`)
+                                "
                                 class="ui-field-box ui-field-inline min-w-0 flex-1 px-1 text-[0.8125rem]"
                                 :class="createError !== undefined ? 'ui-field-error-box' : ''"
                                 @click.stop
@@ -1308,18 +1319,20 @@ const openMenu = (event: MouseEvent, entry: WorkspaceTreeEntry | undefined): voi
                 </template>
             </template>
             <p v-if="visibleRows.length === 0 && creating === undefined" class="px-3 py-3 text-center text-2xs text-subtle">
-                {{ filter.trim() ? "No matching files." : "Empty workspace." }}
+                {{ filter.trim() ? t(`workspace.workspaceTree.noMatchingFiles`) : t(`workspace.workspaceTree.emptyWorkspace`) }}
             </p>
             <!-- The technical switch's own receipt: a press here is the way back, so the hidden files are never a mystery. -->
             <button
                 v-if="technicalCount > 0 && filter.trim() === ''"
                 type="button"
                 class="flex w-full items-center gap-1.5 px-2 py-1 text-left text-2xs italic text-subtle transition-colors hover:text-content"
-                v-tooltip.top="'Lockfiles, configuration, dot files and build output. Press to show them.'"
+                v-tooltip.top="t(`workspace.workspaceTree.lockfilesConfigurationDotFiles`)"
                 @click="layout.toggleHideTechnical()"
             >
                 <span class="w-[0.7rem] shrink-0"></span>
-                <span class="min-w-0 flex-1 truncate">{{ technicalCount }} technical {{ technicalCount === 1 ? "file" : "files" }} hidden</span>
+                <span class="min-w-0 flex-1 truncate">{{
+                    t(`workspace.workspaceTree.technicalHidden`, { count: technicalCount }, technicalCount)
+                }}</span>
             </button>
         </div>
         <!-- Shown only while barren branches exist, pinned to the bottom; names what it counts, since Undo reverses the delete exactly. -->
@@ -1344,10 +1357,10 @@ const openMenu = (event: MouseEvent, entry: WorkspaceTreeEntry | undefined): voi
                     <button
                         type="button"
                         class="shrink-0 cursor-pointer py-0.5 text-2xs text-subtle underline-offset-2 hover:text-content hover:underline"
-                        v-tooltip.top="'Keep this folder: it stops counting as empty'"
+                        v-tooltip.top="t(`workspace.workspaceTree.keepFolderStopsCounting`)"
                         @click="keepFolder(branch.path)"
                     >
-                        Keep
+                        {{ t(`workspace.workspaceTree.keep`) }}
                     </button>
                 </li>
             </ul>
@@ -1363,7 +1376,7 @@ const openMenu = (event: MouseEvent, entry: WorkspaceTreeEntry | undefined): voi
                     @focus="pointedBarren = soleBarren?.path"
                     @blur="pointedBarren = undefined"
                 >
-                    <span class="block truncate">{{ soleBarren.label }} is empty</span>
+                    <span class="block truncate">{{ t(`workspace.workspaceTree.empty`, { label: soleBarren.label }) }}</span>
                     <span v-if="soleBarren.where !== ''" class="block truncate text-muted/70">{{ soleBarren.where }}</span>
                 </button>
                 <button
@@ -1373,7 +1386,7 @@ const openMenu = (event: MouseEvent, entry: WorkspaceTreeEntry | undefined): voi
                     :aria-expanded="sweepOpen"
                     @click="sweepOpen = !sweepOpen"
                 >
-                    <span class="truncate">{{ barrenBranches.length }} empty folders</span>
+                    <span class="truncate">{{ t(`workspace.workspaceTree.emptyFolders`, { count: barrenBranches.length }) }}</span>
                     <Icon :name="sweepOpen ? 'chevron-down' : 'chevron-right'" class="shrink-0 text-[0.6rem]" aria-hidden="true" />
                 </button>
                 <button
@@ -1381,7 +1394,7 @@ const openMenu = (event: MouseEvent, entry: WorkspaceTreeEntry | undefined): voi
                     class="shrink-0 cursor-pointer font-medium text-content/70 underline-offset-2 hover:text-content hover:underline"
                     @click="sweepBarren(barrenRootPaths)"
                 >
-                    Clean up
+                    {{ t(`workspace.workspaceTree.cleanUp`) }}
                 </button>
             </div>
         </div>
@@ -1389,7 +1402,7 @@ const openMenu = (event: MouseEvent, entry: WorkspaceTreeEntry | undefined): voi
         <ConfirmDialog
             :open="confirmPaths !== undefined"
             :header="deleteHeader"
-            confirm-label="Delete"
+            :confirm-label="t(`ui.action.delete`)"
             confirm-icon="trash"
             :items="confirmPaths ?? []"
             @cancel="cancelDelete"
@@ -1406,7 +1419,7 @@ const openMenu = (event: MouseEvent, entry: WorkspaceTreeEntry | undefined): voi
                 <span class="truncate text-content">{{ basename(item) }}</span>
                 <span v-if="parentDir(item) !== ''" class="min-w-0 truncate text-xs text-subtle">{{ parentDir(item) }}</span>
             </template>
-            <p class="mt-3 text-xs text-muted">This can't be undone.</p>
+            <p class="mt-3 text-xs text-muted">{{ t(`workspace.workspaceTree.cantUndone`) }}</p>
         </ConfirmDialog>
     </div>
 </template>

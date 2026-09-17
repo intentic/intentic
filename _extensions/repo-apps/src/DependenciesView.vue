@@ -3,6 +3,7 @@ import type { WorkspaceDepEdge, WorkspacePackage } from "@intentic/sandbox-contr
 import { Card, ui, DagGraph, Notice, noticeOf, ToggleSwitch, useLoadingReveal, type DagEdge, type DagNode } from "@intentic/extension-ui";
 import { computed, ref, toRef } from "vue";
 import { useWorkspaceGraph } from "./useWorkspaceGraph";
+import { t } from "./i18n.js";
 
 // Monorepo's workspace package dependency graph: one card per package (colored by top-level dir), edges flowing
 // dependency to dependent, left-to-right. Dev deps sit behind a toggle since they swamp the picture; selecting a
@@ -115,34 +116,34 @@ const dagEdges = computed<DagEdge[]>(() =>
                     <svg class="h-px w-5 overflow-visible text-subtle" aria-hidden="true">
                         <line x1="0" y1="0.5" x2="20" y2="0.5" stroke="currentColor" stroke-width="1.5" stroke-dasharray="4 3" />
                     </svg>
-                    dev
+                    {{ t(`dependenciesView.dev`) }}
                 </span>
             </div>
             <div class="flex items-center gap-4">
                 <span v-if="closure" class="flex items-center gap-3 text-2xs text-muted">
                     <span class="flex items-center gap-1"
-                        ><span class="h-2 w-2 rounded-full bg-warning"></span>uses {{ closure.uses.reached.size }}</span
+                        ><span class="h-2 w-2 rounded-full bg-warning"></span>{{ t(`dependenciesView.uses`) }} {{ closure.uses.reached.size }}</span
                     >
                     <span class="flex items-center gap-1"
-                        ><span class="h-2 w-2 rounded-full bg-info"></span>used by {{ closure.usedBy.reached.size }}</span
+                        ><span class="h-2 w-2 rounded-full bg-info"></span>{{ t(`dependenciesView.usedBy`) }} {{ closure.usedBy.reached.size }}</span
                     >
                 </span>
                 <label class="flex cursor-pointer items-center gap-2 text-xs text-muted">
                     <ToggleSwitch v-model="showDev" class="scale-75" />
-                    Dev dependencies
+                    {{ t(`dependenciesView.devDependencies`) }}
                 </label>
             </div>
         </div>
         <!-- Dependency skeletons use the real card dimensions and graph shape. -->
         <div v-if="isLoading && outline" class="min-h-0 flex-1 p-2" role="status" aria-busy="true">
-            <span class="sr-only">Reading the workspace graph…</span>
+            <span class="sr-only">{{ t(`dependenciesView.readingWorkspaceGraph`) }}</span>
             <div class="flex flex-wrap gap-3" aria-hidden="true">
                 <span v-for="card in 6" :key="card" class="skeleton block h-12" :class="[`w-44`, `w-52`, `w-40`][card % 3]" />
             </div>
         </div>
 
         <Card v-else-if="packages.length === 0 && !isLoading" dashed class="text-center text-sm text-muted">
-            No workspace packages found: pnpm-workspace.yaml names no package dirs.
+            {{ t(`dependenciesView.noWorkspacePackagesFound`) }}
         </Card>
         <div v-else class="min-h-0 flex-1">
             <DagGraph v-model="selectedId" :nodes="dagNodes" :edges="dagEdges" :node-height="52" touch-pan>

@@ -2,10 +2,13 @@
 import { computed } from "vue";
 import type { Composition } from "./savingsChart";
 import { formatCompact } from "./usageChart";
+import { useT } from "@intentic/ui/i18n";
 
 // Where a window's raw shell output went: one stacked bar (segments sum to the whole, including what reached the
 // assistant) plus a legend list where the numbers actually live. Legend carries one number, tokens; the share is
 // already the bar itself, and the label gets the room a second column would cost it.
+
+const t = useT();
 
 const { composition } = defineProps<{ composition: Composition }>();
 
@@ -32,13 +35,16 @@ const tooltipFor = (label: string, tokens: number): string => `${label} · ~${fo
             />
         </div>
 
-<!-- Only the ends are labelled, the two numbers the bar claims. -->
+        <!-- Only the ends are labelled, the two numbers the bar claims. -->
         <div class="flex items-baseline justify-between gap-2 text-2xs tabular-nums text-subtle">
-            <span>~{{ formatCompact(composition.rawTokens) }} raw</span>
-            <span><span aria-hidden="true">→ </span>~{{ formatCompact(reached?.tokens ?? 0) }} reached the assistant</span>
+            <span>{{ t(`sandbox.savingsStackBar.raw`, { rawTokens: formatCompact(composition.rawTokens) }) }}</span>
+            <span
+                ><span aria-hidden="true">→ </span>~{{ formatCompact(reached?.tokens ?? 0) }}
+                {{ t(`sandbox.savingsStackBar.reachedAssistant`) }}</span
+            >
         </div>
 
-        <figcaption class="sr-only">Raw shell output by what removed it, and what was left for the assistant.</figcaption>
+        <figcaption class="sr-only">{{ t(`sandbox.savingsStackBar.rawShellOutputBy`) }}</figcaption>
         <ul class="mt-1 flex flex-col gap-1.5">
             <li v-for="segment in removed" :key="segment.key" class="flex min-w-0 items-baseline gap-2">
                 <span class="size-2 shrink-0 translate-y-px rounded-2xs" :style="{ background: segment.color }" />
@@ -54,7 +60,7 @@ const tooltipFor = (label: string, tokens: number): string => `${label} · ~${fo
 
         <!-- The displayed total already includes retrievable output cost. -->
         <p v-if="composition.footerTokens > 0" class="text-2xs text-subtle">
-            Includes ~{{ formatCompact(composition.footerTokens) }} tokens of retrieval footers added back.
+            {{ t(`sandbox.savingsStackBar.includesTokensRetrievalFooters`, { footerTokens: formatCompact(composition.footerTokens) }) }}
         </p>
     </figure>
 </template>

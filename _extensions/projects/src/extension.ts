@@ -1,6 +1,7 @@
 import type { ExtensionContext, IntenticApi } from "@intentic/extension-api";
 import { bindHost } from "./host.js";
 import { monogramOf } from "./projects.js";
+import { t } from "./i18n.js";
 
 // The workspace's repositories as a dashboard: one rail tile, activating whether or not a repository exists yet,
 // since a workspace with none is where a maker starts and the dashboard's first tile is then New project. The rail
@@ -13,17 +14,17 @@ export const activate = (api: IntenticApi, context: ExtensionContext): void => {
     context.subscriptions.push(
         api.views.register({
             id: `projects`,
-            label: `Projects`,
+            label: t(`extension.projects`),
             surface: `rail`,
             detect: () => {
                 const project = api.workspace.project();
                 return project === undefined
-                    ? [{ key: `projects`, title: `Projects`, icon: `th-large` }]
-                    : [{ key: `projects`, title: `Projects · ${project}`, icon: `th-large`, monogram: monogramOf(project) }];
+                    ? [{ key: `projects`, title: t(`extension.projects`), icon: `th-large` }]
+                    : [{ key: `projects`, title: t(`extension.projects2`, { project }), icon: `th-large`, monogram: monogramOf(project) }];
             },
             badge: () => {
                 const project = api.workspace.project();
-                return project === undefined ? undefined : { tooltip: `looking at ${project} only` };
+                return project === undefined ? undefined : { tooltip: t(`extension.lookingAtOnly`, { project }) };
             },
             view: async () => (await import(`./ProjectsView.vue`)).default,
         }),

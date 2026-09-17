@@ -10,10 +10,13 @@ import RuleCommand from "./RuleCommand.vue";
 import RuleForm from "./RuleForm.vue";
 import RulesInfo from "./RulesInfo.vue";
 import { momentOf, type RuleDraft } from "./ruleWords";
+import { useT } from "@intentic/ui/i18n";
 
 // Every standing instruction without a row of its own above. A rule is a sentence (moment, condition, action) from one
 // shared vocabulary (ruleWords.ts), same as RuleForm; a row typesets that sentence instead of one grey paragraph.
 // Editing keeps the rule's id, so history and firing stamps don't orphan.
+
+const t = useT();
 
 const { settings, listed, firings, upsert, remove, setEnabled, move, freeId } = useRules();
 const outline = useSandboxOutline(computed(() => settings.value === undefined));
@@ -63,11 +66,11 @@ const menuModel = computed<MenuItem[]>(() => {
     }
     const at = listed.value.findIndex((entry) => entry.id === rule.id);
     return [
-        { label: `Edit`, icon: `pencil`, command: () => startEdit(rule.id) },
-        { label: `Move up`, icon: `chevron-up`, disabled: at <= 0, command: () => move(rule.id, -1) },
-        { label: `Move down`, icon: `chevron-down`, disabled: at === listed.value.length - 1, command: () => move(rule.id, 1) },
+        { label: t(`ui.action.edit`), icon: `pencil`, command: () => startEdit(rule.id) },
+        { label: t(`sandbox.agentRules.moveUp`), icon: `chevron-up`, disabled: at <= 0, command: () => move(rule.id, -1) },
+        { label: t(`sandbox.agentRules.moveDown`), icon: `chevron-down`, disabled: at === listed.value.length - 1, command: () => move(rule.id, 1) },
         { separator: true },
-        { label: `Delete`, icon: `trash`, danger: true, command: () => remove(rule.id) },
+        { label: t(`ui.action.delete`), icon: `trash`, danger: true, command: () => remove(rule.id) },
     ];
 });
 
@@ -92,7 +95,7 @@ const firedOf = (rule: Rule): string => {
 </script>
 
 <template>
-    <RowGroup label="Rules">
+    <RowGroup :label="t(`sandbox.agentRules.rules`)">
         <template #info><RulesInfo /></template>
 
         <template v-for="rule in listed" :key="rule.id">
@@ -106,31 +109,36 @@ const firedOf = (rule: Rule): string => {
             <Row v-else :icon="momentOf(rule.moment).icon" :title="rule.label" :class="{ 'opacity-60': !rule.enabled }">
                 <template #description>
                     <span class="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1.5 text-2xs">
-                        <span class="inline-flex shrink-0 items-center rounded border border-line-subtle bg-overlay px-2 py-0.5 font-medium text-muted">
+                        <span
+                            class="inline-flex shrink-0 items-center rounded border border-line-subtle bg-overlay px-2 py-0.5 font-medium text-muted"
+                        >
                             {{ momentOf(rule.moment).label }}
                         </span>
                         <span v-if="commandOf(rule) !== undefined" class="inline-flex min-w-0 max-w-full items-center gap-1.5">
-                            <span class="shrink-0 text-subtle">run</span>
+                            <span class="shrink-0 text-subtle">{{ t(`sandbox.agentRules.run`) }}</span>
                             <span class="min-w-0 max-w-full truncate rounded border border-line-subtle bg-canvas/80 px-2 py-0.5">
                                 <RuleCommand :command="commandOf(rule)!" />
                             </span>
                         </span>
                         <span v-else-if="textOf(rule) !== undefined" class="min-w-0 max-w-full truncate text-muted">
-                            <span class="text-subtle">say:</span> {{ textOf(rule) }}
+                            <span class="text-subtle">{{ t(`sandbox.agentRules.say`) }}</span> {{ textOf(rule) }}
                         </span>
                         <span v-else-if="verdictOf(rule) !== undefined" class="min-w-0 max-w-full truncate font-medium text-content">
                             {{ verdictOf(rule) }}
                         </span>
                         <!-- Which repository, when it names one: it is where the command RUNS, not only a narrowing. -->
                         <span v-if="rule.when?.repo !== undefined" class="inline-flex min-w-0 items-center gap-1.5 text-muted">
-                            <span class="shrink-0 text-subtle">in</span>
+                            <span class="shrink-0 text-subtle">{{ t(`sandbox.agentRules.in`) }}</span>
                             <span class="max-w-48 truncate rounded border border-line-subtle bg-overlay px-2 py-0.5 font-mono text-content">
                                 {{ rule.when.repo }}
                             </span>
                         </span>
                         <!-- Paths shown as their globs, not a count: which paths is the whole question a reader has. -->
-                        <span v-if="(rule.when?.paths?.length ?? 0) > 0" class="inline-flex min-w-0 max-w-full flex-wrap items-center gap-1.5 text-muted">
-                            <span class="shrink-0 text-subtle">only when touching</span>
+                        <span
+                            v-if="(rule.when?.paths?.length ?? 0) > 0"
+                            class="inline-flex min-w-0 max-w-full flex-wrap items-center gap-1.5 text-muted"
+                        >
+                            <span class="shrink-0 text-subtle">{{ t(`sandbox.agentRules.onlyTouching`) }}</span>
                             <span
                                 v-for="glob in rule.when?.paths"
                                 :key="glob"
@@ -148,8 +156,8 @@ const firedOf = (rule: Rule): string => {
                         <button
                             type="button"
                             :class="ui.iconButton()"
-                            v-tooltip.bottom="`Rule actions`"
-                            aria-label="Rule actions"
+                            v-tooltip.bottom="t(`sandbox.agentRules.ruleActions`)"
+                            :aria-label="t(`sandbox.agentRules.ruleActions`)"
                             @click="openMenu($event, rule)"
                         >
                             <Icon name="bars" class="text-xs" />
@@ -157,7 +165,7 @@ const firedOf = (rule: Rule): string => {
                         <ToggleSwitch
                             :model-value="rule.enabled"
                             :disabled="settings === undefined"
-                            :aria-label="`Enable ${rule.label}`"
+                            :aria-label="t(`sandbox.agentRules.enable`, { label: rule.label })"
                             @update:model-value="(value: boolean) => setEnabled(rule.id, value)"
                         />
                     </div>
@@ -168,20 +176,20 @@ const firedOf = (rule: Rule): string => {
         <!-- Same skeleton rule as the skills list above: nothing true to say while settings are unread. -->
         <div v-if="settings === undefined" role="status" aria-busy="true">
             <template v-if="outline">
-                <span class="sr-only">Reading this sandbox's rules…</span>
+                <span class="sr-only">{{ t(`sandbox.agentRules.readingSandboxsRules`) }}</span>
                 <SkeletonRows :rows="2" description control />
             </template>
         </div>
-        <Row v-else-if="listed.length === 0 && !adding" icon="shield" description="No custom rules added yet." />
+        <Row v-else-if="listed.length === 0 && !adding" icon="shield" :description="t(`sandbox.agentRules.noCustomRulesAdded`)" />
 
-        <Row v-if="adding" icon="plus" title="New rule">
+        <Row v-if="adding" icon="plus" :title="t(`sandbox.agentRules.newRule`)">
             <template #below>
                 <RuleForm :disabled="settings === undefined" @save="saveDraft" @cancel="close" />
             </template>
         </Row>
 
         <!-- Hidden while a form is open, so only one rule is being written at a time. -->
-        <Row v-else-if="editingId === undefined" as="button" icon="plus" interactive title="Add a rule" @click="startAdd" />
+        <Row v-else-if="editingId === undefined" as="button" icon="plus" interactive :title="t(`sandbox.agentRules.addRule`)" @click="startAdd" />
     </RowGroup>
 
     <ContextMenu ref="menu" :model="menuModel" :min-width="11" />

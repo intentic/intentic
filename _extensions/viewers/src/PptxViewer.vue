@@ -2,6 +2,7 @@
 import { Icon } from "@intentic/extension-ui";
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import type { Deck, ImageBox, Paragraph, TextBox } from "./pptx/deck-model";
+import { t } from "./i18n.js";
 
 /* PPTX preview: the deck unpacked in the tab and drawn as slides. All the reading is in src/pptx — this file only
    turns boxes into elements, so anything that looks wrong on a slide was decided by the parse, not here. */
@@ -129,7 +130,14 @@ const paragraphStyle = (paragraph: Paragraph): Record<string, string> => ({
     ...(paragraph.spaceBefore === 0 ? {} : { marginTop: px(paragraph.spaceBefore) }),
 });
 
-const runStyle = (run: { size: number; bold: boolean; italic: boolean; underline: boolean; color: string; font: string | undefined }): Record<string, string> => ({
+const runStyle = (run: {
+    size: number;
+    bold: boolean;
+    italic: boolean;
+    underline: boolean;
+    color: string;
+    font: string | undefined;
+}): Record<string, string> => ({
     fontSize: px(run.size),
     color: run.color,
     ...(run.bold ? { fontWeight: `700` } : {}),
@@ -149,20 +157,33 @@ const hasNotes = computed(() => deck.value?.slides.some((slide) => slide.notes.l
 
 <template>
     <div class="flex h-full min-h-0 flex-col">
-        <div v-if="deck !== undefined && !loading" class="flex shrink-0 items-center gap-3 border-b border-line-subtle px-3 py-1.5 text-2xs text-muted">
+        <div
+            v-if="deck !== undefined && !loading"
+            class="flex shrink-0 items-center gap-3 border-b border-line-subtle px-3 py-1.5 text-2xs text-muted"
+        >
             <span>{{ deck.slides.length }} {{ deck.slides.length === 1 ? `slide` : `slides` }}</span>
-            <button v-if="hasNotes" type="button" class="ui-chip gap-1 rounded-md px-1.5 py-0.5" :aria-pressed="notesShown" @click="notesShown = !notesShown">
+            <button
+                v-if="hasNotes"
+                type="button"
+                class="ui-chip gap-1 rounded-md px-1.5 py-0.5"
+                :aria-pressed="notesShown"
+                @click="notesShown = !notesShown"
+            >
                 <Icon :name="notesShown ? `eye` : `eye-slash`" class="text-2xs" />
-                Speaker notes
+                {{ t(`pptxViewer.speakerNotes`) }}
             </button>
         </div>
         <div ref="surface" class="ui-softscroll relative min-h-0 flex-1 overflow-auto bg-muted/20 px-4 py-4">
-            <div v-if="loading" class="absolute inset-0 flex items-center justify-center bg-canvas text-muted"><Icon name="spinner" class="text-xl" spin /></div>
+            <div v-if="loading" class="absolute inset-0 flex items-center justify-center bg-canvas text-muted">
+                <Icon name="spinner" class="text-xl" spin />
+            </div>
             <div v-else-if="error" class="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-canvas px-6 text-center">
                 <Icon name="exclamation-triangle" class="text-3xl text-danger" />
                 <p class="text-sm text-danger">{{ error }}</p>
             </div>
-            <p v-else-if="deck === undefined || deck.slides.length === 0" class="py-10 text-center text-sm text-muted">This presentation has no slides.</p>
+            <p v-else-if="deck === undefined || deck.slides.length === 0" class="py-10 text-center text-sm text-muted">
+                {{ t(`pptxViewer.presentationNoSlides`) }}
+            </p>
             <div v-else class="mx-auto flex flex-col items-center gap-6">
                 <figure v-for="slide of deck.slides" :key="slide.number" class="flex flex-col items-center gap-1">
                     <div class="pptx-frame overflow-hidden rounded-sm shadow-md ring-1 ring-line" :style="frameStyle">
@@ -173,8 +194,15 @@ const hasNotes = computed(() => deck.value?.slides.some((slide) => slide.notes.l
                         >
                             <template v-for="(box, index) of slide.boxes" :key="index">
                                 <div v-if="box.kind === `text`" class="pptx-box absolute flex flex-col" :style="textStyle(box)">
-                                    <p v-for="(paragraph, line) of box.paragraphs" :key="line" class="pptx-para flex" :style="paragraphStyle(paragraph)">
-                                        <span v-if="paragraph.bullet !== undefined" class="pptx-bullet" :style="bulletStyle(paragraph)">{{ paragraph.bullet }}</span>
+                                    <p
+                                        v-for="(paragraph, line) of box.paragraphs"
+                                        :key="line"
+                                        class="pptx-para flex"
+                                        :style="paragraphStyle(paragraph)"
+                                    >
+                                        <span v-if="paragraph.bullet !== undefined" class="pptx-bullet" :style="bulletStyle(paragraph)">{{
+                                            paragraph.bullet
+                                        }}</span>
                                         <span class="min-w-0 flex-1">
                                             <span v-for="(run, spot) of paragraph.runs" :key="spot" :style="runStyle(run)">{{ run.text }}</span>
                                         </span>
@@ -185,7 +213,7 @@ const hasNotes = computed(() => deck.value?.slides.some((slide) => slide.notes.l
                                     class="pptx-box absolute"
                                     :style="boxStyle(box)"
                                     :src="pictureOf(box)"
-                                    :alt="box.description ?? `Picture on slide ${slide.number}`"
+                                    :alt="box.description ?? t(`pptxViewer.pictureOnSlide`, { number: slide.number })"
                                 />
                                 <table v-else-if="box.kind === `table`" class="pptx-table absolute" :style="boxStyle(box)">
                                     <colgroup>
@@ -201,7 +229,9 @@ const hasNotes = computed(() => deck.value?.slides.some((slide) => slide.notes.l
                                                 :style="cell.fill === undefined ? {} : { background: cell.fill }"
                                             >
                                                 <p v-for="(paragraph, index2) of cell.paragraphs" :key="index2" :style="paragraphStyle(paragraph)">
-                                                    <span v-for="(run, spot2) of paragraph.runs" :key="spot2" :style="runStyle(run)">{{ run.text }}</span>
+                                                    <span v-for="(run, spot2) of paragraph.runs" :key="spot2" :style="runStyle(run)">{{
+                                                        run.text
+                                                    }}</span>
                                                 </p>
                                             </td>
                                         </tr>
@@ -220,8 +250,11 @@ const hasNotes = computed(() => deck.value?.slides.some((slide) => slide.notes.l
                         </div>
                     </div>
                     <figcaption class="flex flex-col items-center gap-1 text-2xs text-subtle" :style="{ width: frameStyle.width }">
-                        <span>Slide {{ slide.number }}</span>
-                        <div v-if="notesShown && slide.notes.length > 0" class="w-full rounded border border-line bg-canvas px-3 py-2 text-left text-xs text-muted">
+                        <span>{{ t(`pptxViewer.slide`, { number: slide.number }) }}</span>
+                        <div
+                            v-if="notesShown && slide.notes.length > 0"
+                            class="w-full rounded border border-line bg-canvas px-3 py-2 text-left text-xs text-muted"
+                        >
                             <p v-for="(note, index) of slide.notes" :key="index" class="whitespace-pre-wrap">{{ note }}</p>
                         </div>
                     </figcaption>

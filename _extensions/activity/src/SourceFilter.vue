@@ -46,15 +46,15 @@ const groups = computed<PickerOptions<string>>(() => [
         options: [
             {
                 value: ``,
-                label: `All sources`,
+                label: t(`sourceFilter.allSources`),
                 description: failed > 0 ? `${total} · ${failed} failed` : String(total),
                 icon: `wave-pulse` as IconName,
             },
         ],
     },
     ...[
-        { key: `connections`, label: `Connections`, items: sources.filter((source) => source.group === `connections`) },
-        { key: `direct`, label: `Direct`, items: sources.filter((source) => source.group === `direct`) },
+        { key: `connections`, label: t(`sourceFilter.connections`), items: sources.filter((source) => source.group === `connections`) },
+        { key: `direct`, label: t(`sourceFilter.direct`), items: sources.filter((source) => source.group === `direct`) },
     ]
         .filter((group) => group.items.length > 0)
         .map((group) => ({

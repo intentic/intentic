@@ -11,10 +11,13 @@ import type { ExtensionEntry } from "../../extensions/useExtensionList";
 import { publishBrief, tightenBrief } from "./extensionBrief";
 import ExtensionSettingsForm from "./ExtensionSettingsForm.vue";
 import ExtensionUpdateCard from "./ExtensionUpdateCard.vue";
+import { useT } from "@intentic/ui/i18n";
 
 // One extension, one line until expanded: name, its places, then the switch; everything else moves below the fold. Tier
 // and mark size come from the list's own RowGroup density, not this file. Weight is deliberately withheld from
 // `intentic.` prefixes, full contribution lists, and a full-size switch.
+
+const t = useT();
 
 const { entry, expanded, pending } = defineProps<{ entry: ExtensionEntry; expanded: boolean; pending: boolean }>();
 
@@ -180,22 +183,18 @@ const tone = computed(() => TONE[entry.state.variant] ?? `text-muted`);
                 <StatusBadge
                     v-if="!entry.state.attention && entry.extension.update !== undefined"
                     :variant="entry.extension.update.securityFix ? `danger` : `info`"
-                    :label="entry.extension.update.securityFix ? `security update` : `update`"
+                    :label="entry.extension.update.securityFix ? t(`sandbox.extensionRow.securityUpdate`) : `update`"
                     size="xs"
                 />
                 <StatusBadge v-if="entry.state.badge" :variant="entry.state.variant" :label="entry.state.label" size="xs" />
                 <span v-else-if="entry.state.label !== undefined" class="text-2xs text-subtle">{{ entry.state.label }}</span>
                 <!-- Fixed, not hidden: a vanished control reads as a bug. -->
-                <span
-                    v-if="entry.extension.essential"
-                    :title="`Always on: this is the only window onto work the sandbox does on its own.`"
-                    class="cursor-not-allowed"
-                >
+                <span v-if="entry.extension.essential" :title="t(`sandbox.extensionRow.alwaysOnOnlyWindow`)" class="cursor-not-allowed">
                     <ToggleSwitch
                         class="ui-switch-sm pointer-events-none"
                         :model-value="true"
                         disabled
-                        :aria-label="`${extensionIdOf(manifest)} is always on`"
+                        :aria-label="t(`sandbox.extensionRow.alwaysOn`, { manifest: extensionIdOf(manifest) })"
                     />
                 </span>
                 <ToggleSwitch
@@ -203,7 +202,7 @@ const tone = computed(() => TONE[entry.state.variant] ?? `text-muted`);
                     class="ui-switch-sm"
                     :model-value="entry.extension.enabled"
                     :disabled="pending"
-                    :aria-label="`Enable ${extensionIdOf(manifest)}`"
+                    :aria-label="t(`sandbox.extensionRow.enable`, { manifest: extensionIdOf(manifest) })"
                     @update:model-value="(value: boolean) => emit(`toggle`, value)"
                 />
             </div>
@@ -225,12 +224,12 @@ const tone = computed(() => TONE[entry.state.variant] ?? `text-muted`);
                 <ExtensionUpdateCard v-if="entry.extension.source === `installed`" :extension="entry.extension" />
 
                 <div v-if="settings.length > 0">
-                    <p :class="ui.sectionLabel(`mb-2 text-2xs`)">Settings</p>
+                    <p :class="ui.sectionLabel(`mb-2 text-2xs`)">{{ t(`sandbox.extensionRow.settings`) }}</p>
                     <ExtensionSettingsForm :extension-id="entry.extension.id" :settings="settings" />
                 </div>
 
                 <div v-if="entry.extension.enabled && consequences.length > 0">
-                    <p :class="ui.sectionLabel(`mb-1.5 text-2xs`)">Switching it off</p>
+                    <p :class="ui.sectionLabel(`mb-1.5 text-2xs`)">{{ t(`sandbox.extensionRow.switchingOff`) }}</p>
                     <ul class="flex flex-col gap-1">
                         <li v-for="consequence in consequences" :key="consequence" class="text-2xs text-muted">— {{ consequence }}.</li>
                     </ul>
@@ -238,7 +237,7 @@ const tone = computed(() => TONE[entry.state.variant] ?? `text-muted`);
 
                 <!-- The reach approved at install, and now whether it was ever used. -->
                 <div v-if="manifest.permissions !== undefined">
-                    <p :class="ui.sectionLabel(`mb-1.5 text-2xs`)">Daemon routes it may call</p>
+                    <p :class="ui.sectionLabel(`mb-1.5 text-2xs`)">{{ t(`sandbox.extensionRow.daemonRoutesMayCall`) }}</p>
                     <div class="flex flex-wrap gap-1">
                         <code
                             v-for="route in routes"
@@ -247,30 +246,29 @@ const tone = computed(() => TONE[entry.state.variant] ?? `text-muted`);
                             :class="route.unused ? `border border-dashed border-line text-subtle` : `border border-line bg-canvas text-muted`"
                             v-tooltip.top="
                                 route.calls > 0
-                                    ? `Called ${route.calls.toLocaleString()} times`
+                                    ? t(`sandbox.extensionRow.calledTimes`, { toLocaleString: route.calls.toLocaleString() })
                                     : route.unused
-                                      ? `Never called since this was first observed`
+                                      ? t(`sandbox.extensionRow.neverCalledSinceFirst`)
                                       : undefined
                             "
                             >{{ route.route }}</code
                         >
                     </div>
                     <p v-if="observed === undefined" class="mt-1.5 text-2xs text-subtle">
-                        Nothing observed yet: routes are counted as the extension uses them.
+                        {{ t(`sandbox.extensionRow.nothingObservedYetRoutes`) }}
                     </p>
                     <p v-else-if="routes.some((route) => route.unused)" class="mt-1.5 text-2xs text-subtle">
-                        Dashed routes have never been called. That is worth raising with whoever maintains it, not acting on alone: a route used only
-                        by a screen you have not opened looks identical.
+                        {{ t(`sandbox.extensionRow.dashedRoutesNeverCalled`) }}
                         <!-- Maintainer-owned extensions route review to the owner. -->
                         <button v-if="tightenable" type="button" :class="ui.linkButton(`text-2xs`)" @click="startAgent(tightenBrief(tighten))">
-                            Have an agent go through them
+                            {{ t(`sandbox.extensionRow.agentGoThrough`) }}
                         </button>
                     </p>
                 </div>
 
                 <!-- File checks cover only facts answerable without running the extension. -->
                 <div v-if="entry.extension.source === `workspace`">
-                    <p :class="ui.sectionLabel(`mb-1.5 text-2xs`)">Fit to publish</p>
+                    <p :class="ui.sectionLabel(`mb-1.5 text-2xs`)">{{ t(`sandbox.extensionRow.fitToPublish`) }}</p>
                     <p v-if="readinessError" class="text-2xs text-danger">{{ readinessError }}</p>
                     <ul v-else-if="readiness" class="flex flex-col gap-1">
                         <li v-for="check in readiness" :key="check.id" class="flex gap-1.5 text-2xs">
@@ -287,7 +285,7 @@ const tone = computed(() => TONE[entry.state.variant] ?? `text-muted`);
                     <!-- Offered only when nothing fails; a warning is the author's call, not a blocker. -->
                     <p v-if="publishable" class="mt-1.5 text-2xs text-subtle">
                         <button type="button" :class="ui.linkButton(`text-2xs`)" @click="startAgent(publishBrief(publish))">
-                            Publish it: an agent pushes these files and reports the commit
+                            {{ t(`sandbox.extensionRow.publishAgentPushesFiles`) }}
                         </button>
                     </p>
                 </div>
@@ -295,7 +293,7 @@ const tone = computed(() => TONE[entry.state.variant] ?? `text-muted`);
                 <!-- Under the fold and last: uninstalling is not the errand a row is opened for, and the dialog it
                      raises is where the consequences get spelled out. -->
                 <div v-if="removable" class="flex items-center gap-2">
-                    <Button size="small" severity="danger" :text="true" label="Remove…" @click="emit(`remove`)">
+                    <Button size="small" severity="danger" :text="true" :label="t(`sandbox.extensionRow.remove`)" @click="emit(`remove`)">
                         <template #icon><Icon name="trash" /></template>
                     </Button>
                     <span class="text-2xs text-subtle">{{ removalHint }}</span>
@@ -306,12 +304,12 @@ const tone = computed(() => TONE[entry.state.variant] ?? `text-muted`);
                     <span class="text-muted">{{ extensionIdOf(manifest) }}</span> · v{{ manifest.version }} ·
                     {{
                         entry.extension.source === `builtin`
-                            ? `built into the sandbox image`
+                            ? t(`sandbox.extensionRow.builtIntoSandboxImage`)
                             : entry.extension.source === `workspace`
-                              ? `from .intentic/config/workspace-extensions`
-                              : `installed · ${entry.extension.commit.slice(0, 12)}`
+                              ? t(`sandbox.extensionRow.intenticConfigWorkspaceExtensions`)
+                              : t(`sandbox.extensionRow.installed`, { slice: entry.extension.commit.slice(0, 12) })
                     }}
-                    · needs intentic
+                    {{ t(`sandbox.extensionRow.needsIntentic`) }}
                     {{ manifest.engines.intentic }}
                 </p>
             </div>

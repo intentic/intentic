@@ -7,10 +7,13 @@ import { ACCOUNT_LIST_LIMIT, matchAccounts, usePickerAccounts } from "./pickerAc
 import { providerDisplayLabel } from "./providerCatalog";
 import { formatAge } from "../session/usageStatus";
 import ProviderLogo from "./ProviderLogo.vue";
+import { useT } from "@intentic/ui/i18n";
 
 // Footer of the model picker: which connected account, and which agentic loop. Used by both the
 // composer's and shell's pickers; it picks (selection is prop in, event out), never applies. Past
 // ACCOUNT_LIST_LIMIT each list folds to the active row plus a count, so the account list can't swallow the panel.
+
+const t = useT();
 
 const emit = defineEmits<{ selectAccount: [string]; selectHarness: [AgentHarness]; navigate: [] }>();
 const { provider, harness, model, account, accountsLocked, harnessLocked } = defineProps<{
@@ -142,19 +145,19 @@ const pickAccount = (id: string): void => {
 </script>
 
 <template>
-<!-- The list above browses across providers; this footer configures what's selected. -->
+    <!-- The list above browses across providers; this footer configures what's selected. -->
     <div class="flex items-center justify-between gap-2">
         <span class="flex min-w-0 items-center gap-1.5 text-2xs font-medium uppercase tracking-wide text-muted">
             <ProviderLogo :provider="provider" class="shrink-0 text-xs" />
-            <span class="truncate">{{ providerDisplayLabel(provider) }} session</span>
+            <span class="truncate">{{ t(`chat.pickerAccounts.session`, { provider: providerDisplayLabel(provider) }) }}</span>
         </span>
         <span class="flex shrink-0 items-center gap-2">
-<!-- One control for age and re-measure: the age is the label, and watching it reset to "just now" is the confirmation that the press worked. -->
+            <!-- One control for age and re-measure: the age is the label, and watching it reset to "just now" is the confirmation that the press worked. -->
             <button
                 type="button"
                 :class="ui.textAction(`gap-1 text-2xs text-subtle`)"
                 :disabled="measuring"
-                v-tooltip.top="`Re-measure every account's plan limits now`"
+                v-tooltip.top="t(`chat.pickerAccounts.reMeasureEveryAccounts`)"
                 :aria-label="remeasureLabel"
                 @click="remeasure"
             >
@@ -162,38 +165,40 @@ const pickAccount = (id: string): void => {
                 <span v-if="measuredAt !== undefined">{{ formatAge(measuredAt) }}</span>
             </button>
             <!-- The ring summarizes headroom; Usage holds windows, resets, and spend. -->
-            <RouterLink to="/sandbox/usage#accounts" class="text-2xs text-link hover:underline" @click="emit(`navigate`)">Headroom</RouterLink>
+            <RouterLink to="/sandbox/usage#accounts" class="text-2xs text-link hover:underline" @click="emit(`navigate`)">{{
+                t(`chat.pickerAccounts.headroom`)
+            }}</RouterLink>
         </span>
     </div>
 
-<!-- The refusal belonging to this selection but no single row (`unplacedRefusal`); shown above every control it qualifies. -->
+    <!-- The refusal belonging to this selection but no single row (`unplacedRefusal`); shown above every control it qualifies. -->
     <p v-if="unplacedRefusal" class="flex items-start gap-1.5 text-2xs text-warning" v-tooltip.top="unplacedRefusal">
         <Icon name="exclamation-triangle" class="mt-px shrink-0 text-[0.6rem]" aria-hidden="true" />
         <span class="line-clamp-2">{{ unplacedRefusal }}</span>
     </p>
 
-<!-- No frame per row: only the tint marks the active one, hover shows the rest are choosable. -->
+    <!-- No frame per row: only the tint marks the active one, hover shows the rest are choosable. -->
     <template v-if="accountRows.length > 1">
-<!-- Shown only once the list is folded and long; a filter over a short, readable list would be a control looking for a reason to exist. -->
+        <!-- Shown only once the list is folded and long; a filter over a short, readable list would be a control looking for a reason to exist. -->
         <SearchBar
             v-if="accountsLong && accountsOpen"
             ref="accountsFilter"
             v-model="accountsQuery"
             variant="field"
-            placeholder="Filter accounts…"
-            aria-label="Filter accounts"
+            :placeholder="t(`chat.pickerAccounts.filterAccounts`)"
+            :aria-label="t(`chat.pickerAccounts.filterAccounts2`)"
             aria-controls="picker-account-list"
             @keydown.esc="escapeAccounts"
         />
 
-<!-- Capped and scrolling only while unfolded; a max-height on a short, unfolded list would be a scrollbar with nothing to scroll. -->
+        <!-- Capped and scrolling only while unfolded; a max-height on a short, unfolded list would be a scrollbar with nothing to scroll. -->
         <div
             id="picker-account-list"
             ref="accountsList"
             class="-mx-3 flex flex-col"
             :class="{ 'max-h-44 overflow-y-auto': accountsOpen }"
             role="group"
-            aria-label="Account"
+            :aria-label="t(`chat.pickerAccounts.account`)"
         >
             <button
                 v-for="a in accountsShown"
@@ -205,7 +210,7 @@ const pickAccount = (id: string): void => {
                 :disabled="accountsLocked"
                 @click="pickAccount(a.id)"
             >
-<!-- Row grows a line only when there's a refusal or subtitle to show; a refusal takes that second line over the subtitle. -->
+                <!-- Row grows a line only when there's a refusal or subtitle to show; a refusal takes that second line over the subtitle. -->
                 <span class="flex min-w-0 flex-col items-start leading-tight">
                     <span class="max-w-full truncate text-content">{{ a.label }}</span>
                     <!-- Truncated on the row, full text on hover; leads with the condition that decides the click. -->
@@ -215,21 +220,23 @@ const pickAccount = (id: string): void => {
                     </span>
                     <span v-else-if="a.subtitle" class="max-w-full truncate text-2xs text-subtle">{{ a.subtitle }}</span>
                 </span>
-<!-- Spend against this account's tightest limit; absent means unmeasured or unavailable, distinct from a measured zero. -->
+                <!-- Spend against this account's tightest limit; absent means unmeasured or unavailable, distinct from a measured zero. -->
                 <UsageRing v-if="a.headroom" :headroom="a.headroom" class="ml-auto" />
                 <Icon
                     v-if="a.needsReauth"
                     name="exclamation-triangle"
                     class="shrink-0 text-2xs text-warning"
                     :class="{ 'ml-auto': !a.headroom }"
-                    v-tooltip.top="a.detail ?? 'This account needs to be reconnected'"
+                    v-tooltip.top="a.detail ?? t(`chat.pickerAccounts.accountNeedsToReconnected`)"
                 />
             </button>
             <!-- Says so inside the list, where the rows would be; otherwise it reads as a list that lost its accounts. -->
-            <p v-if="accountsOpen && accountsShown.length === 0" class="px-3 py-1.5 text-2xs text-subtle" aria-live="polite">No accounts match.</p>
+            <p v-if="accountsOpen && accountsShown.length === 0" class="px-3 py-1.5 text-2xs text-subtle" aria-live="polite">
+                {{ t(`chat.pickerAccounts.noAccountsMatch`) }}
+            </p>
         </div>
 
-<!-- The collapsed group preserves the count and shape of hidden accounts. -->
+        <!-- The collapsed group preserves the count and shape of hidden accounts. -->
         <button
             v-if="accountsLong"
             type="button"
@@ -239,7 +246,7 @@ const pickAccount = (id: string): void => {
             v-action="toggleAccounts"
         >
             <Icon :name="accountsOpen ? `chevron-up` : `chevron-down`" class="shrink-0 text-[0.6rem]" aria-hidden="true" />
-            <span>{{ accountsOpen ? `Show fewer` : `All ${accountRows.length} accounts` }}</span>
+            <span>{{ accountsOpen ? t(`chat.pickerAccounts.showFewer`) : t(`chat.pickerAccounts.allAccounts`, { count: accountRows.length }) }}</span>
             <span class="ml-auto flex min-w-0 items-center gap-2 truncate">
                 <span v-for="count in accountCapacity" :key="count.band" :class="count.tone">
                     <span class="tabular-nums">{{ count.count }}</span> {{ count.label }}
@@ -250,31 +257,33 @@ const pickAccount = (id: string): void => {
 
     <!-- The connections behind a routed provider: shown, not offered. -->
     <template v-if="routedRows.length > 0">
-<!-- Folded like the choosable list above, with more reason: nobody picks between these, so open rows cost height for nothing. -->
+        <!-- Folded like the choosable list above, with more reason: nobody picks between these, so open rows cost height for nothing. -->
         <SearchBar
             v-if="routedLong && routedOpen"
             ref="routedFilter"
             v-model="routedQuery"
             variant="field"
-            placeholder="Filter accounts…"
-            aria-label="Filter subscription accounts"
+            :placeholder="t(`chat.pickerAccounts.filterAccounts`)"
+            :aria-label="t(`chat.pickerAccounts.filterSubscriptionAccounts`)"
             aria-controls="picker-routed-list"
             @keydown.esc="escapeRouted"
         />
 
-<!-- Unframed since these aren't clickable controls. -->
+        <!-- Unframed since these aren't clickable controls. -->
         <div
             id="picker-routed-list"
             class="-mx-3 flex flex-col"
             :class="{ 'max-h-44 overflow-y-auto': routedOpen }"
             role="group"
-            aria-label="Subscription"
+            :aria-label="t(`chat.pickerAccounts.subscription`)"
         >
             <div v-for="a in routedShown" :key="a.name" class="flex min-h-8 min-w-0 items-center gap-2 px-3 py-1.5 text-xs">
                 <span class="min-w-0 truncate text-content">{{ a.label }}</span>
                 <UsageRing v-if="a.headroom" :headroom="a.headroom" class="ml-auto" />
             </div>
-            <p v-if="routedOpen && routedShown.length === 0" class="px-3 py-1.5 text-2xs text-subtle" aria-live="polite">No accounts match.</p>
+            <p v-if="routedOpen && routedShown.length === 0" class="px-3 py-1.5 text-2xs text-subtle" aria-live="polite">
+                {{ t(`chat.pickerAccounts.noAccountsMatch`) }}
+            </p>
         </div>
 
         <button
@@ -286,7 +295,7 @@ const pickAccount = (id: string): void => {
             v-action="toggleRouted"
         >
             <Icon :name="routedOpen ? `chevron-up` : `chevron-down`" class="shrink-0 text-[0.6rem]" aria-hidden="true" />
-            <span>{{ routedOpen ? `Show fewer` : `All ${routedRows.length} accounts` }}</span>
+            <span>{{ routedOpen ? t(`chat.pickerAccounts.showFewer`) : t(`chat.pickerAccounts.allAccounts`, { count: routedRows.length }) }}</span>
             <span class="ml-auto flex min-w-0 items-center gap-2 truncate">
                 <span v-for="count in routedCapacity" :key="count.band" :class="count.tone">
                     <span class="tabular-nums">{{ count.count }}</span> {{ count.label }}
@@ -295,12 +304,12 @@ const pickAccount = (id: string): void => {
         </button>
 
         <!-- Shown only past one connection; with a single one there's nothing to explain. -->
-        <p v-if="routedRows.length > 1" class="text-2xs text-subtle">Turns are spread across these automatically</p>
+        <p v-if="routedRows.length > 1" class="text-2xs text-subtle">{{ t(`chat.pickerAccounts.turnsSpreadAcrossAutomatically`) }}</p>
     </template>
 
-<!-- Harness axis (codex/grok): the provider's runtime, or its model through Claude Code; same subscription ids run under either. -->
+    <!-- Harness axis (codex/grok): the provider's runtime, or its model through Claude Code; same subscription ids run under either. -->
     <div v-if="harnessChoosable" class="flex items-center justify-between gap-2">
-        <span class="text-2xs font-medium uppercase tracking-wide text-muted">Harness</span>
+        <span class="text-2xs font-medium uppercase tracking-wide text-muted">{{ t(`chat.pickerAccounts.harness`) }}</span>
         <div class="flex items-center gap-1">
             <button
                 v-for="h in harnessOptions"

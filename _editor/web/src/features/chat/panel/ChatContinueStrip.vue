@@ -9,11 +9,14 @@ import { pickUpStatus, pressCost } from "../run/pickUp";
 import { formatWait } from "../session/usageStatus";
 import { usePaneView } from "./useChat-view";
 import { useSandbox } from "../../sandbox/client/useSandbox";
+import { useT } from "@intentic/ui/i18n";
 
 // One strip for every ending that leaves work behind (a dead turn, an outage, a spent allowance): finished work
 // behind a live session, and a press that finishes it. The row is ranked — state, this ending's wait, then the
 // press with its variants folded into a menu beside it. An armed automation stays visible, with an off switch,
 // for as long as it runs.
+
+const t = useT();
 
 const props = defineProps<{
     /** The pane's reading of the pick-up: whether to say anything, and whether a press would get through now. */
@@ -226,9 +229,9 @@ const autoContinueLine = computed(() =>
         class="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-xl border border-line-strong bg-card px-3 py-2 text-2xs text-muted"
     >
         <Icon :name="ready ? `pause` : `clock`" class="shrink-0" />
-<!-- Status text has a minimum width beside shrinkable controls. -->
+        <!-- Status text has a minimum width beside shrinkable controls. -->
         <span class="min-w-[11rem] flex-1">{{ status }}</span>
-<!-- This ending's wait: one slot, four possible fillings, never two at once. -->
+        <!-- This ending's wait: one slot, four possible fillings, never two at once. -->
         <Button
             v-if="outage?.automatic !== undefined"
             size="small"
@@ -236,12 +239,12 @@ const autoContinueLine = computed(() =>
             :text="true"
             class="shrink-0"
             :disabled="!reachable || arming"
-            v-tooltip.top="'Stop this chat picking the turn back up by itself'"
+            v-tooltip.top="t(`chat.chatContinueStrip.stopChatPickingTurn`)"
             @click="() => setOutageResume(false)"
         >
-            Stop
+            {{ t(`ui.action.stop`) }}
         </Button>
-<!-- The words say what the press does ("this chat", "keep going"), not the setting's name. -->
+        <!-- The words say what the press does ("this chat", "keep going"), not the setting's name. -->
         <Button
             v-else-if="outage !== undefined"
             size="small"
@@ -249,12 +252,12 @@ const autoContinueLine = computed(() =>
             :text="true"
             class="shrink-0"
             :disabled="!reachable || arming"
-            v-tooltip.top="'Keep trying this turn until the provider answers'"
+            v-tooltip.top="t(`chat.chatContinueStrip.keepTryingTurnUntil`)"
             @click="() => setOutageResume(true)"
         >
-            Keep this chat going
+            {{ t(`chat.chatContinueStrip.keepChatGoing`) }}
         </Button>
-<!-- The allowance's own pair, same slot and order; named as an appointment (fires once, at the published hour) rather than a retry. -->
+        <!-- The allowance's own pair, same slot and order; named as an appointment (fires once, at the published hour) rather than a retry. -->
         <Button
             v-else-if="limitWait?.automatic !== undefined"
             size="small"
@@ -262,10 +265,10 @@ const autoContinueLine = computed(() =>
             :text="true"
             class="shrink-0"
             :disabled="!reachable || arming"
-            v-tooltip.top="'Stop this chat sending the turn again by itself'"
+            v-tooltip.top="t(`chat.chatContinueStrip.stopChatSendingTurn`)"
             @click="() => setLimitResume(false)"
         >
-            Stop
+            {{ t(`ui.action.stop`) }}
         </Button>
         <Button
             v-else-if="limitWait !== undefined"
@@ -274,24 +277,26 @@ const autoContinueLine = computed(() =>
             :text="true"
             class="shrink-0"
             :disabled="!reachable || arming"
-            v-tooltip.top="`Send this turn again by itself, once the allowance comes back.${pressCostLine}`"
+            v-tooltip.top="t(`chat.chatContinueStrip.sendTurnAgainBy`, { pressCostLine })"
             @click="() => setLimitResume(true)"
         >
-            Send it when it's back
+            {{ t(`chat.chatContinueStrip.sendBack`) }}
         </Button>
-<!-- The press and its variants: the reset when offered, Continue, inline Auto-continue in the two-action case, or a caret menu otherwise. -->
+        <!-- The press and its variants: the reset when offered, Continue, inline Auto-continue in the two-action case, or a caret menu otherwise. -->
         <div ref="waysAnchor" class="flex shrink-0 items-center gap-1">
-<!-- What the press spends, said on the control that spends it: a once-a-week grant, worth telling the user about before it's gone. -->
+            <!-- What the press spends, said on the control that spends it: a once-a-week grant, worth telling the user about before it's gone. -->
             <Button
                 v-if="canReset"
                 size="small"
                 severity="secondary"
                 :text="true"
                 :disabled="!reachable || resetting"
-                v-tooltip.top="'Reopen this account\'s session limit now — spends one of its weekly resets. Your weekly allowance is untouched and still applies'"
+                v-tooltip.top="t(`chat.chatContinueStrip.reopenAccountsSessionLimit`)"
                 @click="useLimitReset"
             >
-                <Icon name="refresh" class="mr-1 text-2xs" />{{ resetting ? `Resetting…` : `Reset limit now` }}
+                <Icon name="refresh" class="mr-1 text-2xs" />{{
+                    resetting ? t(`chat.chatContinueStrip.resetting`) : t(`chat.chatContinueStrip.resetLimitNow`)
+                }}
             </Button>
             <Button
                 v-if="showInlineAutoContinue"
@@ -299,13 +304,13 @@ const autoContinueLine = computed(() =>
                 severity="secondary"
                 :text="true"
                 :disabled="!reachable"
-                v-tooltip.top="'Keep continuing automatically whenever a turn stops short'"
+                v-tooltip.top="t(`chat.chatContinueStrip.keepContinuingAutomaticallyWhenever`)"
                 @click="armAutoContinue"
             >
-                <Icon name="repeat" class="mr-1 text-2xs" />Auto-continue
+                <Icon name="repeat" class="mr-1 text-2xs" />{{ t(`chat.chatContinueStrip.autoContinue`) }}
             </Button>
             <Button size="small" :text="true" :disabled="!reachable || !ready" v-tooltip.top="continueHint" @click="emit(`continue`)">
-                Continue
+                {{ t(`ui.action.continue`) }}
             </Button>
             <Button
                 v-if="hasMenu"
@@ -313,21 +318,21 @@ const autoContinueLine = computed(() =>
                 severity="secondary"
                 :text="true"
                 :disabled="!reachable"
-                aria-label="Other ways on"
+                :aria-label="t(`chat.chatContinueStrip.otherWaysOn`)"
                 :aria-expanded="waysOpen"
-                v-tooltip.top="'Other ways on'"
+                v-tooltip.top="t(`chat.chatContinueStrip.otherWaysOn`)"
                 @click="waysOpen = !waysOpen"
             >
                 <Icon name="chevron-down" class="text-2xs" />
             </Button>
         </div>
-<!-- What came back when the reset changed nothing, on its own line (`basis-full`, not a row slot): these are full sentences. -->
+        <!-- What came back when the reset changed nothing, on its own line (`basis-full`, not a row slot): these are full sentences. -->
         <span v-if="resetNote !== undefined" class="basis-full text-2xs text-subtle">{{ resetNote }}</span>
     </div>
     <!-- The press's variants, shown in the dropdown when more than one alternative way on exists. -->
-    <ResponsiveOverlay v-model="waysOpen" :anchor="waysAnchor" cross="end" header="Other ways on" panel-class="w-80 p-1">
+    <ResponsiveOverlay v-model="waysOpen" :anchor="waysAnchor" cross="end" :header="t(`chat.chatContinueStrip.otherWaysOn`)" panel-class="w-80 p-1">
         <div class="flex flex-col p-1">
-<!-- The other account, twice when the session is worth carrying: same press, two prices. -->
+            <!-- The other account, twice when the session is worth carrying: same press, two prices. -->
             <button
                 v-if="fallback !== undefined && canCarry"
                 type="button"
@@ -336,7 +341,9 @@ const autoContinueLine = computed(() =>
             >
                 <Icon name="user" class="mt-0.5 text-xs text-subtle" />
                 <span class="flex min-w-0 flex-col">
-                    <span class="truncate text-sm text-content md:text-xs">Continue on {{ fallbackLabel(fallback) }}, keeping this session</span>
+                    <span class="truncate text-sm text-content md:text-xs">{{
+                        t(`chat.chatContinueStrip.continueOnKeepingSession`, { fallback: fallbackLabel(fallback) })
+                    }}</span>
                     <span class="text-2xs text-subtle">{{ carryLine }}</span>
                 </span>
             </button>
@@ -348,7 +355,11 @@ const autoContinueLine = computed(() =>
             >
                 <Icon name="user" class="mt-0.5 text-xs text-subtle" />
                 <span class="flex min-w-0 flex-col">
-                    <span class="truncate text-sm text-content md:text-xs">Continue on {{ fallbackLabel(fallback) }}{{ canCarry ? `, in a fresh session` : `` }}</span>
+                    <span class="truncate text-sm text-content md:text-xs">{{
+                        canCarry
+                            ? t(`chat.chatContinueStrip.continueOnFresh`, { model: fallbackLabel(fallback) })
+                            : t(`chat.chatContinueStrip.continueOn`, { model: fallbackLabel(fallback) })
+                    }}</span>
                     <span class="text-2xs text-subtle">{{ freshLine }}</span>
                 </span>
             </button>
@@ -360,21 +371,27 @@ const autoContinueLine = computed(() =>
             >
                 <Icon name="repeat" class="mt-0.5 text-xs text-subtle" />
                 <span class="flex min-w-0 flex-col">
-                    <span class="text-sm text-content md:text-xs">Auto-continue</span>
-                    <span class="text-2xs text-subtle">Keeps continuing whenever a turn stops short.</span>
+                    <span class="text-sm text-content md:text-xs">{{ t(`chat.chatContinueStrip.autoContinue`) }}</span>
+                    <span class="text-2xs text-subtle">{{ t(`chat.chatContinueStrip.keepsContinuingWheneverTurn`) }}</span>
                 </span>
             </button>
         </div>
     </ResponsiveOverlay>
-<!-- What an armed chat looks like while it waits on itself; stays on screen for as long as the automation runs, since a switch with no off is a trap. -->
+    <!-- What an armed chat looks like while it waits on itself; stays on screen for as long as the automation runs, since a switch with no off is a trap. -->
     <div
         v-if="autoContinueStrip"
         class="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-xl border border-line-strong bg-card px-3 py-2 text-2xs text-muted"
     >
         <Icon name="repeat" class="shrink-0" />
         <span class="min-w-0 flex-1">{{ autoContinueLine }}</span>
-        <Button size="small" :text="true" class="shrink-0" v-tooltip.top="'Stop continuing this chat by itself'" @click="setAutoContinue(false)">
-            Turn off
+        <Button
+            size="small"
+            :text="true"
+            class="shrink-0"
+            v-tooltip.top="t(`chat.chatContinueStrip.stopContinuingChatBy`)"
+            @click="setAutoContinue(false)"
+        >
+            {{ t(`chat.chatContinueStrip.turnOff`) }}
         </Button>
     </div>
 </template>

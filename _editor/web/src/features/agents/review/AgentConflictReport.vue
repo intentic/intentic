@@ -3,11 +3,14 @@ import type { LandConflict } from "@intentic/sandbox-contract";
 import { Button, useDevice } from "@intentic/ui";
 import { useVocabulary } from "../../../core-views/vocabulary";
 import { computed } from "vue";
-import { agentBlockers, type Blocker, blockerLabel, blockersOf, REASON_COPY, userBlockers } from "./conflictResolution";
+import { agentBlockers, type Blocker, blockerLabel, blockersOf, reasonCopy, userBlockers } from "./conflictResolution";
+import { useT } from "@intentic/ui/i18n";
 
 // Shows what a refused land is blocking: counts blocked vs. clean, groups blockers by cause, and ends on an
 // action ladder ordered by who can act (agent, then user, then a manual merge). Cause copy lives in
-// conflictResolution's REASON_COPY, shared with the file list below.
+// conflictResolution's reasonCopy(), shared with the file list below.
+
+const t = useT();
 
 const props = defineProps<{
     conflicts: readonly LandConflict[];
@@ -34,9 +37,9 @@ const blockedCount = computed(() => blockers.value.length);
 const cleanCount = computed(() => props.conflicts.reduce((total, conflict) => total + conflict.clean, 0));
 // Grouped by cause; kept as {repo, path} since a bare path can't identify a row in a multi-repo composition.
 const groups = computed(() =>
-    (Object.keys(REASON_COPY) as (keyof typeof REASON_COPY)[]).flatMap((reason) => {
+    (Object.keys(reasonCopy()) as (keyof ReturnType<typeof reasonCopy>)[]).flatMap((reason) => {
         const blocked = blockers.value.filter((blocker) => blocker.reason === reason);
-        return blocked.length === 0 ? [] : [{ reason, blocked, ...REASON_COPY[reason] }];
+        return blocked.length === 0 ? [] : [{ reason, blocked, ...reasonCopy()[reason] }];
     }),
 );
 // Ladder's two halves: `mine` is what asking the agent fixes; `theirs` needs a commit or stash regardless.
@@ -53,17 +56,16 @@ const ROW = `mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1`;
 </script>
 
 <template>
-<!-- Nothing was written yet: the worktree still holds every change, so this is a decision point, not a failure. -->
+    <!-- Nothing was written yet: the worktree still holds every change, so this is a decision point, not a failure. -->
     <div class="flex shrink-0 flex-col gap-1.5 rounded-md border border-warning/40 bg-warning/10 px-2 py-1.5">
         <span class="text-2xs font-medium text-warning">
-            <template v-if="blockedCount === 0">Couldn't reach your workspace's copy of this repo</template>
+            <template v-if="blockedCount === 0">{{ t(`agents.agentConflictReport.couldntReachWorkspacesCopy`) }}</template>
             <template v-else>
-                {{ blockedCount }} file{{ blockedCount === 1 ? "" : "s" }} couldn't be applied<template v-if="cleanCount > 0">
-                    , holding back {{ cleanCount }} that {{ cleanCount === 1 ? "would" : "would all" }} land cleanly</template
-                >
+                {{ t(`agents.agentConflictReport.filesCouldntApply`, { count: blockedCount }, blockedCount)
+                }}<template v-if="cleanCount > 0">{{ t(`agents.agentConflictReport.holdingBack`, { count: cleanCount }, cleanCount) }}</template>
             </template>
         </span>
-<!-- Grouped by cause, since that decides who acts next. -->
+        <!-- Grouped by cause, since that decides who acts next. -->
         <div v-for="group in groups" :key="group.reason" class="flex flex-col">
             <span class="inline-flex items-center gap-1 text-2xs text-content">
                 <Icon :name="group.icon" class="shrink-0 text-2xs text-warning" />{{ group.title }}
@@ -75,7 +77,7 @@ const ROW = `mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1`;
                     type="button"
                     class="break-all text-left font-mono text-2xs text-muted underline decoration-dotted underline-offset-2 transition-colors hover:text-content"
                     @click="emit('select', blocker)"
-                    v-tooltip.bottom="'Show this file in the review'"
+                    v-tooltip.bottom="t(`agents.agentConflictReport.showFileInReview`)"
                 >
                     {{ blockerLabel(blocker) }}
                 </button>
@@ -83,63 +85,67 @@ const ROW = `mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1`;
             <span class="text-2xs text-subtle">{{ group.fix }}</span>
         </div>
         <p v-if="blockedCount === 0" class="text-2xs text-muted">
-            Nothing was applied and nothing was lost: the agent's work is still on its branch.
+            {{ t(`agents.agentConflictReport.nothingAppliedNothingLost`) }}
         </p>
 
-<!-- Replaces the ladder rather than sitting beside it: while the rebase runs, re-asking or landing over it is not a real choice. -->
+        <!-- Replaces the ladder rather than sitting beside it: while the rebase runs, re-asking or landing over it is not a real choice. -->
         <div v-if="working" :class="ROW">
             <span class="inline-flex items-center gap-1.5 text-2xs text-link">
-                <Icon name="spinner" spin class="text-2xs" />Resolving: the agent is bringing its branch up to date
+                <Icon name="spinner" spin class="text-2xs" />{{ t(`agents.agentConflictReport.resolvingAgentBringingBranch`) }}
             </span>
-            <span class="text-2xs text-subtle">It lands on its own when the turn ends.</span>
+            <span class="text-2xs text-subtle">{{ t(`agents.agentConflictReport.landsOnOwnTurn`) }}</span>
             <span class="flex-1"></span>
             <!-- Desktop already shows the conversation in the docked chat; only mobile needs a mode switch to watch it. -->
-            <Button v-if="mobile" size="small" :text="true" class="whitespace-nowrap" @click="emit('chat')"> Watch </Button>
-            <Button v-if="streaming" size="small" severity="secondary" label="Stop" :class="INLINE" @click="emit('stop')" />
-            <span v-if="streaming" class="text-2xs text-subtle">The conflict stays exactly as it is.</span>
+            <Button v-if="mobile" size="small" :text="true" class="whitespace-nowrap" @click="emit('chat')">
+                {{ t(`agents.agentConflictReport.watch`) }}
+            </Button>
+            <Button v-if="streaming" size="small" severity="secondary" :label="t(`ui.action.stop`)" :class="INLINE" @click="emit('stop')" />
+            <span v-if="streaming" class="text-2xs text-subtle">{{ t(`agents.agentConflictReport.conflictStaysExactly`) }}</span>
         </div>
 
         <template v-else>
-<!-- Both conflict rows need the agent's conversation to resolve them. -->
+            <!-- Both conflict rows need the agent's conversation to resolve them. -->
             <div v-if="box !== undefined && (mine.length > 0 || theirs.length > 0)" :class="ROW">
-                <Button size="small" :class="INLINE" @click="emit('cross')"> <Icon name="arrow-right" />Open in {{ box }} </Button>
-<!-- Gated on `mergeable`, since git refuses a three-way apply while any path is held by uncommitted work. -->
+                <Button size="small" :class="INLINE" @click="emit('cross')">
+                    <Icon name="arrow-right" />{{ t(`agents.agentConflictReport.openIn`) }} {{ box }}
+                </Button>
+                <!-- Gated on `mergeable`, since git refuses a three-way apply while any path is held by uncommitted work. -->
                 <span class="text-2xs text-subtle">
-                    <template v-if="mine.length > 0">Asking the agent to rebase needs its conversation</template
-                    ><template v-if="mine.length > 0 && theirs.length > 0">, and </template
-                    ><template v-if="theirs.length > 0"
-                        >the {{ theirs.length === 1 ? "file" : `${theirs.length} files` }} with your own edits
-                        {{ theirs.length === 1 ? "is" : "are" }} in that workspace</template
-                    >.<template v-if="mergeable"> Landing with conflict markers still works from here.</template>
+                    <template v-if="mine.length > 0">{{ t(`agents.agentConflictReport.askingAgentToRebase`) }}</template
+                    ><template v-if="mine.length > 0 && theirs.length > 0">{{ t(`agents.agentConflictReport.and`) }} </template
+                    ><template v-if="theirs.length > 0">{{
+                        t(`agents.agentConflictReport.yourEditsAreThere`, { count: theirs.length }, theirs.length)
+                    }}</template
+                    >.<template v-if="mergeable"> {{ t(`agents.agentConflictReport.landingConflictMarkersStill`) }}</template>
                 </span>
             </div>
 
-<!-- First: the one action costing the user nothing, the agent redoing its own merge. -->
+            <!-- First: the one action costing the user nothing, the agent redoing its own merge. -->
             <div v-if="box === undefined && mine.length > 0" :class="ROW">
                 <Button
                     size="small"
                     :class="INLINE"
                     :disabled="busy || streaming"
                     @click="emit('resolve')"
-                    v-tooltip.bottom="streaming ? 'Wait for the agent turn to finish' : undefined"
+                    v-tooltip.bottom="streaming ? t(`agents.agentConflictReport.waitAgentTurnTo`) : undefined"
                 >
                     <Icon name="sparkles" />{{ words.resolveConflict }}
                 </Button>
                 <span class="text-2xs text-subtle">
-                    {{ words.resolveConflictHint }}<template v-if="theirs.length > 0">
-                        The {{ theirs.length === 1 ? "file" : `${theirs.length} files` }} with your own edits still
-                        {{ theirs.length === 1 ? "needs" : "need" }} you.</template
+                    {{ words.resolveConflictHint
+                    }}<template v-if="theirs.length > 0">
+                        {{ t(`agents.agentConflictReport.yourEditsStillNeedYou`, { count: theirs.length }, theirs.length) }}</template
                     >
                 </span>
             </div>
 
-<!-- The user's own half, which nothing else here can do for them; primary only when it's the sole thing left blocking. -->
+            <!-- The user's own half, which nothing else here can do for them; primary only when it's the sole thing left blocking. -->
             <div v-if="box === undefined && theirs.length > 0" :class="ROW">
                 <Button size="small" :severity="mine.length === 0 ? undefined : `secondary`" :class="INLINE" @click="emit('commit')">
-                    <Icon name="file-edit" />Commit or stash yours
+                    <Icon name="file-edit" />{{ t(`agents.agentConflictReport.commitStashYours`) }}
                 </Button>
                 <!-- Says what the button does inline instead of behind a pointer-only tooltip. -->
-                <span class="text-2xs text-subtle">Opens the Changes panel. Then land again: git cannot merge through unstaged work.</span>
+                <span class="text-2xs text-subtle">{{ t(`agents.agentConflictReport.opensChangesPanelLand`) }}</span>
             </div>
 
             <!-- Last and quiet: the only option here that writes to the user's tree on failure. -->
@@ -150,11 +156,11 @@ const ROW = `mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1`;
                     :class="INLINE"
                     :disabled="busy || writing"
                     @click="emit('merge')"
-                    v-tooltip.bottom="writing ? 'Wait until the agent stops writing' : undefined"
+                    v-tooltip.bottom="writing ? t(`agents.agentConflictReport.waitUntilAgentStops`) : undefined"
                 >
-                    <Icon name="check" />Land with conflict markers
+                    <Icon name="check" />{{ t(`agents.agentConflictReport.landConflictMarkers`) }}
                 </Button>
-                <span class="text-2xs text-subtle">You finish the merge yourself, in your workspace.</span>
+                <span class="text-2xs text-subtle">{{ t(`agents.agentConflictReport.finishMergeYourselfIn`) }}</span>
             </div>
         </template>
     </div>

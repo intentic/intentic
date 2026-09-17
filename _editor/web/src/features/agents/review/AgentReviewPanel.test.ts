@@ -7,7 +7,7 @@ import type { WorkspaceModule } from "@intentic/sandbox-contract";
 import { VueQueryPlugin } from "@tanstack/vue-query";
 import { afterEach, expect, it, vi } from "vitest";
 import { type App, createApp, h, nextTick, ref } from "vue";
-import { REASON_COPY } from "./conflictResolution";
+import { reasonCopy } from "./conflictResolution";
 import { useAgentChanges } from "./useAgentChanges";
 import { agentHistoryKey } from "../fleet/useAgentHistory";
 import { queryClient } from "../../../lib/queryPersistence";
@@ -285,14 +285,14 @@ it(`says how much of the work no commit here accounts for`, async () => {
 it(`marks each blocked row with its own cause, and leaves the rest of the review alone`, async () => {
     const el = await mount();
     // Two causes, two marks, worded from the report's own module, so a row can't say something the report doesn't.
-    expect(rowFor(el, `src/config.ts`).textContent).toContain(REASON_COPY.workspace.mark);
-    expect(rowFor(el, `src/config.ts`).querySelector(`[data-icon="${REASON_COPY.workspace.icon}"]`)).not.toBeNull();
-    expect(rowFor(el, `assets/logo.png`).textContent).toContain(REASON_COPY.binary.mark);
-    expect(rowFor(el, `assets/logo.png`).querySelector(`[data-icon="${REASON_COPY.binary.icon}"]`)).not.toBeNull();
+    expect(rowFor(el, `src/config.ts`).textContent).toContain(reasonCopy().workspace.mark);
+    expect(rowFor(el, `src/config.ts`).querySelector(`[data-icon="${reasonCopy().workspace.icon}"]`)).not.toBeNull();
+    expect(rowFor(el, `assets/logo.png`).textContent).toContain(reasonCopy().binary.mark);
+    expect(rowFor(el, `assets/logo.png`).querySelector(`[data-icon="${reasonCopy().binary.icon}"]`)).not.toBeNull();
     // Unlanded isn't blocked: an atomic refusal leaves every row unlanded either way.
-    expect(rowFor(el, `src/auth/session.ts`).textContent).not.toContain(REASON_COPY.workspace.mark);
-    expect(rowFor(el, `src/auth/session.ts`).textContent).not.toContain(REASON_COPY.binary.mark);
-    expect(rowFor(el, `src/auth/session.ts`).textContent).not.toContain(REASON_COPY.diverged.mark);
+    expect(rowFor(el, `src/auth/session.ts`).textContent).not.toContain(reasonCopy().workspace.mark);
+    expect(rowFor(el, `src/auth/session.ts`).textContent).not.toContain(reasonCopy().binary.mark);
+    expect(rowFor(el, `src/auth/session.ts`).textContent).not.toContain(reasonCopy().diverged.mark);
 });
 
 it(`counts the blockers on the repo heading, so a collapsed group cannot hide one`, async () => {
@@ -402,7 +402,7 @@ it(`lands a path clicked in the report on its row, and says so in the diff heade
     await nextTick();
     const header = el.querySelector(`section > div`)!;
     expect(header.textContent).toContain(`logo.png`);
-    expect(header.textContent).toContain(REASON_COPY.binary.mark);
+    expect(header.textContent).toContain(reasonCopy().binary.mark);
 });
 
 // An empty review that answers from refs instead of a daemon: which read state the panel is in is the whole subject

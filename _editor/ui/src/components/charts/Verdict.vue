@@ -3,12 +3,12 @@
 import { VERDICT_RANKS, VERDICT_TONES, type VerdictSize, type VerdictTone } from "./verdict.js";
 
 const { size = `sm` } = defineProps<{
-/** The answer, already worded: "↓12%", "25%", "No effect", "Measuring", "Off". */
+    /** The answer, already worded: "↓12%", "25%", "No effect", "Measuring", "Off". */
     value: string;
     /** What the value is a figure of. Never optional: "↓12%" alone does not say twelve percent of what. */
     unit: string;
     tone: VerdictTone;
-/** What qualifies the answer: the confidence interval, how much sample is still owed. */
+    /** What qualifies the answer: the confidence interval, how much sample is still owed. */
     detail?: string;
     /** What it was measured OVER — the two arms' sizes, the window. A figure with no account of how much data is
      *  behind it is one a reader cannot weigh. */

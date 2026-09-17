@@ -1,6 +1,7 @@
 import type { IconName } from "@intentic/ui";
 import { VERIFY_NUDGE_OPENING, withoutResumeNote } from "@intentic/sandbox-contract";
 import type { ChatMessage } from "../transcript/transcript";
+import { t } from "@intentic/ui/i18n";
 
 // An app-composed prompt, sent as an ordinary turn (so the agent, Stop and the queue treat it unchanged) but folded and
 // rendered by its label in the transcript, not as raw text. Recognized by the prompt's own opening paragraph, since no
@@ -18,22 +19,23 @@ export interface Errand {
     readonly opening: string;
 }
 
-export const ERRANDS = {
-    landConflict: {
-        icon: `sync`,
-        label: `Resolving the land conflict`,
-        detail: `Sent by the app, landing this work refused`,
-        opening: `Landing your work hit a merge conflict, none of it reached the user's workspace; it is all still on your branch. Rebase onto the main line and resolve the conflicts yourself. In each repo below (\`root\` is your working directory, any other name that subdirectory of it):`,
-    },
-    // Composed by the DAEMON, unlike the one above, so its opening is the contract's rather than a literal here: the
-    // two ends would drift the first time either was reworded on its own.
-    verifyNudge: {
-        icon: `check-circle`,
-        label: `Checking the work it just did`,
-        detail: `Sent by the sandbox, that turn ended unverified`,
-        opening: VERIFY_NUDGE_OPENING,
-    },
-} as const satisfies Record<string, Errand>;
+export const errands = () =>
+    ({
+        landConflict: {
+            icon: `sync`,
+            label: t(`chat.errands.resolvingLandConflict`),
+            detail: t(`chat.errands.sentByAppLanding`),
+            opening: `Landing your work hit a merge conflict, none of it reached the user's workspace; it is all still on your branch. Rebase onto the main line and resolve the conflicts yourself. In each repo below (\`root\` is your working directory, any other name that subdirectory of it):`,
+        },
+        // Composed by the DAEMON, unlike the one above, so its opening is the contract's rather than a literal here: the
+        // two ends would drift the first time either was reworded on its own.
+        verifyNudge: {
+            icon: `check-circle`,
+            label: t(`chat.errands.checkingWorkJustDid`),
+            detail: t(`chat.errands.sentBySandboxTurn`),
+            opening: VERIFY_NUDGE_OPENING,
+        },
+    }) as const satisfies Record<string, Errand>;
 
 // The prompt an errand actually sends: its opening, then the parts describing this instance.
 export const errandPrompt = (errand: Errand, parts: readonly string[]): string => [errand.opening, ...parts].join(`\n\n`);
@@ -45,5 +47,5 @@ export const errandOf = (message: ChatMessage): Errand | undefined => {
         return undefined;
     }
     const text = withoutResumeNote(message.text.trim());
-    return Object.values(ERRANDS).find((errand) => text.startsWith(errand.opening));
+    return Object.values(errands()).find((errand) => text.startsWith(errand.opening));
 };

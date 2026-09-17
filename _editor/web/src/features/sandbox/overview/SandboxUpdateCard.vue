@@ -11,10 +11,13 @@ import { expectRestart, type RestartQuiet } from "../live/sandboxRestart";
 import { useSandboxVersion } from "./useSandboxVersion";
 import { apiClient } from "../../../lib/useApi";
 import { useHubWork } from "../../../shell/hub/hubWork";
+import { useT } from "@intentic/ui/i18n";
 
 // Update prompt on the sandbox hub. Updates run on the host, not the sandbox (no host Docker socket; see
 // HostRecreate); a server-managed sandbox updates on its next deploy instead. Also shown with no update when a
 // rollback exists, and splits download from apply so it can offer a bounded restart once staged.
+
+const t = useT();
 
 const {
     installed,
@@ -39,10 +42,10 @@ const hosted = computed(() => (active.value?.hosted ? active.value.id : undefine
 const { busy: restarting, notice: restartNotice, run: runRestart } = useAsyncAction();
 const hubWork = useHubWork();
 // What the sandbox going quiet means, for every surface that isn't this card.
-const RESTART_QUIET: RestartQuiet = {
-    title: `Restarting onto the new image`,
-    detail: `The update you applied replaces this sandbox's container — about half a minute, then this page reconnects on its own. Your files in /work are kept.`,
-};
+const RESTART_QUIET = computed((): RestartQuiet => ({
+    title: t(`sandbox.sandboxUpdateCard.restartingOntoNewImage`),
+    detail: t(`sandbox.sandboxUpdateCard.updateAppliedReplacesSandboxs`),
+}));
 
 const restartHosted = (): Promise<void> =>
     runRestart(
@@ -59,8 +62,8 @@ const restartHosted = (): Promise<void> =>
                 const settled = expectRestart({
                     sandbox,
                     id: `update`,
-                    what: `Restarting this sandbox`,
-                    quiet: RESTART_QUIET,
+                    what: t(`sandbox.sandboxUpdateCard.restartingSandbox`),
+                    quiet: RESTART_QUIET.value,
                     untilAnswered: true,
                 });
                 try {
@@ -119,9 +122,14 @@ const updateHeading = computed(() => {
     <RowGroup v-if="updateAvailable || rollbackTo" :label="updateHeading">
         <template #actions>
             <div class="flex flex-wrap items-center justify-end gap-2">
-                <StatusBadge v-if="updateAvailable && updateStaged && !breaking" variant="success" label="downloaded" dot />
+                <StatusBadge
+                    v-if="updateAvailable && updateStaged && !breaking"
+                    variant="success"
+                    :label="t(`sandbox.sandboxUpdateCard.downloaded`)"
+                    dot
+                />
                 <StatusBadge v-if="updateAvailable" :variant="versionBadge" :label="`${installed ?? '?'} → ${latest}`" dot />
-                <StatusBadge v-else-if="channel === `stable`" variant="success" label="up to date" dot />
+                <StatusBadge v-else-if="channel === `stable`" variant="success" :label="t(`sandbox.sandboxUpdateCard.upToDate`)" dot />
                 <StatusBadge v-else-if="channel" variant="neutral" :label="channel" />
             </div>
         </template>
@@ -130,26 +138,24 @@ const updateHeading = computed(() => {
             <div class="flex flex-col gap-4">
                 <p v-if="(breaking || updateAvailable) && !localImage" class="text-xs text-muted">
                     <template v-if="breaking">
-                        This update removes or changes things you may rely on: read what changes below before taking it. Your files (in /work) are
-                        kept either way, and you can roll back afterwards:
-                        <a href="https://intentic.dev/docs/updates/" target="_blank" rel="noopener" class="underline hover:text-content"
-                            >what updates never break</a
+                        {{ t(`sandbox.sandboxUpdateCard.updateRemovesChangesThings`) }}
+                        <a href="https://intentic.dev/docs/updates/" target="_blank" rel="noopener" class="underline hover:text-content">{{
+                            t(`sandbox.sandboxUpdateCard.whatUpdatesNeverBreak`)
+                        }}</a
                         >.
                     </template>
                     <!-- A bounded half-minute became sayable only once the host reported what it had already downloaded. -->
                     <template v-else-if="updateStaged">
-                        It is already downloaded and built on the device that runs this sandbox. Applying it restarts your sandbox for about half a
-                        minute: your files (in /work) are kept.
+                        {{ t(`sandbox.sandboxUpdateCard.alreadyDownloadedBuiltOn`) }}
                     </template>
                     <template v-else>
-                        A newer sandbox image has been released. Downloading it interrupts nothing: your sandbox keeps working until you apply it, and
-                        your files (in /work) are kept.
+                        {{ t(`sandbox.sandboxUpdateCard.newerSandboxImageReleased`) }}
                     </template>
                 </p>
 
                 <!-- Never truncated: a breaking note cut by a capped list is a break taken unwarned. -->
                 <div v-if="breaking" class="flex flex-col gap-1.5 rounded-lg border border-danger/40 bg-danger/10 p-3">
-                    <p class="text-xs font-medium text-danger">What changes</p>
+                    <p class="text-xs font-medium text-danger">{{ t(`sandbox.sandboxUpdateCard.whatChanges`) }}</p>
                     <ul class="flex flex-col gap-1">
                         <li v-for="note in breakingNotes" :key="note" class="flex gap-2 text-2xs text-content">
                             <span class="mt-1.5 h-0.5 w-0.5 shrink-0 rounded-full bg-danger" />
@@ -158,9 +164,9 @@ const updateHeading = computed(() => {
                     </ul>
                 </div>
 
-<!-- Shown above the cost and the button, so the reader has something to weigh an update against. -->
+                <!-- Shown above the cost and the button, so the reader has something to weigh an update against. -->
                 <div v-if="updateAvailable && updateNotes.length > 0 && !localImage" class="mt-3 flex flex-col gap-1.5">
-                    <p class="text-xs font-medium text-content">What's new</p>
+                    <p class="text-xs font-medium text-content">{{ t(`sandbox.sandboxUpdateCard.whatsNew`) }}</p>
                     <ul class="flex flex-col gap-1">
                         <li v-for="note in updateNotes" :key="note" class="flex gap-2 text-2xs text-muted">
                             <span class="mt-1.5 h-0.5 w-0.5 shrink-0 rounded-full bg-primary-500" />
@@ -169,92 +175,92 @@ const updateHeading = computed(() => {
                     </ul>
                     <!-- Tail of a long gap as a count, not more bullets, so an old sandbox doesn't bury the rest of the page. -->
                     <p v-if="moreUpdateNotes > 0" class="text-2xs text-subtle">
-                        …and {{ moreUpdateNotes }} more:
-                        <a href="https://intentic.dev/changelog/" target="_blank" rel="noopener" class="underline hover:text-content"
-                            >read the changelog</a
-                        >
+                        {{ t(`sandbox.sandboxUpdateCard.and`) }} {{ moreUpdateNotes }} {{ t(`sandbox.sandboxUpdateCard.more`) }}
+                        <a href="https://intentic.dev/changelog/" target="_blank" rel="noopener" class="underline hover:text-content">{{
+                            t(`sandbox.sandboxUpdateCard.readChangelog`)
+                        }}</a>
                     </p>
                 </div>
 
-<!-- Only the restart costs a turn, so the way out is downloading first. -->
+                <!-- Only the restart costs a turn, so the way out is downloading first. -->
                 <p v-if="midTurn > 0 && updateAvailable" class="text-2xs text-warning">
-                    {{ midTurn === 1 ? `An agent is` : `${midTurn} agents are` }} mid-turn right now, restarting the sandbox interrupts
-                    {{ midTurn === 1 ? `its` : `their` }} work.
-                    <template v-if="!updateStaged">
-                        Downloading it now costs {{ midTurn === 1 ? `it` : `them` }} nothing, and the restart can wait.
-                    </template>
-                    <template v-else>Wait for the fleet to settle, or continue if that is acceptable.</template>
+                    {{ t(`sandbox.sandboxUpdateCard.midTurnRestart`, { count: midTurn }, midTurn) }}
+                    <template v-if="!updateStaged">{{ t(`sandbox.sandboxUpdateCard.downloadCostsNothing`, { count: midTurn }, midTurn) }}</template>
+                    <template v-else>{{ t(`sandbox.sandboxUpdateCard.waitFleetToSettle`) }}</template>
                 </p>
 
                 <!-- A staged update a newer release overtook; still worth saying, since applying now hands over the older image. -->
                 <p v-if="updateAvailable && stagedBehind" class="text-2xs text-muted">
-                    {{ stagedBehind }} is already downloaded here, but {{ latest }} has been released since. Updating now gives you
-                    {{ stagedBehind }}, or download the newer one first.
+                    {{ t(`sandbox.sandboxUpdateCard.alreadyDownloadedHereReleased`, { stagedBehind, latest, stagedBehind2: stagedBehind }) }}
                 </p>
 
                 <template v-if="serverManaged">
                     <p class="text-2xs text-subtle">
-                        This sandbox updates on the next <span class="font-mono">intentic deploy apply</span> against its host.
+                        {{ t(`sandbox.sandboxUpdateCard.sandboxUpdatesOnNext`) }} <span class="font-mono">intentic deploy apply</span>
+                        {{ t(`sandbox.sandboxUpdateCard.againstHost`) }}
                     </p>
                 </template>
                 <template v-else-if="slug">
-<!-- A sandbox on a checkout-built base is not updated from the registry: a pull would REPLACE its image with a published build, not refresh it. -->
+                    <!-- A sandbox on a checkout-built base is not updated from the registry: a pull would REPLACE its image with a published build, not refresh it. -->
                     <template v-if="localImage">
                         <DevRebuild :slug="slug" :base="localImage.base" :root="localImage.root" />
-<!-- A command, not a button: taking the published image throws away what a checkout built, which is a thing to mean rather than to click. -->
+                        <!-- A command, not a button: taking the published image throws away what a checkout built, which is a thing to mean rather than to click. -->
                         <template v-if="updateAvailable">
-                            <p class="text-2xs text-subtle">
-                                The published {{ latest }} is newer than what this sandbox reports, but taking it discards the image built from your
-                                checkout. On the device that runs it:
-                            </p>
+                            <p class="text-2xs text-subtle">{{ t(`sandbox.sandboxUpdateCard.publishedNewerThanWhat`, { latest }) }}</p>
                             <Code
                                 :code="`ic sandbox update ${slug} --force`"
                                 :lang="commandLang(cmdOs)"
-                                label="Take the published image instead"
+                                :label="t(`sandbox.sandboxUpdateCard.takePublishedImageInstead`)"
                                 :wrap="true"
                             />
                         </template>
                     </template>
                     <!-- Gate for a breaking update: the copy-paste command appears only after this explicit click. -->
                     <template v-else-if="breaking && !acknowledged">
-                        <Button label="I've read what changes: show me the update" size="small" severity="secondary" @click="acknowledged = true" />
+                        <Button
+                            :label="t(`sandbox.sandboxUpdateCard.iveReadWhatChanges`)"
+                            size="small"
+                            severity="secondary"
+                            @click="acknowledged = true"
+                        />
                     </template>
-<!-- One offer when the image is already staged, two when it isn't (download-only, or download-and-restart). -->
+                    <!-- One offer when the image is already staged, two when it isn't (download-only, or download-and-restart). -->
                     <template v-else-if="updateAvailable && hosted">
                         <p class="text-xs font-medium text-content">
-                            Restart to update: the platform boots your sandbox onto the new image, files kept.
+                            {{ t(`sandbox.sandboxUpdateCard.restartToUpdatePlatform`) }}
                         </p>
                         <!-- Own block so the column's stretch doesn't draw a small button at full width. -->
                         <div>
-                            <Button label="Restart and update" size="small" :loading="restarting" @click="restartHosted" />
+                            <Button :label="t(`sandbox.sandboxUpdateCard.restartUpdate`)" size="small" :loading="restarting" @click="restartHosted" />
                         </div>
                         <Notice v-if="restartNotice" :of="restartNotice" />
                     </template>
                     <template v-else-if="updateAvailable && updateStaged">
-                        <p class="text-xs font-medium text-content">Apply it: this restarts your sandbox:</p>
+                        <p class="text-xs font-medium text-content">{{ t(`sandbox.sandboxUpdateCard.applyRestartsSandbox`) }}</p>
                         <HostRecreate :slug="slug" action="Update" ready />
                     </template>
                     <template v-else-if="updateAvailable">
-                        <p class="text-xs font-medium text-content">Download it now: nothing restarts until you say so:</p>
+                        <p class="text-xs font-medium text-content">{{ t(`sandbox.sandboxUpdateCard.downloadNowNothingRestarts`) }}</p>
                         <HostRecreate :slug="slug" action="Download" />
-                        <p class="text-xs font-medium text-content">Or do both now, downloading and restarting in one go:</p>
+                        <p class="text-xs font-medium text-content">{{ t(`sandbox.sandboxUpdateCard.doBothNowDownloading`) }}</p>
                         <HostRecreate :slug="slug" action="Update" />
                     </template>
-<!-- Offered alongside an available update too, since a rollback is as likely the reason someone opened this card. -->
+                    <!-- Offered alongside an available update too, since a rollback is as likely the reason someone opened this card. -->
                     <p v-if="rollbackTo && !hosted" class="text-2xs text-subtle">
-<!-- Explicit space: Vue drops a whitespace-only text node spanning a newline, and the sentence would run into the link without it. -->
-                        <template v-if="updateAvailable">Rather go back?&#32;</template>
-                        <template v-else>Something wrong since the last update?&#32;</template>
-                        <button type="button" class="underline hover:text-content" @click="toggleRollback">Roll back to the previous image</button>
+                        <!-- Explicit space: Vue drops a whitespace-only text node spanning a newline, and the sentence would run into the link without it. -->
+                        <template v-if="updateAvailable">{{ t(`sandbox.sandboxUpdateCard.ratherGoBack`) }}</template>
+                        <template v-else>{{ t(`sandbox.sandboxUpdateCard.somethingWrongSinceLast`) }}</template>
+                        <button type="button" class="underline hover:text-content" @click="toggleRollback">
+                            {{ t(`sandbox.sandboxUpdateCard.rollBackToPrevious`) }}
+                        </button>
                     </p>
                     <div v-if="rollbackTo && !hosted && rollbackOpen" class="flex flex-col gap-2">
                         <!-- Lives here, in the all-clear state, since it cautions about the restart a rollback causes, not an update. -->
                         <p v-if="midTurn > 0 && !updateAvailable" class="text-2xs text-warning">
-                            {{ midTurn === 1 ? `An agent is` : `${midTurn} agents are` }} mid-turn right now, rolling back interrupts
-                            {{ midTurn === 1 ? `its` : `their` }} work.
+                            {{ t(`sandbox.sandboxUpdateCard.midTurnRollback`, { count: midTurn }, midTurn) }}
                         </p>
                         <p class="text-2xs text-subtle">
-                            Rolls back to <span class="font-mono">…{{ rollbackDigest }}</span
+                            {{ t(`sandbox.sandboxUpdateCard.rollsBackTo`) }} <span class="font-mono">…{{ rollbackDigest }}</span
                             >. Your files (in /work) are kept either way.
                         </p>
                         <HostRecreate :slug="slug" action="Roll back" />

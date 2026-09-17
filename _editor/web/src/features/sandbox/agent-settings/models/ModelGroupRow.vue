@@ -5,10 +5,13 @@ import { computed } from "vue";
 import AddModelButton from "./AddModelButton.vue";
 import type { PinnedList } from "./modelPinList";
 import ModelPinList from "./ModelPinList.vue";
+import { useT } from "@intentic/ui/i18n";
 
 // Collapsed, one-row view of a job block (vs. <ModelRoleRow>'s per-job Advanced view); not a separate setting, it
 // writes the same list into every role of the block as one patch. When jobs disagree it shows their intersection and
 // flags "differs" rather than hiding the gap; `roles` is handed in since availability varies per job.
+
+const t = useT();
 
 const { block, roles, list, differs, disabled, loaded } = defineProps<{
     /** Block being collapsed; its heading names the Add button and its id words the empty chip. */
@@ -43,18 +46,18 @@ const chip = computed<{ readonly label: string; readonly hint: string } | undefi
     }
     if (differs) {
         return {
-            label: `jobs differ`,
-            hint: `These jobs do not all hold the same models. Listed here is what every one of them has; a change made here gives them all exactly this list. Switch to Advanced to see them apart.`,
+            label: t(`sandbox.modelGroupRow.jobsDiffer`),
+            hint: t(`sandbox.modelGroupRow.jobsDoNotAll`),
         };
     }
     if (pinned.value) {
         return undefined;
     }
     return block.id === `helper`
-        ? { label: `off`, hint: `Not set: none of these jobs runs, and no model is chosen for you. Add a model to switch them on.` }
+        ? { label: t(`sandbox.modelGroupRow.off`), hint: t(`sandbox.modelGroupRow.notSetNoneJobs`) }
         : {
-              label: `chat default`,
-              hint: `Nothing is pinned, so these run on whatever your chat is set to and keep following it as you change it. Add a model to pin them to a tier of their own.`,
+              label: t(`sandbox.modelGroupRow.chatDefault`),
+              hint: t(`sandbox.modelGroupRow.nothingPinnedRunOn`),
           };
 });
 </script>
@@ -79,7 +82,7 @@ const chip = computed<{ readonly label: string; readonly hint: string } | undefi
         <template #control>
             <!-- Named for the group: the accessible name is what distinguishes this button from the per-job ones. -->
             <AddModelButton
-                :label="`Add a model for every ${block.label.toLowerCase()} job`"
+                :label="t(`sandbox.modelGroupRow.addModelEveryJob`, { toLowerCase: block.label.toLowerCase() })"
                 :disabled="disabled"
                 @open="(anchor: HTMLElement) => emit(`open`, undefined, anchor)"
             />

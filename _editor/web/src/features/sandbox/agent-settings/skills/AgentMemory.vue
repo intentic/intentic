@@ -6,9 +6,12 @@ import { onMounted, ref } from "vue";
 import { IMPORT_PROMPT, mergeMemory } from "../../../extensions/memoryImport";
 import { useSandbox } from "../../client/useSandbox";
 import { useWorkspaceTree } from "../../../workspace/explorer/useWorkspaceTree";
+import { useT } from "@intentic/ui/i18n";
 
 // One file, read at the top of every turn on every runtime; this card can read, edit and delete it, not just append
 // via import. Save is explicit since a half-typed sentence going live would be read on the next turn.
+
+const t = useT();
 
 const sandbox = useSandbox();
 const { readFile, saveText } = useWorkspaceTree();
@@ -75,12 +78,12 @@ const importMemory = async (): Promise<void> => {
 
 <template>
     <Card class="flex flex-col gap-3">
-        <Row flush :heading="2" icon="sparkles" title="Memory">
+        <Row flush :heading="2" icon="sparkles" :title="t(`sandbox.agentMemory.memory`)">
             <template #description>
-                The standing instructions
-                <span class="font-medium text-content">{{ sandbox.active.value?.name ?? `your sandbox` }}</span> carries into every turn, on whichever
-                model runs it. <code>{{ MEMORY_FILE }}</code> at the workspace root; a folder deeper in can carry its own, read on top of this one by a
-                conversation that starts there.
+                {{ t(`sandbox.agentMemory.standingInstructions`) }}
+                <span class="font-medium text-content">{{ sandbox.active.value?.name ?? t(`sandbox.agentMemory.sandbox`) }}</span>
+                {{ t(`sandbox.agentMemory.carriesIntoEveryTurn`) }} <code>{{ MEMORY_FILE }}</code>
+                {{ t(`sandbox.agentMemory.atWorkspaceRootFolder`) }}
             </template>
         </Row>
 
@@ -94,42 +97,54 @@ const importMemory = async (): Promise<void> => {
                 :saving="saving"
                 save="explicit"
                 :label="MEMORY_FILE"
-                :placeholder="onDisk === undefined ? `Reading ${MEMORY_FILE}…` : `Nothing here yet. What every turn in this workspace should know.`"
+                :placeholder="
+                    onDisk === undefined
+                        ? t(`sandbox.agentMemory.reading`, { memory_file: MEMORY_FILE })
+                        : t(`sandbox.agentMemory.nothingHereYetWhat`)
+                "
                 class="min-h-48"
                 @save="commit"
             >
-                <template #note><code>{{ MEMORY_FILE }}</code>, at the workspace root.</template>
+                <template #note
+                    ><code>{{ MEMORY_FILE }}</code
+                    >{{ t(`sandbox.agentMemory.atWorkspaceRoot`) }}</template
+                >
             </MarkdownDocument>
         </div>
 
         <!-- Import sits under the document; editing is the primary path, this is the narrow one. -->
         <div class="flex flex-col gap-3 border-t border-line/60 pt-3">
-            <span class="text-sm font-medium text-content">Bring memory over from another assistant</span>
+            <span class="text-sm font-medium text-content">{{ t(`sandbox.agentMemory.bringMemoryOverAnother`) }}</span>
 
             <label class="flex flex-col gap-1.5">
                 <span class="flex items-center gap-2 text-xs text-subtle">
                     <span class="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-content/10 text-2xs font-semibold">1</span>
-                    Copy this prompt into a chat with your other AI provider
+                    {{ t(`sandbox.agentMemory.copyPromptIntoChat`) }}
                 </span>
                 <textarea :value="IMPORT_PROMPT" readonly rows="6" :class="ui.input('w-full font-mono resize-y text-subtle')"></textarea>
                 <div class="flex justify-end">
-                    <CopyButton :text="IMPORT_PROMPT" label="Copy prompt" />
+                    <CopyButton :text="IMPORT_PROMPT" :label="t(`sandbox.agentMemory.copyPrompt`)" />
                 </div>
             </label>
 
             <label class="flex flex-col gap-1.5">
                 <span class="flex items-center gap-2 text-xs text-subtle">
                     <span class="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-content/10 text-2xs font-semibold">2</span>
-                    Paste the result below to merge it into both files
+                    {{ t(`sandbox.agentMemory.pasteResultBelowTo`) }}
                 </span>
                 <textarea
                     v-model="importText"
                     rows="8"
-                    placeholder="Paste your memory details here"
+                    :placeholder="t(`sandbox.agentMemory.pasteMemoryDetailsHere`)"
                     :class="ui.input('w-full font-mono resize-y')"
                 ></textarea>
                 <div class="flex justify-end">
-                    <Button label="Add to memory" :loading="importing" :disabled="importText.trim().length === 0" @click="importMemory">
+                    <Button
+                        :label="t(`sandbox.agentMemory.addToMemory`)"
+                        :loading="importing"
+                        :disabled="importText.trim().length === 0"
+                        @click="importMemory"
+                    >
                         <template #icon><Icon name="sparkles" /></template>
                     </Button>
                 </div>

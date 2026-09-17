@@ -25,7 +25,7 @@ import {
     inWindow,
     previousWindow,
     providersIn,
-    RANGE_PRESETS,
+    rangePresets,
     type RangePreset,
     rankByCost,
     providerColor,
@@ -38,6 +38,7 @@ import {
     usageSeries,
     windowFor,
 } from "./usageChart";
+import { useT } from "@intentic/ui/i18n";
 
 // The Usage tab answers three separate questions, kept visually distinct:
 //   - what has this sandbox cost (the never-pruned spend ledger, scoped by the filter row)
@@ -45,12 +46,14 @@ import {
 //   - what the token-reduction settings were worth over this window (its own section, needs a period to mean anything)
 // Cost and tokens stay separate tiles, never one chart with two y-axes: unrelated scales.
 
+const t = useT();
+
 const route = useRoute();
 const router = useRouter();
 const { rows, isLoading, isFetching, refetch, error } = useUsage();
 const outline = useSandboxOutline(isLoading);
 const usageNotice = computed<NoticeModel | undefined>(() =>
-    error.value === undefined ? undefined : { tone: `danger`, title: `Couldn't read this sandbox's usage.`, detail: error.value },
+    error.value === undefined ? undefined : { tone: `danger`, title: t(`sandbox.sandboxUsage.couldntReadSandboxsUsage`), detail: error.value },
 );
 const { fleet } = useAgents();
 
@@ -85,7 +88,7 @@ const previous = computed(() => {
 // range changes. Folded by `providerGroup` so every locally-run model is one pill, however many deleted cards still own
 // an id.
 const providerOptions = computed(() => [
-    { label: `All providers`, value: `all` },
+    { label: t(`sandbox.sandboxUsage.allProviders`), value: `all` },
     ...providersIn(rows.value, providerGroup).map((provider) => ({ label: providerGroupLabel(provider), value: provider })),
 ]);
 
@@ -106,7 +109,13 @@ const deltaTone = (delta: number | undefined): string =>
     delta === undefined ? `text-subtle` : delta > 0 ? `text-warning` : delta < 0 ? `text-success` : `text-subtle`;
 const deltaArrow = (delta: number | undefined): string => (delta === undefined || delta === 0 ? `` : delta > 0 ? `↑` : `↓`);
 const comparedTo = computed(() =>
-    preset.value === `all` ? undefined : `vs previous ${RANGE_PRESETS.find((entry) => entry.value === preset.value)?.label.toLowerCase() ?? ``}`,
+    preset.value === `all`
+        ? undefined
+        : `vs previous ${
+              rangePresets()
+                  .find((entry) => entry.value === preset.value)
+                  ?.label.toLowerCase() ?? ``
+          }`,
 );
 
 // Only counting tiles: a rate would plot 0% on idle days (reads as broken); spend already has its own chart.
@@ -163,7 +172,7 @@ const hasSpend = computed(() => current.value.length > 0);
 
         <!-- One filter row scoping everything below; date first, the control every reader reaches for. -->
         <div class="flex flex-wrap items-center gap-x-4 gap-y-2">
-            <SegmentedControl v-model="preset" :options="RANGE_PRESETS" />
+            <SegmentedControl v-model="preset" :options="rangePresets()" />
             <span class="h-4 w-px bg-line" />
             <SegmentedControl v-model="providerFilter" :options="providerOptions" size="xs" />
             <button v-if="agentFilter !== undefined" type="button" class="ui-chip gap-1" @click="clearAgentFilter">
@@ -172,8 +181,8 @@ const hasSpend = computed(() => current.value.length > 0);
             <button
                 type="button"
                 :class="ui.iconButton('ml-auto')"
-                aria-label="Refresh"
-                v-tooltip.top="'Refresh'"
+                :aria-label="t(`ui.action.refresh`)"
+                v-tooltip.top="t(`ui.action.refresh`)"
                 :disabled="isFetching"
                 v-action="() => refetch()"
             >
@@ -183,9 +192,9 @@ const hasSpend = computed(() => current.value.length > 0);
 
         <!-- Refetch dims the previous render instead of swapping in skeletons: no layout jump, numbers stay readable. -->
         <div class="flex flex-col gap-6 transition-opacity" :class="isFetching && !isLoading ? `opacity-60` : ``">
-<!-- Skeleton mirrors the real layout (hero, tiles, chart) so a returning reader recognises it while the ledger sums. -->
+            <!-- Skeleton mirrors the real layout (hero, tiles, chart) so a returning reader recognises it while the ledger sums. -->
             <div v-if="isLoading && outline" role="status" aria-busy="true" class="flex flex-col gap-6">
-                <span class="sr-only">Reading the ledger…</span>
+                <span class="sr-only">{{ t(`sandbox.sandboxUsage.readingLedger`) }}</span>
                 <div class="grid gap-3 @lg:grid-cols-2 @3xl:grid-cols-4" aria-hidden="true">
                     <Card v-for="tile in 4" :key="tile" class="flex min-w-0 flex-col gap-2">
                         <span class="skeleton block h-2.5 w-16" />
@@ -212,14 +221,14 @@ const hasSpend = computed(() => current.value.length > 0);
 
             <!-- `!isLoading`, not just the outline: a still-reading ledger hasn't earned the right to say "never run". -->
             <p v-else-if="!isLoading && rows.length === 0" :class="ui.emptyState(`py-8`)">
-                No turns have been billed on this sandbox yet. Spend is recorded at the end of every turn: run an agent and this fills in.
+                {{ t(`sandbox.sandboxUsage.noTurnsBilledOn`) }}
             </p>
 
             <template v-else-if="!isLoading">
                 <!-- Spend alone is hero-sized, the rest are stat tiles. -->
                 <div class="grid gap-3 @lg:grid-cols-2 @3xl:grid-cols-4">
                     <Card class="@container flex min-w-0 flex-col">
-                        <div class="text-xs text-muted">Spend</div>
+                        <div class="text-xs text-muted">{{ t(`sandbox.sandboxUsage.spend`) }}</div>
                         <div class="mt-1 truncate text-[clamp(1.5rem,13cqi,3rem)] font-semibold leading-none tabular-nums text-content">
                             {{ formatUsdHero(totals.costUsd) }}
                         </div>
@@ -228,12 +237,14 @@ const hasSpend = computed(() => current.value.length > 0);
                                 <span class="tabular-nums">{{ deltaArrow(spendDelta) }}{{ formatDelta(spendDelta) }}</span>
                                 <span class="text-subtle">{{ comparedTo }}</span>
                             </template>
-                            <span v-else class="text-subtle">{{ comparedTo === undefined ? `All time` : `No spend in the previous period` }}</span>
+                            <span v-else class="text-subtle">{{
+                                comparedTo === undefined ? t(`sandbox.sandboxUsage.allTime`) : t(`sandbox.sandboxUsage.noSpendInPrevious`)
+                            }}</span>
                         </div>
                     </Card>
 
                     <Card class="@container flex min-w-0 flex-col">
-                        <div class="text-xs text-muted">Turns</div>
+                        <div class="text-xs text-muted">{{ t(`sandbox.sandboxUsage.turns`) }}</div>
                         <div class="mt-1 truncate text-[clamp(1.25rem,9cqi,1.75rem)] font-semibold leading-none tabular-nums text-content">
                             {{ formatCompact(totals.turns) }}
                         </div>
@@ -244,7 +255,7 @@ const hasSpend = computed(() => current.value.length > 0);
                     </Card>
 
                     <Card class="@container flex min-w-0 flex-col">
-                        <div class="text-xs text-muted">Tokens</div>
+                        <div class="text-xs text-muted">{{ t(`sandbox.sandboxUsage.tokens`) }}</div>
                         <div class="mt-1 truncate text-[clamp(1.25rem,9cqi,1.75rem)] font-semibold leading-none tabular-nums text-content">
                             {{ formatCompact(totalTokens(totals)) }}
                         </div>
@@ -255,11 +266,13 @@ const hasSpend = computed(() => current.value.length > 0);
                     </Card>
 
                     <Card class="@container flex min-w-0 flex-col">
-                        <div class="text-xs text-muted">Cache hit rate</div>
+                        <div class="text-xs text-muted">{{ t(`sandbox.sandboxUsage.cacheHitRate`) }}</div>
                         <div class="mt-1 truncate text-[clamp(1.25rem,9cqi,1.75rem)] font-semibold leading-none tabular-nums text-content">
                             {{ formatPercent(cacheHitRate(totals)) }}
                         </div>
-                        <p class="mt-auto pt-2 text-2xs text-subtle">{{ formatCompact(totals.cacheReadTokens) }} prompt input cached</p>
+                        <p class="mt-auto pt-2 text-2xs text-subtle">
+                            {{ t(`sandbox.sandboxUsage.promptInputCached`, { cacheReadTokens: formatCompact(totals.cacheReadTokens) }) }}
+                        </p>
                     </Card>
                 </div>
 
@@ -268,65 +281,64 @@ const hasSpend = computed(() => current.value.length > 0);
 
                 <Card>
                     <div class="mb-3 flex items-baseline justify-between gap-3">
-                        <h3 class="text-sm font-semibold text-content">Spend per {{ preset === `all` ? `period` : `day` }}</h3>
+                        <h3 class="text-sm font-semibold text-content">
+                            {{ preset === `all` ? t(`sandbox.sandboxUsage.spendPerPeriod`) : t(`sandbox.sandboxUsage.spendPerDay`) }}
+                        </h3>
                         <span class="text-sm tabular-nums text-muted">{{ formatUsd(totals.costUsd) }}</span>
                     </div>
                     <UsageColumnChart v-if="hasSpend" :series="series" :providers="seriesProviders" />
-                    <p v-else :class="ui.emptyState()">Nothing was billed in this range.</p>
+                    <p v-else :class="ui.emptyState()">{{ t(`sandbox.sandboxUsage.nothingBilledInRange`) }}</p>
                 </Card>
 
                 <div class="grid gap-3 @2xl:grid-cols-2">
                     <Card>
-                        <h3 class="mb-3 text-sm font-semibold text-content">Cost by model</h3>
+                        <h3 class="mb-3 text-sm font-semibold text-content">{{ t(`sandbox.sandboxUsage.costByModel`) }}</h3>
                         <BarChart v-if="byModel.length > 0" :items="rankedBars(byModel)" :label-width="8" />
-                        <p v-else :class="ui.emptyState()">Nothing was billed in this range.</p>
+                        <p v-else :class="ui.emptyState()">{{ t(`sandbox.sandboxUsage.nothingBilledInRange`) }}</p>
                     </Card>
                     <Card>
-                        <h3 class="mb-3 text-sm font-semibold text-content">Cost by agent</h3>
+                        <h3 class="mb-3 text-sm font-semibold text-content">{{ t(`sandbox.sandboxUsage.costByAgent`) }}</h3>
                         <BarChart v-if="byAgent.length > 0" :items="rankedBars(byAgent)" :label-width="8" />
-                        <p v-else :class="ui.emptyState()">Nothing was billed in this range.</p>
+                        <p v-else :class="ui.emptyState()">{{ t(`sandbox.sandboxUsage.nothingBilledInRange`) }}</p>
                     </Card>
                 </div>
 
                 <!-- Keep measured usage separate from the experimental comparison. -->
                 <section v-if="hasSavings" class="@container">
                     <div class="mb-2 flex flex-wrap items-baseline gap-x-2 gap-y-1 px-0.5">
-                        <span :class="ui.sectionLabel()">Token savings</span>
+                        <span :class="ui.sectionLabel()">{{ t(`sandbox.sandboxUsage.tokenSavings`) }}</span>
                     </div>
 
-<!-- `items-start`: a short card stays short, not stretched to the tallest. -->
+                    <!-- `items-start`: a short card stays short, not stretched to the tallest. -->
                     <div class="grid items-start gap-3 @2xl:grid-cols-2">
                         <SavingsCard
-                            title="Tool output → assistant"
+                            :title="t(`sandbox.sandboxUsage.toolOutputAssistant`)"
                             :value="`${savings?.input.savedPct ?? 0}%`"
                             unit="of shell output removed"
                             tone="success"
                         >
                             <template #hint>
-                                Every command carries its own raw baseline, so this is realized, not estimated. Each stage is weighed against what
-                                reached it: sequential attribution, which is what makes the parts sum to the whole and lets them be stacked at all. It
-                                is not "what turning this cleaner off would cost you": the cap downstream would have eaten some of the same lines. The
-                                retrieval footers are the price of the trimming being reversible: the pointers that let the agent grep the full output
-                                back.
+                                {{ t(`sandbox.sandboxUsage.everyCommandCarriesOwn`) }}
                             </template>
 
                             <SavingsStackBar v-if="composition !== undefined && composition.rawTokens > 0" :composition="composition" />
-                            <p v-else :class="ui.emptyState()">No shell output was cleaned in this range.</p>
+                            <p v-else :class="ui.emptyState()">{{ t(`sandbox.sandboxUsage.noShellOutputCleaned`) }}</p>
 
                             <!-- This comparison measures the whole pipeline, including raw commands. -->
                             <p v-if="savings?.input.holdout.measuredSavedPct !== undefined" class="mt-2 text-2xs text-muted">
-                                Holdout control
-                                <span class="tabular-nums text-content">{{ savings.input.holdout.measuredSavedPct }}%</span>: measured against
-                                {{ savings.input.holdout.heldOut }} of {{ savings.input.holdout.heldOut + savings.input.holdout.cleaned }} commands
-                                left raw at random.
+                                {{ t(`sandbox.sandboxUsage.holdoutControl`) }}
+                                <span class="tabular-nums text-content">{{ savings.input.holdout.measuredSavedPct }}%</span
+                                >{{ t(`sandbox.sandboxUsage.measuredAgainst`) }} {{ savings.input.holdout.heldOut }}
+                                {{ t(`sandbox.sandboxUsage.of`) }} {{ savings.input.holdout.heldOut + savings.input.holdout.cleaned }}
+                                {{ t(`sandbox.sandboxUsage.commandsLeftRawAt`) }}
                             </p>
 
                             <!-- Age stated always: a frozen figure reads exactly like a live one otherwise. -->
                             <template #footnote>
-                                {{ formatCompact(savings?.input.commands ?? 0) }} commands · {{ savingsPeriod }}
-                                <template v-if="savings?.input.updatedAt !== undefined"
-                                    >· last command {{ relativeTime(savings.input.updatedAt) }}</template
-                                >
+                                {{ formatCompact(savings?.input.commands ?? 0) }} {{ t(`sandbox.sandboxUsage.commands`) }} {{ savingsPeriod }}
+                                <template v-if="savings?.input.updatedAt !== undefined">{{
+                                    t(`sandbox.sandboxUsage.lastCommand`, { updatedAt: relativeTime(savings.input.updatedAt) })
+                                }}</template>
                             </template>
                         </SavingsCard>
                     </div>
@@ -337,11 +349,13 @@ const hasSpend = computed(() => current.value.length > 0);
                     <div class="flex items-center justify-between gap-3">
                         <button type="button" class="flex cursor-pointer items-center gap-1.5 text-sm text-content" @click="tableOpen = !tableOpen">
                             <Icon :name="tableOpen ? `chevron-down` : `chevron-right`" class="text-muted" />
-                            Show table
-                            <span class="text-2xs text-subtle">{{ tableRows.length }} rows · {{ formatCompact(totals.turns) }} turns</span>
+                            {{ t(`sandbox.sandboxUsage.showTable`) }}
+                            <span class="text-2xs text-subtle">{{
+                                t(`sandbox.sandboxUsage.rowsTurns`, { count: tableRows.length, turns: formatCompact(totals.turns) })
+                            }}</span>
                         </button>
                         <button type="button" :class="ui.linkButton(`gap-1 text-2xs`)" :disabled="tableRows.length === 0" @click="exportCsv">
-                            <Icon name="download" />Export CSV
+                            <Icon name="download" />{{ t(`sandbox.sandboxUsage.exportCsv`) }}
                         </button>
                     </div>
 
@@ -349,15 +363,15 @@ const hasSpend = computed(() => current.value.length > 0);
                         <table class="w-full text-2xs">
                             <thead class="text-left text-subtle">
                                 <tr class="border-b border-line-subtle">
-                                    <th class="py-1.5 pr-3 font-medium">Day</th>
-                                    <th class="py-1.5 pr-3 font-medium">Provider</th>
-                                    <th class="py-1.5 pr-3 font-medium">Model</th>
-                                    <th class="py-1.5 pr-3 font-medium">Agent</th>
-                                    <th class="py-1.5 pr-3 text-right font-medium">Turns</th>
-                                    <th class="py-1.5 pr-3 text-right font-medium">In</th>
-                                    <th class="py-1.5 pr-3 text-right font-medium">Out</th>
-                                    <th class="py-1.5 pr-3 text-right font-medium">Cached</th>
-                                    <th class="py-1.5 text-right font-medium">Cost</th>
+                                    <th class="py-1.5 pr-3 font-medium">{{ t(`sandbox.sandboxUsage.day`) }}</th>
+                                    <th class="py-1.5 pr-3 font-medium">{{ t(`sandbox.sandboxUsage.provider`) }}</th>
+                                    <th class="py-1.5 pr-3 font-medium">{{ t(`sandbox.sandboxUsage.model`) }}</th>
+                                    <th class="py-1.5 pr-3 font-medium">{{ t(`sandbox.sandboxUsage.agent`) }}</th>
+                                    <th class="py-1.5 pr-3 text-right font-medium">{{ t(`sandbox.sandboxUsage.turns`) }}</th>
+                                    <th class="py-1.5 pr-3 text-right font-medium">{{ t(`sandbox.sandboxUsage.in`) }}</th>
+                                    <th class="py-1.5 pr-3 text-right font-medium">{{ t(`sandbox.sandboxUsage.out`) }}</th>
+                                    <th class="py-1.5 pr-3 text-right font-medium">{{ t(`sandbox.sandboxUsage.cached`) }}</th>
+                                    <th class="py-1.5 text-right font-medium">{{ t(`sandbox.sandboxUsage.cost`) }}</th>
                                 </tr>
                             </thead>
                             <tbody class="tabular-nums text-muted">
@@ -375,7 +389,7 @@ const hasSpend = computed(() => current.value.length > 0);
                                     </td>
                                     <td class="py-1.5 pr-3">{{ row.model ?? `—` }}</td>
                                     <td class="max-w-40 truncate py-1.5 pr-3">
-                                        {{ row.conversationId === undefined ? `Main tree` : agentTitle(row.conversationId) }}
+                                        {{ row.conversationId === undefined ? t(`sandbox.sandboxUsage.mainTree`) : agentTitle(row.conversationId) }}
                                     </td>
                                     <td class="py-1.5 pr-3 text-right">{{ row.turns }}</td>
                                     <td class="py-1.5 pr-3 text-right">{{ formatCompact(row.inputTokens) }}</td>
@@ -387,7 +401,7 @@ const hasSpend = computed(() => current.value.length > 0);
                         </table>
                         <!-- Never silently truncate a money table: say what was cut, and where the rest is. -->
                         <p v-if="tableRows.length > TABLE_LIMIT" class="mt-2 text-2xs text-subtle">
-                            Showing the {{ TABLE_LIMIT }} most recent of {{ tableRows.length }} rows: export the CSV for all of them.
+                            {{ t(`sandbox.sandboxUsage.showingMostRecentRows`, { table_limit: TABLE_LIMIT, count: tableRows.length }) }}
                         </p>
                     </div>
                 </Card>

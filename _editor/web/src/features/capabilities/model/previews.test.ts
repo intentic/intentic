@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { HOST_PRESETS, hostGrantSummary, localModelMemorySummary, matchHostPreset, walletPolicySummary } from "./previews";
+import { hostPresets, hostGrantSummary, localModelMemorySummary, matchHostPreset, walletPolicySummary } from "./previews";
 
 /* The sentences the forms say back. Each is the actual thing being agreed to, so what it claims is pinned. */
 
@@ -15,7 +15,7 @@ test(`says the wallet policy the numbers add up to`, () => {
 });
 
 test(`matches the switches back to the preset they spell`, () => {
-    for (const preset of HOST_PRESETS) {
+    for (const preset of hostPresets()) {
         expect(matchHostPreset(preset.grants)).toBe(preset.key);
     }
     // A hand-tuned mix is nobody's preset, and must not claim to be one.
@@ -39,7 +39,9 @@ test(`states the grant in one line, from what is allowed`, () => {
             sandboxes: `on`,
             destructive: `on`,
         }),
-    ).toBe(`May run commands, change files, see the screen, use the mouse and keyboard, manage and remove its sandboxes and delete folders and wipe disks.`);
+    ).toBe(
+        `May run commands, change files, see the screen, use the mouse and keyboard, manage and remove its sandboxes and delete folders and wipe disks.`,
+    );
 });
 
 test(`does the local model's RAM sum so the reader doesn't`, () => {

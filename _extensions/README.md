@@ -29,6 +29,14 @@ not-yet-installed extension still has to look like something. A pack that declar
 its initials; `extensionMarks.test.ts` in the web app keeps that from happening by accident and checks the
 glyph names are real.
 
+A UI extension also ships its **words**: `src/locales/<code>.json` per shipped language and a `src/i18n.ts`
+exporting `messages` (which `index.ts` re-exports, and the host registers and awaits before it calls `activate`)
+plus `t = extensionT(extensionIdOf(manifest))`, the translator bound to that extension's own slice of the message
+tree. Keys are its own (`t("panel.title")` for what lands at `ext.<id>.panel.title`), so nothing it writes can
+collide with the app's or another extension's. Eleven of the packs below carry one; the ones with no editor bundle
+have no UI words to carry. `docs/architecture/languages.md` is the whole layer, and two checks hold it:
+`i18n-keys.mjs` refuses a key no catalog has, `i18n-literals.mjs` refuses English typed into a template.
+
 Dependencies are limited **by lint** (`.oxlintrc.json`, scoped to `_extensions/**`) to
 `@intentic/extension-api`, `@intentic/extension-manifest`, `@intentic/extension-ui`,
 `@intentic/connector-runtime` (the gateway-process half of the SDK, for the messaging connectors), and

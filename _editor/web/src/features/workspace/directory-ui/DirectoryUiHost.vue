@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import { onBeforeUnmount, ref, shallowRef, watch } from "vue";
 import { createDirectoryUiBridge, loadDirectoryUi } from "./useDirectoryUi";
+import { useT } from "@intentic/ui/i18n";
+
+const t = useT();
 
 /* Renders a directory's own UI (its `.intentic/ui/index.html`) inside a locked-down iframe. */
 
@@ -41,14 +44,14 @@ onBeforeUnmount(() => detach?.());
         </div>
         <div v-else-if="html === undefined" class="flex flex-1 flex-col items-center justify-center gap-1 text-muted">
             <Icon name="exclamation-triangle" class="text-warning" />
-            <span class="text-xs">This directory's UI couldn't be loaded.</span>
+            <span class="text-xs">{{ t(`workspace.directoryUiHost.directorysUiCouldntLoaded`) }}</span>
         </div>
         <iframe
             v-else
             ref="iframe"
             :srcdoc="html"
             sandbox="allow-scripts"
-            :title="`${dir || 'workspace'} UI`"
+            :title="t(`workspace.directoryUiHost.directoryUi`, { dir: dir || t(`workspace.directoryUiHost.workspace`) })"
             class="min-h-0 w-full flex-1 border-0 bg-white"
             @load="onLoad"
         ></iframe>

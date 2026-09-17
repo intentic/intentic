@@ -19,9 +19,12 @@ import {
 import { computed, ref } from "vue";
 import { useSafetyLog } from "../../environment/useSafetyPolicy";
 import { useSandboxSettings } from "../../overview/useSandboxSettings";
+import { useT } from "@intentic/ui/i18n";
 
 // Every judged command, including allowed ones: what the policy actually did, not just what it says. Collapsed rows are
 // a scannable timeline; expanded shows the judge's full assessment, the command, and triage metadata.
+
+const t = useT();
 
 type OutcomeFilter = "all" | "ran" | "asked" | "refused";
 
@@ -40,10 +43,10 @@ interface DecisionStatus {
 
 const statusOf = (entry: SafetyLogEntry): DecisionStatus => {
     if (entry.answer === `allowed`) {
-        return { label: `You allowed it`, variant: `success`, dot: true, icon: `check`, iconTone: `text-success` };
+        return { label: t(`sandbox.agentSafetyLog.allowed`), variant: `success`, dot: true, icon: `check`, iconTone: `text-success` };
     }
     if (entry.answer === `declined`) {
-        return { label: `You declined it`, variant: `danger`, dot: true, icon: `times`, iconTone: `text-danger` };
+        return { label: t(`sandbox.agentSafetyLog.declined`), variant: `danger`, dot: true, icon: `times`, iconTone: `text-danger` };
     }
     // Outcome allowed with decision not allow means watch mode: the judge would have stopped it and couldn't, so the
     // label must say both halves, not just "Ran".
@@ -57,12 +60,12 @@ const statusOf = (entry: SafetyLogEntry): DecisionStatus => {
         };
     }
     if (entry.outcome === `refused`) {
-        return { label: `Refused`, variant: `danger`, dot: true, icon: `times`, iconTone: `text-danger` };
+        return { label: t(`sandbox.agentSafetyLog.refused`), variant: `danger`, dot: true, icon: `times`, iconTone: `text-danger` };
     }
     if (entry.outcome === `asked`) {
-        return { label: `Asked you`, variant: `warning`, dot: true, icon: `question-circle`, iconTone: `text-warning` };
+        return { label: t(`sandbox.agentSafetyLog.asked`), variant: `warning`, dot: true, icon: `question-circle`, iconTone: `text-warning` };
     }
-    return { label: `Ran`, variant: `neutral`, dot: false, icon: `check`, iconTone: `text-subtle` };
+    return { label: t(`sandbox.agentSafetyLog.ran`), variant: `neutral`, dot: false, icon: `check`, iconTone: `text-subtle` };
 };
 
 const counts = computed(() => {
@@ -84,10 +87,10 @@ const counts = computed(() => {
 });
 
 const filterOptions = computed(() => [
-    { label: `All`, value: `all` as const, badge: counts.value.all },
-    { label: `Ran`, value: `ran` as const, badge: counts.value.ran },
-    { label: `Asked`, value: `asked` as const, badge: counts.value.asked },
-    { label: `Refused`, value: `refused` as const, badge: counts.value.refused },
+    { label: t(`sandbox.agentSafetyLog.all`), value: `all` as const, badge: counts.value.all },
+    { label: t(`sandbox.agentSafetyLog.ran`), value: `ran` as const, badge: counts.value.ran },
+    { label: t(`sandbox.agentSafetyLog.asked2`), value: `asked` as const, badge: counts.value.asked },
+    { label: t(`sandbox.agentSafetyLog.refused`), value: `refused` as const, badge: counts.value.refused },
 ]);
 
 const query = ref(``);
@@ -168,7 +171,7 @@ const groupCount = computed(() => {
         <FilterBar
             v-if="entries.length > 0"
             v-model="query"
-            placeholder="Filter decisions by command, reason, machine…"
+            :placeholder="t(`sandbox.agentSafetyLog.filterDecisionsByCommand`)"
             :count="filteredEntries.length"
             clearable
         >
@@ -177,7 +180,7 @@ const groupCount = computed(() => {
             </template>
         </FilterBar>
 
-        <RowGroup label="Recent decisions" :count="groupCount">
+        <RowGroup :label="t(`sandbox.agentSafetyLog.recentDecisions`)" :count="groupCount">
             <SkeletonRows v-if="isLoading" :rows="4" description />
 
             <RowNote v-else-if="error !== undefined" variant="block">
@@ -186,15 +189,15 @@ const groupCount = computed(() => {
 
             <!-- Off and "nothing judged yet" are different empty states; the message must not blur them. -->
             <RowNote v-else-if="entries.length === 0" variant="empty">
-                <template v-if="judgeOff">The safety judge is off, so nothing is being judged and nothing is recorded here.</template>
+                <template v-if="judgeOff">{{ t(`sandbox.agentSafetyLog.safetyJudgeOffNothing`) }}</template>
                 <template v-else>
-                    Nothing has needed judging yet. Ordinary work — building, testing, editing, committing — never reaches the policy at all.
+                    {{ t(`sandbox.agentSafetyLog.nothingNeededJudgingYet`) }}
                 </template>
             </RowNote>
 
             <RowNote v-else-if="visibleEntries.length === 0" variant="empty">
-                <template v-if="query.trim() !== ''"> No decisions match "{{ query.trim() }}". </template>
-                <template v-else> No {{ outcomeFilter }} decisions recorded yet. </template>
+                <template v-if="query.trim() !== ''">{{ t(`sandbox.agentSafetyLog.noDecisionsMatch`, { trim: query.trim() }) }}</template>
+                <template v-else>{{ t(`sandbox.agentSafetyLog.noDecisionsRecordedYet`, { outcomeFilter }) }}</template>
             </RowNote>
 
             <template v-else>
@@ -225,7 +228,7 @@ const groupCount = computed(() => {
                         <span
                             v-if="entry.machine"
                             class="hidden items-center gap-1 font-mono text-2xs text-subtle @xl:inline-flex"
-                            :title="`Ran on ${entry.machine}`"
+                            :title="t(`sandbox.agentSafetyLog.ranOn`, { machine: entry.machine })"
                         >
                             <Icon name="desktop" class="text-3xs" />
                             {{ entry.machine }}
@@ -239,34 +242,38 @@ const groupCount = computed(() => {
                     <template #below>
                         <div class="flex flex-col gap-3 py-1 text-xs">
                             <div>
-                                <div class="text-2xs font-medium uppercase tracking-wider text-subtle">Judge Assessment</div>
+                                <div class="text-2xs font-medium uppercase tracking-wider text-subtle">
+                                    {{ t(`sandbox.agentSafetyLog.judgeAssessment`) }}
+                                </div>
                                 <p class="mt-1 leading-relaxed text-content/90">{{ entry.sentence }}</p>
                             </div>
 
                             <div>
-                                <div class="mb-1 text-2xs font-medium uppercase tracking-wider text-subtle">Program / Command</div>
+                                <div class="mb-1 text-2xs font-medium uppercase tracking-wider text-subtle">
+                                    {{ t(`sandbox.agentSafetyLog.programCommand`) }}
+                                </div>
                                 <Code :code="entry.program" lang="bash" :wrap="true" />
                             </div>
 
                             <div class="flex flex-wrap items-center gap-x-4 gap-y-1.5 pt-1 text-2xs text-muted">
                                 <span class="inline-flex items-center gap-1.5">
-                                    <span class="text-subtle">Judge:</span>
+                                    <span class="text-subtle">{{ t(`sandbox.agentSafetyLog.judge`) }}</span>
                                     <span class="font-medium text-content capitalize">{{ entry.decision }}</span>
                                 </span>
                                 <span class="inline-flex items-center gap-1.5">
-                                    <span class="text-subtle">Gate:</span>
+                                    <span class="text-subtle">{{ t(`sandbox.agentSafetyLog.gate`) }}</span>
                                     <span class="font-medium text-content capitalize">{{ entry.outcome }}</span>
                                 </span>
                                 <span v-if="entry.answer" class="inline-flex items-center gap-1.5">
-                                    <span class="text-subtle">Your response:</span>
+                                    <span class="text-subtle">{{ t(`sandbox.agentSafetyLog.response`) }}</span>
                                     <span class="font-medium text-content capitalize">{{ entry.answer }}</span>
                                 </span>
                                 <span v-if="entry.machine" class="inline-flex items-center gap-1.5">
-                                    <span class="text-subtle">Target:</span>
+                                    <span class="text-subtle">{{ t(`sandbox.agentSafetyLog.target`) }}</span>
                                     <span class="font-medium text-content">{{ entry.machine }}</span>
                                 </span>
                                 <span v-if="entry.classes.length > 0" class="inline-flex items-center gap-1.5">
-                                    <span class="text-subtle">Triage:</span>
+                                    <span class="text-subtle">{{ t(`sandbox.agentSafetyLog.triage`) }}</span>
                                     <span class="flex flex-wrap gap-1">
                                         <span
                                             v-for="cls in entry.classes"
@@ -289,7 +296,11 @@ const groupCount = computed(() => {
                     v-if="shouldCollapse"
                     variant="action"
                     :icon="expandedList ? 'chevron-up' : 'chevron-down'"
-                    :label="expandedList ? 'Show fewer decisions' : `Show ${hiddenCount} older decisions`"
+                    :label="
+                        expandedList
+                            ? t(`sandbox.agentSafetyLog.showFewerDecisions`)
+                            : t(`sandbox.agentSafetyLog.showOlderDecisions`, { hiddenCount })
+                    "
                     @click="expandedList = !expandedList"
                 />
             </template>

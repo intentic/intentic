@@ -14,6 +14,7 @@ import { jsonBody } from "../client/jsonBody";
 import { useSandboxOutline } from "../overview/useSandboxOutline";
 import { useSecretInventory } from "../../capabilities/connect/useSecrets";
 import { matchesSecret, type SecretGroup, type SecretRow, secretRows } from "./secretRows";
+import { useT } from "@intentic/ui/i18n";
 
 // The one place every credential in this sandbox is visible, built to be scanned past a dozen rows. Owner-set
 // values are the only "work" here (settable, removable); capability credentials are read-only and collapse behind a
@@ -22,6 +23,8 @@ import { matchesSecret, type SecretGroup, type SecretRow, secretRows } from "./s
 
 // The daemon's own rule, imported rather than restated, so the box cannot accept a name the write will refuse.
 // Below this many rows the list is its own overview; a display choice, kept out of the row model.
+const t = useT();
+
 const FILTERABLE_FROM = 8;
 // Same truncation as AiAccountSection, applied to capability credentials alone.
 const COLLAPSE_THRESHOLD = 5;
@@ -48,8 +51,8 @@ const opened = ref<string | undefined>(undefined);
 const filterable = computed(() => rows.value.length >= FILTERABLE_FROM);
 const missingCount = computed(() => rows.value.filter((row) => row.entry.status === `missing`).length);
 const scopeOptions = computed(() => [
-    { label: `All`, value: `all` as const, badge: rows.value.length },
-    { label: `Missing`, value: `missing` as const, badge: missingCount.value },
+    { label: t(`sandbox.sandboxSecrets.all`), value: `all` as const, badge: rows.value.length },
+    { label: t(`sandbox.sandboxSecrets.missing`), value: `missing` as const, badge: missingCount.value },
 ]);
 const filtering = computed(() => query.value.trim() !== `` || scope.value !== `all`);
 const matches = computed<SecretRow[]>(() => {
@@ -146,12 +149,12 @@ const pushToCi = async (): Promise<void> => {
     <div class="flex flex-col gap-5">
         <NoticeStack :of="[pushError]" />
 
-<!-- Content waits for inventory; the outline waits for the reveal. -->
+        <!-- Content waits for inventory; the outline waits for the reveal. -->
         <template v-if="inventoryPending">
-<!-- Shows the shape of the coming list (rows with a key and reveal control), not a spinner. -->
-            <RowGroup v-if="outline" label="Your secrets">
+            <!-- Shows the shape of the coming list (rows with a key and reveal control), not a spinner. -->
+            <RowGroup v-if="outline" :label="t(`sandbox.sandboxSecrets.secrets`)">
                 <div role="status" aria-busy="true">
-                    <span class="sr-only">Reading your sandbox's secrets…</span>
+                    <span class="sr-only">{{ t(`sandbox.sandboxSecrets.readingSandboxsSecrets`) }}</span>
                     <SkeletonRows :rows="4" control />
                 </div>
             </RowGroup>
@@ -163,7 +166,7 @@ const pushToCi = async (): Promise<void> => {
                 <FilterBar
                     v-if="filterable"
                     v-model="query"
-                    placeholder="Key, account or what uses it…"
+                    :placeholder="t(`sandbox.sandboxSecrets.keyAccountWhatUses`)"
                     :count="matches.length"
                     class="min-w-0 flex-1"
                 >
@@ -171,7 +174,7 @@ const pushToCi = async (): Promise<void> => {
                 </FilterBar>
                 <Button
                     v-if="ciKnown"
-                    :label="ciStale ? `Push to CI` : `CI in sync`"
+                    :label="ciStale ? t(`sandbox.sandboxSecrets.pushToCi`) : t(`sandbox.sandboxSecrets.ciInSync`)"
                     size="small"
                     :severity="ciStale ? undefined : `secondary`"
                     :disabled="!ciStale"
@@ -183,7 +186,7 @@ const pushToCi = async (): Promise<void> => {
             </div>
 
             <!-- Shown only while something is owed: the rows themselves, not a count of them. -->
-            <RowGroup v-if="attention.length > 0" label="Needs attention" :count="attention.length">
+            <RowGroup v-if="attention.length > 0" :label="t(`sandbox.sandboxSecrets.needsAttention`)" :count="attention.length">
                 <SecretEntryRow
                     v-for="row in attention"
                     :key="row.entry.key"
@@ -195,8 +198,12 @@ const pushToCi = async (): Promise<void> => {
 
             <!-- The owner's own: what they must keep, what they chose to keep, what intentic keeps for them. -->
             <div class="flex flex-col gap-6">
-                <RowGroup v-if="devopsActive && groupVisible(required)" label="Required by your intent" :count="required.length">
-                    <RowNote v-if="required.length === 0">Your intent declares no user-supplied secrets yet.</RowNote>
+                <RowGroup
+                    v-if="devopsActive && groupVisible(required)"
+                    :label="t(`sandbox.sandboxSecrets.requiredByIntent`)"
+                    :count="required.length"
+                >
+                    <RowNote v-if="required.length === 0">{{ t(`sandbox.sandboxSecrets.intentDeclaresNoUser`) }}</RowNote>
                     <SecretEntryRow
                         v-for="row in required"
                         :key="row.entry.key"
@@ -208,21 +215,23 @@ const pushToCi = async (): Promise<void> => {
 
                 <!-- Gate sits on the group it gates, not atop the page: everything else here works with DevOps off. -->
                 <!-- A navigating row is `<Row>` wrapped in `<RouterLink>` (the pattern it documents), at the list's own tier. -->
-                <RowGroup v-else-if="!devopsActive && !filtering" label="Your secrets">
+                <RowGroup v-else-if="!devopsActive && !filtering" :label="t(`sandbox.sandboxSecrets.secrets`)">
                     <RouterLink to="/capabilities" class="block no-underline">
                         <Row
                             interactive
                             chevron
                             icon="exclamation-triangle"
                             tone="warning"
-                            title="Keeping your own secrets here needs DevOps active."
+                            :title="t(`sandbox.sandboxSecrets.keepingOwnSecretsHere`)"
                         >
-                            <template #meta><span class="font-medium text-link">Activate</span></template>
+                            <template #meta
+                                ><span class="font-medium text-link">{{ t(`sandbox.sandboxSecrets.activate`) }}</span></template
+                            >
                         </Row>
                     </RouterLink>
                 </RowGroup>
 
-                <RowGroup v-if="devopsActive && groupVisible(yours)" label="Your secrets" :count="yours.length">
+                <RowGroup v-if="devopsActive && groupVisible(yours)" :label="t(`sandbox.sandboxSecrets.secrets`)" :count="yours.length">
                     <SecretEntryRow
                         v-for="row in yours"
                         :key="row.entry.key"
@@ -231,13 +240,13 @@ const pushToCi = async (): Promise<void> => {
                         @update:expanded="(open) => (opened = open ? row.entry.key : undefined)"
                     />
                     <!-- `<RowNote action>`, not another hand-written spelling of this row, aligned with the chevron column above. -->
-                    <RowNote v-if="!filtering && !adding" variant="action" label="Add a secret" @click="adding = true" />
+                    <RowNote v-if="!filtering && !adding" variant="action" :label="t(`sandbox.sandboxSecrets.addSecret`)" @click="adding = true" />
                     <RowNote v-else-if="!filtering" variant="block">
                         <div class="flex flex-col gap-2">
                             <div class="flex items-start gap-2">
                                 <input
                                     v-model="newKey"
-                                    placeholder="KEY_NAME"
+                                    :placeholder="t(`sandbox.sandboxSecrets.keyName`)"
                                     autocapitalize="off"
                                     spellcheck="false"
                                     :class="ui.input('w-44 shrink-0 font-mono')"
@@ -247,13 +256,19 @@ const pushToCi = async (): Promise<void> => {
                             <span v-if="newKeyProblem" :class="newKeyTaken ? `text-2xs text-subtle` : `text-2xs text-warning`">
                                 {{ newKeyProblem }}
                             </span>
-                            <button type="button" :class="ui.textAction(`text-2xs text-subtle`)" @click="cancelAdd">Cancel</button>
+                            <button type="button" :class="ui.textAction(`text-2xs text-subtle`)" @click="cancelAdd">
+                                {{ t(`ui.action.cancel`) }}
+                            </button>
                         </div>
                     </RowNote>
                 </RowGroup>
 
-                <RowGroup v-if="devopsActive && groupVisible(generated)" label="Generated by intentic" :count="generated.length">
-                    <RowNote v-if="generated.length === 0">Nothing generated yet: these appear after your first deploy.</RowNote>
+                <RowGroup
+                    v-if="devopsActive && groupVisible(generated)"
+                    :label="t(`sandbox.sandboxSecrets.generatedByIntentic`)"
+                    :count="generated.length"
+                >
+                    <RowNote v-if="generated.length === 0">{{ t(`sandbox.sandboxSecrets.nothingGeneratedYetAppear`) }}</RowNote>
                     <SecretEntryRow
                         v-for="row in generated"
                         :key="row.entry.key"
@@ -264,9 +279,19 @@ const pushToCi = async (): Promise<void> => {
                 </RowGroup>
 
                 <!-- Same collapse-behind-toggle pattern as the Agent tab, once there are enough rows to crowd the rest of it. -->
-                <RowGroup v-if="groupVisible(visibleCredentials)" label="Capability credentials" :count="credentials.length">
+                <RowGroup
+                    v-if="groupVisible(visibleCredentials)"
+                    :label="t(`sandbox.sandboxSecrets.capabilityCredentials`)"
+                    :count="credentials.length"
+                >
                     <template #actions>
-                        <Button :as="RouterLink" to="/capabilities" label="Manage capabilities" size="small" severity="secondary" />
+                        <Button
+                            :as="RouterLink"
+                            to="/capabilities"
+                            :label="t(`sandbox.sandboxSecrets.manageCapabilities`)"
+                            size="small"
+                            severity="secondary"
+                        />
                     </template>
                     <SecretEntryRow
                         v-for="row in visibleCredentials"
@@ -281,7 +306,11 @@ const pushToCi = async (): Promise<void> => {
                                 <span class="flex w-[1.125rem] shrink-0 justify-center">
                                     <Icon :name="credentialsExpanded ? 'chevron-up' : 'chevron-down'" class="text-2xs" />
                                 </span>
-                                {{ credentialsExpanded ? `Show less` : `Show ${collapsedCredentialCount} more accounts` }}
+                                {{
+                                    credentialsExpanded
+                                        ? t(`sandbox.sandboxSecrets.showLess`)
+                                        : t(`sandbox.sandboxSecrets.showMoreAccounts`, { collapsedCredentialCount })
+                                }}
                             </span>
                         </template>
                     </Row>
@@ -290,7 +319,7 @@ const pushToCi = async (): Promise<void> => {
 
             <div v-if="emptyNote !== undefined" :class="ui.emptyState(`flex flex-col items-center gap-2 py-6`)">
                 <span>{{ emptyNote }}</span>
-                <Button v-if="rows.length > 0" size="small" label="Clear filter" @click="clearFilters" />
+                <Button v-if="rows.length > 0" size="small" :label="t(`sandbox.sandboxSecrets.clearFilter`)" @click="clearFilters" />
             </div>
         </template>
     </div>

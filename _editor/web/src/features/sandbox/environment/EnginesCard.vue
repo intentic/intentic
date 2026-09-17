@@ -6,10 +6,14 @@ import { useSandboxOutline } from "../overview/useSandboxOutline";
 import { useRole } from "../secrets/useRole";
 import { useHubWork } from "../../../shell/hub/hubWork";
 import { engineVisual } from "./engineVisual";
+import { useT } from "@intentic/ui/i18n";
+import { computed } from "vue";
 
 // Agent engines this sandbox runs, and where each version comes from (the image bake vs. this machine's
 // store). Each row shows what's running, its channel (recommended/latest/pinned/image), and a revert.
 // Changing a channel is owner-only; a viewer still sees the running versions.
+
+const t = useT();
 
 const { canShip: canOperate } = useRole();
 const {
@@ -39,26 +43,26 @@ const runUpdate = (engine: EngineRow): Promise<void> => hubWork.track(`Updating 
 const runRevert = (engine: EngineRow): Promise<void> => hubWork.track(`Reverting ${engine.label}`, () => revert(engine));
 const runUpdateAll = (): Promise<void> => hubWork.track(`Updating agent engines`, () => updateAll());
 
-const CHANNELS: readonly PickerOption<`blessed` | `latest` | `pinned` | `image`>[] = [
+const CHANNELS = computed((): readonly PickerOption<`blessed` | `latest` | `pinned` | `image`>[] => [
     {
-        label: `Recommended`,
+        label: t(`sandbox.enginesCard.recommended`),
         value: `blessed`,
         icon: `check`,
-        hint: `Intentic-tested. Updates in place.`,
+        hint: t(`sandbox.enginesCard.intenticTestedUpdatesIn`),
     },
     {
-        label: `Latest`,
+        label: t(`sandbox.enginesCard.latest`),
         value: `latest`,
         icon: `download`,
-        hint: `Upstream's newest release.`,
+        hint: t(`sandbox.enginesCard.upstreamsNewestRelease`),
     },
-    { label: `Pinned`, value: `pinned`, icon: `lock`, hint: `Freeze the running version.` },
-    { label: `Image`, value: `image`, icon: `box`, hint: `Image copy only.` },
-];
+    { label: t(`sandbox.enginesCard.pinned`), value: `pinned`, icon: `lock`, hint: t(`sandbox.enginesCard.freezeRunningVersion`) },
+    { label: t(`sandbox.enginesCard.image2`), value: `image`, icon: `box`, hint: t(`sandbox.enginesCard.imageCopyOnly`) },
+]);
 </script>
 
 <template>
-    <RowGroup label="Agent engines">
+    <RowGroup :label="t(`sandbox.enginesCard.agentEngines`)">
         <template #actions>
             <div class="flex flex-wrap items-center justify-end gap-2">
                 <Button
@@ -66,16 +70,22 @@ const CHANNELS: readonly PickerOption<`blessed` | `latest` | `pinned` | `image`>
                     size="small"
                     :loading="updatingAll"
                     :disabled="isAnyBusy || !canOperate"
-                    label="Update all"
+                    :label="t(`sandbox.enginesCard.updateAll`)"
                     @click="runUpdateAll"
                 />
                 <StatusBadge
                     v-if="updatable.length"
                     variant="warning"
-                    :label="`${updatable.length} update${updatable.length === 1 ? `` : `s`}`"
+                    :label="t(`sandbox.enginesCard.updates`, { count: updatable.length }, updatable.length)"
                     dot
                 />
-                <button type="button" :class="ui.iconButton()" aria-label="Refresh" v-tooltip.top="'Refresh'" @click="query.refetch()">
+                <button
+                    type="button"
+                    :class="ui.iconButton()"
+                    :aria-label="t(`ui.action.refresh`)"
+                    v-tooltip.top="t(`ui.action.refresh`)"
+                    @click="query.refetch()"
+                >
                     <Icon name="refresh" class="text-sm" :spin="isFetching" />
                 </button>
             </div>
@@ -83,65 +93,67 @@ const CHANNELS: readonly PickerOption<`blessed` | `latest` | `pinned` | `image`>
 
         <div v-if="isLoading" role="status" aria-busy="true">
             <template v-if="outline">
-                <span class="sr-only">Reading this sandbox's agent engines…</span>
+                <span class="sr-only">{{ t(`sandbox.enginesCard.readingSandboxsAgentEngines`) }}</span>
                 <SkeletonRows :rows="5" description control />
             </template>
         </div>
 
         <Row v-for="engine in engines" v-else :key="engine.id">
-                <template #lead="{ mark }">
-                    <BrandMark :size="mark" :name="engine.label" :logo="engineVisual(engine.id).logo" :icon="engineVisual(engine.id).icon" />
-                </template>
-                <template #title
-                    ><span class="text-xs">{{ engine.label }}</span></template
-                >
-                <template #description>
-                    <span v-if="engine.running.version" class="font-mono">{{ engine.running.version }}</span>
-                    <span v-else>not installed here</span>
-                </template>
-                <template #meta>
-                    <StatusBadge v-if="engine.running.source === `store`" variant="info" label="installed" />
-                    <StatusBadge v-else-if="engine.running.version" variant="neutral" label="from image" />
-                    <StatusBadge
-                        v-if="engine.running.version && engine.blessed && engine.running.version !== engine.blessed"
-                        variant="warning"
-                        label="not recommended"
-                    />
-                </template>
-                <template #control>
-                    <Picker
-                        :model-value="engine.channel.kind"
-                        :options="CHANNELS"
-                        variant="ghost"
-                        :disabled="isEngineBusy(engine) || !canOperate"
-                        class="shrink-0"
-                        :aria-label="`Where ${engine.label} gets its version`"
-                        :header="`${engine.label} version source`"
-                        @update:model-value="(kind) => kind !== undefined && setChannel(engine, kind)"
-                    />
-                    <Button
-                        v-if="engine.offered"
-                        size="small"
-                        :loading="isEngineUpdating(engine)"
-                        :disabled="isEngineBusy(engine) || !canOperate"
-                        :label="`Update to ${engine.offered.version}`"
-                        @click="runUpdate(engine)"
-                    />
-                    <Button
-                        v-if="engine.previous || engine.running.source === `store`"
-                        size="small"
-                        severity="secondary"
-                        :loading="isEngineReverting(engine)"
-                        :disabled="isEngineBusy(engine) || !canOperate"
-                        :label="engine.previous ? `Back to ${engine.previous}` : `Back to the image's copy`"
-                        @click="runRevert(engine)"
-                    />
-                </template>
-                <template v-if="engine.quarantined.length > 0" #below>
-                    <p v-for="refused in engine.quarantined" :key="refused.version" class="text-xs break-words text-muted">
-                        {{ refused.version }} was refused: {{ refused.reason }}
-                    </p>
-                </template>
+            <template #lead="{ mark }">
+                <BrandMark :size="mark" :name="engine.label" :logo="engineVisual(engine.id).logo" :icon="engineVisual(engine.id).icon" />
+            </template>
+            <template #title
+                ><span class="text-xs">{{ engine.label }}</span></template
+            >
+            <template #description>
+                <span v-if="engine.running.version" class="font-mono">{{ engine.running.version }}</span>
+                <span v-else>{{ t(`sandbox.enginesCard.notInstalledHere`) }}</span>
+            </template>
+            <template #meta>
+                <StatusBadge v-if="engine.running.source === `store`" variant="info" :label="t(`sandbox.enginesCard.installed`)" />
+                <StatusBadge v-else-if="engine.running.version" variant="neutral" :label="t(`sandbox.enginesCard.image`)" />
+                <StatusBadge
+                    v-if="engine.running.version && engine.blessed && engine.running.version !== engine.blessed"
+                    variant="warning"
+                    :label="t(`sandbox.enginesCard.notRecommended`)"
+                />
+            </template>
+            <template #control>
+                <Picker
+                    :model-value="engine.channel.kind"
+                    :options="CHANNELS"
+                    variant="ghost"
+                    :disabled="isEngineBusy(engine) || !canOperate"
+                    class="shrink-0"
+                    :aria-label="t(`sandbox.enginesCard.whereGetsVersion`, { label: engine.label })"
+                    :header="t(`sandbox.enginesCard.versionSource`, { label: engine.label })"
+                    @update:model-value="(kind) => kind !== undefined && setChannel(engine, kind)"
+                />
+                <Button
+                    v-if="engine.offered"
+                    size="small"
+                    :loading="isEngineUpdating(engine)"
+                    :disabled="isEngineBusy(engine) || !canOperate"
+                    :label="t(`sandbox.enginesCard.updateTo`, { version: engine.offered.version })"
+                    @click="runUpdate(engine)"
+                />
+                <Button
+                    v-if="engine.previous || engine.running.source === `store`"
+                    size="small"
+                    severity="secondary"
+                    :loading="isEngineReverting(engine)"
+                    :disabled="isEngineBusy(engine) || !canOperate"
+                    :label="
+                        engine.previous ? t(`sandbox.enginesCard.backTo`, { previous: engine.previous }) : t(`sandbox.enginesCard.backToImagesCopy`)
+                    "
+                    @click="runRevert(engine)"
+                />
+            </template>
+            <template v-if="engine.quarantined.length > 0" #below>
+                <p v-for="refused in engine.quarantined" :key="refused.version" class="text-xs break-words text-muted">
+                    {{ t(`sandbox.enginesCard.refused`, { version: refused.version, reason: refused.reason }) }}
+                </p>
+            </template>
         </Row>
 
         <Notice v-if="actionNotice" :of="actionNotice" class="m-3" />

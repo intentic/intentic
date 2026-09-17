@@ -7,7 +7,11 @@ import { type NoticeModel, NOTICE_BOX, NOTICE_ICON, type NoticeTone } from "./no
 import type { IconName } from "../../icons/iconSets.js";
 import { ui } from "../../lib/ui.js";
 
-const { of, tone, dismissLabel = `` } = defineProps<{
+const {
+    of,
+    tone,
+    dismissLabel = ``,
+} = defineProps<{
     /** The data case: a failure the app already turned into a sentence. */
     of?: NoticeModel;
     /** The authored case for slot content; ignored when `of` is given, which carries its own tone. */
@@ -32,8 +36,8 @@ const boxClass = computed(() => twMerge(NOTICE_BOX[shown.value], attrs[`class`] 
         <Icon :name="icon ?? NOTICE_ICON[shown]" class="mt-px shrink-0" aria-hidden="true" />
         <span class="min-w-0 flex-1">
             <span v-if="of !== undefined" class="block">{{ of.title }}</span>
-<!-- The cause, a shade back: evidence a reader may skip; sized down, not faded, since fading failed contrast. -->
-<!-- `break-words`: the raw cause is often a URL/sha/token wider than the box; else the line pushes the layout. -->
+            <!-- The cause, a shade back: evidence a reader may skip; sized down, not faded, since fading failed contrast. -->
+            <!-- `break-words`: the raw cause is often a URL/sha/token wider than the box; else the line pushes the layout. -->
             <span v-if="of?.detail !== undefined && of.detail !== ``" class="mt-0.5 block break-words text-2xs">{{ of.detail }}</span>
             <slot />
         </span>

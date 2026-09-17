@@ -18,10 +18,13 @@ import { DESK_DIR_ACTIONS, DESK_SEARCH, useDesk } from "./useDesk";
 import { useDeskActions } from "./useDeskActions";
 import DeskPeek from "./DeskPeek.vue";
 import DeskTile from "./DeskTile.vue";
+import { useT } from "@intentic/ui/i18n";
 
 // Drawn by EditorPane in place of the empty state while the desk preference is on. Reads the same tree the explorer
 // draws, opens files into the same tabs, and does to its tiles what the tree does to its rows (useDeskActions). Owns
 // which folder is open, arrow travel and the quick look.
+
+const t = useT();
 
 const { deskDir, openDir, selected } = useDesk();
 const { tree, entriesByPath, lazyChildren, lazyHidden, lazyLoading, rootHidden, loadChildren, isLoading } = useWorkspaceTree();
@@ -70,7 +73,8 @@ const querying = computed(() => query.value.trim() !== ``);
 const searching = computed(() => search?.searching.value === true);
 const entryAt = (path: string): WorkspaceTreeEntry | undefined =>
     entriesByPath.value.get(path) ?? lazyChildren.value.get(parentDir(path))?.find((entry) => entry.path === path);
-const childrenOfEntry = (folder: WorkspaceTreeEntry): readonly WorkspaceTreeEntry[] | undefined => folder.children ?? lazyChildren.value.get(folder.path);
+const childrenOfEntry = (folder: WorkspaceTreeEntry): readonly WorkspaceTreeEntry[] | undefined =>
+    folder.children ?? lazyChildren.value.get(folder.path);
 const results = computed(() => {
     if (search === undefined || !querying.value) {
         return [];
@@ -89,7 +93,9 @@ const clearQuery = (): void => {
     search?.clear();
     scroller.value?.focus({ preventScroll: true });
 };
-const placeholder = computed(() => (search?.scope.value === `text` ? `Search text` : search?.scope.value === `smart` ? `Smart search` : `Filter names`));
+const placeholder = computed(() =>
+    search?.scope.value === `text` ? `Search text` : search?.scope.value === `smart` ? `Smart search` : `Filter names`,
+);
 const queryField = ref<HTMLInputElement>();
 // The field owns its keys; Escape hands the desk back, Enter lands on the first result so the next Enter opens it.
 const onFieldKey = (event: KeyboardEvent): void => {
@@ -246,7 +252,8 @@ watch([children, () => tree.value.length], () => {
 // --- Tiles ---------------------------------------------------------------------------------------------------------
 const dimmed = (entry: WorkspaceTreeEntry): boolean => entry.ignored === true || entry.link?.state !== undefined;
 // The tab stop: the marked tile, else the first, so Tab always enters somewhere.
-const tabindexOf = (entry: WorkspaceTreeEntry): number => (selectedEntry.value === undefined ? (entry === order.value[0] ? 0 : -1) : selected.value === entry.path ? 0 : -1);
+const tabindexOf = (entry: WorkspaceTreeEntry): number =>
+    selectedEntry.value === undefined ? (entry === order.value[0] ? 0 : -1) : selected.value === entry.path ? 0 : -1;
 // A folder takes a drop itself; a file stands in for the folder holding it, as with paste.
 const dropDirOf = (entry: WorkspaceTreeEntry): string => (entry.type === `dir` && entry.link?.state === undefined ? entry.path : deskDir.value);
 // What a tile offers a move: that folder, unless the sandbox keeps it private or it is an archive's contents.
@@ -445,7 +452,10 @@ const onBackgroundMenu = (event: MouseEvent): void => {
     >
         <!-- Where you are; the root wears the scope's own name. Sticky, so a long folder keeps its way back in view. A crumb
              also takes a drop, which is how a tile moves up a level or two. -->
-        <nav class="sticky top-0 z-10 flex items-center gap-1 bg-canvas/85 px-5 pt-4 pb-2 text-xs backdrop-blur" aria-label="Folder path">
+        <nav
+            class="sticky top-0 z-10 flex items-center gap-1 bg-canvas/85 px-5 pt-4 pb-2 text-xs backdrop-blur"
+            :aria-label="t(`workspace.deskView.folderPath`)"
+        >
             <template v-for="(crumb, index) in crumbs" :key="crumb.path">
                 <Icon v-if="index > 0" name="chevron-right" class="text-[0.55rem] text-subtle" aria-hidden="true" />
                 <span v-if="index === crumbs.length - 1" class="font-medium text-content" aria-current="location">{{ crumb.label }}</span>
@@ -466,7 +476,7 @@ const onBackgroundMenu = (event: MouseEvent): void => {
             <!-- Says why there is no New File here and why a drop bounces; the menu's own note only shows on a right-click. -->
             <span v-if="archiveHere" class="ui-chip ml-2 h-5 shrink-0 gap-1 px-1.5 text-2xs text-muted">
                 <Icon name="box" aria-hidden="true" />
-                Read-only
+                {{ t(`workspace.deskView.readOnly`) }}
             </span>
             <!-- The sidebar's query, here too; the placeholder names the scope the sidebar set, since it may be closed. -->
             <div v-if="search !== undefined" class="ml-auto flex items-center gap-2 pl-4">
@@ -495,7 +505,7 @@ const onBackgroundMenu = (event: MouseEvent): void => {
                         v-if="query"
                         type="button"
                         class="absolute top-1/2 right-1.5 flex -translate-y-1/2 items-center rounded text-2xs text-subtle transition-colors hover:text-content"
-                        aria-label="Clear filter"
+                        :aria-label="t(`workspace.deskView.clearFilter`)"
                         @click.stop="clearQuery"
                     >
                         <Icon name="times" />
@@ -513,7 +523,7 @@ const onBackgroundMenu = (event: MouseEvent): void => {
             :leave-to-class="direction === 'forward' ? 'opacity-0 -translate-x-2' : 'opacity-0 translate-x-2'"
             @after-leave="scroller?.scrollTo(0, 0)"
         >
-            <div :key="deskDir" class="px-4 pb-6" role="listbox" aria-multiselectable="true" :aria-label="`Contents of ${here}`">
+            <div :key="deskDir" class="px-4 pb-6" role="listbox" aria-multiselectable="true" :aria-label="t(`workspace.deskView.contents`, { here })">
                 <!-- A wait long enough to show: tile-shaped placeholders, still. -->
                 <div v-if="revealed" class="grid grid-cols-[repeat(auto-fill,minmax(7.5rem,1fr))] gap-0.5" aria-hidden="true">
                     <div v-for="index in 8" :key="index" class="flex flex-col items-center gap-2 px-2 pt-3 pb-2">
@@ -531,7 +541,7 @@ const onBackgroundMenu = (event: MouseEvent): void => {
                             <input
                                 v-model="createDraft"
                                 type="text"
-                                :aria-label="creating === 'dir' ? 'New folder name' : 'New file name'"
+                                :aria-label="creating === 'dir' ? t(`workspace.deskView.newFolderName`) : t(`workspace.deskView.newFileName`)"
                                 class="ui-field-box ui-field-inline w-full min-w-0 px-1 text-center text-xs"
                                 :class="createError !== undefined ? 'ui-field-error-box' : ''"
                                 @click.stop
@@ -545,7 +555,7 @@ const onBackgroundMenu = (event: MouseEvent): void => {
                         </div>
                     </div>
                     <p v-if="order.length === 0 && !loading && !searching && creating === undefined" class="py-12 text-center text-xs text-subtle">
-                        {{ querying ? `Nothing matches "${query.trim()}" in ${here}.` : `Nothing here.` }}
+                        {{ querying ? t(`workspace.deskView.nothingMatchesIn`, { trim: query.trim(), here }) : t(`workspace.deskView.nothingHere`) }}
                     </p>
                     <section v-for="group in groups" :key="group.key">
                         <!-- Named only when there is a second kind to tell apart; a folder of one kind reads without a label. -->
@@ -584,10 +594,10 @@ const onBackgroundMenu = (event: MouseEvent): void => {
                     </section>
                 </template>
                 <p v-if="hiddenTooling > 0 && !querying" class="px-2 pt-4 text-2xs text-subtle">
-                    {{ hiddenTooling.toLocaleString() }} tooling {{ hiddenTooling === 1 ? "file" : "files" }} hidden
+                    {{ t(`workspace.deskView.toolingHidden`, { count: hiddenTooling.toLocaleString() }, hiddenTooling) }}
                 </p>
                 <p v-if="hiddenByCap > 0 && !querying" class="px-2 pt-4 text-2xs text-subtle">
-                    {{ hiddenByCap.toLocaleString() }} more {{ hiddenByCap === 1 ? "entry" : "entries" }} in this folder, search to reach them
+                    {{ t(`workspace.deskView.moreEntries`, { count: hiddenByCap.toLocaleString() }, hiddenByCap) }}
                 </p>
             </div>
         </Transition>
@@ -599,7 +609,7 @@ const onBackgroundMenu = (event: MouseEvent): void => {
             aria-hidden="true"
         >
             <span class="rounded-full border border-primary-500/60 bg-canvas/90 px-3 py-1 text-2xs font-medium text-primary-500 backdrop-blur">
-                {{ dragging ? `Move into ${here}` : `Drop to add to ${here}` }}
+                {{ dragging ? t(`workspace.deskView.moveInto`, { here }) : t(`workspace.deskView.dropToAddTo`, { here }) }}
             </span>
         </div>
 
@@ -608,7 +618,7 @@ const onBackgroundMenu = (event: MouseEvent): void => {
         <ConfirmDialog
             :open="confirmPaths !== undefined"
             :header="deleteTitle"
-            confirm-label="Delete"
+            :confirm-label="t(`ui.action.delete`)"
             confirm-icon="trash"
             :items="confirmPaths ?? []"
             @cancel="cancelDelete"
@@ -619,7 +629,7 @@ const onBackgroundMenu = (event: MouseEvent): void => {
                 <span class="truncate text-content">{{ basename(item) }}</span>
                 <span v-if="parentDir(item) !== ''" class="min-w-0 truncate text-xs text-subtle">{{ parentDir(item) }}</span>
             </template>
-            <p class="mt-3 text-xs text-muted">This can't be undone.</p>
+            <p class="mt-3 text-xs text-muted">{{ t(`workspace.deskView.cantUndone`) }}</p>
         </ConfirmDialog>
     </div>
 </template>

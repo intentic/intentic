@@ -2,13 +2,23 @@
 import { InlineRename, Row } from "@intentic/ui";
 import UsageRing from "../../../components/UsageRing.vue";
 import type { PlanHeadroom } from "../../chat/session/usageStatus";
+import { useT } from "@intentic/ui/i18n";
 
 // One row for every credential the Agent tab shows (native account, subscription, empty and add placeholders),
 // all answering the same question: what am I signed in with, what can I do about it. Fixed anatomy: glyph, editable
 // name, state text, one action, an in-row sign-in panel below. `state` drives only the glyph and tone, never the
 // layout.
 
-const { title, state, activity, headroom, rename, interactive = false } = defineProps<{
+const t = useT();
+
+const {
+    title,
+    state,
+    activity,
+    headroom,
+    rename,
+    interactive = false,
+} = defineProps<{
     title: string;
     // `unknown` is the honest first frame: the daemon hasn't answered, so the dot must not claim either way.
     state: `connected` | `reauth` | `missing` | `unknown` | `add`;
@@ -49,7 +59,7 @@ const DOT_TONE: Record<string, string> = {
             <span class="flex min-w-0 flex-wrap items-center gap-x-2.5" :class="state === `add` ? `text-muted` : ``">
                 <span class="flex w-[1.125rem] shrink-0 justify-center">
                     <Icon v-if="state === `add`" name="plus" class="text-2xs" />
-<!-- Ring replaces the dot when headroom is known, using the same green/yellow/red system. -->
+                    <!-- Ring replaces the dot when headroom is known, using the same green/yellow/red system. -->
                     <UsageRing v-else-if="headroom" :headroom="headroom" :activity="activity" flank="left" />
                     <span v-else class="h-1.5 w-1.5 rounded-full" :class="DOT_TONE[state]" />
                 </span>
@@ -58,8 +68,8 @@ const DOT_TONE: Record<string, string> = {
                     v-if="rename"
                     :value="title"
                     :write="rename"
-                    label="Account name"
-                    action="Rename"
+                    :label="t(`sandbox.connectionRow.accountName`)"
+                    :action="t(`ui.action.rename`)"
                     :maxlength="60"
                     failure="Couldn't rename that account."
                     class="min-w-0"
@@ -70,7 +80,7 @@ const DOT_TONE: Record<string, string> = {
                 </span>
             </span>
         </template>
-<!-- Indented to the title's x, not the glyph's. -->
+        <!-- Indented to the title's x, not the glyph's. -->
         <template v-if="description || descriptionPending" #description>
             <span v-if="descriptionPending" class="flex min-h-[1lh] items-center pl-7" aria-hidden="true">
                 <span class="skeleton block h-2.5 w-56" />

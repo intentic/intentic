@@ -3,6 +3,9 @@
 import type { CapabilityEffect } from "@intentic/capability-catalog";
 import type { IconName } from "@intentic/ui";
 import { computed } from "vue";
+import { useT } from "@intentic/ui/i18n";
+
+const t = useT();
 
 const { effects, compact = false } = defineProps<{ effects: readonly CapabilityEffect[]; compact?: boolean }>();
 
@@ -21,27 +24,27 @@ const describe = (effect: CapabilityEffect): EffectRow => {
             };
         case "secret":
             return effect.exposure === `agent-env`
-                ? { icon: `key`, label: `Stores a secret, injected into the agent's env each turn, never written to disk or shown in Files` }
-                : { icon: `lock`, label: `Stores a secret in your sandbox, never shown in Files` };
+                ? { icon: `key`, label: t(`capabilities.capabilityEffects.storesSecretInjectedInto`) }
+                : { icon: `lock`, label: t(`capabilities.capabilityEffects.storesSecretInSandbox`) };
         case "clone":
             return {
                 icon: `download`,
                 label: effect.url === undefined ? `Clones a git repository into your sandbox` : `Clones ${effect.url} into your sandbox`,
             };
         case "image":
-            return { icon: `box`, label: `Extends the sandbox image, one-time rebuild required` };
+            return { icon: `box`, label: t(`capabilities.capabilityEffects.extendsSandboxImageOne`) };
         case "runtime":
             return effect.level === `privileged`
-                ? { icon: `shield`, label: `Runs the sandbox container privileged, what its own isolated Docker Engine needs`, warn: true }
-                : { icon: `shield`, label: `Requires network-admin container access` };
+                ? { icon: `shield`, label: t(`capabilities.capabilityEffects.runsSandboxContainerPrivileged`), warn: true }
+                : { icon: `shield`, label: t(`capabilities.capabilityEffects.requiresNetworkAdminContainer`) };
         case "gpu":
-            return { icon: `bolt`, label: `Claims every NVIDIA GPU on the host machine, needs its container toolkit installed`, warn: true };
+            return { icon: `bolt`, label: t(`capabilities.capabilityEffects.claimsEveryNvidiaGpu`), warn: true };
         case "restart":
-            return { icon: `refresh`, label: `Applies without a rebuild by restarting ${effect.process}, anything it is running stops` };
+            return { icon: `refresh`, label: t(`capabilities.capabilityEffects.appliesWithoutRebuildBy`, { process: effect.process }) };
         case "process":
             return { icon: `play`, label: `Runs background process${effect.names.length === 1 ? `` : `es`}: ${effect.names.join(`, `)}` };
         case "mcp":
-            return { icon: `bolt`, label: `Registers an MCP server the agent connects to next turn` };
+            return { icon: `bolt`, label: t(`capabilities.capabilityEffects.registersMcpServerAgent`) };
         case "scaffold":
             return {
                 icon: `sitemap`,
@@ -52,19 +55,19 @@ const describe = (effect: CapabilityEffect): EffectRow => {
             };
         case "deploy":
             return effect.provisions
-                ? { icon: `cloud-upload`, label: `Writes a deploy config entry and provisions infrastructure now` }
-                : { icon: `server`, label: `Writes a deploy config entry, applied on the next provision` };
+                ? { icon: `cloud-upload`, label: t(`capabilities.capabilityEffects.writesDeployConfigEntry`) }
+                : { icon: `server`, label: t(`capabilities.capabilityEffects.writesDeployConfigEntry2`) };
         case "trusted-code":
             return {
                 icon: `exclamation-triangle`,
-                label: `Runs code inside the app with your session, owner-only; install only publishers you trust`,
+                label: t(`capabilities.capabilityEffects.runsCodeInsideApp`),
                 warn: true,
             };
         case "profile":
             // Names the passkey as well as the profile, since a stored security key is a bigger thing to hold than a
             // session
             // cookie; both are removed together.
-            return { icon: `globe`, label: `Keeps a logged-in ${effect.platform} browser profile, and any passkey you enroll, in your sandbox` };
+            return { icon: `globe`, label: t(`capabilities.capabilityEffects.keepsLoggedInBrowser`, { platform: effect.platform }) };
         case "machine":
             // The one effect reaching outside the sandbox: warned, and states the actual verbs granted on the user's
             // device.
@@ -117,9 +120,9 @@ const rows = computed<readonly EffectRow[]>(() => effects.map(describe));
             <Icon :name="row.icon" />
         </span>
     </div>
-<!-- Full panel shares the same card and heading tier as <CredentialGuide>, since both live in the same reference column read beside the form. -->
+    <!-- Full panel shares the same card and heading tier as <CredentialGuide>, since both live in the same reference column read beside the form. -->
     <div v-else-if="rows.length > 0" class="ui-card">
-        <div class="mb-3 text-sm font-semibold text-content">This will add to your sandbox</div>
+        <div class="mb-3 text-sm font-semibold text-content">{{ t(`capabilities.capabilityEffects.addToSandbox`) }}</div>
         <ul class="flex flex-col gap-2">
             <li
                 v-for="(row, index) in rows"

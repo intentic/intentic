@@ -22,10 +22,13 @@ import ConnectHost from "./ConnectHost.vue";
 import { useApplyProgress } from "./useApplyProgress";
 import { usePlanPreview } from "./usePlanPreview";
 import { wantedApps } from "./wanted";
+import { useT } from "@intentic/ui/i18n";
 
 // Want-first authoring: declare apps/services via one Add dialog; haves (server, Cloudflare) are demoted to
 // 'What you have' and pulled in just-in-time by a requirement card, never asked up front. Apply resolves in
 // the sandbox, then runs as a detached tmux job whose terminal tab is the durable log.
+
+const t = useT();
 
 const { entries, error: queryError, isLoading, add, remove } = useInventory();
 const { set: setSecret } = useSecrets();
@@ -94,7 +97,9 @@ const actionError = ref<NoticeModel | null>(null);
 const topError = computed<NoticeModel | undefined>(
     () =>
         actionError.value ??
-        (queryError.value === undefined ? undefined : { tone: `danger`, title: `Couldn't read your inventory.`, detail: queryError.value }),
+        (queryError.value === undefined
+            ? undefined
+            : { tone: `danger`, title: t(`views.infraDeclare.couldntReadInventory`), detail: queryError.value }),
 );
 
 // The display chip for an entry: the service label for i.want.service, "App" for i.want.app, else "Server"
@@ -257,8 +262,8 @@ onMounted(progress.recover);
     <div v-if="komodoDown" class="mb-6 flex items-center gap-2 rounded-lg border border-warning/40 bg-warning/10 px-4 py-3 text-sm text-warning">
         <Icon name="exclamation-triangle" class="shrink-0" />
         <span>
-            Your deployment engine (Komodo) is unreachable on your server: deployments can't go live until it's back.
-            <b>Apply changes</b> below repairs it.
+            {{ t(`views.infraDeclare.deploymentEngineKomodoUnreachable`) }}
+            <b>{{ t(`views.infraDeclare.applyChanges`) }}</b> {{ t(`views.infraDeclare.belowRepairs`) }}
         </span>
     </div>
 
@@ -266,18 +271,22 @@ onMounted(progress.recover);
     <section class="@container mb-6">
         <div class="mb-3 flex items-end justify-between gap-3">
             <div class="flex items-center gap-2">
-                <h2 class="text-base font-semibold text-content">What you want</h2>
-                <InfoHint label="What you want">
-                    <span class="block text-sm font-medium text-content">What you want</span>
+                <h2 class="text-base font-semibold text-content">{{ t(`views.infraDeclare.whatWant`) }}</h2>
+                <InfoHint :label="t(`views.infraDeclare.whatWant`)">
+                    <span class="block text-sm font-medium text-content">{{ t(`views.infraDeclare.whatWant`) }}</span>
                     <span class="mt-1 block text-xs text-muted">
-                        What runs on your server: your <b>apps</b> (from your monorepos) and <b>self-hosted services</b> like Outline or SigNoz. Pick
-                        either from the catalog with <b>Add</b>: anything it needs (a server, Cloudflare) is asked for right when it's needed.
+                        {{ t(`views.infraDeclare.whatRunsOnServer`) }} <b>{{ t(`views.infraDeclare.apps`) }}</b>
+                        {{ t(`views.infraDeclare.monorepos`) }} <b>{{ t(`views.infraDeclare.selfHostedServices`) }}</b>
+                        {{ t(`views.infraDeclare.likeOutlineSignozPick`) }} <b>{{ t(`ui.action.add`) }}</b
+                        >{{ t(`views.infraDeclare.anythingNeedsServerCloudflare`) }}
                     </span>
                 </InfoHint>
                 <StatusBadge v-if="convergence" :variant="convergence.variant" :label="convergence.label" size="xs" dot />
-                <RouterLink v-if="liveStatusRoute" :to="liveStatusRoute" class="text-2xs text-link hover:underline">Live status →</RouterLink>
+                <RouterLink v-if="liveStatusRoute" :to="liveStatusRoute" class="text-2xs text-link hover:underline">{{
+                    t(`views.infraDeclare.liveStatus`)
+                }}</RouterLink>
             </div>
-            <Button label="Add" size="small" @click="addOpen = true">
+            <Button :label="t(`ui.action.add`)" size="small" @click="addOpen = true">
                 <template #icon><Icon name="plus" /></template>
             </Button>
         </div>
@@ -285,7 +294,7 @@ onMounted(progress.recover);
         <div class="grid grid-cols-1 gap-4 @lg:grid-cols-2">
             <!-- Apps: declared i.want.app entries union resolved plan union live deployments (see wanted.ts). -->
             <div class="flex flex-col gap-2">
-                <span :class="ui.sectionLabel()">Apps</span>
+                <span :class="ui.sectionLabel()">{{ t(`views.infraDeclare.apps2`) }}</span>
                 <Card v-for="app in apps" :key="app.name" class="flex items-center justify-between gap-3">
                     <div class="min-w-0">
                         <span class="truncate font-medium text-content">{{ app.name }}</span>
@@ -294,7 +303,13 @@ onMounted(progress.recover);
                     <div class="flex shrink-0 items-center gap-1">
                         <StatusBadge
                             :variant="app.status === 'live' ? 'success' : app.status === 'planned' ? 'info' : 'neutral'"
-                            :label="app.status === 'live' ? 'Live' : app.status === 'planned' ? 'Planned' : 'Declared'"
+                            :label="
+                                app.status === 'live'
+                                    ? t(`views.infraDeclare.live`)
+                                    : app.status === 'planned'
+                                      ? t(`views.infraDeclare.planned`)
+                                      : t(`views.infraDeclare.declared`)
+                            "
                             size="xs"
                             dot
                         />
@@ -303,7 +318,7 @@ onMounted(progress.recover);
                             size="small"
                             severity="danger"
                             :text="true"
-                            aria-label="Remove app"
+                            :aria-label="t(`views.infraDeclare.removeApp`)"
                             @click="removeEntry(app.name)"
                         >
                             <template #icon><Icon name="trash" /></template>
@@ -311,13 +326,14 @@ onMounted(progress.recover);
                     </div>
                 </Card>
                 <Card v-if="apps.length === 0" :dashed="true" class="text-center text-xs text-muted">
-                    No app yet. <b>Add</b>: the apps in your monorepos are in the catalog.
+                    {{ t(`views.infraDeclare.noAppYet`) }} <b>{{ t(`ui.action.add`) }}</b
+                    >{{ t(`views.infraDeclare.appsInMonoreposIn`) }}
                 </Card>
             </div>
 
             <!-- Self-hosted services = i.want.service entries (removable here). -->
             <div class="flex flex-col gap-2">
-                <span :class="ui.sectionLabel()">Self-hosted services</span>
+                <span :class="ui.sectionLabel()">{{ t(`views.infraDeclare.selfHostedServices2`) }}</span>
                 <Card v-for="tool in tools" :key="tool.name" class="flex items-center justify-between gap-3">
                     <div class="min-w-0">
                         <div class="flex items-center gap-2">
@@ -326,12 +342,19 @@ onMounted(progress.recover);
                         </div>
                         <p v-if="summary(tool)" class="mt-0.5 truncate font-mono text-2xs text-subtle">{{ summary(tool) }}</p>
                     </div>
-                    <Button size="small" severity="danger" :text="true" aria-label="Remove service" @click="removeEntry(tool.name)">
+                    <Button
+                        size="small"
+                        severity="danger"
+                        :text="true"
+                        :aria-label="t(`views.infraDeclare.removeService`)"
+                        @click="removeEntry(tool.name)"
+                    >
                         <template #icon><Icon name="trash" /></template>
                     </Button>
                 </Card>
                 <Card v-if="tools.length === 0" :dashed="true" class="text-center text-xs text-muted">
-                    No services yet. <b>Add</b>: Outline, Paperless-ngx, OpenProject, SigNoz and more.
+                    {{ t(`views.infraDeclare.noServicesYet`) }} <b>{{ t(`ui.action.add`) }}</b
+                    >{{ t(`views.infraDeclare.outlinePaperlessNgxOpenproject`) }}
                 </Card>
             </div>
         </div>
@@ -341,13 +364,13 @@ onMounted(progress.recover);
     <section v-if="needsHost || needsCloudflare" class="mb-6 flex flex-col gap-3">
         <Card v-if="needsHost" class="flex flex-col gap-3">
             <ConnectHost>
-                <template #reason>What you want needs a server to run on.</template>
+                <template #reason>{{ t(`views.infraDeclare.whatWantNeedsServer`) }}</template>
             </ConnectHost>
         </Card>
         <Card v-if="needsCloudflare" class="flex flex-col gap-3">
             <div class="min-w-0">
-                <span class="font-medium text-content">Connect Cloudflare</span>
-                <p class="mt-0.5 text-xs text-muted">What you want needs a domain: Cloudflare puts it on one, reachable through a tunnel.</p>
+                <span class="font-medium text-content">{{ t(`views.infraDeclare.connectCloudflare`) }}</span>
+                <p class="mt-0.5 text-xs text-muted">{{ t(`views.infraDeclare.whatWantNeedsDomain`) }}</p>
             </div>
             <CloudflareConnect />
         </Card>
@@ -357,12 +380,12 @@ onMounted(progress.recover);
     <details class="group mb-6">
         <summary class="flex cursor-pointer list-none items-center gap-2 [&::-webkit-details-marker]:hidden">
             <Icon name="chevron-right" aria-hidden="true" class="text-xs text-subtle transition-transform group-open:rotate-90" />
-            <h2 class="text-base font-semibold text-content">What you have</h2>
+            <h2 class="text-base font-semibold text-content">{{ t(`views.infraDeclare.what`) }}</h2>
             <span class="text-xs text-muted">{{ haveSummary }}</span>
         </summary>
         <div class="mt-3">
             <div class="mb-3 flex items-center justify-end">
-                <Button v-if="!showConnect" label="Add server" size="small" severity="secondary" @click="showConnect = true">
+                <Button v-if="!showConnect" :label="t(`views.infraDeclare.addServer`)" size="small" severity="secondary" @click="showConnect = true">
                     <template #icon><Icon name="plus" /></template>
                 </Button>
             </div>
@@ -372,27 +395,42 @@ onMounted(progress.recover);
                 <div class="flex items-start justify-between gap-3">
                     <div class="min-w-0">
                         <div class="flex items-center gap-2">
-                            <span class="font-medium text-content">Source control</span>
+                            <span class="font-medium text-content">{{ t(`views.infraDeclare.sourceControl`) }}</span>
                             <StatusBadge v-if="hasGithub" variant="success" size="xs"><Icon name="check" class="text-2xs" /> GitHub</StatusBadge>
                             <StatusBadge v-else-if="hasGitlab" variant="success" size="xs"><Icon name="check" class="text-2xs" /> GitLab</StatusBadge>
                         </div>
                         <p class="mt-0.5 text-xs text-muted">
-                            <template v-if="hasGithub">Your DevOps repos live on GitHub: no Forgejo to run.</template>
-                            <template v-else-if="hasGitlab">Your DevOps repos live on GitLab: no Forgejo to run.</template>
+                            <template v-if="hasGithub">{{ t(`views.infraDeclare.devopsReposLiveOn`) }}</template>
+                            <template v-else-if="hasGitlab">{{ t(`views.infraDeclare.devopsReposLiveOn2`) }}</template>
                             <template v-else
-                                >Default is self-hosted <b>Forgejo</b> (provisioned for you). Link <b>GitHub</b> or <b>GitLab</b> to use one
-                                instead.</template
+                                >{{ t(`views.infraDeclare.defaultSelfHosted`) }} <b>{{ t(`views.infraDeclare.forgejo`) }}</b>
+                                {{ t(`views.infraDeclare.provisionedLink`) }} <b>GitHub</b> {{ t(`views.infraDeclare.or`) }} <b>GitLab</b>
+                                {{ t(`views.infraDeclare.toUseOneInstead`) }}</template
                             >
                         </p>
                     </div>
                     <div class="flex shrink-0 items-center gap-2">
-                        <Button v-if="hasGithub" label="Unlink" size="small" severity="secondary" :text="true" @click="removeEntry('gh')" />
-                        <Button v-else-if="hasGitlab" label="Unlink" size="small" severity="secondary" :text="true" @click="removeEntry('gl')" />
+                        <Button
+                            v-if="hasGithub"
+                            :label="t(`views.infraDeclare.unlink`)"
+                            size="small"
+                            severity="secondary"
+                            :text="true"
+                            @click="removeEntry('gh')"
+                        />
+                        <Button
+                            v-else-if="hasGitlab"
+                            :label="t(`views.infraDeclare.unlink`)"
+                            size="small"
+                            severity="secondary"
+                            :text="true"
+                            @click="removeEntry('gl')"
+                        />
                         <template v-else-if="!showGithub && !showGitlab">
-                            <Button label="Link GitHub" size="small" severity="secondary" @click="showGithub = true">
+                            <Button :label="t(`views.infraDeclare.linkGithub`)" size="small" severity="secondary" @click="showGithub = true">
                                 <template #icon><Icon name="github" /></template>
                             </Button>
-                            <Button label="Link GitLab" size="small" severity="secondary" @click="showGitlab = true">
+                            <Button :label="t(`views.infraDeclare.linkGitlab`)" size="small" severity="secondary" @click="showGitlab = true">
                                 <template #icon><Icon name="gitlab" /></template>
                             </Button>
                         </template>
@@ -400,41 +438,56 @@ onMounted(progress.recover);
                 </div>
                 <form v-if="showGithub && !hasGithub" class="flex flex-col gap-2" @submit.prevent="submitGithub">
                     <Notice tone="info" class="text-2xs">
-                        GitHub source control doesn't yet support managed databases/caches. Use the self-hosted default if your app needs one.
+                        {{ t(`views.infraDeclare.githubSourceControlDoesnt`) }}
                     </Notice>
                     <label class="ui-field">
-                        <span class="ui-field-label">GitHub personal access token</span>
-                        <SecretField v-model="ghToken" secret-key="GITHUB_TOKEN" collect placeholder="ghp_…" />
+                        <span class="ui-field-label">{{ t(`views.infraDeclare.githubPersonalAccessToken`) }}</span>
+                        <SecretField v-model="ghToken" secret-key="GITHUB_TOKEN" collect :placeholder="t(`views.infraDeclare.ghp`)" />
                         <span class="text-2xs text-subtle"
-                            >Stored in your sandbox's .env as <span class="font-mono">GITHUB_TOKEN</span>: never on the platform.</span
+                            >{{ t(`views.infraDeclare.storedInSandboxsEnv`) }} <span class="font-mono">GITHUB_TOKEN</span
+                            >{{ t(`views.infraDeclare.neverOnPlatform`) }}</span
                         >
                     </label>
                     <div class="flex justify-end gap-2">
-                        <Button type="button" label="Cancel" severity="secondary" :text="true" @click="showGithub = false" />
-                        <Button type="submit" label="Link GitHub" :disabled="ghToken.trim().length === 0 || ghSubmitting" :loading="ghSubmitting">
+                        <Button type="button" :label="t(`ui.action.cancel`)" severity="secondary" :text="true" @click="showGithub = false" />
+                        <Button
+                            type="submit"
+                            :label="t(`views.infraDeclare.linkGithub`)"
+                            :disabled="ghToken.trim().length === 0 || ghSubmitting"
+                            :loading="ghSubmitting"
+                        >
                             <template #icon><Icon name="github" /></template>
                         </Button>
                     </div>
                 </form>
                 <form v-if="showGitlab && !hasGitlab" class="flex flex-col gap-2" @submit.prevent="submitGitlab">
                     <Notice tone="info" class="text-2xs">
-                        GitLab source control doesn't yet support managed databases/caches. Use the self-hosted default if your app needs one.
+                        {{ t(`views.infraDeclare.gitlabSourceControlDoesnt`) }}
                     </Notice>
                     <label class="ui-field">
-                        <span class="ui-field-label">GitLab personal access token</span>
-                        <SecretField v-model="glToken" secret-key="GITLAB_TOKEN" collect placeholder="glpat-…" />
+                        <span class="ui-field-label">{{ t(`views.infraDeclare.gitlabPersonalAccessToken`) }}</span>
+                        <SecretField v-model="glToken" secret-key="GITLAB_TOKEN" collect :placeholder="t(`views.infraDeclare.glpat`)" />
                         <span class="text-2xs text-subtle"
-                            >Stored in your sandbox's .env as <span class="font-mono">GITLAB_TOKEN</span>: never on the platform.</span
+                            >{{ t(`views.infraDeclare.storedInSandboxsEnv`) }} <span class="font-mono">GITLAB_TOKEN</span
+                            >{{ t(`views.infraDeclare.neverOnPlatform`) }}</span
                         >
                     </label>
                     <label class="ui-field">
-                        <span class="ui-field-label">GitLab URL <span class="text-subtle">(optional: self-hosted)</span></span>
+                        <span class="ui-field-label"
+                            >{{ t(`views.infraDeclare.gitlabUrl`) }}
+                            <span class="text-subtle">{{ t(`views.infraDeclare.optionalSelfHosted`) }}</span></span
+                        >
                         <input v-model="glUrl" type="text" autocomplete="off" placeholder="https://gitlab.com" :class="ui.input()" />
-                        <span class="text-2xs text-subtle">Leave blank for gitlab.com.</span>
+                        <span class="text-2xs text-subtle">{{ t(`views.infraDeclare.leaveBlankGitlabCom`) }}</span>
                     </label>
                     <div class="flex justify-end gap-2">
-                        <Button type="button" label="Cancel" severity="secondary" :text="true" @click="showGitlab = false" />
-                        <Button type="submit" label="Link GitLab" :disabled="glToken.trim().length === 0 || glSubmitting" :loading="glSubmitting">
+                        <Button type="button" :label="t(`ui.action.cancel`)" severity="secondary" :text="true" @click="showGitlab = false" />
+                        <Button
+                            type="submit"
+                            :label="t(`views.infraDeclare.linkGitlab`)"
+                            :disabled="glToken.trim().length === 0 || glSubmitting"
+                            :loading="glSubmitting"
+                        >
                             <template #icon><Icon name="gitlab" /></template>
                         </Button>
                     </div>
@@ -447,31 +500,47 @@ onMounted(progress.recover);
                     <div class="min-w-0">
                         <div class="flex items-center gap-2">
                             <span class="font-medium text-content">Stripe</span>
-                            <StatusBadge v-if="hasStripe" variant="success" size="xs"><Icon name="check" class="text-2xs" /> Connected</StatusBadge>
+                            <StatusBadge v-if="hasStripe" variant="success" size="xs"
+                                ><Icon name="check" class="text-2xs" /> {{ t(`views.infraDeclare.connected`) }}</StatusBadge
+                            >
                         </div>
                         <p class="mt-0.5 text-xs text-muted">
-                            <template v-if="hasStripe">Your apps get the Stripe API key on deploy.</template>
-                            <template v-else>Connect your Stripe account so your apps can take payments.</template>
+                            <template v-if="hasStripe">{{ t(`views.infraDeclare.appsGetStripeApi`) }}</template>
+                            <template v-else>{{ t(`views.infraDeclare.connectStripeAccountApps`) }}</template>
                         </p>
                     </div>
-                    <Button v-if="hasStripe" label="Disconnect" size="small" severity="secondary" :text="true" @click="removeEntry('stripe')" />
-                    <Button v-else-if="!showStripe" label="Connect Stripe" size="small" severity="secondary" @click="showStripe = true">
+                    <Button
+                        v-if="hasStripe"
+                        :label="t(`ui.action.disconnect`)"
+                        size="small"
+                        severity="secondary"
+                        :text="true"
+                        @click="removeEntry('stripe')"
+                    />
+                    <Button
+                        v-else-if="!showStripe"
+                        :label="t(`views.infraDeclare.connectStripe`)"
+                        size="small"
+                        severity="secondary"
+                        @click="showStripe = true"
+                    >
                         <template #icon><Icon name="credit-card" /></template>
                     </Button>
                 </div>
                 <form v-if="showStripe && !hasStripe" class="flex flex-col gap-2" @submit.prevent="submitStripe">
                     <label class="ui-field">
-                        <span class="ui-field-label">Stripe API key</span>
-                        <SecretField v-model="stripeKey" secret-key="STRIPE_API_KEY" collect placeholder="sk_…" />
+                        <span class="ui-field-label">{{ t(`views.infraDeclare.stripeApiKey`) }}</span>
+                        <SecretField v-model="stripeKey" secret-key="STRIPE_API_KEY" collect :placeholder="t(`views.infraDeclare.sk`)" />
                         <span class="text-2xs text-subtle"
-                            >Stored in your sandbox's .env as <span class="font-mono">STRIPE_API_KEY</span>: never on the platform.</span
+                            >{{ t(`views.infraDeclare.storedInSandboxsEnv`) }} <span class="font-mono">STRIPE_API_KEY</span
+                            >{{ t(`views.infraDeclare.neverOnPlatform`) }}</span
                         >
                     </label>
                     <div class="flex justify-end gap-2">
-                        <Button type="button" label="Cancel" severity="secondary" :text="true" @click="showStripe = false" />
+                        <Button type="button" :label="t(`ui.action.cancel`)" severity="secondary" :text="true" @click="showStripe = false" />
                         <Button
                             type="submit"
-                            label="Connect Stripe"
+                            :label="t(`views.infraDeclare.connectStripe`)"
                             :disabled="stripeKey.trim().length === 0 || stripeSubmitting"
                             :loading="stripeSubmitting"
                         >
@@ -488,16 +557,29 @@ onMounted(progress.recover);
                         <div class="flex items-center gap-2">
                             <span class="font-medium text-content">Cloudflare</span>
                             <StatusBadge v-if="hasCloudflare" variant="success" size="xs"
-                                ><Icon name="check" class="text-2xs" /> Connected</StatusBadge
+                                ><Icon name="check" class="text-2xs" /> {{ t(`views.infraDeclare.connected`) }}</StatusBadge
                             >
                         </div>
                         <p class="mt-0.5 text-xs text-muted">
-                            <template v-if="hasCloudflare">Your services can be put on a domain, reachable through a Cloudflare tunnel.</template>
-                            <template v-else>Connect Cloudflare so your services can be reached on a domain.</template>
+                            <template v-if="hasCloudflare">{{ t(`views.infraDeclare.servicesPutOnDomain`) }}</template>
+                            <template v-else>{{ t(`views.infraDeclare.connectCloudflareServicesReached`) }}</template>
                         </p>
                     </div>
-                    <Button v-if="hasCloudflare" label="Disconnect" size="small" severity="secondary" :text="true" @click="removeEntry('cf')" />
-                    <Button v-else-if="!showCloudflare" label="Connect Cloudflare" size="small" severity="secondary" @click="showCloudflare = true">
+                    <Button
+                        v-if="hasCloudflare"
+                        :label="t(`ui.action.disconnect`)"
+                        size="small"
+                        severity="secondary"
+                        :text="true"
+                        @click="removeEntry('cf')"
+                    />
+                    <Button
+                        v-else-if="!showCloudflare"
+                        :label="t(`views.infraDeclare.connectCloudflare`)"
+                        size="small"
+                        severity="secondary"
+                        @click="showCloudflare = true"
+                    >
                         <template #icon><Icon name="cloud" /></template>
                     </Button>
                 </div>
@@ -507,7 +589,7 @@ onMounted(progress.recover);
             <Card v-if="showConnect" class="mb-3 flex flex-col gap-3">
                 <ConnectHost />
                 <div class="flex justify-end">
-                    <Button type="button" label="Close" severity="secondary" :text="true" @click="showConnect = false" />
+                    <Button type="button" :label="t(`ui.action.close`)" severity="secondary" :text="true" @click="showConnect = false" />
                 </div>
             </Card>
 
@@ -521,7 +603,13 @@ onMounted(progress.recover);
                         </div>
                         <p v-if="summary(entry)" class="mt-0.5 truncate font-mono text-2xs text-subtle">{{ summary(entry) }}</p>
                     </div>
-                    <Button size="small" severity="danger" :text="true" aria-label="Remove server" @click="removingServer = entry.name">
+                    <Button
+                        size="small"
+                        severity="danger"
+                        :text="true"
+                        :aria-label="t(`views.infraDeclare.removeServer`)"
+                        @click="removingServer = entry.name"
+                    >
                         <template #icon><Icon name="trash" /></template>
                     </Button>
                 </Card>
@@ -532,20 +620,20 @@ onMounted(progress.recover);
                     class="flex flex-col items-center gap-3 py-8 text-center"
                 >
                     <Icon name="box" class="text-2xl text-subtle" />
-                    <p class="text-sm text-muted">No server yet. One is asked for when something you want needs it.</p>
+                    <p class="text-sm text-muted">{{ t(`views.infraDeclare.noServerYetOne`) }}</p>
                 </Card>
             </div>
         </div>
     </details>
 
-<!-- Review the plan, then apply. -->
+    <!-- Review the plan, then apply. -->
     <div class="mb-8 flex flex-col items-center gap-3 border-y border-line py-6">
         <template v-if="hasHost && wantsSomething">
             <!-- What applying will do, before anything changes (resolve to plan, read-only). -->
             <ChangePreview :preview="preview" />
 
             <Button
-                :label="isFirstProvision ? 'Set up & deploy' : 'Apply changes'"
+                :label="isFirstProvision ? t(`views.infraDeclare.setUpDeploy`) : t(`views.infraDeclare.applyChanges`)"
                 :disabled="!canApply"
                 :loading="applying"
                 @click="progress.launch()"
@@ -553,45 +641,43 @@ onMounted(progress.recover);
                 <template #icon><Icon name="bolt" /></template>
             </Button>
             <p class="max-w-lg text-center text-xs text-subtle">
-                <template v-if="needsPreview">Preview your changes above, then apply.</template>
-                <template v-else-if="isFirstProvision">
-                    Installs Komodo{{ hasGithub || hasGitlab ? "" : " and Forgejo" }} on your server to run deployments, then deploys what you
-                    configured. Takes a few minutes.
-                </template>
-                <template v-else>Builds what you configured on your server.</template>
+                <template v-if="needsPreview">{{ t(`views.infraDeclare.previewChangesAboveApply`) }}</template>
+                <template v-else-if="isFirstProvision">{{
+                    hasGithub || hasGitlab ? t(`views.infraDeclare.installsKomodo`) : t(`views.infraDeclare.installsKomodoAndForgejo`)
+                }}</template>
+                <template v-else>{{ t(`views.infraDeclare.buildsWhatConfiguredOn`) }}</template>
             </p>
 
-<!-- Live apply progress from the durable event stream; survives a refresh and keeps the terminal reachable via "View logs". -->
+            <!-- Live apply progress from the durable event stream; survives a refresh and keeps the terminal reachable via "View logs". -->
             <ApplyProgress v-if="showApplyProgress" :progress="progress" />
         </template>
         <p v-else-if="!wantsSomething" class="max-w-lg text-center text-sm text-muted">
-            <b>Add</b> an app or a service above: the first apply then sets up your server to run it.
+            <b>{{ t(`ui.action.add`) }}</b> {{ t(`views.infraDeclare.appServiceAboveFirst`) }}
         </p>
-        <p v-else class="max-w-lg text-center text-sm text-muted">Connect a server above: then apply builds what you want on it.</p>
+        <p v-else class="max-w-lg text-center text-sm text-muted">{{ t(`views.infraDeclare.connectServerAboveApply`) }}</p>
     </div>
 
     <AddWantDialog v-model:visible="addOpen" @added="onAdded" />
 
-<!-- Server removal is two separate acts: forgetting it here vs wiping the machine. -->
+    <!-- Server removal is two separate acts: forgetting it here vs wiping the machine. -->
     <ConfirmDialog
         :open="removingServer !== undefined"
-        header="Remove server"
-        confirm-label="Remove server"
+        :header="t(`views.infraDeclare.removeServer`)"
+        :confirm-label="t(`views.infraDeclare.removeServer`)"
         size="md"
         @cancel="removingServer = undefined"
         @confirm="confirmRemoveServer"
     >
         <div class="flex flex-col gap-3">
             <p class="text-sm text-muted">
-                This forgets <b class="text-content">{{ removingServer }}</b> from your inventory: its entry and stored SSH key. The machine itself is
-                not touched: <b>everything already deployed keeps running on it</b> until you clean it up.
+                {{ t(`views.infraDeclare.forgets`) }} <b class="text-content">{{ removingServer }}</b>
+                {{ t(`views.infraDeclare.inventoryEntryStoredSsh`) }} <b>{{ t(`views.infraDeclare.everythingAlreadyDeployedKeeps`) }}</b>
+                {{ t(`views.infraDeclare.untilCleanUp`) }}
             </p>
-            <Code :code="cleanupHostCommand" lang="bash" label="Run on the server (as root) to wipe everything intentic put there" :wrap="true" />
+            <Code :code="cleanupHostCommand" lang="bash" :label="t(`views.infraDeclare.runOnServerRoot`)" :wrap="true" />
             <p class="text-xs text-subtle">
-                The script lists exactly what it found and asks before removing anything: the deployed containers and their volumes (databases
-                included), the deployment state under /opt/intentic: <b>including the on-host backup repo</b>, the tunnel connector service, and the
-                intentic service user. Docker itself stays. This host's Cloudflare tunnel + DNS records are cleaned up from here on the next apply,
-                not by the script.
+                {{ t(`views.infraDeclare.scriptListsExactlyWhat`) }} <b>{{ t(`views.infraDeclare.includingOnHostBackup`) }}</b
+                >{{ t(`views.infraDeclare.tunnelConnectorServiceIntentic`) }}
             </p>
         </div>
     </ConfirmDialog>

@@ -9,6 +9,7 @@ import { type ExtensionFacet, facetsOf, searchTextOf } from "./extensionFacets";
 import { backendState, type ExtensionState, extensionState } from "./extensionState";
 import { useCapabilities } from "../capabilities/connect/useCapabilities";
 import { useExtensions } from "./useExtensions";
+import { t } from "@intentic/ui/i18n";
 
 // Extensions tab's row model: joins the daemon's list, the extension host's per-browser statuses, and configured
 // capabilities into one row, computed once instead of per render inside the row component.
@@ -67,7 +68,7 @@ export function useExtensionList() {
                 // A blocked advisory or unhealthy update outranks both halves, always pinning the row to attention.
                 const registryState: ExtensionState | undefined =
                     extension.advisory !== undefined
-                        ? { label: `blocked`, variant: `danger`, badge: true, attention: true }
+                        ? { label: t(`extensions.useExtensionList.blocked`), variant: `danger`, badge: true, attention: true }
                         : extension.health?.state === `unhealthy`
                           ? {
                                 label: extension.health.autoReverted === true ? `update rolled back` : `update unhealthy`,

@@ -1,13 +1,21 @@
 import type { ApprovalsList, AutomationApproval, PostApprovalSummary } from "@intentic/sandbox-contract";
 import type { Activation, ExtensionContext, HostQuery, IntenticApi, ViewRegistration } from "@intentic/extension-api";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { registerExtensionMessages } from "@intentic/extension-ui/i18n";
+import { extensionIdOf } from "@intentic/extension-manifest";
 import { activate } from "./extension";
 import { bindHost } from "./host";
+import { messages } from "./i18n";
+import { manifest } from "./manifest";
 import { owedOf } from "./useApprovals";
 import { heldWakesQuery, waitingOf } from "./useHeldWakes";
 
 // The badge seats the tile; it counts proposals owing a decision and automations held for one, never anything already
 // underway.
+
+// The host registers this before it calls `activate`; a test that calls `activate` itself has to, or every label it
+// asserts on reads as its own dotted key.
+await registerExtensionMessages(extensionIdOf(manifest), messages);
 
 const post = (id: string, over: Partial<PostApprovalSummary> = {}): PostApprovalSummary => ({
     id,

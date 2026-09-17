@@ -20,7 +20,7 @@ import { useRouter } from "vue-router";
 import ReviewStat from "../../../components/ReviewStat.vue";
 import { stopAgent } from "../fleet/agentActions";
 import { boxNameOf, openInSandbox } from "../fleet/fleetScope";
-import { type Blocker, REASON_COPY } from "./conflictResolution";
+import { type Blocker, reasonCopy } from "./conflictResolution";
 import { AGENT_FILE_DIFF_OPTIONS, agentFileDiffKey, type AgentReviewFile, readAgentFileDiff, useAgentChanges } from "./useAgentChanges";
 import { useAgentHistory } from "../fleet/useAgentHistory";
 import { documentsAt } from "../../../core-views/documentRegistry";
@@ -46,6 +46,7 @@ import DiffSkeleton from "../../workspace/viewers/DiffSkeleton.vue";
 import ReviewGroupCheck from "./ReviewGroupCheck.vue";
 import { groupCountLabel, groupPassOn, rowAfterGroup, viewedIn } from "./reviewGroupPass";
 import { basename } from "@intentic/ui/path";
+import { useT } from "@intentic/ui/i18n";
 
 // One agent's work as a review: file list on the left, that file's diff on the right, the shape every code review
 // has. Replaces the old panel's mistakes:
@@ -57,6 +58,8 @@ import { basename } from "@intentic/ui/path";
 //
 // Keyboard (outside text fields and Monaco): arrows/j/k move, v marks viewed and advances, Shift+V marks a
 // heading's rows and advances past them.
+
+const t = useT();
 
 const { agentId, at, changes } = defineProps<{
     agentId: string;
@@ -111,18 +114,22 @@ const outline = useLoadingReveal(
 type ReviewFilter = `all` | `blocked` | `code` | `tests` | `pending` | `history`;
 const filter = ref<ReviewFilter>(`all`);
 const filterOptions = computed<{ label: string; value: ReviewFilter }[]>(() => [
-    ...(changes.count.value > 0 ? [{ label: `All ${changes.count.value}`, value: `all` as const }] : []),
-    ...(changes.blocked.value.length > 0 ? [{ label: `Blocked ${changes.blocked.value.length}`, value: `blocked` as const }] : []),
+    ...(changes.count.value > 0 ? [{ label: t(`agents.agentReviewPanel.all`, { count: changes.count.value }), value: `all` as const }] : []),
+    ...(changes.blocked.value.length > 0
+        ? [{ label: t(`agents.agentReviewPanel.blocked2`, { count: changes.blocked.value.length }), value: `blocked` as const }]
+        : []),
     ...(changes.testStat.value.files > 0 && changes.codeStat.value.files > 0
         ? [
-              { label: `Code ${changes.codeStat.value.files}`, value: `code` as const },
-              { label: `Tests ${changes.testStat.value.files}`, value: `tests` as const },
+              { label: t(`agents.agentReviewPanel.code`, { files: changes.codeStat.value.files }), value: `code` as const },
+              { label: t(`agents.agentReviewPanel.tests`, { files: changes.testStat.value.files }), value: `tests` as const },
           ]
         : []),
     ...(changes.pending.value.length > 0 && changes.pending.value.length < changes.count.value
-        ? [{ label: `Not landed ${changes.pending.value.length}`, value: `pending` as const }]
+        ? [{ label: t(`agents.agentReviewPanel.notLanded2`, { count: changes.pending.value.length }), value: `pending` as const }]
         : []),
-    ...(history.count.value > 0 ? [{ label: `In history ${history.count.value}`, value: `history` as const }] : []),
+    ...(history.count.value > 0
+        ? [{ label: t(`agents.agentReviewPanel.inHistory`, { count: history.count.value }), value: `history` as const }]
+        : []),
 ]);
 // Falls back to the first available option (not `all`) when the current filter's option disappears, since `all`
 // itself can be the one missing option (nothing left to be all of).
@@ -570,24 +577,24 @@ const seamWidth = computed<number>({
         <div v-if="changes.error.value" :class="[NOTICE, 'mx-2 mt-2 shrink-0']">
             <Icon name="exclamation-triangle" class="mt-0.5 shrink-0 text-2xs text-danger" />
             <div class="min-w-0 flex-1">
-                <p class="text-2xs font-medium text-danger">Couldn't read this agent's changes</p>
+                <p class="text-2xs font-medium text-danger">{{ t(`agents.agentReviewPanel.couldntReadAgentsChanges`) }}</p>
                 <p class="break-words text-2xs text-muted">{{ changes.error.value }}</p>
             </div>
         </div>
         <Notice v-if="changes.actionError.value" :of="changes.actionError.value" class="mx-2 mt-2 shrink-0" />
 
-<!-- What a merge land left behind: everything else applied, these files carry markers to finish in the workspace. -->
+        <!-- What a merge land left behind: everything else applied, these files carry markers to finish in the workspace. -->
         <div v-if="resolvingPaths.length > 0" class="mx-2 mt-2 flex shrink-0 flex-col gap-1 rounded-md border border-info/40 bg-info/10 px-2 py-1.5">
-            <span class="text-2xs font-medium text-info">
-                Landed with {{ resolvingPaths.length }} file{{ resolvingPaths.length === 1 ? "" : "s" }} to finish
-            </span>
+            <span class="text-2xs font-medium text-info">{{
+                t(`agents.agentReviewPanel.landedWithFiles`, { count: resolvingPaths.length }, resolvingPaths.length)
+            }}</span>
             <p class="text-2xs text-muted">
-                Everything else applied. These carry conflict markers in your workspace: resolve them there, as you would any merge.
+                {{ t(`agents.agentReviewPanel.everythingElseAppliedCarry`) }}
             </p>
             <p class="break-all font-mono text-2xs text-muted">{{ resolvingPaths.join(", ") }}</p>
         </div>
 
-<!-- The conflict report and its action ladder; mounted rather than inlined since it holds its own decision tree. -->
+        <!-- The conflict report and its action ladder; mounted rather than inlined since it holds its own decision tree. -->
         <AgentConflictReport
             v-if="changes.conflicts.value !== undefined && changes.conflicts.value.length > 0"
             class="mx-2 mt-2"
@@ -606,17 +613,17 @@ const seamWidth = computed<number>({
             @select="jumpTo"
         />
 
-<!-- Where the committed work went, shown only while `history` is the active filter, since it isn't what the reader is doing otherwise. -->
+        <!-- Where the committed work went, shown only while `history` is the active filter, since it isn't what the reader is doing otherwise. -->
         <div
             v-if="filter === 'history' && history.commits.value.length > 0"
             class="mx-2 mt-2 flex shrink-0 flex-col gap-1 rounded-md border border-success/40 bg-success/10 px-2 py-1.5"
         >
             <span class="inline-flex items-center gap-1 text-2xs font-medium text-success">
-                <Icon name="check" class="text-2xs" />In {{ remoteName === undefined ? "your" : `${remoteName}'s` }} history
+                <Icon name="check" class="text-2xs" />{{ t(`agents.agentReviewPanel.in`) }}
+                {{ remoteName === undefined ? "your" : `${remoteName}'s` }} {{ t(`agents.agentReviewPanel.history`) }}
             </span>
             <p class="text-2xs text-muted">
-                You committed this work, so it is not a difference against main any more and the review above cannot list it. It is still readable
-                here, file by file, exactly as the agent wrote it.
+                {{ t(`agents.agentReviewPanel.committedWorkNotDifference`) }}
             </p>
             <button
                 v-for="commit in history.commits.value"
@@ -626,23 +633,26 @@ const seamWidth = computed<number>({
                 :class="graphs.get(commit.repo) === undefined ? 'cursor-default' : 'hover:bg-overlay'"
                 :disabled="graphs.get(commit.repo) === undefined"
                 @click="openGitHistory(commit.repo)"
-                v-tooltip.bottom="graphs.get(commit.repo) === undefined ? undefined : 'Open this repository\'s git history'"
+                v-tooltip.bottom="graphs.get(commit.repo) === undefined ? undefined : t(`agents.agentReviewPanel.openRepositorysGitHistory`)"
             >
                 <span class="shrink-0 rounded bg-overlay px-1 py-px font-mono text-2xs text-muted">{{ commit.short }}</span>
                 <span class="min-w-0 flex-1 truncate text-2xs text-content" v-tooltip.bottom.overflow="commit.subject">{{ commit.subject }}</span>
-                <span class="shrink-0 text-2xs text-subtle">
-                    {{ commit.author }} · {{ historyStamp(commit.at) }} · {{ commit.changes.length }} file{{ commit.changes.length === 1 ? "" : "s" }}
-                </span>
+                <span class="shrink-0 text-2xs text-subtle">{{
+                    t(
+                        `agents.agentReviewPanel.commitLine`,
+                        { author: commit.author, when: historyStamp(commit.at), count: commit.changes.length },
+                        commit.changes.length,
+                    )
+                }}</span>
                 <Icon v-if="graphs.get(commit.repo) !== undefined" name="sitemap" class="shrink-0 text-2xs text-subtle" />
             </button>
             <!-- Absorbed but unattributable: reached main by no commit here; said explicitly, not silently dropped. -->
             <p v-if="history.unaccounted.value > 0" class="text-2xs text-subtle">
-                {{ history.unaccounted.value }} more file{{ history.unaccounted.value === 1 ? " is" : "s are" }} in your history without a commit here
-                accounting for {{ history.unaccounted.value === 1 ? "it" : "them" }}: that content reached your main line some other way.
+                {{ t(`agents.agentReviewPanel.unaccounted`, { count: history.unaccounted.value }, history.unaccounted.value) }}
             </p>
         </div>
 
-<!-- History loads only once absorbed work is reported, skipping a flash of "nothing here" first. -->
+        <!-- History loads only once absorbed work is reported, skipping a flash of "nothing here" first. -->
         <template v-if="waiting">
             <AgentReviewOutline v-if="outline" :label="waitLabel" />
         </template>
@@ -651,19 +661,19 @@ const seamWidth = computed<number>({
             class="flex min-h-0 flex-1 flex-col items-center justify-center gap-2 p-6 text-center"
         >
             <Icon :name="changes.absorbed.value > 0 ? 'check' : 'file-edit'" class="text-2xl text-subtle" />
-<!-- An empty list is two opposite facts needing different next moves: nothing written, or everything already committed. -->
-            <p v-if="changes.absorbed.value > 0" class="max-w-xs text-2xs text-muted">{{ absorbedNote }} Anything it writes next shows up here.</p>
-<!-- "Ask it in chat" only applies where a chat for this agent exists; a remote review has none on screen, so the sentence points at the crossing instead. -->
+            <!-- An empty list is two opposite facts needing different next moves: nothing written, or everything already committed. -->
+            <p v-if="changes.absorbed.value > 0" class="max-w-xs text-2xs text-muted">
+                {{ t(`agents.agentReviewPanel.anythingWritesNextShows`, { absorbedNote }) }}
+            </p>
+            <!-- "Ask it in chat" only applies where a chat for this agent exists; a remote review has none on screen, so the sentence points at the crossing instead. -->
             <p v-else-if="remoteName !== undefined" class="max-w-xs text-2xs text-muted">
-                This agent hasn't changed any files. Its conversation is in {{ remoteName }}: open it there to ask for something, and whatever it
-                writes shows up here.
+                {{ t(`agents.agentReviewPanel.agentHasntChangedAny`, { remoteName }) }}
             </p>
             <p v-else class="max-w-xs text-2xs text-muted">
-                This agent hasn't changed any files. Ask it for something in the chat: its work shows up here, file by file, to review before it
-                lands.
+                {{ t(`agents.agentReviewPanel.agentHasntChangedAny2`) }}
             </p>
             <Button v-if="remoteName !== undefined" size="small" severity="secondary" class="mt-1" @click="cross">
-                <Icon name="arrow-right" />Open in {{ remoteName }}
+                <Icon name="arrow-right" />{{ t(`agents.agentReviewPanel.openIn`) }} {{ remoteName }}
             </Button>
         </div>
 
@@ -676,17 +686,18 @@ const seamWidth = computed<number>({
                 :class="mobile ? 'flex-1' : 'shrink-0 border-r border-line'"
                 :style="mobile ? undefined : { width: uiLength(shell.reviewListWidth.value) }"
             >
-<!-- The list's own header (count, filter, pass progress), the same height as the diff's toolbar so both align. -->
+                <!-- The list's own header (count, filter, pass progress), the same height as the diff's toolbar so both align. -->
                 <div class="flex h-8 shrink-0 items-center gap-1.5 border-b border-line px-2 max-md:h-12">
                     <SegmentedControl v-if="filterOptions.length > 1" v-model="filter" :options="filterOptions" size="xs" />
                     <span v-else class="whitespace-nowrap text-2xs text-muted">
-                        <span class="font-medium text-content">{{ bodyFiles.length }}</span> file{{ bodyFiles.length === 1 ? "" : "s" }}
+                        <span class="font-medium text-content">{{ bodyFiles.length }}</span> {{ t(`agents.agentReviewPanel.file`)
+                        }}{{ bodyFiles.length === 1 ? "" : "s" }}
                     </span>
                     <Icon v-if="changes.fetching.value" name="spinner" class="shrink-0 text-2xs text-muted" spin />
                     <span class="flex-1"></span>
-<!-- Totals for the whole review; the code/tests split is now carried by the filter options above instead. -->
+                    <!-- Totals for the whole review; the code/tests split is now carried by the filter options above instead. -->
                     <ReviewStat :code="reviewCode" :additions="bodyAdditions" :deletions="bodyDeletions" />
-<!-- A check and "N/total" reads as reviewed-of-total on its own, no hover-only shortcut hint needed here. -->
+                    <!-- A check and "N/total" reads as reviewed-of-total on its own, no hover-only shortcut hint needed here. -->
                     <span class="inline-flex shrink-0 items-center gap-0.5 whitespace-nowrap text-2xs text-subtle">
                         <Icon name="check" class="text-2xs" />{{ bodyViewed }}/{{ bodyFiles.length }}
                     </span>
@@ -694,7 +705,7 @@ const seamWidth = computed<number>({
 
                 <div class="min-h-0 flex-1 overflow-auto">
                     <div v-for="group in groups" :key="group.repo">
-<!-- Sticky, since scrolling is what takes the repo context away. -->
+                        <!-- Sticky, since scrolling is what takes the repo context away. -->
                         <div
                             class="group/head sticky top-0 z-10 flex w-full items-center border-b border-line/60 bg-canvas pr-1 transition-colors hover:bg-overlay"
                         >
@@ -725,7 +736,7 @@ const seamWidth = computed<number>({
 
                         <template v-if="!collapsed.has(group.repo)">
                             <template v-for="bucket in viewOf(group.repo).buckets" :key="`${group.repo}/${bucket.key}`">
-<!-- The package a run of rows belongs to, stated once: same fold-left/sweep-right/totals-between heading as the repo's, one scope down. -->
+                                <!-- The package a run of rows belongs to, stated once: same fold-left/sweep-right/totals-between heading as the repo's, one scope down. -->
                                 <div v-if="viewOf(group.repo).named" class="group/head flex items-center border-b border-line/40 bg-canvas/60 pr-1.5">
                                     <button
                                         type="button"
@@ -736,10 +747,10 @@ const seamWidth = computed<number>({
                                             class="shrink-0 text-[0.6rem] text-subtle"
                                             :name="moduleCollapsed(group.repo, bucket.key) ? 'chevron-right' : 'chevron-down'"
                                         />
-<!-- One way to name a module, shared with the workspace's own Changes list (ModuleLabel). -->
+                                        <!-- One way to name a module, shared with the workspace's own Changes list (ModuleLabel). -->
                                         <ModuleLabel :name="bucket.name" :packaged="bucket.packaged" />
                                         <span class="shrink-0 text-2xs text-subtle">{{ groupLabel(bucket.rows) }}</span>
-<!-- A folded package can't hide a refusal either: same badge, same glyph, one scope down. -->
+                                        <!-- A folded package can't hide a refusal either: same badge, same glyph, one scope down. -->
                                         <span
                                             v-if="bucket.blocked > 0"
                                             class="inline-flex shrink-0 items-center gap-0.5 ui-status-pill bg-warning/20 text-2xs font-medium text-warning"
@@ -747,7 +758,7 @@ const seamWidth = computed<number>({
                                             <Icon name="exclamation-triangle" class="text-2xs" />{{ bucket.blocked }}
                                         </span>
                                         <span class="flex-1"></span>
-<!-- Its size, always: the only place a folded package's +/- survives, and what marks it worth folding. -->
+                                        <!-- Its size, always: the only place a folded package's +/- survives, and what marks it worth folding. -->
                                         <ReviewStat :code="bucket.code" :additions="bucket.additions" :deletions="bucket.deletions" />
                                     </button>
                                     <ReviewGroupCheck
@@ -785,29 +796,29 @@ const seamWidth = computed<number>({
                                                 class="shrink-0 text-2xs"
                                                 :class="explorerColorClass(explorerStyle, basename(file.change.path), 'file', false)"
                                             />
-<!-- How a changed file is named, shared with the workspace's Changes list (ChangeRowName). -->
+                                            <!-- How a changed file is named, shared with the workspace's Changes list (ChangeRowName). -->
                                             <ChangeRowName :path="file.change.path" :label="file.label" :named="viewOf(group.repo).named" />
-<!-- Blocked files replace the ordinary unlanded marker. -->
+                                            <!-- Blocked files replace the ordinary unlanded marker. -->
                                             <span
                                                 v-if="file.blocked !== undefined"
                                                 class="inline-flex shrink-0 items-center gap-0.5 ui-status-pill bg-warning/20 text-2xs font-medium text-warning"
-                                                v-tooltip.right="REASON_COPY[file.blocked].row"
+                                                v-tooltip.right="reasonCopy()[file.blocked].row"
                                             >
-                                                <Icon :name="REASON_COPY[file.blocked].icon" class="text-2xs" />{{ REASON_COPY[file.blocked].mark }}
+                                                <Icon :name="reasonCopy()[file.blocked].icon" class="text-2xs" />{{ reasonCopy()[file.blocked].mark }}
                                             </span>
-<!-- Which commit took this file; silent with only one, already named by the summary above (`manyCommits`). -->
+                                            <!-- Which commit took this file; silent with only one, already named by the summary above (`manyCommits`). -->
                                             <span
                                                 v-else-if="file.carriedBy !== undefined && manyCommits"
                                                 class="shrink-0 rounded bg-overlay px-1 py-px font-mono text-2xs text-subtle"
-                                                v-tooltip.right="`You committed this file in ${file.carriedBy.short}`"
+                                                v-tooltip.right="t(`agents.agentReviewPanel.committedFileIn`, { short: file.carriedBy.short })"
                                                 >{{ file.carriedBy.short }}</span
                                             >
                                             <span
                                                 v-else-if="file.carriedBy === undefined && !file.change.landed"
                                                 class="h-1.5 w-1.5 shrink-0 rounded-full bg-warning"
-                                                v-tooltip.right="'Not yet landed in your workspace'"
+                                                v-tooltip.right="t(`agents.agentReviewPanel.notYetLandedIn`)"
                                             ></span>
-<!-- `of` turns the badge into a rail: weight against the heaviest file on screen, scanned rather than read digit by digit. -->
+                                            <!-- `of` turns the badge into a rail: weight against the heaviest file on screen, scanned rather than read digit by digit. -->
                                             <ReviewStat
                                                 :code="file.change.code"
                                                 :additions="file.change.additions"
@@ -826,8 +837,12 @@ const seamWidth = computed<number>({
                                                 )
                                             "
                                             @click="toggleViewed(file)"
-                                            v-tooltip.right="isViewed(file) ? 'Reviewed, click to unmark' : 'Mark as reviewed'"
-                                            :aria-label="`Mark ${file.label} as reviewed`"
+                                            v-tooltip.right="
+                                                isViewed(file)
+                                                    ? t(`agents.agentReviewPanel.reviewedClickToUnmark`)
+                                                    : t(`agents.agentReviewPanel.markReviewed`)
+                                            "
+                                            :aria-label="t(`agents.agentReviewPanel.markReviewed2`, { label: file.label })"
                                         >
                                             <Icon :name="isViewed(file) ? 'check-square' : 'check'" class="text-2xs" />
                                         </button>
@@ -839,19 +854,19 @@ const seamWidth = computed<number>({
                 </div>
             </aside>
 
-<!-- Sits in flow with negative margins, straddling the border without an overlay that scrolls with the list. -->
+            <!-- Sits in flow with negative margins, straddling the border without an overlay that scrolls with the list. -->
             <ResizeSeam
                 v-if="!mobile"
                 v-model="seamWidth"
                 :min="toScreenPx(MIN_REVIEW_LIST_WIDTH)"
                 :max="toScreenPx(MAX_REVIEW_LIST_WIDTH)"
                 :reset="toScreenPx(defaultReviewListWidth())"
-                title="Drag to resize · double-click to reset"
+                :title="t(`agents.agentReviewPanel.dragToResizeDouble`)"
             />
 
             <section v-if="!mobile || selected !== undefined" class="flex min-h-0 min-w-0 flex-1 flex-col">
                 <template v-if="selected !== undefined">
-<!-- The same toolbar the workspace tab renders, so Split|Unified and Comments sit in the same place everywhere. -->
+                    <!-- The same toolbar the workspace tab renders, so Split|Unified and Comments sit in the same place everywhere. -->
                     <DiffToolbar
                         :path="selected.label"
                         :status="selected.change.status"
@@ -866,34 +881,35 @@ const seamWidth = computed<number>({
                                 type="button"
                                 :class="ICON_BUTTON"
                                 @click="selectedKey = undefined"
-                                aria-label="Back to the file list"
+                                :aria-label="t(`agents.agentReviewPanel.backToFileList`)"
                             >
                                 <Icon name="arrow-left" class="text-xs" />
                             </button>
                         </template>
-<!-- The row's mark, carried onto the opened file: a diff without it would read as an ordinary change. -->
+                        <!-- The row's mark, carried onto the opened file: a diff without it would read as an ordinary change. -->
                         <template #badges>
                             <span
                                 v-if="selected.blocked !== undefined"
                                 class="inline-flex shrink-0 items-center gap-1 ui-status-pill bg-warning/15 text-2xs font-medium text-warning"
-                                v-tooltip.bottom="REASON_COPY[selected.blocked].row"
+                                v-tooltip.bottom="reasonCopy()[selected.blocked].row"
                             >
-                                <Icon :name="REASON_COPY[selected.blocked].icon" class="text-2xs" />blocked · {{ REASON_COPY[selected.blocked].mark }}
+                                <Icon :name="reasonCopy()[selected.blocked].icon" class="text-2xs" />{{ t(`agents.agentReviewPanel.blocked`) }}
+                                {{ reasonCopy()[selected.blocked].mark }}
                             </span>
-<!-- What this diff is on an already-committed file: the agent's own change, measured the same as every other row, not the commit's own patch. -->
+                            <!-- What this diff is on an already-committed file: the agent's own change, measured the same as every other row, not the commit's own patch. -->
                             <span
                                 v-else-if="selected.carriedBy !== undefined"
                                 class="inline-flex shrink-0 items-center gap-1 ui-status-pill bg-success/15 font-mono text-2xs font-medium text-success"
-                                v-tooltip.bottom="'You committed this file here. The diff is what the agent wrote, not the commit\'s own patch.'"
+                                v-tooltip.bottom="t(`agents.agentReviewPanel.committedFileHereDiff`)"
                             >
                                 <Icon name="check" class="text-2xs" />{{ selected.carriedBy.short }}
                             </span>
                             <span
                                 v-else-if="!selected.change.landed"
                                 class="shrink-0 ui-status-pill bg-warning/15 text-2xs font-medium text-warning"
-                                v-tooltip.bottom="'Still waiting for Land now'"
+                                v-tooltip.bottom="t(`agents.agentReviewPanel.stillWaitingLandNow`)"
                             >
-                                not landed
+                                {{ t(`agents.agentReviewPanel.notLanded`) }}
                             </span>
                         </template>
                         <template #actions>
@@ -903,10 +919,10 @@ const seamWidth = computed<number>({
                                 @click="toggleViewed(selected)"
                                 v-tooltip.bottom="
                                     isViewed(selected)
-                                        ? 'Reviewed: click to unmark (v)'
-                                        : 'Mark reviewed and go to the next file (v) · ⇧V for the rest of this group'
+                                        ? t(`agents.agentReviewPanel.reviewedClickToUnmark2`)
+                                        : t(`agents.agentReviewPanel.markReviewedGoTo`)
                                 "
-                                :aria-label="`Mark ${selected.label} as reviewed`"
+                                :aria-label="t(`agents.agentReviewPanel.markReviewed2`, { label: selected.label })"
                             >
                                 <Icon :name="isViewed(selected) ? 'check-square' : 'check'" class="text-2xs" />
                             </button>
@@ -914,23 +930,29 @@ const seamWidth = computed<number>({
                                 type="button"
                                 :class="ICON_BUTTON"
                                 @click="move(-1)"
-                                v-tooltip.bottom="'Previous file (k)'"
-                                aria-label="Previous file"
+                                v-tooltip.bottom="t(`agents.agentReviewPanel.previousFileK`)"
+                                :aria-label="t(`agents.agentReviewPanel.previousFile`)"
                             >
                                 <Icon name="chevron-up" class="text-2xs" />
                             </button>
-                            <button type="button" :class="ICON_BUTTON" @click="move(1)" v-tooltip.bottom="'Next file (j)'" aria-label="Next file">
+                            <button
+                                type="button"
+                                :class="ICON_BUTTON"
+                                @click="move(1)"
+                                v-tooltip.bottom="t(`agents.agentReviewPanel.nextFileJ`)"
+                                :aria-label="t(`agents.agentReviewPanel.nextFile`)"
+                            >
                                 <Icon name="chevron-down" class="text-2xs" />
                             </button>
-<!-- Remote agents have no local workspace editor tab. -->
+                            <!-- Remote agents have no local workspace editor tab. -->
                             <button
                                 v-if="!mobile && at === undefined"
                                 type="button"
                                 :class="ICON_BUTTON"
                                 :disabled="diff === undefined"
                                 @click="openInWorkspace(selected)"
-                                v-tooltip.bottom="'Open this diff in the workspace editor'"
-                                aria-label="Open this diff in the workspace"
+                                v-tooltip.bottom="t(`agents.agentReviewPanel.openDiffInWorkspace`)"
+                                :aria-label="t(`agents.agentReviewPanel.openDiffInWorkspace2`)"
                             >
                                 <Icon name="external-link" class="text-2xs" />
                             </button>
@@ -939,9 +961,9 @@ const seamWidth = computed<number>({
 
                     <div class="min-h-0 flex-1">
                         <p v-if="diffError !== undefined" class="p-4 text-xs text-danger">{{ diffError }}</p>
-<!-- File reads open from the existing diff outline. -->
+                        <!-- File reads open from the existing diff outline. -->
                         <template v-else-if="diff === undefined"><DiffSkeleton v-if="diffOutline" /></template>
-<!-- Bytes, a patch, or two whole sides: FileDiffPane decides, same as it does in the workspace editor. -->
+                        <!-- Bytes, a patch, or two whole sides: FileDiffPane decides, same as it does in the workspace editor. -->
                         <FileDiffPane
                             v-else
                             :key="diffKey"
@@ -956,7 +978,7 @@ const seamWidth = computed<number>({
                         />
                     </div>
                 </template>
-                <p v-else class="p-4 text-2xs text-subtle">Pick a file to see what the agent did to it.</p>
+                <p v-else class="p-4 text-2xs text-subtle">{{ t(`agents.agentReviewPanel.pickFileToSee`) }}</p>
             </section>
         </div>
     </div>

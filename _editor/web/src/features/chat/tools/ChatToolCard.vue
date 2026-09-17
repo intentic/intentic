@@ -7,11 +7,14 @@ import ChatCodeBody from "../transcript/ChatCodeBody.vue";
 import ChatDocumentBody from "../transcript/cards/ChatDocumentBody.vue";
 import ChatToolDiff from "./ChatToolDiff.vue";
 import { present } from "./toolPresentation";
+import { useT } from "@intentic/ui/i18n";
 
 // One tool call: per-tool facts (icon, summary, output shape, default-open) come from the presentation
 // registry (toolPresentation.ts); this component renders them and owns fold/open-in-workspace. Everything that
 // leaves the card comes from the injected surface (chatToolSurface.ts), so a published conversation with no
 // surface has nothing to click.
+
+const t = useT();
 
 const props = defineProps<{
     tool: TranscriptTool;
@@ -118,9 +121,9 @@ const openSubagent = (event: MouseEvent, toolId: string): void => {
 
 <template>
     <div class="flex flex-col gap-0.5">
-<!-- Folded cards keep their target visible in muted text. -->
+        <!-- Folded cards keep their target visible in muted text. -->
         <div class="group/tool flex min-w-0 items-center gap-1.5 text-2xs text-muted">
-<!-- Header doubles as the fold toggle when there's output, same chevron as the turn's Thinking block; an output-less call keeps a plain header. -->
+            <!-- Header doubles as the fold toggle when there's output, same chevron as the turn's Thinking block; an output-less call keeps a plain header. -->
             <button
                 v-if="hasContent"
                 type="button"
@@ -133,7 +136,7 @@ const openSubagent = (event: MouseEvent, toolId: string): void => {
                 <span class="font-medium" :class="failed ? 'text-danger' : 'text-muted'">{{ tool.name }}</span>
             </button>
             <template v-else>
-<!-- Kept as one protected flex item too: chat messages inherit `overflow-wrap: anywhere`. -->
+                <!-- Kept as one protected flex item too: chat messages inherit `overflow-wrap: anywhere`. -->
                 <span class="flex shrink-0 items-center gap-1.5 whitespace-nowrap">
                     <Icon v-bind="statusIcon" class="text-2xs" />
                     <span class="font-medium" :class="failed ? 'text-danger' : 'text-muted'">{{ tool.name }}</span>
@@ -141,42 +144,44 @@ const openSubagent = (event: MouseEvent, toolId: string): void => {
             </template>
             <!-- Who it delegated to and what it asked for, in the slot a path would take; a sentence, not mono. -->
             <span v-if="subagentTitle" class="min-w-0 truncate">{{ subagentTitle }}</span>
-<!-- Document cards show the title while keeping the path in the header. -->
+            <!-- Document cards show the title while keeping the path in the header. -->
             <span v-else-if="view.document" class="min-w-0 truncate">{{ view.document.title }}</span>
             <!-- Clickable only where there's a workspace to open it in; published to the public it's plain text. -->
             <button
                 v-else-if="location && openFile"
                 type="button"
                 class="min-w-0 truncate font-mono transition-colors hover:text-content hover:underline"
-                v-tooltip.top="'Open in workspace'"
+                v-tooltip.top="t(`chat.chatToolCard.openInWorkspace`)"
                 @click="openFile(location.path, location.line)"
             >
                 {{ tool.target ?? location.path }}
             </button>
             <span v-else-if="location || tool.target" class="min-w-0 truncate font-mono">{{ tool.target ?? location?.path }}</span>
             <!-- Working in the background while the parent moved on: why this card can sit unfinished for minutes. -->
-            <span v-if="subagent?.background === true && subagentLive" class="ui-status-pill shrink-0 bg-overlay text-2xs text-subtle"
-                >background</span
-            >
-<!-- The delegate itself reports being stuck on a permission or question; the one live state worth shouting. -->
-            <span v-if="subagent?.status === `blocked`" class="ui-status-pill shrink-0 bg-overlay text-2xs text-warning">needs input</span>
-<!-- Collapsed calls keep their result or pending clock visible. -->
-<!-- What the child is doing and has spent, since its own result summary can't report the thing it's still waiting on. -->
+            <span v-if="subagent?.background === true && subagentLive" class="ui-status-pill shrink-0 bg-overlay text-2xs text-subtle">{{
+                t(`chat.chatToolCard.background`)
+            }}</span>
+            <!-- The delegate itself reports being stuck on a permission or question; the one live state worth shouting. -->
+            <span v-if="subagent?.status === `blocked`" class="ui-status-pill shrink-0 bg-overlay text-2xs text-warning">{{
+                t(`chat.chatToolCard.needsInput`)
+            }}</span>
+            <!-- Collapsed calls keep their result or pending clock visible. -->
+            <!-- What the child is doing and has spent, since its own result summary can't report the thing it's still waiting on. -->
             <span v-if="subagentFacts.length > 0 && subagentLive" class="ml-auto flex shrink-0 items-center gap-2 tabular-nums text-subtle">
                 <span v-for="fact in subagentFacts" :key="fact">{{ fact }}</span>
             </span>
-            <span v-else-if="unfinished" class="ml-auto shrink-0 text-subtle">interrupted</span>
+            <span v-else-if="unfinished" class="ml-auto shrink-0 text-subtle">{{ t(`chat.chatToolCard.interrupted`) }}</span>
             <span v-else-if="view.summary" class="ml-auto shrink-0 tabular-nums" :class="failed ? 'text-danger' : 'text-subtle'">{{
                 view.summary
             }}</span>
-<!-- Attach to the command's shell while it's genuinely in flight ("what's it doing right now"), hover-only once settled so a quiet transcript stays quiet. -->
+            <!-- Attach to the command's shell while it's genuinely in flight ("what's it doing right now"), hover-only once settled so a quiet transcript stays quiet. -->
             <button
                 v-if="agentTerminal && surface.watchTerminal"
                 type="button"
                 class="shrink-0 transition-opacity hover:text-content"
                 :class="[running && live ? '' : 'opacity-0 group-hover/tool:opacity-100', { 'ml-auto': !unfinished && !view.summary }]"
-                v-tooltip.top="'Watch in terminal'"
-                aria-label="Watch in terminal"
+                v-tooltip.top="t(`chat.chatToolCard.watchInTerminal`)"
+                :aria-label="t(`chat.chatToolCard.watchInTerminal`)"
                 @click="surface.watchTerminal(agentTerminal)"
             >
                 <Icon name="desktop" class="text-2xs" />
@@ -187,26 +192,26 @@ const openSubagent = (event: MouseEvent, toolId: string): void => {
                 type="button"
                 class="shrink-0 transition-opacity hover:text-content"
                 :class="[running && live ? '' : 'opacity-0 group-hover/tool:opacity-100', { 'ml-auto': !unfinished && !view.summary }]"
-                v-tooltip.top="'Watch the browser'"
-                aria-label="Watch the browser"
+                v-tooltip.top="t(`chat.chatToolCard.watchBrowser`)"
+                :aria-label="t(`chat.chatToolCard.watchBrowser`)"
                 @click="surface.watchBrowser(agentBrowser)"
             >
                 <Icon name="globe" class="text-2xs" />
             </button>
-<!-- The third door: the child's own transcript. -->
+            <!-- The third door: the child's own transcript. -->
             <a
                 v-if="subagent && surface.subagentRoute"
                 :href="surface.subagentRoute(tool.id)"
                 class="shrink-0 transition-colors hover:text-content"
-                v-tooltip.top="subagentLive ? 'Watch this agent' : `Open this agent's transcript`"
-                :aria-label="subagentLive ? 'Watch this agent' : `Open this agent's transcript`"
+                v-tooltip.top="subagentLive ? t(`chat.chatToolCard.watchAgent`) : t(`chat.chatToolCard.openAgentsTranscript`)"
+                :aria-label="subagentLive ? t(`chat.chatToolCard.watchAgent`) : t(`chat.chatToolCard.openAgentsTranscript`)"
                 @click="openSubagent($event, tool.id)"
             >
                 <Icon name="users" class="text-2xs" />
             </a>
         </div>
         <template v-if="isOpen">
-<!-- What the child concluded (its own last words, or the tail of what it printed). -->
+            <!-- What the child concluded (its own last words, or the tail of what it printed). -->
             <p
                 v-if="subagent?.summary"
                 class="chat-inset ml-4 px-2.5 py-1.5 text-2xs leading-relaxed whitespace-pre-wrap"
@@ -219,18 +224,18 @@ const openSubagent = (event: MouseEvent, toolId: string): void => {
                 v-if="tool.thinking"
                 class="chat-inset ml-4 max-h-40 overflow-auto px-2.5 py-1.5 text-2xs leading-relaxed whitespace-pre-wrap italic"
                 >{{ tool.thinking }}</pre>
-<!-- A sub-agent's nested transcript, indented under the delegation so the whole run reads as one unit; recursive. -->
+            <!-- A sub-agent's nested transcript, indented under the delegation so the whole run reads as one unit; recursive. -->
             <div v-if="tool.children?.length" class="ml-4 flex flex-col gap-1">
                 <ChatToolCard v-for="child in tool.children" :key="child.id" :tool="child" :live="live" />
             </div>
-<!-- Agent output is re-minted from the workspace in-app when needed. -->
+            <!-- Agent output is re-minted from the workspace in-app when needed. -->
             <component
                 :is="openFile ? 'button' : 'div'"
                 v-for="image in view.images"
                 :key="image.path"
                 :type="openFile ? 'button' : undefined"
                 class="chat-inset ml-4 overflow-hidden text-left"
-                v-tooltip.top="openFile ? 'Open in workspace' : undefined"
+                v-tooltip.top="openFile ? t(`chat.chatToolCard.openInWorkspace`) : undefined"
                 @click="openFile?.(image.path)"
             >
                 <img
@@ -241,7 +246,7 @@ const openSubagent = (event: MouseEvent, toolId: string): void => {
                 />
                 <span v-else class="block px-2 py-1 font-mono text-2xs text-subtle">{{ image.path }}</span>
             </component>
-<!-- What the call wrote for the reader, above the machine-facing halves: a whole markdown file is drawn as prose, not as the diff it arrived as. -->
+            <!-- What the call wrote for the reader, above the machine-facing halves: a whole markdown file is drawn as prose, not as the diff it arrived as. -->
             <ChatDocumentBody v-if="view.document" :document="view.document" :titled="false" max-height="32rem" class="ml-4" />
             <ChatToolDiff
                 v-for="diff in view.diffs"
@@ -253,7 +258,7 @@ const openSubagent = (event: MouseEvent, toolId: string): void => {
                 :openable="openFile !== undefined"
                 @open="openFile?.(diff.path)"
             />
-<!-- Body shape chosen by the registry: `command` shows the invocation above its output like a terminal; `files` turns a path listing into navigable rows. -->
+            <!-- Body shape chosen by the registry: `command` shows the invocation above its output like a terminal; `files` turns a path listing into navigable rows. -->
             <div v-if="view.body?.kind === 'command'" class="chat-inset ml-4 overflow-hidden">
                 <div v-if="view.body.command" class="chat-inset-rule flex gap-1.5 px-2.5 py-1.5 font-mono text-2xs text-muted">
                     <span class="shrink-0 select-none text-subtle">$</span>
@@ -265,10 +270,7 @@ const openSubagent = (event: MouseEvent, toolId: string): void => {
                     :class="failed ? 'text-danger' : 'text-muted'"
                     >{{ view.body.output }}</pre>
             </div>
-            <div
-                v-else-if="view.body?.kind === 'files'"
-                class="chat-inset ml-4 flex max-h-40 flex-col overflow-auto p-1.5"
-            >
+            <div v-else-if="view.body?.kind === 'files'" class="chat-inset ml-4 flex max-h-40 flex-col overflow-auto p-1.5">
                 <component
                     :is="openFile ? 'button' : 'div'"
                     v-for="(entry, index) in view.body.entries"
@@ -276,13 +278,15 @@ const openSubagent = (event: MouseEvent, toolId: string): void => {
                     :type="openFile ? 'button' : undefined"
                     class="flex items-baseline gap-1.5 rounded-md px-1.5 py-0.5 text-left font-mono text-2xs text-muted transition-colors"
                     :class="openFile && 'hover:bg-overlay hover:text-content'"
-                    v-tooltip.top="openFile ? 'Open in workspace' : undefined"
+                    v-tooltip.top="openFile ? t(`chat.chatToolCard.openInWorkspace`) : undefined"
                     @click="openFile?.(entry.path, entry.line)"
                 >
                     <span class="truncate">{{ entry.path }}</span>
                     <span v-if="entry.line" class="shrink-0 text-subtle">:{{ entry.line }}</span>
                 </component>
-                <span v-if="view.body.hidden" class="px-1 py-0.5 text-2xs text-subtle">… {{ view.body.hidden }} more</span>
+                <span v-if="view.body.hidden" class="px-1 py-0.5 text-2xs text-subtle">{{
+                    t(`chat.chatToolCard.more`, { hidden: view.body.hidden })
+                }}</span>
             </div>
             <!-- A Read's contents: syntax-highlighted with a line-number gutter, the same highlighter as the workspace viewer. -->
             <ChatCodeBody v-else-if="view.body?.kind === 'code'" :code="view.body.code" :lang="view.body.lang" :first-line="view.body.firstLine" />

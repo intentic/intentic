@@ -25,7 +25,7 @@ import { useChanges } from "../changes/useChanges";
 import { useMonaco } from "../files/useMonaco";
 import { useUploadQueue } from "../files/upload/useUploadQueue";
 import { useExplorerSearch } from "../search/useExplorerSearch";
-import { MATCH_TOGGLES } from "../search/useSearchOptions";
+import { matchToggles } from "../search/useSearchOptions";
 import { useWorkspaceRoute } from "../health/useWorkspaceRoute";
 import { useWorkspaceTabs } from "../tabs/useWorkspaceTabs";
 import { useWorkspaceTree } from "../explorer/useWorkspaceTree";
@@ -51,11 +51,14 @@ import WorkspaceScopeChip from "../explorer/WorkspaceScopeChip.vue";
 import { workspaceAgent } from "../health/workspaceScope";
 import WorkspaceSearchResults from "../search/WorkspaceSearchResults.vue";
 import { parentDir } from "@intentic/ui/path";
+import { useT } from "@intentic/ui/i18n";
 
 // Drill-down file browser (one directory per screen) plus Changes/Restore Points panels and a full-screen
 // read-only viewer. Navigation state lives in the route (`?dir=`, `?file=`, `?diff=`), so OS back is up/close
 // and deep links work. Desktop affordances (drag-drop, tab strip, edit) become a picker FAB, a long-press sheet, and
 // read-only files.
+
+const t = useT();
 
 const route = useRoute();
 const router = useRouter();
@@ -87,7 +90,7 @@ const {
 } = useWorkspaceTree();
 // The tree query reports a raw message; this view knows the user was trying to see their files.
 const treeNotice = computed<NoticeModel | undefined>(() =>
-    error.value === undefined ? undefined : { tone: `danger`, title: `Couldn't load your files.`, detail: error.value },
+    error.value === undefined ? undefined : { tone: `danger`, title: t(`workspace.workspaceMobile.couldntLoadFiles`), detail: error.value },
 );
 const { enqueue } = useUploadQueue();
 const { say } = useNotifications();
@@ -165,7 +168,7 @@ const changesMark = computed(() => {
 });
 const segmentOptions = computed(() => [
     // Touch has no hover; `markTitle` reaches the reader via the pill's accessible name (nameOf), not a tooltip.
-    { label: `Files`, value: `files` as const },
+    { label: t(`workspace.workspaceMobile.files`), value: `files` as const },
     { label: words.value.changes, value: `changes` as const, badge: changes.count.value, ...changesMark.value },
 ]);
 
@@ -339,13 +342,23 @@ const onPick = (event: Event): void => {
                 class="bg-card"
             >
                 <template #lead>
-                    <button type="button" :class="ui.iconButton(`h-11 w-11 rounded-lg active:bg-overlay`)" aria-label="Back" @click="router.back()">
+                    <button
+                        type="button"
+                        :class="ui.iconButton(`h-11 w-11 rounded-lg active:bg-overlay`)"
+                        :aria-label="t(`ui.action.back`)"
+                        @click="router.back()"
+                    >
                         <Icon name="arrow-left" class="text-lg" />
                     </button>
                 </template>
             </DiffToolbar>
             <div v-else class="flex h-12 shrink-0 items-center gap-1 border-b border-line bg-card px-1">
-                <button type="button" :class="ui.iconButton(`h-11 w-11 rounded-lg active:bg-overlay`)" aria-label="Back" @click="router.back()">
+                <button
+                    type="button"
+                    :class="ui.iconButton(`h-11 w-11 rounded-lg active:bg-overlay`)"
+                    :aria-label="t(`ui.action.back`)"
+                    @click="router.back()"
+                >
                     <Icon name="arrow-left" class="text-lg" />
                 </button>
                 <span class="min-w-0 flex-1 truncate text-sm font-medium">{{ fileName(openPath ?? "") }}</span>
@@ -397,7 +410,7 @@ const onPick = (event: Event): void => {
                     type="button"
                     :class="ui.iconButton(`h-10 w-10 rounded-lg active:bg-overlay`, segment === `history` ? `bg-overlay text-content` : ``)"
                     :aria-pressed="segment === 'history'"
-                    aria-label="Restore points"
+                    :aria-label="t(`workspace.workspaceMobile.restorePoints`)"
                     @click="segment = 'history'"
                 >
                     <Icon name="history" class="text-base" />
@@ -409,7 +422,7 @@ const onPick = (event: Event): void => {
                     :class="
                         ui.iconButton(`h-10 w-10 rounded-lg active:bg-overlay`, layout.showIgnored.value || layout.hideTests.value ? `text-link` : ``)
                     "
-                    aria-label="Filter what the explorer lists"
+                    :aria-label="t(`workspace.workspaceMobile.filterWhatExplorerLists`)"
                     @click="filterSheet = true"
                 >
                     <Icon name="filter" class="text-base" />
@@ -419,7 +432,7 @@ const onPick = (event: Event): void => {
                     type="button"
                     :class="ui.iconButton(`h-10 w-10 rounded-lg active:bg-overlay`)"
                     @click="segment === 'changes' ? changes.refresh() : refetch()"
-                    aria-label="Refresh"
+                    :aria-label="t(`ui.action.refresh`)"
                     :disabled="
                         segment === 'changes'
                             ? changes.actionBusy.value || changes.fetching.value || changes.landing.value !== undefined
@@ -454,7 +467,7 @@ const onPick = (event: Event): void => {
                         <input
                             v-model="filter"
                             type="search"
-                            :placeholder="contentMode ? `Search in files…` : `Filter…`"
+                            :placeholder="contentMode ? t(`workspace.workspaceMobile.searchInFiles`) : t(`workspace.workspaceMobile.filter`)"
                             class="ui-field-box w-full min-w-0 pl-8 pr-3"
                             @keydown.esc="clearFilter"
                         />
@@ -480,8 +493,8 @@ const onPick = (event: Event): void => {
                         <input
                             v-model="search.include.value"
                             type="search"
-                            placeholder="Files to include, e.g. package.json"
-                            aria-label="Files to include"
+                            :placeholder="t(`workspace.workspaceMobile.filesToIncludeE`)"
+                            :aria-label="t(`workspace.workspaceMobile.filesToInclude`)"
                             class="ui-field-box w-full min-w-0 pl-8 pr-3"
                         />
                     </div>
@@ -490,7 +503,7 @@ const onPick = (event: Event): void => {
                 <div v-if="contentMode" class="flex shrink-0 items-center gap-1.5 px-2 pb-1.5">
                     <template v-if="textMode">
                         <button
-                            v-for="toggle in MATCH_TOGGLES"
+                            v-for="toggle in matchToggles()"
                             :key="toggle.label"
                             type="button"
                             class="flex h-8 w-9 items-center justify-center rounded-lg font-mono text-xs leading-none text-muted transition-colors active:bg-overlay"
@@ -511,7 +524,7 @@ const onPick = (event: Event): void => {
                         @click="search.includeIgnored.value = !search.includeIgnored.value"
                     >
                         <Icon :name="search.includeIgnored.value ? `eye` : `eye-slash`" class="text-2xs" />
-                        Ignored
+                        {{ t(`workspace.workspaceMobile.ignored`) }}
                     </button>
                 </div>
 
@@ -520,7 +533,7 @@ const onPick = (event: Event): void => {
                     <button
                         type="button"
                         :class="ui.iconButton(`h-10 w-10 rounded-lg active:bg-overlay`)"
-                        aria-label="Up one directory"
+                        :aria-label="t(`workspace.workspaceMobile.upOneDirectory`)"
                         @click="openDir(parentDir(dir))"
                     >
                         <Icon name="arrow-left" class="text-base" />
@@ -606,12 +619,14 @@ const onPick = (event: Event): void => {
                                 class="shrink-0 text-xs text-subtle"
                             />
                         </button>
-                        <p v-if="dirLoading && listing.length === 0" class="px-4 py-8 text-center text-xs text-subtle">Loading…</p>
+                        <p v-if="dirLoading && listing.length === 0" class="px-4 py-8 text-center text-xs text-subtle">
+                            {{ t(`workspace.workspaceMobile.loading`) }}
+                        </p>
                         <p v-else-if="listing.length === 0" class="px-4 py-8 text-center text-xs text-subtle">
-                            {{ filter ? "No matching entries." : "This directory is empty." }}
+                            {{ filter ? t(`workspace.workspaceMobile.noMatchingEntries`) : t(`workspace.workspaceMobile.directoryEmpty`) }}
                         </p>
                         <p v-if="dirHidden > 0" class="px-4 py-2 text-center text-2xs text-subtle">
-                            {{ dirHidden.toLocaleString() }} more {{ dirHidden === 1 ? "entry" : "entries" }} in this folder, search to reach them.
+                            {{ t(`workspace.workspaceMobile.moreEntries`, { count: dirHidden.toLocaleString() }, dirHidden) }}
                         </p>
                         <!-- The technical switch's own receipt; a tap is the way back. -->
                         <button
@@ -620,7 +635,7 @@ const onPick = (event: Event): void => {
                             class="w-full px-4 py-2 text-center text-2xs text-subtle active:text-content"
                             @click="layout.toggleHideTechnical()"
                         >
-                            {{ technicalCount }} technical {{ technicalCount === 1 ? "file" : "files" }} hidden. Tap to show them.
+                            {{ t(`workspace.workspaceMobile.technicalHidden`, { count: technicalCount }, technicalCount) }}
                         </button>
                     </div>
                 </PullToRefresh>
@@ -628,7 +643,12 @@ const onPick = (event: Event): void => {
                 <!-- The upload FAB stays on a wrapper so PrimeVue cannot override its absolute position. -->
                 <input ref="fileInput" type="file" multiple class="hidden" @change="onPick" />
                 <div v-if="!contentMode" class="absolute bottom-4 right-4 z-10">
-                    <Button rounded class="h-14 w-14 px-0 py-0 shadow-lg" aria-label="Upload files here" @click="fileInput?.click()">
+                    <Button
+                        rounded
+                        class="h-14 w-14 px-0 py-0 shadow-lg"
+                        :aria-label="t(`workspace.workspaceMobile.uploadFilesHere`)"
+                        @click="fileInput?.click()"
+                    >
                         <Icon name="upload" class="text-xl" />
                     </Button>
                 </div>
@@ -636,7 +656,7 @@ const onPick = (event: Event): void => {
         </template>
 
         <!-- A checked row draws its mark; the gutter holds the space either way, so the label can't shift on flip. -->
-        <BottomSheet v-model="filterSheet" header="Filter">
+        <BottomSheet v-model="filterSheet" :header="t(`workspace.workspaceMobile.filter2`)">
             <div class="flex flex-col gap-0.5">
                 <button
                     type="button"
@@ -647,7 +667,7 @@ const onPick = (event: Event): void => {
                     <span class="flex w-4 shrink-0 justify-center">
                         <Icon v-show="layout.showIgnored.value" name="check" class="text-base text-muted" />
                     </span>
-                    Show ignored files
+                    {{ t(`workspace.workspaceMobile.showIgnoredFiles`) }}
                 </button>
                 <button
                     type="button"
@@ -658,7 +678,7 @@ const onPick = (event: Event): void => {
                     <span class="flex w-4 shrink-0 justify-center">
                         <Icon v-show="layout.hideTests.value" name="check" class="text-base text-muted" />
                     </span>
-                    Hide tests
+                    {{ t(`workspace.workspaceMobile.hideTests`) }}
                 </button>
                 <button
                     type="button"
@@ -669,7 +689,7 @@ const onPick = (event: Event): void => {
                     <span class="flex w-4 shrink-0 justify-center">
                         <Icon v-show="layout.hideTechnical.value" name="check" class="text-base text-muted" />
                     </span>
-                    Hide technical files
+                    {{ t(`workspace.workspaceMobile.hideTechnicalFiles`) }}
                 </button>
             </div>
         </BottomSheet>
@@ -682,19 +702,22 @@ const onPick = (event: Event): void => {
                     class="flex h-12 items-center gap-3 rounded-lg px-3 text-left text-sm active:bg-overlay"
                     @click="copyPath(sheetEntry)"
                 >
-                    <Icon name="copy" class="text-base text-muted" /> Copy path
+                    <Icon name="copy" class="text-base text-muted" /> {{ t(`workspace.workspaceMobile.copyPath`) }}
                 </button>
                 <!-- Where a link points; no hover on a phone, so this sheet is the only place a row can say it. -->
                 <p v-if="sheetEntry.link" class="flex min-h-12 items-start gap-3 px-3 py-3 text-sm text-muted">
                     <Icon :name="sheetEntry.link.state === undefined ? 'link' : 'link-broken'" class="mt-0.5 shrink-0 text-base text-subtle" />
                     <span class="min-w-0 break-all"
-                        >Link to {{ sheetEntry.link.to }}<template v-if="sheetEntry.link.state === 'broken'">: there is nothing there</template
-                        ><template v-else-if="sheetEntry.link.state === 'outside'">: outside the workspace, so the sandbox won't open it</template>
+                        >{{ t(`workspace.workspaceMobile.linkTo`) }} {{ sheetEntry.link.to
+                        }}<template v-if="sheetEntry.link.state === 'broken'">{{ t(`workspace.workspaceMobile.nothing`) }}</template
+                        ><template v-else-if="sheetEntry.link.state === 'outside'">{{
+                            t(`workspace.workspaceMobile.outsideWorkspaceSandboxWont`)
+                        }}</template>
                     </span>
                 </p>
                 <!-- Everything below Copy path is refused by the sandbox on a locked entry, so it gets the explanation instead. -->
                 <p v-if="isLockedWorkspacePath(sheetEntry.path)" class="flex h-12 items-center gap-3 px-3 text-sm text-muted">
-                    <Icon name="lock" class="text-base text-subtle" /> Kept private by the sandbox
+                    <Icon name="lock" class="text-base text-subtle" /> {{ t(`workspace.workspaceMobile.keptPrivateBySandbox`) }}
                 </p>
                 <template v-else>
                     <button
@@ -703,7 +726,7 @@ const onPick = (event: Event): void => {
                         class="flex h-12 items-center gap-3 rounded-lg px-3 text-left text-sm active:bg-overlay"
                         @click="download(sheetEntry)"
                     >
-                        <Icon name="download" class="text-base text-muted" /> Download
+                        <Icon name="download" class="text-base text-muted" /> {{ t(`ui.action.download`) }}
                     </button>
                     <!-- Rename and Delete stay gated; Download and Copy path remain available. -->
                     <template v-if="canEditFiles && !archivedEntry(sheetEntry)">
@@ -712,45 +735,46 @@ const onPick = (event: Event): void => {
                             class="flex h-12 items-center gap-3 rounded-lg px-3 text-left text-sm active:bg-overlay"
                             @click="startRename(sheetEntry)"
                         >
-                            <Icon name="pencil" class="text-base text-muted" /> Rename
+                            <Icon name="pencil" class="text-base text-muted" /> {{ t(`ui.action.rename`) }}
                         </button>
                         <button
                             type="button"
                             class="flex h-12 items-center gap-3 rounded-lg px-3 text-left text-sm text-danger active:bg-danger/10"
                             @click="((deleteTarget = sheetEntry), (sheetEntry = undefined))"
                         >
-                            <Icon name="trash" class="text-base" /> Delete
+                            <Icon name="trash" class="text-base" /> {{ t(`ui.action.delete`) }}
                         </button>
                     </template>
                     <p v-else-if="archivedEntry(sheetEntry)" class="flex h-12 items-center gap-3 px-3 text-sm text-subtle">
-                        <Icon name="box" class="text-base text-subtle" /> Inside an archive: extract it to change anything
+                        <Icon name="box" class="text-base text-subtle" /> {{ t(`workspace.workspaceMobile.insideArchiveExtractTo`) }}
                     </p>
                     <p v-else class="flex h-12 items-center gap-3 px-3 text-sm text-subtle">
-                        <Icon name="lock" class="text-base text-subtle" /> Read-only: changing files needs maintainer access
+                        <Icon name="lock" class="text-base text-subtle" /> {{ t(`workspace.workspaceMobile.readOnlyChangingFiles`) }}
                     </p>
                 </template>
             </div>
         </BottomSheet>
 
-        <Modal :open="renameTarget !== undefined" size="sm" header="Rename" @update:open="renameTarget = undefined">
+        <Modal :open="renameTarget !== undefined" size="sm" :header="t(`ui.action.rename`)" @update:open="renameTarget = undefined">
             <input v-model="renameValue" type="text" class="ui-field-box w-full" @keydown.enter="confirmRename" />
             <template #footer>
-                <Button label="Cancel" severity="secondary" :text="true" @click="renameTarget = undefined" />
-                <Button label="Rename" autofocus @click="confirmRename" />
+                <Button :label="t(`ui.action.cancel`)" severity="secondary" :text="true" @click="renameTarget = undefined" />
+                <Button :label="t(`ui.action.rename`)" autofocus @click="confirmRename" />
             </template>
         </Modal>
 
         <ConfirmDialog
             :open="deleteTarget !== undefined"
-            header="Delete?"
-            confirm-label="Delete"
+            :header="t(`workspace.workspaceMobile.delete`)"
+            :confirm-label="t(`ui.action.delete`)"
             confirm-icon="trash"
             @cancel="deleteTarget = undefined"
             @confirm="confirmDelete"
         >
             <p class="text-sm text-content">
-                Delete <span class="font-medium">{{ deleteTarget?.path }}</span
-                >{{ deleteTarget?.type === "dir" ? " and everything inside it" : "" }}? This can't be undone.
+                {{ t(`ui.action.delete`) }} <span class="font-medium">{{ deleteTarget?.path }}</span
+                >{{ deleteTarget?.type === "dir" ? t(`workspace.workspaceMobile.everythingInside`) : ""
+                }}{{ t(`workspace.workspaceMobile.cantUndone`) }}
             </p>
         </ConfirmDialog>
     </div>

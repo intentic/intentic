@@ -2,6 +2,7 @@
 <script setup lang="ts">
 import { ui, formatDateTime, formatTimestamp, formatWeekdayTime } from "@intentic/extension-ui";
 import { type ComponentPublicInstance, ref } from "vue";
+import { t } from "./i18n.js";
 
 const { at } = defineProps<{
     /** Epoch ms, or absent: an item with no date goes ahead as soon as the executor picks it up. */
@@ -62,7 +63,7 @@ const commit = (value: string): void => {
         type="datetime-local"
         :value="toInput(at)"
         :class="ui.inputSm()"
-        :aria-label="`Go ahead with ${label} at`"
+        :aria-label="t(`scheduleControl.goAheadAt`, { label })"
         @change="commit(($event.target as HTMLInputElement).value)"
         @keydown.escape="editing = false"
         @blur="editing = false"
@@ -71,11 +72,11 @@ const commit = (value: string): void => {
         v-else
         type="button"
         :class="ui.textAction()"
-        v-tooltip.top="at === undefined ? `Goes ahead as soon as the executor picks it up, click to pick a date` : formatTimestamp(at)"
+        v-tooltip.top="at === undefined ? t(`scheduleControl.goesAheadSoonExecutor`) : formatTimestamp(at)"
         @click="editing = true"
     >
         <Icon name="clock" />
-        <span>{{ at === undefined ? `No date` : words(at) }}</span>
+        <span>{{ at === undefined ? t(`scheduleControl.noDate`) : words(at) }}</span>
         <Icon name="pencil" class="text-2xs opacity-0 transition-opacity group-hover:opacity-100" />
     </button>
 </template>

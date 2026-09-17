@@ -41,6 +41,15 @@ const arc = computed(() => {
             :stroke-dasharray="track"
             :style="{ stroke: 'color-mix(in srgb, var(--color-content) 12%, transparent)' }"
         />
-        <circle v-if="lit > 0" :cx="size / 2" :cy="size / 2" :r="radius" fill="none" stroke="currentColor" :stroke-width="stroke" :stroke-dasharray="arc" />
+        <circle
+            v-if="lit > 0"
+            :cx="size / 2"
+            :cy="size / 2"
+            :r="radius"
+            fill="none"
+            stroke="currentColor"
+            :stroke-width="stroke"
+            :stroke-dasharray="arc"
+        />
     </svg>
 </template>

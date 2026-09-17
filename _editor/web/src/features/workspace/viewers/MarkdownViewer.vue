@@ -12,12 +12,15 @@ import MarkdownOutline from "./MarkdownOutline.vue";
 import { toggleTaskCheckbox } from "./markdownTasks";
 import { useMarkdownOutline } from "./markdownOutline";
 import { CHROME_SCOPE, viewerActionsTarget } from "../files/viewerChrome";
+import { useT } from "@intentic/ui/i18n";
 
 // Markdown surface: one document (kit's <MarkdownDocument>), rendered in both reading and editing states; the
 // app's ordinary Edit switch decides which. Source view is an escape hatch, not half a toggle: Monaco, since a
 // file can be huge, and where a search hit (a line fact) lands. Checkbox ticks are live while reading.
 
 // `line`: a content-search hit landing here; `editable` is the host's permission, not whether editing is on.
+const t = useT();
+
 const { source, path, line, editable } = defineProps<{ source: string; path: string; line?: LineJump; editable?: boolean }>();
 const emit = defineEmits<{ change: [value: string]; save: [value: string] }>();
 
@@ -140,9 +143,9 @@ watch([() => current.value === undefined, () => path], () => (overlayOpen.value 
 
 <template>
     <div ref="root" class="flex h-full min-h-0 flex-col">
-<!-- No bar of its own: three controls and a section name aren't a toolbar's worth, so they ride the breadcrumb instead of pushing prose down another row. -->
+        <!-- No bar of its own: three controls and a section name aren't a toolbar's worth, so they ride the breadcrumb instead of pushing prose down another row. -->
         <Teleport defer :to="`#${viewerActionsTarget(scope)}`">
-<!-- The current section opens the outline when the pane cannot dock it. -->
+            <!-- The current section opens the outline when the pane cannot dock it. -->
             <Button
                 v-if="current !== undefined"
                 ref="opener"
@@ -150,11 +153,11 @@ watch([() => current.value === undefined, () => path], () => (overlayOpen.value 
                 severity="secondary"
                 :text="true"
                 class="min-w-0"
-                v-tooltip.bottom="'Outline'"
+                v-tooltip.bottom="t(`workspace.markdownViewer.outline`)"
                 @click="overlayOpen = !overlayOpen"
             >
                 <Icon name="align-left" class="shrink-0 text-subtle" aria-hidden="true" />
-<!-- Narrower than it was on its own bar, since this now shares a row with the tab strip; the glyph alone still opens the outline. -->
+                <!-- Narrower than it was on its own bar, since this now shares a row with the tab strip; the glyph alone still opens the outline. -->
                 <span class="max-w-32 truncate max-md:hidden">{{ current }}</span>
             </Button>
 
@@ -163,20 +166,20 @@ watch([() => current.value === undefined, () => path], () => (overlayOpen.value 
                 type="button"
                 :class="ui.iconButton()"
                 :aria-pressed="docked"
-                v-tooltip.bottom="docked ? `Hide outline` : `Show outline`"
-                :aria-label="docked ? `Hide outline` : `Show outline`"
+                v-tooltip.bottom="docked ? t(`workspace.markdownViewer.hideOutline`) : t(`workspace.markdownViewer.showOutline`)"
+                :aria-label="docked ? t(`workspace.markdownViewer.hideOutline`) : t(`workspace.markdownViewer.showOutline`)"
                 @click="layout.toggleMarkdownOutline()"
             >
                 <Icon name="align-left" />
             </button>
 
-<!-- The way out, not half of a toggle: source is for what prose can't express (a blank line between blocks, a swallowed construct, a matched search line). -->
+            <!-- The way out, not half of a toggle: source is for what prose can't express (a blank line between blocks, a swallowed construct, a matched search line). -->
             <button
                 type="button"
                 :class="ui.iconButton()"
                 :aria-pressed="view === `source`"
-                v-tooltip.bottom="view === `source` ? `Back to the document` : `View markdown source`"
-                :aria-label="view === `source` ? `Back to the document` : `View markdown source`"
+                v-tooltip.bottom="view === `source` ? t(`workspace.markdownViewer.backToDocument`) : t(`workspace.markdownViewer.viewMarkdownSource`)"
+                :aria-label="view === `source` ? t(`workspace.markdownViewer.backToDocument`) : t(`workspace.markdownViewer.viewMarkdownSource`)"
                 @click="view = view === `source` ? `document` : `source`"
             >
                 <Icon :name="view === `source` ? `eye` : `code`" />
@@ -184,7 +187,7 @@ watch([() => current.value === undefined, () => path], () => (overlayOpen.value 
         </Teleport>
 
         <div class="relative flex min-h-0 flex-1">
-<!-- A reading position is a hairline's worth of info, not a bar's; absent when the document fits its pane. -->
+            <!-- A reading position is a hairline's worth of info, not a bar's; absent when the document fits its pane. -->
             <div
                 v-if="view === `document` && outline.scrollable.value"
                 class="pointer-events-none absolute left-0 top-0 z-10 h-px bg-link/60"
@@ -192,7 +195,7 @@ watch([() => current.value === undefined, () => path], () => (overlayOpen.value 
                 aria-hidden="true"
             ></div>
             <template v-if="view === `document`">
-<!-- Scroller spans the whole pane, scrollbar at its edge, rail parked in padding rather than beside it. -->
+                <!-- Scroller spans the whole pane, scrollbar at its edge, rail parked in padding rather than beside it. -->
                 <div
                     ref="scroller"
                     class="ui-softscroll h-full min-w-0 flex-1 overflow-auto bg-canvas py-5 pl-12"
@@ -210,13 +213,13 @@ watch([() => current.value === undefined, () => path], () => (overlayOpen.value 
                         :caret-at="landing"
                         :decorate="decorate"
                         :label="path"
-                        :placeholder="editing ? `Start typing.` : `Empty file.`"
+                        :placeholder="editing ? t(`workspace.markdownViewer.startTyping`) : t(`workspace.markdownViewer.emptyFile`)"
                         class="mx-auto min-h-full max-w-3xl"
                         @change="onChange"
                         @save="(value: string) => emit(`save`, value)"
                     />
                 </div>
-<!-- Parked in that padding, outside the scroller, so it neither scrolls with the document nor slides with a wide table. -->
+                <!-- Parked in that padding, outside the scroller, so it neither scrolls with the document nor slides with a wide table. -->
                 <aside
                     v-if="docked"
                     class="absolute inset-y-0 flex w-72 flex-col bg-canvas py-5 pl-2 pr-2"
@@ -241,8 +244,8 @@ watch([() => current.value === undefined, () => path], () => (overlayOpen.value 
             />
         </div>
 
-<!-- Same outline, for panes that can't dock one (or a peek after the rail is off); anchored to the section button on desktop, a sheet on phone. -->
-        <ResponsiveOverlay v-model="overlayOpen" :anchor="opener" header="Outline" panel-class="max-h-[60vh] w-72 p-2">
+        <!-- Same outline, for panes that can't dock one (or a peek after the rail is off); anchored to the section button on desktop, a sheet on phone. -->
+        <ResponsiveOverlay v-model="overlayOpen" :anchor="opener" :header="t(`workspace.markdownViewer.outline`)" panel-class="max-h-[60vh] w-72 p-2">
             <MarkdownOutline :headings="outline.headings.value" :active="outline.active.value" @jump="jumpFromOverlay" />
         </ResponsiveOverlay>
     </div>

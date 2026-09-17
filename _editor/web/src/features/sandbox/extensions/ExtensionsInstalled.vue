@@ -10,10 +10,13 @@ import { useSandboxOutline } from "../overview/useSandboxOutline";
 import { reloadExtensions } from "../../../extension-host/useExtensionHost";
 import ExtensionRemoveDialog from "./ExtensionRemoveDialog.vue";
 import ExtensionRow from "./ExtensionRow.vue";
+import { useT } from "@intentic/ui/i18n";
 
 // Every extension this sandbox has (first-party, baked, git-installed, workspace), the half of the Extensions section
 // answering 'what do I have and is it working' (Browse is the other half). Built to be scanned: the nominal case is
 // silent, exceptions pin to a group at the top, and sections group by manifest-declared purpose.
+
+const t = useT();
 
 const { query, mode, focus, publishedMatches } = defineProps<{
     /** The section's search text: matches the id and everything the extension contributes. */
@@ -41,7 +44,13 @@ const outline = useSandboxOutline(isLoading);
 // The list query's own message, in the words of the view that asked for it.
 watch(
     () => error.value,
-    (failure) => emit(`notice`, failure === undefined ? undefined : { tone: `danger`, title: `Couldn't list this sandbox's extensions.`, detail: failure }),
+    (failure) =>
+        emit(
+            `notice`,
+            failure === undefined
+                ? undefined
+                : { tone: `danger`, title: t(`sandbox.extensionsInstalled.couldntListSandboxsExtensions`), detail: failure },
+        ),
     { immediate: true },
 );
 
@@ -68,7 +77,11 @@ const matches = computed(() => {
 });
 const attention = computed(() => matches.value.filter((entry) => entry.state.attention));
 const healthy = computed(() => matches.value.filter((entry) => !entry.state.attention));
-watch(() => matches.value.length, (count) => emit(`matched`, count), { immediate: true });
+watch(
+    () => matches.value.length,
+    (count) => emit(`matched`, count),
+    { immediate: true },
+);
 
 // The exception group is an ordinary section, just pinned first, overriding the purpose taxonomy: a broken extension
 // shouldn't hide under the heading you'd look for it on a good day.
@@ -78,7 +91,7 @@ const sections = computed<ExtensionSection[]>(() => [
         : [
               {
                   id: `attention`,
-                  label: `Needs attention`,
+                  label: t(`sandbox.extensionsInstalled.needsAttention`),
                   entries: attention.value,
               },
           ]),
@@ -142,7 +155,7 @@ const confirmRemove = async (): Promise<void> => {
         ];
         emit(`notice`, {
             tone: removed.rebuildNeeded === true ? `warning` : `info`,
-            title: `Removed ${extensionIdOf(extension.manifest)}.`,
+            title: t(`sandbox.extensionsInstalled.removed`, { manifest: extensionIdOf(extension.manifest) }),
             ...(said.length === 0 ? {} : { detail: said.join(` `) }),
         });
     } catch (failure) {
@@ -171,9 +184,9 @@ const confirmRemove = async (): Promise<void> => {
 
         <!-- Sections render nothing while the read is out, so this outline gives the wait the list's own shape instead of a sentence. -->
         <template v-if="isLoading">
-            <RowGroup v-if="outline" label="Installed">
+            <RowGroup v-if="outline" :label="t(`sandbox.extensionsInstalled.installed`)">
                 <div role="status" aria-busy="true">
-                    <span class="sr-only">Reading this sandbox's extensions…</span>
+                    <span class="sr-only">{{ t(`sandbox.extensionsInstalled.readingSandboxsExtensions`) }}</span>
                     <SkeletonRows :rows="3" description control />
                 </div>
             </RowGroup>
@@ -182,17 +195,22 @@ const confirmRemove = async (): Promise<void> => {
             <span>{{ emptyNote }}</span>
             <!-- An empty list is the moment to answer 'where do extensions come from', not just point at another surface. -->
             <button v-if="entries.length === 0" type="button" :class="ui.linkButton(`text-xs`)" @click="emit(`browse`)">
-                Discover what people have published →
+                {{ t(`sandbox.extensionsInstalled.discoverWhatPeoplePublished`) }}
             </button>
             <!-- The empty state answers the active filter before offering reset. -->
             <button v-if="matches.length === 0 && publishedMatches > 0" type="button" :class="ui.linkButton(`text-xs`)" @click="emit(`browse`)">
-                {{ publishedMatches }} published {{ publishedMatches === 1 ? `extension matches` : `extensions match` }} “{{ query.trim() }}” →
+                {{ t(`sandbox.extensionsInstalled.publishedMatches`, { count: publishedMatches, query: query.trim() }, publishedMatches) }}
             </button>
-            <Button v-if="matches.length === 0 && entries.length > 0" size="small" label="Clear filter" @click="emit(`clear`)" />
+            <Button
+                v-if="matches.length === 0 && entries.length > 0"
+                size="small"
+                :label="t(`sandbox.extensionsInstalled.clearFilter`)"
+                @click="emit(`clear`)"
+            />
         </div>
 
         <!-- Unenumerated workspace extensions are listed with their reason. -->
-        <RowGroup v-if="invalid.length > 0" label="Not loadable">
+        <RowGroup v-if="invalid.length > 0" :label="t(`sandbox.extensionsInstalled.notLoadable`)">
             <Row v-for="entry in invalid" :key="entry.dir">
                 <template #title>
                     <span class="block truncate">.intentic/config/workspace-extensions/{{ entry.dir }}</span>
@@ -200,12 +218,12 @@ const confirmRemove = async (): Promise<void> => {
                 <template #description>
                     <span class="text-danger">{{ entry.error }}</span>
                 </template>
-                <template #meta><StatusBadge variant="danger" label="invalid" size="xs" /></template>
+                <template #meta><StatusBadge variant="danger" :label="t(`sandbox.extensionsInstalled.invalid`)" size="xs" /></template>
             </Row>
         </RowGroup>
 
         <!-- Running in this app build, absent from the daemon's list: no row to sit in, no switch to offer. -->
-        <RowGroup v-if="unlisted.length > 0" label="Running but not listed">
+        <RowGroup v-if="unlisted.length > 0" :label="t(`sandbox.extensionsInstalled.runningNotListed`)">
             <Row v-for="status in unlisted" :key="status.id">
                 <template #title>
                     <span class="block truncate">{{ status.extensionId }}</span>
@@ -221,11 +239,6 @@ const confirmRemove = async (): Promise<void> => {
 
         <!-- Removal takes state the owner configured themselves, so it is never one click: the dialog reads the plan
              first and names every connection, credential and file that goes with it. -->
-        <ExtensionRemoveDialog
-            :extension="removing"
-            :busy="removingNow"
-            @close="removing = undefined"
-            @confirm="void confirmRemove()"
-        />
+        <ExtensionRemoveDialog :extension="removing" :busy="removingNow" @close="removing = undefined" @confirm="void confirmRemove()" />
     </div>
 </template>

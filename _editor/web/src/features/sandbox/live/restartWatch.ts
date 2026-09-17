@@ -15,6 +15,7 @@ import { useSandboxVersion } from "../overview/useSandboxVersion";
 import { SANDBOX_DEFAULT_SECTION } from "../sandboxNav";
 import { useHostedBuild } from "../secrets/useHostedBuild";
 import { restartFinished } from "./sandboxRestart";
+import { t } from "@intentic/ui/i18n";
 
 // THE RUNS THAT END IN A RESTART, FOLLOWED FROM THE ROOT. Everything here was already followed — by the Environment
 // card, by the hub — and that was the whole problem: a build takes minutes, and the reader spends them somewhere
@@ -54,13 +55,13 @@ export const rebuildReceipt = (before: DevRebuildPhase | undefined, run: DevRebu
     }
     // The card keeps the durable record — the log, its path, the dismissal. This is only the sentence that finds
     // whoever left, which by the time a rebuild lands is nearly everyone.
-    const seeTheLog = [{ label: `See the log`, severity: `secondary` as const, run: openEnvironment }];
+    const seeTheLog = [{ label: t(`sandbox.restartWatch.seeLog`), severity: `secondary` as const, run: openEnvironment }];
     if (run.phase === `done`) {
         const took = rebuildElapsedLabel(rebuildSeconds(run));
         return {
             tone: `done`,
             title: `Rebuilt from your checkout in ${took ?? `a few minutes`}`,
-            detail: `You're running the new image.`,
+            detail: t(`sandbox.restartWatch.youreRunningNewImage`),
             actions: seeTheLog,
         };
     }

@@ -93,7 +93,7 @@ const svg = computed<string>(() => {
 </script>
 
 <template>
-<!-- The name is only a lookup index, never markup, so nothing user-supplied is interpolated into what's rendered. -->
+    <!-- The name is only a lookup index, never markup, so nothing user-supplied is interpolated into what's rendered. -->
     <span
         class="flex shrink-0 items-center justify-center"
         :style="{ width: `${size}px`, height: `${size}px` }"

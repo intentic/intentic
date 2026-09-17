@@ -1,0 +1,78 @@
+{
+    "extension": {
+        "ports": "Ports",
+        "public": "Public"
+    },
+    "portRow": {
+        "boundToLoopbackAlias": "Bound to a loopback alias the preview proxy cannot reach.",
+        "forwarded": "forwarded",
+        "notForwardable": "not forwardable",
+        "openInNewTab": "Open in new tab",
+        "openPortPreviewIn": "Open the port {port} preview in a new tab",
+        "openTerminalRunningIn": "Open {session}: the terminal this is running in",
+        "preview": "Preview",
+        "stop": "Stop"
+    },
+    "portsView": {
+        "comeSandboxRunWhether": "These come with the sandbox and run whether or not you start anything: the service this app talks to, the agent runtimes, Docker's plumbing, an extension's background worker. They are listed so nothing is hidden from you, not because there is anything to do with them.",
+        "everyTcpPortSomething": "Every TCP port something inside the sandbox is listening on: dev servers you or an agent started, ports your containers publish, anything at all. Each row is named from the process behind it; open the",
+        "exactCommandFolderTerminal": "for the exact command, folder and terminal.",
+        "insteadDesktopSyncMirroring": "instead? That is desktop sync mirroring it onto your machine: Devices says which ports made it, and which one another sandbox got to first.",
+        "internals": "Internals",
+        "localhost": "localhost",
+        "lookingPortOnOwn": "Looking for a port on your own",
+        "makesOneReachableIn": "makes one reachable in your browser through the sandbox's tunnel; a forwarded port stays public until you stop it.",
+        "nothingYoursListeningYet": "Nothing of yours is listening yet.",
+        "ports": "Ports",
+        "preview": "Preview",
+        "sandboxInternals": "Sandbox internals",
+        "sandboxsOwnServices": "The sandbox's own services",
+        "scanningListeningPorts": "Scanning for listening ports…",
+        "services": "Your services",
+        "startDevServerIn": "Start a dev server in a terminal and it appears here.",
+        "whatListeningHere": "What is listening here"
+    },
+    "publicView": {
+        "anythingInside": "Anything inside",
+        "blocked": "blocked",
+        "copyAddress": "Copy address",
+        "create": "Create a",
+        "folderInWorkspacePut": "folder in your workspace and put a file in it, or ask the agent to publish something for you.",
+        "inWorkspaceServedOn": "in your workspace is served on the internet at the address below: no sign-in, no running server. Drop a file in and it has a link; delete it and the link stops working. The folder disappears when the last file leaves, so an empty workspace publishes nothing.",
+        "notServed": "Not served: {blocked}",
+        "nothingPublished": "Nothing is published.",
+        "openInNewTab": "Open {path} in a new tab",
+        "openInNewTab2": "Open in new tab",
+        "public2": "{servedCount} public",
+        "publicFiles": "Public files",
+        "publicFolder": "Your public folder",
+        "published": "Published",
+        "readingPublishedFiles": "Reading your published files…",
+        "sandboxNoPublicAddress": "This sandbox has no public address, so files can't be published from it.",
+        "share": "Share",
+        "unpublish": "Unpublish"
+    },
+    "sharePreview": {
+        "anyoneLinkOpen": "Anyone with this link can open it",
+        "copyLink": "Copy link",
+        "openInNewTab": "Open in new tab",
+        "openPreviewInNew": "Open the preview in a new tab",
+        "shareLivePreview": "Share this live preview"
+    },
+    "sharedConversations": {
+        "chatsYouvePublished": "Chats you've published",
+        "copyLink": "Copy link",
+        "eachReadOnlyPage": "Each of these is a read-only page anyone with the link can open: no sign-in. It shows the conversation as it was when you shared it, so anything said since stays private until you press",
+        "messagesOnly": "messages only",
+        "openInNewTab": "Open {title} in a new tab",
+        "openInNewTab2": "Open in new tab",
+        "public": "{count} public",
+        "publishEverythingSaidSince": "Publish everything said since you shared it",
+        "sandboxNoPublicAddress": "This sandbox has no public address, so this page can't be reached.",
+        "sharedConversations": "Shared conversations",
+        "stopSharing": "Stop sharing",
+        "summary": "shared {when} · {count} message · {detail} | shared {when} · {count} messages · {detail}",
+        "update": "Update",
+        "withAgentWork": "with the agent's work"
+    }
+}

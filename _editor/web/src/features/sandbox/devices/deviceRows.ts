@@ -31,6 +31,7 @@ import {
     machineWarnings,
     osLabel,
 } from "./deviceFacts";
+import { t } from "@intentic/ui/i18n";
 
 // One device as the board and the device page both read it: its state in one word and one colour, its
 // sandboxes folded into groups, and the agent verdicts a render needs; and one MACHINE, the PC those devices are
@@ -106,8 +107,7 @@ export const deviceRow = (device: Device, latest: string | undefined): DeviceRow
     return {
         device,
         groups: groupsOf(device),
-        agent:
-            agent === undefined ? undefined : { ...agent, stalled: agentHalted(device), ...(staleBuild === undefined ? {} : { staleBuild }) },
+        agent: agent === undefined ? undefined : { ...agent, stalled: agentHalted(device), ...(staleBuild === undefined ? {} : { staleBuild }) },
         chip: agentChip(device, latest),
     };
 };
@@ -223,8 +223,7 @@ export const commandable = (device: Device, group: DeviceSandboxGroup): boolean 
 // Offered only where there's a running file sync to pause: a mirror-only enrollment has no session for it, and
 // neither does a sync pairing whose sandbox was unreachable when its session was due — asking the machine to
 // pause that one is asking Mutagen for a name it cannot resolve.
-export const pausable = (device: Device, group: DeviceSandboxGroup): boolean =>
-    commandable(device, group) && syncSessionLive(group.folder);
+export const pausable = (device: Device, group: DeviceSandboxGroup): boolean => commandable(device, group) && syncSessionLive(group.folder);
 
 // A conflict between two EDITED copies has no switch: choosing between them is judgement per file, so the
 // control is a turn an agent can run against both ends, not a one-click winner. Offered only where at least
@@ -373,7 +372,11 @@ export const syncHalf = (row: DeviceRow): DeviceHalf =>
         (folder) => folder.paused === true,
     );
 
-export const mirrorHalf = (row: DeviceRow): DeviceHalf => halfOf(row.groups.map((group) => group.folder), mirroringOff);
+export const mirrorHalf = (row: DeviceRow): DeviceHalf =>
+    halfOf(
+        row.groups.map((group) => group.folder),
+        mirroringOff,
+    );
 
 // Offered under the same three conditions as the per-pairing buttons, plus more than one pairing for that
 // half: over a single pairing this would be that row's own button wearing a wider, scarier label.
@@ -400,18 +403,26 @@ export interface DeviceSwitch {
     readonly actions: readonly HalfAction[];
 }
 
-const PAUSE: HalfAction = {
+const pause = (): HalfAction => ({
     command: `sync-pause`,
-    label: `Pause all`,
-    hint: `Stop moving files either way, for every sandbox this device syncs. Their ports keep being mirrored.`,
-};
-const RESUME: HalfAction = { command: `sync-resume`, label: `Resume all`, hint: `Start moving files again for every sandbox this device syncs.` };
-const MIRROR_OFF: HalfAction = {
+    label: t(`sandbox.deviceRows.pauseAll`),
+    hint: t(`sandbox.deviceRows.stopMovingFilesEither`),
+});
+const resume = (): HalfAction => ({
+    command: `sync-resume`,
+    label: t(`sandbox.deviceRows.resumeAll`),
+    hint: t(`sandbox.deviceRows.startMovingFilesAgain`),
+});
+const mirrorOff = (): HalfAction => ({
     command: `mirror-off`,
-    label: `Stop all`,
-    hint: `Take every paired sandbox's ports off this device's localhost. Files keep syncing.`,
-};
-const MIRROR_ON: HalfAction = { command: `mirror-on`, label: `Start all`, hint: `Put every paired sandbox's ports back on this device's localhost.` };
+    label: t(`sandbox.deviceRows.stopAll`),
+    hint: t(`sandbox.deviceRows.takeEveryPairedSandboxs`),
+});
+const mirrorOn = (): HalfAction => ({
+    command: `mirror-on`,
+    label: t(`sandbox.deviceRows.startAll`),
+    hint: t(`sandbox.deviceRows.putEveryPairedSandboxs`),
+});
 
 // A settled switch offers the way out; a mixed one offers both, rather than choosing for the reader.
 const actionsFor = (position: HalfState, toOff: HalfAction, toOn: HalfAction): HalfAction[] =>
@@ -426,23 +437,23 @@ export const deviceSwitches = (row: DeviceRow): DeviceSwitch[] => {
     const sync = syncHalf(row);
     if (switchable(row, sync)) {
         switches.push({
-            label: `File syncing`,
+            label: t(`sandbox.deviceRows.fileSyncing`),
             state: sync.state,
             word: sync.state === `off` ? `paused` : `on`,
             note: halfNote(sync, `paused`),
             scope: `all ${sync.total} sandboxes`,
-            actions: actionsFor(sync.state, PAUSE, RESUME),
+            actions: actionsFor(sync.state, pause(), resume()),
         });
     }
     const mirror = mirrorHalf(row);
     if (switchable(row, mirror)) {
         switches.push({
-            label: `Port mirroring`,
+            label: t(`sandbox.deviceRows.portMirroring`),
             state: mirror.state,
             word: mirror.state === `off` ? `off` : `on`,
             note: halfNote(mirror, `off`),
             scope: `all ${mirror.total} sandboxes`,
-            actions: actionsFor(mirror.state, MIRROR_OFF, MIRROR_ON),
+            actions: actionsFor(mirror.state, mirrorOff(), mirrorOn()),
         });
     }
     return switches;

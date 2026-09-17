@@ -4,8 +4,9 @@ import type { WorkflowRun } from "@intentic/sandbox-contract";
 import { computed, ref, watch } from "vue";
 import WorkflowNodeCard from "./WorkflowNodeCard.vue";
 import { host } from "./host";
-import { STEP_TONE, workflowDag } from "./workflowDag";
+import { stepTone, workflowDag } from "./workflowDag";
 import { useWorkflows } from "./useWorkflows";
+import { t } from "./i18n.js";
 
 // Read-only counterpart to the designer, sharing `workflowDag`/`WorkflowNodeCard` so a run looks like its design. Uses
 // `DagGraph`, not `DagEditor`: nothing here is editable. Cards show state and round count, the only signal that
@@ -64,16 +65,25 @@ const chatLink = (conversationId: string) => {
 <template>
     <div class="flex h-full min-h-0 flex-col">
         <header class="flex shrink-0 flex-wrap items-center gap-2 border-b border-line-subtle px-4 py-2.5">
-            <button type="button" :class="ui.iconButton()" aria-label="Back to workflows" @click="emit(`close`)"><Icon name="arrow-left" /></button>
+            <button type="button" :class="ui.iconButton()" :aria-label="t(`workflowRunPage.backToWorkflows`)" @click="emit(`close`)">
+                <Icon name="arrow-left" />
+            </button>
             <span class="text-sm font-medium text-content">{{ run.workflow.name }}</span>
             <span class="text-2xs font-medium" :class="run.state === `done` ? `text-success` : run.state === `running` ? `text-link` : `text-subtle`">
                 {{ run.state }}
             </span>
-            <span class="text-2xs text-subtle">{{ finished }} of {{ run.steps.length }} steps</span>
+            <span class="text-2xs text-subtle">{{ t(`workflowRunPage.steps`, { finished, count: run.steps.length }) }}</span>
             <span v-if="spent > 0" class="text-2xs text-subtle">${{ spent.toFixed(2) }}</span>
-            <span class="text-2xs text-subtle">started {{ timeAgo(run.startedAt) }}</span>
+            <span class="text-2xs text-subtle">{{ t(`workflowRunPage.started`, { startedAt: timeAgo(run.startedAt) }) }}</span>
             <span class="flex-1"></span>
-            <Button v-if="run.state === `running`" label="Stop" size="small" severity="secondary" :disabled="stop.isPending.value" @click="stopRun()">
+            <Button
+                v-if="run.state === `running`"
+                :label="t(`workflowRunPage.stop`)"
+                size="small"
+                severity="secondary"
+                :disabled="stop.isPending.value"
+                @click="stopRun()"
+            >
                 <template #icon><Icon name="stop" /></template>
             </Button>
         </header>
@@ -91,21 +101,30 @@ const chatLink = (conversationId: string) => {
 
             <aside v-if="shown && shownStep" class="flex w-96 shrink-0 flex-col gap-2 overflow-y-auto border-l border-line p-3">
                 <div class="flex flex-wrap items-center gap-2">
-                    <Icon :name="STEP_TONE[shown.state].icon" :spin="STEP_TONE[shown.state].spin" :class="STEP_TONE[shown.state].text" />
+                    <Icon :name="stepTone()[shown.state].icon" :spin="stepTone()[shown.state].spin" :class="stepTone()[shown.state].text" />
                     <span class="text-sm font-medium text-content">{{ shownStep.title }}</span>
-                    <span class="text-2xs" :class="STEP_TONE[shown.state].text">{{ STEP_TONE[shown.state].label }}</span>
-                    <span v-if="shown.iterations > 0" class="text-2xs text-subtle"
-                        >{{ shown.iterations }} round{{ shown.iterations === 1 ? `` : `s` }}</span
-                    >
+                    <span class="text-2xs" :class="stepTone()[shown.state].text">{{ stepTone()[shown.state].label }}</span>
+                    <span v-if="shown.iterations > 0" class="text-2xs text-subtle">{{
+                        t(`workflowRunPage.rounds`, { count: shown.iterations }, shown.iterations)
+                    }}</span>
                     <span v-if="shown.costUsd" class="text-2xs text-subtle">${{ shown.costUsd.toFixed(2) }}</span>
                 </div>
 
-                <Button label="Open the session log" size="small" severity="secondary" :text="true" as="a" v-bind="chatLink(shown.conversationId)">
+                <Button
+                    :label="t(`workflowRunPage.openSessionLog`)"
+                    size="small"
+                    severity="secondary"
+                    :text="true"
+                    as="a"
+                    v-bind="chatLink(shown.conversationId)"
+                >
                     <template #icon><Icon name="arrow-right" /></template>
                 </Button>
 
                 <!-- Falls back to the run's own request, not the step's title, which is a label rather than a completion bar. -->
-                <p class="text-xs text-subtle"><span class="text-content">Done when:</span> {{ shownStep.goal ?? run.request }}</p>
+                <p class="text-xs text-subtle">
+                    <span class="text-content">{{ t(`workflowRunPage.done`) }}</span> {{ shownStep.goal ?? run.request }}
+                </p>
 
                 <!-- Declared `json` output as a table: data to read at a glance and for the next step to act on. -->
                 <div v-if="dataRows.length > 0" class="overflow-hidden rounded-md border border-line-subtle">

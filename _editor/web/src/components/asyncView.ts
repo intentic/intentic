@@ -2,6 +2,7 @@ import { Notice, useLoadingReveal } from "@intentic/ui";
 import { type Component, computed, defineComponent, h, ref, shallowRef } from "vue";
 import { useRoute } from "vue-router";
 import { clearStaleChunkReload, isStaleChunkError, recoverStaleChunk } from "../router/staleChunk";
+import { t } from "@intentic/ui/i18n";
 
 // Wraps a route's `() => import(...)` so navigation completes immediately; `outline` shows only past the same
 // reveal-delay thresholds data skeletons use. Owns the failure path, invisible to router.onError once navigation lands:
@@ -75,9 +76,9 @@ export const asyncView = (load: Loader, outline?: Component): Component => {
                         h(Notice, {
                             of: {
                                 tone: `danger`,
-                                title: `This view couldn't load.`,
+                                title: t(`common.asyncView.viewCouldntLoad`),
                                 detail: failure.value,
-                                action: { label: `Try again`, run: attempt },
+                                action: { label: t(`ui.action.tryAgain`), run: attempt },
                             },
                         }),
                     ]);

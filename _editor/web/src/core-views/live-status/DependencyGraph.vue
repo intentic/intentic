@@ -4,6 +4,9 @@ import { DagGraph, type DagEdge, type DagNode } from "@intentic/ui";
 import { computed, reactive } from "vue";
 import { statusDot, statusLabel } from "../../features/extensions/reconcileStatus";
 import { groupAccent, resourceIcon, resourceLogoUrl } from "../../features/extensions/resourceVisual";
+import { useT } from "@intentic/ui/i18n";
+
+const t = useT();
 
 /* The desired-state dependency graph: each resource as a node, laid out left→right by dependency depth, edges flowing from a dependency to its dependents. */
 
@@ -61,5 +64,5 @@ const logoFailed = reactive(new Set<string>());
             </template>
         </DagGraph>
     </div>
-    <p v-else class="py-6 text-center text-sm text-muted">No desired state yet. Declare backends in Configuration, then provision.</p>
+    <p v-else class="py-6 text-center text-sm text-muted">{{ t(`views.dependencyGraph.noDesiredStateYet`) }}</p>
 </template>

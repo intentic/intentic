@@ -1,5 +1,6 @@
 import type { StatusVariant } from "@intentic/ui";
 import { readIntenticLines } from "../../lib/intenticStream";
+import { t } from "@intentic/ui/i18n";
 
 // Shared reconcile-action vocabulary for the live-status board, the plan preview, and apply progress: one source of
 // truth for a verdict's label, badge variant, and dot colour so all three stay in lockstep.
@@ -131,5 +132,7 @@ export const convergedBadge = (converged: boolean | undefined): { label: string;
     if (converged === undefined) {
         return undefined;
     }
-    return converged ? { label: `up to date`, variant: `success` } : { label: `changes pending`, variant: `info` };
+    return converged
+        ? { label: t(`extensions.reconcileStatus.upToDate`), variant: `success` }
+        : { label: t(`extensions.reconcileStatus.changesPending`), variant: `info` };
 };

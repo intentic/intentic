@@ -8,6 +8,7 @@ import { useMissingSecretCount } from "../../capabilities/connect/useSecrets";
 import { useSyncHealth } from "../devices/useDevices";
 import { useEnvironment } from "../environment/useEnvironment";
 import { useSandboxVersion } from "./useSandboxVersion";
+import { t } from "@intentic/ui/i18n";
 
 // What the active sandbox needs from its owner, versus what's merely true of it: one list, split by `kind`, read
 // by the rail chip and the mobile menu so they agree. Lives as a badge on the chip, not a dismissible bar, since
@@ -57,14 +58,16 @@ const updateItems = (available: boolean, staged: boolean): SandboxAttentionItem[
             {
                 icon: `arrow-circle-up`,
                 tone: `info`,
-                message: `A sandbox update is ready to apply — a restart of about half a minute`,
+                message: t(`sandbox.sandboxAttention.sandboxUpdateReadyTo`),
                 to: `/sandbox`,
                 kind: `note`,
                 badges: true,
             },
         ];
     }
-    return [{ icon: `arrow-circle-up`, tone: `info`, message: `A new sandbox version is available`, to: `/sandbox`, kind: `note` }];
+    return [
+        { icon: `arrow-circle-up`, tone: `info`, message: t(`sandbox.sandboxAttention.newSandboxVersionAvailable`), to: `/sandbox`, kind: `note` },
+    ];
 };
 
 export function useSandboxAttention() {
@@ -81,7 +84,7 @@ export function useSandboxAttention() {
                   {
                       icon: `sparkles` as const,
                       tone: `warning` as const,
-                      message: `No AI account connected, the agent can't run a turn`,
+                      message: t(`sandbox.sandboxAttention.noAiAccountConnected`),
                       to: `/sandbox/agent`,
                       kind: `needs` as const,
                   },
@@ -93,7 +96,7 @@ export function useSandboxAttention() {
                   {
                       icon: `exclamation-triangle` as const,
                       tone: `warning` as const,
-                      message: `Rebuild needed to finish setting up your new capabilities`,
+                      message: t(`sandbox.sandboxAttention.rebuildNeededToFinish`),
                       to: `/sandbox/environment`,
                       kind: `needs` as const,
                   },
@@ -104,7 +107,7 @@ export function useSandboxAttention() {
                   {
                       icon: `exclamation-triangle` as const,
                       tone: `warning` as const,
-                      message: `The agent proposed a change to your environment`,
+                      message: t(`sandbox.sandboxAttention.agentProposedChangeTo`),
                       to: `/sandbox/environment`,
                       kind: `needs` as const,
                   },

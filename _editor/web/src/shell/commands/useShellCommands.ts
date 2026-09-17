@@ -10,6 +10,7 @@ import { useTerminalPanel } from "../../features/terminal/useTerminalPanel";
 import { useTerminalFloating } from "../../features/terminal/terminalFloating";
 import { useQuickOpen } from "./useQuickOpen";
 import { useRole } from "../../features/sandbox/secrets/useRole";
+import { t } from "@intentic/ui/i18n";
 
 // Core shell's built-in actions: what the shell can *do*, against the panels it owns. Where these commands can take
 // you is useNavigationCommands' half, derived from the rail and the hubs rather than listed. Each handler calls the
@@ -31,7 +32,7 @@ export function useShellCommands(): void {
         const entries: Omit<CommandRegistration, `owner`>[] = [
             {
                 command: `workspace.goToFile`,
-                title: `File…`,
+                title: t(`shell.useShellCommands.file`),
                 category: GO_TO,
                 icon: `search`,
                 keybinding: `Mod+P`,
@@ -43,7 +44,7 @@ export function useShellCommands(): void {
             {
                 command: `workspace.commandPalette`,
                 // The one command with no family: it is the list the others are read from.
-                title: `Command Palette…`,
+                title: t(`shell.useShellCommands.commandPalette`),
                 icon: `search`,
                 keybinding: `Mod+Shift+P`,
                 handler: (): void => {
@@ -54,7 +55,7 @@ export function useShellCommands(): void {
             // Both terminal commands no-op below maintainer, where the daemon refuses the socket.
             {
                 command: `terminal.toggle`,
-                title: `Toggle Panel`,
+                title: t(`shell.useShellCommands.togglePanel`),
                 category: TERMINAL,
                 icon: `code`,
                 keybinding: `Ctrl+\``,
@@ -63,7 +64,7 @@ export function useShellCommands(): void {
             // Match the physical key globally so terminal.new works while its panel is closed.
             {
                 command: `terminal.new`,
-                title: `New`,
+                title: t(`shell.useShellCommands.new`),
                 category: TERMINAL,
                 icon: `code`,
                 keybinding: `Ctrl+Shift+\``,

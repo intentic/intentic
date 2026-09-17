@@ -3,6 +3,7 @@ import { computed, ref } from "vue";
 import { SandboxHttpError, sandboxJson } from "../client/sandboxClient";
 import { ENVIRONMENT_CONTENTS } from "../../../lib/queryKeys";
 import { useSandboxQuery } from "../client/useSandboxQuery";
+import { t } from "@intentic/ui/i18n";
 
 // This sandbox's contents, grouped by whose decision put it there. A separate, on-demand query from useEnvironment,
 // since probing every tool's version costs process spawns. `unsupported` reads a 404 as an older daemon lacking this
@@ -11,11 +12,12 @@ import { useSandboxQuery } from "../client/useSandboxQuery";
 const ENVIRONMENT_CONTENTS_KEY = ENVIRONMENT_CONTENTS.of();
 
 // Read order: agent-approved custom additions, then capability cost, then the unchosen base — narrowest decision first.
-const GROUPS = [
-    { origin: `custom`, label: `Added for this workspace` },
-    { origin: `capability`, label: `From your capabilities` },
-    { origin: `base`, label: `Comes with every sandbox` },
-] as const satisfies readonly { origin: EnvironmentItem[`origin`]; label: string }[];
+const originGroups = () =>
+    [
+        { origin: `custom`, label: t(`sandbox.useEnvironmentContents.addedWorkspace`) },
+        { origin: `capability`, label: t(`sandbox.useEnvironmentContents.capabilities`) },
+        { origin: `base`, label: t(`sandbox.useEnvironmentContents.comesEverySandbox`) },
+    ] as const satisfies readonly { origin: EnvironmentItem[`origin`]; label: string }[];
 
 export interface ContentsGroup {
     readonly origin: EnvironmentItem[`origin`];
@@ -42,11 +44,13 @@ export function useEnvironmentContents(enabled: () => boolean) {
     // full sandbox as stock.
     const loading = computed(() => query.isPending.value || (query.isFetching.value && items.value.length === 0));
     const groups = computed((): ContentsGroup[] =>
-        GROUPS.map((group) => ({
-            origin: group.origin,
-            label: group.label,
-            items: items.value.filter((item) => item.origin === group.origin),
-        })).filter((group) => group.items.length > 0),
+        originGroups()
+            .map((group) => ({
+                origin: group.origin,
+                label: group.label,
+                items: items.value.filter((item) => item.origin === group.origin),
+            }))
+            .filter((group) => group.items.length > 0),
     );
     // What the owner still has to decide on, so the toggle can say so before they open it.
     const awaiting = computed(() => items.value.filter((item) => item.state === `awaiting-approval`).length);

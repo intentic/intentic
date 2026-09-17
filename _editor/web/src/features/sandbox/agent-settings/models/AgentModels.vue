@@ -21,10 +21,13 @@ import { type PinnedList, pinKnobSummary, pinnedList } from "./modelPinList";
 import ModelPinList from "./ModelPinList.vue";
 import ModelPinPicker from "./ModelPinPicker.vue";
 import ModelRoleRow from "./ModelRoleRow.vue";
+import { useT } from "@intentic/ui/i18n";
 
 // Every model choice the sandbox makes: one row per job from the catalog (MODEL_ROLES/MODEL_ROLE_BLOCKS), grouped by
 // the catalog rather than by hand here. A block's Simple view stores nothing of its own, it reads and writes the same
 // per-job settings as Advanced, so switching views never changes what's saved.
+
+const t = useT();
 
 const { settings, patch } = useSandboxSettings();
 const loaded = computed(() => settings.value !== undefined);
@@ -162,10 +165,10 @@ const selectAllIn = (ids: readonly ModelRole[], on: boolean): void => {
 // Per-group, not a page toggle: opens Advanced if jobs already disagree (collapsing would hide that), Simple if they
 // agree. Derived once when settings land, not continuously, or a group could refold itself under the cursor.
 type ModelView = `simple` | `advanced`;
-const VIEWS: readonly { readonly label: string; readonly value: ModelView }[] = [
-    { label: `Simple`, value: `simple` },
-    { label: `Advanced`, value: `advanced` },
-];
+const VIEWS = computed((): readonly { readonly label: string; readonly value: ModelView }[] => [
+    { label: t(`sandbox.agentModels.simple`), value: `simple` },
+    { label: t(`sandbox.agentModels.advanced`), value: `advanced` },
+]);
 
 // Two refs: what settings opened with, and what's chosen since, so a late seed can't undo an early press.
 const openedIn = shallowRef<Partial<Record<ModelRoleBlockId, ModelView>>>({});
@@ -303,18 +306,18 @@ const setPickerOpen = (open: boolean): void => {
 };
 
 // Middle state is the point, not a halfway house: measuring first ends the guessing about a cutoff.
-const autoTierOptions = [
-    { label: `Off`, value: `off` },
-    { label: `Measure`, value: `shadow` },
-    { label: `On`, value: `on` },
-];
+const autoTierOptions = computed(() => [
+    { label: t(`sandbox.agentModels.off`), value: `off` },
+    { label: t(`sandbox.agentModels.measure`), value: `shadow` },
+    { label: t(`sandbox.agentModels.on`), value: `on` },
+]);
 
 // Named, not numbered: the cutoff is meaningless unread; offered live in both Measure and On.
-const eagernessOptions = [
-    { label: `Cautious`, value: `cautious` },
-    { label: `Balanced`, value: `balanced` },
-    { label: `Eager`, value: `eager` },
-];
+const eagernessOptions = computed(() => [
+    { label: t(`sandbox.agentModels.cautious`), value: `cautious` },
+    { label: t(`sandbox.agentModels.balanced`), value: `balanced` },
+    { label: t(`sandbox.agentModels.eager`), value: `eager` },
+]);
 </script>
 
 <template>
@@ -328,7 +331,7 @@ const eagernessOptions = [
                     :model-value="viewOf(block.id)"
                     :options="VIEWS"
                     size="xs"
-                    :aria-label="`How to show ${block.label.toLowerCase()}`"
+                    :aria-label="t(`sandbox.agentModels.howToShow`, { toLowerCase: block.label.toLowerCase() })"
                     @update:model-value="(view: ModelView) => setView(block, view)"
                 />
             </template>
@@ -342,21 +345,32 @@ const eagernessOptions = [
                             :indeterminate="someSelectedIn(block.ids)"
                             binary
                             size="small"
-                            :aria-label="`Select every job under ${block.label.toLowerCase()}`"
+                            :aria-label="t(`sandbox.agentModels.selectEveryJobUnder`, { toLowerCase: block.label.toLowerCase() })"
                             @update:model-value="(value: unknown) => selectAllIn(block.ids, value === true)"
                         />
-                        <span>{{ selectedIn(block.ids).length > 0 ? `${selectedIn(block.ids).length} selected` : `Select jobs` }}</span>
+                        <span>{{
+                            selectedIn(block.ids).length > 0
+                                ? t(`sandbox.agentModels.selected`, { count: selectedIn(block.ids).length })
+                                : t(`sandbox.agentModels.selectJobs`)
+                        }}</span>
                     </label>
                     <!-- Appears only once something's ticked; disabled buttons on every visit would just be furniture. -->
                     <template v-if="selectedIn(block.ids).length > 0">
                         <Button
                             size="small"
-                            label="Set a model for all…"
+                            :label="t(`sandbox.agentModels.setModelAll`)"
                             :disabled="!loaded"
                             @click="(event: MouseEvent) => openBulkPicker(event.currentTarget as HTMLElement, block.ids)"
                         />
                         <!-- The other half of the vocabulary: an empty list means off, so this switches several jobs off in one press. -->
-                        <Button size="small" severity="danger" text label="Clear models" :disabled="!loaded" @click="clearRoles(block.ids)" />
+                        <Button
+                            size="small"
+                            severity="danger"
+                            text
+                            :label="t(`sandbox.agentModels.clearModels`)"
+                            :disabled="!loaded"
+                            @click="clearRoles(block.ids)"
+                        />
                     </template>
                 </div>
             </template>
@@ -375,13 +389,13 @@ const eagernessOptions = [
                 <!-- Names the job the count leaves out, and links to the same switch the Advanced row does. -->
                 <template v-if="block.ids.includes(JUDGE) && judgeOff" #note>
                     <p class="text-2xs text-subtle">
-                        Safety judge is off, so it is not one of these and nothing here writes to it.
+                        {{ t(`sandbox.agentModels.safetyJudgeOffNot`) }}
                         <RouterLink
                             :to="{ name: `sandbox`, params: { tab: `agent` }, query: { section: `safety` } }"
                             class="text-link hover:underline"
-                            >Turn the judge on</RouterLink
+                            >{{ t(`sandbox.agentModels.turnJudgeOn`) }}</RouterLink
                         >
-                        under Safety.
+                        {{ t(`sandbox.agentModels.underSafety`) }}
                     </p>
                 </template>
             </ModelGroupRow>
@@ -404,18 +418,17 @@ const eagernessOptions = [
                     <template v-if="row.role.id === JUDGE" #note>
                         <!-- The judge row explains why its feature may be unavailable. -->
                         <p v-if="judgeOff" class="text-2xs text-subtle">
-                            Nothing is judging commands at the moment, so this is not in use.
+                            {{ t(`sandbox.agentModels.nothingJudgingCommandsAt`) }}
                             <RouterLink
                                 :to="{ name: `sandbox`, params: { tab: `agent` }, query: { section: `safety` } }"
                                 class="text-link hover:underline"
-                                >Turn the judge on</RouterLink
+                                >{{ t(`sandbox.agentModels.turnJudgeOn`) }}</RouterLink
                             >
-                            under Safety.
+                            {{ t(`sandbox.agentModels.underSafety`) }}
                         </p>
                         <!-- The judge model evaluates untrusted generated input. -->
                         <p v-else class="text-2xs text-subtle">
-                            Worth a better model than the rest of the automatic jobs: it reads the command as data, and on a turn that has taken in
-                            something from outside, that text may be arguing for its own approval.
+                            {{ t(`sandbox.agentModels.worthBetterModelThan`) }}
                         </p>
                     </template>
                 </ModelRoleRow>
@@ -423,8 +436,8 @@ const eagernessOptions = [
         </RowGroup>
 
         <!-- Not a job (not selectable), so its own group rather than a nineteenth row needing a placeholder tick column. -->
-        <RowGroup label="Cheaper turns" caption="Not a job: a substitution made inside a turn you started.">
-            <Row spine title="Automatic tier" description="Run simple turns on a cheaper model from the same provider.">
+        <RowGroup :label="t(`sandbox.agentModels.cheaperTurns`)" :caption="t(`sandbox.agentModels.notJobSubstitutionMade`)">
+            <Row spine :title="t(`sandbox.agentModels.automaticTier`)" :description="t(`sandbox.agentModels.runSimpleTurnsOn`)">
                 <!-- The judge row uses the standard lead slot and mark size. -->
                 <template #lead="{ mark, iconClass }">
                     <span class="flex shrink-0 items-center justify-center" :style="{ width: `${mark}px`, height: `${mark}px` }">
@@ -440,9 +453,9 @@ const eagernessOptions = [
                 </template>
                 <template #below>
                     <div class="flex flex-col gap-3">
-                        <p v-if="settings?.autoTier === `off`" class="text-2xs text-muted">Nothing is judged or recorded.</p>
+                        <p v-if="settings?.autoTier === `off`" class="text-2xs text-muted">{{ t(`sandbox.agentModels.nothingJudgedRecorded`) }}</p>
                         <p v-else-if="settings?.autoTier === `on`" class="text-2xs text-muted">
-                            Simple turns run on the cheaper model. Each conversation can veto it.
+                            {{ t(`sandbox.agentModels.simpleTurnsRunOn`) }}
                         </p>
 
                         <!-- The app's standard shape for a measured answer; no background, since `#below` is inside the row's hairline. -->
@@ -456,9 +469,14 @@ const eagernessOptions = [
 
                         <div class="flex flex-col gap-1.5">
                             <div class="flex flex-wrap items-center justify-between gap-3">
-                                <span class="text-xs font-medium text-content">Cheaper model</span>
+                                <span class="text-xs font-medium text-content">{{ t(`sandbox.agentModels.cheaperModel`) }}</span>
                                 <div class="flex flex-wrap items-center justify-end gap-2">
-                                    <div v-if="settings?.autoTier !== `off`" class="flex shrink-0 items-center" role="group" aria-label="How readily">
+                                    <div
+                                        v-if="settings?.autoTier !== `off`"
+                                        class="flex shrink-0 items-center"
+                                        role="group"
+                                        :aria-label="t(`sandbox.agentModels.howReadily`)"
+                                    >
                                         <SegmentedControl
                                             :model-value="settings?.autoTierEagerness ?? `balanced`"
                                             :options="eagernessOptions"
@@ -470,7 +488,7 @@ const eagernessOptions = [
                                         />
                                     </div>
                                     <AddModelButton
-                                        label="Add a model for automatic tier selection"
+                                        :label="t(`sandbox.agentModels.addModelAutomaticTier`)"
                                         :disabled="!loaded"
                                         @open="(anchor: HTMLElement) => openRowPicker(fast, undefined, anchor)"
                                     />
@@ -484,7 +502,8 @@ const eagernessOptions = [
                                 @edit="(index: number, anchor: HTMLElement) => openRowPicker(fast, index, anchor)"
                             />
                             <p v-else-if="loaded" class="text-2xs text-muted">
-                                <span class="text-content">Auto</span>: cheapest from the chat's provider.
+                                <span class="text-content">{{ t(`sandbox.agentModels.auto`) }}</span
+                                >{{ t(`sandbox.agentModels.cheapestChatsProvider`) }}
                             </p>
                         </div>
                     </div>

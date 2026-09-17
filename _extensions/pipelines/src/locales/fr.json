@@ -1,0 +1,54 @@
+{
+    "extension": {
+        "pipelines": "Pipelines"
+    },
+    "pipelineDagGraph": {
+        "expand": "Expand",
+        "failingRunsInRow": "Failing for {name} runs in a row",
+        "fit": "Fit",
+        "openJobGraphFull": "Open the job graph full screen",
+        "zoomOutUntilWhole": "Zoom out until the whole run is in frame"
+    },
+    "pipelineGraph": {
+        "failingRunsInRow": "Failing for {name} runs in a row"
+    },
+    "pipelineRunRow": {
+        "agentAlreadyWorkingOn": "An agent is already working on {branch}, started from run #{runId} — open it",
+        "agentOnBranch": "Agent on branch",
+        "cancel": "Cancel",
+        "continue": "Continue",
+        "failedJobs": "Failed jobs",
+        "fixAgent": "Fix with agent",
+        "fixInWorkspaceRun": "The fix is in your workspace: run the pipeline again to prove it",
+        "jobGraph": "{headline}: job graph",
+        "loadingJobs": "Loading jobs",
+        "noJobDetailsAvailable": "No job details available for this run.",
+        "reRun": "Re-run",
+        "setAttemptAsideStart": "Set this attempt aside and start a fresh one — opens the picker first",
+        "startOver": "Start over",
+        "supersededBy": "superseded by",
+        "wentGreenAgainIn": "{branch} went green again in this run: open it to check the job that failed here even ran"
+    },
+    "pipelinesSkeleton": {
+        "loadingPipelines": "Loading pipelines"
+    },
+    "pipelinesTally": {
+        "passRate": "{rate}% pass rate"
+    },
+    "pipelinesView": {
+        "allRepositories": "All repositories",
+        "connectedRepos": "any of the {count} connected repos",
+        "failedLastRunsOn": "{job} has failed the last {runs} runs on {repo} {branch}",
+        "failingRepeatedly": "Failing repeatedly",
+        "noRunsYet": "No pipeline has run yet on {where}. Runs land here as soon as one does.",
+        "noRunsYet2": "No runs yet",
+        "noRunsYetRepo": "No runs yet for this repo.",
+        "noWorkspaceRepoMaps": "No workspace repo maps to a connected GitHub/GitLab account: clone a repo from your connected host, or connect the matching capability on the + page.",
+        "openPipelines": "Open {project} pipelines",
+        "openProjectOn": "Open {project} on {host}",
+        "pipelines": "Pipelines",
+        "repository": "Repository",
+        "runs": "{runs} runs",
+        "thisRepo": "this repo"
+    }
+}

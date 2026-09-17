@@ -4,6 +4,7 @@ import { boxNameOf } from "../../agents/fleet/fleetScope";
 import type { Conversation } from "../session/conversation";
 import { type BoxFleet, otherBoxes, subscribe as watchOtherBoxes } from "../../sandbox/live/fleetAcross";
 import { useRunners } from "../../sandbox/devices/useRunners";
+import { useT } from "@intentic/ui/i18n";
 
 // Where this conversation runs — three answers to one question:
 //
@@ -15,6 +16,8 @@ import { useRunners } from "../../sandbox/devices/useRunners";
 // spells out each omission); provider and model still cross. Offered only before the first turn, since placement
 // latches with the branch then (Conversation.registered) and that box is the only one that can continue it.
 // Offline runners and unreachable sandboxes are listed but not selectable.
+
+const t = useT();
 
 const emit = defineEmits<{ selected: [] }>();
 const { conversation } = defineProps<{ conversation: Conversation }>();
@@ -74,10 +77,14 @@ const place = (at: { box?: string; runner?: string }): void => {
             :disabled="settled"
             @click="place({})"
         >
-            <Icon name="box" class="mt-0.5 text-xs" :class="picked === undefined && pickedRunner === undefined ? 'text-primary-500' : 'text-subtle'" />
+            <Icon
+                name="box"
+                class="mt-0.5 text-xs"
+                :class="picked === undefined && pickedRunner === undefined ? 'text-primary-500' : 'text-subtle'"
+            />
             <span class="flex min-w-0 flex-col">
-                <span class="text-sm text-content md:text-xs">This sandbox</span>
-                <span class="text-2xs text-subtle">Runs on the machine this workspace lives on.</span>
+                <span class="text-sm text-content md:text-xs">{{ t(`chat.chatPlacementMenu.sandbox`) }}</span>
+                <span class="text-2xs text-subtle">{{ t(`chat.chatPlacementMenu.runsOnMachineWorkspace`) }}</span>
             </span>
         </button>
         <button
@@ -96,9 +103,11 @@ const place = (at: { box?: string; runner?: string }): void => {
             </span>
         </button>
 
-<!-- Other workspaces on this account, under their own heading (a bigger step than the rows above); absent on a single-sandbox account. -->
+        <!-- Other workspaces on this account, under their own heading (a bigger step than the rows above); absent on a single-sandbox account. -->
         <template v-if="otherBoxes.length > 0">
-            <p class="mt-1 px-2.5 pb-0.5 pt-1.5 text-2xs font-medium uppercase tracking-wide text-subtle">Other sandboxes</p>
+            <p class="mt-1 px-2.5 pb-0.5 pt-1.5 text-2xs font-medium uppercase tracking-wide text-subtle">
+                {{ t(`chat.chatPlacementMenu.otherSandboxes`) }}
+            </p>
             <button
                 v-for="box in otherBoxes"
                 :key="box.sandbox.id"
@@ -114,18 +123,17 @@ const place = (at: { box?: string; runner?: string }): void => {
                     <span class="text-2xs text-subtle">{{ boxDetail(box) }}</span>
                 </span>
             </button>
-<!-- Said once under the section, not per row: the whole difference from this sandbox and its runners is what a remote turn is served by. -->
+            <!-- Said once under the section, not per row: the whole difference from this sandbox and its runners is what a remote turn is served by. -->
             <p v-if="!settled" class="px-2.5 py-1 text-2xs text-subtle">
-                The turn runs there and streams back into this tab. It uses that sandbox's files and accounts, so this box's open file,
-                @-mentions and personas stay behind.
+                {{ t(`chat.chatPlacementMenu.turnRunsStreamsBack`) }}
             </p>
         </template>
 
         <p v-if="runners.length === 0 && otherBoxes.length === 0" class="px-2.5 py-1.5 text-2xs text-subtle">
-            No runners yet. Add one on a connected computer under Sandbox ▸ Devices to run agents there.
+            {{ t(`chat.chatPlacementMenu.noRunnersYetAdd`) }}
         </p>
         <p v-else-if="settled" class="px-2.5 py-1.5 text-2xs text-subtle">
-            This conversation already runs {{ placedAt }}. Start a new agent to work somewhere else.
+            {{ t(`chat.chatPlacementMenu.conversationAlreadyRunsStart`, { placedAt }) }}
         </p>
     </div>
 </template>

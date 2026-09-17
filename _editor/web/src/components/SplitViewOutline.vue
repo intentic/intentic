@@ -1,6 +1,9 @@
 <!-- Loading outline for a <SplitView>-shaped route (asyncView) while its chunk loads; title and description are passed in at registration. -->
 <script setup lang="ts">
 import { SkeletonRows, SplitView } from "@intentic/ui";
+import { useT } from "@intentic/ui/i18n";
+
+const t = useT();
 
 const { railRows = 8, bodyRows = 4 } = defineProps<{
     /** The page's real heading: a static string the route table already knows, never a guess. */
@@ -28,8 +31,8 @@ const PILL_WIDTHS = [`w-20`, `w-16`, `w-24`, `w-14`, `w-20`];
             </div>
         </template>
         <template #detail>
-<!-- The one status region for the whole wait: the bars themselves are decoration (SkeletonRows marks its rows aria-hidden). -->
-            <div role="status" aria-busy="true" aria-label="Loading">
+            <!-- The one status region for the whole wait: the bars themselves are decoration (SkeletonRows marks its rows aria-hidden). -->
+            <div role="status" aria-busy="true" :aria-label="t(`common.splitViewOutline.loading`)">
                 <SkeletonRows :rows="bodyRows" description />
             </div>
         </template>

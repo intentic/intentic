@@ -7,10 +7,13 @@ import SkillForm from "../agent-settings/skills/SkillForm.vue";
 import SkillRow from "../agent-settings/skills/SkillRow.vue";
 import { usePersonaKit } from "./usePersonaKit";
 import { useDraft } from "../../../lib/useDraft";
+import { useT } from "@intentic/ui/i18n";
 
 // What this persona is told: the prompt and its own skills, one tab since they're one folder and one decision. Skills
 // reuse the Skills page's <SkillRow>/<SkillForm>, not a second hand-rolled editor. The mode rides the card's autosave;
 // the prompt text commits on its own, so a keystroke never hits the personas file.
+
+const t = useT();
 
 const { personaId, mode } = defineProps<{
     /** The saved card's id; always set, since a card is created before it's edited. */
@@ -21,12 +24,15 @@ const emit = defineEmits<{ "update:mode": [SystemPromptMode | undefined] }>();
 
 // First option is the default: a persona with nothing set runs on the sandbox's prompt. The other three are the same
 // bases the sandbox itself offers.
-const MODES = [
-    { label: `Sandbox's`, value: `inherit` },
-    { label: `Intentic`, value: `intentic` },
-    { label: `Claude`, value: `claude` },
-    { label: `Its own`, value: `custom` },
-] as const;
+const MODES = computed(
+    () =>
+        [
+            { label: t(`sandbox.personaKitFields.sandboxs`), value: `inherit` },
+            { label: `Intentic`, value: `intentic` },
+            { label: `Claude`, value: `claude` },
+            { label: t(`sandbox.personaKitFields.own`), value: `custom` },
+        ] as const,
+);
 const picked = computed(() => mode ?? `inherit`);
 const setMode = (value: string): void => emit(`update:mode`, value === `inherit` ? undefined : (value as SystemPromptMode));
 
@@ -129,8 +135,7 @@ watch(
     <div class="flex flex-col gap-5">
         <div class="flex flex-col gap-3">
             <p class="text-xs text-subtle">
-                The instructions a session wearing this card carries, and the skills only its turns can reach. Every other chat in this sandbox is
-                unaffected.
+                {{ t(`sandbox.personaKitFields.instructionsSessionWearingCard`) }}
             </p>
 
             <!-- Same three words the sandbox setting uses, plus the one answer only a card can give: follow the sandbox. -->
@@ -138,12 +143,12 @@ watch(
                 <span class="flex min-w-0 flex-col">
                     <span class="flex items-center gap-2 text-sm text-content">
                         <Icon name="pencil" class="w-4 shrink-0 text-center text-xs text-subtle" />
-                        System prompt
+                        {{ t(`sandbox.personaKitFields.systemPrompt`) }}
                     </span>
                     <span class="text-xs text-subtle">
-                        <template v-if="picked === `custom`">Its own words, replacing the sandbox's prompt on this persona's turns.</template>
-                        <template v-else-if="picked === `inherit`">Whatever the sandbox is set to: change it in Agent ▸ Instructions.</template>
-                        <template v-else>A built-in prompt, for this persona only.</template>
+                        <template v-if="picked === `custom`">{{ t(`sandbox.personaKitFields.ownWordsReplacingSandboxs`) }}</template>
+                        <template v-else-if="picked === `inherit`">{{ t(`sandbox.personaKitFields.whateverSandboxSetTo`) }}</template>
+                        <template v-else>{{ t(`sandbox.personaKitFields.builtInPromptPersona`) }}</template>
                     </span>
                 </span>
                 <SegmentedControl :model-value="picked" :options="MODES" @update:model-value="setMode" />
@@ -157,16 +162,15 @@ watch(
                     :stored="isLoading ? undefined : kit.prompt"
                     :saving="savePrompt.isPending.value"
                     save="explicit"
-                    label="This persona's system prompt"
+                    :label="t(`sandbox.personaKitFields.personasSystemPrompt`)"
                     :max-chars="PROMPT_MAX"
-                    placeholder="Write what this persona is, who it is, what it does, how it answers."
+                    :placeholder="t(`sandbox.personaKitFields.writeWhatPersonaWho`)"
                     class="min-h-48"
                     @save="commitPrompt"
                 >
                     <!-- Custom mode removes the app's built-in briefing for this persona. -->
                     <template #note>
-                        Replaces the whole prompt on this persona's turns, including what this app tells the assistant about its question cards,
-                        checklist panel and browser tools. Leave it empty to fall back to the sandbox's.
+                        {{ t(`sandbox.personaKitFields.replacesWholePromptOn`) }}
                     </template>
                 </MarkdownDocument>
             </div>
@@ -176,16 +180,12 @@ watch(
         <div class="flex flex-col gap-2">
             <span class="flex items-center gap-2 text-sm text-content">
                 <Icon name="book" class="w-4 shrink-0 text-center text-xs text-subtle" />
-                Its own skills
+                {{ t(`sandbox.personaKitFields.ownSkills`) }}
             </span>
             <!-- A real <RowGroup>, so the rows inside don't each have to declare their own size; the group sets `compact` once. -->
             <RowGroup>
                 <!-- The invitation is a row inside the list, not a paragraph above it, matching the Skills page's shape. -->
-                <Row
-                    v-if="kit.skills.length === 0 && !adding"
-                    icon="book"
-                    description="None yet. A skill here is instructions the agent reads only while acting as this persona: a house style, a review checklist, the steps for one job."
-                />
+                <Row v-if="kit.skills.length === 0 && !adding" icon="book" :description="t(`sandbox.personaKitFields.noneYetSkillHere`)" />
 
                 <SkillRow
                     v-for="skill in kit.skills"
@@ -202,14 +202,14 @@ watch(
                 />
 
                 <!-- New skills use the same disclosure row as existing skills. -->
-                <DisclosureRow v-if="adding" open body="drawer" icon="plus" title="New skill" @update:open="close">
+                <DisclosureRow v-if="adding" open body="drawer" icon="plus" :title="t(`sandbox.personaKitFields.newSkill`)" @update:open="close">
                     <template #below>
                         <SkillForm :disabled="busy" @save="save" @cancel="close" />
                     </template>
                 </DisclosureRow>
 
                 <!-- Hidden while something is open, so only one skill is ever being written or read at a time. -->
-                <RowNote v-else-if="openName === undefined" variant="action" label="Write a skill" @click="startAdd" />
+                <RowNote v-else-if="openName === undefined" variant="action" :label="t(`sandbox.personaKitFields.writeSkill`)" @click="startAdd" />
             </RowGroup>
         </div>
 

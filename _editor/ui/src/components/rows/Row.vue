@@ -112,13 +112,13 @@ const picked = as === `button`;
             selected ? `ui-row-select-on` : ``,
         ]"
     >
-<!-- The selection column leads the HEADLINE, not the whole row or `#lead`, so it stays aligned even when `#below` adds lines beneath the row. -->
+        <!-- The selection column leads the HEADLINE, not the whole row or `#lead`, so it stays aligned even when `#below` adds lines beneath the row. -->
         <div :class="$slots[`before`] ? `flex items-center ${TIERS[tier].gap}` : `contents`">
             <div v-if="$slots[`before`]" class="flex shrink-0 items-center"><slot name="before" /></div>
             <div :class="$slots[`before`] ? `min-w-0 flex-1` : `contents`">
-<!-- Wraps rather than squeezes: below the tier's headline width the trailing cluster takes a line of its own, since a title crushed to one word per line is not a narrower row, it's a broken one. -->
+                <!-- Wraps rather than squeezes: below the tier's headline width the trailing cluster takes a line of its own, since a title crushed to one word per line is not a narrower row, it's a broken one. -->
                 <div class="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
-<!-- The left region takes the free space (`grow`) rather than shrink-wrapping the title, so the gap after a short name is still part of the hit area. -->
+                    <!-- The left region takes the free space (`grow`) rather than shrink-wrapping the title, so the gap after a short name is still part of the hit area. -->
                     <component
                         :is="headerButton ? `button` : `div`"
                         :type="headerButton ? `button` : undefined"
@@ -134,7 +134,7 @@ const picked = as === `button`;
                         ]"
                         @click="onHeaderClick"
                     >
-<!-- The lead mark's size, handed to the slot so callers don't look up or restate the tier's number. -->
+                        <!-- The lead mark's size, handed to the slot so callers don't look up or restate the tier's number. -->
                         <slot name="lead" :mark="TIERS[tier].mark" :icon-class="TIERS[tier].icon" />
                         <Icon
                             v-if="icon !== undefined"
@@ -143,7 +143,7 @@ const picked = as === `button`;
                             class="shrink-0"
                             :class="[TIERS[tier].icon, selected && tone === `default` ? `text-link` : TONES[tone]]"
                         />
-<!-- `break-words` so an address, a path or an id breaks instead of running out of its box and painting over the `#meta` cluster beside it. -->
+                        <!-- `break-words` so an address, a path or an id breaks instead of running out of its box and painting over the `#meta` cluster beside it. -->
                         <div class="min-w-0 break-words" @click="onHeadlineClick">
                             <component
                                 :is="heading === undefined ? `div` : `h${heading}`"
@@ -162,17 +162,17 @@ const picked = as === `button`;
                             </p>
                         </div>
                     </component>
-<!-- `ml-auto` only bites on the line this wraps onto, where it keeps the cluster on the row's right edge rather than under the icon. -->
+                    <!-- `ml-auto` only bites on the line this wraps onto, where it keeps the cluster on the row's right edge rather than under the icon. -->
                     <div
                         v-if="$slots[`meta`] || $slots[`control`] || chevron || href !== undefined"
                         class="flex items-center gap-2"
                         :class="wideControl ? `grow basis-auto flex-wrap justify-end` : `ml-auto shrink-0`"
                     >
-<!-- Facts, not controls: tabular so a column of sizes/times lines up, muted so the row's name still leads. -->
+                        <!-- Facts, not controls: tabular so a column of sizes/times lines up, muted so the row's name still leads. -->
                         <div v-if="$slots[`meta`]" class="flex shrink-0 items-center gap-2 text-2xs tabular-nums text-subtle">
                             <slot name="meta" />
                         </div>
-<!-- `display: contents` keeps the cluster's layout invisible while still catching clicks (`.stop`), so a control here never also toggles the row. -->
+                        <!-- `display: contents` keeps the cluster's layout invisible while still catching clicks (`.stop`), so a control here never also toggles the row. -->
                         <div v-if="$slots[`control`]" class="contents" @click.stop><slot name="control" /></div>
                         <Icon v-if="chevron || href !== undefined" name="chevron-right" class="text-2xs text-subtle" />
                     </div>
@@ -180,10 +180,10 @@ const picked = as === `button`;
             </div>
         </div>
         <div v-if="$slots[`below`]" class="mt-3" :class="$slots[`before`] ? `flex ${TIERS[tier].gap}` : ``">
-<!-- The `#before` column, mirrored and hidden, so `#below` aligns under the headline instead of a typed number going stale. -->
+            <!-- The `#before` column, mirrored and hidden, so `#below` aligns under the headline instead of a typed number going stale. -->
             <span v-if="$slots[`before`]" class="invisible flex shrink-0 items-center" inert aria-hidden="true"><slot name="before" /></span>
             <div :class="$slots[`before`] ? `min-w-0 flex-1` : `contents`">
-<!-- The spine's own lead mirror, absolutely positioned to centre on that column without adding to its height. -->
+                <!-- The spine's own lead mirror, absolutely positioned to centre on that column without adding to its height. -->
                 <div v-if="spine" class="flex" :class="TIERS[tier].gap">
                     <div class="relative flex shrink-0 justify-center">
                         <span class="invisible flex items-center" :class="TIERS[tier].gap" inert aria-hidden="true">

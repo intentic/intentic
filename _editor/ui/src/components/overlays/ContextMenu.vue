@@ -15,7 +15,7 @@ const {
     model: MenuItem[];
     /** rem: the menu's floor, so a short verb list doesn't render as a sliver. */
     minWidth?: number;
-/* Which document the menu opens in, for a caller that draws into one of its own (an iframe). */
+    /* Which document the menu opens in, for a caller that draws into one of its own (an iframe). */
     appendTo?: HTMLElement | string;
 }>();
 
@@ -85,7 +85,7 @@ const onRowClick = (event: MouseEvent, item: MenuItem): void => {
                     <Icon v-if="`checked` in item" v-show="item['checked'] === true" name="check" class="text-sm text-muted" />
                     <Icon v-else-if="item.icon" :name="item.icon as IconName" class="text-sm" />
                 </span>
-<!-- The label, and under it the row's own consequence when it has one to state. -->
+                <!-- The label, and under it the row's own consequence when it has one to state. -->
                 <span class="flex min-w-0 flex-1 flex-col">
                     <span class="truncate" :class="item['danger'] === true && `text-danger`">{{ item.label }}</span>
                     <span v-if="item['hint']" class="truncate text-2xs text-subtle">{{ item["hint"] }}</span>

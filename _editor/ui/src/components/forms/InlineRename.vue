@@ -18,11 +18,11 @@ const {
     value,
     write,
     label,
-    action = `Rename`,
-    fallback = `Unnamed`,
+    action,
+    fallback,
     editable = true,
     maxlength = 80,
-    failure = `Couldn't save that name.`,
+    failure,
 } = defineProps<{
     /** The name as it stands. Empty or absent draws `fallback` instead, and starts the field empty. */
     value: string | undefined;
@@ -44,12 +44,12 @@ const {
 const rename = createInlineRename(
     () => value,
     (name) => write(name),
-    failure,
+    failure ?? t(`ui.inlineRename.couldntSaveName`),
 );
 
 const shown = computed(() => {
     const named = value?.trim() ?? ``;
-    return named === `` ? fallback : named;
+    return named === `` ? (fallback ?? t(`ui.inlineRename.unnamed`)) : named;
 });
 const unnamed = computed(() => (value?.trim() ?? ``) === ``);
 
@@ -155,7 +155,7 @@ onBeforeUnmount(disarm);
                 v-tooltip.overflow="shown"
                 @click.stop="rename.begin()"
             >
-                {{ shown }}<span class="sr-only">, {{ action }}</span>
+                {{ shown }}<span class="sr-only">, {{ action ?? t(`ui.action.rename`) }}</span>
             </button>
             <!-- The same transparent 1px rule the field carries, so text sits on the same pixel in every state. -->
             <span v-else class="col-start-1 row-start-1 min-w-0 truncate border border-transparent px-1" :class="unnamed ? `text-subtle` : ``">{{
@@ -172,7 +172,7 @@ onBeforeUnmount(disarm);
                 :class="ui.iconButton(`h-5 w-5`)"
                 :disabled="rename.busy"
                 :aria-label="t(`ui.action.save`)"
-                v-tooltip.top="`Save · Enter`"
+                v-tooltip.top="t(`ui.inlineRename.saveEnter`)"
                 @mousedown.prevent
                 @click.stop="rename.commit()"
             >
@@ -186,7 +186,7 @@ onBeforeUnmount(disarm);
                 tabindex="-1"
                 aria-hidden="true"
                 :class="ui.iconButton(`h-5 w-5`)"
-                v-tooltip.top="action"
+                v-tooltip.top="action ?? t(`ui.action.rename`)"
                 @click.stop="rename.begin()"
             >
                 <Icon name="pencil" class="text-2xs opacity-60 transition-opacity group-hover/rename:opacity-100" />

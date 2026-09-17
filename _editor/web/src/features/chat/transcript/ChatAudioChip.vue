@@ -5,6 +5,9 @@ import { computed, onBeforeUnmount, ref, watch } from "vue";
 import { audioWave, WAVE_BARS } from "../drafts/audioWave";
 import { useChatSurface } from "../tools/chatToolSurface";
 import { useClippedName } from "./clippedName";
+import { useT } from "@intentic/ui/i18n";
+
+const t = useT();
 
 /* One attached sound, played where it was attached: its own waveform, scrubable, above the name it arrived under. */
 
@@ -202,7 +205,7 @@ const open = (): void => surface.openFile?.(path);
                 :type="openable ? `button` : undefined"
                 class="flex min-w-0 items-center text-left text-xs text-content"
                 :class="openable ? `cursor-pointer` : ``"
-                :aria-label="openable ? `Open ${name} in the workspace` : undefined"
+                :aria-label="openable ? t(`chat.chatAudioChip.openInWorkspace`, { name }) : undefined"
                 @click="openable && open()"
             >
                 <!-- Softened at the cut, so a half-drawn glyph reads as the name running into its mark. -->
@@ -223,7 +226,13 @@ const open = (): void => surface.openFile?.(path);
                 }}</span>
                 <Icon v-if="progress !== undefined" name="spinner" spin class="text-2xs text-link" />
                 <Icon v-else-if="fault" name="exclamation-circle" class="text-2xs text-danger" v-tooltip.top="fault" />
-                <button v-if="removable" type="button" class="composer-ghost h-5 w-5" aria-label="Remove attachment" @click="emit(`remove`)">
+                <button
+                    v-if="removable"
+                    type="button"
+                    class="composer-ghost h-5 w-5"
+                    :aria-label="t(`chat.chatAudioChip.removeAttachment`)"
+                    @click="emit(`remove`)"
+                >
                     <Icon name="times" class="text-2xs" />
                 </button>
             </div>
@@ -236,7 +245,7 @@ const open = (): void => surface.openFile?.(path);
                 type="button"
                 class="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary-fill text-2xs text-fill-content transition-[background-color,transform] hover:bg-primary-fill-hover active:scale-95 disabled:pointer-events-none disabled:bg-[var(--ui-button-off-fill)] disabled:text-[var(--ui-button-off-content)]"
                 :disabled="src === undefined || undecodable"
-                :aria-label="playing ? `Pause ${name}` : `Play ${name}`"
+                :aria-label="playing ? t(`chat.chatAudioChip.pause`, { name }) : t(`chat.chatAudioChip.play`, { name })"
                 @click="toggle"
             >
                 <!-- Nudged right: a triangle's optical centre sits left of its bounding box's. -->
@@ -252,8 +261,8 @@ const open = (): void => surface.openFile?.(path);
                 :aria-valuemin="0"
                 :aria-valuemax="Math.round(duration)"
                 :aria-valuenow="Math.round(displayTime)"
-                :aria-valuetext="`${formatDuration(displayTime)} of ${formatDuration(duration)}`"
-                :aria-label="`Seek ${name}`"
+                :aria-valuetext="t(`chat.chatAudioChip.of`, { displayTime: formatDuration(displayTime), duration: formatDuration(duration) })"
+                :aria-label="t(`chat.chatAudioChip.seek`, { name })"
                 @pointerdown="onTrackDown"
                 @pointermove="onTrackMove"
                 @pointerup="onTrackUp"

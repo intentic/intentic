@@ -6,6 +6,7 @@
 import type { IconName } from "../../icons/iconSets.js";
 import type { StatusVariant } from "../feedback/statusBadge.js";
 import type { NoticeTone } from "../feedback/notice.js";
+import { t } from "../../i18n/index.js";
 
 // The agent, in the three states a reader can act on. `stalled` is decided by the caller (see
 // `agentStalled` in the sandbox contract), so browser and terminal can't disagree about one machine.
@@ -37,10 +38,10 @@ export interface AgentNote {
 }
 
 // What this one process carries, as the row's description: three glyphs, not a sentence about them.
-export const AGENT_DUTIES: readonly { readonly icon: IconName; readonly label: string }[] = [
-    { icon: `folder`, label: `Folders` },
-    { icon: `ports`, label: `Ports` },
-    { icon: `terminal`, label: `Commands` },
+export const agentDuties = (): readonly { readonly icon: IconName; readonly label: string }[] => [
+    { icon: `folder`, label: t(`ui.deviceAgent.folders`) },
+    { icon: `ports`, label: t(`ui.deviceAgent.ports`) },
+    { icon: `terminal`, label: t(`ui.deviceAgent.commands`) },
 ];
 
 /** The sentence the duty strip replaced, kept on hover where a reader can still reach for it. */
@@ -66,11 +67,11 @@ export const agentLines = (panel: AgentPanel): readonly AgentNote[] => [...panel
 
 // Restarting is the one verb every caller has: it runs on the machine's own installed build and downloads
 // nothing, so a caller with any way to that machine can offer it.
-export const RESTART_AGENT: AgentAction<`restart`> = {
+export const restartAgent = (): AgentAction<`restart`> => ({
     op: `restart`,
-    label: `Restart agent`,
-    hint: `Stops and starts this device's agent loop. Nothing is downloaded — the build already installed there is the one that comes up.`,
-};
+    label: t(`ui.deviceAgent.restartAgent`),
+    hint: t(`ui.deviceAgent.stopsStartsDevicesAgent`),
+});
 
 /** The badge's word for an agent that has reported; a caller states a device it hasn't heard from itself. */
 export const agentLoopState = (agent: DeviceAgentState): AgentPanel[`state`] => {
@@ -92,7 +93,7 @@ export const agentLoopNote = (agent: DeviceAgentState | undefined): AgentNote | 
         ? {
               text: `Loop stalled — what is below may be out of date.`,
               tone: `warning`,
-              hint: `Its agent is alive but has stopped making rounds, so this sandbox's picture of its folders and ports is as old as the last one.`,
+              hint: t(`ui.deviceAgent.agentAliveStoppedMaking`),
           }
         : undefined;
 };
@@ -108,5 +109,5 @@ export const agentSkewNote = (skew: DeviceAgentState[`staleBuild`]): AgentNote |
                       ? `Serving a build older than the ${skew.installed} installed — a restart picks it up.`
                       : `Serving ${skew.running}, ${skew.installed} installed — a restart picks it up.`,
               tone: `warning`,
-              hint: `A loop keeps the build it started with until it restarts, so replacing the file on disk changes nothing on its own.`,
+              hint: t(`ui.deviceAgent.loopKeepsBuildStarted`),
           };

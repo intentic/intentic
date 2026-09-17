@@ -1,11 +1,11 @@
 import { PROVIDERS, type WorkflowStep, workflowFaults, WorkflowSchema } from "@intentic/sandbox-contract";
 import { expect, test } from "vitest";
-import { WORKFLOW_TEMPLATES } from "./templates";
+import { workflowTemplates } from "./templates";
 
 // Pins every template as a parseable, fault-free workflow, since a template is never exercised before a user picks it.
 
 test("every template parses as a workflow and has no faults", () => {
-    for (const template of WORKFLOW_TEMPLATES) {
+    for (const template of workflowTemplates()) {
         const parsed = WorkflowSchema.safeParse(template.workflow);
         expect(parsed.success, `${template.workflow.id}: ${parsed.error?.issues[0]?.message ?? ``}`).toBe(true);
         expect(workflowFaults(template.workflow), template.workflow.id).toEqual([]);
@@ -13,12 +13,12 @@ test("every template parses as a workflow and has no faults", () => {
 });
 
 test("template ids are unique: the gallery hides one already saved under its id", () => {
-    const ids = WORKFLOW_TEMPLATES.map((template) => template.workflow.id);
+    const ids = workflowTemplates().map((template) => template.workflow.id);
     expect(new Set(ids).size).toBe(ids.length);
 });
 
 // The two racing cards; release-gate is a one-step pitch and doesn't share their fan-out/fan-in shape.
-const RACING = WORKFLOW_TEMPLATES.filter(({ workflow }) => workflow.id.startsWith(`two-models`));
+const RACING = workflowTemplates().filter(({ workflow }) => workflow.id.startsWith(`two-models`));
 
 test("the template teaches every shape", () => {
     expect(RACING.length, `the gallery lost the racing cards these assertions are about`).toBeGreaterThan(0);
@@ -52,7 +52,7 @@ test("the attempts are unburdened and anonymous in every template", () => {
 });
 
 test("the default template is three steps and no completion scaffolding", () => {
-    const simple = WORKFLOW_TEMPLATES[0]?.workflow;
+    const simple = workflowTemplates()[0]?.workflow;
     expect(simple?.id).toBe(`two-models-one-task`);
     expect(simple?.steps.map((step) => step.id)).toEqual([`attempt-a`, `attempt-b`, `synthesise`]);
     for (const step of simple?.steps ?? []) {
@@ -62,7 +62,7 @@ test("the default template is three steps and no completion scaffolding", () => 
 });
 
 test("the scored template separates blind evaluation from checked synthesis", () => {
-    const scored = WORKFLOW_TEMPLATES.find(({ workflow }) => workflow.id === `two-models-scored`)?.workflow;
+    const scored = workflowTemplates().find(({ workflow }) => workflow.id === `two-models-scored`)?.workflow;
     const attempts = scored?.steps.filter((step) => step.id.startsWith(`attempt-`)) ?? [];
 
     const evaluation = scored?.steps.find((step) => step.id === `evaluate`);
@@ -102,7 +102,7 @@ const racingPairs = (steps: readonly WorkflowStep[]): [WorkflowStep, WorkflowSte
     );
 
 test("attempts that race each other are given the identical task: only the model differs", () => {
-    const pairs = WORKFLOW_TEMPLATES.flatMap(({ workflow }) => racingPairs(workflow.steps).map((pair) => ({ id: workflow.id, pair })));
+    const pairs = workflowTemplates().flatMap(({ workflow }) => racingPairs(workflow.steps).map((pair) => ({ id: workflow.id, pair })));
     // Guards against vacuous truth: an empty `pairs` would still pass the loop below.
     expect(pairs.length, `no template runs two models against one brief`).toBeGreaterThan(0);
     for (const { id, pair } of pairs) {
@@ -113,7 +113,7 @@ test("attempts that race each other are given the identical task: only the model
 });
 
 test("the release-gate template ships wired: one step, gate on its required verdict", () => {
-    const gated = WORKFLOW_TEMPLATES.find(({ workflow }) => workflow.id === `release-gate`)?.workflow;
+    const gated = workflowTemplates().find(({ workflow }) => workflow.id === `release-gate`)?.workflow;
     expect(gated?.steps).toHaveLength(1);
     expect(gated?.gate?.step).toBe(gated?.steps[0]?.id);
     expect(gated?.gate?.pass.length).toBeGreaterThan(0);
@@ -127,7 +127,7 @@ test("the release-gate template ships wired: one step, gate on its required verd
 
 test("every pinned provider is one the picker offers", () => {
     const known = PROVIDERS.map((provider) => provider.value);
-    for (const { workflow } of WORKFLOW_TEMPLATES) {
+    for (const { workflow } of workflowTemplates()) {
         for (const pinned of workflow.steps.filter((step) => step.agent !== undefined)) {
             expect(known, `${workflow.id}/${pinned.id}`).toContain(pinned.agent);
         }
@@ -135,7 +135,7 @@ test("every pinned provider is one the picker offers", () => {
 });
 
 test("every declared field says what it is for", () => {
-    for (const template of WORKFLOW_TEMPLATES) {
+    for (const template of workflowTemplates()) {
         for (const step of template.workflow.steps) {
             if (step.output.kind !== `json`) {
                 continue;

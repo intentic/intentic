@@ -4,10 +4,13 @@ import { BrandMark, Code, DisclosureRow, RowGroup, ui } from "@intentic/ui";
 import { computed, ref } from "vue";
 import { startAgent } from "../../agents/fleet/agentActions";
 import { runtimeInstallVisual } from "./environmentVisual";
+import { useT } from "@intentic/ui/i18n";
 
 // The daemon's cross-session record of what sessions install at runtime: auto-drafted into the proposal where a step
 // follows from the package name, surfaced here otherwise. Every row ends somewhere: add its step, hand the routing
 // judgement to an agent, or dismiss it.
+
+const t = useT();
 
 const { entries, canOperate, busy } = defineProps<{
     entries: readonly EnvironmentRecurring[];
@@ -99,20 +102,20 @@ const brief = (entry: EnvironmentRecurring): string =>
     <RowGroup
         flat
         undivided
-        label="Installed at runtime"
+        :label="t(`sandbox.runtimeInstalls.installedAtRuntime`)"
         :count="countLabel"
-        :caption="awaiting.length ? `Not in the image, so every rebuild loses them.` : undefined"
+        :caption="awaiting.length ? t(`sandbox.runtimeInstalls.notInImageEvery`) : undefined"
     >
         <!-- The fold lives in the header, not as a row: it's a fact about the list, not an entry in it. -->
         <template v-if="dismissed.length" #actions>
             <button
                 type="button"
                 :aria-pressed="revealed"
-                v-tooltip.top="revealed ? `Hide what you have dismissed` : `Show what you have dismissed`"
+                v-tooltip.top="revealed ? t(`sandbox.runtimeInstalls.hideWhatDismissed`) : t(`sandbox.runtimeInstalls.showWhatDismissed`)"
                 :class="ui.linkButton(`gap-1 text-2xs font-medium text-subtle hover:text-content`)"
                 @click="revealed = !revealed"
             >
-                <Icon :name="revealed ? `eye` : `eye-slash`" />{{ dismissed.length }} dismissed
+                <Icon :name="revealed ? `eye` : `eye-slash`" />{{ dismissed.length }} {{ t(`sandbox.runtimeInstalls.dismissed`) }}
             </button>
         </template>
 
@@ -155,7 +158,7 @@ const brief = (entry: EnvironmentRecurring): string =>
                         v-if="entry.step !== undefined && entry.declined !== true"
                         :code="entry.step"
                         lang="docker"
-                        :label="entry.drafted === true ? `What it adds to the proposal` : `What this would add`"
+                        :label="entry.drafted === true ? t(`sandbox.runtimeInstalls.whatAddsToProposal`) : t(`sandbox.runtimeInstalls.whatWouldAdd`)"
                         :clamp-lines="10"
                     />
                     <!-- Install details stay quiet inside the already-open row. -->
@@ -167,7 +170,7 @@ const brief = (entry: EnvironmentRecurring): string =>
                             :class="ui.linkButton(`gap-1 text-2xs font-medium text-link`)"
                             @click="decide(entry, `adopt`)"
                         >
-                            <Icon name="plus" />Add to the image
+                            <Icon name="plus" />{{ t(`sandbox.runtimeInstalls.addToImage`) }}
                         </button>
                         <button
                             v-if="entry.step === undefined && entry.declined !== true"
@@ -175,7 +178,7 @@ const brief = (entry: EnvironmentRecurring): string =>
                             :class="ui.linkButton(`gap-1 text-2xs font-medium text-link`)"
                             @click="startAgent(brief(entry))"
                         >
-                            <Icon name="sparkles" />Ask an agent where it belongs
+                            <Icon name="sparkles" />{{ t(`sandbox.runtimeInstalls.askAgentWhereBelongs`) }}
                         </button>
                         <button
                             v-if="canOperate"
@@ -184,7 +187,9 @@ const brief = (entry: EnvironmentRecurring): string =>
                             :class="ui.linkButton(`gap-1 text-2xs text-subtle hover:text-content`)"
                             @click="decide(entry, entry.declined === true ? `restore` : `dismiss`)"
                         >
-                            <Icon :name="entry.declined === true ? `undo` : `eye-slash`" />{{ entry.declined === true ? `Undo` : `Dismiss` }}
+                            <Icon :name="entry.declined === true ? `undo` : `eye-slash`" />{{
+                                entry.declined === true ? t(`sandbox.runtimeInstalls.undo`) : t(`ui.action.dismiss`)
+                            }}
                         </button>
                     </div>
                 </div>

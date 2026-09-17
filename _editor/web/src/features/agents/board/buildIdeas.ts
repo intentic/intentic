@@ -1,3 +1,5 @@
+import { t } from "@intentic/ui/i18n";
+
 // The one suggestion an empty workspace can act on without existing code: three one-click examples from different
 // worlds (business, personal, toy) rather than variations on one theme. Like every board starter, pressing one fills
 // the composer rather than sending, so editing it is what makes it the user's own.
@@ -6,13 +8,19 @@ export interface BuildIdea {
     readonly idea: string;
 }
 
-export const BUILD_IDEAS: readonly BuildIdea[] = [
+export const buildIdeas = (): readonly BuildIdea[] => [
     {
-        label: `A page for my business`,
+        label: t(`agents.buildIdeas.pageMyBusiness`),
         idea: `A one-page site for a small coffee roastery, what we sell, where to find us, and how to get in touch.`,
     },
-    { label: `A personal profile`, idea: `A personal homepage for me, a short introduction, what I work on, and links to find me elsewhere.` },
-    { label: `Something playful`, idea: `A single-page browser game I can play with the keyboard, with a score and a restart button.` },
+    {
+        label: t(`agents.buildIdeas.personalProfile`),
+        idea: `A personal homepage for me, a short introduction, what I work on, and links to find me elsewhere.`,
+    },
+    {
+        label: t(`agents.buildIdeas.somethingPlayful`),
+        idea: `A single-page browser game I can play with the keyboard, with a score and a restart button.`,
+    },
 ];
 
 // The build prompt: one self-contained file in `public/`, no install step, no repository, no clarifying questions, so

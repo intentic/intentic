@@ -5,6 +5,9 @@ import { ref } from "vue";
 import { fileToSquareDataUrl } from "../../lib/imageDataUrl";
 import { useAuth } from "../auth/useAuth";
 import { useHostedPlan } from "./hosted-plan/useHostedPlan";
+import { useT } from "@intentic/ui/i18n";
+
+const t = useT();
 
 /* Profile: display name + avatar, saved via Better Auth's update-user (useAuth.updateProfile). */
 
@@ -50,14 +53,14 @@ const writeName = async (name: string): Promise<void> => {
 </script>
 
 <template>
-    <RowGroup label="Profile">
+    <RowGroup :label="t(`settings.settingsProfile.profile`)">
         <RowNote variant="block">
             <div class="flex min-w-0 items-center gap-3">
                 <button
                     type="button"
                     :disabled="avatarBusy"
-                    aria-label="Change avatar"
-                    v-tooltip.bottom="`Change avatar`"
+                    :aria-label="t(`settings.settingsProfile.changeAvatar`)"
+                    v-tooltip.bottom="t(`settings.settingsProfile.changeAvatar`)"
                     class="group relative h-14 w-14 shrink-0 cursor-pointer rounded-full"
                     @click="avatarInput?.click()"
                 >
@@ -78,15 +81,15 @@ const writeName = async (name: string): Promise<void> => {
                             <InlineRename
                                 :value="user?.name"
                                 :write="writeName"
-                                label="Display name"
-                                action="Rename display name"
+                                :label="t(`settings.settingsProfile.displayName`)"
+                                :action="t(`settings.settingsProfile.renameDisplayName`)"
                                 fallback="Account"
                                 :maxlength="60"
                                 failure="Couldn't save your display name."
                             />
                         </h2>
 
-<!-- THE LANE THIS ACCOUNT IS ON, the same chip the account menu wears (hostedHours.ts). -->
+                        <!-- THE LANE THIS ACCOUNT IS ON, the same chip the account menu wears (hostedHours.ts). -->
                         <StatusBadge
                             v-if="planBadge"
                             :variant="planBadge.variant"

@@ -9,6 +9,9 @@ import { manageDeviceSandbox, useDevices, useHostRunning } from "./useDevices";
 import { useSandbox } from "../client/useSandbox";
 import { useRole } from "../secrets/useRole";
 import { useHubWork } from "../../../shell/hub/hubWork";
+import { useT } from "@intentic/ui/i18n";
+
+const t = useT();
 
 const { active, daemonUrl } = useSandbox();
 const { isOwner } = useRole();
@@ -75,9 +78,9 @@ const repair = async (): Promise<void> => {
                 <div class="flex min-w-0 flex-col gap-1">
                     <p class="text-sm font-medium text-content">{{ notice.title }}</p>
                     <p class="text-xs text-muted">{{ notice.detail }}</p>
-<!-- The env by name, for a bug report or a `docker inspect` — evidence a reader may skip, so it sits under the sentence that does not need it. -->
+                    <!-- The env by name, for a bug report or a `docker inspect` — evidence a reader may skip, so it sits under the sentence that does not need it. -->
                     <p v-if="notice.keys?.length" class="flex flex-wrap items-center gap-1 text-xs text-muted">
-                        <span>Missing from this container:</span>
+                        <span>{{ t(`sandbox.containerHealthCard.missingContainer`) }}</span>
                         <Code v-for="key of notice.keys" :key="key" :code="key" />
                     </p>
                     <p v-if="notice.repair" class="text-xs text-muted">{{ notice.repair }}</p>
@@ -92,7 +95,7 @@ const repair = async (): Promise<void> => {
                     severity="secondary"
                     :loading="busy"
                     :disabled="busy"
-                    :label="busy ? `Reconnecting…` : `Reconnect this sandbox`"
+                    :label="busy ? t(`sandbox.containerHealthCard.reconnecting`) : t(`sandbox.containerHealthCard.reconnectSandbox`)"
                     @click="repair"
                 />
                 <!-- The same repair by hand, and the only one available to a member or with no machine connected. -->
@@ -103,15 +106,15 @@ const repair = async (): Promise<void> => {
                     size="small"
                     severity="secondary"
                     :text="true"
-                    label="Open its setup screen"
+                    :label="t(`sandbox.containerHealthCard.openSetupScreen`)"
                 >
                     <template #icon><Icon name="arrow-up-right" /></template>
                 </Button>
                 <p v-if="canRepair" class="text-xs text-muted">
-                    Replaces the container on {{ host?.label ?? `this machine` }}. Its files, its history and its Docker engine are kept.
+                    {{ t(`sandbox.containerHealthCard.replacesContainer`, { host: host?.label ?? t(`sandbox.containerHealthCard.thisMachine`) }) }}
                 </p>
-                <p v-else-if="!isOwner" class="text-xs text-muted">Only this sandbox's owner can reconnect it.</p>
-                <p v-else class="text-xs text-muted">Connect the computer that runs this sandbox to repair it from here.</p>
+                <p v-else-if="!isOwner" class="text-xs text-muted">{{ t(`sandbox.containerHealthCard.onlySandboxsOwnerReconnect`) }}</p>
+                <p v-else class="text-xs text-muted">{{ t(`sandbox.containerHealthCard.connectComputerRunsSandbox`) }}</p>
             </div>
         </div>
 
@@ -122,8 +125,8 @@ const repair = async (): Promise<void> => {
         <p v-if="done" class="text-xs text-content">{{ done }}</p>
         <p v-if="failure" class="text-xs text-danger">
             {{ failure }}
-<!-- Said next to the error rather than instead of it: this call cuts its own connection by design. -->
-            <span class="text-muted">If the sandbox was replaced, this page reconnects on its own once it is back.</span>
+            <!-- Said next to the error rather than instead of it: this call cuts its own connection by design. -->
+            <span class="text-muted">{{ t(`sandbox.containerHealthCard.sandboxReplacedPageReconnects`) }}</span>
         </p>
     </section>
 </template>

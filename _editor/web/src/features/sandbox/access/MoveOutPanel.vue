@@ -17,12 +17,15 @@ import { bundleDownloadUrl, useBundleExports } from "./useBundleExports";
 import ExportBundleDialog from "./ExportBundleDialog.vue";
 import { workspaceRepoOf } from "../overview/workspaceRepo";
 import { sizeLabel } from "@intentic/base/format";
+import { useT } from "@intentic/ui/i18n";
 
 // Body of <ExportCard>: everything that leaves this sandbox, at three fidelities (published workspace,
 // sandbox.toml document, bundle), in that order since publishing unlocks what a definition can carry and comparing
 // writes nothing. Card chrome and the role check belong to <ExportCard>, not here.
 
 // The workspace repo, the half a definition cannot supply for itself.
+const t = useT();
+
 const workspace = ref<WorkspaceRemote | undefined>(undefined);
 const confirmingPublish = ref(false);
 const { notice: workspaceError, run: runWorkspace } = useAsyncAction();
@@ -76,7 +79,9 @@ const downloadDefinition = (): Promise<void> =>
 // Export state derives from the export directory (useBundleExports), surviving a refresh or view switch.
 const { exports, packing, start, remove, error: listError } = useBundleExports();
 const listNotice = computed<NoticeModel | undefined>(() =>
-    listError.value === undefined ? undefined : { tone: `danger`, title: `Couldn't list this sandbox's bundles.`, detail: listError.value },
+    listError.value === undefined
+        ? undefined
+        : { tone: `danger`, title: t(`sandbox.moveOutPanel.couldntListSandboxsBundles`), detail: listError.value },
 );
 
 const { busy: starting, notice: startError, run: runStart } = useAsyncAction();
@@ -131,40 +136,45 @@ const compare = (event: Event): Promise<void> =>
                         target="_blank"
                         rel="noopener"
                         :class="ui.iconButton()"
-                        aria-label="Open the workspace repository"
-                        v-tooltip.top="`Open the repository`"
+                        :aria-label="t(`sandbox.moveOutPanel.openWorkspaceRepository`)"
+                        v-tooltip.top="t(`sandbox.moveOutPanel.openRepository`)"
                     >
                         <Icon name="external-link" class="text-sm" />
                     </a>
-                    <CopyButton :text="workspace?.remote ?? ``" aria-label="Copy the clone URL" v-tooltip.top="`Copy the clone URL`" />
+                    <CopyButton
+                        :text="workspace?.remote ?? ``"
+                        :aria-label="t(`sandbox.moveOutPanel.copyCloneUrl`)"
+                        v-tooltip.top="t(`sandbox.moveOutPanel.copyCloneUrl`)"
+                    />
                 </template>
             </Row>
 
             <!-- The description is what blocks the button, so a greyed-out control never needs a press to explain itself. -->
-            <Row v-else icon="cloud-upload" title="Not published">
+            <Row v-else icon="cloud-upload" :title="t(`sandbox.moveOutPanel.notPublished`)">
                 <template #description>
-                    <template v-if="host === undefined">Connect a GitHub or GitLab account first.</template>
-                    <template v-else>Publish <span class="font-mono">/work</span>.</template>
+                    <template v-if="host === undefined">{{ t(`sandbox.moveOutPanel.connectGithubGitlabAccount`) }}</template>
+                    <template v-else>{{ t(`sandbox.moveOutPanel.publish`) }} <span class="font-mono">/work</span>.</template>
                 </template>
                 <template #control>
                     <Button
                         v-if="!confirmingPublish"
-                        label="Publish"
+                        :label="t(`sandbox.moveOutPanel.publish`)"
                         size="small"
                         severity="secondary"
                         :disabled="host === undefined"
                         @click="confirmingPublish = true"
                     />
                     <template v-else>
-                        <Button label="Publish" size="small" :loading="publishing" @click="publish" />
-                        <Button label="Cancel" size="small" severity="secondary" text @click="confirmingPublish = false" />
+                        <Button :label="t(`sandbox.moveOutPanel.publish`)" size="small" :loading="publishing" @click="publish" />
+                        <Button :label="t(`ui.action.cancel`)" size="small" severity="secondary" text @click="confirmingPublish = false" />
                     </template>
                 </template>
                 <!-- Shown only at the confirm moment, not as standing prose. -->
                 <template v-if="confirmingPublish" #below>
                     <p class="text-2xs text-subtle">
-                        Creates a private repository on {{ host }} and pushes <span class="font-mono">/work</span>. Secrets and
-                        <span class="font-mono">.env</span> files stay behind.
+                        {{ t(`sandbox.moveOutPanel.createsPrivateRepositoryOn`) }} {{ host }} {{ t(`sandbox.moveOutPanel.pushes`) }}
+                        <span class="font-mono">/work</span>. Secrets and <span class="font-mono">.env</span>
+                        {{ t(`sandbox.moveOutPanel.filesStayBehind`) }}
                     </p>
                 </template>
             </Row>
@@ -172,12 +182,12 @@ const compare = (event: Event): Promise<void> =>
 
         <!-- Publishable and private export choices remain visible together. -->
         <div class="flex flex-wrap items-center gap-2">
-            <Button label="Download sandbox.toml" size="small" :loading="deriving" @click="downloadDefinition">
+            <Button :label="t(`sandbox.moveOutPanel.downloadSandboxToml`)" size="small" :loading="deriving" @click="downloadDefinition">
                 <template #icon><Icon name="download" /></template>
             </Button>
             <!-- Disabled while one pack runs; two concurrent packs would only halve each other's speed, and the daemon 409s anyway. -->
             <Button
-                :label="packing ? 'Export running…' : 'Export environment…'"
+                :label="packing ? t(`sandbox.moveOutPanel.exportRunning`) : t(`sandbox.moveOutPanel.exportEnvironment`)"
                 size="small"
                 severity="secondary"
                 :disabled="packing !== undefined"
@@ -185,40 +195,49 @@ const compare = (event: Event): Promise<void> =>
             >
                 <template #icon><Icon name="box" /></template>
             </Button>
-            <Button label="Compare sandbox.toml" size="small" severity="secondary" text :loading="comparing" @click="chooseCompare?.click()" />
+            <Button
+                :label="t(`sandbox.moveOutPanel.compareSandboxToml`)"
+                size="small"
+                severity="secondary"
+                text
+                :loading="comparing"
+                @click="chooseCompare?.click()"
+            />
             <input ref="chooseCompare" type="file" accept=".toml,text/plain,application/toml" class="hidden" @change="compare" />
         </div>
 
         <ExportBundleDialog :open="exporting" :busy="starting" @cancel="exporting = false" @confirm="startExport" />
 
         <!-- What the export could not express, said beside the file it just handed over. -->
-        <RowGroup v-if="derived !== undefined && derived.omitted.length > 0" flat label="Not in the document">
+        <RowGroup v-if="derived !== undefined && derived.omitted.length > 0" flat :label="t(`sandbox.moveOutPanel.notInDocument`)">
             <Row v-for="entry in derived.omitted" :key="entry.subject" :title="entry.subject" :description="entry.detail" />
         </RowGroup>
 
         <!-- Download and delete use the same compact icon affordance. -->
-        <RowGroup v-if="exports.length > 0" flat label="Exports" :count="exports.length">
+        <RowGroup v-if="exports.length > 0" flat :label="t(`sandbox.moveOutPanel.exports`)" :count="exports.length">
             <Row v-for="entry in exports" :key="entry.name">
                 <template #title
                     ><span class="block truncate font-mono text-2xs">{{ entry.name }}</span></template
                 >
                 <template #description>
-                    <template v-if="entry.status === 'packing'">Packing… {{ sizeLabel(entry.bytes) }} so far</template>
-                    <template v-else-if="entry.status === 'failed'">{{ entry.error ?? `The export failed.` }}</template>
+                    <template v-if="entry.status === 'packing'">{{
+                        t(`sandbox.moveOutPanel.packingFar`, { bytes: sizeLabel(entry.bytes) })
+                    }}</template>
+                    <template v-else-if="entry.status === 'failed'">{{ entry.error ?? t(`sandbox.moveOutPanel.exportFailed`) }}</template>
                     <template v-else>{{ sizeLabel(entry.bytes) }} · {{ formatDateTime(entry.createdAt) }}</template>
                 </template>
                 <template #meta>
-                    <StatusBadge v-if="entry.secrets && entry.status === 'ready'" variant="warning" label="secrets" />
-                    <StatusBadge v-if="entry.status === 'packing'" variant="info" label="packing" dot />
-                    <StatusBadge v-else-if="entry.status === 'failed'" variant="danger" label="failed" dot />
+                    <StatusBadge v-if="entry.secrets && entry.status === 'ready'" variant="warning" :label="t(`sandbox.moveOutPanel.secrets`)" />
+                    <StatusBadge v-if="entry.status === 'packing'" variant="info" :label="t(`sandbox.moveOutPanel.packing`)" dot />
+                    <StatusBadge v-else-if="entry.status === 'failed'" variant="danger" :label="t(`sandbox.moveOutPanel.failed`)" dot />
                 </template>
                 <template #control>
                     <button
                         v-if="entry.status === 'ready'"
                         type="button"
                         :class="ui.iconButton()"
-                        aria-label="Download export"
-                        v-tooltip.top="'Download'"
+                        :aria-label="t(`sandbox.moveOutPanel.downloadExport`)"
+                        v-tooltip.top="t(`ui.action.download`)"
                         v-action="() => download(entry)"
                     >
                         <Icon name="download" class="text-sm" />
@@ -227,8 +246,8 @@ const compare = (event: Event): Promise<void> =>
                         v-if="entry.status !== 'packing'"
                         type="button"
                         :class="ui.iconButton(`hover:text-danger`)"
-                        aria-label="Delete export"
-                        v-tooltip.top="'Delete this export'"
+                        :aria-label="t(`sandbox.moveOutPanel.deleteExport`)"
+                        v-tooltip.top="t(`sandbox.moveOutPanel.deleteExport2`)"
                         @click="remove(entry.name)"
                     >
                         <Icon name="trash" class="text-sm" />
@@ -240,9 +259,9 @@ const compare = (event: Event): Promise<void> =>
         <!-- Agreement gets a sentence, not an empty box: "no differences" is itself the answer this check exists to give. -->
         <template v-if="diff !== undefined">
             <div v-if="diff.differences.length === 0" class="flex items-center gap-2">
-                <StatusBadge variant="success" label="in agreement" dot />
+                <StatusBadge variant="success" :label="t(`sandbox.moveOutPanel.inAgreement`)" dot />
             </div>
-            <RowGroup v-else flat label="Differences" :count="diff.differences.length">
+            <RowGroup v-else flat :label="t(`sandbox.moveOutPanel.differences`)" :count="diff.differences.length">
                 <Row
                     v-for="difference in diff.differences"
                     :key="difference.subject + difference.detail"

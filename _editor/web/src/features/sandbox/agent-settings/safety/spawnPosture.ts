@@ -1,5 +1,6 @@
 import type { AdmissionRule } from "@intentic/sandbox-contract";
 import type { PickerOption } from "@intentic/ui";
+import { t } from "@intentic/ui/i18n";
 
 // Whether a turn may start child agents, keyed by `agents.spawn` in the open `actionRules` record shared with
 // the outbound sniffer's provider rules. A settings patch must merge into it, not replace it, or unrelated rules
@@ -12,11 +13,11 @@ export type Posture = "default" | AdmissionRule;
 export const SPAWN_KEY = `agents.spawn`;
 
 // Four real answers, not a boolean: `hold` lets a spawn wait on the owner, and `default` differs from `allow`.
-export const POSTURES: readonly PickerOption<Posture>[] = [
-    { value: `default`, label: `Default`, icon: `circle`, description: `runs, asks after outside content` },
-    { value: `allow`, label: `Always allow`, icon: `check-circle` },
-    { value: `hold`, label: `Ask me`, icon: `lock` },
-    { value: `deny`, label: `Never`, icon: `times` },
+export const postures = (): readonly PickerOption<Posture>[] => [
+    { value: `default`, label: t(`sandbox.spawnPosture.default`), icon: `circle`, description: t(`sandbox.spawnPosture.runsAsksAfterOutside`) },
+    { value: `allow`, label: t(`sandbox.spawnPosture.alwaysAllow`), icon: `check-circle` },
+    { value: `hold`, label: t(`sandbox.spawnPosture.askMe`), icon: `lock` },
+    { value: `deny`, label: t(`sandbox.spawnPosture.never`), icon: `times` },
 ];
 
 export const postureOf = (rules: Readonly<Record<string, AdmissionRule>>): Posture => rules[SPAWN_KEY] ?? `default`;

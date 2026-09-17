@@ -4,7 +4,7 @@ import { computed, nextTick, onMounted, ref } from "vue";
 import { RouterLink } from "vue-router";
 import { type AgentProvider, capabilitiesOf, PROVIDERS } from "@intentic/sandbox-contract";
 import { accessBadge, accessStateFor, providerReady, trialBadge } from "../session/access";
-import { BADGE_META } from "./catalog";
+import { badgeMeta } from "./catalog";
 import { acpProviders, type CatalogLoadState, endpointProviders, providerModelsState } from "../accounts/providerCatalog";
 import {
     customEntryFor,
@@ -20,6 +20,9 @@ import { loadAllProviderModels, loadProviderModels } from "./useChat-catalog";
 import { refreshConnections } from "../accounts/useChat-accounts";
 import { useSandboxVersion } from "../../sandbox/overview/useSandboxVersion";
 import ProviderLogo from "../accounts/ProviderLogo.vue";
+import { useT } from "@intentic/ui/i18n";
+
+const t = useT();
 
 /* THE APP'S ONE MODEL PICKER (search + provider rail + one grouped list). */
 
@@ -248,14 +251,14 @@ onMounted(() => {
 </script>
 
 <template>
-<!-- Flex column with a shrinkable middle, so the panel fits whatever height its host gives (a desktop popover caps to the room around its trigger). -->
-    <div class="flex min-h-0 flex-col" role="combobox" aria-haspopup="listbox" aria-expanded="true" aria-label="Model picker">
-<!-- Keys bind on the bar, not the field: they bubble from the input, and what they mean (Enter picks, Esc clears then closes) is this panel's business. -->
+    <!-- Flex column with a shrinkable middle, so the panel fits whatever height its host gives (a desktop popover caps to the room around its trigger). -->
+    <div class="flex min-h-0 flex-col" role="combobox" aria-haspopup="listbox" aria-expanded="true" :aria-label="t(`chat.modelPicker.modelPicker`)">
+        <!-- Keys bind on the bar, not the field: they bubble from the input, and what they mean (Enter picks, Esc clears then closes) is this panel's business. -->
         <SearchBar
             ref="searchInput"
             v-model="query"
             class="shrink-0"
-            placeholder="Search models…"
+            :placeholder="t(`chat.modelPicker.searchModels`)"
             aria-controls="model-picker-list"
             :aria-activedescendant="flat.length > 0 ? `model-picker-opt-${activeIndex}` : undefined"
             @keydown.down.prevent="move(1)"
@@ -266,12 +269,12 @@ onMounted(() => {
             @keydown.esc="onEsc"
         />
 
-<!-- Fixed height so the rail's filter states never resize the panel; min-h-40, not 0, since the footer's height depends on what's connected. -->
+        <!-- Fixed height so the rail's filter states never resize the panel; min-h-40, not 0, since the footer's height depends on what's connected. -->
         <div class="flex h-80 min-h-40 flex-col max-md:h-auto max-md:min-h-0">
-<!-- Provider strip filters, never switches: scoping to one provider is a safe glance; switching only happens by picking a model row. -->
+            <!-- Provider strip filters, never switches: scoping to one provider is a safe glance; switching only happens by picking a model row. -->
             <div
                 role="radiogroup"
-                aria-label="Filter by provider"
+                :aria-label="t(`chat.modelPicker.filterByProvider`)"
                 class="flex w-full shrink-0 items-center gap-1 overflow-x-auto border-b border-line px-1.5 py-1.5"
             >
                 <button
@@ -280,8 +283,8 @@ onMounted(() => {
                     :aria-checked="rail === undefined"
                     class="ui-row-select ui-row-select-horizontal flex h-8 w-8 shrink-0 items-center justify-center rounded-lg max-md:h-11 max-md:w-11"
                     :class="{ 'ui-row-select-on': rail === undefined }"
-                    v-tooltip.bottom="'All providers'"
-                    aria-label="All providers"
+                    v-tooltip.bottom="t(`chat.modelPicker.allProviders`)"
+                    :aria-label="t(`chat.modelPicker.allProviders`)"
                     @click="railTo(undefined)"
                 >
                     <Icon name="th-large" class="text-sm" :class="rail === undefined ? 'text-primary-500' : 'text-subtle'" />
@@ -305,7 +308,7 @@ onMounted(() => {
                     />
                     <!-- The current provider's dot: independent of the filter selection; both must be legible at once. -->
                     <span v-if="railActive(lane)" class="absolute right-1 top-1 h-1 w-1 rounded-full bg-primary-500" aria-hidden="true"></span>
-<!-- One corner, two mutually exclusive faults: a provider with a broken account has an account, so it is never the locked one. -->
+                    <!-- One corner, two mutually exclusive faults: a provider with a broken account has an account, so it is never the locked one. -->
                     <Icon
                         v-if="providerNeedsReauth(railLead(lane))"
                         name="exclamation-triangle"
@@ -325,10 +328,10 @@ onMounted(() => {
                 id="model-picker-list"
                 class="min-h-0 min-w-0 flex-1 overflow-y-auto py-1 max-md:overflow-visible"
                 role="listbox"
-                aria-label="Models"
+                :aria-label="t(`chat.modelPicker.models`)"
             >
                 <template v-for="section in sections" :key="section.key">
-<!-- Group header doubles as the access line (cost + way out); absent once connected, since a usable provider needs no annotation. -->
+                    <!-- Group header doubles as the access line (cost + way out); absent once connected, since a usable provider needs no annotation. -->
                     <div
                         v-if="section.label !== undefined"
                         class="flex items-center gap-1.5 px-3 pb-1 pt-2 text-2xs font-medium uppercase tracking-wide text-subtle"
@@ -340,7 +343,7 @@ onMounted(() => {
                                 v-if="providerNeedsReauth(section.provider)"
                                 name="exclamation-triangle"
                                 class="text-2xs text-warning"
-                                v-tooltip.top="'This account needs to be reconnected'"
+                                v-tooltip.top="t(`chat.modelPicker.accountNeedsToReconnected`)"
                             />
                             <template v-if="section.badge !== undefined">
                                 <span
@@ -357,7 +360,7 @@ onMounted(() => {
                                     class="ml-auto text-2xs normal-case tracking-normal text-link"
                                     @click="closeOnPlainClick"
                                 >
-                                    Connect
+                                    {{ t(`ui.action.connect`) }}
                                 </RouterLink>
                             </template>
                         </template>
@@ -369,7 +372,7 @@ onMounted(() => {
                         >
                     </div>
                     <template v-for="block in section.blocks" :key="block.key">
-<!-- Family header, shown only for older-version blocks; the latest band needs none, since the section header above already names the group. -->
+                        <!-- Family header, shown only for older-version blocks; the latest band needs none, since the section header above already names the group. -->
                         <p v-if="block.label !== undefined" class="px-3 pb-0.5 pt-1.5 pl-8 text-2xs text-subtle" role="presentation">
                             {{ block.label }}
                         </p>
@@ -403,11 +406,11 @@ onMounted(() => {
                             <Icon
                                 v-for="badge in (row.entry.badges ?? []).slice(0, 3)"
                                 :key="badge"
-                                :name="BADGE_META[badge].icon"
+                                :name="badgeMeta()[badge].icon"
                                 class="shrink-0 text-2xs text-subtle"
-                                :aria-label="BADGE_META[badge].label"
+                                :aria-label="badgeMeta()[badge].label"
                             />
-<!-- The per-row lock, redundant with the section chip while browsing; in search the row is all there is to go on. -->
+                            <!-- The per-row lock, redundant with the section chip while browsing; in search the row is all there is to go on. -->
                             <Icon
                                 v-if="isLocked(row.entry)"
                                 name="lock"
@@ -417,37 +420,45 @@ onMounted(() => {
                             <Icon v-if="isSelected(row.entry)" name="check" class="shrink-0 text-2xs text-primary-500" aria-hidden="true" />
                         </button>
                     </template>
-<!-- Group disclosure: a group opens at one row per family so Claude's catalog doesn't bury others. -->
+                    <!-- Group disclosure: a group opens at one row per family so Claude's catalog doesn't bury others. -->
                     <button
                         v-if="section.label !== undefined && section.collapsible"
                         type="button"
                         class="ui-row-select flex w-full items-center gap-1.5 px-3 py-1.5 text-left text-2xs text-subtle max-md:min-h-11"
                         :aria-expanded="section.expanded"
-                        :aria-label="section.expanded ? `Show fewer ${section.label} models` : `Show ${section.hidden} older ${section.label} models`"
+                        :aria-label="
+                            section.expanded
+                                ? t(`chat.modelPicker.showFewerModels`, { label: section.label })
+                                : t(`chat.modelPicker.showOlderModels`, { hidden: section.hidden, label: section.label })
+                        "
                         @click="toggleExpanded(section.key)"
                     >
                         <Icon :name="section.expanded ? `chevron-up` : `chevron-down`" class="shrink-0 text-[0.6rem]" aria-hidden="true" />
-                        <span>{{ section.expanded ? `Show fewer` : `Show ${section.hidden} older` }}</span>
+                        <span>{{
+                            section.expanded ? t(`chat.modelPicker.showFewer`) : t(`chat.modelPicker.showOlder`, { hidden: section.hidden })
+                        }}</span>
                     </button>
                     <!-- Catalog state row (loading / error+retry): searching hides it. -->
                     <template v-if="!searching && section.label !== undefined && section.rowCount === 0">
                         <div v-if="stateFor(section.providers) === `error`" class="flex items-center gap-2 px-3 py-1.5 text-2xs text-danger">
-                            <span>Couldn't load models.</span>
-                            <button type="button" class="text-link" @click="retrySection(section.providers)">Retry</button>
+                            <span>{{ t(`chat.modelPicker.couldntLoadModels`) }}</span>
+                            <button type="button" class="text-link" @click="retrySection(section.providers)">{{ t(`ui.action.retry`) }}</button>
                         </div>
-                        <div v-else-if="stateFor(section.providers) === `loaded`" class="px-3 py-1.5 text-2xs text-subtle">No models discovered.</div>
+                        <div v-else-if="stateFor(section.providers) === `loaded`" class="px-3 py-1.5 text-2xs text-subtle">
+                            {{ t(`chat.modelPicker.noModelsDiscovered`) }}
+                        </div>
                         <div v-else class="flex items-center gap-2 px-3 py-1.5 text-2xs text-subtle">
-                            <Icon name="spinner" spin /> Loading models…
+                            <Icon name="spinner" spin /> {{ t(`chat.modelPicker.loadingModels`) }}
                         </div>
                     </template>
                 </template>
                 <div v-if="searching && flat.length === 0" class="px-3 py-3 text-center text-2xs text-subtle">
-                    <p>No models match.</p>
+                    <p>{{ t(`chat.modelPicker.noModelsMatch`) }}</p>
                     <button v-if="rail !== undefined" type="button" class="mt-1 text-2xs text-link" @click="railTo(undefined)">
-                        Search all providers
+                        {{ t(`chat.modelPicker.searchAllProviders`) }}
                     </button>
                 </div>
-<!-- The door to everything this list can only badge: a second account, dropping one, sign-in mechanics. -->
+                <!-- The door to everything this list can only badge: a second account, dropping one, sign-in mechanics. -->
                 <RouterLink
                     v-if="!searching"
                     to="/sandbox/agent"
@@ -455,12 +466,12 @@ onMounted(() => {
                     @click="closeOnPlainClick"
                 >
                     <Icon name="key" class="shrink-0 text-2xs" aria-hidden="true" />
-                    <span>All AI accounts</span>
+                    <span>{{ t(`chat.modelPicker.allAiAccounts`) }}</span>
                 </RouterLink>
             </div>
         </div>
 
-        <div class="sr-only" aria-live="polite">{{ flat.length }} models</div>
+        <div class="sr-only" aria-live="polite">{{ t(`chat.modelPicker.models2`, { count: flat.length }) }}</div>
 
         <!-- Whatever the caller configures beside the model; empty for a caller that only chooses one. -->
         <slot name="footer" />

@@ -26,6 +26,7 @@ import { nextIn } from "./cronSchedule";
 import { host } from "./host";
 import { availableTemplates, glyph, useCatalog, withAvailability } from "./catalog";
 import { useAutomations } from "./useAutomations";
+import { t } from "./i18n.js";
 
 // Automations: trigger, then optional guard, then the prompt the agent wakes with; the daemon fires them and records
 // history. The page answers three questions top-down: is anything wrong (the tally), what's standing (two shelves of
@@ -93,10 +94,12 @@ const nextFire = computed<number | undefined>(() => {
 // The Errors tab appears only once something fails, so its presence is itself the alert; it stays while active so a
 // fixed run can't strand the filter.
 const viewOptions = computed<{ label: string; value: View; badge: number }[]>(() => [
-    { label: `All`, value: `all`, badge: counts.value.all },
-    { label: `On`, value: `on`, badge: counts.value.on },
-    { label: `Off`, value: `off`, badge: counts.value.off },
-    ...(counts.value.failing > 0 || view.value === `failing` ? [{ label: `Errors`, value: `failing` as const, badge: counts.value.failing }] : []),
+    { label: t(`automationsView.all`), value: `all`, badge: counts.value.all },
+    { label: t(`automationsView.on`), value: `on`, badge: counts.value.on },
+    { label: t(`automationsView.off`), value: `off`, badge: counts.value.off },
+    ...(counts.value.failing > 0 || view.value === `failing`
+        ? [{ label: t(`automationsView.errors`), value: `failing` as const, badge: counts.value.failing }]
+        : []),
 ]);
 
 // Fixed order (enabled, then name), so a row never moves under the cursor when a run lands; the Errors filter finds
@@ -183,15 +186,17 @@ const toggleDetail = (id: string): void => {
 
 <template>
     <Page width="wide">
-        <PageHeader title="Automations">
+        <PageHeader :title="t(`automationsView.automations`)">
             <!-- On the title row, not under it, to spend that height on the body instead. -->
             <template #info>
                 <StatusTally v-if="!isLoading && automations.length > 0" :items="tally" class="ml-2">
-                    <span v-if="nextFire !== undefined" class="text-xs text-subtle">next {{ nextIn(nextFire) }}</span>
+                    <span v-if="nextFire !== undefined" class="text-xs text-subtle">{{
+                        t(`automationsView.next`, { nextFire: nextIn(nextFire) })
+                    }}</span>
                 </StatusTally>
             </template>
             <template #actions>
-                <PageAction icon="plus" label="New automation" primary @click="createOpen = true" />
+                <PageAction icon="plus" :label="t(`automationsView.newAutomation`)" primary @click="createOpen = true" />
             </template>
         </PageHeader>
 
@@ -215,8 +220,8 @@ const toggleDetail = (id: string): void => {
                     v-model="search"
                     variant="field"
                     clearable
-                    aria-label="Filter automations"
-                    placeholder="Filter by name or prompt…"
+                    :aria-label="t(`automationsView.filterAutomations`)"
+                    :placeholder="t(`automationsView.filterByNamePrompt`)"
                     class="min-w-56 max-w-sm flex-1"
                 />
                 <SegmentedControl v-model="view" :options="viewOptions" class="ml-auto" />
@@ -226,23 +231,27 @@ const toggleDetail = (id: string): void => {
             <template v-if="isLoading">
                 <RowGroup v-if="outline" role="status" aria-busy="true">
                     <template #label><span class="skeleton block h-2.5 w-24" aria-hidden="true" /></template>
-                    <span class="sr-only">Reading your automations…</span>
+                    <span class="sr-only">{{ t(`automationsView.readingAutomations`) }}</span>
                     <SkeletonRows :rows="3" description control />
                 </RowGroup>
             </template>
 
-<!-- The header names both navigation destinations without adding another button. The second sentence points at the
+            <!-- The header names both navigation destinations without adding another button. The second sentence points at the
                  offers section below, which is itself conditional: with nothing on offer here (a workspace whose capabilities
                  match no template) it sent the reader to look for a list that is not on the page. -->
             <div v-else-if="automations.length === 0" :class="ui.emptyState('flex flex-col items-center gap-1 py-6')">
-                <span class="text-sm text-content">Nothing runs on its own yet.</span>
+                <span class="text-sm text-content">{{ t(`automationsView.nothingRunsOnOwn`) }}</span>
                 <span v-if="availableChores.length > 0 || availableSuggestions.length > 0">
-                    Take one of the offers below, or build your own with <b class="font-medium text-muted">New automation</b>.
+                    {{ t(`automationsView.takeOneOffersBelow`) }} <b class="font-medium text-muted">{{ t(`automationsView.newAutomation`) }}</b
+                    >.
                 </span>
-                <span v-else>Build one with <b class="font-medium text-muted">New automation</b>.</span>
+                <span v-else
+                    >{{ t(`automationsView.buildOne`) }} <b class="font-medium text-muted">{{ t(`automationsView.newAutomation`) }}</b
+                    >.</span
+                >
             </div>
             <div v-else-if="shown.length === 0" :class="ui.emptyState('py-5')">
-                Nothing matches this filter.
+                {{ t(`automationsView.nothingMatchesFilter`) }}
                 <button
                     type="button"
                     class="cursor-pointer text-link hover:underline"
@@ -251,11 +260,16 @@ const toggleDetail = (id: string): void => {
                         view = 'all';
                     "
                 >
-                    Show all {{ automations.length }}
+                    {{ t(`automationsView.showAll`, { count: automations.length }) }}
                 </button>
             </div>
 
-            <RowGroup v-if="chores.length > 0" label="Code chores" :count="chores.length" caption="maintenance of this codebase">
+            <RowGroup
+                v-if="chores.length > 0"
+                :label="t(`automationsView.codeChores`)"
+                :count="chores.length"
+                :caption="t(`automationsView.maintenanceCodebase`)"
+            >
                 <AutomationRow
                     v-for="chore in chores"
                     :key="chore.id"
@@ -272,7 +286,12 @@ const toggleDetail = (id: string): void => {
                 />
             </RowGroup>
 
-            <RowGroup v-if="integrations.length > 0" label="Integrations" :count="integrations.length" caption="fired from outside this workspace">
+            <RowGroup
+                v-if="integrations.length > 0"
+                :label="t(`automationsView.integrations`)"
+                :count="integrations.length"
+                :caption="t(`automationsView.firedOutsideWorkspace`)"
+            >
                 <AutomationRow
                     v-for="automation in integrations"
                     :key="automation.id"
@@ -292,14 +311,13 @@ const toggleDetail = (id: string): void => {
             <!-- Automation sections use one equal-width grid. -->
             <section v-if="availableChores.length > 0 || availableSuggestions.length > 0" class="@container">
                 <div class="mb-2.5 flex flex-wrap items-baseline gap-x-2 gap-y-1 px-1">
-                    <span :class="ui.sectionLabel()">Add an automation</span>
-                    <span class="text-2xs text-subtle">Things this sandbox can do that nobody has asked it for yet.</span>
+                    <span :class="ui.sectionLabel()">{{ t(`automationsView.addAutomation`) }}</span>
+                    <span class="text-2xs text-subtle">{{ t(`automationsView.thingsSandboxDoNobody`) }}</span>
                 </div>
                 <div class="flex flex-col gap-3">
                     <div v-if="availableChores.length > 0" class="flex flex-col gap-1.5">
                         <span class="px-1 text-2xs text-subtle">
-                            <b class="font-medium text-muted">Code chores</b> · their check runs for free first, so a turn is spent only when it finds
-                            something.
+                            <b class="font-medium text-muted">{{ t(`automationsView.codeChores`) }}</b> {{ t(`automationsView.checkRunsFreeFirst`) }}
                         </span>
                         <div class="grid gap-1.5 @xl:grid-cols-2 @3xl:grid-cols-3">
                             <button
@@ -323,8 +341,8 @@ const toggleDetail = (id: string): void => {
 
                     <div v-if="availableSuggestions.length > 0" class="flex flex-col gap-1.5">
                         <span class="px-1 text-2xs text-subtle">
-                            <b class="font-medium text-muted">Reach this agent from elsewhere</b> · a few details to fill in, then it is a row like any
-                            other.
+                            <b class="font-medium text-muted">{{ t(`automationsView.reachAgentElsewhere`) }}</b>
+                            {{ t(`automationsView.fewDetailsToFill`) }}
                         </span>
                         <div class="grid gap-1.5 @xl:grid-cols-2 @3xl:grid-cols-3">
                             <button
@@ -361,15 +379,15 @@ const toggleDetail = (id: string): void => {
         <!-- Deleting takes the run history with it and the daemon keeps no copy: the one action here with no undo. -->
         <ConfirmDialog
             :open="confirmRemoveId !== undefined"
-            header="Delete automation"
-            confirm-label="Delete"
+            :header="t(`automationsView.deleteAutomation`)"
+            :confirm-label="t(`automationsView.delete`)"
             confirm-icon="trash"
             :loading="remove.isPending.value"
             @cancel="confirmRemoveId = undefined"
             @confirm="removeAutomation"
         >
             <p class="text-sm text-content">
-                Delete <b>{{ confirmRemoveId }}</b> and its run history? This can't be undone.
+                {{ t(`automationsView.delete`) }} <b>{{ confirmRemoveId }}</b> {{ t(`automationsView.runHistoryCantUndone`) }}
             </p>
         </ConfirmDialog>
     </Page>

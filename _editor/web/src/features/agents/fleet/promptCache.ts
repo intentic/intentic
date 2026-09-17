@@ -1,5 +1,6 @@
 import { formatTokens } from "@intentic/ui/format";
 import { type AgentStanding, formatElapsed, laneOf, turnInFlight } from "./agentStatus";
+import { t } from "@intentic/ui/i18n";
 
 // Whether picking a conversation up is about to stop being cheap. The daemon publishes a deadline
 // (AgentSummary.promptCache) only for providers whose cache lifetime it could ground in a measurement or a documented
@@ -50,11 +51,12 @@ export const cacheCooling = (agent: CacheStanding, now: number): CacheCooling | 
     }
     const countdown = formatElapsed(now, deadline);
     // Named in tokens, never dollars: the rate depends on a model price list this app does not carry.
-    const read = agent.contextTokens === undefined ? `everything it has already read` : `the ${formatTokens(agent.contextTokens)} tokens it has already read`;
+    const read =
+        agent.contextTokens === undefined ? `everything it has already read` : `the ${formatTokens(agent.contextTokens)} tokens it has already read`;
     return {
         text: `Cooling`,
         countdown,
         near: left <= window / 2,
-        hint: `Its prompt cache goes cold in ${countdown}. Answer before then and ${read} is served from the provider's cache; after, all of it is sent and paid for again.`,
+        hint: t(`agents.promptCache.promptCacheGoesCold`, { countdown, read }),
     };
 };

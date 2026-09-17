@@ -73,7 +73,7 @@ const titleId = useId();
             <li v-for="(item, index) in items.slice(0, NAMED)" :key="index" class="flex min-w-0 items-center gap-2 text-sm">
                 <slot name="item" :item="item" />
             </li>
-            <li v-if="items.length > NAMED" class="text-xs text-subtle">…and {{ items.length - NAMED }} more</li>
+            <li v-if="items.length > NAMED" class="text-xs text-subtle">{{ t(`ui.confirmDialog.more`, { count: items.length - NAMED }) }}</li>
         </ul>
         <slot />
         <template #footer>

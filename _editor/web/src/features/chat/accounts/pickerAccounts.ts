@@ -24,6 +24,7 @@ import {
     refusalFor,
 } from "../session/usageStatus";
 import { accountsOf, refreshConnections, subscriptionOnly } from "./useChat-accounts";
+import { t } from "@intentic/ui/i18n";
 
 // Which credential and runtime serve the turn: shared by the composer's and shell's model pickers. A
 // composable, not a component body, since both callers need to know whether there's anything to show
@@ -78,7 +79,7 @@ export const usePickerAccounts = (provider: Ref<AgentProvider>, harness: Ref<Age
     // Harness chips for codex/grok; each names the runtime it selects (e.g. "ChatGPT"), never "Default".
     const harnessOptions = computed<readonly { label: string; value: AgentHarness }[]>(() => [
         { label: providerDisplayLabel(provider.value), value: `native` },
-        { label: `Claude Code`, value: `claude-code` },
+        { label: t(`chat.accountsPickerAccounts.claudeCode`), value: `claude-code` },
     ]);
     // Read from the contract: choosable only where the provider's two harnesses point at different runtimes.
     const harnessChoosable = computed(() => contractHarnessChoosable(provider.value));

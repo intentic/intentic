@@ -4,6 +4,7 @@ import { onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { openOdf, type OdfPackage } from "./odf/pkg";
 import { renderBlocks } from "./odf/render";
 import { readPresentation, type Slide } from "./odf/slides";
+import { t } from "./i18n.js";
 
 /* OpenDocument presentation and drawing (.odp, .odg) preview: every slide at its own size, scaled to fit. */
 
@@ -153,7 +154,7 @@ onBeforeUnmount(() => {
             <p class="text-sm text-danger">{{ error }}</p>
         </div>
         <div v-else-if="count === 0" class="pointer-events-none absolute inset-0 flex items-center justify-center text-sm text-muted">
-            This presentation has no slides.
+            {{ t(`odfSlidesViewer.presentationNoSlides`) }}
         </div>
     </div>
 </template>

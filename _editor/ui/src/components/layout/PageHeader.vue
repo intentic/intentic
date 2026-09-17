@@ -9,12 +9,12 @@ const back = usePageBack();
 </script>
 
 <template>
-<!-- `ui-page-header` is how the desktop app's window buttons find the row that meets their corner (web's shell/window/controlsReserve.ts). -->
+    <!-- `ui-page-header` is how the desktop app's window buttons find the row that meets their corner (web's shell/window/controlsReserve.ts). -->
     <header class="ui-page-header" :class="description ? 'mb-6' : 'mb-4'">
         <div class="flex items-center justify-between gap-3">
-<!-- THE TITLE CLUSTER TAKES THE ROW'S LEFTOVER WIDTH, not its own content's. -->
+            <!-- THE TITLE CLUSTER TAKES THE ROW'S LEFTOVER WIDTH, not its own content's. -->
             <div class="flex min-w-0 flex-1 items-center gap-2">
-<!-- A button rather than a link: where it goes is history, not an address (see pageBack.ts). -->
+                <!-- A button rather than a link: where it goes is history, not an address (see pageBack.ts). -->
                 <button v-if="back" type="button" :class="ui.iconButton(`-ml-1.5 h-8 w-8 shrink-0`)" :aria-label="back.label" @click="back.go()">
                     <Icon name="arrow-left" class="text-base" />
                 </button>

@@ -19,10 +19,13 @@ import { createTerminalTabs, type TerminalTab, type TerminalTabsSource, terminal
 import { clearTerminalRequest, consumeSpawnRequest, registerTerminalSpawn, type TerminalRequest } from "./useTerminalPanel";
 import { useTerminalFloating } from "./terminalFloating";
 import { postTurnControl } from "../chat/run/turnStream";
+import { useT } from "@intentic/ui/i18n";
 
 // Terminal panel, mounted once below every view: each tab is a tmux session in the shared cache, so scrollback survives
 // unmount, navigation, and reload. Tabs arrange into split groups (VSCode-style); Shift/Ctrl+click multi-selects pills,
 // right-click opens split/join/kill and rename/color/icon. Poppable into its own window, bar moving to the left edge.
+
+const t = useT();
 
 const {
     source,
@@ -87,7 +90,12 @@ const resolveHelp = async (helped: boolean): Promise<void> => {
     const note = helpNote.value.trim();
     // `undefined`: replies go to this sandbox's own daemon, which is the one that raised the ask.
     try {
-        await postTurnControl(undefined, `/agent/reply`, { kind: `terminal_help`, requestId: open.requestId, helped, ...(note === `` ? {} : { note }) });
+        await postTurnControl(undefined, `/agent/reply`, {
+            kind: `terminal_help`,
+            requestId: open.requestId,
+            helped,
+            ...(note === `` ? {} : { note }),
+        });
         helpNote.value = ``;
     } finally {
         replying.value = false;
@@ -331,13 +339,17 @@ const stripItems = computed<MenuItem[]>(() => {
         });
     }
     if (killTabs !== undefined && killable.value.length > 0) {
-        items.push({ label: `Kill all terminals`, shortcut: commandShortcut(`terminal.killAll`), command: () => requestKill(killable.value) });
+        items.push({
+            label: t(`terminal.terminalPanel.killAllTerminals`),
+            shortcut: commandShortcut(`terminal.killAll`),
+            command: () => requestKill(killable.value),
+        });
     }
     items.push(
         ...(items.length > 0 ? [{ separator: true }] : []),
         // The one checked row here: whether work terminals tab at all, same preference as the popover and Settings.
         {
-            label: `Show work terminals`,
+            label: t(`terminal.terminalPanel.showWorkTerminals`),
             checked: showWorkTerminals.value,
             shortcut: commandShortcut(`terminal.toggleWorkTerminals`),
             command: () => (showWorkTerminals.value = !showWorkTerminals.value),
@@ -363,7 +375,7 @@ const menuItems = computed<MenuItem[]>(() => {
         const names = selectedNames.value;
         const items: MenuItem[] = [
             {
-                label: `Join ${selectedGroups.value.length} tabs`,
+                label: t(`terminal.terminalPanel.joinTabs`, { count: selectedGroups.value.length }),
                 shortcut: commandShortcut(`terminal.join`),
                 command: () => {
                     joinTabs(names);
@@ -374,25 +386,41 @@ const menuItems = computed<MenuItem[]>(() => {
         if (killTabs !== undefined) {
             items.push(
                 { separator: true },
-                { label: `Kill ${names.length} terminals`, shortcut: commandShortcut(`terminal.kill`), command: () => requestKill(names) },
+                {
+                    label: t(`terminal.terminalPanel.killTerminals`, { count: names.length }),
+                    shortcut: commandShortcut(`terminal.kill`),
+                    command: () => requestKill(names),
+                },
             );
         }
         return [...items, ...stripItems.value];
     }
     const items: MenuItem[] = [];
     if (splitTab !== undefined) {
-        items.push({ label: `Split terminal`, shortcut: commandShortcut(`terminal.split`), command: () => splitTab(name) });
+        items.push({ label: t(`terminal.terminalPanel.splitTerminal`), shortcut: commandShortcut(`terminal.split`), command: () => splitTab(name) });
     }
     if (group.length > 1) {
-        items.push({ label: `Unsplit terminal`, shortcut: commandShortcut(`terminal.unsplit`), command: () => unsplit(name) });
+        items.push({
+            label: t(`terminal.terminalPanel.unsplitTerminal`),
+            shortcut: commandShortcut(`terminal.unsplit`),
+            command: () => unsplit(name),
+        });
     }
     if (items.length > 0) {
         items.push({ separator: true });
     }
     items.push(
-        { label: `Rename`, shortcut: commandShortcut(`terminal.rename`), command: () => beginRename(name) },
-        { label: `Change color…`, shortcut: commandShortcut(`terminal.changeColor`), command: () => openCustomize(name, `color`) },
-        { label: `Change icon…`, shortcut: commandShortcut(`terminal.changeIcon`), command: () => openCustomize(name, `icon`) },
+        { label: t(`ui.action.rename`), shortcut: commandShortcut(`terminal.rename`), command: () => beginRename(name) },
+        {
+            label: t(`terminal.terminalPanel.changeColor`),
+            shortcut: commandShortcut(`terminal.changeColor`),
+            command: () => openCustomize(name, `color`),
+        },
+        {
+            label: t(`terminal.terminalPanel.changeIcon`),
+            shortcut: commandShortcut(`terminal.changeIcon`),
+            command: () => openCustomize(name, `icon`),
+        },
     );
     if (killTabs !== undefined) {
         items.push(
@@ -477,19 +505,22 @@ const gridItems = computed<MenuItem[]>(() => {
     // Both hand focus back to the terminal so the next keystroke doesn't land nowhere.
     const items: MenuItem[] = [
         {
-            label: `Copy`,
+            label: t(`ui.action.copy`),
             disabled: !gridHasSelection.value,
             command: () => {
                 copySelection(session);
                 session.term.focus();
             },
         },
-        { label: `Paste`, command: () => pasteIntoTerminal(session) },
+        { label: t(`terminal.terminalPanel.paste`), command: () => pasteIntoTerminal(session) },
         { separator: true },
-        { label: `Full scrollback…`, command: () => void openScrollback(name) },
+        { label: t(`terminal.terminalPanel.fullScrollback`), command: () => void openScrollback(name) },
     ];
     if (splitTab !== undefined) {
-        items.push({ separator: true }, { label: `Split terminal`, shortcut: commandShortcut(`terminal.split`), command: () => splitTab(name) });
+        items.push(
+            { separator: true },
+            { label: t(`terminal.terminalPanel.splitTerminal`), shortcut: commandShortcut(`terminal.split`), command: () => splitTab(name) },
+        );
     }
     return items;
 });
@@ -650,7 +681,7 @@ const registerPanelCommands = (): void => {
     const entries: Omit<CommandRegistration, `owner`>[] = [
         {
             command: `terminal.rename`,
-            title: `Rename`,
+            title: t(`ui.action.rename`),
             icon: `pencil`,
             // F2, gated to a keystroke from inside this panel; outside it the chord stays free for other surfaces.
             keybinding: `F2`,
@@ -666,7 +697,7 @@ const registerPanelCommands = (): void => {
         },
         {
             command: `terminal.changeColor`,
-            title: `Change Color…`,
+            title: t(`terminal.terminalPanel.changeColor2`),
             icon: `palette`,
             handler: (): void => {
                 if (activeName.value !== undefined) {
@@ -676,7 +707,7 @@ const registerPanelCommands = (): void => {
         },
         {
             command: `terminal.changeIcon`,
-            title: `Change Icon…`,
+            title: t(`terminal.terminalPanel.changeIcon2`),
             icon: `star`,
             handler: (): void => {
                 if (activeName.value !== undefined) {
@@ -686,7 +717,7 @@ const registerPanelCommands = (): void => {
         },
         {
             command: `terminal.join`,
-            title: `Join Selected`,
+            title: t(`terminal.terminalPanel.joinSelected`),
             icon: `code`,
             keybinding: `Ctrl+Shift+G`,
             handler: (): void => {
@@ -698,7 +729,7 @@ const registerPanelCommands = (): void => {
         },
         {
             command: `terminal.unsplit`,
-            title: `Unsplit`,
+            title: t(`terminal.terminalPanel.unsplit`),
             icon: `code`,
             keybinding: `Ctrl+Shift+U`,
             handler: (): void => {
@@ -710,7 +741,7 @@ const registerPanelCommands = (): void => {
         {
             // Unbound by default, like the cosmetic pickers: already has two clickable homes.
             command: `terminal.toggleWorkTerminals`,
-            title: `Toggle Work Terminals`,
+            title: t(`terminal.terminalPanel.toggleWorkTerminals`),
             icon: `sparkles`,
             handler: (): void => {
                 showWorkTerminals.value = !showWorkTerminals.value;
@@ -718,7 +749,7 @@ const registerPanelCommands = (): void => {
         },
         {
             command: `terminal.find`,
-            title: `Find`,
+            title: t(`terminal.terminalPanel.find`),
             icon: `search`,
             // Cmd+F on Mac, Ctrl+F elsewhere, gated to this panel so the page find keeps the chord elsewhere.
             keybinding: `Mod+F`,
@@ -727,14 +758,14 @@ const registerPanelCommands = (): void => {
         },
         {
             command: `terminal.nextTab`,
-            title: `Next`,
+            title: t(`ui.action.next`),
             keybinding: `Alt+PageDown`,
             when: `tabSurface == 'terminal'`,
             handler: () => cycleTab(1),
         },
         {
             command: `terminal.previousTab`,
-            title: `Previous`,
+            title: t(`terminal.terminalPanel.previous`),
             keybinding: `Alt+PageUp`,
             when: `tabSurface == 'terminal'`,
             handler: () => cycleTab(-1),
@@ -743,7 +774,7 @@ const registerPanelCommands = (): void => {
     if (splitTab !== undefined) {
         entries.push({
             command: `terminal.split`,
-            title: `Split`,
+            title: t(`terminal.terminalPanel.split`),
             icon: `code`,
             keybinding: `Ctrl+Shift+5`,
             handler: (): void => {
@@ -756,7 +787,7 @@ const registerPanelCommands = (): void => {
     if (killTabs !== undefined) {
         entries.push({
             command: `terminal.kill`,
-            title: `Kill`,
+            title: t(`terminal.terminalPanel.kill`),
             icon: `trash`,
             keybinding: `Ctrl+Shift+X`,
             when: `tabSurface == 'terminal'`,
@@ -773,7 +804,7 @@ const registerPanelCommands = (): void => {
         });
         entries.push({
             command: `terminal.killAll`,
-            title: `Kill All`,
+            title: t(`terminal.terminalPanel.killAll`),
             icon: `trash`,
             keybinding: `Ctrl+Shift+Backspace`,
             when: `tabSurface == 'terminal'`,
@@ -781,7 +812,7 @@ const registerPanelCommands = (): void => {
         });
         entries.push({
             command: `terminal.killInactive`,
-            title: `Kill Inactive`,
+            title: t(`terminal.terminalPanel.killInactive`),
             icon: `trash`,
             // Unbound: tidying is occasional, and a chord for it would sit one slip from the one that kills your shell.
             handler: sweepInactive,
@@ -837,9 +868,9 @@ watch(ctrlArmed, (armed) => {
 // edge where thumb accuracy is worst.
 const KEY_CLASS = `inline-flex h-11 min-w-11 shrink-0 items-center justify-center rounded-md border border-line bg-canvas px-[0.6rem] font-mono text-[0.8125rem] text-content active:bg-overlay`;
 
-const EXTRA_KEYS: readonly { label: string; data: string }[] = [
-    { label: `Esc`, data: `\x1b` },
-    { label: `Tab`, data: `\t` },
+const EXTRA_KEYS = computed((): readonly { label: string; data: string }[] => [
+    { label: t(`terminal.terminalPanel.esc`), data: `\x1b` },
+    { label: t(`terminal.terminalPanel.tab`), data: `\t` },
     { label: `/`, data: `/` },
     { label: `-`, data: `-` },
     { label: `|`, data: `|` },
@@ -848,7 +879,7 @@ const EXTRA_KEYS: readonly { label: string; data: string }[] = [
     { label: `↓`, data: `\x1b[B` },
     { label: `←`, data: `\x1b[D` },
     { label: `→`, data: `\x1b[C` },
-];
+]);
 // pointerdown, not click, with preventDefault: keeps the xterm textarea focused so the soft keyboard stays up.
 const pressKey = (data: string): void => tabs.sendInput(data);
 
@@ -986,7 +1017,7 @@ const maxHeight = computed(() => Math.round(window.innerHeight * 0.8));
             :min="MIN_HEIGHT"
             :max="maxHeight"
             :reset="DEFAULT_HEIGHT"
-            title="Drag to resize · double-click to reset"
+            :title="t(`terminal.terminalPanel.dragToResizeDouble`)"
         />
         <!-- Bar: across the top when docked, down the left edge floating (`vertical`); same pills, toolbar, and menu either way. -->
         <div
@@ -1041,7 +1072,7 @@ const maxHeight = computed(() => Math.round(window.innerHeight * 0.8));
                                 v-model="renameDraft"
                                 type="text"
                                 maxlength="40"
-                                aria-label="Terminal name"
+                                :aria-label="t(`terminal.terminalPanel.terminalName`)"
                                 :placeholder="defaultLabel(name)"
                                 class="ui-field-box ui-field-inline w-24 min-w-0 select-text px-1 text-2xs"
                                 @click.stop
@@ -1063,7 +1094,11 @@ const maxHeight = computed(() => Math.round(window.innerHeight * 0.8));
                                 v-if="killTabs !== undefined && renamingName !== name"
                                 class="relative flex h-3 w-3 shrink-0 items-center justify-center"
                                 @click.stop="requestKill([name])"
-                                :aria-label="isBusy(name) ? `Kill terminal, running ${tabByName.get(name)?.command}` : `Kill terminal`"
+                                :aria-label="
+                                    isBusy(name)
+                                        ? t(`terminal.terminalPanel.killTerminalRunning`, { command: tabByName.get(name)?.command })
+                                        : t(`terminal.terminalPanel.killTerminal`)
+                                "
                             >
                                 <Icon
                                     name="times"
@@ -1094,8 +1129,8 @@ const maxHeight = computed(() => Math.round(window.innerHeight * 0.8));
                     class="flex h-6 shrink-0 items-center justify-center rounded-md text-muted transition-colors hover:bg-overlay hover:text-content"
                     :class="vertical ? 'w-full' : 'w-6'"
                     @click="newTab()"
-                    v-tooltip.top="withShortcut('New terminal', 'terminal.new')"
-                    aria-label="New terminal"
+                    v-tooltip.top="withShortcut(t(`terminal.terminalPanel.newTerminal`), 'terminal.new')"
+                    :aria-label="t(`terminal.terminalPanel.newTerminal`)"
                 >
                     <Icon name="plus" class="text-2xs" />
                 </button>
@@ -1109,8 +1144,8 @@ const maxHeight = computed(() => Math.round(window.innerHeight * 0.8));
                     type="button"
                     :class="ui.iconButton()"
                     @click="restart()"
-                    v-tooltip.top="'Restart shell'"
-                    aria-label="Restart shell"
+                    v-tooltip.top="t(`terminal.terminalPanel.restartShell`)"
+                    :aria-label="t(`terminal.terminalPanel.restartShell`)"
                 >
                     <Icon name="refresh" class="text-xs" />
                 </button>
@@ -1119,12 +1154,12 @@ const maxHeight = computed(() => Math.round(window.innerHeight * 0.8));
                     type="button"
                     :class="ui.iconButton()"
                     @click="tabs.refresh().catch(() => undefined)"
-                    v-tooltip.top="'Refresh sessions'"
-                    aria-label="Refresh sessions"
+                    v-tooltip.top="t(`terminal.terminalPanel.refreshSessions`)"
+                    :aria-label="t(`terminal.terminalPanel.refreshSessions`)"
                 >
                     <Icon name="refresh" class="text-xs" />
                 </button>
-            <!-- Keep the pop-out action beside close because both change the window. -->
+                <!-- Keep the pop-out action beside close because both change the window. -->
                 <button type="button" :class="ui.iconButton()" @click="floating.toggle()" v-tooltip.top="floatHint" :aria-label="floatHint">
                     <Icon :name="floating.floats.value ? 'arrow-down-left' : 'external-link'" class="text-xs" />
                 </button>
@@ -1140,26 +1175,33 @@ const maxHeight = computed(() => Math.round(window.innerHeight * 0.8));
                 <div class="flex items-start gap-2">
                     <Icon name="exclamation-triangle" class="mt-0.5 shrink-0 text-sm text-warning" />
                     <div class="min-w-0 flex-1 text-xs text-content">
-                        <span class="font-medium">The agent needs your help:</span>
+                        <span class="font-medium">{{ t(`terminal.terminalPanel.agentNeedsHelp`) }}</span>
                         {{ help.message }}
-                        <span class="text-muted">: type it below, then hand back.</span>
+                        <span class="text-muted">{{ t(`terminal.terminalPanel.typeBelowHandBack`) }}</span>
                     </div>
                 </div>
                 <div class="flex flex-wrap items-center gap-2">
                     <input
                         v-model="helpNote"
                         type="text"
-                        placeholder="Optional note back to the agent"
+                        :placeholder="t(`terminal.terminalPanel.optionalNoteBackTo`)"
                         class="ui-field-box ui-field-sm min-w-40 flex-1"
                         @keydown.enter="resolveHelp(true)"
                     />
-                    <Button size="small" class="shrink-0" @click="() => resolveHelp(true)"> Done: hand back </Button>
-                    <Button size="small" severity="secondary" class="shrink-0" @click="() => resolveHelp(false)"> Can't help now </Button>
+                    <Button size="small" class="shrink-0" @click="() => resolveHelp(true)"> {{ t(`terminal.terminalPanel.doneHandBack`) }} </Button>
+                    <Button size="small" severity="secondary" class="shrink-0" @click="() => resolveHelp(false)">
+                        {{ t(`terminal.terminalPanel.cantHelpNow`) }}
+                    </Button>
                 </div>
             </div>
             <!-- xterm sizes to this container; each split's fit observer fills its own cell. -->
-<!-- Every press here is the terminal's: xterm selects under its own cursor rules (shell/window/windowGesture.ts). -->
-            <div ref="container" class="term-body flex min-h-0 min-w-0 flex-1 bg-terminal p-2" data-window-no-drag @contextmenu="onGridContextMenu"></div>
+            <!-- Every press here is the terminal's: xterm selects under its own cursor rules (shell/window/windowGesture.ts). -->
+            <div
+                ref="container"
+                class="term-body flex min-h-0 min-w-0 flex-1 bg-terminal p-2"
+                data-window-no-drag
+                @contextmenu="onGridContextMenu"
+            ></div>
             <!-- Find sits over the pane's top-right corner (VSCode's placement) so highlighted rows stay visible under it. -->
             <div
                 v-if="finding"
@@ -1171,8 +1213,8 @@ const maxHeight = computed(() => Math.round(window.innerHeight * 0.8));
                     ref="findInput"
                     v-model="findQuery"
                     type="text"
-                    placeholder="Find"
-                    aria-label="Find in terminal"
+                    :placeholder="t(`terminal.terminalPanel.find`)"
+                    :aria-label="t(`terminal.terminalPanel.findInTerminal`)"
                     class="ui-field-box ui-field-sm w-44"
                     @input="runFind(true)"
                     @keydown.enter.exact.prevent="findNext"
@@ -1182,16 +1224,28 @@ const maxHeight = computed(() => Math.round(window.innerHeight * 0.8));
                 <button
                     type="button"
                     :class="ui.iconButton()"
-                    aria-label="Previous match"
-                    v-tooltip.top="'Previous match (Shift+Enter)'"
+                    :aria-label="t(`terminal.terminalPanel.previousMatch`)"
+                    v-tooltip.top="t(`terminal.terminalPanel.previousMatchShiftEnter`)"
                     @click="findPrevious"
                 >
                     <Icon name="chevron-up" />
                 </button>
-                <button type="button" :class="ui.iconButton()" aria-label="Next match" v-tooltip.top="'Next match (Enter)'" @click="findNext">
+                <button
+                    type="button"
+                    :class="ui.iconButton()"
+                    :aria-label="t(`terminal.terminalPanel.nextMatch`)"
+                    v-tooltip.top="t(`terminal.terminalPanel.nextMatchEnter`)"
+                    @click="findNext"
+                >
                     <Icon name="chevron-down" />
                 </button>
-                <button type="button" :class="ui.iconButton()" aria-label="Close find" v-tooltip.top="'Close (Esc)'" @click="closeFind">
+                <button
+                    type="button"
+                    :class="ui.iconButton()"
+                    :aria-label="t(`terminal.terminalPanel.closeFind`)"
+                    v-tooltip.top="t(`terminal.terminalPanel.closeEsc`)"
+                    @click="closeFind"
+                >
                     <Icon name="times" />
                 </button>
             </div>
@@ -1204,7 +1258,7 @@ const maxHeight = computed(() => Math.round(window.innerHeight * 0.8));
                 <p class="text-sm text-muted">
                     <template v-if="about?.title">{{ about.title }}…</template>
                     <template v-else
-                        >Opening <span class="font-mono text-content">{{ named }}</span
+                        >{{ t(`terminal.terminalPanel.opening`) }} <span class="font-mono text-content">{{ named }}</span
                         >…</template
                     >
                 </p>
@@ -1217,7 +1271,7 @@ const maxHeight = computed(() => Math.round(window.innerHeight * 0.8));
                 class="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-2 p-6 text-center"
             >
                 <Icon name="spinner" spin class="text-lg text-subtle" />
-                <p class="text-sm text-muted">Looking for this sandbox's terminals…</p>
+                <p class="text-sm text-muted">{{ t(`terminal.terminalPanel.lookingSandboxsTerminals`) }}</p>
             </div>
             <div
                 v-else-if="order.length === 0"
@@ -1226,15 +1280,18 @@ const maxHeight = computed(() => Math.round(window.innerHeight * 0.8));
                 <Icon :name="answer === 'refused' ? 'exclamation-triangle' : 'desktop'" class="text-2xl text-subtle" />
                 <p v-if="about?.title" class="text-sm text-muted">{{ about.title }}</p>
                 <p v-else-if="about" class="text-sm text-muted">
-                    <span class="font-mono text-content">{{ named }}</span> {{ awaiting === undefined ? `isn't running.` : `` }}
+                    <span class="font-mono text-content">{{ named }}</span>
+                    {{ awaiting === undefined ? t(`terminal.terminalPanel.isntRunning`) : `` }}
                 </p>
                 <!-- 'Nothing runs here' and 'this sandbox never answered' are different sentences; only one is about the terminals. -->
-                <p v-else class="text-sm text-muted">{{ answer === "refused" ? `Couldn't reach this sandbox.` : `No terminals open.` }}</p>
+                <p v-else class="text-sm text-muted">
+                    {{ answer === "refused" ? t(`terminal.terminalPanel.couldntReachSandbox`) : t(`terminal.terminalPanel.noTerminalsOpen`) }}
+                </p>
                 <p class="max-w-md text-2xs text-subtle">{{ emptyHint }}</p>
                 <Button
                     v-if="newTab !== undefined"
                     class="pointer-events-auto mt-1"
-                    label="New terminal"
+                    :label="t(`terminal.terminalPanel.newTerminal`)"
                     size="small"
                     severity="secondary"
                     @click="newTab()"
@@ -1249,7 +1306,7 @@ const maxHeight = computed(() => Math.round(window.innerHeight * 0.8));
                     :class="[KEY_CLASS, ctrlArmed ? 'border-primary-500/60 bg-primary-500/16 text-primary-500' : '']"
                     @pointerdown.prevent="ctrlArmed = !ctrlArmed"
                 >
-                    Ctrl
+                    {{ t(`terminal.terminalPanel.ctrl`) }}
                 </button>
                 <button v-for="key in EXTRA_KEYS" :key="key.label" type="button" :class="KEY_CLASS" @pointerdown.prevent="pressKey(key.data)">
                     {{ key.label }}
@@ -1268,19 +1325,25 @@ const maxHeight = computed(() => Math.round(window.innerHeight * 0.8));
             :open="scrollbackName !== undefined"
             size="xl"
             :scroll="false"
-            :header="scrollbackName === undefined ? '' : `Scrollback, ${segmentLabel(scrollbackName)}`"
+            :header="scrollbackName === undefined ? '' : t(`terminal.terminalPanel.scrollback`, { scrollbackName: segmentLabel(scrollbackName) })"
             @update:open="closeScrollback"
         >
             <!-- The pre element scrolls; its parent only provides the layout height. -->
             <div class="flex h-panel-lg min-h-0 flex-col gap-2">
                 <div class="flex shrink-0 items-center gap-2 text-xs text-muted">
                     <template v-if="scrollback">
-                        <span>{{ scrollback.lines.toLocaleString() }} lines</span>
-                        <span v-if="scrollback.truncated">· older lines beyond this are still in tmux</span>
-                        <Button class="ml-auto" size="small" severity="secondary" label="Copy all" @click="copyScrollback" />
+                        <span>{{ t(`terminal.terminalPanel.lines`, { toLocaleString: scrollback.lines.toLocaleString() }) }}</span>
+                        <span v-if="scrollback.truncated">{{ t(`terminal.terminalPanel.olderLinesBeyondStill`) }}</span>
+                        <Button
+                            class="ml-auto"
+                            size="small"
+                            severity="secondary"
+                            :label="t(`terminal.terminalPanel.copyAll`)"
+                            @click="copyScrollback"
+                        />
                     </template>
-                    <span v-else-if="scrollbackFailed">Couldn't read this terminal's scrollback: the session may have ended.</span>
-                    <span v-else-if="scrollbackPending">Reading…</span>
+                    <span v-else-if="scrollbackFailed">{{ t(`terminal.terminalPanel.couldntReadTerminalsScrollback`) }}</span>
+                    <span v-else-if="scrollbackPending">{{ t(`terminal.terminalPanel.reading`) }}</span>
                 </div>
                 <pre
                     v-if="scrollback"
@@ -1294,7 +1357,7 @@ const maxHeight = computed(() => Math.round(window.innerHeight * 0.8));
         <ConfirmDialog
             :open="pendingKill !== undefined"
             :header="killHeader"
-            confirm-label="Kill anyway"
+            :confirm-label="t(`terminal.terminalPanel.killAnyway`)"
             confirm-icon="trash"
             :items="pendingKillItems"
             @cancel="pendingKill = undefined"
@@ -1315,8 +1378,8 @@ const maxHeight = computed(() => Math.round(window.innerHeight * 0.8));
                     <button
                         type="button"
                         :class="ui.addTile(`h-7 w-7 rounded-full text-subtle`)"
-                        v-tooltip.top="'Default'"
-                        aria-label="Default color"
+                        v-tooltip.top="t(`terminal.terminalPanel.default`)"
+                        :aria-label="t(`terminal.terminalPanel.defaultColor`)"
                         @click="applyColor(undefined)"
                     >
                         <Icon name="times" class="text-2xs" />
@@ -1337,8 +1400,8 @@ const maxHeight = computed(() => Math.round(window.innerHeight * 0.8));
                     <button
                         type="button"
                         :class="ui.addTile(`h-8 w-8 text-subtle`)"
-                        v-tooltip.top="'Default'"
-                        aria-label="Default icon"
+                        v-tooltip.top="t(`terminal.terminalPanel.default`)"
+                        :aria-label="t(`terminal.terminalPanel.defaultIcon`)"
                         @click="applyIcon(undefined)"
                     >
                         <Icon name="times" class="text-2xs" />

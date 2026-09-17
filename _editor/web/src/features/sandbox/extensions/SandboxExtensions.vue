@@ -14,10 +14,13 @@ import { extensionBrief } from "./extensionBrief";
 import ExtensionsBrowse from "./ExtensionsBrowse.vue";
 import ExtensionsInstalled from "./ExtensionsInstalled.vue";
 import NewExtensionDialog from "./NewExtensionDialog.vue";
+import { useT } from "@intentic/ui/i18n";
 
 // The sandbox hub's Extensions section: installed and published listings as two pills over one shared search box,
 // previously two separate index rows. The mode rides the URL (`?view=browse`) rather than component state, so a
 // reload or pasted link lands on the same view.
+
+const t = useT();
 
 const VIEWS = [`installed`, `browse`] as const;
 type View = (typeof VIEWS)[number];
@@ -69,9 +72,9 @@ const clearFilters = (): void => {
 
 // Both counts are inventories; the update count is a mark instead, since it isn't the size of either list.
 const viewOptions = computed(() => [
-    { label: `Installed`, value: `installed` as View, badge: entries.value.length },
+    { label: t(`sandbox.sandboxExtensions.installed`), value: `installed` as View, badge: entries.value.length },
     {
-        label: `Browse`,
+        label: t(`sandbox.sandboxExtensions.browse`),
         value: `browse` as View,
         badge: listings.value.length,
         ...(updatable.value > 0
@@ -107,9 +110,9 @@ const staleNotice = computed<NoticeModel | undefined>(() => {
     const plural = updatedSinceLoaded.value.length === 1 ? `was` : `were`;
     return {
         tone: `info`,
-        title: `Reload to finish updating.`,
-        detail: `${names} ${plural} updated, this browser is still running the previous code until the extensions reload.`,
-        action: { label: `Reload now`, run: () => void reload() },
+        title: t(`sandbox.sandboxExtensions.reloadToFinishUpdating`),
+        detail: t(`sandbox.sandboxExtensions.updatedBrowserStillRunning`, { names, plural }),
+        action: { label: t(`sandbox.sandboxExtensions.reloadNow`), run: () => void reload() },
     };
 });
 
@@ -149,16 +152,22 @@ const created = async (extension: { id: string; dir: string; wish: string }): Pr
     <div class="flex flex-col gap-5">
         <NoticeStack :of="[viewNotice, staleNotice]" />
 
-<!-- The section's instrument, not either half's: pills lead, the search box takes the row's slack, and filters ride #controls. -->
+        <!-- The section's instrument, not either half's: pills lead, the search box takes the row's slack, and filters ride #controls. -->
         <div class="flex flex-wrap items-center gap-2">
             <SegmentedControl :model-value="view" :options="viewOptions" @update:model-value="show" />
 
             <FilterBar
                 v-if="filterable"
                 v-model="query"
-                :placeholder="view === `installed` ? `Name or contribution…` : `Name, publisher, what it does…`"
+                :placeholder="
+                    view === `installed` ? t(`sandbox.sandboxExtensions.nameContribution`) : t(`sandbox.sandboxExtensions.namePublisherWhatDoes`)
+                "
                 :count="matched"
-                :aria-label="view === `installed` ? `Filter installed extensions` : `Search published extensions`"
+                :aria-label="
+                    view === `installed`
+                        ? t(`sandbox.sandboxExtensions.filterInstalledExtensions`)
+                        : t(`sandbox.sandboxExtensions.searchPublishedExtensions`)
+                "
                 class="min-w-0 flex-1 basis-64"
             >
                 <template v-if="view === `installed`" #controls>
@@ -188,10 +197,16 @@ const created = async (extension: { id: string; dir: string; wish: string }): Pr
             <div class="ml-auto flex shrink-0 items-center gap-2">
                 <!-- A labelled button, not an icon: it creates something, unlike the others which only narrow or refresh. -->
                 <template v-if="view === `installed`">
-                    <Button label="New extension" size="small" @click="creating = true">
+                    <Button :label="t(`sandbox.sandboxExtensions.newExtension`)" size="small" @click="creating = true">
                         <template #icon><Icon name="plus" /></template>
                     </Button>
-                    <button type="button" :class="ui.iconButton(`h-8 w-8`)" :disabled="reloading" v-tooltip.top="`Reload extensions`" v-action="reload">
+                    <button
+                        type="button"
+                        :class="ui.iconButton(`h-8 w-8`)"
+                        :disabled="reloading"
+                        v-tooltip.top="t(`sandbox.sandboxExtensions.reloadExtensions`)"
+                        v-action="reload"
+                    >
                         <Icon name="refresh" :spin="reloading" />
                     </button>
                 </template>
@@ -200,7 +215,7 @@ const created = async (extension: { id: string; dir: string; wish: string }): Pr
                     type="button"
                     :class="ui.iconButton(`h-8 w-8`)"
                     :disabled="isFetching"
-                    v-tooltip.top="`Re-read the registry`"
+                    v-tooltip.top="t(`sandbox.sandboxExtensions.reReadRegistry`)"
                     @click="refetch"
                 >
                     <Icon name="refresh" :spin="isFetching" />
@@ -227,14 +242,14 @@ const created = async (extension: { id: string; dir: string; wish: string }): Pr
         <p v-if="updatesCheckedAt !== undefined" class="text-right text-2xs text-subtle">
             <template v-if="updatable > 0">
                 <button v-if="view === `installed`" type="button" :class="ui.linkButton(`text-2xs`)" @click="show(`browse`)">
-                    {{ updatable }} {{ updatable === 1 ? `update` : `updates` }} to install
+                    {{ t(`sandbox.sandboxExtensions.updatesToInstall`, { count: updatable }, updatable) }}
                 </button>
-                <span v-else class="text-content">{{ updatable }} {{ updatable === 1 ? `update` : `updates` }} to install</span>
+                <span v-else class="text-content">{{ t(`sandbox.sandboxExtensions.updatesToInstall`, { count: updatable }, updatable) }}</span>
                 ·
             </template>
-            Updates checked {{ timeAgo(Date.parse(updatesCheckedAt)) }} ·
+            {{ t(`sandbox.sandboxExtensions.updatesChecked`) }} {{ timeAgo(Date.parse(updatesCheckedAt)) }} ·
             <button type="button" :class="ui.linkButton(`text-2xs`)" :disabled="checking" v-action="checkNow">
-                {{ checking ? `Checking…` : `Check now` }}
+                {{ checking ? t(`sandbox.sandboxExtensions.checking`) : t(`sandbox.sandboxExtensions.checkNow`) }}
             </button>
         </p>
     </div>

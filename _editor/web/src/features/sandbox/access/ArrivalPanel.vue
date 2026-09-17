@@ -17,12 +17,15 @@ import { sandboxJson } from "../client/sandboxClient";
 import { useSandbox } from "../client/useSandbox";
 import { useHubWork } from "../../../shell/hub/hubWork";
 import { helpTopics, SOURCE_GUIDES } from "../overview/assistantGuide";
+import { useT } from "@intentic/ui/i18n";
 
 // Body of <ImportCard>: one picker, one checklist, one report for all four arrival sources. The daemon detects
 // the source from the file itself, so the picker never asks; every source becomes a plan first, and only Apply writes.
 // Credentials are a separate consent, the same lock-in-a-box as <ExportBundleDialog>'s.
 
 // Held for the one write the daemon cannot make itself (adoptPresentation below), and for the id to make it against.
+const t = useT();
+
 const sandbox = useSandbox();
 const hosts = ref<ArrivalHost[]>([]);
 const picked = ref<AssistantSource | undefined>(undefined);
@@ -168,7 +171,7 @@ const cancel = (): Promise<void> =>
     <div class="flex flex-col gap-4">
         <template v-if="plan === undefined">
             <!-- Connected devices go first, since a connected machine needs no archive or file dialog. -->
-            <RowGroup v-if="hosts.length > 0" flat label="Your devices">
+            <RowGroup v-if="hosts.length > 0" flat :label="t(`sandbox.arrivalPanel.devices`)">
                 <Row
                     v-for="host in hosts"
                     :key="host.id"
@@ -177,18 +180,26 @@ const cancel = (): Promise<void> =>
                 >
                     <template #title
                         ><span class="text-xs">{{
-                            host.found === undefined ? host.id : `Found a ${host.found === `hermes` ? `Hermes` : `OpenClaw`} setup on ${host.id}`
+                            host.found === undefined
+                                ? host.id
+                                : t(`sandbox.arrivalPanel.foundSetupOn`, { kind: host.found === `hermes` ? `Hermes` : `OpenClaw`, host: host.id })
                         }}</span></template
                     >
                     <template v-if="host.found === undefined" #description>{{ host.detail }}</template>
                     <template #control>
-                        <Button v-if="host.found !== undefined" label="Bring it in" size="small" :loading="planning" @click="readFromHost(host)" />
+                        <Button
+                            v-if="host.found !== undefined"
+                            :label="t(`sandbox.arrivalPanel.bringIn`)"
+                            size="small"
+                            :loading="planning"
+                            @click="readFromHost(host)"
+                        />
                         <button
                             v-else
                             type="button"
                             :class="ui.iconButton()"
-                            aria-label="Check this device again"
-                            v-tooltip.top="'Check again'"
+                            :aria-label="t(`sandbox.arrivalPanel.checkDeviceAgain`)"
+                            v-tooltip.top="t(`sandbox.arrivalPanel.checkAgain`)"
                             v-action="recheck"
                         >
                             <Icon name="refresh" :spin="probing" class="text-sm" />
@@ -200,7 +211,7 @@ const cancel = (): Promise<void> =>
             <!-- One picker, no format question: the daemon tells the formats apart. -->
             <div class="flex flex-wrap items-center gap-2">
                 <Button
-                    :label="ready.length > 0 ? `Or choose a file` : `Choose a file`"
+                    :label="ready.length > 0 ? t(`sandbox.arrivalPanel.chooseFile`) : t(`sandbox.arrivalPanel.chooseFile2`)"
                     size="small"
                     :loading="planning"
                     @click="chooseFile?.click()"
@@ -215,17 +226,22 @@ const cancel = (): Promise<void> =>
                     @change="readFile"
                 />
                 <template v-if="picked === undefined">
-                    <p class="text-2xs text-subtle">Pack from</p>
-                    <Button label="Hermes" size="small" severity="secondary" text @click="picked = `hermes`" />
-                    <Button label="OpenClaw" size="small" severity="secondary" text @click="picked = `openclaw`" />
+                    <p class="text-2xs text-subtle">{{ t(`sandbox.arrivalPanel.pack`) }}</p>
+                    <Button :label="t(`sandbox.arrivalPanel.hermes`)" size="small" severity="secondary" text @click="picked = `hermes`" />
+                    <Button :label="t(`sandbox.arrivalPanel.openclaw`)" size="small" severity="secondary" text @click="picked = `openclaw`" />
                 </template>
             </div>
 
             <!-- One command only: the reader already named which assistant is theirs. -->
             <div v-if="guide" class="flex flex-col gap-3">
                 <div class="flex items-center justify-between gap-2">
-                    <p class="text-xs text-content">Run on {{ guide.label }}:</p>
-                    <button type="button" :class="ui.iconButton()" aria-label="Choose a different assistant" @click="picked = undefined">
+                    <p class="text-xs text-content">{{ t(`sandbox.arrivalPanel.runOn`, { label: guide.label }) }}</p>
+                    <button
+                        type="button"
+                        :class="ui.iconButton()"
+                        :aria-label="t(`sandbox.arrivalPanel.chooseDifferentAssistant`)"
+                        @click="picked = undefined"
+                    >
                         <Icon name="times" class="text-sm" />
                     </button>
                 </div>
@@ -241,7 +257,7 @@ const cancel = (): Promise<void> =>
                         </div>
                     </details>
                     <details v-if="guide.fallbackCommand" class="text-2xs">
-                        <summary class="cursor-pointer text-subtle">That command isn't available</summary>
+                        <summary class="cursor-pointer text-subtle">{{ t(`sandbox.arrivalPanel.commandIsntAvailable`) }}</summary>
                         <div class="mt-1 flex flex-col gap-1 pb-1">
                             <p class="text-subtle">{{ guide.fallbackNote }}</p>
                             <Code :code="guide.fallbackCommand" lang="bash" :wrap="true" :copyable="true" />
@@ -256,7 +272,7 @@ const cancel = (): Promise<void> =>
             <div class="flex items-center gap-2">
                 <StatusBadge variant="info" :label="plan.name ?? SOURCE_LABELS[plan.source]" />
             </div>
-            <RowGroup flat label="What would land">
+            <RowGroup flat :label="t(`sandbox.arrivalPanel.whatWouldLand`)">
                 <Row
                     v-for="item in plan.items"
                     :key="item.id"
@@ -268,9 +284,9 @@ const cancel = (): Promise<void> =>
                     >
                     <template #description>{{ item.applicable ? item.detail : item.reason }}</template>
                     <template #meta>
-                        <StatusBadge v-if="!item.applicable" variant="info" label="already here" />
-                        <StatusBadge v-else-if="item.secrets.length > 0" variant="warning" label="secret" />
-                        <StatusBadge v-else-if="!item.recommended" variant="info" label="check first" />
+                        <StatusBadge v-if="!item.applicable" variant="info" :label="t(`sandbox.arrivalPanel.alreadyHere`)" />
+                        <StatusBadge v-else-if="item.secrets.length > 0" variant="warning" :label="t(`sandbox.arrivalPanel.secret`)" />
+                        <StatusBadge v-else-if="!item.recommended" variant="info" :label="t(`sandbox.arrivalPanel.checkFirst`)" />
                     </template>
                     <template #control>
                         <Checkbox v-if="item.applicable" v-model="ticked[item.id]" binary />
@@ -286,7 +302,7 @@ const cancel = (): Promise<void> =>
                     density="compact"
                     :icon="withSecrets ? `unlock` : `lock`"
                     :tone="withSecrets ? `warning` : `default`"
-                    title="Take the secret values too"
+                    :title="t(`sandbox.arrivalPanel.takeSecretValuesToo`)"
                     class="cursor-pointer px-3.5 py-3"
                 >
                     <template #control>
@@ -295,14 +311,13 @@ const cancel = (): Promise<void> =>
                 </Row>
             </div>
 
-            <RowGroup v-if="plan.needsAction.length > 0" flat label="Won't happen by itself">
+            <RowGroup v-if="plan.needsAction.length > 0" flat :label="t(`sandbox.arrivalPanel.wontHappenByItself`)">
                 <Row v-for="action in plan.needsAction" :key="action.subject" :title="action.subject" :description="action.detail" />
             </RowGroup>
 
             <details v-if="plan.refused.length > 0" class="text-2xs text-subtle">
                 <summary class="cursor-pointer">
-                    {{ plan.refused.length }} thing{{ plan.refused.length === 1 ? `` : `s` }} stay{{ plan.refused.length === 1 ? `s` : `` }} behind on
-                    purpose
+                    {{ t(`sandbox.arrivalPanel.staysBehind`, { count: plan.refused.length }, plan.refused.length) }}
                 </summary>
                 <ul class="mt-1 flex list-disc flex-col gap-0.5 pl-4">
                     <li v-for="line in plan.refused" :key="line">{{ line }}</li>
@@ -311,33 +326,39 @@ const cancel = (): Promise<void> =>
 
             <div class="flex flex-wrap items-center gap-2">
                 <Button
-                    :label="`Bring in ${tickedCount} item${tickedCount === 1 ? `` : `s`}`"
+                    :label="t(`sandbox.arrivalPanel.bringIn`, { count: tickedCount }, tickedCount)"
                     size="small"
                     :loading="applying"
                     :disabled="tickedCount === 0"
                     @click="apply"
                 />
-                <Button label="Cancel" size="small" severity="secondary" text @click="cancel" />
+                <Button :label="t(`ui.action.cancel`)" size="small" severity="secondary" text @click="cancel" />
             </div>
         </template>
 
         <!-- One shared report for all four sources. -->
         <template v-if="report">
             <div class="flex items-center gap-2">
-                <StatusBadge variant="success" label="arrived" dot />
-                <p class="text-2xs text-subtle">{{ report.applied.length }} item{{ report.applied.length === 1 ? `` : `s` }}.</p>
+                <StatusBadge variant="success" :label="t(`sandbox.arrivalPanel.arrived`)" dot />
+                <p class="text-2xs text-subtle">
+                    {{ t(`sandbox.arrivalPanel.itemsApplied`, { count: report.applied.length }, report.applied.length) }}
+                </p>
             </div>
             <!-- Taking the source's name and logo renames what the owner is looking at, so it is said, never silent. -->
             <p v-if="adopted" class="text-2xs text-subtle">{{ adopted }}</p>
             <!-- Label is a slot so a failure group can wear its own tone without RowGroup knowing about tones. -->
             <RowGroup v-if="report.failed.length > 0" flat>
-                <template #label><span :class="ui.sectionLabel(`text-danger`)">Didn't land</span></template>
+                <template #label
+                    ><span :class="ui.sectionLabel(`text-danger`)">{{ t(`sandbox.arrivalPanel.didntLand`) }}</span></template
+                >
                 <Row v-for="failure in report.failed" :key="failure.id" :title="failure.label" :description="failure.error" />
             </RowGroup>
-            <RowGroup v-if="report.needsAction.length > 0" flat label="Finish the arrival">
+            <RowGroup v-if="report.needsAction.length > 0" flat :label="t(`sandbox.arrivalPanel.finishArrival`)">
                 <Row v-for="action in report.needsAction" :key="action.subject" :title="action.subject" :description="action.detail" />
             </RowGroup>
-            <p v-if="report.refused.length > 0" class="text-2xs text-warning">{{ report.refused.length }} refused.</p>
+            <p v-if="report.refused.length > 0" class="text-2xs text-warning">
+                {{ t(`sandbox.arrivalPanel.refused`, { count: report.refused.length }) }}
+            </p>
         </template>
 
         <NoticeStack :of="[planError, applyError]" />

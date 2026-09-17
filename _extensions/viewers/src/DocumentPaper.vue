@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { Icon } from "@intentic/extension-ui";
 import { ref } from "vue";
+import { t } from "./i18n.js";
 
 /* The paper a document viewer draws on: the scroll surface, its states, and one set of document typography.
    Its pages are built imperatively by whichever viewer owns it, which is why every rule below is `:deep`. */
@@ -24,7 +25,7 @@ defineExpose({ host });
             <p class="text-sm text-danger">{{ error }}</p>
         </div>
         <div v-else-if="empty === true" class="pointer-events-none absolute inset-0 flex items-center justify-center text-sm text-muted">
-            This document has no text in it.
+            {{ t(`documentPaper.documentNoTextIn`) }}
         </div>
     </div>
 </template>

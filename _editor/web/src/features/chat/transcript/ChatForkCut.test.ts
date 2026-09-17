@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { type App, createApp, h, nextTick } from "vue";
 import type { MenuItem } from "primevue/menuitem";
 import type { ChatMessage } from "./transcript";
-import { ERRANDS } from "../run/errands";
+import { errands } from "../run/errands";
 import { IconStub } from "@intentic/ui/testing";
 
 // Pins the cut's menu: which rows a cut offers, which an unanchored cut may still show, and that the destructive rewind
@@ -225,7 +225,7 @@ describe(`the fork cut`, () => {
             id: 2,
             role: `user`,
             rewindIndex: 2,
-            text: `${ERRANDS.landConflict.opening}\n\nroot: two files`,
+            text: `${errands().landConflict.opening}\n\nroot: two files`,
         };
         state.messages = [anchored(0), { id: 1, role: `assistant`, text: `answer` }, errand, { id: 3, role: `assistant`, text: `fixed` }];
         const element = mount(2);

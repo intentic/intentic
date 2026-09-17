@@ -9,10 +9,13 @@ import type { SecretRow } from "../../sandbox/secrets/secretRows";
 import { reveal, useCredentialGates, useSecrets } from "./useSecrets";
 import ToggleSwitch from "primevue/toggleswitch";
 import SecretField from "./SecretField.vue";
+import { useT } from "@intentic/ui/i18n";
 
 // One secret, one line, until asked otherwise: a mark, a name, what tells it apart, and (only when owed) a due
 // badge. Reveal/copy/set/remove fade in on hover, focus or touch rather than crowding a scanned list. Expansion
 // belongs to the parent (one row open at a time); closing drops whatever the row opened with.
+
+const t = useT();
 
 const { row, expanded } = defineProps<{ row: SecretRow; expanded: boolean }>();
 const emit = defineEmits<{ "update:expanded": [expanded: boolean] }>();
@@ -107,10 +110,14 @@ const clearGate = async (): Promise<void> => {
     }
 };
 
-const SCOPE_OPTIONS = [
-    { label: `This once`, value: `use` as const, title: `One click releases exactly one use. The next use asks again.` },
-    { label: `Rest of the conversation`, value: `conversation` as const, title: `One click covers every use for the rest of that conversation.` },
-];
+const SCOPE_OPTIONS = computed(() => [
+    { label: t(`capabilities.secretEntryRow.once`), value: `use` as const, title: t(`capabilities.secretEntryRow.oneClickReleasesExactly`) },
+    {
+        label: t(`capabilities.secretEntryRow.restConversation`),
+        value: `conversation` as const,
+        title: t(`capabilities.secretEntryRow.oneClickCoversEvery`),
+    },
+]);
 
 const editing = ref(false);
 const multiline = ref(false);
@@ -180,10 +187,10 @@ const ACTION = ui.iconButton(`text-subtle disabled:opacity-40 disabled:hover:bg-
 </script>
 
 <template>
-<!-- Header and panel share one tint while open, reading as a single block; the wash, chevron and rail are <DisclosureRow>'s. -->
+    <!-- Header and panel share one tint while open, reading as a single block; the wash, chevron and rail are <DisclosureRow>'s. -->
     <DisclosureRow class="@container" :open="expanded" @update:open="emit(`update:expanded`, !expanded)">
         <template #lead="{ mark }">
-<!-- The only non-text element, findable without reading (accounts differing only in a last character). -->
+            <!-- The only non-text element, findable without reading (accounts differing only in a last character). -->
             <BrandMark :size="mark" :name="row.title" :logo="row.logo" :icon="row.icon" />
         </template>
 
@@ -195,7 +202,7 @@ const ACTION = ui.iconButton(`text-subtle disabled:opacity-40 disabled:hover:bg-
                     :class="row.mono ? `font-mono` : ``"
                     >{{ row.title }}</span
                 >
-<!-- Dropped rather than wrapped at rail width: the name is what the row is for; the panel below repeats the detail. -->
+                <!-- Dropped rather than wrapped at rail width: the name is what the row is for; the panel below repeats the detail. -->
                 <span
                     v-if="row.detail"
                     v-tooltip.top.overflow="row.detail"
@@ -218,22 +225,32 @@ const ACTION = ui.iconButton(`text-subtle disabled:opacity-40 disabled:hover:bg-
                 >
                     <button
                         v-if="row.entry.status !== `missing`"
-                        v-tooltip.top="revealedValue !== undefined ? `Hide` : `Reveal (owner only)`"
+                        v-tooltip.top="
+                            revealedValue !== undefined ? t(`capabilities.secretEntryRow.hide`) : t(`capabilities.secretEntryRow.revealOwnerOnly`)
+                        "
                         type="button"
                         :class="ACTION"
                         :disabled="!canReveal"
-                        :aria-label="revealedValue !== undefined ? `Hide value` : `Reveal value (owner only)`"
+                        :aria-label="
+                            revealedValue !== undefined
+                                ? t(`capabilities.secretEntryRow.hideValue`)
+                                : t(`capabilities.secretEntryRow.revealValueOwnerOnly`)
+                        "
                         v-action="toggleReveal"
                     >
                         <Icon :name="revealedValue !== undefined ? `eye-slash` : `eye`" class="text-xs" />
                     </button>
-                    <CopyButton v-if="canReveal" v-tooltip.top="`Copy value`" :text="() => revealedValue ?? reveal(row.entry.key)" />
+                    <CopyButton
+                        v-if="canReveal"
+                        v-tooltip.top="t(`capabilities.secretEntryRow.copyValue`)"
+                        :text="() => revealedValue ?? reveal(row.entry.key)"
+                    />
                     <button
                         v-if="row.editable"
-                        v-tooltip.top="`Set / update`"
+                        v-tooltip.top="t(`capabilities.secretEntryRow.setUpdate`)"
                         type="button"
                         :class="ACTION"
-                        aria-label="Set / update value"
+                        :aria-label="t(`capabilities.secretEntryRow.setUpdateValue`)"
                         @click="startEdit"
                     >
                         <Icon name="pencil" class="text-xs" />
@@ -241,25 +258,31 @@ const ACTION = ui.iconButton(`text-subtle disabled:opacity-40 disabled:hover:bg-
                     <template v-if="row.removable">
                         <button
                             v-if="!confirming"
-                            v-tooltip.top="`Remove`"
+                            v-tooltip.top="t(`ui.action.remove`)"
                             type="button"
                             :class="ACTION"
-                            aria-label="Remove"
+                            :aria-label="t(`ui.action.remove`)"
                             @click="confirming = true"
                         >
                             <Icon name="trash" class="text-xs" />
                         </button>
                         <template v-else>
                             <button
-                                v-tooltip.top="`Confirm remove`"
+                                v-tooltip.top="t(`capabilities.secretEntryRow.confirmRemove`)"
                                 type="button"
                                 :class="ui.iconButton(`text-danger hover:bg-danger/10 hover:text-danger`)"
-                                aria-label="Confirm remove"
+                                :aria-label="t(`capabilities.secretEntryRow.confirmRemove`)"
                                 v-action="removeKey"
                             >
                                 <Icon name="check" class="text-xs" />
                             </button>
-                            <button v-tooltip.top="`Cancel`" type="button" :class="ACTION" aria-label="Cancel remove" @click="confirming = false">
+                            <button
+                                v-tooltip.top="t(`ui.action.cancel`)"
+                                type="button"
+                                :class="ACTION"
+                                :aria-label="t(`capabilities.secretEntryRow.cancelRemove`)"
+                                @click="confirming = false"
+                            >
                                 <Icon name="times" class="text-xs" />
                             </button>
                         </template>
@@ -274,49 +297,58 @@ const ACTION = ui.iconButton(`text-subtle disabled:opacity-40 disabled:hover:bg-
                 <template v-if="row.detail">
                     <span class="@xl:hidden">{{ row.detail }} · </span>
                 </template>
-                <template v-if="row.entry.kind === `generated`">generated for you · </template>lives in
+                <template v-if="row.entry.kind === `generated`">{{ t(`capabilities.secretEntryRow.generated`) }} </template
+                >{{ t(`capabilities.secretEntryRow.livesIn`) }}
                 <span class="font-mono text-subtle">{{ row.entry.storedAt }}</span>
-                <template v-if="row.entry.ci !== undefined"> · CI {{ row.entry.ci.synced ? `synced` : `out of date` }}</template>
+                <template v-if="row.entry.ci !== undefined">
+                    · {{ row.entry.ci.synced ? t(`capabilities.secretEntryRow.ciSynced`) : t(`capabilities.secretEntryRow.ciOutOfDate`) }}</template
+                >
             </p>
             <!-- Use ledger's newest row: when the agent last spent this and where; absent for a secret never yet used. -->
             <p v-if="row.entry.lastUse" class="pt-0.5 text-2xs text-muted">
-                used by the agent {{ timeAgo(row.entry.lastUse.at, { days: true }) }}
+                {{ t(`capabilities.secretEntryRow.usedByAgent`) }} {{ timeAgo(row.entry.lastUse.at, { days: true }) }}
                 <template v-if="row.entry.lastUse.detail">
                     ·
-                    <span v-if="row.entry.lastUse.lane === `browser`">typed on {{ row.entry.lastUse.detail }}</span>
+                    <span v-if="row.entry.lastUse.lane === `browser`">{{
+                        t(`capabilities.secretEntryRow.typedOn`, { detail: row.entry.lastUse.detail })
+                    }}</span>
                     <span v-else class="font-mono text-subtle">{{ row.entry.lastUse.detail }}</span>
                 </template>
             </p>
-<!-- Who has to release this: off for nearly everything by design, since gating is for the few credentials where one wrong use is the incident. -->
+            <!-- Who has to release this: off for nearly everything by design, since gating is for the few credentials where one wrong use is the incident. -->
             <div v-if="row.gateSubject !== undefined" class="mt-3 border-t border-line pt-2">
                 <div class="flex items-center justify-between gap-2">
-                    <span class="text-2xs font-medium uppercase tracking-wide text-subtle">Needs approval</span>
+                    <span class="text-2xs font-medium uppercase tracking-wide text-subtle">{{ t(`capabilities.secretEntryRow.needsApproval`) }}</span>
                     <ToggleSwitch
                         v-if="isOwner"
                         :model-value="gateOn"
                         v-tooltip.top="
-                            gateOn
-                                ? `Let the agent use this without asking anybody`
-                                : `Require a named person to release this before the agent can use it`
+                            gateOn ? t(`capabilities.secretEntryRow.letAgentUseWithout`) : t(`capabilities.secretEntryRow.requireNamedPersonTo`)
                         "
-                        aria-label="Needs approval"
+                        :aria-label="t(`capabilities.secretEntryRow.needsApproval`)"
                         @update:model-value="toggleGate"
                     />
                 </div>
 
-<!-- Not the owner: states the gate's status and that only the owner can change it, rather than hiding the controls silently. -->
+                <!-- Not the owner: states the gate's status and that only the owner can change it, rather than hiding the controls silently. -->
                 <p v-if="!isOwner" class="pt-0.5 text-2xs text-muted">
                     <template v-if="gate">
-                        Only {{ gate.approvers.join(` or `) }} can release this, and
-                        {{ gate.scope === `conversation` ? `one release covers the rest of a conversation` : `every use asks again` }}. Only the owner
-                        can change this.
+                        {{
+                            t(`capabilities.secretEntryRow.gateExplained`, {
+                                approvers: gate.approvers.join(` or `),
+                                scope:
+                                    gate.scope === `conversation`
+                                        ? t(`capabilities.secretEntryRow.scopeConversation`)
+                                        : t(`capabilities.secretEntryRow.scopeEveryUse`),
+                            })
+                        }}
                     </template>
-                    <template v-else>Nobody has to approve this. Only the owner can change that.</template>
+                    <template v-else>{{ t(`capabilities.secretEntryRow.nobodyToApproveOnly`) }}</template>
                 </p>
 
                 <template v-else-if="gateOn">
-<!-- Approvers are an exact list, not a role floor ("only Bob"); the owner appears here too, since they aren't an implicit approver. -->
-                    <p class="pt-1 text-2xs text-muted">Who can release it</p>
+                    <!-- Approvers are an exact list, not a role floor ("only Bob"); the owner appears here too, since they aren't an implicit approver. -->
+                    <p class="pt-1 text-2xs text-muted">{{ t(`capabilities.secretEntryRow.whoRelease`) }}</p>
                     <div class="flex flex-wrap gap-1 pt-1">
                         <button
                             v-for="email of approverChoices"
@@ -330,31 +362,39 @@ const ACTION = ui.iconButton(`text-subtle disabled:opacity-40 disabled:hover:bg-
                             {{ email }}
                         </button>
                     </div>
-<!-- Names come from the Access roster plus the owner; the daemon refuses anyone else. -->
+                    <!-- Names come from the Access roster plus the owner; the daemon refuses anyone else. -->
                     <p v-if="approverChoices.length === 0" class="pt-1 text-2xs text-muted">
-                        Nobody can be named yet. Give somebody access on the
-                        <RouterLink to="/sandbox/access" class="text-link hover:underline">Access tab</RouterLink> first.
+                        {{ t(`capabilities.secretEntryRow.nobodyNamedYetGive`) }}
+                        <RouterLink to="/sandbox/access" class="text-link hover:underline">{{
+                            t(`capabilities.secretEntryRow.accessTab`)
+                        }}</RouterLink>
+                        {{ t(`capabilities.secretEntryRow.first`) }}
                     </p>
                     <p v-else-if="approverChoices.length === 1" class="pt-1 text-2xs text-muted">
-                        Only you so far. Anybody you give access on the
-                        <RouterLink to="/sandbox/access" class="text-link hover:underline">Access tab</RouterLink> can be named here.
+                        {{ t(`capabilities.secretEntryRow.onlyFarAnybodyGive`) }}
+                        <RouterLink to="/sandbox/access" class="text-link hover:underline">{{
+                            t(`capabilities.secretEntryRow.accessTab`)
+                        }}</RouterLink>
+                        {{ t(`capabilities.secretEntryRow.namedHere`) }}
                     </p>
 
-<!-- How long one release lasts, except where it isn't a choice: a signed-in profile or running MCP server is mounted for a whole turn. -->
-                    <p class="pt-2 text-2xs text-muted">How long one release lasts</p>
+                    <!-- How long one release lasts, except where it isn't a choice: a signed-in profile or running MCP server is mounted for a whole turn. -->
+                    <p class="pt-2 text-2xs text-muted">{{ t(`capabilities.secretEntryRow.howLongOneRelease`) }}</p>
                     <p v-if="row.sessionShaped" class="pt-0.5 text-2xs text-subtle">
-                        For the rest of the conversation. A signed-in account is loaded for a whole turn, so it cannot be released for a single use.
+                        {{ t(`capabilities.secretEntryRow.restConversationSignedIn`) }}
                     </p>
                     <SegmentedControl v-else v-model="draftScope" :options="SCOPE_OPTIONS" size="xs" wrap class="pt-1" />
 
                     <div class="flex items-center gap-2 pt-2">
                         <button type="button" :class="ui.linkButton(`text-2xs`)" :disabled="!gateDirty" v-action="saveGate">
-                            {{ gate === undefined ? `Require approval` : `Save` }}
+                            {{ gate === undefined ? t(`capabilities.secretEntryRow.requireApproval`) : t(`ui.action.save`) }}
                         </button>
-                        <span v-if="draftApprovers.length === 0" class="text-2xs text-warning">Name at least one person.</span>
+                        <span v-if="draftApprovers.length === 0" class="text-2xs text-warning">{{
+                            t(`capabilities.secretEntryRow.nameAtLeastOne`)
+                        }}</span>
                     </div>
                 </template>
-                <p v-else class="pt-0.5 text-2xs text-muted">The agent can use this without asking anybody.</p>
+                <p v-else class="pt-0.5 text-2xs text-muted">{{ t(`capabilities.secretEntryRow.agentUseWithoutAsking`) }}</p>
                 <Notice v-if="gateError" :of="gateError" class="mt-2" />
             </div>
 
@@ -362,8 +402,8 @@ const ACTION = ui.iconButton(`text-subtle disabled:opacity-40 disabled:hover:bg-
 
             <div v-if="panelMode === `reveal`" class="mt-2">
                 <div class="mb-1 flex items-center gap-2">
-                    <span class="text-2xs font-medium uppercase tracking-wide text-subtle">Value</span>
-                    <CopyButton :text="() => revealedValue ?? reveal(row.entry.key)" label="Copy" />
+                    <span class="text-2xs font-medium uppercase tracking-wide text-subtle">{{ t(`capabilities.secretEntryRow.value`) }}</span>
+                    <CopyButton :text="() => revealedValue ?? reveal(row.entry.key)" :label="t(`ui.action.copy`)" />
                 </div>
                 <code
                     class="block max-h-48 overflow-auto whitespace-pre-wrap break-all rounded-md border border-line bg-canvas px-3 py-2 font-mono text-xs text-content"
@@ -382,7 +422,7 @@ const ACTION = ui.iconButton(`text-subtle disabled:opacity-40 disabled:hover:bg-
                     @cancel="editing = false"
                 />
                 <button type="button" :class="ui.linkButton(`text-2xs`)" @click="multiline = !multiline">
-                    {{ multiline ? `Single-line value` : `Multi-line value (SSH key, PEM…)` }}
+                    {{ multiline ? t(`capabilities.secretEntryRow.singleLineValue`) : t(`capabilities.secretEntryRow.multiLineValueSsh`) }}
                 </button>
             </div>
         </template>

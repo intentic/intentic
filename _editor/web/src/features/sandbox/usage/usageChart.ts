@@ -2,6 +2,7 @@ import type { FigureAccent } from "@intentic/ui/markdown";
 import type { BarItem } from "@intentic/ui";
 import { seriesColor } from "@intentic/ui/series";
 import type { UsageRollupRow } from "@intentic/sandbox-contract";
+import { t } from "@intentic/ui/i18n";
 
 // Every number and mark on the Usage tab, as pure functions over the daemon's rollup rows; the screen only binds.
 // Same split as toolPresentation.ts, so a money readout's arithmetic is testable without mounting a component.
@@ -20,11 +21,11 @@ export const daySpan = (from: string, to: string): number => Math.round((dayToMs
 
 export type RangePreset = "7d" | "30d" | "90d" | "all";
 // Mutable by design: <SegmentedControl> takes its options array as-is.
-export const RANGE_PRESETS: { label: string; value: RangePreset }[] = [
-    { label: `7 days`, value: `7d` },
-    { label: `30 days`, value: `30d` },
-    { label: `90 days`, value: `90d` },
-    { label: `All time`, value: `all` },
+export const rangePresets = (): { label: string; value: RangePreset }[] => [
+    { label: t(`sandbox.usageChart.n7Days`), value: `7d` },
+    { label: t(`sandbox.usageChart.n30Days`), value: `30d` },
+    { label: t(`sandbox.usageChart.n90Days`), value: `90d` },
+    { label: t(`sandbox.usageChart.allTime`), value: `all` },
 ];
 
 // Inclusive UTC range. Absent `from` means unbounded (All time), not a sentinel date: the two read differently
@@ -265,7 +266,7 @@ export const rankByCost = (
         {
             key: undefined,
             kind: `other`,
-            label: `${tail.length} more`,
+            label: t(`sandbox.usageChart.more`, { count: tail.length }),
             value: tail.reduce((sum, entry) => sum + entry.value, 0),
             // The fold mixes providers by construction, so it takes the achromatic slot.
             providers: [],

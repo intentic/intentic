@@ -6,7 +6,15 @@ import { RouterLink } from "vue-router";
 import { useAudience } from "../app/useAudience";
 import { useAuth } from "../features/auth/useAuth";
 import { useCapabilities } from "../features/capabilities/connect/useCapabilities";
-import { type ActiveExtension, activationBadge, detectActivations, extensionPath, railBands, tabBarIds, WORKSPACE_VIEW_ID } from "../core-views/registry";
+import {
+    type ActiveExtension,
+    activationBadge,
+    detectActivations,
+    extensionPath,
+    railBands,
+    tabBarIds,
+    WORKSPACE_VIEW_ID,
+} from "../core-views/registry";
 import { useVocabulary } from "../core-views/vocabulary";
 import { badgeChip, badgeClass, badgeToneClass, RUNNING_MARK_CLASS } from "../core-views/viewBadge";
 import { usePanels } from "../features/extensions/usePanels";
@@ -23,10 +31,13 @@ import { environment } from "../app/environments/environment";
 import { usePushNotifications } from "../push/usePushNotifications";
 import { pushMenuRow } from "./pushMenuRow";
 import RailIcon from "./rail/RailIcon.vue";
+import { useT } from "@intentic/ui/i18n";
 
 // The mobile Menu tab: everything the desktop rail and its popovers hold, as one page — sandbox
 // switching, the presence roster, the area list, account actions. Same state singletons, different
 // presentation.
+
+const t = useT();
 
 interface AreaRow {
     // Groups by railBands, so this page's sections match the desktop rail's runs.
@@ -90,10 +101,10 @@ const areaBands = computed(() =>
 const { canShip } = useRole();
 const { maker } = useAudience();
 const sandboxRows = computed<readonly AreaRow[]>(() => [
-    { id: `capabilities`, to: `/capabilities`, label: `Add a capability`, icon: `plus` },
-    ...(canShip.value && !maker.value ? [{ id: `terminal`, to: `/terminal`, label: `Terminal`, icon: `code` } as const] : []),
-    { id: `sandbox`, to: `/sandbox`, label: `Sandbox`, icon: `box` },
-    { id: `settings`, to: `/settings`, label: `Settings`, icon: `cog` },
+    { id: `capabilities`, to: `/capabilities`, label: t(`shell.mobileMenu.addCapability`), icon: `plus` },
+    ...(canShip.value && !maker.value ? [{ id: `terminal`, to: `/terminal`, label: t(`shell.mobileMenu.terminal`), icon: `code` } as const] : []),
+    { id: `sandbox`, to: `/sandbox`, label: t(`shell.mobileMenu.sandbox`), icon: `box` },
+    { id: `settings`, to: `/settings`, label: t(`shell.mobileMenu.settings`), icon: `cog` },
 ]);
 
 // Split so an unreachable sandbox isn't offered beside ones that can actually be switched to.
@@ -114,7 +125,7 @@ const logout = async (): Promise<void> => {
     <div class="mx-auto flex w-full max-w-lg flex-col gap-6 p-4">
         <!-- First on the page: the tab's badge is what brought the reader here, one row per pending item. -->
         <section v-if="sandboxAttention.length > 0" class="flex flex-col gap-1">
-            <h2 class="px-1 text-2xs font-semibold uppercase tracking-wide text-subtle">Needs you</h2>
+            <h2 class="px-1 text-2xs font-semibold uppercase tracking-wide text-subtle">{{ t(`shell.mobileMenu.needs`) }}</h2>
             <RouterLink
                 v-for="item in sandboxAttention"
                 :key="item.message"
@@ -131,7 +142,7 @@ const logout = async (): Promise<void> => {
 
         <!-- Quieter ink; none of these carry the tab's badge, so none should read as the reason it's flagged. -->
         <section v-if="sandboxNotes.length > 0" class="flex flex-col gap-1">
-            <h2 class="px-1 text-2xs font-semibold uppercase tracking-wide text-subtle">Worth knowing</h2>
+            <h2 class="px-1 text-2xs font-semibold uppercase tracking-wide text-subtle">{{ t(`shell.mobileMenu.worthKnowing`) }}</h2>
             <RouterLink
                 v-for="item in sandboxNotes"
                 :key="item.message"
@@ -148,7 +159,7 @@ const logout = async (): Promise<void> => {
 
         <!-- This device, not the sandbox: push is registered per phone, so the ask belongs on the phone's own page. -->
         <section v-if="pushRow !== undefined" class="flex flex-col gap-1">
-            <h2 class="px-1 text-2xs font-semibold uppercase tracking-wide text-subtle">This phone</h2>
+            <h2 class="px-1 text-2xs font-semibold uppercase tracking-wide text-subtle">{{ t(`shell.mobileMenu.phone`) }}</h2>
             <RouterLink
                 to="/settings/notifications"
                 class="flex min-h-12 items-center gap-3 rounded-lg px-2 py-1.5 text-sm text-content transition-colors active:bg-overlay"
@@ -166,7 +177,7 @@ const logout = async (): Promise<void> => {
 
         <!-- Sandboxes: tap to switch; the active one shows its live status dot. -->
         <section class="flex flex-col gap-1">
-            <h2 class="px-1 text-2xs font-semibold uppercase tracking-wide text-subtle">Sandboxes</h2>
+            <h2 class="px-1 text-2xs font-semibold uppercase tracking-wide text-subtle">{{ t(`shell.mobileMenu.sandboxes`) }}</h2>
             <button
                 v-for="option in switchable"
                 :key="option.id"
@@ -182,9 +193,9 @@ const logout = async (): Promise<void> => {
                 <span class="min-w-0 flex-1 truncate" :class="option.id === sandbox.activeSandboxId.value ? 'text-link' : 'text-content'">{{
                     option.name
                 }}</span>
-                <span v-if="option.role !== 'owner'" class="ui-status-pill shrink-0 bg-content/10 text-2xs font-medium text-subtle"
-                    >Shared</span
-                >
+                <span v-if="option.role !== 'owner'" class="ui-status-pill shrink-0 bg-content/10 text-2xs font-medium text-subtle">{{
+                    t(`shell.mobileMenu.shared`)
+                }}</span>
                 <span
                     v-if="option.id === sandbox.activeSandboxId.value"
                     class="h-2 w-2 shrink-0 rounded-full"
@@ -197,12 +208,12 @@ const logout = async (): Promise<void> => {
                 class="flex h-12 items-center gap-3 rounded-lg px-2 text-left text-sm text-content transition-colors active:bg-overlay"
             >
                 <span class="flex h-8 w-8 shrink-0 items-center justify-center"><Icon name="plus" class="text-base text-muted" /></span>
-                Add sandbox
+                {{ t(`shell.mobileMenu.addSandbox`) }}
             </RouterLink>
 
             <!-- Same wording as the desktop switcher: offers the move left, not a machine that doesn't exist yet. -->
             <template v-if="unfinished.length > 0">
-                <h2 class="mt-2 px-1 text-2xs font-semibold uppercase tracking-wide text-subtle">Unfinished setup</h2>
+                <h2 class="mt-2 px-1 text-2xs font-semibold uppercase tracking-wide text-subtle">{{ t(`shell.mobileMenu.unfinishedSetup`) }}</h2>
                 <RouterLink
                     v-for="option in unfinished"
                     :key="option.id"
@@ -210,7 +221,7 @@ const logout = async (): Promise<void> => {
                     class="flex h-12 items-center gap-3 rounded-lg px-2 text-left text-sm transition-colors active:bg-overlay"
                 >
                     <span class="flex h-8 w-8 shrink-0 items-center justify-center text-subtle"><Icon name="wrench" /></span>
-                    <span class="min-w-0 flex-1 truncate text-muted">Finish setting up {{ option.name }}</span>
+                    <span class="min-w-0 flex-1 truncate text-muted">{{ t(`shell.mobileMenu.finishSettingUp`, { name: option.name }) }}</span>
                     <Icon name="chevron-right" class="shrink-0 text-xs text-subtle" />
                 </RouterLink>
             </template>
@@ -218,7 +229,7 @@ const logout = async (): Promise<void> => {
 
         <!-- The other members connected right now: same roster the desktop rail stacks. -->
         <section v-if="presenceOthers.length > 0" class="flex flex-col gap-2">
-            <h2 class="px-1 text-2xs font-semibold uppercase tracking-wide text-subtle">Here now</h2>
+            <h2 class="px-1 text-2xs font-semibold uppercase tracking-wide text-subtle">{{ t(`shell.mobileMenu.hereNow`) }}</h2>
             <div class="flex flex-col gap-1">
                 <div v-for="member in presenceOthers" :key="member.email" class="flex h-11 items-center gap-3 px-2">
                     <Avatar
@@ -230,14 +241,16 @@ const logout = async (): Promise<void> => {
                     />
                     <span class="min-w-0 flex-1">
                         <span class="block truncate text-sm text-content">{{ member.name ?? member.email }}</span>
-                        <span class="block truncate text-xs text-muted">{{ presenceActivity(member) }}{{ member.idle ? " · away" : "" }}</span>
+                        <span class="block truncate text-xs text-muted"
+                            >{{ presenceActivity(member) }}{{ member.idle ? t(`shell.mobileMenu.away`) : "" }}</span
+                        >
                     </span>
                 </div>
             </div>
         </section>
 
         <!-- Areas the desktop rail links to, minus the tab bar, grouped into the rail's own bands. -->
-<!-- A badge's tooltip renders as a second line under the name, never a shrink-0 pill beside it — a sentence-length pill would push or truncate the name. -->
+        <!-- A badge's tooltip renders as a second line under the name, never a shrink-0 pill beside it — a sentence-length pill would push or truncate the name. -->
         <section v-for="band in areaBands" :key="band.group.id" class="flex flex-col gap-1">
             <h2 class="px-1 text-2xs font-semibold uppercase tracking-wide text-subtle">{{ band.group.label }}</h2>
             <RouterLink
@@ -263,7 +276,7 @@ const logout = async (): Promise<void> => {
                     <span v-if="area.badge?.tooltip !== undefined" class="mt-0.5 block text-xs" :class="badgeToneClass(area.badge)">{{
                         area.badge.tooltip
                     }}</span>
-<!-- Running gets a line of its own rather than the rail's corner mark: a row this wide can afford the sentence. -->
+                    <!-- Running gets a line of its own rather than the rail's corner mark: a row this wide can afford the sentence. -->
                     <span v-if="area.badge?.running !== undefined" class="mt-0.5 flex items-center gap-1 text-xs" :class="RUNNING_MARK_CLASS">
                         <Icon name="spinner" spin />{{ area.badge.running }}
                     </span>
@@ -274,7 +287,7 @@ const logout = async (): Promise<void> => {
 
         <!-- The box rather than the work, matching what the desktop rail keeps below its last divider. -->
         <section class="flex flex-col gap-1">
-            <h2 class="px-1 text-2xs font-semibold uppercase tracking-wide text-subtle">Sandbox</h2>
+            <h2 class="px-1 text-2xs font-semibold uppercase tracking-wide text-subtle">{{ t(`shell.mobileMenu.sandbox`) }}</h2>
             <RouterLink
                 v-for="row in sandboxRows"
                 :key="row.to"
@@ -291,7 +304,7 @@ const logout = async (): Promise<void> => {
 
         <!-- Account: identity and the actions the desktop avatar popover holds. -->
         <section class="flex flex-col gap-1 pb-4">
-            <h2 class="px-1 text-2xs font-semibold uppercase tracking-wide text-subtle">Account</h2>
+            <h2 class="px-1 text-2xs font-semibold uppercase tracking-wide text-subtle">{{ t(`shell.mobileMenu.account`) }}</h2>
             <div class="flex h-14 items-center gap-3 px-2">
                 <Avatar :size="40" :src="user?.image" />
                 <span class="min-w-0 flex-1">
@@ -305,7 +318,7 @@ const logout = async (): Promise<void> => {
                 v-action="logout"
             >
                 <span class="flex h-8 w-8 shrink-0 items-center justify-center"><Icon name="sign-out" class="text-base text-muted" /></span>
-                Sign out
+                {{ t(`shell.mobileMenu.signOut`) }}
             </button>
         </section>
     </div>

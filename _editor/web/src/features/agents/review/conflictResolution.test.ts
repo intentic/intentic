@@ -1,6 +1,6 @@
 import type { LandConflict } from "@intentic/sandbox-contract";
 import { describe, expect, it } from "vitest";
-import { ERRANDS, errandOf } from "../../chat/run/errands";
+import { errands, errandOf } from "../../chat/run/errands";
 import { agentBlockers, blockerLabel, blockersOf, resolvePrompt, userBlockers } from "./conflictResolution";
 
 // The prompt is what the panel's primary button sends; only the parts a turn fails without are pinned here: the
@@ -117,6 +117,6 @@ describe(`resolvePrompt`, () => {
     // hydrate (errands.ts). Asserted here so rewording the opening fails the test instead of silently breaking
     // recognition.
     it(`reads back as the land-conflict errand, which is what keeps it from stealing the sticky prompt`, () => {
-        expect(errandOf({ id: 1, role: `user`, text: prompt })).toBe(ERRANDS.landConflict);
+        expect(errandOf({ id: 1, role: `user`, text: prompt })?.opening).toBe(errands().landConflict.opening);
     });
 });

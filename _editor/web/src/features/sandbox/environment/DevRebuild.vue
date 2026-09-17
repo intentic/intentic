@@ -8,6 +8,7 @@ import { useAgents } from "../../agents/fleet/useAgents";
 import { useSandboxSettings } from "../overview/useSandboxSettings";
 import { useHostHolding } from "../devices/useDevices";
 import { type DevRebuildPhase, rebuildElapsedLabel, rebuildRunning, useDevRebuild } from "./useDevRebuild";
+import { useT } from "@intentic/ui/i18n";
 
 // Rebuilding a sandbox whose base was compiled from a checkout, from that checkout. Not HostRecreate's flow: that one
 // swaps between images that already exist, and the image this asks for — the working tree as it is now — is not one of
@@ -23,6 +24,8 @@ import { type DevRebuildPhase, rebuildElapsedLabel, rebuildRunning, useDevRebuil
 // Nothing streams back from the build itself, for the same reason: it is detached out there, and the swap at the end
 // replaces the daemon that would have carried a stream. So progress is READ rather than received — useDevRebuild polls
 // the machine's own log — and the run it draws lives outside this component, because the build outlives it.
+
+const t = useT();
 
 const props = defineProps<{
     slug: string;
@@ -135,7 +138,7 @@ const failure = computed<NoticeModel | undefined>(() => {
     if (run.phase === `lost`) {
         return {
             tone: `warning`,
-            title: `That rebuild stopped reporting, and never said how it ended.`,
+            title: t(`sandbox.devRebuild.rebuildStoppedReportingNever`),
             detail: run.trouble ?? `Nothing has been written to its log for a while: the machine may have slept, or the build was stopped.`,
         };
     }
@@ -175,10 +178,10 @@ const interrupted = computed(() => {
 
 // The two costs as two steps, in the order they land: run through one sentence, the minutes that interrupt nothing
 // read as the half-minute that does.
-const STEPS: readonly { icon: IconName; label: string; note: string; takes: string }[] = [
-    { icon: `hammer`, label: `Builds the image`, note: `You keep working`, takes: `minutes` },
-    { icon: `refresh`, label: `Restarts the sandbox`, note: `Reconnects on its own`, takes: `~30s` },
-];
+const STEPS = computed((): readonly { icon: IconName; label: string; note: string; takes: string }[] => [
+    { icon: `hammer`, label: t(`sandbox.devRebuild.buildsImage`), note: t(`sandbox.devRebuild.keepWorking`), takes: `minutes` },
+    { icon: `refresh`, label: t(`sandbox.devRebuild.restartsSandbox`), note: t(`sandbox.devRebuild.reconnectsOnOwn`), takes: `~30s` },
+]);
 
 // The last segment is what tells two checkouts apart, so it never truncates; the parent stays, dimmed, to be checkable.
 const checkout = computed(() => {
@@ -193,7 +196,13 @@ const checkout = computed(() => {
         <!-- The machine holding the checkout is reachable from here, so this is a button wherever you're reading it. -->
         <template v-if="hostId && root">
             <div ref="anchorRef" class="inline-flex self-start" @pointerenter="onEnter" @pointerleave="onLeave" @focusin="onFocus" @focusout="onBlur">
-                <Button :label="live ? `Rebuilding…` : `Rebuild from checkout`" size="small" :loading="live" :disabled="live" @click="onButtonClick">
+                <Button
+                    :label="live ? t(`sandbox.devRebuild.rebuilding`) : t(`sandbox.devRebuild.rebuildCheckout`)"
+                    size="small"
+                    :loading="live"
+                    :disabled="live"
+                    @click="onButtonClick"
+                >
                     <template #icon><Icon name="bolt" /></template>
                 </Button>
             </div>
@@ -201,13 +210,13 @@ const checkout = computed(() => {
             <AnchoredOverlay v-model="overlayOpen" :anchor="anchorRef" side="right" cross="start">
                 <div class="flex w-96 max-w-[calc(100vw-2rem)] flex-col gap-2.5 p-3 text-left" @pointerenter="onCardEnter" @pointerleave="onLeave">
                     <p class="text-2xs text-muted">
-                        Runs <span class="font-mono text-content">{{ base }}</span> from your checkout, not a published release. Rebuild to pick up
-                        code you've written since.
+                        {{ t(`sandbox.devRebuild.runs`) }} <span class="font-mono text-content">{{ base }}</span>
+                        {{ t(`sandbox.devRebuild.checkoutNotPublishedRelease`) }}
                     </p>
 
                     <div class="flex flex-col gap-1">
                         <div class="flex items-baseline justify-between gap-2">
-                            <span class="text-2xs font-medium uppercase tracking-wide text-subtle">Host command</span>
+                            <span class="text-2xs font-medium uppercase tracking-wide text-subtle">{{ t(`sandbox.devRebuild.hostCommand`) }}</span>
                             <span class="truncate font-mono text-2xs text-subtle">{{ root }}</span>
                         </div>
                         <Code :code="command" :lang="commandLang(`unix`)" :wrap="true" />
@@ -231,11 +240,11 @@ const checkout = computed(() => {
                 v-if="live || run.lines.length > 0"
                 :lines="run.lines"
                 :running="live"
-                empty="Waiting for the first line from that device…"
+                :empty="t(`sandbox.devRebuild.waitingFirstLineDevice`)"
             />
 
             <p v-if="quiet" class="text-2xs text-subtle">{{ quiet }}</p>
-            <p v-if="hiccup" class="text-2xs text-subtle">Can't read the log at the moment — the build itself is unaffected. {{ hiccup }}</p>
+            <p v-if="hiccup" class="text-2xs text-subtle">{{ t(`sandbox.devRebuild.cantReadLogAt`, { hiccup }) }}</p>
 
             <Notice v-if="failure" :of="failure" />
             <p v-else-if="done" class="flex items-center gap-2 text-2xs text-muted">
@@ -246,18 +255,18 @@ const checkout = computed(() => {
             <!-- Failure and completion retain the full log path. -->
             <div v-if="failure || done" class="flex flex-wrap items-center gap-x-3 gap-y-1">
                 <p class="text-2xs text-subtle">
-                    The full output is in <span class="font-mono">{{ logPath }}</span> on that device.
+                    {{ t(`sandbox.devRebuild.fullOutputIn`) }} <span class="font-mono">{{ logPath }}</span> {{ t(`sandbox.devRebuild.onDevice`) }}
                 </p>
                 <button type="button" :class="ui.linkButton(`gap-1 text-2xs text-subtle hover:text-content`)" @click="dismiss">
-                    <Icon name="times" />Dismiss
+                    <Icon name="times" />{{ t(`ui.action.dismiss`) }}
                 </button>
             </div>
 
             <ConfirmDialog
                 :open="confirming"
-                header="Rebuild from checkout?"
+                :header="t(`sandbox.devRebuild.rebuildCheckout2`)"
                 header-icon="box"
-                confirm-label="Rebuild now"
+                :confirm-label="t(`sandbox.devRebuild.rebuildNow`)"
                 confirm-icon="bolt"
                 :destructive="false"
                 @cancel="confirming = false"
@@ -298,16 +307,15 @@ const checkout = computed(() => {
 
         <template v-else>
             <p class="text-2xs text-subtle">
-                Runs <span class="font-mono">{{ base }}</span> from your checkout, not a published release. Rebuild to pick up code you've written
-                since.
+                {{ t(`sandbox.devRebuild.runs`) }} <span class="font-mono">{{ base }}</span> {{ t(`sandbox.devRebuild.checkoutNotPublishedRelease`) }}
             </p>
             <!-- Two different gaps, one fallback: no checkout recorded, or nobody here can reach the machine holding it. -->
             <p v-if="root === undefined" class="text-2xs text-subtle">
-                This sandbox doesn't record which checkout its image came from, so it can't start the rebuild for you. Run it there, and recreating it
-                once with <span class="font-mono">dev-sandbox.sh</span> makes this a button from then on.
+                {{ t(`sandbox.devRebuild.sandboxDoesntRecordCheckout`) }} <span class="font-mono">dev-sandbox.sh</span>
+                {{ t(`sandbox.devRebuild.makesButtonOn`) }}
             </p>
-            <p v-else class="text-2xs text-subtle">Run it on the device that holds that checkout:</p>
-            <Code :code="command" :lang="commandLang(`unix`)" label="Rebuild command" :wrap="true" />
+            <p v-else class="text-2xs text-subtle">{{ t(`sandbox.devRebuild.runOnDeviceHolds`) }}</p>
+            <Code :code="command" :lang="commandLang(`unix`)" :label="t(`sandbox.devRebuild.rebuildCommand`)" :wrap="true" />
             <ConnectDeviceHint v-if="root" :slug="slug" gains="rebuilding from your checkout becomes a button here." />
         </template>
     </div>

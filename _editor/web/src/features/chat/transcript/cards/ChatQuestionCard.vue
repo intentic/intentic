@@ -8,6 +8,9 @@ import ChatCard from "./ChatCard.vue";
 import ChatDecisionButton from "./ChatDecisionButton.vue";
 import ChatDocumentBody from "./ChatDocumentBody.vue";
 import { questionStatus } from "./cardStatus";
+import { useT } from "@intentic/ui/i18n";
+
+const t = useT();
 
 const { card, settling } = defineProps<{
     card: TranscriptQuestion;
@@ -179,7 +182,9 @@ const decidedOptions = (question: AskQuestion): DecidedOption[] => {
                 <template v-if="card.status === 'pending'">
                     <!-- States in words what the square marks say by shape; becomes a running count once picked. -->
                     <span v-if="question.multiSelect" class="chat-card-column text-2xs text-subtle">{{
-                        pickedCount(index) > 0 ? `${pickedCount(index)} selected` : "Select all that apply"
+                        pickedCount(index) > 0
+                            ? t(`chat.chatQuestionCard.selected`, { index: pickedCount(index) })
+                            : t(`chat.chatQuestionCard.selectAllApply`)
                     }}</span>
                     <!-- ARIA roles mirror the marks; the Other text field stays outside the group, since it is that row's payload. -->
                     <div :role="question.multiSelect ? 'group' : 'radiogroup'" :aria-label="question.question">
@@ -221,27 +226,27 @@ const decidedOptions = (question: AskQuestion): DecidedOption[] => {
                                 :class="isSelected(index, OTHER_LABEL) ? 'text-primary-500' : 'text-subtle'"
                             />
                             <span class="flex min-w-0 flex-col gap-0.5">
-                                <span class="text-xs font-medium text-content">Other</span>
+                                <span class="text-xs font-medium text-content">{{ t(`chat.chatQuestionCard.other`) }}</span>
                                 <span class="text-2xs leading-snug text-muted">{{
-                                    question.multiSelect ? "Add an answer in your own words." : "Answer in your own words."
+                                    question.multiSelect ? t(`chat.chatQuestionCard.addAnswerInOwn`) : t(`chat.chatQuestionCard.answerInOwnWords`)
                                 }}</span>
                             </span>
                         </button>
                     </div>
                     <!-- The one framed thing on the card, in the column the labels stand in. -->
                     <div v-if="isSelected(index, OTHER_LABEL)" class="chat-option-field flex flex-col gap-1">
-<!-- Grows rather than a fixed one-line input, since answers here often run long. -->
+                        <!-- Grows rather than a fixed one-line input, since answers here often run long. -->
                         <textarea
                             :ref="(el) => setOtherInput(index, el)"
                             rows="1"
                             :value="otherValue(index)"
                             @input="onOtherInput(index, $event)"
                             @keydown="otherKeydown"
-                            placeholder="Type your answer…"
+                            :placeholder="t(`chat.chatQuestionCard.typeAnswer`)"
                             class="ui-field-box ui-field-sm max-h-48 resize-none overflow-y-auto leading-relaxed"
                         ></textarea>
                         <!-- Shown from the moment the row is picked, not as an error; explains the disabled Submit. -->
-                        <span v-if="otherPending(index)" class="text-2xs text-subtle">Write your answer to submit.</span>
+                        <span v-if="otherPending(index)" class="text-2xs text-subtle">{{ t(`chat.chatQuestionCard.writeAnswerToSubmit`) }}</span>
                     </div>
                 </template>
                 <!-- Frozen view of a decided question: no affordances and no preview, since choosing is already done. -->
@@ -258,7 +263,7 @@ const decidedOptions = (question: AskQuestion): DecidedOption[] => {
                         </span>
                         <span class="flex min-w-0 flex-col gap-0.5">
                             <span class="text-xs font-medium" :class="option.picked ? 'text-content' : 'text-muted'">
-                                <span v-if="option.picked" class="sr-only">Chosen: </span>{{ option.label }}
+                                <span v-if="option.picked" class="sr-only">{{ t(`chat.chatQuestionCard.chosen`) }} </span>{{ option.label }}
                             </span>
                             <!-- Rejected options keep the live card's description colour; only the label dims. -->
                             <span v-if="option.description" class="text-2xs leading-snug text-muted">{{ option.description }}</span>
@@ -269,10 +274,16 @@ const decidedOptions = (question: AskQuestion): DecidedOption[] => {
         </div>
         <!-- In the shared answer row, like every other card, not floating under the last option. -->
         <template v-if="card.status === 'pending'" #actions>
-            <ChatDecisionButton tone="primary" icon="check" :disabled="!canSubmit || settling" @click="submitAnswers">Submit</ChatDecisionButton>
+            <ChatDecisionButton tone="primary" icon="check" :disabled="!canSubmit || settling" @click="submitAnswers">{{
+                t(`chat.chatQuestionCard.submit`)
+            }}</ChatDecisionButton>
             <!-- Dismiss ends the turn (Conversation.cancelQuestion); the tooltip says so before the click. -->
-            <ChatDecisionButton tone="secondary" :disabled="settling" v-tooltip.bottom="'Also stops the turn'" @click="emit(`dismiss`)"
-                >Dismiss</ChatDecisionButton
+            <ChatDecisionButton
+                tone="secondary"
+                :disabled="settling"
+                v-tooltip.bottom="t(`chat.chatQuestionCard.alsoStopsTurn`)"
+                @click="emit(`dismiss`)"
+                >{{ t(`ui.action.dismiss`) }}</ChatDecisionButton
             >
         </template>
     </ChatCard>

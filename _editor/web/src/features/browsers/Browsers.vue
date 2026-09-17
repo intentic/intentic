@@ -9,11 +9,14 @@ import { useBrowserView } from "./useBrowserView";
 import BrowserSelectMenu from "../capabilities/connect/BrowserSelectMenu.vue";
 import { relativeTime } from "../chat/models/catalog";
 import { postTurnControl } from "../chat/run/turnStream";
+import { useT } from "@intentic/ui/i18n";
 
 // Live view of the agent's Chromium (@playwright/mcp) with open pages as a tab strip; a route, not a terminal pane,
 // since a browser holds several pages and one stream can't show which. One line of chrome (browser chip, tabs,
 // address) leaves the rest of the height to the picture; asks are cards over it, and a finished session keeps its
 // tab list as a record rather than dialling a dead socket.
+
+const t = useT();
 
 const route = useRoute();
 const { sessions } = useBrowsersQuery();
@@ -158,7 +161,12 @@ const resolveHelp = async (helped: boolean): Promise<void> => {
     // undefined targets this box: a browser session belongs to the machine it runs on, and this view only lists the
     // active sandbox's (see postTurnControl).
     try {
-        await postTurnControl(undefined, `/agent/reply`, { kind: `browser_help`, requestId: help.requestId, helped, ...(note === `` ? {} : { note }) });
+        await postTurnControl(undefined, `/agent/reply`, {
+            kind: `browser_help`,
+            requestId: help.requestId,
+            helped,
+            ...(note === `` ? {} : { note }),
+        });
         helpNote.value = ``;
         // Handing back while still driving would race the owner's keystrokes against the agent's next move.
         if (helped) {
@@ -233,9 +241,9 @@ watch(
         <!-- Not an error: most turns never open a browser. -->
         <div v-if="sessions.length === 0" class="flex flex-1 flex-col items-center justify-center gap-2 px-4 text-center">
             <Icon name="globe" class="text-2xl text-muted" />
-            <div class="text-sm text-content">No browsers open</div>
+            <div class="text-sm text-content">{{ t(`browsers.browsers.noBrowsersOpen`) }}</div>
             <div class="max-w-sm text-xs text-muted">
-                When an agent opens a page with its browser tools, it appears here: live, with every page it has open as a tab.
+                {{ t(`browsers.browsers.agentOpensPageBrowser`) }}
             </div>
         </div>
 
@@ -248,7 +256,7 @@ watch(
             >
                 <!-- Which browser, which page, where it is, and the wheel. -->
                 <div ref="chromeEl" class="flex shrink-0 items-center gap-1 border-b border-line px-1.5 py-1">
-<!-- A chip instead of a row of pills: with several browsers it's a label plus caret rather than a band with its own scrollbar. -->
+                    <!-- A chip instead of a row of pills: with several browsers it's a label plus caret rather than a band with its own scrollbar. -->
                     <button
                         ref="switcherTrigger"
                         type="button"
@@ -257,12 +265,12 @@ watch(
                         :aria-haspopup="sessions.length > 1 ? 'menu' : undefined"
                         :aria-expanded="sessions.length > 1 ? switcherOpen : undefined"
                         :disabled="sessions.length < 2"
-                        v-tooltip.bottom="sessions.length > 1 ? `Switch browser: ${sessions.length} open` : current?.name"
+                        v-tooltip.bottom="sessions.length > 1 ? t(`browsers.browsers.switchBrowserOpen`, { count: sessions.length }) : current?.name"
                         @click="switcherOpen = !switcherOpen"
                     >
                         <span v-if="current" class="size-1.5 shrink-0 rounded-full" :class="dotOf(current)" />
                         <span class="max-w-32 truncate">{{ current?.label }}</span>
-<!-- Rides here when a browser other than this one is parked; the queue chip below says how many, this is what opens them. -->
+                        <!-- Rides here when a browser other than this one is parked; the queue chip below says how many, this is what opens them. -->
                         <Icon v-if="queuedHelp.length > 0" name="exclamation-triangle" class="shrink-0 text-3xs text-warning" />
                         <Icon v-if="sessions.length > 1" name="chevron-down" class="shrink-0 text-3xs text-muted" />
                     </button>
@@ -288,11 +296,11 @@ watch(
                         </div>
                     </AnchoredOverlay>
 
-<!-- Only for a signed-in profile (see accountOf); the switcher's rows carry the same fact when this is too narrow for it. -->
+                    <!-- Only for a signed-in profile (see accountOf); the switcher's rows carry the same fact when this is too narrow for it. -->
                     <span
                         v-if="accountOf(current) && !compact"
                         class="flex shrink-0 items-center gap-1 rounded-md bg-overlay px-1.5 py-0.5 text-3xs text-muted"
-                        v-tooltip.bottom="`This browser is signed in as the ${accountOf(current)} account`"
+                        v-tooltip.bottom="t(`browsers.browsers.browserSignedInAccount`, { current: accountOf(current) })"
                     >
                         <Icon name="user" class="text-3xs" />
                         <span class="max-w-24 truncate">{{ accountOf(current) }}</span>
@@ -300,7 +308,7 @@ watch(
 
                     <span class="h-4 w-px shrink-0 bg-line"></span>
 
-<!-- The agent's own tab strip; capped at half the row so the address stays legible with many tabs open. -->
+                    <!-- The agent's own tab strip; capped at half the row so the address stays legible with many tabs open. -->
                     <div ref="stripEl" class="scrollbar-none flex min-w-0 max-w-[50%] flex-1 items-center gap-0.5 overflow-x-auto">
                         <button
                             v-for="page in current?.pages ?? []"
@@ -315,7 +323,9 @@ watch(
                             <Icon name="globe" class="shrink-0 text-3xs" />
                             <span class="max-w-40 truncate">{{ pageLabel(page) }}</span>
                         </button>
-                        <span v-if="(current?.pages.length ?? 0) === 0" class="px-1 text-2xs text-muted">No pages open</span>
+                        <span v-if="(current?.pages.length ?? 0) === 0" class="px-1 text-2xs text-muted">{{
+                            t(`browsers.browsers.noPagesOpen`)
+                        }}</span>
                     </div>
 
                     <span class="h-4 w-px shrink-0 bg-line"></span>
@@ -332,11 +342,11 @@ watch(
                             <span class="text-content">{{ addressParts.host }}</span
                             ><span class="text-muted">{{ addressParts.rest }}</span>
                         </span>
-<!-- No tooltip of its own: the address line above already has one, and nesting tooltips would open a second box on the first. -->
+                        <!-- No tooltip of its own: the address line above already has one, and nesting tooltips would open a second box on the first. -->
                         <CopyButton
                             :text="address"
                             class="shrink-0 opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
-                            aria-label="Copy this address"
+                            :aria-label="t(`browsers.browsers.copyAddress`)"
                         />
                     </div>
 
@@ -347,28 +357,30 @@ watch(
                         class="ui-chip shrink-0 px-2 py-1 font-medium"
                         :class="view.driving.value ? `ui-chip-on` : ``"
                         v-tooltip.bottom="
-                            view.driving.value
-                                ? 'Stop sending your clicks and keystrokes to the agent\'s browser'
-                                : 'Send your clicks and keystrokes to the agent\'s browser'
+                            view.driving.value ? t(`browsers.browsers.stopSendingClicksKeystrokes`) : t(`browsers.browsers.sendClicksKeystrokesTo`)
                         "
                         @click="takeControl"
                     >
                         <span v-if="view.driving.value" class="size-1.5 rounded-full bg-white"></span>
-                        <template v-if="view.driving.value">{{ compact ? "Driving" : "You're driving · hand back" }}</template>
-                        <template v-else>{{ compact ? "Control" : "Take control" }}</template>
+                        <template v-if="view.driving.value">{{
+                            compact ? t(`browsers.browsers.driving`) : t(`browsers.browsers.youreDrivingHandBack`)
+                        }}</template>
+                        <template v-else>{{ compact ? t(`browsers.browsers.control`) : t(`browsers.browsers.takeControl`) }}</template>
                     </button>
-                    <span v-else class="shrink-0 whitespace-nowrap px-1 text-2xs text-muted">
-                        Closed{{ current?.finishedAt === undefined ? "" : ` ${relativeTime(current.finishedAt)}` }}
-                    </span>
+                    <span v-else class="shrink-0 whitespace-nowrap px-1 text-2xs text-muted">{{
+                        current?.finishedAt === undefined
+                            ? t(`browsers.browsers.closed`)
+                            : t(`browsers.browsers.closedWhen`, { when: relativeTime(current.finishedAt) })
+                    }}</span>
 
-<!-- Closing controls stay separate from everyday browser controls. -->
+                    <!-- Closing controls stay separate from everyday browser controls. -->
                     <button
                         ref="moreTrigger"
                         type="button"
                         :class="ui.iconButton(moreOpen ? 'bg-overlay text-content' : '')"
                         aria-haspopup="menu"
                         :aria-expanded="moreOpen"
-                        aria-label="More"
+                        :aria-label="t(`browsers.browsers.more`)"
                         @click="moreOpen = !moreOpen"
                     >
                         <Icon name="ellipsis" class="text-2xs" />
@@ -383,7 +395,7 @@ watch(
                                 @click="moreOpen = false"
                             >
                                 <Icon name="arrow-up-right" class="shrink-0 text-2xs text-muted" />
-                                <span class="min-w-0 flex-1 truncate">Open this address yourself</span>
+                                <span class="min-w-0 flex-1 truncate">{{ t(`browsers.browsers.openAddressYourself`) }}</span>
                             </a>
                             <button
                                 v-if="current?.running"
@@ -396,15 +408,15 @@ watch(
                             >
                                 <Icon name="trash" class="shrink-0 text-2xs text-muted" />
                                 <span class="min-w-0 flex-1">
-                                    <span class="block">Close this browser</span>
-                                    <span class="block text-3xs text-muted">The agent's next browser tool call will fail</span>
+                                    <span class="block">{{ t(`browsers.browsers.closeBrowser`) }}</span>
+                                    <span class="block text-3xs text-muted">{{ t(`browsers.browsers.agentsNextBrowserTool`) }}</span>
                                 </span>
                             </button>
                         </div>
                     </AnchoredOverlay>
                 </div>
 
-<!-- Exactly the remote viewport's shape, so switching between a live and closed browser doesn't resize the window under the pointer. -->
+                <!-- Exactly the remote viewport's shape, so switching between a live and closed browser doesn't resize the window under the pointer. -->
                 <div
                     class="relative min-h-0 w-full"
                     :class="current?.running ? 'bg-terminal' : ''"
@@ -423,14 +435,14 @@ watch(
                         @paste="view.onPaste"
                         @contextmenu.prevent
                     >
-<!-- The whole browser window, decoded off its own X display, so selects/autofill/file-pickers are all in the picture. -->
+                        <!-- The whole browser window, decoded off its own X display, so selects/autofill/file-pickers are all in the picture. -->
                         <canvas
                             v-if="view.kind.value === 'video'"
                             ref="canvasEl"
                             class="h-full w-full object-contain"
                             :class="view.driving.value ? 'cursor-none' : ''"
                         />
-<!-- Display-less browsers expose one compositor surface without a cursor. -->
+                        <!-- Display-less browsers expose one compositor surface without a cursor. -->
                         <img
                             v-else
                             v-show="view.frame.value"
@@ -444,7 +456,7 @@ watch(
                         <div v-if="view.status.value" class="absolute inset-0 flex items-center justify-center px-4">
                             <span class="rounded-md bg-card px-2 py-1 text-center text-xs text-muted">{{ view.status.value }}</span>
                         </div>
-<!-- An open drop-down the picture itself can't show; only happens on the frames path, since a native menu on video is already photographed and clickable. -->
+                        <!-- An open drop-down the picture itself can't show; only happens on the frames path, since a native menu on video is already photographed and clickable. -->
                         <BrowserSelectMenu
                             v-if="view.select.value && view.driving.value"
                             :menu="view.select.value"
@@ -456,17 +468,19 @@ watch(
                         />
                     </div>
 
-<!-- Recorded browser sessions have no live stream. -->
+                    <!-- Recorded browser sessions have no live stream. -->
                     <div v-else class="absolute inset-0 flex flex-col items-center justify-center gap-2 px-4 text-center">
                         <Icon name="globe" class="text-2xl text-muted" />
-                        <div class="text-sm text-content">This browser has closed</div>
+                        <div class="text-sm text-content">{{ t(`browsers.browsers.browserClosed`) }}</div>
                         <div class="max-w-sm text-xs text-muted">
-                            <template v-if="current?.finishedAt !== undefined">Closed {{ relativeTime(current.finishedAt) }}. </template>
-                            Every page it opened is still in the strip above, with the one it ended on selected: the record of where the agent went.
+                            <template v-if="current?.finishedAt !== undefined">{{
+                                t(`browsers.browsers.closed`, { finishedAt: relativeTime(current.finishedAt) })
+                            }}</template>
+                            {{ t(`browsers.browsers.everyPageOpenedStill`) }}
                         </div>
                     </div>
 
-<!-- Cards over the picture, not above it; the stack itself takes no pointer events, so the page stays clickable around them. -->
+                    <!-- Cards over the picture, not above it; the stack itself takes no pointer events, so the page stays clickable around them. -->
                     <div
                         v-if="current?.help !== undefined || queuedHelp.length > 0"
                         class="pointer-events-none absolute inset-x-0 bottom-0 z-10 flex flex-col items-center gap-2 p-3"
@@ -481,7 +495,7 @@ watch(
                             >
                                 <Icon name="exclamation-triangle" class="shrink-0 text-2xs text-warning" />
                                 <span class="max-w-80 truncate">{{ current.help.message }}</span>
-                                <span class="shrink-0 text-link">Answer</span>
+                                <span class="shrink-0 text-link">{{ t(`browsers.browsers.answer`) }}</span>
                             </button>
                             <div
                                 v-else
@@ -489,19 +503,19 @@ watch(
                             >
                                 <div class="flex items-start gap-2">
                                     <Icon name="exclamation-triangle" class="mt-0.5 shrink-0 text-sm text-warning" />
-<!-- Kept on separate lines from the instruction below it: joined, a message ending in a period collides with a clause starting with a colon. -->
+                                    <!-- Kept on separate lines from the instruction below it: joined, a message ending in a period collides with a clause starting with a colon. -->
                                     <div class="min-w-0 flex-1">
                                         <div class="text-xs text-content">
-                                            <span class="font-medium">The agent needs your help:</span>
+                                            <span class="font-medium">{{ t(`browsers.browsers.agentNeedsHelp`) }}</span>
                                             {{ current.help.message }}
                                         </div>
-                                        <div class="text-2xs text-muted">Take control, fix that step, then hand back.</div>
+                                        <div class="text-2xs text-muted">{{ t(`browsers.browsers.takeControlFixStep`) }}</div>
                                     </div>
                                     <button
                                         type="button"
                                         :class="ui.iconButton()"
-                                        aria-label="Fold this out of the way"
-                                        v-tooltip.top="`Fold this out of the way`"
+                                        :aria-label="t(`browsers.browsers.foldOutWay`)"
+                                        v-tooltip.top="t(`browsers.browsers.foldOutWay`)"
                                         @click="helpOpen = false"
                                     >
                                         <Icon name="chevron-down" class="text-2xs" />
@@ -511,19 +525,21 @@ watch(
                                     <input
                                         v-model="helpNote"
                                         type="text"
-                                        placeholder="Optional note back to the agent"
+                                        :placeholder="t(`browsers.browsers.optionalNoteBackTo`)"
                                         class="ui-field-box ui-field-sm min-w-40 flex-1"
                                         @keydown.enter="resolveHelp(true)"
                                     />
-                                    <Button size="small" class="shrink-0" @click="() => resolveHelp(true)"> Done: hand back </Button>
+                                    <Button size="small" class="shrink-0" @click="() => resolveHelp(true)">
+                                        {{ t(`browsers.browsers.doneHandBack`) }}
+                                    </Button>
                                     <Button size="small" severity="secondary" class="shrink-0" @click="() => resolveHelp(false)">
-                                        Can't help now
+                                        {{ t(`browsers.browsers.cantHelpNow`) }}
                                     </Button>
                                 </div>
                             </div>
                         </template>
 
-<!-- Expands inline, not in a popover: an anchored panel here would open right over the ask card it's queued behind. -->
+                        <!-- Expands inline, not in a popover: an anchored panel here would open right over the ask card it's queued behind. -->
                         <div v-if="queuedHelp.length > 0" class="pointer-events-auto flex w-full max-w-2xl flex-col items-center gap-2">
                             <div v-if="queueOpen" class="flex w-full flex-col gap-0.5 rounded-lg border border-line bg-card p-1 shadow-lg">
                                 <RouterLink
@@ -538,7 +554,7 @@ watch(
                                         <span class="block truncate font-medium text-content">{{ session.label }}</span>
                                         <span class="block truncate text-3xs text-muted">{{ session.help?.message }}</span>
                                     </span>
-                                    <span class="shrink-0 text-2xs text-link">Help →</span>
+                                    <span class="shrink-0 text-2xs text-link">{{ t(`browsers.browsers.help`) }}</span>
                                 </RouterLink>
                             </div>
                             <button
@@ -548,7 +564,8 @@ watch(
                                 @click="queueOpen = !queueOpen"
                             >
                                 <Icon name="exclamation-triangle" class="shrink-0 text-3xs text-warning" />
-                                {{ queuedHelp.length }} other {{ queuedHelp.length === 1 ? "browser" : "browsers" }} waiting for you
+                                {{ queuedHelp.length }} {{ t(`browsers.browsers.other`) }} {{ queuedHelp.length === 1 ? "browser" : "browsers" }}
+                                {{ t(`browsers.browsers.waiting`) }}
                                 <Icon :name="queueOpen ? 'chevron-down' : 'chevron-up'" class="shrink-0 text-3xs text-muted" />
                             </button>
                         </div>

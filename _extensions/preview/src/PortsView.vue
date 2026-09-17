@@ -4,6 +4,7 @@ import { computed, ref } from "vue";
 import { host } from "./host";
 import PortRow from "./PortRow.vue";
 import { usePorts } from "./usePorts";
+import { t } from "./i18n.js";
 
 // Ports view: every listening TCP port inside the sandbox, named/attributed by the daemon and grouped by owner (your
 // work above, sandbox internals muted below). Preview forwards a port to its public port-<slot> hostname, the only
@@ -53,34 +54,31 @@ const openTerminal = (session: string): void => host().terminal.open(session);
     <div class="flex flex-col gap-4">
         <Notice v-if="error ?? actionError" :of="noticeOf(error ?? actionError ?? ``)" />
 
-        <RowGroup label="Your services">
+        <RowGroup :label="t(`portsView.services`)">
             <template #info>
-                <InfoHint label="Ports">
-                    <span class="block text-sm font-medium text-content">What is listening here</span>
+                <InfoHint :label="t(`portsView.ports`)">
+                    <span class="block text-sm font-medium text-content">{{ t(`portsView.whatListeningHere`) }}</span>
                     <span class="mt-1 block text-xs text-muted">
-                        Every TCP port something inside the sandbox is listening on: dev servers you or an agent started, ports your containers
-                        publish, anything at all. Each row is named from the process behind it; open the <b>ⓘ</b> for the exact command, folder and
-                        terminal. <b>Preview</b> makes one reachable in your browser through the sandbox's tunnel; a forwarded port stays public until
-                        you stop it.
+                        {{ t(`portsView.everyTcpPortSomething`) }} <b>ⓘ</b> {{ t(`portsView.exactCommandFolderTerminal`) }}
+                        <b>{{ t(`portsView.preview`) }}</b> {{ t(`portsView.makesOneReachableIn`) }}
                     </span>
                     <!-- Ports here means public forwarding, not localhost mirroring (Devices); avoids the wrong-index confusion. -->
                     <span class="mt-2 block text-xs text-muted">
-                        Looking for a port on your own <b>localhost</b> instead? That is desktop sync mirroring it onto your machine: Devices says
-                        which ports made it, and which one another sandbox got to first.
+                        {{ t(`portsView.lookingPortOnOwn`) }} <b>{{ t(`portsView.localhost`) }}</b> {{ t(`portsView.insteadDesktopSyncMirroring`) }}
                     </span>
                 </InfoHint>
             </template>
 
             <!-- An empty scan result would read as 'nothing found' with less confidence; skeleton rows stand in while loading. -->
             <div v-if="isLoading && outline" role="status" aria-busy="true">
-                <span class="sr-only">Scanning for listening ports…</span>
+                <span class="sr-only">{{ t(`portsView.scanningListeningPorts`) }}</span>
                 <SkeletonRows :rows="3" density="compact" description control />
             </div>
 
             <div v-else-if="!isLoading && workspacePorts.length === 0" class="flex flex-col items-center gap-2 py-10 text-center">
                 <Icon name="ports" class="text-2xl text-subtle" />
-                <p class="text-sm text-muted">Nothing of yours is listening yet.</p>
-                <p class="text-2xs text-subtle">Start a dev server in a terminal and it appears here.</p>
+                <p class="text-sm text-muted">{{ t(`portsView.nothingYoursListeningYet`) }}</p>
+                <p class="text-2xs text-subtle">{{ t(`portsView.startDevServerIn`) }}</p>
             </div>
 
             <PortRow
@@ -95,14 +93,12 @@ const openTerminal = (session: string): void => host().terminal.open(session);
         </RowGroup>
 
         <!-- Listed for transparency, muted since nobody previews these; forwarding stays possible, just de-emphasized. -->
-        <RowGroup v-if="systemPorts.length > 0" label="Sandbox internals" class="opacity-70">
+        <RowGroup v-if="systemPorts.length > 0" :label="t(`portsView.sandboxInternals`)" class="opacity-70">
             <template #info>
-                <InfoHint label="Internals">
-                    <span class="block text-sm font-medium text-content">The sandbox's own services</span>
+                <InfoHint :label="t(`portsView.internals`)">
+                    <span class="block text-sm font-medium text-content">{{ t(`portsView.sandboxsOwnServices`) }}</span>
                     <span class="mt-1 block text-xs text-muted">
-                        These come with the sandbox and run whether or not you start anything: the service this app talks to, the agent runtimes,
-                        Docker's plumbing, an extension's background worker. They are listed so nothing is hidden from you, not because there is
-                        anything to do with them.
+                        {{ t(`portsView.comeSandboxRunWhether`) }}
                     </span>
                 </InfoHint>
             </template>

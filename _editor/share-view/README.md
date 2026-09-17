@@ -10,6 +10,9 @@ from anywhere — there is nothing for a visitor to authenticate to, and nothing
 It shares the design system (`@intentic/ui`) and the transcript components with the editor, so a shared
 transcript reads the way it read in the app rather than being a second renderer that drifts.
 Its boot registers the native SVG `Icon` directly; icons need no library plugin, collection or network request.
+It also registers two message catalogs: its own handful of words (`src/i18n/`, namespaced `share.`) and the
+editor's, since the chat components it compiles in name keys in the editor's catalog. A stranger's browser picks
+the language — this page stores no preference and offers no picker — and it is picked before the first paint.
 
 ## Key files
 
@@ -18,3 +21,4 @@ Its boot registers the native SVG `Icon` directly; icons need no library plugin,
 - [`src/ShareApp.vue`](src/ShareApp.vue) — the page: the transcript and nothing around it.
 - [`src/shareSurface.ts`](src/shareSurface.ts) — what a shared tool call is allowed to show, which is less than
   the app shows its owner.
+- [`src/i18n/index.ts`](src/i18n/index.ts) — this page's own words; the editor's arrive with its components.

@@ -1,5 +1,8 @@
 <script setup lang="ts">
 import { InfoDialog, InfoTable } from "@intentic/ui";
+import { useT } from "@intentic/ui/i18n";
+
+const t = useT();
 
 /* The (i) beside the Agent tab's "Subagents" group. */
 
@@ -11,37 +14,31 @@ const WHICH_CAP = [
 </script>
 
 <template>
-    <InfoDialog title="Subagents">
+    <InfoDialog :title="t(`sandbox.subagentsInfo.subagents`)">
         <p class="text-sm text-muted">
-            The assistant can hand a piece of work to another agent: a search across the whole repo, a second opinion, a long build it doesn't need
-            to watch. Each one runs on its own and reports back. The first row decides whether it may do that at all; the three numbers under it
-            bound how many there can be.
+            {{ t(`sandbox.subagentsInfo.assistantHandPieceWork`) }}
         </p>
 
-        <h3 class="mt-5 text-xs font-semibold uppercase tracking-wide text-subtle">Which one you've hit</h3>
+        <h3 class="mt-5 text-xs font-semibold uppercase tracking-wide text-subtle">{{ t(`sandbox.subagentsInfo.oneYouveHit`) }}</h3>
         <p class="mt-1.5 text-2xs text-muted">
-            They stop different things, so the symptom names the row. Raising just the first is the common mistake: a fan-out that clears it lands on
-            the second a few rounds later, and it looks like the same wall moved.
+            {{ t(`sandbox.subagentsInfo.theyStopDifferentThings`) }}
         </p>
         <InfoTable class="mt-2" :headers="[``, `What you see`, `When it bites`]" :rows="WHICH_CAP" />
 
-        <h3 class="mt-5 text-xs font-semibold uppercase tracking-wide text-subtle">What happens at the limit</h3>
+        <h3 class="mt-5 text-xs font-semibold uppercase tracking-wide text-subtle">{{ t(`sandbox.subagentsInfo.whatHappensAtLimit`) }}</h3>
         <p class="mt-1.5 text-2xs text-muted">
-            Nothing fails. The assistant is told it has reached the limit and told not to retry, so it does the remaining work itself, one piece at a
-            time. That is why a low number costs you speed rather than an error, and why an unexplained slow patch on a big task is worth checking
-            here.
+            {{ t(`sandbox.subagentsInfo.nothingFailsAssistantTold`) }}
         </p>
 
-        <h3 class="mt-5 text-xs font-semibold uppercase tracking-wide text-subtle">What raising them costs</h3>
+        <h3 class="mt-5 text-xs font-semibold uppercase tracking-wide text-subtle">{{ t(`sandbox.subagentsInfo.whatRaisingCosts`) }}</h3>
         <p class="mt-1.5 text-2xs text-muted">
-            Every agent is a model running against your allowance, so twenty at once is twenty conversations being paid for at once: the ceiling is
-            what stops a single instruction from becoming a fleet. Your sandbox's own CPU and memory are the other bound, and the assistant cannot
-            raise any of this itself: it can only ask you to.
+            {{ t(`sandbox.subagentsInfo.everyAgentModelRunning`) }}
         </p>
         <p class="mt-1.5 text-2xs text-subtle">
-            Left alone, all three stay exactly where the Claude Code CLI puts them: 20 at once, 200 per conversation, 3 deep. What you spend is on
-            <span class="font-medium text-content">Usage</span>, and what is running right now is on
-            <span class="font-medium text-content">Subagents</span> in the sidebar.
+            {{ t(`sandbox.subagentsInfo.leftAloneAllThree`) }}
+            <span class="font-medium text-content">{{ t(`sandbox.subagentsInfo.usage`) }}</span
+            >{{ t(`sandbox.subagentsInfo.whatRunningRightNow`) }}
+            <span class="font-medium text-content">{{ t(`sandbox.subagentsInfo.subagents`) }}</span> {{ t(`sandbox.subagentsInfo.inSidebar`) }}
         </p>
     </InfoDialog>
 </template>

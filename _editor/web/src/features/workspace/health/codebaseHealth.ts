@@ -1,5 +1,6 @@
 import type { WorkspaceHotspot, WorkspaceKeyModule } from "@intentic/api-contract";
 import { hotspotAsk, moduleAsk, type RefactorAsk } from "./refactorAsk";
+import { t } from "@intentic/ui/i18n";
 
 // Pure-function arithmetic behind the Codebase Health tab: the component binds, this computes, so the numbers
 // are testable without mounting anything. Each row's refactor offer is derived from these same figures
@@ -9,11 +10,11 @@ import { hotspotAsk, moduleAsk, type RefactorAsk } from "./refactorAsk";
 // different question, what's hot now.
 export type ChurnWindow = "all" | "90d" | "30d" | "7d";
 // Mutable by design; <SegmentedControl> takes its options array as-is.
-export const CHURN_WINDOWS: { label: string; value: ChurnWindow; title: string }[] = [
-    { label: `All`, value: `all`, title: `Every commit in the repository's history` },
-    { label: `90d`, value: `90d`, title: `Commits from the last 90 days` },
-    { label: `30d`, value: `30d`, title: `Commits from the last 30 days` },
-    { label: `7d`, value: `7d`, title: `Commits from the last 7 days` },
+export const churnWindows = (): { label: string; value: ChurnWindow; title: string }[] => [
+    { label: t(`workspace.healthCodebaseHealth.all`), value: `all`, title: t(`workspace.healthCodebaseHealth.everyCommitInRepositorys`) },
+    { label: `90d`, value: `90d`, title: t(`workspace.healthCodebaseHealth.commitsLast90Days`) },
+    { label: `30d`, value: `30d`, title: t(`workspace.healthCodebaseHealth.commitsLast30Days`) },
+    { label: `7d`, value: `7d`, title: t(`workspace.healthCodebaseHealth.commitsLast7Days`) },
 ];
 
 // Splits a path at its last separator, so a row can dim the directory while the filename (the part that

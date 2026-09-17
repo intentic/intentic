@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { RowGroup } from "@intentic/extension-ui";
+import { t } from "./i18n.js";
 
 // Mirrors the real page's shape (repo group, rows with status dot, avatar, headline, meta, stage circles, action
 // button) so the page doesn't jump when data lands. The orientation line's own skeleton (<PipelinesTally skeleton>) is
@@ -18,7 +19,7 @@ const ROWS = [
 
 <template>
     <!-- aria-busy, not aria-hidden: silence here reads as an empty board, not as loading. -->
-    <div role="status" aria-busy="true" aria-label="Loading pipelines">
+    <div role="status" aria-busy="true" :aria-label="t(`pipelinesSkeleton.loadingPipelines`)">
         <!-- One repo group: a second would be guessing about the workspace. h-4 matches the real label's text-xs line box. -->
         <RowGroup>
             <template #label>

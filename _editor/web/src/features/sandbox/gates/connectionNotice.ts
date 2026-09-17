@@ -1,6 +1,7 @@
 import { DETACHED_AFTER_MS } from "../overview/availability";
 import type { ConnectionFailure } from "../live/connection";
 import { RESTART_PATIENCE_MS, type RestartQuiet } from "../live/sandboxRestart";
+import { t } from "@intentic/ui/i18n";
 
 // What the connecting gate says, as a pure function of the classified failure and what the platform knows, so setup,
 // reconnect, sign-in, removal and blocked causes each get their own words and action instead of one generic screen.
@@ -61,23 +62,23 @@ export interface ConnectionNoticeInput {
 const waitingNotice = (kind: "timeout" | "closed" | "network" | "detached", name: string): ConnectionNotice => {
     if (kind === `timeout`) {
         return {
-            title: `Still opening "${name}"…`,
-            body: `The sandbox is taking longer than usual to answer. It will open automatically as soon as it is ready.`,
+            title: t(`sandbox.connectionNotice.stillOpening`, { name }),
+            body: t(`sandbox.connectionNotice.sandboxTakingLongerThan`),
             action: undefined,
             waiting: true,
         };
     }
     if (kind === `closed`) {
         return {
-            title: `Opening "${name}"…`,
-            body: `The sandbox is still getting ready. Retrying automatically.`,
+            title: t(`sandbox.connectionNotice.opening`, { name }),
+            body: t(`sandbox.connectionNotice.sandboxStillGettingReady`),
             action: undefined,
             waiting: true,
         };
     }
     return {
-        title: `Opening "${name}"…`,
-        body: `Waiting for the sandbox to answer. Your workspace opens automatically when it is ready.`,
+        title: t(`sandbox.connectionNotice.opening`, { name }),
+        body: t(`sandbox.connectionNotice.waitingSandboxToAnswer`),
         action: undefined,
         waiting: true,
     };
@@ -91,17 +92,17 @@ const removedNotice = (input: ConnectionNoticeInput, name: string): ConnectionNo
     }
     const where = input.removedBy === undefined || input.removedBy === null || input.removedBy === `` ? `the computer it ran on` : input.removedBy;
     return {
-        title: `"${name}" was removed`,
-        body: `Its container was deleted on ${where}, and its files went with it. Nothing is on its way back — setting it up again starts this sandbox fresh, under the same name and address.`,
-        action: { kind: `setup`, label: `Set it up again` },
+        title: t(`sandbox.connectionNotice.removed`, { name }),
+        body: t(`sandbox.connectionNotice.containerDeletedOnFiles`, { where }),
+        action: { kind: `setup`, label: t(`sandbox.connectionNotice.setUpAgain`) },
         waiting: false,
     };
 };
 
 // The platform has no such sandbox: the row is deleted, so no machine can ever serve this address again.
 const goneNotice = (name: string): ConnectionNotice => ({
-    title: `"${name}" no longer exists`,
-    body: `Intentic has no record of this sandbox, so nothing can answer at its address. If you deleted it, this is that; otherwise its owner did. Your other sandboxes are in the switcher above.`,
+    title: t(`sandbox.connectionNotice.noLongerExists`, { name }),
+    body: t(`sandbox.connectionNotice.intenticNoRecordSandbox`),
     action: undefined,
     waiting: false,
 });
@@ -114,16 +115,16 @@ const hoursSpentNotice = (input: ConnectionNoticeInput, name: string): Connectio
     }
     if (input.owner === false) {
         return {
-            title: `"${name}" has used its free hours for this month`,
-            body: `The owner's free hosted hours are spent, so the machine stays asleep until the month resets or the owner moves it to the hosted plan. Nothing on your side causes this.`,
+            title: t(`sandbox.connectionNotice.usedFreeHoursMonth`, { name }),
+            body: t(`sandbox.connectionNotice.ownersFreeHostedHours`),
             action: undefined,
             waiting: false,
         };
     }
     return {
-        title: `"${name}" has used its free hours for this month`,
-        body: `Free hosted sandboxes get a monthly allowance of awake hours; this one has spent it, so the machine stays asleep until the month resets. The hosted plan keeps it always on. Or move it to your own computer, free, with no hours at all.`,
-        action: { kind: `billing`, label: `See the plan` },
+        title: t(`sandbox.connectionNotice.usedFreeHoursMonth`, { name }),
+        body: t(`sandbox.connectionNotice.freeHostedSandboxesGet`),
+        action: { kind: `billing`, label: t(`sandbox.connectionNotice.seePlan`) },
         waiting: false,
     };
 };
@@ -137,16 +138,16 @@ const suspendedNotice = (input: ConnectionNoticeInput, name: string): Connection
     }
     if (input.owner === false) {
         return {
-            title: `"${name}" can't be started right now`,
-            body: `Hosted sandboxes are switched off for the owner's account, so the machine stays asleep until that is lifted. Nothing on your side causes this.`,
+            title: t(`sandbox.connectionNotice.cantStartedRightNow`, { name }),
+            body: t(`sandbox.connectionNotice.hostedSandboxesSwitchedOff2`),
             action: undefined,
             waiting: false,
         };
     }
     return {
-        title: `Hosted sandboxes are switched off for your account`,
-        body: `We won't start this machine: the email we sent says why and where to write if we have it wrong. Your files are still on it, and nothing else about your account changes. The same sandbox runs on your own computer, free and without limits, from its setup screen.`,
-        action: { kind: `setup`, label: `Run it on my computer` },
+        title: t(`sandbox.connectionNotice.hostedSandboxesSwitchedOff`),
+        body: t(`sandbox.connectionNotice.weWontStartMachine`),
+        action: { kind: `setup`, label: t(`sandbox.connectionNotice.runOnMyComputer`) },
         waiting: false,
     };
 };
@@ -155,9 +156,9 @@ const suspendedNotice = (input: ConnectionNoticeInput, name: string): Connection
 const detachedNotice = (input: ConnectionNoticeInput, name: string): ConnectionNotice | undefined =>
     input.failure?.kind === `detached` && input.outageMs >= DETACHED_AFTER_MS
         ? {
-              title: `"${name}" isn't connected`,
-              body: `Intentic answered for this address and your sandbox isn't dialled into it, so your own connection is fine. Its container isn't running, or the computer it runs on is off. It opens here by itself the moment it comes back.`,
-              action: { kind: `setup`, label: `Check setup` },
+              title: t(`sandbox.connectionNotice.isntConnected`, { name }),
+              body: t(`sandbox.connectionNotice.intenticAnsweredAddressSandbox`),
+              action: { kind: `setup`, label: t(`sandbox.connectionNotice.checkSetup`) },
               waiting: false,
           }
         : undefined;
@@ -168,18 +169,18 @@ const stuckNotice = (input: ConnectionNoticeInput, name: string): ConnectionNoti
     if (input.hostedMachine) {
         return input.outageMs >= HOSTED_STUCK_AFTER_MS
             ? {
-                  title: `"${name}" isn't answering`,
-                  body: `The machine we run this sandbox on hasn't come back. Nothing on your side causes this — open its setup screen to see what the machine is doing and start it over.`,
-                  action: { kind: `setup`, label: `Check the machine` },
+                  title: t(`sandbox.connectionNotice.isntAnswering`, { name }),
+                  body: t(`sandbox.connectionNotice.machineWeRunSandbox`),
+                  action: { kind: `setup`, label: t(`sandbox.connectionNotice.checkMachine`) },
                   waiting: false,
               }
             : undefined;
     }
     return input.outageMs >= OWN_STUCK_AFTER_MS
         ? {
-              title: `"${name}" isn't answering`,
-              body: `It has been silent for a while. This sandbox runs on a computer of your own: check that computer is awake and its container is running. The workspace opens here by itself as soon as it answers.`,
-              action: { kind: `setup`, label: `Check setup` },
+              title: t(`sandbox.connectionNotice.isntAnswering`, { name }),
+              body: t(`sandbox.connectionNotice.silentWhileSandboxRuns`),
+              action: { kind: `setup`, label: t(`sandbox.connectionNotice.checkSetup`) },
               waiting: false,
           }
         : undefined;
@@ -210,22 +211,22 @@ type SettledKind = "gone" | "unaddressed" | "unauthenticated" | "forbidden";
 const SETTLED: Record<SettledKind, (name: string) => ConnectionNotice> = {
     gone: goneNotice,
     unaddressed: (name) => ({
-        title: `Connect "${name}"`,
-        body: `This sandbox isn't connected yet, finish setup to start its daemon, and your workspace opens automatically.`,
-        action: { kind: `setup`, label: `Finish setup` },
+        title: t(`sandbox.connectionNotice.connect`, { name }),
+        body: t(`sandbox.connectionNotice.sandboxIsntConnectedYet`),
+        action: { kind: `setup`, label: t(`sandbox.connectionNotice.finishSetup`) },
         waiting: false,
     }),
     unauthenticated: (name) => ({
-        title: `Sign in to reach "${name}"`,
-        body: `Your sandbox is up, but the session this browser presents to it has expired. Signing in again reconnects you, nothing on the sandbox is affected.`,
-        action: { kind: `signin`, label: `Sign in again` },
+        title: t(`sandbox.connectionNotice.signInToReach`, { name }),
+        body: t(`sandbox.connectionNotice.sandboxUpSessionBrowser`),
+        action: { kind: `signin`, label: t(`sandbox.connectionNotice.signInAgain`) },
         waiting: false,
     }),
     // A routed 403 goes elsewhere; kept here so a routing slip still shows accurate words.
     forbidden: (name) => ({
-        title: `No access to "${name}"`,
-        body: `This sandbox refused the Google account you're signed in with. Ask its owner to invite you, or switch accounts.`,
-        action: { kind: `signin`, label: `Sign in again` },
+        title: t(`sandbox.connectionNotice.noAccessTo`, { name }),
+        body: t(`sandbox.connectionNotice.sandboxRefusedGoogleAccount`),
+        action: { kind: `signin`, label: t(`sandbox.connectionNotice.signInAgain`) },
         waiting: false,
     }),
 };
@@ -237,8 +238,8 @@ export const connectionNotice = (input: ConnectionNoticeInput): ConnectionNotice
     const name = input.sandboxName ?? `your sandbox`;
     if (failure === undefined) {
         return {
-            title: `Connecting to "${name}"…`,
-            body: `Your sandbox reported in, opening a live connection to it. Your workspace appears automatically in a moment.`,
+            title: t(`sandbox.connectionNotice.connectingTo`, { name }),
+            body: t(`sandbox.connectionNotice.sandboxReportedInOpening`),
             action: undefined,
             waiting: true,
         };

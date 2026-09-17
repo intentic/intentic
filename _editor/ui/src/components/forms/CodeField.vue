@@ -64,7 +64,7 @@ defineExpose({ field });
         <!-- `[grid-area:1/1]`, not absolute: staying in flow is what gives the row its height. -->
         <div v-if="html" class="ui-code-field-html [grid-area:1/1] min-w-0" v-html="html"></div>
         <pre v-else class="ui-code-field-box [grid-area:1/1] min-w-0">{{ shown }}</pre>
-<!-- Takes the keystrokes; transparent text over the colored `<pre>`, contributing only caret and selection. -->
+        <!-- Takes the keystrokes; transparent text over the colored `<pre>`, contributing only caret and selection. -->
         <textarea
             ref="field"
             v-bind="forwarded"

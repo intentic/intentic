@@ -4,6 +4,7 @@ import type { IconName } from "@intentic/extension-ui";
 import { useQuery } from "@tanstack/vue-query";
 import { computed } from "vue";
 import { host } from "./host";
+import { t } from "./i18n.js";
 
 // What can wake an agent here, and what to start from, in one read from the daemon: it merges what it emits itself with
 // what every installed pack declares. The page names no integration itself, and `upsert` accepts exactly what the
@@ -50,7 +51,7 @@ export const listenerSourceOf = (sources: readonly AvailableSource[], provider: 
         available: false,
         requires: [],
         events: eventType === undefined ? [] : [{ value: eventType, label: eventType }],
-        channel: { label: `Channel ID (optional)`, placeholder: `all channels` },
+        channel: { label: t(`catalog.channelIdOptional`), placeholder: t(`catalog.allChannels`) },
     };
 
 // `icon` is an open string in the contract, since neither it nor a pack's manifest may depend on the UI kit's names;

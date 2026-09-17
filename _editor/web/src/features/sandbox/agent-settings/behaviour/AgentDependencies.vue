@@ -4,6 +4,9 @@ import { formatDateTime, Icon, Row, RowGroup, SegmentedControl, StatusBadge, tim
 import { computed } from "vue";
 import { useSandboxSettings } from "../../overview/useSandboxSettings";
 import { useSavings } from "../../usage/useSavings";
+import { useT } from "@intentic/ui/i18n";
+
+const t = useT();
 
 /* WHAT THE ASSISTANT REACHES FOR WHEN IT ADDS A DEPENDENCY, and whether anything checks the version it picked before it lands. */
 
@@ -12,11 +15,11 @@ const { savings } = useSavings({});
 
 // Named for what each one is allowed to SAY, because that is the only difference between them and the user is
 // choosing how much opinion they want, not how hard it tries.
-const freshnessOptions = [
-    { label: `Off`, value: `off` },
-    { label: `Versions`, value: `versions` },
-    { label: `Alternatives`, value: `full` },
-];
+const freshnessOptions = computed(() => [
+    { label: t(`sandbox.agentDependencies.off`), value: `off` },
+    { label: t(`sandbox.agentDependencies.versions`), value: `versions` },
+    { label: t(`sandbox.agentDependencies.alternatives`), value: `full` },
+]);
 
 const dependencySavings = computed(() => savings.value?.dependencies);
 
@@ -27,7 +30,7 @@ const verdict = computed(() => {
             value: `Nothing yet`,
             unit: `no dependencies checked so far`,
             tone: `muted` as const,
-            detail: `Checked when the assistant adds or modifies dependencies in manifests and install commands.`,
+            detail: t(`sandbox.agentDependencies.checkedAssistantAddsModifies`),
             evidence: ``,
         };
     }
@@ -36,19 +39,19 @@ const verdict = computed(() => {
         value: `${data.improved}`,
         unit: `improvements made (${ratio})`,
         tone: data.improved > 0 ? (`success` as const) : (`content` as const),
-        detail: `prevented outdated or deprecated choices in favor of newer releases or maintained replacements`,
+        detail: t(`sandbox.agentDependencies.preventedOutdatedDeprecatedChoices`),
         evidence: data.updatedAt === undefined ? `` : `last check ${timeAgo(data.updatedAt)}`,
     };
 });
 </script>
 
 <template>
-    <RowGroup label="Dependencies">
+    <RowGroup :label="t(`sandbox.agentDependencies.dependencies`)">
         <Row
             spine
             icon="box"
-            title="Check versions against the registry"
-            description="Look up a version before it is pinned, instead of recalling one."
+            :title="t(`sandbox.agentDependencies.checkVersionsAgainstRegistry`)"
+            :description="t(`sandbox.agentDependencies.lookUpVersionBefore`)"
         >
             <template #control>
                 <SegmentedControl
@@ -57,18 +60,16 @@ const verdict = computed(() => {
                     @update:model-value="(dependencyFreshness: string) => patch({ dependencyFreshness: dependencyFreshness as DependencyFreshness })"
                 />
             </template>
-<!-- One line per state, saying what changes rather than repeating the label. -->
+            <!-- One line per state, saying what changes rather than repeating the label. -->
             <template #below>
                 <div class="flex flex-col gap-3">
                     <p v-if="settings?.dependencyFreshness === `versions`" class="text-2xs text-muted">
-                        Facts only: whether a newer release exists, and whether the version picked is deprecated. The assistant is told and
-                        decides — matching a version this workspace already uses stays a good answer.
+                        {{ t(`sandbox.agentDependencies.factsOnlyWhetherNewer`) }}
                     </p>
                     <p v-else-if="settings?.dependencyFreshness === `full`" class="text-2xs text-muted">
-                        The same facts, plus the name of a maintained replacement where a package is being added that has one. Suggestions are
-                        made only as a package is added, never about one already in a manifest.
+                        {{ t(`sandbox.agentDependencies.sameFactsPlusName`) }}
                     </p>
-                    <p v-else class="text-2xs text-muted">Nothing is looked up, and no registry is contacted.</p>
+                    <p v-else class="text-2xs text-muted">{{ t(`sandbox.agentDependencies.nothingLookedUpNo`) }}</p>
 
                     <!-- Measured improvements readout, matching the style of Output savings on this view -->
                     <template v-if="settings?.dependencyFreshness !== `off`">
@@ -82,7 +83,9 @@ const verdict = computed(() => {
 
                         <!-- Recent improvements list -->
                         <div v-if="dependencySavings !== undefined && dependencySavings.recent.length > 0" class="flex flex-col gap-1.5 pt-1">
-                            <p class="text-2xs font-medium uppercase tracking-wide text-subtle">Recent improvements</p>
+                            <p class="text-2xs font-medium uppercase tracking-wide text-subtle">
+                                {{ t(`sandbox.agentDependencies.recentImprovements`) }}
+                            </p>
                             <div
                                 v-for="item in dependencySavings.recent.slice(0, 5)"
                                 :key="`${item.prevented}->${item.chosen}`"

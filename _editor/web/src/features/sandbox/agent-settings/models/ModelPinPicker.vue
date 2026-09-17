@@ -2,10 +2,13 @@
 import type { ModelPin } from "@intentic/sandbox-contract";
 import { ResponsiveOverlay } from "@intentic/ui";
 import ModelPinPickerBody from "./ModelPinPickerBody.vue";
+import { useT } from "@intentic/ui/i18n";
 
 // Frame the settings-page model picker opens in: anchored on desktop, a sheet on phone, split into frame/body like the
 // shell picker's (HostModelPicker) since only the frame differs per surface. Mounted once and driven by `open`; the
 // body remounts each open, giving it a fresh search box and refreshed catalogs.
+
+const t = useT();
 
 const emit = defineEmits<{ "update:open": [boolean]; pick: [ModelPin]; configure: [ModelPin] }>();
 const { open, anchor, header, pin, knobs, taken } = defineProps<{
@@ -28,7 +31,7 @@ const { open, anchor, header, pin, knobs, taken } = defineProps<{
     <ResponsiveOverlay
         :model-value="open"
         :anchor="anchor"
-        :header="header ?? (pin === undefined ? `Add a model` : `Model`)"
+        :header="header ?? (pin === undefined ? t(`sandbox.modelPinPicker.addModel`) : t(`sandbox.modelPinPicker.model`))"
         panel-class="w-[26rem]"
         side="bottom"
         @update:model-value="emit(`update:open`, $event)"

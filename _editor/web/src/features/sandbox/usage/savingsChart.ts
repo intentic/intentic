@@ -2,6 +2,7 @@ import type { FigureAccent } from "@intentic/ui/markdown";
 import { seriesColor } from "@intentic/ui/series";
 import type { InputSavings, TurnExperiment, TurnMetricReading } from "@intentic/sandbox-contract";
 import { formatCompact } from "./usageChart";
+import { t } from "@intentic/ui/i18n";
 
 // Every number and mark on the Savings surfaces, as pure functions over the daemon's savings report (same split
 // as usageChart.ts): the arithmetic under a claim like "89% saved" is testable without mounting a component. Cleaner
@@ -11,22 +12,23 @@ import { formatCompact } from "./usageChart";
 
 // Every toggleable cleaner id and label, in bin/cleaners.mjs CLEANERS' order (keep in sync). Shared by the Agent
 // tab's switches and this chart's labels, so a mechanism is never named differently on two screens.
-export const CLEANER_OPTIONS = [
-    { id: `pnpm`, label: `pnpm` },
-    { id: `apt`, label: `apt` },
-    { id: `test`, label: `test runners` },
-    { id: `diff`, label: `generated-file diffs` },
-    { id: `ls`, label: `directory listings` },
-    { id: `files`, label: `file lists` },
-    { id: `hits`, label: `search hits` },
-    { id: `dedup`, label: `dedupe repeats` },
-    { id: `wide`, label: `machine-generated blobs` },
-    { id: `cap`, label: `head/tail cap` },
-    { id: `redact`, label: `redact secrets` },
-    { id: `cache`, label: `collapse repeats` },
-] as const;
+export const cleanerOptions = () =>
+    [
+        { id: `pnpm`, label: `pnpm` },
+        { id: `apt`, label: `apt` },
+        { id: `test`, label: t(`sandbox.savingsChart.testRunners`) },
+        { id: `diff`, label: `generated-file diffs` },
+        { id: `ls`, label: t(`sandbox.savingsChart.directoryListings`) },
+        { id: `files`, label: t(`sandbox.savingsChart.fileLists`) },
+        { id: `hits`, label: t(`sandbox.savingsChart.searchHits`) },
+        { id: `dedup`, label: t(`sandbox.savingsChart.dedupeRepeats`) },
+        { id: `wide`, label: `machine-generated blobs` },
+        { id: `cap`, label: `head/tail cap` },
+        { id: `redact`, label: t(`sandbox.savingsChart.redactSecrets`) },
+        { id: `cache`, label: t(`sandbox.savingsChart.collapseRepeats`) },
+    ] as const;
 
-export const ALL_CLEANER_IDS: readonly string[] = CLEANER_OPTIONS.map((cleaner) => cleaner.id);
+export const allCleanerIds = (): readonly string[] => cleanerOptions().map((cleaner) => cleaner.id);
 
 // Stages with no settings switch (unconditional parts of the filter). Named rather than folded into "other" so a
 // reader can tell "not listed" from "not yours to turn off".
@@ -37,7 +39,7 @@ const FIXED_STAGE_LABELS: Record<string, string> = {
     guard: `refused (output grew)`,
 };
 
-export const stageLabel = (id: string): string => CLEANER_OPTIONS.find((cleaner) => cleaner.id === id)?.label ?? FIXED_STAGE_LABELS[id] ?? id;
+export const stageLabel = (id: string): string => cleanerOptions().find((cleaner) => cleaner.id === id)?.label ?? FIXED_STAGE_LABELS[id] ?? id;
 
 // the composition bar
 
@@ -81,7 +83,7 @@ export const compositionOf = (input: InputSavings): Composition => {
     if (tail.length > 0) {
         segments.push({
             key: `other`,
-            label: `${tail.length} more`,
+            label: t(`sandbox.savingsChart.more`, { count: tail.length }),
             tokens: tail.reduce((sum, stage) => sum + stage.savedTokens, 0),
             color: `var(--color-series-other)`,
             kind: `saved`,
@@ -91,7 +93,7 @@ export const compositionOf = (input: InputSavings): Composition => {
     const removed = segments.reduce((sum, segment) => sum + segment.tokens, 0);
     segments.push({
         key: `reached`,
-        label: `reached the assistant`,
+        label: t(`sandbox.savingsChart.reachedAssistant`),
         tokens: Math.max(0, input.rawTokens - removed),
         color: `var(--color-content-subtle)`,
         kind: `reached`,
@@ -138,7 +140,7 @@ export const readingVerdict = (
     // Margin arrives once both arms clear minTurns; the delta waits for the margin to exclude zero.
     if (reading.marginPct === undefined) {
         const shortfall = Math.max(minTurns - reading.on.turns, minTurns - reading.off.turns);
-        return { value: `Measuring`, unit, tone: `muted`, detail: `needs ${minTurns} ${sampleUnit} per arm, ${shortfall} more on the shorter one` };
+        return { value: `Measuring`, unit, tone: `muted`, detail: t(`sandbox.savingsChart.needsPerArmMore`, { minTurns, sampleUnit, shortfall }) };
     }
     // Distinct from "Measuring": the arms are big enough, the effect is just smaller than the noise, and the
     // reader's next move differs (wait vs. question the mechanism).
@@ -151,7 +153,12 @@ export const readingVerdict = (
                 : `~${formatCompact(reading.controlTurnsNeeded)} more control ${sampleUnit} would settle it`;
         // Same grammar as the measured verdict's detail: margin, then the qualifier, joined by a middot. The framing is
         // carried by the headline above it, so nothing is lost by dropping it here.
-        return { value: `No effect`, unit: `measurable in ${unit}`, tone: `muted`, detail: `±${reading.marginPct}pp (95%) · ${wait}` };
+        return {
+            value: `No effect`,
+            unit: `measurable in ${unit}`,
+            tone: `muted`,
+            detail: t(`sandbox.savingsChart.pp95`, { marginPct: reading.marginPct, wait }),
+        };
     }
 
     return {

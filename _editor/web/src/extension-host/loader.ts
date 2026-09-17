@@ -1,6 +1,6 @@
 import type { ExtensionModule } from "@intentic/extension-api";
 import { errorMessage } from "@intentic/ui/async";
-import { registerCatalog } from "@intentic/ui/i18n";
+import { registerCatalog, t } from "@intentic/ui/i18n";
 import type { ExtensionManifest } from "@intentic/extension-manifest";
 import { extensionApiVersion, satisfiesEngines, resetSandboxScope } from "@intentic/extension-api";
 import { extensionIdOf } from "@intentic/extension-manifest";
@@ -102,7 +102,7 @@ const loadOne = async (summary: ExtensionSummary, host: HostBindings, startedIn:
         return {
             ...status,
             state: `incompatible`,
-            detail: `needs intentic ${summary.manifest.engines.intentic}; this app provides ${extensionApiVersion}`,
+            detail: t(`extension-host.loader.needsIntenticAppProvides`, { intentic: summary.manifest.engines.intentic, extensionApiVersion }),
         };
     }
     const compiled = builtinModules.get(extensionId);
@@ -112,7 +112,7 @@ const loadOne = async (summary: ExtensionSummary, host: HostBindings, startedIn:
             ? {
                   ...status,
                   state: `missing`,
-                  detail: `declares UI but this app build has no module compiled in for it, the sandbox image and the app are on different versions`,
+                  detail: t(`extension-host.loader.declaresUiAppBuild`),
               }
             : { ...status, state: `agent-only` };
     }

@@ -1,5 +1,6 @@
 import type { IconName } from "@intentic/ui";
 import { documentsAt } from "../../../core-views/documentRegistry";
+import { t } from "@intentic/ui/i18n";
 
 // One model for every icon a directory row offers. Documents differ from the management panel: per directory,
 // contributed by an extension, not known here. The tree just renders what it's given and runs the click; this module
@@ -88,7 +89,7 @@ const manageAction = (dir: string, sources: RowActionSources): RowAction[] =>
               {
                   id: `directory`,
                   icon: `cog`,
-                  tooltip: `Open management panel`,
+                  tooltip: t(`workspace.rowActions.openManagementPanel`),
                   standing: false,
                   run: (): void => sources.openDirectory(dir),
               },

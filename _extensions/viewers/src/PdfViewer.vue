@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { Button, Icon } from "@intentic/extension-ui";
 import { onBeforeUnmount, ref, watch } from "vue";
+import { t } from "./i18n.js";
 
 /* PDF preview: the browser's own PDF plugin, via <object>. */
 
@@ -29,8 +30,8 @@ onBeforeUnmount(revoke);
 <template>
     <object v-if="url" :data="url" type="application/pdf" class="h-full w-full">
         <div class="flex h-full flex-col items-center justify-center gap-3 text-center text-muted">
-            <p class="text-sm">This PDF can't be displayed inline.</p>
-            <Button severity="secondary" @click="$emit(`download`)"> <Icon name="download" class="text-xs" /> Download </Button>
+            <p class="text-sm">{{ t(`pdfViewer.pdfCantDisplayedInline`) }}</p>
+            <Button severity="secondary" @click="$emit(`download`)"> <Icon name="download" class="text-xs" /> {{ t(`pdfViewer.download`) }} </Button>
         </div>
     </object>
 </template>

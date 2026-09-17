@@ -1,5 +1,8 @@
+import { fileURLToPath } from "node:url";
 import { defineConfig } from "vitest/config";
 import { INTEGRATION_SUITE, UNIT_SUITE } from "@intentic/testing/vitest";
+
+const here = (path: string): string => fileURLToPath(new URL(path, import.meta.url));
 
 // Every workspace package exports an `@intentic/src` condition pointing at its .ts source, and none of
 // them ship a dist in a fresh checkout. Vite applies it for the app build; vitest resolves with node's
@@ -9,7 +12,7 @@ import { INTEGRATION_SUITE, UNIT_SUITE } from "@intentic/testing/vitest";
 // ON EACH PROJECT, not at the top level: a project is its own Vite config, and a `resolve` stated once above
 // `projects` is silently ignored. The failure that causes is the quiet kind — a suite passing against a build
 // several changes old. Same reasoning as _search/iq/vitest.config.ts.
-const resolve = { conditions: [`@intentic/src`] };
+const resolve = { conditions: [`@intentic/src`], alias: { "@intentic/extension-ui/i18n": here(`../../_shared/extension-ui/src/i18n.ts`) } };
 
 export default defineConfig({
     test: {

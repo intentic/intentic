@@ -7,11 +7,14 @@ import Row from "../rows/Row.vue";
 import RowGroup from "../rows/RowGroup.vue";
 import RowNote from "../rows/RowNote.vue";
 import DeviceAgentNotes from "./DeviceAgentNotes.vue";
-import { AGENT_DUTIES, agentCarries, agentLines, type AgentPanel } from "./deviceAgent.js";
+import { agentDuties, agentCarries, agentLines, type AgentPanel } from "./deviceAgent.js";
+import { useT } from "../../i18n/index.js";
+
+const t = useT();
 
 const {
     panel,
-    label = `Agent on this device`,
+    label,
     subject,
     busy = false,
     running,
@@ -45,14 +48,18 @@ const emit = defineEmits<{ run: [op: Op] }>();
         offered on a healthy agent too: "behind" is a comparison only a caller that knows what has been
         published can make, and a missing button is a walk to the machine to type the command by hand.
     -->
-    <RowGroup :label="label">
+    <RowGroup :label="label ?? t(`ui.deviceAgentGroup.agentOnThisDevice`)">
         <!-- `wideControl`: the trailing cluster takes a line of its own rather than squeezing the headline until
              the duty strip wraps, which would drag the lead mark off the title it belongs to. -->
-        <Row icon="desktop" :wide-control="true" :title="panel.version === undefined ? `Agent` : `Agent ${panel.version}`">
+        <Row
+            icon="desktop"
+            :wide-control="true"
+            :title="panel.version === undefined ? t(`ui.deviceAgentGroup.agent`) : t(`ui.deviceAgentGroup.agent2`, { version: panel.version })"
+        >
             <!-- What the process carries, as three glyphs: the sentence it replaced is on hover. -->
             <template #description>
                 <span v-tooltip.top="agentCarries(subject)" class="flex w-fit flex-wrap items-center gap-x-3 gap-y-0.5">
-                    <span v-for="duty in AGENT_DUTIES" :key="duty.label" class="inline-flex items-center gap-1">
+                    <span v-for="duty in agentDuties()" :key="duty.label" class="inline-flex items-center gap-1">
                         <Icon :name="duty.icon" aria-hidden="true" />{{ duty.label }}
                     </span>
                 </span>

@@ -39,7 +39,7 @@ provideRowDensity(computed(() => density));
             <slot name="label"
                 ><span v-if="label !== undefined" :class="ui.sectionLabel()">{{ label }}</span></slot
             >
-<!-- Info controls stay attached to the group label. -->
+            <!-- Info controls stay attached to the group label. -->
             <slot name="info" />
             <span v-if="count !== undefined" class="text-2xs font-medium text-subtle">{{ count }}</span>
             <span v-if="caption !== undefined" class="min-w-0 text-2xs text-subtle">{{ caption }}</span>

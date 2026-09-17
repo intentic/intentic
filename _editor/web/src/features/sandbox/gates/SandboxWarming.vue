@@ -5,10 +5,13 @@ import GateCard from "./GateCard.vue";
 import { formatElapsed } from "../../agents/fleet/agentStatus";
 import { bootSteps, bootStartedAt } from "../overview/useDaemonBoot";
 import { useSandbox } from "../client/useSandbox";
+import { useT } from "@intentic/ui/i18n";
 
 // Shown while the active daemon is reached but not yet ready, converging state before other routes work. Steps
 // come from the daemon's own declared boot chain, streamed on /events, so a slow boot names its slow step while
 // running.
+
+const t = useT();
 
 const { active } = useSandbox();
 
@@ -24,7 +27,7 @@ const now = useNow();
 <template>
     <GateCard icon="box" :title="title" spinner>
         <p class="text-sm text-muted">
-            Your sandbox is up and getting its workspace ready. It opens by itself the moment it can serve: nothing to click.
+            {{ t(`sandbox.sandboxWarming.sandboxUpGettingWorkspace`) }}
         </p>
         <template #below>
             <!-- The declared chain, in run order; a daemon too old to report one just leaves this empty. -->
@@ -48,8 +51,11 @@ const now = useNow();
             </div>
 
             <p class="text-center text-2xs text-muted">
-                <template v-if="bootSteps.length > 0">{{ done }} of {{ bootSteps.length }}{{ running ? ` · ${running.label}` : "" }} · </template>
-                {{ bootStartedAt === undefined ? "starting" : formatElapsed(bootStartedAt, now) }}
+                <template v-if="bootSteps.length > 0"
+                    >{{ t(`sandbox.sandboxWarming.stepsDone`, { done, total: bootSteps.length })
+                    }}<template v-if="running"> · {{ running.label }}</template> ·
+                </template>
+                {{ bootStartedAt === undefined ? t(`sandbox.sandboxWarming.starting`) : formatElapsed(bootStartedAt, now) }}
             </p>
         </template>
     </GateCard>

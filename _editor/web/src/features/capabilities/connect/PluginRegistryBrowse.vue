@@ -8,6 +8,9 @@ import { noticeFrom } from "@intentic/ui/async";
 import { computed, ref } from "vue";
 import { browseMarketplace } from "./useCapabilities";
 import { checksOk, checksProblem } from "../../sandbox/extensions/discoverListing";
+import { useT } from "@intentic/ui/i18n";
+
+const t = useT();
 
 /** What this card installs: the rows of any other kind are not its to offer. */
 const props = defineProps<{ kind: CapabilityKind }>();
@@ -76,13 +79,25 @@ const pick = (entry: RegistryEntry): void => {
 </script>
 
 <template>
-    <RowGroup label="From a registry (optional)">
+    <RowGroup :label="t(`capabilities.pluginRegistryBrowse.registryOptional`)">
         <RowNote variant="block">
             <div class="flex flex-col gap-2">
                 <div class="flex gap-2">
                     <input v-model="url" placeholder="https://github.com/owner/registry" :class="ui.input('min-w-0 flex-1')" />
-                    <input v-model="token" type="password" autocomplete="off" placeholder="Token" :class="ui.input('w-28')" />
-                    <Button label="Browse" size="small" :disabled="url.trim().length === 0 || browsing" :loading="browsing" @click="browse" />
+                    <input
+                        v-model="token"
+                        type="password"
+                        autocomplete="off"
+                        :placeholder="t(`capabilities.pluginRegistryBrowse.token`)"
+                        :class="ui.input('w-28')"
+                    />
+                    <Button
+                        :label="t(`capabilities.pluginRegistryBrowse.browse`)"
+                        size="small"
+                        :disabled="url.trim().length === 0 || browsing"
+                        :loading="browsing"
+                        @click="browse"
+                    />
                 </div>
                 <div v-if="market" class="flex max-h-40 flex-col gap-0.5 overflow-auto">
                     <button
@@ -93,18 +108,23 @@ const pick = (entry: RegistryEntry): void => {
                         :disabled="blockedReason(entry) !== undefined"
                         @click="pick(entry)"
                     >
-<!-- Registry's own mark (usually the extension's initials); a column of them is scannable without reading unfamiliar names. -->
+                        <!-- Registry's own mark (usually the extension's initials); a column of them is scannable without reading unfamiliar names. -->
                         <BrandMark :size="20" :name="entry.name" :art="entry.art" :logo="entry.logo" :icon="entry.icon" />
-<!-- Verified is the only badge: the one state a human actually asserted, unlike the default "listed". -->
-                        <Icon v-if="entry.trust === 'verified'" name="shield" class="shrink-0 text-success" title="Verified" />
+                        <!-- Verified is the only badge: the one state a human actually asserted, unlike the default "listed". -->
+                        <Icon
+                            v-if="entry.trust === 'verified'"
+                            name="shield"
+                            class="shrink-0 text-success"
+                            :title="t(`capabilities.pluginRegistryBrowse.verified`)"
+                        />
                         <span class="font-medium text-content">{{ entry.name }}</span>
                         <span v-if="entry.version" class="text-2xs text-subtle">{{ entry.version }}</span>
-<!-- Evidence, not endorsement: the nightly scan re-checked this pinned commit and loaded it (or didn't); silent when there's no check at all. -->
+                        <!-- Evidence, not endorsement: the nightly scan re-checked this pinned commit and loaded it (or didn't); silent when there's no check at all. -->
                         <Icon
                             v-if="checksOk(entry)"
                             name="check"
                             class="shrink-0 text-success"
-                            v-tooltip.top="`Loads: re-checked at the pinned commit by the registry's nightly scan`"
+                            v-tooltip.top="t(`capabilities.pluginRegistryBrowse.loadsReCheckedAt`)"
                         />
                         <Icon
                             v-else-if="checksProblem(entry)"
@@ -124,7 +144,9 @@ const pick = (entry: RegistryEntry): void => {
                         </span>
                     </button>
                 </div>
-                <p v-if="market && entries.length === 0" class="text-2xs text-subtle">That registry lists no plugins.</p>
+                <p v-if="market && entries.length === 0" class="text-2xs text-subtle">
+                    {{ t(`capabilities.pluginRegistryBrowse.registryListsNoPlugins`) }}
+                </p>
             </div>
         </RowNote>
     </RowGroup>

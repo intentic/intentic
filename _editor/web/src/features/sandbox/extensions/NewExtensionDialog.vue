@@ -2,10 +2,13 @@
 import { Button, ui, Modal, Notice, type NoticeModel } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
 import { computed, ref, watch } from "vue";
+import { useT } from "@intentic/ui/i18n";
 
 // Creates a running extension, not a project: the dialog only asks for a name, and further decisions are made by
 // editing the two files it writes. Publisher defaults to `workspace`, a placeholder to replace before publishing
 // under a real identity.
+
+const t = useT();
 
 const open = defineModel<boolean>({ required: true });
 // `wish` is the author's own words, untouched: the tab turns it into the agent's brief.
@@ -61,51 +64,43 @@ const submit = async (): Promise<void> => {
 </script>
 
 <template>
-    <Modal v-model:open="open" size="md" header="New extension">
+    <Modal v-model:open="open" size="md" :header="t(`sandbox.newExtensionDialog.newExtension`)">
         <div class="flex flex-col gap-4">
             <p class="text-2xs text-subtle">
-                Writes a working extension into this workspace and switches it on. Nothing is installed and nothing is built: the files are what runs,
-                so an edit shows up on the next reload.
+                {{ t(`sandbox.newExtensionDialog.writesWorkingExtensionInto`) }}
             </p>
 
             <div class="flex items-end gap-2">
                 <label class="flex flex-col gap-1" :style="{ width: '9rem' }">
-                    <span :class="ui.sectionLabel()">Publisher</span>
+                    <span :class="ui.sectionLabel()">{{ t(`sandbox.newExtensionDialog.publisher`) }}</span>
                     <input v-model="publisher" :class="ui.input()" spellcheck="false" />
                 </label>
                 <span class="pb-2 text-subtle">.</span>
                 <label class="flex flex-1 flex-col gap-1">
-                    <span :class="ui.sectionLabel()">Name</span>
-                    <input
-                        v-model="name"
-                        :class="ui.input()"
-                        placeholder="release-notes"
-                        spellcheck="false"
-                        autofocus
-                        @keyup.enter="submit()"
-                    />
+                    <span :class="ui.sectionLabel()">{{ t(`sandbox.newExtensionDialog.name`) }}</span>
+                    <input v-model="name" :class="ui.input()" placeholder="release-notes" spellcheck="false" autofocus @keyup.enter="submit()" />
                 </label>
             </div>
             <!-- The rule at rest; once a box holds something that breaks it, the same line names which box and turns
                  to a warning, rather than leaving Create greyed out with nothing pointing at the cause. -->
             <span v-if="publisherProblem || nameProblem" class="text-2xs text-warning">
-                {{ publisherProblem ? `Publisher` : `Name` }}: {{ publisherProblem ?? nameProblem }}
+                {{ publisherProblem ? t(`sandbox.newExtensionDialog.publisher`) : t(`sandbox.newExtensionDialog.name`) }}:
+                {{ publisherProblem ?? nameProblem }}
             </span>
             <span v-else class="text-2xs text-subtle">
-                Lower case, digits and hyphens.
+                {{ t(`sandbox.newExtensionDialog.lowerCaseDigitsHyphens`) }}
                 <template v-if="ready"
-                    >It will be listed as <code class="ui-code">{{ cleanPublisher }}.{{ cleanSlug }}</code
+                    >{{ t(`sandbox.newExtensionDialog.listed`) }} <code class="ui-code">{{ cleanPublisher }}.{{ cleanSlug }}</code
                     >.</template
                 >
             </span>
 
             <!-- Optional, and last: empty leaves a stub to edit by hand, filled starts an agent on it before dialog closes. -->
             <label class="flex flex-col gap-1">
-                <span :class="ui.sectionLabel()">What should it do?</span>
-                <textarea v-model="wish" :class="ui.input()" rows="3" placeholder="show what shipped this week, read from the git log"></textarea>
+                <span :class="ui.sectionLabel()">{{ t(`sandbox.newExtensionDialog.whatShouldDo`) }}</span>
+                <textarea v-model="wish" :class="ui.input()" rows="3" :placeholder="t(`sandbox.newExtensionDialog.showWhatShippedWeek`)"></textarea>
                 <span class="text-2xs text-subtle">
-                    Optional. Say it in your own words: an agent starts on it in a chat you can watch and argue with. Leave it empty for a working
-                    stub to edit yourself.
+                    {{ t(`sandbox.newExtensionDialog.optionalSayInOwn`) }}
                 </span>
             </label>
 
@@ -113,8 +108,13 @@ const submit = async (): Promise<void> => {
         </div>
 
         <template #footer>
-            <Button label="Cancel" severity="secondary" text @click="open = false" />
-            <Button :label="wish.trim() === `` ? `Create` : `Create and start`" :loading="busy" :disabled="!ready" @click="submit">
+            <Button :label="t(`ui.action.cancel`)" severity="secondary" text @click="open = false" />
+            <Button
+                :label="wish.trim() === `` ? t(`ui.action.create`) : t(`sandbox.newExtensionDialog.createStart`)"
+                :loading="busy"
+                :disabled="!ready"
+                @click="submit"
+            >
                 <template #icon><Icon name="plus" /></template>
             </Button>
         </template>

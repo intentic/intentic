@@ -9,6 +9,9 @@ import { computed, onBeforeUnmount, ref, watch } from "vue";
 import { isCommitSha } from "../model/form";
 import { initialChoice, MANUAL_KEY, refFor, refGroups, refKey, refSummary, shortSha } from "../model/refs";
 import { readRemoteRefs } from "./useCapabilities";
+import { useT } from "@intentic/ui/i18n";
+
+const t = useT();
 
 const { field, values, url, token, keeping } = defineProps<{
     field: CapabilityField;
@@ -132,7 +135,7 @@ const pickable = computed(() => manual.value && refs.value !== undefined);
             :model-value="chosen"
             :options="groups"
             :aria-label="field.label"
-            placeholder="Pick a version…"
+            :placeholder="t(`capabilities.gitRefField.pickVersion`)"
             class="w-full"
             @update:model-value="choose($event)"
         />
@@ -141,23 +144,23 @@ const pickable = computed(() => manual.value && refs.value !== undefined);
             v-model="values[field.key]"
             type="text"
             spellcheck="false"
-            placeholder="A full 40-character commit sha"
+            :placeholder="t(`capabilities.gitRefField.full40CharacterCommit`)"
             :class="[ui.input(`font-mono`), alarm ? 'ui-field-error-box' : '']"
             @blur="emit('left')"
         />
-<!-- One severity-ordered line below the control, like every other field on this form. -->
+        <!-- One severity-ordered line below the control, like every other field on this form. -->
         <span v-if="alarm" class="ui-field-error">
             <Icon name="exclamation-triangle" class="text-2xs" />
             {{ alarm }}
         </span>
         <span v-else-if="reading" class="flex items-center gap-1 text-2xs text-muted">
             <Icon name="spinner" spin class="text-2xs" />
-            Asking {{ host }} what it offers…
+            {{ t(`capabilities.gitRefField.asking`) }} {{ host }} {{ t(`capabilities.gitRefField.whatOffers`) }}
         </span>
         <span v-else-if="failure" class="flex flex-wrap items-center gap-x-1.5 text-2xs text-warning">
             <Icon name="exclamation-triangle" class="text-2xs" />
             {{ failure }}
-            <button type="button" :class="ui.linkButton(`text-2xs underline`)" @click.prevent="read()">Try again</button>
+            <button type="button" :class="ui.linkButton(`text-2xs underline`)" @click.prevent="read()">{{ t(`ui.action.tryAgain`) }}</button>
         </span>
         <span v-else-if="selected && !manual" class="flex items-center gap-1 text-2xs text-muted">
             <Icon name="check-circle" class="text-2xs text-success" />
@@ -166,9 +169,9 @@ const pickable = computed(() => manual.value && refs.value !== undefined);
         <span v-else-if="pinnedOnly" class="flex flex-wrap items-center gap-x-1.5 text-2xs text-muted">
             {{ pinnedNote }}
             <button v-if="pickable" type="button" :class="ui.linkButton(`text-2xs underline`)" @click.prevent="manual = false">
-                Pick a branch or release instead
+                {{ t(`capabilities.gitRefField.pickBranchReleaseInstead`) }}
             </button>
         </span>
-        <span v-else-if="!readable" class="text-2xs text-subtle">Add the repository above and the versions it offers appear here.</span>
+        <span v-else-if="!readable" class="text-2xs text-subtle">{{ t(`capabilities.gitRefField.addRepositoryAboveVersions`) }}</span>
     </label>
 </template>

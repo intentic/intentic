@@ -783,6 +783,9 @@ report anything.
   one pure model (`setupPlan.ts`), one bridge module (`desktop.ts`) and one reporter (`analytics.ts`); the
   sandbox rows, their verbs and their output pane all come from the kit, so this app has no second opinion
   about them. The archived three-persona wizard is not here.
+- `src/i18n/`, this shell's own message catalog, mounted at `desktop.` and registered before `startI18n()` in
+  `main.ts`. Its own rather than the editor's, because this bundle is the Tauri shell alone: it never loads the
+  web app's code, so it must not carry the web app's words either (`docs/architecture/languages.md`).
 - `src-tauri/src/`: the Tauri 2 shell. `windows.rs` (the frame swap, the close dialog and link
   interception), `scripts.rs`
   (the script runner), `commands.rs` (the UI's backend), `auth.rs` (the sign-in handoff), `update.rs` (the app

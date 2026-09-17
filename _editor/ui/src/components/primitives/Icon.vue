@@ -48,7 +48,7 @@ const reducedMotion = useReducedMotion();
             stroke-miterlimit="2"
             :shape-rendering="isSpinner ? `geometricPrecision` : undefined"
         >
-<!-- The circle the spinner's arc travels, at a quiet fraction of the same ink. -->
+            <!-- The circle the spinner's arc travels, at a quiet fraction of the same ink. -->
             <circle v-if="isSpinner" cx="12" cy="12" r="8.75" :stroke-width="SPINNER_STROKE" opacity="0.35" />
             <!-- Everything that turns, and only what turns. -->
             <g :stroke-width="isSpinner ? SPINNER_STROKE : undefined" :stroke-linecap="isSpinner ? `round` : undefined">

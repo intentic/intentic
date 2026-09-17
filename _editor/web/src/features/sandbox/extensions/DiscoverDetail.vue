@@ -3,10 +3,13 @@ import { githubRepoOf } from "@intentic/registry";
 import { BrandMark, Button, ui, Modal, Notice, type NoticeModel } from "@intentic/ui";
 import { computed, useId } from "vue";
 import { checksOk, checksProblem, type DiscoverListing, splitListingName } from "./discoverListing";
+import { useT } from "@intentic/ui/i18n";
 
 // One listing, read before it's run: where this product's trust argument gets made explicit rather than implied. Source
 // identity, scanner, agent gate and human review are separate guarantees shown as separate lines, not one badge. The
 // owner's own agent read is offered as primary where no human has reviewed the code, secondary otherwise.
+
+const t = useT();
 
 const { listing, canInstall, installing } = defineProps<{
     listing: DiscoverListing;
@@ -75,81 +78,91 @@ const auditLeads = computed(() => auditable.value && !verified.value);
                     rel="noreferrer noopener"
                     class="inline-flex items-center gap-1 text-link hover:underline"
                 >
-                    Homepage <Icon name="external-link" />
+                    {{ t(`sandbox.discoverDetail.homepage`) }} <Icon name="external-link" />
                 </a>
             </div>
 
             <!-- A non-default state is said before anything else, so a reader never has to reach the button to learn it. -->
             <Notice v-if="listing.state.kind === `blocked`" tone="danger">
-                <b>Blocked.</b> {{ listing.state.reason }} It stays listed rather than disappearing, because anyone who already installed it is the
-                person this most concerns.
+                <b>{{ t(`sandbox.discoverDetail.blocked`) }}</b> {{ listing.state.reason }} {{ t(`sandbox.discoverDetail.staysListedRatherThan`) }}
             </Notice>
             <Notice v-else-if="listing.state.kind === `unavailable`" tone="info">{{ listing.state.reason }}</Notice>
             <Notice v-else-if="listing.state.kind === `installed`" tone="info">
-                Already installed in this sandbox, at this commit. Manage it on the Extensions tab.
+                {{ t(`sandbox.discoverDetail.alreadyInstalledInSandbox`) }}
             </Notice>
             <Notice v-else-if="listing.state.kind === `update`" tone="info">
-                You have this installed at <code class="ui-code">{{ listing.state.installedRef?.slice(0, 10) }}</code
+                {{ t(`sandbox.discoverDetail.installedAt`) }} <code class="ui-code">{{ listing.state.installedRef?.slice(0, 10) }}</code
                 >. The listing points at <code class="ui-code">{{ shortRef }}</code
                 >. Updating replaces the code wholesale and re-asks for broader declared host API access; code internals still need review.
             </Notice>
 
             <!-- Keep the three guarantees separate and ordered by responsibility. -->
             <div class="flex flex-col gap-2 rounded-lg border border-line bg-canvas px-3 py-2.5">
-                <div :class="ui.sectionLabel()">What you'd be trusting</div>
+                <div :class="ui.sectionLabel()">{{ t(`sandbox.discoverDetail.whatYoudTrusting`) }}</div>
 
                 <template v-if="listing.entry.securityReview">
                     <div class="flex items-start gap-2 text-xs">
                         <Icon name="shield" class="mt-0.5 shrink-0 text-success" />
                         <span class="text-content">
-                            <b>Deterministic scan</b>: {{ listing.entry.securityReview.deterministic.scanner }}
-                            {{ listing.entry.securityReview.deterministic.version }} found no blocking dependency, secret, or configuration issue.
-                            <span class="text-muted">Workflow run {{ listing.entry.securityReview.deterministic.runId }}.</span>
+                            <b>{{ t(`sandbox.discoverDetail.deterministicScan`) }}</b
+                            >: {{ listing.entry.securityReview.deterministic.scanner }} {{ listing.entry.securityReview.deterministic.version }}
+                            {{ t(`sandbox.discoverDetail.foundNoBlockingDependency`) }}
+                            <span class="text-muted">{{
+                                t(`sandbox.discoverDetail.workflowRun`, { runId: listing.entry.securityReview.deterministic.runId })
+                            }}</span>
                         </span>
                     </div>
                     <div class="flex items-start gap-2 text-xs">
                         <Icon name="shield" class="mt-0.5 shrink-0 text-success" />
                         <span class="text-content">
-                            <b>Agent security audit</b>: {{ listing.entry.securityReview.reviewer }} passed this exact source under
+                            <b>{{ t(`sandbox.discoverDetail.agentSecurityAudit`) }}</b
+                            >: {{ listing.entry.securityReview.reviewer }} {{ t(`sandbox.discoverDetail.passedExactSourceUnder`) }}
                             <code class="ui-code">{{ listing.entry.securityReview.policy }}</code
-                            >. <span class="text-muted">Gate run {{ listing.entry.securityReview.runId }}.</span>
+                            >.
+                            <span class="text-muted">{{ t(`sandbox.discoverDetail.gateRun`, { runId: listing.entry.securityReview.runId }) }}</span>
                         </span>
                     </div>
                 </template>
                 <div v-else class="flex items-start gap-2 text-xs">
                     <Icon name="exclamation-triangle" class="mt-0.5 shrink-0 text-warning" />
                     <span class="text-content">
-                        <b>No security audit record</b>: this registry has not bound both automated checks to the source.
+                        <b>{{ t(`sandbox.discoverDetail.noSecurityAuditRecord`) }}</b
+                        >{{ t(`sandbox.discoverDetail.registryNotBoundBoth`) }}
                     </span>
                 </div>
 
                 <div v-if="verified" class="flex items-start gap-2 text-xs">
                     <Icon name="shield" class="mt-0.5 shrink-0 text-success" />
                     <span class="text-content">
-                        <b>Human reviewed</b>: someone here also read the source at this commit.
+                        <b>{{ t(`sandbox.discoverDetail.humanReviewed`) }}</b
+                        >{{ t(`sandbox.discoverDetail.someoneHereAlsoRead`) }}
                         <span v-if="listing.entry.trustReason" class="text-muted">{{ listing.entry.trustReason }}</span>
                     </span>
                 </div>
                 <div v-else class="flex items-start gap-2 text-xs">
                     <Icon name="exclamation-triangle" class="mt-0.5 shrink-0 text-warning" />
-                    <span class="text-content"><b>No human source review</b>: use your own agent read if you want an independent account.</span>
+                    <span class="text-content"
+                        ><b>{{ t(`sandbox.discoverDetail.noHumanSourceReview`) }}</b
+                        >{{ t(`sandbox.discoverDetail.useOwnAgentRead`) }}</span
+                    >
                 </div>
 
                 <div v-if="ref40" class="flex items-start gap-2 text-xs">
                     <Icon name="check" class="mt-0.5 shrink-0 text-success" />
                     <span class="text-content">
-                        <b>Pinned</b>: you install commit <code class="ui-code">{{ shortRef }}</code
-                        >. <span class="text-muted">A force-push upstream cannot change what runs here.</span>
+                        <b>{{ t(`sandbox.discoverDetail.pinned`) }}</b
+                        >{{ t(`sandbox.discoverDetail.installCommit`) }} <code class="ui-code">{{ shortRef }}</code
+                        >. <span class="text-muted">{{ t(`sandbox.discoverDetail.forcePushUpstreamCannot`) }}</span>
                     </span>
                 </div>
 
                 <div class="flex items-start gap-2 text-xs">
                     <Icon name="exclamation-triangle" class="mt-0.5 shrink-0 text-warning" />
                     <span class="text-content">
-                        <b>Not browser-isolated</b>:
+                        <b>{{ t(`sandbox.discoverDetail.notBrowserIsolated`) }}</b
+                        >:
                         <span class="text-muted">
-                            its bundle shares this app's page, browser storage and network access. The manifest gates daemon calls made through the
-                            extension API; it does not confine browser code.
+                            {{ t(`sandbox.discoverDetail.bundleSharesAppsPage`) }}
                         </span>
                     </span>
                 </div>
@@ -157,7 +170,7 @@ const auditLeads = computed(() => auditable.value && !verified.value);
                 <!-- Evidence, not endorsement, and silent when there's none: a registry with no scanner hasn't failed a check. -->
                 <div v-if="loads" class="flex items-start gap-2 text-xs">
                     <Icon name="check" class="mt-0.5 shrink-0 text-success" />
-                    <span class="text-muted">Re-checked at this exact commit by the registry's nightly scan: the manifest parses and it loads.</span>
+                    <span class="text-muted">{{ t(`sandbox.discoverDetail.reCheckedAtExact`) }}</span>
                 </div>
                 <div v-else-if="problem" class="flex items-start gap-2 text-xs">
                     <Icon name="exclamation-triangle" class="mt-0.5 shrink-0 text-warning" />
@@ -166,7 +179,7 @@ const auditLeads = computed(() => auditable.value && !verified.value);
             </div>
 
             <div v-if="sourceHref" class="flex flex-wrap items-baseline gap-x-2 text-2xs">
-                <span class="text-subtle">Source</span>
+                <span class="text-subtle">{{ t(`sandbox.discoverDetail.source`) }}</span>
                 <a
                     :href="sourceHref"
                     target="_blank"
@@ -177,12 +190,13 @@ const auditLeads = computed(() => auditable.value && !verified.value);
                 </a>
             </div>
             <p v-if="listing.entry.install?.path" class="text-2xs text-subtle">
-                Lives in <code class="ui-code">{{ listing.entry.install.path }}</code> inside that repository.
+                {{ t(`sandbox.discoverDetail.livesIn`) }} <code class="ui-code">{{ listing.entry.install.path }}</code>
+                {{ t(`sandbox.discoverDetail.insideRepository`) }}
             </p>
 
             <Notice v-if="failure" :of="failure" />
             <p v-if="listing.state.action !== undefined && !canInstall" class="text-2xs text-subtle">
-                Only the sandbox owner can install extensions.
+                {{ t(`sandbox.discoverDetail.onlySandboxOwnerInstall`) }}
             </p>
         </div>
 
@@ -190,7 +204,7 @@ const auditLeads = computed(() => auditable.value && !verified.value);
             <!-- Order follows what's been earned: where the code's been read, Install leads; where it hasn't, the read leads instead. -->
             <Button
                 v-if="auditable"
-                :label="auditLeads ? `Have my agent read the code first` : `Read the code first`"
+                :label="auditLeads ? t(`sandbox.discoverDetail.myAgentReadCode`) : t(`sandbox.discoverDetail.readCodeFirst`)"
                 :severity="auditLeads ? undefined : `secondary`"
                 :text="!auditLeads"
                 size="small"

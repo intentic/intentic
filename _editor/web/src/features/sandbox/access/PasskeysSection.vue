@@ -6,11 +6,14 @@ import { computed, ref } from "vue";
 import { useAuth } from "../../auth/useAuth";
 import { useSandbox } from "../client/useSandbox";
 import { usePasskeys } from "./usePasskeys";
+import { useT } from "@intentic/ui/i18n";
 
 // Passkeys on the Access tab: the sandbox is the relying party, so a passkey here opens THIS sandbox and no other.
 // Everyone manages their own; the owner also sees members' (to reset one who is locked out) and holds the rule that
 // a passkey is the only proof that opens the sandbox, with the recovery codes that keep that rule from locking the
 // owner out. Codes are shown once; the daemon keeps only their hashes.
+
+const t = useT();
 
 const { user } = useAuth();
 const { active } = useSandbox();
@@ -54,15 +57,15 @@ const codesText = computed(() => (codes.value ?? []).join(`\n`));
 </script>
 
 <template>
-    <RowGroup label="Passkeys" :count="list.passkeys.length === 0 ? undefined : list.passkeys.length">
+    <RowGroup :label="t(`sandbox.passkeysSection.passkeys`)" :count="list.passkeys.length === 0 ? undefined : list.passkeys.length">
         <Row v-for="passkey in list.passkeys" :key="passkey.id" icon="key" :title="passkey.label" :description="describe(passkey)">
             <template #meta>
                 <!-- Another member's passkey, in the owner's list: named so a reset removes the right one. -->
                 <StatusBadge v-if="!mine(passkey)" variant="neutral" :label="passkey.email" size="xs" />
-                <StatusBadge v-if="passkey.backedUp" variant="info" label="synced" size="xs" />
+                <StatusBadge v-if="passkey.backedUp" variant="info" :label="t(`sandbox.passkeysSection.synced`)" size="xs" />
             </template>
             <template #control>
-                <Button label="Remove" size="small" severity="danger" :text="true" @click="remove(passkey.id)" />
+                <Button :label="t(`ui.action.remove`)" size="small" severity="danger" :text="true" @click="remove(passkey.id)" />
             </template>
         </Row>
 
@@ -70,23 +73,36 @@ const codesText = computed(() => (codes.value ?? []).join(`\n`));
             <div class="flex flex-col gap-3">
                 <Notice v-if="notice" :of="notice" />
                 <form class="flex flex-wrap items-center gap-2" @submit.prevent="submit">
-                    <input v-model="label" type="text" autocomplete="off" placeholder="Name it, e.g. work laptop" :class="ui.inputSm(`min-w-48 flex-1`)" />
-                    <Button type="submit" label="Add a passkey" size="small" :loading="busy" :disabled="busy || !supported" class="shrink-0">
+                    <input
+                        v-model="label"
+                        type="text"
+                        autocomplete="off"
+                        :placeholder="t(`sandbox.passkeysSection.nameEGWork`)"
+                        :class="ui.inputSm(`min-w-48 flex-1`)"
+                    />
+                    <Button
+                        type="submit"
+                        :label="t(`sandbox.passkeysSection.addPasskey`)"
+                        size="small"
+                        :loading="busy"
+                        :disabled="busy || !supported"
+                        class="shrink-0"
+                    >
                         <template #icon><Icon name="key" /></template>
                     </Button>
                 </form>
-                <span v-if="!supported" class="text-2xs text-subtle">This browser can't create passkeys; add one from a browser that can.</span>
+                <span v-if="!supported" class="text-2xs text-subtle">{{ t(`sandbox.passkeysSection.browserCantCreatePasskeys`) }}</span>
             </div>
         </RowNote>
 
         <template v-if="isOwner">
-            <Row icon="shield" title="Require a passkey to open this sandbox" :description="requiredDescription">
+            <Row icon="shield" :title="t(`sandbox.passkeysSection.requirePasskeyToOpen`)" :description="requiredDescription">
                 <template #meta>
                     <StatusBadge :variant="list.required ? `success` : `neutral`" :label="list.required ? `required` : `optional`" size="xs" />
                 </template>
                 <template #control>
                     <Button
-                        :label="list.required ? `Stop requiring` : `Require a passkey`"
+                        :label="list.required ? t(`sandbox.passkeysSection.stopRequiring`) : t(`sandbox.passkeysSection.requirePasskey`)"
                         size="small"
                         :severity="list.required ? `secondary` : `primary`"
                         :loading="busy"
@@ -98,16 +114,23 @@ const codesText = computed(() => (codes.value ?? []).join(`\n`));
             <Row
                 v-if="list.required"
                 icon="key"
-                title="Recovery codes"
-                :description="`${list.recovery?.remaining ?? 0} unused. One code plus your Google sign-in opens the sandbox if every passkey is lost; each works once.`"
+                :title="t(`sandbox.passkeysSection.recoveryCodes`)"
+                :description="t(`sandbox.passkeysSection.unusedOneCodePlus`, { remaining: list.recovery?.remaining ?? 0 })"
             >
                 <template #control>
-                    <Button label="New codes" size="small" severity="secondary" :text="true" :disabled="busy" @click="regenerateCodes" />
+                    <Button
+                        :label="t(`sandbox.passkeysSection.newCodes`)"
+                        size="small"
+                        severity="secondary"
+                        :text="true"
+                        :disabled="busy"
+                        @click="regenerateCodes"
+                    />
                 </template>
                 <template v-if="codes" #below>
                     <div class="flex flex-col gap-2">
-                        <span class="text-2xs text-subtle">Save these now. They are shown once; the sandbox keeps only their fingerprints.</span>
-                        <Code :code="codesText" label="Recovery codes" />
+                        <span class="text-2xs text-subtle">{{ t(`sandbox.passkeysSection.saveNowTheyShown`) }}</span>
+                        <Code :code="codesText" :label="t(`sandbox.passkeysSection.recoveryCodes`)" />
                     </div>
                 </template>
             </Row>

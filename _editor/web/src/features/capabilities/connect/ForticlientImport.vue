@@ -5,6 +5,9 @@ import { type NoticeModel, RowGroup, RowNote, ui } from "@intentic/ui";
 import { noticeFrom, noticeOf } from "@intentic/ui/async";
 import { ref } from "vue";
 import { importForticlient } from "../../sandbox/devices/useVpn";
+import { useT } from "@intentic/ui/i18n";
+
+const t = useT();
 
 const emit = defineEmits<{
     /** The connection to fill the form with. */
@@ -83,12 +86,11 @@ const protocolOf = (connection: ForticlientConnection): string => (connection.pr
 </script>
 
 <template>
-    <RowGroup label="Import from FortiClient (optional)">
+    <RowGroup :label="t(`capabilities.forticlientImport.importForticlientOptional`)">
         <RowNote variant="block">
             <div class="flex flex-col gap-2">
                 <p class="text-2xs text-muted">
-                    Drop an exported FortiClient configuration (File ▸ Settings ▸ Backup) here to fill the form from one of its connections. Passwords
-                    in that file are encrypted by FortiClient and can't be read: you'll still type those.
+                    {{ t(`capabilities.forticlientImport.dropExportedForticlientConfiguration`) }}
                 </p>
                 <!-- The zone is the button itself: drag and click share one target, no separate browse link. -->
                 <button
@@ -109,17 +111,21 @@ const protocolOf = (connection: ForticlientConnection): string => (connection.pr
                     <Icon v-if="importing" name="spinner" spin class="text-lg text-info" />
                     <Icon v-else name="upload" :class="['text-lg', dragging ? 'text-primary-500' : 'text-muted']" />
                     <span class="text-xs text-content">
-                        <template v-if="importing">Reading…</template>
-                        <template v-else-if="dragging">Drop it to read its connections</template>
-                        <template v-else>Drop the configuration file here</template>
+                        <template v-if="importing">{{ t(`capabilities.forticlientImport.reading`) }}</template>
+                        <template v-else-if="dragging">{{ t(`capabilities.forticlientImport.dropToReadConnections`) }}</template>
+                        <template v-else>{{ t(`capabilities.forticlientImport.dropConfigurationFileHere`) }}</template>
                     </span>
-<!-- Hidden, not unmounted: removing it would shrink the zone mid-drag and loop the pointer in and out. -->
-                    <span :class="['text-2xs text-subtle', importing || dragging ? 'invisible' : '']">or click to choose one</span>
+                    <!-- Hidden, not unmounted: removing it would shrink the zone mid-drag and loop the pointer in and out. -->
+                    <span :class="['text-2xs text-subtle', importing || dragging ? 'invisible' : '']">{{
+                        t(`capabilities.forticlientImport.clickToChooseOne`)
+                    }}</span>
                 </button>
                 <input ref="chooseFile" type="file" accept=".conf,.xml,text/xml,application/xml" class="hidden" @change="onPick" />
-                <p v-if="fileName !== '' && connections.length === 0" class="text-2xs text-warning">No VPN connections found in {{ fileName }}.</p>
+                <p v-if="fileName !== '' && connections.length === 0" class="text-2xs text-warning">
+                    {{ t(`capabilities.forticlientImport.noVpnConnectionsFound`, { fileName }) }}
+                </p>
                 <template v-if="connections.length > 0">
-                    <p class="text-2xs text-subtle">From {{ fileName }}: pick the connection to fill the form with.</p>
+                    <p class="text-2xs text-subtle">{{ t(`capabilities.forticlientImport.pickConnectionToFill`, { fileName }) }}</p>
                     <div class="flex max-h-48 flex-col gap-0.5 overflow-auto">
                         <button
                             v-for="connection in connections"
@@ -133,7 +139,9 @@ const protocolOf = (connection: ForticlientConnection): string => (connection.pr
                                 <span class="text-2xs text-subtle">{{ protocolOf(connection) }}</span>
                                 <span class="min-w-0 truncate font-mono text-2xs text-muted"> {{ connection.server }}:{{ connection.port }} </span>
                             </span>
-                            <span class="text-2xs text-subtle">You'll need to enter: {{ connection.needs.join(", ") }}</span>
+                            <span class="text-2xs text-subtle">{{
+                                t(`capabilities.forticlientImport.youllNeedToEnter`, { needs: connection.needs.join(`, `) })
+                            }}</span>
                         </button>
                     </div>
                 </template>

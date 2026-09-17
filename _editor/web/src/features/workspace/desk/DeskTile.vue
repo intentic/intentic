@@ -4,6 +4,9 @@ import type { WorkspaceTreeEntry } from "@intentic/api-contract";
 import { explorerColorClass, type IconName, iconForEntry } from "@intentic/ui";
 import { computed, onBeforeUnmount, onMounted, ref, type VNode, watch } from "vue";
 import { thumbnailKind, thumbnailUrl } from "./thumbnails";
+import { useT } from "@intentic/ui/i18n";
+
+const t = useT();
 
 const {
     entry,
@@ -192,14 +195,19 @@ const seekFrame = (event: Event): void => {
             <!-- The glyph holds the place until a thumbnail has painted, and stays where none can. -->
             <Icon v-if="!shown" :name="icon" class="text-[2.125rem]" :class="[color, src !== undefined && !failed ? 'absolute' : '']" />
             <!-- A link wears its target's glyph; the small mark says it is one. -->
-            <Icon v-if="entry.link !== undefined" name="link" class="absolute right-2 bottom-0 text-[0.65rem] text-subtle" aria-label="Link" />
+            <Icon
+                v-if="entry.link !== undefined"
+                name="link"
+                class="absolute right-2 bottom-0 text-[0.65rem] text-subtle"
+                :aria-label="t(`workspace.deskTile.link`)"
+            />
         </span>
         <!-- The field owns its keys (arrows move the caret, Enter commits, Escape cancels); none reach the desk. -->
         <input
             v-if="renaming"
             v-model="draft"
             type="text"
-            aria-label="New name"
+            :aria-label="t(`workspace.deskTile.newName`)"
             class="ui-field-box ui-field-inline w-full min-w-0 px-1 text-center text-xs"
             @click.stop
             @dblclick.stop

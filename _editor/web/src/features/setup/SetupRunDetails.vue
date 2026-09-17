@@ -4,6 +4,9 @@ import { Button, Code, CopyButton, commandLang, useOsPreference } from "@intenti
 import { computed } from "vue";
 import { desktopVersion } from "../../app/environments/desktop";
 import { DESKTOP_DOWNLOADS } from "../../app/environments/desktopDownloads";
+import { useT } from "@intentic/ui/i18n";
+
+const t = useT();
 
 const { cmdOs } = useOsPreference();
 
@@ -18,33 +21,36 @@ const { cleanup, downloads = true } = defineProps<{ cleanup: string; downloads?:
 
 <template>
     <div class="flex flex-col gap-3">
-        <p class="text-sm font-medium text-content">What this does</p>
-<!-- ONE CLAUSE A LINE. -->
+        <p class="text-sm font-medium text-content">{{ t(`setup.setupRunDetails.whatDoes`) }}</p>
+        <!-- ONE CLAUSE A LINE. -->
         <ul class="flex flex-col gap-2 text-xs leading-relaxed text-muted">
             <li class="flex items-start gap-2">
                 <Icon name="box" class="mt-0.5 shrink-0 text-link" />
                 <span class="min-w-0 flex flex-col gap-1">
-                    <span>Starts your sandbox in <span class="text-content">Docker</span></span>
+                    <span>{{ t(`setup.setupRunDetails.startsSandboxIn`) }} <span class="text-content">Docker</span></span>
                     <a
                         href="https://docs.docker.com/get-docker/"
                         target="_blank"
                         rel="noreferrer"
                         class="inline-flex items-center gap-1 text-link hover:underline"
                     >
-                        Install Docker yourself <Icon name="external-link" />
+                        {{ t(`setup.setupRunDetails.installDockerYourself`) }} <Icon name="external-link" />
                     </a>
                 </span>
             </li>
             <li class="flex items-start gap-2">
                 <Icon name="cloud" class="mt-0.5 shrink-0 text-link" />
-<!-- The fabric changed under this line and the line did not: it named Cloudflare long after the box stopped dialling one. -->
-                <span class="min-w-0">Dials <span class="text-content">out</span> to reach your browser, no inbound ports</span>
+                <!-- The fabric changed under this line and the line did not: it named Cloudflare long after the box stopped dialling one. -->
+                <span class="min-w-0"
+                    >{{ t(`setup.setupRunDetails.dials`) }} <span class="text-content">{{ t(`setup.setupRunDetails.out`) }}</span>
+                    {{ t(`setup.setupRunDetails.toReachBrowserNo`) }}</span
+                >
             </li>
         </ul>
 
-<!-- A visible alternative to the terminal path, kept in the reference column where it can be weighed before somebody commits to the command. -->
+        <!-- A visible alternative to the terminal path, kept in the reference column where it can be weighed before somebody commits to the command. -->
         <div v-if="!desktop && downloads" class="flex flex-col gap-2 border-t border-line pt-3">
-            <p class="text-xs text-subtle">Or use the desktop app</p>
+            <p class="text-xs text-subtle">{{ t(`setup.setupRunDetails.useDesktopApp`) }}</p>
             <div class="grid grid-cols-2 gap-2">
                 <Button as="a" :href="DESKTOP_DOWNLOADS.windows" label="Windows" severity="secondary">
                     <template #icon><Icon name="download" /></template>
@@ -55,15 +61,15 @@ const { cleanup, downloads = true } = defineProps<{ cleanup: string; downloads?:
             </div>
         </div>
 
-<!-- The undo. -->
+        <!-- The undo. -->
         <div class="flex flex-col gap-1 border-t border-line pt-3 text-xs text-muted">
-<!-- The copy button rides the label, not the command. -->
+            <!-- The copy button rides the label, not the command. -->
             <span class="flex items-center gap-2">
                 <Icon name="undo" class="shrink-0 text-subtle" />
-                Removes all of it
+                {{ t(`setup.setupRunDetails.removesAll`) }}
                 <CopyButton :text="cleanup" class="-my-1 ml-auto" />
             </span>
-<!-- Same highlighted block as the install command: the OS tab on the run step picks bash vs PowerShell. -->
+            <!-- Same highlighted block as the install command: the OS tab on the run step picks bash vs PowerShell. -->
             <Code :code="cleanup" :lang="commandLang(cmdOs)" :wrap="true" :copyable="false" />
         </div>
     </div>

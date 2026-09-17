@@ -1,5 +1,8 @@
 <script setup lang="ts">
 import { InfoDialog, InfoTable } from "@intentic/ui";
+import { useT } from "@intentic/ui/i18n";
+
+const t = useT();
 
 /* The (i) beside the Agent tab's "Code search" group. */
 
@@ -24,85 +27,67 @@ const SHADOW_COMPARISON = [
 </script>
 
 <template>
-    <InfoDialog title="Code search">
-        <p class="text-sm text-muted">How the assistant finds its way around your code. Both apply to this sandbox only.</p>
+    <InfoDialog :title="t(`sandbox.codeSearchInfo.codeSearch`)">
+        <p class="text-sm text-muted">{{ t(`sandbox.codeSearchInfo.howAssistantFindsWay`) }}</p>
 
         <!-- ① iq: an off/on comparison, because the value is entirely relative to grep. -->
-        <h3 class="mt-5 text-xs font-semibold uppercase tracking-wide text-subtle">iq code search</h3>
+        <h3 class="mt-5 text-xs font-semibold uppercase tracking-wide text-subtle">{{ t(`sandbox.codeSearchInfo.iqCodeSearch`) }}</h3>
         <p class="mt-1.5 text-2xs text-muted">
-            iq is a search tool built into the sandbox. Where grep answers "which lines contain this text", iq answers "where does this happen". It
-            works out what you're asking, runs several kinds of search at once, then ranks and trims the result.
+            {{ t(`sandbox.codeSearchInfo.iqSearchToolBuilt`) }}
         </p>
         <InfoTable class="mt-2" :headers="[``, `Off: grep / find / glob`, `On: iq`]" :rows="IQ_COMPARISON" />
         <p class="mt-1.5 text-2xs text-subtle">
-            Switching it on loads a small plugin that teaches the assistant iq's commands and nudges it to reach for them. The Search box in your
-            workspace uses iq either way: this only changes what the assistant does.
+            {{ t(`sandbox.codeSearchInfo.switchingOnLoadsSmall`) }}
         </p>
-<!-- Why this setting carries a measurement control, and the one rule that makes its arms honest. -->
+        <!-- Why this setting carries a measurement control, and the one rule that makes its arms honest. -->
         <div class="mt-2 flex items-start gap-2 rounded-lg border border-line bg-canvas px-2.5 py-2">
             <Icon name="wave-pulse" class="mt-0.5 shrink-0 text-2xs text-subtle" />
             <p class="text-2xs text-muted">
-                <span class="font-medium text-content">Measure it</span> runs a slice of conversations without the teaching, as a control. There's no
-                other way to know what it's worth: the same conversation can't be replayed to see how it would have searched otherwise. The arm is
-                picked once and held for the whole conversation, so a session that already learned iq can never later be counted as a cold one. Both
-                groups need about 30 conversations before a figure appears, and it appears under the switch itself.
+                <span class="font-medium text-content">{{ t(`sandbox.codeSearchInfo.measure`) }}</span>
+                {{ t(`sandbox.codeSearchInfo.runsSliceConversationsWithout`) }}
             </p>
         </div>
 
-<!-- ② Project map, one question earlier than ①. -->
-        <h3 class="mt-5 text-xs font-semibold uppercase tracking-wide text-subtle">Project map</h3>
+        <!-- ② Project map, one question earlier than ①. -->
+        <h3 class="mt-5 text-xs font-semibold uppercase tracking-wide text-subtle">{{ t(`sandbox.codeSearchInfo.projectMap`) }}</h3>
         <p class="mt-1.5 text-2xs text-muted">
-            Before it can search for anything, the assistant has to know what it is looking at. With this on, the sandbox reads your folders when a
-            conversation opens and hands over a short list: the main parts of the project, what each one is for, how big it is, and which one the
-            conversation started in.
+            {{ t(`sandbox.codeSearchInfo.beforeSearchAnythingAssistant`) }}
         </p>
         <InfoTable class="mt-2" :headers="[``, `Off: it looks around first`, `On: handed the layout`]" :rows="MAP_COMPARISON" />
         <p class="mt-1.5 text-2xs text-subtle">
-            Each part's description is taken from that folder's own package details or the first line of its README, so it says what your project says
-            about itself and nothing is made up. Folders with neither are listed by name and size.
+            {{ t(`sandbox.codeSearchInfo.eachPartsDescriptionTaken`) }}
         </p>
         <p class="mt-1.5 text-2xs text-subtle">
-            It follows the conversation. Open one in a particular project and that project is what gets mapped, with the rest of the workspace named
-            on one line, since an assistant working three folders deep isn't asking about the others.
+            {{ t(`sandbox.codeSearchInfo.followsConversationOpenOne`) }}
         </p>
         <div class="mt-2 flex items-start gap-2 rounded-lg border border-line bg-canvas px-2.5 py-2">
             <Icon name="refresh" class="mt-0.5 shrink-0 text-2xs text-subtle" />
             <p class="text-2xs text-muted">
-                <span class="font-medium text-content">Read fresh, never stored.</span> This is the difference between it and writing the same list
-                into a notes file yourself: the map is re-read every time a conversation opens, so renaming or adding a folder needs nothing from you.
-                A written one drifts the first time the project moves, and nobody notices until the assistant spends a turn looking for something that
-                isn't there any more. Sent once per conversation, and you can read exactly what was sent: it appears above your first message.
+                <span class="font-medium text-content">{{ t(`sandbox.codeSearchInfo.readFreshNeverStored`) }}</span>
+                {{ t(`sandbox.codeSearchInfo.differenceBetweenWritingSame`) }}
             </p>
         </div>
-<!-- The map measurement uses a different score from its neighbour. -->
+        <!-- The map measurement uses a different score from its neighbour. -->
         <div class="mt-2 flex items-start gap-2 rounded-lg border border-line bg-canvas px-2.5 py-2">
             <Icon name="wave-pulse" class="mt-0.5 shrink-0 text-2xs text-subtle" />
             <p class="text-2xs text-muted">
-                <span class="font-medium text-content">Measure it</span> opens a slice of conversations without the map, as a control, and compares
-                what the two groups did on their <span class="text-content">first message</span> — the only message the map is ever sent on. It is
-                scored on the folder listings a conversation opens with rather than on how much it searched, and that is the whole finding behind this
-                control: across a thousand conversations here, the map did not change how many times the assistant looked something up, it changed
-                what it looked up. Conversations that were handed the map opened by listing a folder about a third less often. Both groups need around
-                30 conversations before a figure appears.
+                <span class="font-medium text-content">{{ t(`sandbox.codeSearchInfo.measure`) }}</span>
+                {{ t(`sandbox.codeSearchInfo.opensSliceConversationsWithout`) }}
+                <span class="text-content">{{ t(`sandbox.codeSearchInfo.firstMessage`) }}</span> {{ t(`sandbox.codeSearchInfo.onlyMessageMapEver`) }}
             </p>
         </div>
 
-<!-- ③ Document shadows, one step before either of the above: the files no text search can see into. -->
-        <h3 class="mt-5 text-xs font-semibold uppercase tracking-wide text-subtle">Document shadows</h3>
+        <!-- ③ Document shadows, one step before either of the above: the files no text search can see into. -->
+        <h3 class="mt-5 text-xs font-semibold uppercase tracking-wide text-subtle">{{ t(`sandbox.codeSearchInfo.documentShadows`) }}</h3>
         <p class="mt-1.5 text-2xs text-muted">
-            Some files in a workspace aren't text: Word documents, spreadsheets, slide decks, PDFs, images, recordings. With this on, the sandbox
-            keeps a plain-text rendering of each one — made in the background the moment a file lands or changes, so the assistant reads a page of
-            markdown instead of parsing a binary file mid-task.
+            {{ t(`sandbox.codeSearchInfo.someFilesInWorkspace`) }}
         </p>
         <InfoTable class="mt-2" :headers="[``, `Off: parsed on demand`, `On: shadowed as files land`]" :rows="SHADOW_COMPARISON" />
         <p class="mt-1.5 text-2xs text-subtle">
-            Nothing is invented. What a rendering can't contain without a model — the text of a scanned page, a description of a photo, a transcript
-            of a recording — is named as not generated, so an empty shadow can never pass for an empty file. The renderings live in the sandbox's own
-            cache, never in your project, and are rebuilt rather than exported.
+            {{ t(`sandbox.codeSearchInfo.nothingInventedWhatRendering`) }}
         </p>
         <p class="mt-1.5 text-2xs text-subtle">
-            Off, the assistant can still read these formats — it just pays for the conversion at the moment it needs the file. The switch only decides
-            whether the sandbox spends background effort keeping the shadows current.
+            {{ t(`sandbox.codeSearchInfo.offAssistantStillRead`) }}
         </p>
     </InfoDialog>
 </template>

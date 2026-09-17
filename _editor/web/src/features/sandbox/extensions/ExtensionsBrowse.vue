@@ -17,10 +17,13 @@ import { auditBrief, updateBrief } from "./extensionBrief";
 import DiscoverCard from "./DiscoverCard.vue";
 import DiscoverDetail from "./DiscoverDetail.vue";
 import { type DiscoverListing, listingSections, toListing } from "./discoverListing";
+import { useT } from "@intentic/ui/i18n";
 
 // Browse: what other people have published, the other half of the Extensions section; search, pills and registry line
 // are owned by SandboxExtensions.vue and passed in as `query`/`trust`. Shows no manifest, since the code hasn't been
 // cloned yet; it states who vouched for it, what the scan found, and where it lives.
+
+const t = useT();
 
 const { query, trust } = defineProps<{
     /** The section's search text: matched against name, publisher, description and category. */
@@ -58,7 +61,11 @@ const matches = computed(() => {
     );
 });
 const sections = computed(() => listingSections(matches.value));
-watch(() => matches.value.length, (count) => emit(`matched`, count), { immediate: true });
+watch(
+    () => matches.value.length,
+    (count) => emit(`matched`, count),
+    { immediate: true },
+);
 
 // A registry that fails to read may be a blip; retry is the one recovery this notice can offer.
 watch(
@@ -68,7 +75,12 @@ watch(
             `notice`,
             failed === undefined
                 ? undefined
-                : { tone: `danger`, title: `Couldn't read that registry.`, detail: failed, action: { label: `Try again`, run: refetch } },
+                : {
+                      tone: `danger`,
+                      title: t(`sandbox.extensionsBrowse.couldntReadRegistry`),
+                      detail: failed,
+                      action: { label: t(`ui.action.tryAgain`), run: refetch },
+                  },
         ),
     { immediate: true },
 );
@@ -206,20 +218,24 @@ const emptyNote = computed<string | undefined>(() => {
     <div class="flex flex-col gap-5">
         <!-- Where the list came from, stated rather than asked for; changing it is one click, not a blocking field. -->
         <div class="flex flex-wrap items-center gap-x-2 gap-y-1 text-2xs">
-            <span class="text-subtle">Source</span>
-            <span class="font-medium text-content">{{ isOfficial ? (registryName ?? `Official registry`) : (registryName ?? url) }}</span>
+            <span class="text-subtle">{{ t(`sandbox.extensionsBrowse.source`) }}</span>
+            <span class="font-medium text-content">{{
+                isOfficial ? (registryName ?? t(`sandbox.extensionsBrowse.officialRegistry`)) : (registryName ?? url)
+            }}</span>
             <span v-if="!isOfficial" class="truncate font-mono text-subtle">{{ url }}</span>
-            <button v-if="!changing" type="button" class="text-link hover:underline" @click="openChange">change</button>
+            <button v-if="!changing" type="button" class="text-link hover:underline" @click="openChange">
+                {{ t(`sandbox.extensionsBrowse.change`) }}
+            </button>
             <button v-if="!isOfficial && !changing" type="button" class="text-link hover:underline" @click="backToOfficial">
-                back to the official one
+                {{ t(`sandbox.extensionsBrowse.backToOfficialOne`) }}
             </button>
         </div>
 
         <!-- Any git repository with a marketplace file can be a collapsed registry. -->
         <div v-if="changing" class="flex flex-col gap-2 rounded-lg border border-line bg-canvas px-3 py-2.5">
             <p class="text-2xs text-muted">
-                Any git repository holding a <code class="ui-code">.claude-plugin/marketplace.json</code> is a registry: point this at your own and
-                nothing here reads ours.
+                {{ t(`sandbox.extensionsBrowse.anyGitRepositoryHolding`) }} <code class="ui-code">.claude-plugin/marketplace.json</code>
+                {{ t(`sandbox.extensionsBrowse.registryPointAtOwn`) }}
             </p>
             <div class="flex flex-wrap gap-2">
                 <input
@@ -229,16 +245,22 @@ const emptyNote = computed<string | undefined>(() => {
                     :class="ui.input(`min-w-56 flex-1`)"
                     @keyup.enter="applyChange"
                 />
-                <input v-model="draftToken" type="password" autocomplete="off" placeholder="Token" :class="ui.input(`w-32`)" />
-                <Button label="Browse" size="small" :disabled="draftUrl.trim() === ``" @click="applyChange" />
-                <Button label="Cancel" size="small" text @click="changing = false" />
+                <input
+                    v-model="draftToken"
+                    type="password"
+                    autocomplete="off"
+                    :placeholder="t(`sandbox.extensionsBrowse.token`)"
+                    :class="ui.input(`w-32`)"
+                />
+                <Button :label="t(`sandbox.extensionsBrowse.browse`)" size="small" :disabled="draftUrl.trim() === ``" @click="applyChange" />
+                <Button :label="t(`ui.action.cancel`)" size="small" text @click="changing = false" />
             </div>
-            <p class="text-2xs text-subtle">A token is only needed for a private registry. It's kept for this session and never put in a link.</p>
+            <p class="text-2xs text-subtle">{{ t(`sandbox.extensionsBrowse.tokenOnlyNeededPrivate`) }}</p>
         </div>
 
         <!-- Registry loading uses the real card grid shape. -->
         <div v-if="isLoading && outline" class="@container" role="status" aria-busy="true">
-            <span class="sr-only">Reading the registry…</span>
+            <span class="sr-only">{{ t(`sandbox.extensionsBrowse.readingRegistry`) }}</span>
             <div class="grid grid-cols-1 gap-2 @xl:grid-cols-2 @4xl:grid-cols-3" aria-hidden="true">
                 <div v-for="card in 6" :key="card" class="flex flex-col gap-2 rounded-lg border border-line bg-card px-3 py-2.5">
                     <div class="flex w-full items-start gap-2.5">
@@ -271,17 +293,17 @@ const emptyNote = computed<string | undefined>(() => {
 
         <div v-if="emptyNote !== undefined" :class="ui.emptyState(`flex flex-col items-center gap-2 py-8`)">
             <span>{{ emptyNote }}</span>
-            <Button v-if="listings.length > 0" size="small" label="Clear filter" @click="emit(`clear`)" />
+            <Button v-if="listings.length > 0" size="small" :label="t(`sandbox.extensionsBrowse.clearFilter`)" @click="emit(`clear`)" />
         </div>
 
         <!-- The first place this app says publishing is possible, and how cheap it is (a repo topic, no account or queue). -->
         <!-- Registry details flow as one paragraph so narrow panes wrap naturally. -->
         <p class="text-2xs leading-relaxed text-muted">
             <Icon name="sparkles" class="mr-1 text-subtle" />
-            Built one? Put the <code class="ui-code">intentic-extension</code> topic on its repository and a nightly job opens the listing for you. No
-            account, no upload, no queue.
+            {{ t(`sandbox.extensionsBrowse.builtOnePut`) }} <code class="ui-code">intentic-extension</code>
+            {{ t(`sandbox.extensionsBrowse.topicOnRepositoryNightly`) }}
             <a href="https://intentic.dev/docs/extensions/publish/" target="_blank" rel="noreferrer noopener" class="ml-1 text-link hover:underline">
-                How publishing works ↗
+                {{ t(`sandbox.extensionsBrowse.howPublishingWorks`) }}
             </a>
             <a
                 v-if="isOfficial"
@@ -290,7 +312,7 @@ const emptyNote = computed<string | undefined>(() => {
                 rel="noreferrer noopener"
                 class="ml-2 whitespace-nowrap text-link hover:underline"
             >
-                The registry ↗
+                {{ t(`sandbox.extensionsBrowse.registry`) }}
             </a>
         </p>
 

@@ -6,6 +6,9 @@ import { openWorkspaceRef } from "../../workspace/files/openFileRef";
 import ChatToolCard from "./ChatToolCard.vue";
 import { type ToolGroup, groupDiffSummary } from "./toolGrouping";
 import { present } from "./toolPresentation";
+import { useT } from "@intentic/ui/i18n";
+
+const t = useT();
 
 /* A collapsed run of consecutive same-name+same-target tool calls. */
 
@@ -57,7 +60,7 @@ const location = computed(() => props.group.tools[0]?.locations?.[0]);
                 v-if="location"
                 type="button"
                 class="min-w-0 truncate font-mono transition-colors hover:text-content hover:underline"
-                v-tooltip.top="'Open in workspace'"
+                v-tooltip.top="t(`chat.chatToolGroup.openInWorkspace`)"
                 @click="openWorkspaceRef(location.path, location.line, linkScope)"
             >
                 {{ group.target ?? location.path }}

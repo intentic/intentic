@@ -3,10 +3,13 @@ import { ui, Notice, SegmentedControl } from "@intentic/ui";
 import ToggleSwitch from "primevue/toggleswitch";
 import { computed } from "vue";
 import type { PersonaGrantable, PersonaPowersDraft } from "./personaCard";
+import { useT } from "@intentic/ui/i18n";
 
 // What a persona may do: shelves plus per-id grants, one component since two surfaces (the editor, the quick panel)
 // must never answer this differently. Split by blast radius, workspace then reach beyond it, everything visible: a
 // permission you can't see is one you can't audit. The draft is the parent's, mutated in place, like <PersonaForm>.
+
+const t = useT();
 
 const {
     draft,
@@ -20,11 +23,11 @@ const {
     folderBound?: boolean;
 }>();
 
-const FILE_ACCESS = [
-    { label: `None`, value: `none` as const },
-    { label: `Read`, value: `read` as const },
-    { label: `Read & change`, value: `write` as const },
-];
+const FILE_ACCESS = computed(() => [
+    { label: t(`sandbox.personaPowersFields.none`), value: `none` as const },
+    { label: t(`sandbox.personaPowersFields.read`), value: `read` as const },
+    { label: t(`sandbox.personaPowersFields.readChange`), value: `write` as const },
+]);
 
 // Rail width and hint indent live here once, so no row's hint can drift from under its own label.
 const RAIL = `w-4 shrink-0 text-center text-xs text-subtle`;
@@ -34,56 +37,83 @@ const HINT = `pl-6 text-xs text-subtle`;
 
 // What it can do to the workspace itself; files leads since it's the widest and most common change, and sandbox
 // settings/outbox are workspace files too.
-const WORKSPACE_SHELVES = [
+const WORKSPACE_SHELVES = computed(() => [
     {
         key: `sandbox` as const,
         icon: `cog` as const,
-        label: `Change the sandbox`,
-        hint: `Its own settings and manifests, and the folder that publishes files publicly.`,
+        label: t(`sandbox.personaPowersFields.changeSandbox`),
+        hint: t(`sandbox.personaPowersFields.ownSettingsManifestsFolder`),
     },
-];
+]);
 
 // What it can reach past the workspace. Shell heads this group, not the one above, since a command can post, fetch,
 // install and read a credential, the only sentence on this card in a warning tone is the caveat about it.
-const OUTWARD_SHELVES = [
-    { key: `shell` as const, icon: `terminal` as const, label: `Run commands`, hint: `Shell, tests, builds, and every CLI on the image.` },
+const OUTWARD_SHELVES = computed(() => [
+    {
+        key: `shell` as const,
+        icon: `terminal` as const,
+        label: t(`sandbox.personaPowersFields.runCommands`),
+        hint: t(`sandbox.personaPowersFields.shellTestsBuildsEvery`),
+    },
     // Sits under Run commands since they answer the same question (what may a session run); fenced to the Files answer,
     // and can't start programs without Run commands.
     {
         key: `code` as const,
         icon: `code` as const,
-        label: `Run code`,
-        hint: `JavaScript runs fenced by the runtime: files follow the Files answer, no programs without Run commands.`,
+        label: t(`sandbox.personaPowersFields.runCode`),
+        hint: t(`sandbox.personaPowersFields.javascriptRunsFencedBy`),
     },
     // Reuses the globe an accountless browser site also wears (useBrowserAccounts); told apart by treatment, not a
     // different glyph, since the mark must stay one per account everywhere.
-    { key: `web` as const, icon: `globe` as const, label: `Read the web`, hint: `Fetch a page, run a search.` },
+    {
+        key: `web` as const,
+        icon: `globe` as const,
+        label: t(`sandbox.personaPowersFields.readWeb`),
+        hint: t(`sandbox.personaPowersFields.fetchPageRunSearch`),
+    },
     // States what it isn't rather than pointing at the account picker, since this component also renders in the quick
     // panel, which has none.
     // `picture-in-picture`: `window-maximize` (the first guess) read as "make this bigger", not "drive a browser".
     {
         key: `browser` as const,
         icon: `picture-in-picture` as const,
-        label: `Drive a browser`,
-        hint: `The anonymous browser, not the signed-in accounts.`,
+        label: t(`sandbox.personaPowersFields.driveBrowser`),
+        hint: t(`sandbox.personaPowersFields.anonymousBrowserNotSigned`),
     },
     // A branching hierarchy, since delegating creates one; a group-of-people glyph read as "several people", not
     // "several agents".
-    { key: `delegate` as const, icon: `sitemap` as const, label: `Delegate`, hint: `Spawn sub-agents and run workflows.` },
-];
+    {
+        key: `delegate` as const,
+        icon: `sitemap` as const,
+        label: t(`sandbox.personaPowersFields.delegate`),
+        hint: t(`sandbox.personaPowersFields.spawnSubAgentsRun`),
+    },
+]);
 
-const GRANT_GROUPS = [
+const GRANT_GROUPS = computed(() => [
     // `link`, not a wrench, since the reader maps the glyph to the label beside it (Connectors).
-    { key: `connectors` as const, kind: `cli` as const, icon: `link` as const, label: `Connectors`, empty: `No connectors added yet.` },
+    {
+        key: `connectors` as const,
+        kind: `cli` as const,
+        icon: `link` as const,
+        label: t(`sandbox.personaPowersFields.connectors`),
+        empty: t(`sandbox.personaPowersFields.noConnectorsAddedYet`),
+    },
     {
         key: `devices` as const,
         kind: `host` as const,
         icon: `desktop` as const,
-        label: `Your devices`,
-        empty: `No devices connected yet.`,
+        label: t(`sandbox.personaPowersFields.devices`),
+        empty: t(`sandbox.personaPowersFields.noDevicesConnectedYet`),
     },
-    { key: `mcp` as const, kind: `mcp` as const, icon: `server` as const, label: `MCP connections`, empty: `No MCP connections added yet.` },
-];
+    {
+        key: `mcp` as const,
+        kind: `mcp` as const,
+        icon: `server` as const,
+        label: t(`sandbox.personaPowersFields.mcpConnections`),
+        empty: t(`sandbox.personaPowersFields.noMcpConnectionsAdded`),
+    },
+]);
 
 const groupItems = (kind: PersonaGrantable[`kind`]): PersonaGrantable[] => grantables.filter((entry) => entry.kind === kind);
 
@@ -109,16 +139,16 @@ const shellCaveat = computed(
 
 <template>
     <div class="@container">
-<!-- Persona powers fold at @2xl to keep opened cards readable. -->
+        <!-- Persona powers fold at @2xl to keep opened cards readable. -->
         <div class="grid items-start gap-x-10 gap-y-6 @2xl:grid-cols-2">
             <!-- This section controls carried resources and the persona's location. -->
             <div class="flex flex-col gap-6">
                 <div class="flex flex-col gap-3">
-                    <span :class="ui.sectionLabel()">In your workspace</span>
+                    <span :class="ui.sectionLabel()">{{ t(`sandbox.personaPowersFields.inWorkspace`) }}</span>
 
                     <div class="flex flex-wrap items-center gap-x-2 gap-y-1">
                         <Icon name="file-tree" :class="RAIL" />
-                        <span class="min-w-0 flex-1 text-sm text-content">Files</span>
+                        <span class="min-w-0 flex-1 text-sm text-content">{{ t(`sandbox.personaPowersFields.files`) }}</span>
                         <SegmentedControl v-model="draft.files" :options="FILE_ACCESS" />
                     </div>
 
@@ -138,7 +168,7 @@ const shellCaveat = computed(
 
             <!-- Everything whose consequences leave this box. -->
             <div class="flex flex-col gap-3">
-                <span :class="ui.sectionLabel()">Reaching out</span>
+                <span :class="ui.sectionLabel()">{{ t(`sandbox.personaPowersFields.reachingOut`) }}</span>
 
                 <label v-for="shelf in OUTWARD_SHELVES" :key="shelf.key" class="flex flex-col gap-0.5">
                     <span class="flex items-center gap-2">
@@ -151,8 +181,8 @@ const shellCaveat = computed(
 
                 <!-- Shown only when it's load-bearing: something is bounded while the shell stays on. -->
                 <Notice v-if="shellCaveat" tone="warning">
-                    With <strong>Run commands</strong> on, every other limit on this card is a strong default rather than a wall: a session with a
-                    shell can reach a credential it wasn't granted. Turn it off for a persona that has to be fenced in.
+                    {{ t(`sandbox.personaPowersFields.with`) }} <strong>{{ t(`sandbox.personaPowersFields.runCommands`) }}</strong>
+                    {{ t(`sandbox.personaPowersFields.onEveryOtherLimit`) }}
                 </Notice>
 
                 <!-- The default all-access state collapses to one line. -->
@@ -172,8 +202,8 @@ const shellCaveat = computed(
                                 groupItems(group.kind).length === 0
                                     ? group.empty
                                     : grantsAll(group.key)
-                                      ? `All of them, including new ones.`
-                                      : `Pick which:`
+                                      ? t(`sandbox.personaPowersFields.allIncludingNewOnes`)
+                                      : t(`sandbox.personaPowersFields.pick`)
                             }}
                         </span>
                     </label>

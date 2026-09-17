@@ -20,10 +20,13 @@ import WorkspaceEmptyState from "../explorer/WorkspaceEmptyState.vue";
 import WorkspaceScopeGone from "../explorer/WorkspaceScopeGone.vue";
 import type { EditorPane } from "../tabs/workspaceTabs";
 import { CHROME_SCOPE, contextTarget } from "./viewerChrome";
+import { useT } from "@intentic/ui/i18n";
 
 // One editor pane: a tab strip, the open file's context, and whatever the active tab renders. The desktop lays out two
 // (EditorStrip), so a commit's list and diff no longer fight for the same pane. Owns only what's per-pane;
 // workspace-wide facts arrive as slots.
+
+const t = useT();
 
 const { pane, broken = false, empty = false } = defineProps<{ pane: EditorPane; broken?: boolean; empty?: boolean }>();
 
@@ -105,8 +108,8 @@ const diffOutline = useLoadingReveal(
                 type="button"
                 :class="ui.iconButton(`mx-1 h-7 w-7 shrink-0 self-center`)"
                 @click="collapseSplit()"
-                v-tooltip.bottom="'Close the split · these tabs move back into one pane'"
-                aria-label="Close the split"
+                v-tooltip.bottom="t(`workspace.editorPane.closeSplitTabsMove`)"
+                :aria-label="t(`workspace.editorPane.closeSplit`)"
             >
                 <Icon name="split-columns" class="text-xs" />
             </button>

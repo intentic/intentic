@@ -4,10 +4,13 @@ import { browserOwnsClick, MarkdownFigure } from "@intentic/ui";
 import { copyCodeFromEvent, renderMarkdownParts } from "@intentic/ui/markdown";
 import { computed, ref } from "vue";
 import { useChatSurface } from "../../tools/chatToolSurface";
+import { useT } from "@intentic/ui/i18n";
 
 // Renders a document a turn wrote: the Write card that produced it, and any question/plan card asking about it. No diff
 // view, since a Write carries no `oldText` (a diff of it would be every line as a plus). Uses the injected surface
 // (chatToolSurface.ts), not app singletons, since this also renders on a published page with no workspace or router.
+
+const t = useT();
 
 const props = withDefaults(
     defineProps<{
@@ -93,7 +96,7 @@ const onProseClick = (event: MouseEvent): void => {
                 }}</span>
             </component>
             <!-- Set when the wire cap cut the document short; must never look like the whole document. -->
-            <span v-if="document.truncated" class="shrink-0 text-subtle">clipped</span>
+            <span v-if="document.truncated" class="shrink-0 text-subtle">{{ t(`chat.chatDocumentBody.clipped`) }}</span>
             <!-- Titled: a right-side chip. Untitled: takes the label slot (can't nest inside the fold button). -->
             <component
                 :is="openFile ? 'button' : 'span'"

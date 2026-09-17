@@ -1,6 +1,7 @@
 import type { IconName } from "@intentic/ui";
 import type { Component } from "vue";
 import { computed, ref, shallowReactive } from "vue";
+import { t } from "@intentic/ui/i18n";
 
 // Every floating message the app raises, in one store, for one lane (shell/NotificationHost.vue). Three kinds,
 // and the kind is the whole of the difference:
@@ -95,7 +96,11 @@ export const useNotifications = () => {
 
     // Confirms success without asking for anything back.
     const say = (message: string, undo?: () => void | Promise<void>, undoHint?: string): void => {
-        report({ tone: `done`, title: message, ...(undo === undefined ? {} : { actions: [{ label: `Undo`, run: undo, hint: undoHint }] }) });
+        report({
+            tone: `done`,
+            title: message,
+            ...(undo === undefined ? {} : { actions: [{ label: t(`shell.notifications.undo`), run: undo, hint: undoHint }] }),
+        });
     };
 
     // A calm failure: nothing broke, nothing to fix but wait, so it shares the receipt's self-retiring channel with a

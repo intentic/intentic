@@ -3,6 +3,7 @@ import { computed, ref } from "vue";
 import type { IconName } from "@intentic/ui";
 import type { TodoItem } from "@intentic/sandbox-contract";
 import type { ChecklistView } from "./transcript";
+import { useT } from "@intentic/ui/i18n";
 
 // A snapshot of the agent's task checklist (TaskCreate/TaskUpdate) at one point in the turn. The daemon rebuilds the
 // whole list on every status flip, so only a turn's first and last snapshots draw the list â€” the plan and where it
@@ -10,6 +11,8 @@ import type { ChecklistView } from "./transcript";
 // line one of them states is a MOVE, never a level: the reader gets the level from the list under it. `live` marks the
 // snapshot still being written: only it may animate, so a scrolled-back settled snapshot reads as a static record
 // instead of work still in progress.
+
+const t = useT();
 
 const props = defineProps<{
     todos: readonly TodoItem[];
@@ -84,7 +87,7 @@ const hint = computed(() => `${expanded.value ? `Hide` : `Show`} the checklist Â
 
 <template>
     <div class="flex w-full flex-col">
-<!-- One line for the change, at the list's own indent and text size: it stands in for rows, so it reads as one. -->
+        <!-- One line for the change, at the list's own indent and text size: it stands in for rows, so it reads as one. -->
         <button
             v-if="delta"
             type="button"
@@ -93,7 +96,7 @@ const hint = computed(() => `${expanded.value ? `Hide` : `Show`} the checklist Â
             :aria-label="hint"
             @click="toggle"
         >
-<!-- No strikethrough here, unlike the row it stands for: this is the news that it got done, not a settled row. -->
+            <!-- No strikethrough here, unlike the row it stands for: this is the news that it got done, not a settled row. -->
             <template v-if="delta.finished.length > 0">
                 <Icon name="check-circle" class="shrink-0 text-2xs text-success" />
                 <span class="min-w-0 truncate text-muted">{{ delta.finished[0]!.content }}</span>
@@ -106,21 +109,21 @@ const hint = computed(() => `${expanded.value ? `Hide` : `Show`} the checklist Â
                 <span class="min-w-0 truncate text-content">{{ todoText(delta.started[0]!) }}</span>
             </template>
 
-<!-- The move the finished/started pair cannot state, and the reason the figure beside it can hold still. Marked with a
+            <!-- The move the finished/started pair cannot state, and the reason the figure beside it can hold still. Marked with a
      glyph from outside the list's own three, since this is an annotation on the line and not a row of the checklist. -->
             <template v-if="delta.parked.length > 0">
                 <Icon name="clock" class="shrink-0 text-2xs text-subtle" />
-                <span class="min-w-0 truncate text-subtle">{{ delta.parked[0]!.content }} still open</span>
+                <span class="min-w-0 truncate text-subtle">{{ t(`chat.chatTodoList.stillOpen`, { content: delta.parked[0]!.content }) }}</span>
                 <span v-if="delta.parked.length > 1" class="shrink-0 text-2xs text-subtle">+{{ delta.parked.length - 1 }}</span>
             </template>
 
             <span v-if="churn" class="shrink-0 text-2xs tabular-nums text-subtle">{{ churn }}</span>
 
-<!-- The advance is the one number worth keeping when the line truncates, so it is pinned to the far edge. -->
+            <!-- The advance is the one number worth keeping when the line truncates, so it is pinned to the far edge. -->
             <span v-if="advance" class="ml-auto shrink-0 text-2xs tabular-nums text-subtle group-hover/todo:text-muted">{{ advance }}</span>
         </button>
 
-<!-- Opened, the delta shows the same rows the full mode draws; there is no second rendering of a checklist. -->
+        <!-- Opened, the delta shows the same rows the full mode draws; there is no second rendering of a checklist. -->
         <Transition name="chat-run-reveal">
             <div v-if="delta === undefined || expanded" class="grid">
                 <div class="min-h-0 overflow-hidden">
