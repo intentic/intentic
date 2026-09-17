@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { githubRepoOf } from "@intentic/registry";
 import { BrandMark, Button, ui, Modal, Notice, type NoticeModel } from "@intentic/ui";
-import { computed } from "vue";
+import { computed, useId } from "vue";
 import { checksOk, checksProblem, type DiscoverListing, splitListingName } from "./discoverListing";
 
 // One listing, read before it's run: where this product's trust argument gets made explicit rather than implied. Source
@@ -18,6 +18,9 @@ const { listing, canInstall, installing } = defineProps<{
 
 const open = defineModel<boolean>({ required: true });
 const emit = defineEmits<{ install: []; audit: [] }>();
+
+// The brand row replaces the modal's own title, so the name it is announced by has to be pointed at this one.
+const titleId = useId();
 
 const name = computed(() => splitListingName(listing.entry.name));
 const problem = computed(() => checksProblem(listing.entry));
@@ -40,17 +43,16 @@ const auditable = computed(() => ref40.value !== undefined && listing.state.kind
 const actionable = computed(() => listing.state.action !== undefined && canInstall);
 // Leads wherever the registry hasn't vouched for the code.
 const auditLeads = computed(() => auditable.value && !verified.value);
-
 </script>
 
 <template>
     <!-- The footer wraps so the primary action remains usable on phones. -->
-    <Modal v-model:open="open" size="md">
+    <Modal v-model:open="open" size="md" :labelled-by="titleId">
         <template #header>
             <div class="flex min-w-0 items-center gap-3">
                 <BrandMark :size="32" :name="listing.entry.name" :art="listing.entry.art" :logo="listing.entry.logo" :icon="listing.entry.icon" />
                 <div class="min-w-0">
-                    <div class="truncate font-medium text-content">{{ name.title }}</div>
+                    <div :id="titleId" class="truncate font-medium text-content">{{ name.title }}</div>
                     <div class="truncate text-2xs text-subtle">{{ listing.entry.name }}</div>
                 </div>
             </div>

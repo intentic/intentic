@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { devRebuildLogPath } from "@intentic/sandbox-contract";
-import { AnchoredOverlay, Button, Code, commandLang, ConfirmDialog, DeviceRunLog, Notice, type NoticeModel, ui } from "@intentic/ui";
+import { AnchoredOverlay, Button, Code, commandLang, ConfirmDialog, DeviceRunLog, type IconName, Notice, type NoticeModel, ui } from "@intentic/ui";
 import { computed, onBeforeUnmount, ref, watch } from "vue";
 import ConnectDeviceHint from "../devices/ConnectDeviceHint.vue";
 import { turnInFlight } from "../../agents/fleet/agentStatus";
@@ -128,7 +128,8 @@ const done = computed(() =>
 
 const failure = computed<NoticeModel | undefined>(() => {
     if (run.phase === `failed`) {
-        const title = run.exitCode === undefined ? `That device didn't run the rebuild.` : `The rebuild failed on that device (exit ${run.exitCode}).`;
+        const title =
+            run.exitCode === undefined ? `That device didn't run the rebuild.` : `The rebuild failed on that device (exit ${run.exitCode}).`;
         return { tone: `warning`, title, ...(run.trouble === undefined ? {} : { detail: run.trouble }) };
     }
     if (run.phase === `lost`) {
@@ -161,39 +162,47 @@ const { fleet } = useAgents();
 const midTurn = computed(() => fleet.value.filter(turnInFlight).length);
 const { settings } = useSandboxSettings();
 const autoResume = computed(() => settings.value?.autoResumeOnRestart === true);
+const interrupted = computed(() => {
+    const count = midTurn.value;
+    if (count === 0) {
+        return undefined;
+    }
+    const who = count === 1 ? `An agent is` : `${count} agents are`;
+    return autoResume.value
+        ? `${who} mid-turn — interrupted, then picked up once the sandbox is back.`
+        : `${who} mid-turn — interrupted, and would need sending again.`;
+});
+
+// The two costs as two steps, in the order they land: run through one sentence, the minutes that interrupt nothing
+// read as the half-minute that does.
+const STEPS: readonly { icon: IconName; label: string; note: string; takes: string }[] = [
+    { icon: `hammer`, label: `Builds the image`, note: `You keep working`, takes: `minutes` },
+    { icon: `refresh`, label: `Restarts the sandbox`, note: `Reconnects on its own`, takes: `~30s` },
+];
+
+// The last segment is what tells two checkouts apart, so it never truncates; the parent stays, dimmed, to be checkable.
+const checkout = computed(() => {
+    const path = props.root ?? ``;
+    const cut = path.lastIndexOf(`/`);
+    return cut <= 0 ? { parent: ``, name: path } : { parent: path.slice(0, cut + 1), name: path.slice(cut + 1) };
+});
 </script>
 
 <template>
     <div class="flex flex-col gap-2">
         <!-- The machine holding the checkout is reachable from here, so this is a button wherever you're reading it. -->
         <template v-if="hostId && root">
-            <div
-                ref="anchorRef"
-                class="inline-flex self-start"
-                @pointerenter="onEnter"
-                @pointerleave="onLeave"
-                @focusin="onFocus"
-                @focusout="onBlur"
-            >
-                <Button
-                    :label="live ? `Rebuilding…` : `Rebuild from checkout`"
-                    size="small"
-                    :loading="live"
-                    :disabled="live"
-                    @click="onButtonClick"
-                >
+            <div ref="anchorRef" class="inline-flex self-start" @pointerenter="onEnter" @pointerleave="onLeave" @focusin="onFocus" @focusout="onBlur">
+                <Button :label="live ? `Rebuilding…` : `Rebuild from checkout`" size="small" :loading="live" :disabled="live" @click="onButtonClick">
                     <template #icon><Icon name="bolt" /></template>
                 </Button>
             </div>
 
             <AnchoredOverlay v-model="overlayOpen" :anchor="anchorRef" side="right" cross="start">
-                <div
-                    class="flex w-96 max-w-[calc(100vw-2rem)] flex-col gap-2.5 p-3 text-left"
-                    @pointerenter="onCardEnter"
-                    @pointerleave="onLeave"
-                >
+                <div class="flex w-96 max-w-[calc(100vw-2rem)] flex-col gap-2.5 p-3 text-left" @pointerenter="onCardEnter" @pointerleave="onLeave">
                     <p class="text-2xs text-muted">
-                        Runs <span class="font-mono text-content">{{ base }}</span> from your checkout, not a published release. Rebuild to pick up code you've written since.
+                        Runs <span class="font-mono text-content">{{ base }}</span> from your checkout, not a published release. Rebuild to pick up
+                        code you've written since.
                     </p>
 
                     <div class="flex flex-col gap-1">
@@ -218,7 +227,12 @@ const autoResume = computed(() => settings.value?.autoResumeOnRestart === true);
             <!-- The log appears before its first line so running is distinct from no activity. -->
             <!-- No note under the pane: the progress line above it is this run's one spinner, and that the build
                  outlives this page is said by the hub's Environment row, where leaving it can be seen. -->
-            <DeviceRunLog v-if="live || run.lines.length > 0" :lines="run.lines" :running="live" empty="Waiting for the first line from that device…" />
+            <DeviceRunLog
+                v-if="live || run.lines.length > 0"
+                :lines="run.lines"
+                :running="live"
+                empty="Waiting for the first line from that device…"
+            />
 
             <p v-if="quiet" class="text-2xs text-subtle">{{ quiet }}</p>
             <p v-if="hiccup" class="text-2xs text-subtle">Can't read the log at the moment — the build itself is unaffected. {{ hiccup }}</p>
@@ -241,39 +255,51 @@ const autoResume = computed(() => settings.value?.autoResumeOnRestart === true);
 
             <ConfirmDialog
                 :open="confirming"
-                header="Rebuild this sandbox from your checkout?"
+                header="Rebuild from checkout?"
+                header-icon="box"
                 confirm-label="Rebuild now"
                 confirm-icon="bolt"
                 :destructive="false"
                 @cancel="confirming = false"
                 @confirm="execute"
             >
-                <p>
-                    The image is built from the working tree in {{ root }} — your sandbox keeps working through that, and it can take several minutes
-                    — and then your sandbox restarts for about half a minute, after which this page reconnects on its own.
-                </p>
-                <p class="mt-3 text-xs text-muted">
-                    Only the sandbox restarts — nothing else on that device is touched. Your files (in /work) are kept.
-                </p>
-<!-- The cost nobody can see from here: what is running now, and whether the restart hands it back. -->
-                <p v-if="midTurn > 0" class="mt-3 text-xs text-warning">
-                    {{ midTurn === 1 ? `An agent is` : `${midTurn} agents are` }} mid-turn right now, and the restart interrupts
-                    {{ midTurn === 1 ? `its` : `their` }} work.
-                    <template v-if="autoResume">
-                        {{ midTurn === 1 ? `It is` : `They are` }} picked up again once the sandbox is back, since this sandbox resumes turns after a
-                        restart.
-                    </template>
-                    <template v-else>
-                        This sandbox doesn't resume turns after a restart, so {{ midTurn === 1 ? `it` : `they` }} would have to be sent again. The
-                        build takes minutes — the fleet may well settle before it lands.
-                    </template>
-                </p>
+                <div class="flex flex-col gap-3">
+                    <div class="flex items-center gap-2 rounded-md border border-line bg-canvas px-2.5 py-2 font-mono text-xs">
+                        <Icon name="folder-open" class="shrink-0 text-subtle" />
+                        <span class="flex min-w-0" :title="root">
+                            <span class="truncate text-subtle">{{ checkout.parent }}</span>
+                            <span class="shrink-0 text-content">{{ checkout.name }}</span>
+                        </span>
+                    </div>
+
+                    <ol class="flex flex-col gap-3">
+                        <li v-for="step in STEPS" :key="step.label" class="flex items-start gap-2.5">
+                            <span class="mt-px grid size-6 shrink-0 place-items-center rounded-full bg-primary-600/15 text-primary-500">
+                                <Icon :name="step.icon" />
+                            </span>
+                            <span class="min-w-0 flex-1">
+                                <span class="block text-xs text-content">{{ step.label }}</span>
+                                <span class="block text-2xs text-subtle">{{ step.note }}</span>
+                            </span>
+                            <span class="mt-px shrink-0 font-mono text-2xs tabular-nums text-muted">{{ step.takes }}</span>
+                        </li>
+                    </ol>
+
+                    <p class="flex items-center gap-2 text-2xs text-muted">
+                        <Icon name="check" class="shrink-0 text-success" />
+                        <span>/work is kept. Nothing else on that device is touched.</span>
+                    </p>
+
+                    <!-- The cost nobody can see from here: what is running now, and whether the restart hands it back. -->
+                    <Notice v-if="interrupted" tone="warning" class="text-2xs">{{ interrupted }}</Notice>
+                </div>
             </ConfirmDialog>
         </template>
 
         <template v-else>
             <p class="text-2xs text-subtle">
-                Runs <span class="font-mono">{{ base }}</span> from your checkout, not a published release. Rebuild to pick up code you've written since.
+                Runs <span class="font-mono">{{ base }}</span> from your checkout, not a published release. Rebuild to pick up code you've written
+                since.
             </p>
             <!-- Two different gaps, one fallback: no checkout recorded, or nobody here can reach the machine holding it. -->
             <p v-if="root === undefined" class="text-2xs text-subtle">

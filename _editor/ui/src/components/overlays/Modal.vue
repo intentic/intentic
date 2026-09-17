@@ -10,6 +10,7 @@ const {
     scroll = true,
     dismissable = true,
     position = `center`,
+    labelledBy,
     appendTo,
 } = defineProps<{
     /** `sm` a confirm or rename · `md` a form · `lg` a document · `xl` content that IS the width · `full` a canvas. */
@@ -24,6 +25,8 @@ const {
     dismissable?: boolean;
     /** `top` for a surface opened by a keyboard shortcut, so the eye doesn't have to travel to it. */
     position?: `center` | `top`;
+    /** Id of the element naming this box. Required with `#header`: the title it replaces is what `aria-labelledby` points at. */
+    labelledBy?: string;
     /** The overlay host, for a modal raised from a panel in a different (popped-out) window. */
     appendTo?: HTMLElement | string;
 }>();
@@ -57,6 +60,13 @@ const contentClass = computed(() =>
         .filter(Boolean)
         .join(` `),
 );
+
+// `root` last: PrimeVue merges pt over its own `aria-labelledby`, which is the only way to re-point it at a `#header`.
+const pt = computed(() => ({
+    content: { class: contentClass.value },
+    footer: { class: `flex flex-wrap justify-end gap-2` },
+    ...(labelledBy === undefined ? {} : { root: { "aria-labelledby": labelledBy } }),
+}));
 </script>
 
 <template>
@@ -71,11 +81,12 @@ const contentClass = computed(() =>
         :position="position"
         :append-to="appendTo"
         :class="rootClass"
-        :pt="{ content: { class: contentClass }, footer: { class: `flex flex-wrap justify-end gap-2` } }"
+        :pt="pt"
         @show="emit(`show`)"
         @hide="emit(`hide`)"
     >
-        <template v-if="$slots[`header`]" #header><slot name="header" /></template>
+        <!-- The title's own class, handed on so slot content wears its typography; PrimeVue's naming stops here, not at callers. -->
+        <template v-if="$slots[`header`]" #header><slot name="header" title-class="p-dialog-title" /></template>
         <slot />
         <template v-if="$slots[`footer`]" #footer><slot name="footer" /></template>
     </Dialog>

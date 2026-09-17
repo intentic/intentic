@@ -142,7 +142,19 @@ it(`confirms first, then starts the build and stops offering to start another`, 
 
     buttonSaying(`Rebuild from checkout`)?.click();
     await nextTick();
-    expect(document.body.textContent).toContain(`Rebuild this sandbox from your checkout?`);
+    expect(document.body.textContent).toContain(`Rebuild from checkout?`);
+    // The two costs are told apart rather than run through one sentence: the minutes that interrupt nothing, and the
+    // half-minute that does.
+    expect(document.body.textContent).toContain(`Builds the image`);
+    expect(document.body.textContent).toContain(`Restarts the sandbox`);
+    expect(document.body.textContent).toContain(`~30s`);
+    // The checkout is named in full, split for reading, not summarised away.
+    expect(document.body.textContent).toContain(`/home/ada/`);
+    expect(document.body.textContent).toContain(`intentic`);
+    // The header icon means this dialog draws its own title bar, which drops the one `aria-labelledby` points at: a
+    // dangling reference leaves the box announced with no name at all.
+    const named = document.querySelector(`[role="dialog"]`)?.getAttribute(`aria-labelledby`) ?? ``;
+    expect(document.getElementById(named)?.textContent).toBe(`Rebuild from checkout?`);
 
     buttonSaying(`Rebuild now`)?.click();
     await settleUi();
@@ -161,8 +173,8 @@ it(`counts the turns the restart will interrupt before it is agreed to`, async (
     buttonSaying(`Rebuild from checkout`)?.click();
     await nextTick();
 
-    expect(document.body.textContent).toContain(`2 agents are mid-turn right now`);
-    expect(document.body.textContent).toContain(`would have to be sent again`);
+    expect(document.body.textContent).toContain(`2 agents are mid-turn`);
+    expect(document.body.textContent).toContain(`would need sending again`);
 });
 
 it(`says the turns come back when this sandbox resumes them after a restart`, async () => {
@@ -173,8 +185,8 @@ it(`says the turns come back when this sandbox resumes them after a restart`, as
     buttonSaying(`Rebuild from checkout`)?.click();
     await nextTick();
 
-    expect(document.body.textContent).toContain(`An agent is mid-turn right now`);
-    expect(document.body.textContent).toContain(`picked up again once the sandbox is back`);
+    expect(document.body.textContent).toContain(`An agent is mid-turn`);
+    expect(document.body.textContent).toContain(`picked up once the sandbox is back`);
 });
 
 it(`says nothing about interrupted work when there is none to interrupt`, async () => {
@@ -183,7 +195,7 @@ it(`says nothing about interrupted work when there is none to interrupt`, async 
     buttonSaying(`Rebuild from checkout`)?.click();
     await nextTick();
 
-    expect(document.body.textContent).toContain(`Rebuild this sandbox from your checkout?`);
+    expect(document.body.textContent).toContain(`Rebuild from checkout?`);
     expect(document.body.textContent).not.toContain(`mid-turn`);
 });
 
@@ -271,7 +283,9 @@ it(`keeps following a build that runs for hours while its log keeps growing`, as
 it(`gives a failed rebuild its exit status and points at the whole log`, async () => {
     const slug = nextSlug();
     const el = mount({ slug, base: `intentic-sandbox:dev`, root: `/home/ada/intentic` });
-    runDeviceCommand.mockResolvedValueOnce(started).mockResolvedValue(log(`0`, `ERROR: failed to solve: process did not complete`, `${DEV_REBUILD_EXIT_MARK} 1`));
+    runDeviceCommand
+        .mockResolvedValueOnce(started)
+        .mockResolvedValue(log(`0`, `ERROR: failed to solve: process did not complete`, `${DEV_REBUILD_EXIT_MARK} 1`));
 
     await useDevRebuild(slug).start(`host-1`);
     await settleUi();
