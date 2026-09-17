@@ -477,10 +477,77 @@
     background: var(--color-card);
     pointer-events: none;
 }
-/* Nothing to mask in the quick bar: no transcript above the box and no page of ours below it, so the strip would be a
-   band of card colour hanging under a composer floating on someone else's page. */
-.chat-footer-bare::after {
+/* THE STRIP'S COMPOSER KEEPS ONE RECT, peek or no peek. Every pixel of padding, gutter or mask that a transcript
+   brings with it would otherwise come out of the box the reader is typing in — measured at 13px up and 38px narrower,
+   which is a box moving under a pointer that is aiming at it. What a peek adds is room ABOVE it and nothing else; the
+   card it needs around it is drawn by the strip itself (ChatQuickBar), spilling past this box rather than insetting it.
+   Nothing to mask here either: no transcript under the padding, and no page of ours below the box. */
+.chat-footer-strip {
+    padding: 0;
+}
+.chat-footer-strip::after {
     content: none;
+}
+.chat-peeking .chat-footer-strip {
+    padding-top: 0.75rem;
+}
+/* A scrollbar arriving with the peek would take its width out of the composer's, for the same reason. The peek opens
+   pinned to the newest turn and is read by hovering, so the wheel is the gesture it is actually driven by. */
+.chat-panel.chat-peeking .chat-scroller {
+    scrollbar-gutter: auto;
+    scrollbar-width: none;
+}
+.chat-panel.chat-peeking .chat-scroller::-webkit-scrollbar {
+    width: 0;
+    height: 0;
+}
+/* THE PEEK'S MOTION. Both of these MOUNT with the peek, and a transition has no earlier value to run from on the frame
+   a thing mounts — so the way in is an animation and the way out is a transition to the resting rule, which is the
+   state each is written at. That is also why neither needs a flag set a frame late: the class arrives with the
+   element, and a flag that is wrong for one frame is a flag Escape can arrive in. */
+.chat-quick-card {
+    opacity: 0;
+    transform: translateY(8px);
+    transition:
+        opacity 130ms ease-in,
+        transform 130ms ease-in;
+}
+.chat-quick-peeking .chat-quick-card {
+    opacity: 1;
+    transform: none;
+    animation: chat-peek-card 200ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+@keyframes chat-peek-card {
+    from {
+        opacity: 0;
+        transform: translateY(8px);
+    }
+}
+/* The turns arrive and leave WITH the card behind them, never on their own: the strip holds them mounted through the
+   fade (chatBarPeek outlives peekOpen) and this is what fades. Opacity only — a transform here would make this the
+   containing block for the sticky prompts inside it. */
+.chat-peeking .chat-turns {
+    opacity: 0;
+    transition: opacity 130ms ease-in;
+}
+.chat-quick-peeking .chat-peeking .chat-turns {
+    opacity: 1;
+    animation: chat-peek-turns 200ms ease;
+}
+@keyframes chat-peek-turns {
+    from {
+        opacity: 0;
+    }
+}
+@media (prefers-reduced-motion: reduce) {
+    .chat-quick-card,
+    .chat-peeking .chat-turns {
+        transition: none;
+    }
+    .chat-quick-peeking .chat-quick-card,
+    .chat-quick-peeking .chat-peeking .chat-turns {
+        animation: none;
+    }
 }
 .composer-ghost {
     display: inline-flex;

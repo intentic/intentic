@@ -1282,11 +1282,12 @@ watch(
                 </div>
 
                 <!-- The composer and its gating notices; last row of the transcript, stuck to the bottom edge, rather than a separate band. -->
-                <!-- `bare` has no transcript above it and no scroller edge below, so it drops both the padding and the strip that masks them. -->
+                <!-- The strip's composer keeps ONE rect whether or not a transcript is open above it (chat.css): its padding is room a
+     peek adds above the box, never around it, since everything else would move the box being typed in. -->
                 <div
                     ref="footer"
                     class="chat-footer sticky bottom-0 z-10 mx-auto flex w-full max-w-[51rem] flex-col gap-2"
-                    :class="bare ? 'chat-footer-bare' : 'px-2 py-3'"
+                    :class="strip ? 'chat-footer-strip' : 'px-2 py-3'"
                 >
                     <!-- The composer is hidden only when another notice explains a blocked or unavailable state. -->
                     <Notice v-if="denied" tone="danger">{{ t(`chat.chatPane.googleAccountNoAccess`) }}</Notice>

@@ -200,16 +200,32 @@ it(`hands reach to whichever form is showing, in the frame it opens`, async () =
 // the composer's height while the panel was still parked offscreen.
 it(`sizes itself by whichever form is in flow, never by a measured height`, async () => {
     await mount(ChatQuickBar);
-    const pill = document.querySelector(`.chat-quick-pill`)!;
+    // The pill's own wrapper is what leaves the flow, so the transform stays free for the pill to be animated by.
+    const rest = document.querySelector(`.chat-quick-rest`)!;
     const host = document.querySelector(`.chat-quick-host`)!;
-    expect([pill.classList.contains(`absolute`), host.classList.contains(`absolute`)]).toEqual([false, true]);
+    expect([rest.classList.contains(`absolute`), host.classList.contains(`absolute`)]).toEqual([false, true]);
     expect(bar()!.style.height).toBe(``);
 
     press().click();
     await settle();
 
-    expect([pill.classList.contains(`absolute`), host.classList.contains(`absolute`)]).toEqual([true, false]);
+    expect([rest.classList.contains(`absolute`), host.classList.contains(`absolute`)]).toEqual([true, false]);
     expect(bar()!.style.height).toBe(``);
+});
+
+// Which of two utilities for the same property wins is the STYLESHEET's order, never the class attribute's. A static
+// `relative` beside a conditional `absolute` kept the hidden composer in flow, stacked under the pill — so opening the
+// box moved it out from under the pointer that opened it, which left, which closed it, which put the pill back under
+// the pointer: an enter/leave oscillation every 670ms, measured.
+it(`never carries two positions at once, since the class attribute's order settles nothing`, async () => {
+    await mount(ChatQuickBar);
+    const host = document.querySelector(`.chat-quick-host`)!;
+    expect(host.classList.contains(`relative`)).toBe(false);
+
+    press().click();
+    await settle();
+
+    expect(host.classList.contains(`absolute`)).toBe(false);
 });
 
 // The pill is the whole resting form: a second control on it was one more thing to mean, in the one place the reader
@@ -303,7 +319,10 @@ it(`folds the transcript away with the pointer, before the box itself goes`, asy
     await settle();
     expect(chatBarPeek.value).toBe(true);
 
+    // The turns stay mounted just long enough to fade with the card behind them — they are the panel's, so they cannot
+    // fade after the flag that draws them has dropped — and the box is still standing when they are gone.
     hoverOut();
+    vi.advanceTimersByTime(130);
     await settle();
     expect([chatBarPeek.value, opened()]).toEqual([false, true]);
 
@@ -325,6 +344,7 @@ it(`keeps the transcript on a press, and gives it back one Escape before the box
     expect(chatBarPeek.value).toBe(true);
 
     escape();
+    vi.advanceTimersByTime(130);
     await settle();
     expect([chatBarPeek.value, opened()]).toEqual([false, true]);
 
@@ -355,12 +375,13 @@ it(`the strip paints no surface of its own: the composer is the whole of it`, as
     await mount(ChatPanel, { bar: true });
 
     expect(document.querySelector(`.chat-panel`)!.classList.contains(`bg-card`)).toBe(false);
-    expect(document.querySelector(`.chat-footer`)!.classList.contains(`chat-footer-bare`)).toBe(true);
+    expect(document.querySelector(`.chat-footer`)!.classList.contains(`chat-footer-strip`)).toBe(true);
 });
 
-// A peek is this pane's turns arriving, not a transcript built beside the one /chat draws — and turns need a surface,
-// which is the one moment the strip paints one.
-it(`a peek lifts the withheld turns, on the one surface they can be read over a page`, async () => {
+// A peek is this pane's turns arriving, not a transcript built beside the one /chat draws. The card they need is the
+// strip's own, so the panel only clips to it — and the composer keeps the one class that holds its rect still, which
+// is what stops it jumping 13px up and 38px narrower as the transcript lands above it.
+it(`a peek lifts the withheld turns without moving the composer they arrive over`, async () => {
     const chat = useChat();
     chat.active.value.restoreMessages([{ role: `user`, text: `an earlier turn` }]);
     chatBarPeek.value = true;
@@ -368,8 +389,9 @@ it(`a peek lifts the withheld turns, on the one surface they can be read over a 
 
     expect(document.querySelectorAll(`.chat-turns`)).toHaveLength(1);
     expect(document.body.textContent).toContain(`an earlier turn`);
-    expect(document.querySelector(`.chat-panel`)!.classList.contains(`bg-card`)).toBe(true);
-    expect(document.querySelector(`.chat-footer`)!.classList.contains(`chat-footer-bare`)).toBe(false);
+    expect(document.querySelector(`.chat-panel`)!.classList.contains(`chat-peeking`)).toBe(true);
+    expect(document.querySelector(`.chat-panel`)!.classList.contains(`bg-card`)).toBe(false);
+    expect(document.querySelector(`.chat-footer`)!.classList.contains(`chat-footer-strip`)).toBe(true);
 });
 
 it(`the same panel drawn anywhere else still has its transcript, on its own surface`, async () => {
@@ -380,5 +402,5 @@ it(`the same panel drawn anywhere else still has its transcript, on its own surf
     expect(document.querySelectorAll(`.chat-turns`)).toHaveLength(1);
     expect(document.body.textContent).toContain(`an earlier turn`);
     expect(document.querySelector(`.chat-panel`)!.classList.contains(`bg-card`)).toBe(true);
-    expect(document.querySelector(`.chat-footer`)!.classList.contains(`chat-footer-bare`)).toBe(false);
+    expect(document.querySelector(`.chat-footer`)!.classList.contains(`chat-footer-strip`)).toBe(false);
 });

@@ -55,20 +55,53 @@ const HOVER_INTENT_MS = 250;
 const HOVER_GRACE_MS = 400;
 // The handle is a target reached on purpose, so its guard only has to outlast a pointer leaving the box across it.
 const PEEK_INTENT_MS = 140;
+// Long enough to read as leaving, short enough that nobody waits for it; must match the card's own exit duration,
+// since this is what keeps the turns mounted while they fade with it.
+const PEEK_EXIT_MS = 130;
 let timer: ReturnType<typeof setTimeout> | undefined;
 let peekTimer: ReturnType<typeof setTimeout> | undefined;
+let peekExit: ReturnType<typeof setTimeout> | undefined;
 const cancelTimer = (): void => {
     clearTimeout(timer);
     timer = undefined;
 };
+
+// Two states, not one, and both flip in the same render: `peekOpen` is whether the transcript is being asked for,
+// `chatBarPeek` is whether the panel is drawing it. They come apart only on the way out, where the turns have to stay
+// mounted long enough to fade — they belong to the panel, so they cannot fade after the flag that draws them drops.
+// The entry state is an ANIMATION rather than a transition (chat.css) precisely so nothing here has to wait a frame:
+// a flag set a frame late is a flag that is wrong for a frame, and Escape arriving in it closed the wrong thing.
+const peekOpen = ref(false);
+const openPeek = (): void => {
+    clearTimeout(peekTimer);
+    clearTimeout(peekExit);
+    peekTimer = peekExit = undefined;
+    peekOpen.value = true;
+    chatBarPeek.value = true;
+};
 const closePeek = (): void => {
     clearTimeout(peekTimer);
     peekTimer = undefined;
+    if (!peekOpen.value) {
+        return;
+    }
+    peekOpen.value = false;
+    peekExit = setTimeout(() => {
+        chatBarPeek.value = false;
+        peekExit = undefined;
+    }, PEEK_EXIT_MS);
+};
+// The whole form is leaving, so there is nothing for the transcript to fade out of: it goes with it, in one render.
+const dropPeek = (): void => {
+    clearTimeout(peekTimer);
+    clearTimeout(peekExit);
+    peekTimer = peekExit = undefined;
+    peekOpen.value = false;
     chatBarPeek.value = false;
 };
 onBeforeUnmount(() => {
     cancelTimer();
-    closePeek();
+    dropPeek();
 });
 
 // Words in the box are the one thing a close could lose sight of, so they hold it open; a live turn does not, since
@@ -94,7 +127,7 @@ const expand = (caret: boolean): void => {
 };
 const collapse = (): void => {
     cancelTimer();
-    closePeek();
+    dropPeek();
     expanded.value = false;
 };
 
@@ -123,7 +156,7 @@ const onEscape = (event: KeyboardEvent): void => {
     if (event.defaultPrevented) {
         return;
     }
-    if (chatBarPeek.value) {
+    if (peekOpen.value) {
         closePeek();
         return;
     }
@@ -144,14 +177,16 @@ const onFocusOut = (event: FocusEvent): void => {
 // which can hover at all.
 const onPeekEnter = (): void => {
     clearTimeout(peekTimer);
-    if (!chatBarPeek.value) {
-        peekTimer = setTimeout(() => (chatBarPeek.value = true), PEEK_INTENT_MS);
+    if (!peekOpen.value) {
+        peekTimer = setTimeout(openPeek, PEEK_INTENT_MS);
     }
 };
 const togglePeek = (): void => {
-    clearTimeout(peekTimer);
-    peekTimer = undefined;
-    chatBarPeek.value = !chatBarPeek.value;
+    if (peekOpen.value) {
+        closePeek();
+        return;
+    }
+    openPeek();
 };
 
 // Anything that asks for the caret — "New agent" from any surface, a board starter filling the box, a card summoned
@@ -208,49 +243,76 @@ const onPress = (): void => {
     <!-- Sits in the workspace cell rather than a row of its own, so it overlays the area instead of shortening it. -->
     <div
         v-if="chatParked"
-        class="chat-quick-seat pointer-events-none z-20 flex w-full justify-center self-end px-4 pb-4"
+        class="chat-quick-seat pointer-events-none z-20 flex w-full justify-center self-end px-4 pb-5"
         style="grid-area: workspace"
     >
-        <!-- NOTHING HERE TRANSITIONS. The swap is one render: an animated width reflowed the composer's own container queries
-     every frame of it, and the opacity crossfade between the two forms spent its first 100ms showing neither. -->
+        <!-- ONE WIDTH AT EVERY STATE, and the box centred inside it: what moves is opacity and transform, never a size.
+     Animating the width put the composer through its own container queries on every frame — the control row wrapped
+     and unwrapped mid-flight — and it is the one property here that cannot move without the layout moving with it.
+     Nothing hit-tests on this element (`pointer-events` inherits, so each form claims its own back): a 51rem strip of
+     hover target would open the box from halfway across the page. Enter and leave still fire, through the forms. -->
         <div
             ref="float"
-            class="chat-quick-float pointer-events-auto relative max-w-full"
-            :class="expanded ? `chat-quick-open w-[51rem]` : `w-[22rem]`"
+            class="chat-quick-float pointer-events-none relative w-[51rem] max-w-full"
+            :class="{ 'chat-quick-open': expanded, 'chat-quick-peeking': peekOpen }"
             @pointerenter="onEnter"
             @pointerleave="onLeave"
             @focusin="holdsFocus = true"
             @focusout="onFocusOut"
             @keydown.esc="onEscape"
         >
+            <!-- The peek's surface, drawn HERE rather than by the panel, because it has to arrive without the composer
+     arriving with it — and the composer is the panel's own child, so anything done to that element is done to the box
+     the reader is typing in. It spills past the box on three sides, which is how the card grows AROUND a composer
+     that does not move: 8px of it either side, 12px under it, exactly the room a card would have padded. -->
+            <div
+                v-if="chatBarPeek"
+                class="chat-quick-card pointer-events-auto absolute top-0 -right-2 -bottom-3 -left-2 rounded-2xl border border-line-strong bg-card shadow-2xl"
+            ></div>
+
             <!-- WHICHEVER FORM IS NOT SHOWING LEAVES THE FLOW instead of being measured out of it: the box is the size of what is
      actually in it at both ends, so no reading can be stale and no frame can be left standing on air. -->
             <!-- It fades to nothing rather than to `display: none`, since the caret a summons sends arrives in the same render and
      an unrendered box cannot take it. `inert` is a boolean attribute — present is inert whatever it says — and Vue
      strips a `false` only for the attributes it knows are boolean, which this is not. Hence `|| undefined` on both. -->
-            <button
-                type="button"
-                class="chat-quick-pill flex h-10 w-full cursor-pointer items-center gap-2 rounded-2xl border border-line-strong bg-card px-3 text-left shadow-lg"
-                :class="expanded ? `pointer-events-none absolute inset-x-0 bottom-0 opacity-0` : ``"
-                :inert="expanded || undefined"
-                :aria-expanded="standing === `asking` ? undefined : expanded"
-                :aria-label="standing === `asking` ? t(`chat.chatQuickBar.openChatAgentWaiting`) : t(`chat.chatQuickBar.writeToAgentHere`)"
-                @click="onPress"
-            >
-                <Icon v-if="standing === `asking`" name="exclamation-circle" class="shrink-0 text-2xs text-warning" />
-                <Icon v-else-if="standing === `working`" name="spinner" spin class="shrink-0 text-2xs text-link" />
-                <Icon v-else name="comments" class="shrink-0 text-2xs text-subtle" />
-                <span
-                    class="min-w-0 flex-1 truncate text-2xs"
-                    :class="standing === `asking` ? `text-warning` : standing === `inviting` ? `text-subtle` : `text-muted`"
-                    >{{ restingLine }}</span
-                >
-            </button>
-
-            <!-- The grown form: the panel's own composer, and nothing of this component's around it. -->
+            <!-- The wrapper is what leaves the flow, so the transform stays the pill's own: centring it with a translate
+     of its own would have slid it half its width across the box every time it faded. -->
             <div
-                class="chat-quick-host w-full"
-                :class="expanded ? `` : `pointer-events-none absolute inset-x-0 bottom-0 opacity-0`"
+                class="chat-quick-rest mx-auto w-fit max-w-full rounded-full border border-line-strong bg-card/80 shadow-lg backdrop-blur-md transition-[opacity,scale] motion-reduce:transition-none"
+                :class="
+                    expanded
+                        ? `pointer-events-none absolute inset-x-0 bottom-0 scale-95 opacity-0 duration-100 ease-in`
+                        : `pointer-events-auto duration-150 ease-out`
+                "
+            >
+                <button
+                    type="button"
+                    class="chat-quick-pill ui-chip h-9 max-w-[22rem] px-3 text-left"
+                    :inert="expanded || undefined"
+                    :aria-expanded="standing === `asking` ? undefined : expanded"
+                    :aria-label="standing === `asking` ? t(`chat.chatQuickBar.openChatAgentWaiting`) : t(`chat.chatQuickBar.writeToAgentHere`)"
+                    @click="onPress"
+                >
+                    <Icon v-if="standing === `asking`" name="exclamation-circle" class="shrink-0 text-2xs text-warning" />
+                    <Icon v-else-if="standing === `working`" name="spinner" spin class="shrink-0 text-2xs text-link" />
+                    <Icon v-else name="comments" class="shrink-0 text-2xs text-subtle" />
+                    <span
+                        class="min-w-0 truncate text-2xs"
+                        :class="standing === `asking` ? `text-warning` : standing === `inviting` ? `text-subtle` : `text-muted`"
+                        >{{ restingLine }}</span
+                    >
+                </button>
+            </div>
+
+            <!-- The grown form: the panel's own composer, and nothing of this component's around it. It rises the last few
+     pixels into place rather than cutting in, which is the whole of the motion: no size of anything changes. -->
+            <div
+                class="chat-quick-host w-full transition-[opacity,translate] motion-reduce:transition-none"
+                :class="
+                    expanded
+                        ? `pointer-events-auto relative duration-[170ms] ease-[cubic-bezier(0.16,1,0.3,1)]`
+                        : `pointer-events-none absolute inset-x-0 bottom-0 translate-y-1.5 opacity-0 duration-100 ease-in`
+                "
                 :inert="!expanded || undefined"
             >
                 <div ref="slot" class="contents"></div>
@@ -262,7 +324,7 @@ const onPress = (): void => {
             <button
                 v-if="expanded && hasTranscript"
                 type="button"
-                class="chat-quick-handle absolute top-0 left-1/2 z-10 flex h-5 w-12 -translate-x-1/2 -translate-y-1/2 cursor-pointer items-center justify-center rounded-full border border-line-strong bg-card text-subtle shadow-md hover:text-content"
+                class="chat-quick-handle pointer-events-auto absolute top-0 left-1/2 z-10 flex h-5 w-12 -translate-x-1/2 -translate-y-1/2 cursor-pointer items-center justify-center rounded-full border border-line-strong bg-card text-subtle shadow-md transition-colors hover:text-content"
                 v-tooltip.top="chatBarPeek ? t(`chat.chatQuickBar.hideConversation`) : t(`chat.chatQuickBar.whatWasSaidHover`)"
                 :aria-expanded="chatBarPeek"
                 :aria-label="t(`chat.chatQuickBar.conversationSoFar`)"
