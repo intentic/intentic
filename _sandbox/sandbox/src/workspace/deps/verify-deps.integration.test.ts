@@ -53,13 +53,29 @@ const fakeProcesses = (root: string, exitCode: number | undefined, started: stri
     } as unknown as ManagedProcesses;
 };
 
+// A pane that never reports: what the daemon's watch window is for, and the one path where a check is stopped mid-write.
+const hangingProcesses = (): ManagedProcesses => {
+    const live = new Set<string>();
+    return {
+        start: async (key: string) => void live.add(key),
+        running: (key: string) => live.has(key),
+        stop: async (key: string) => void live.delete(key),
+    } as unknown as ManagedProcesses;
+};
+
 // Fresh module per case, since the module's queue is process-wide and mustn't leak between tests.
 const freshQueue = async (): Promise<typeof import("./verify-deps.js")> => {
     vi.resetModules();
     return import("./verify-deps.js");
 };
 
-const deps = (root: string, processes: ManagedProcesses, events: WorkspaceEvent[], feed: string[]): VerifyDeps => ({
+const deps = (
+    root: string,
+    processes: ManagedProcesses,
+    events: WorkspaceEvent[],
+    feed: string[],
+    announced: { count: number } = { count: 0 },
+): VerifyDeps => ({
     workspace: { root },
     processes,
     logger: silent,
@@ -70,6 +86,7 @@ const deps = (root: string, processes: ManagedProcesses, events: WorkspaceEvent[
         },
     },
     emit: (event) => void events.push(event),
+    announce: () => (announced.count += 1),
     pollMs: 5,
     watchMaxMs: 200,
 });
@@ -192,6 +209,32 @@ test("an install nobody caused records its verdict and wakes nobody", async () =
     expect(started).toEqual(["app--verify"]);
     expect(feed).toEqual(["deps.verify_red"]);
     expect(events).toEqual([]);
+});
+
+// A build empties and rewrites its output dir, which the watcher prunes: nothing else can tell a browser that files a
+// repo tracks under `dist/` came back, so a review read mid-build would keep reporting them deleted.
+test("a finished check says it wrote the tree where nothing was watching", async () => {
+    const { queueVerify } = await freshQueue();
+    const root = await workspace();
+    await ready(root, { verify: "pnpm run build" });
+    const feed: string[] = [];
+    const announced = { count: 0 };
+    queueVerify(deps(root, fakeProcesses(root, 0, []), [], feed, announced), context, ["app"]);
+    await settle(() => feed.length > 0);
+    expect(feed).toEqual(["deps.verify_green"]);
+    expect(announced.count).toBe(1);
+});
+
+test("a check that outran the watch window says so too: it wrote before it was stopped", async () => {
+    const { queueVerify } = await freshQueue();
+    const root = await workspace();
+    await ready(root, { test: "vitest run" });
+    const feed: string[] = [];
+    const announced = { count: 0 };
+    queueVerify(deps(root, hangingProcesses(), [], feed, announced), context, ["app"]);
+    await settle(() => feed.length > 0);
+    expect(feed).toEqual(["deps.verify_lost"]);
+    expect(announced.count).toBe(1);
 });
 
 test("a chain with no event sink at all still checks and still records", async () => {

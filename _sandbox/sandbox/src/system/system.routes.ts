@@ -24,7 +24,7 @@ import { SERVICE_SESSION_PREFIX, serviceSession } from "../processes/service-pro
 import { foreground, PANE_FORMAT, paneStates, SHELL } from "../terminal/pane-state.js";
 import { subscribeRepoChanges } from "../workspace/watch/repo-watch.js";
 import { subscribeRefChanges } from "../git/remote/ref-watch.js";
-import { subscribeWorkspaceChanges } from "../workspace/watch/workspace-watch.js";
+import { subscribeUnwatchedWrites, subscribeWorkspaceChanges } from "../workspace/watch/workspace-watch.js";
 import { subscribeDerived } from "../derived/sidecar-service.js";
 import { publishRuntimeChange, subscribeRuntimeChanges } from "./runtime-watch.js";
 import { registerPresence, subscribePresence, updatePresence } from "./presence.js";
@@ -104,6 +104,12 @@ async function* systemEvents(
         enqueue({ kind: "workspaceChanged", paths });
         onWake();
     });
+    // The unnamed batch for a write the watcher could not see: a check's build rewrites tracked files under `dist/`,
+    // which is pruned, so without this a review read mid-build stands as the answer until something remounts the panel.
+    const unsubscribeAnnounced = subscribeUnwatchedWrites(() => {
+        enqueue({ kind: "workspaceChanged", paths: [] });
+        onWake();
+    });
     // Shadows land under the state directory the watcher ignores on purpose, so no workspaceChanged batch can ever
     // carry them; without this frame a reader watching a file waits for text that already arrived.
     const unsubscribeDerived = subscribeDerived((paths) => {
@@ -170,6 +176,7 @@ async function* systemEvents(
     } finally {
         abort.removeEventListener("abort", onWake);
         unsubscribe();
+        unsubscribeAnnounced();
         unsubscribeDerived();
         unsubscribeRepos();
         unsubscribeRefs();

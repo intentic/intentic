@@ -4,6 +4,7 @@ import type { Services } from "../../composition.js";
 import type { DependencyLandOrigin } from "../../workspace/deps/dependency-origin.js";
 import type { ReconcileOutcome } from "../../workspace/deps/reconcile-deps.js";
 import { queueVerify, type VerifyDeps } from "../../workspace/deps/verify-deps.js";
+import { announceUnwatchedWrite } from "../../workspace/watch/workspace-watch.js";
 
 // Every land that reached the tree gets the whole repository's check, whichever door it came through: the auto-land
 // that ends a turn or the Land button. When the land left node_modules behind, the reconciler's install listener
@@ -23,6 +24,7 @@ export const verifyLandedTree = async (
         verifyStore: services.verifyStore,
         activity: services.activity,
         emit,
+        announce: announceUnwatchedWrite,
         queue: queueWhole(services.heavyCommands.read),
     };
     const deps = await services.dependencies.reconcileLand(origin);

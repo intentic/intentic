@@ -95,7 +95,7 @@ import { startRuntimeHealth } from "./agent/providers/adapter-health.js";
 import { startSidecarService } from "./derived/sidecar-service.js";
 import { startRepoWatch, subscribeRepoChanges } from "./workspace/watch/repo-watch.js";
 import { startRefWatch, subscribeRefChanges } from "./git/remote/ref-watch.js";
-import { startWorkspaceWatch, subscribeWorkspaceChanges } from "./workspace/watch/workspace-watch.js";
+import { announceUnwatchedWrite, startWorkspaceWatch, subscribeWorkspaceChanges } from "./workspace/watch/workspace-watch.js";
 
 // Sandbox container's entrypoint; config comes from env injected at run time, never baked in. Listeners come up
 // immediately (`/health`, `/events`); data routes wait behind the readiness gate below until the boot chain finishes.
@@ -674,6 +674,7 @@ const main = async (): Promise<void> => {
         verifyStore: services.verifyStore,
         activity: services.activity,
         emit: (event) => emitWorkspaceEvent(services, event, streamAgent),
+        announce: announceUnwatchedWrite,
         queue: queueWhole(services.heavyCommands.read),
     };
     services.dependencies.subscribe(({ dir, origin }) => {

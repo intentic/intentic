@@ -31,6 +31,9 @@ export interface VerifyDeps {
     readonly activity: Pick<ActivityStore, "append">;
     // Injected event sink, so the chain needs no wake fn or full services object; absent for a causeless install.
     readonly emit?: (event: WorkspaceEvent) => void;
+    // Says the check wrote the tree where nothing was watching (announceUnwatchedWrite); required, since a check whose
+    // writes go unannounced leaves every browser holding whatever it read mid-build.
+    readonly announce: () => void;
     // Same queue an agent's turn uses, so a check can't stack beside live turns; absent means unqueued.
     readonly queue?: (command: string) => Promise<string>;
     // Test dials; the daemon uses the defaults.
@@ -106,7 +109,12 @@ const verifyProject = async (verify: PendingVerify, dir: string, command: string
         cwd: join(deps.workspace.root, dir),
         oneShot: true,
     });
-    if (!(await watchPanel(deps, key))) {
+    const settled = await watchPanel(deps, key);
+    // A check runs the project's own build, which empties and rewrites an output dir the repo may track; `dist/` is
+    // pruned from the watcher, so nothing else can say those files came back, and a review scanned mid-build keeps
+    // reporting them deleted for as long as it stays cached. Sent however the watch ended: it wrote either way.
+    deps.announce();
+    if (!settled) {
         await deps.processes.stop(key);
         activity(
             deps,

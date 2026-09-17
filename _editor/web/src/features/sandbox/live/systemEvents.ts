@@ -83,6 +83,27 @@ const applyHello = (event: Extract<SystemEvent, { kind: `hello` }>, sandboxId: s
     }
 };
 
+// Paths the daemon saw change on disk, or the unnamed batch that stands for "something moved and I cannot say what".
+const applyWorkspaceChanged = (event: Extract<SystemEvent, { kind: `workspaceChanged` }>): void => {
+    markWorkspaceChanged(event.paths);
+    // Keys are core's table unioned with what activated extensions declare; an inactive extension contributes nothing.
+    // An empty path list means the daemon truncated the batch, so it invalidates every file-bound key, not none.
+    const stale = event.paths.length === 0 ? fileBoundQueryKeys(contributedFileBindings()) : staleQueryKeys(event.paths, contributedFileBindings());
+    for (const key of stale) {
+        void queryClient.invalidateQueries({ queryKey: [key] });
+    }
+    // Same frame, announced for rail badges with no mounted query; sent even for an empty batch, the largest change
+    // there is.
+    emitFilesChanged(event.paths);
+    // Skipped during a streaming turn to avoid hammering `git status` on every write; useChanges covers it at
+    // stream-end. An unnamed batch is exempt: it is the daemon saying it cannot name what moved (a truncated burst, a
+    // reconnect, a check whose build rewrote tracked files under a dir the watcher prunes), and the review has no other
+    // way to hear it — skipping one leaves whatever was read mid-write standing as the answer.
+    if (event.paths.length === 0 || !useChat().streaming.value) {
+        refreshChanges();
+    }
+};
+
 /** Routes one typed `/events` frame to whatever it makes stale. */
 export const applySystemEvent = (event: SystemEvent, sandboxId: string): void => {
     switch (event.kind) {
@@ -152,26 +173,8 @@ export const applySystemEvent = (event: SystemEvent, sandboxId: string): void =>
             // demand, never cached per file, so there is no key to invalidate here.
             markDerivedChanged(event.paths, event.queue);
             return;
-        case `workspaceChanged`: {
-            markWorkspaceChanged(event.paths);
-            // Keys are core's table unioned with what activated extensions declare; an inactive extension contributes
-            // nothing.
-            // An empty path list means the daemon truncated the batch, so it invalidates every file-bound key, not
-            // none.
-            const stale =
-                event.paths.length === 0 ? fileBoundQueryKeys(contributedFileBindings()) : staleQueryKeys(event.paths, contributedFileBindings());
-            for (const key of stale) {
-                void queryClient.invalidateQueries({ queryKey: [key] });
-            }
-            // Same frame, announced for rail badges with no mounted query; sent even for an empty batch, the largest
-            // change there is.
-            emitFilesChanged(event.paths);
-            // Skipped during a streaming turn to avoid hammering `git status` on every write; useChanges covers it at
-            // stream-end.
-            if (!useChat().streaming.value) {
-                refreshChanges();
-            }
+        case `workspaceChanged`:
+            applyWorkspaceChanged(event);
             return;
-        }
     }
 };

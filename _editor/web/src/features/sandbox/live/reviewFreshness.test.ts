@@ -13,6 +13,11 @@ vi.mock("../client/useSandbox", async () => {
     };
 });
 vi.mock("../client/sandboxClient", () => ({ sandboxJson: vi.fn(), sandboxRequest: vi.fn() }));
+// The two fields this import chain reads, both only as `.value`: `streaming` here, `conversations` in useChanges' own
+// module-scope watch. Hoisted so a case can flip `streaming` before the frame is routed.
+const streaming = vi.hoisted(() => ({ value: false }));
+const conversations = vi.hoisted(() => ({ value: [] as { streaming: { value: boolean } }[] }));
+vi.mock("../../chat/run/useChat", () => ({ useChat: () => ({ streaming, conversations }) }));
 
 import type { AgentSummary } from "@intentic/sandbox-contract";
 import { AGENT_DIFF, AGENTS, GIT_CHANGES } from "../../../lib/queryKeys";
@@ -55,6 +60,7 @@ afterEach(() => {
     vi.advanceTimersByTime(5_000);
     vi.useRealTimers();
     registry.value = [];
+    streaming.value = false;
 });
 
 // Whether anything in the batch would drop this key, by whichever means it was filed under.
@@ -77,6 +83,20 @@ it(`refreshes every open agent review when a commit moves the refs`, () => {
     expect(reaches(GIT_CHANGES.of())).toBe(true);
     // Transcripts don't refresh: a commit says nothing about what anyone said, and rereading one is expensive.
     expect(reaches(AGENTS.of(`a1`, `transcript`))).toBe(false);
+});
+
+// A turn's writes are named, and scanning per name would spend a `git status` per repo on each one — but an unnamed
+// batch is the daemon saying it cannot name what moved. The post-land check's build rewrites tracked files under
+// `dist/`, which the watcher prunes, so this frame is the only word a browser gets that they came back; dropping it
+// leaves whatever was read mid-build standing as the review's answer until something remounts the panel.
+it(`re-reads the review on an unnamed batch mid-turn, and still not on a named one`, () => {
+    streaming.value = true;
+
+    applySystemEvent({ kind: `workspaceChanged`, paths: [`app/src/main.ts`] }, SANDBOX);
+    expect(reaches(GIT_CHANGES.of())).toBe(false);
+
+    applySystemEvent({ kind: `workspaceChanged`, paths: [] }, SANDBOX);
+    expect(reaches(GIT_CHANGES.of())).toBe(true);
 });
 
 // A land writes the tree file by file and moves refs as it goes, so it fires this signal repeatedly against a patch

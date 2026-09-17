@@ -1,7 +1,16 @@
 import { STATE_DIR } from "@intentic/constants";
 import { IGNORED_DIRS } from "@intentic/workspace-ignore";
 import { afterEach, expect, test, vi } from "vitest";
-import { createPathBatcher, DEBOUNCE_MS, isWatchIgnored, MAX_PATHS, watchIgnoreGlobs } from "./workspace-watch.js";
+import {
+    announceUnwatchedWrite,
+    createPathBatcher,
+    DEBOUNCE_MS,
+    isWatchIgnored,
+    MAX_PATHS,
+    subscribeUnwatchedWrites,
+    subscribeWorkspaceChanges,
+    watchIgnoreGlobs,
+} from "./workspace-watch.js";
 
 // The coalescing rule on its own clock: the integration suite can prove a change is announced, but not how many batches
 // a burst becomes, since that depends on runner timing. Batching itself is decided here, on fake timers.
@@ -101,6 +110,23 @@ test("every skip glob covers both the directory itself and its subtree", () => {
         expect(globs).toContain(`${glob}/**`);
     }
     expect(globs).toHaveLength(bare.length * 2);
+});
+
+test("a build's write under a pruned dir reaches browsers only by being announced, and no watcher subscriber", () => {
+    const root = "/work";
+    // The watcher cannot report this one: a repo that tracks its build output has files no watched batch ever names.
+    expect(isWatchIgnored(root, `${root}/app/dist/extension.js`)).toBe(true);
+    let announced = 0;
+    const watched: string[][] = [];
+    const stopAnnounced = subscribeUnwatchedWrites(() => (announced += 1));
+    const stopWatched = subscribeWorkspaceChanges((paths) => watched.push(paths));
+    announceUnwatchedWrite();
+    stopAnnounced();
+    stopWatched();
+    announceUnwatchedWrite();
+    expect(announced).toBe(1);
+    // The reconciler reads an unnamed batch as "a manifest may have moved", which a finished check is not.
+    expect(watched).toEqual([]);
 });
 
 test("the junk-dir globs are generated from the shared list, not restated", () => {

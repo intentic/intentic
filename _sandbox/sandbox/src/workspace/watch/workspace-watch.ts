@@ -196,3 +196,18 @@ export const subscribeWorkspaceChanges = (listener: (paths: string[]) => void): 
     subscribers.add(listener);
     return () => subscribers.delete(listener);
 };
+
+// The daemon having written the tree where nothing was watching: IGNORED_DIRS (`dist/`, …) is pruned above, so a repo
+// that tracks what a build writes there changes with no batch to carry it. Carries no paths, because nobody saw which.
+// Its own subscriber set, not the watched one: this exists for browsers, while the daemon's own reconcilers read an
+// unnamed batch as "a manifest may have moved" and must not be told that by a check that only rebuilt.
+const announcers = new Set<() => void>();
+export const subscribeUnwatchedWrites = (listener: () => void): (() => void) => {
+    announcers.add(listener);
+    return () => announcers.delete(listener);
+};
+export const announceUnwatchedWrite = (): void => {
+    for (const listener of announcers) {
+        listener();
+    }
+};
