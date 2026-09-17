@@ -44,7 +44,11 @@ const unpack = (format: ArchiveFormat, archive: string, target: string, stdout: 
         child.stderr?.on(`data`, (chunk: string) => {
             complaint = (complaint + chunk).slice(-STDERR_TAIL);
         });
-        child.on(`error`, reject);
+        // The image bakes every tool named above, so a missing one is a broken image rather than a bad archive:
+        // say which binary is gone instead of leaving "spawn ENOENT" as the whole account.
+        child.on(`error`, (failure: NodeJS.ErrnoException) =>
+            reject(failure.code === `ENOENT` ? new Error(`${command} is not installed in this sandbox`) : failure),
+        );
         child.on(`close`, (code, signal) => {
             if (succeeded(format, code)) {
                 resolve();

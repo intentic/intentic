@@ -33,6 +33,8 @@ LABEL org.opencontainers.image.source=https://github.com/intentic/intentic
 #                           compiles it from source
 #   ripgrep                 the iq engine's lexical tier shells into `rg --json`, so the iq suites need it
 #   openssh-client          sandbox git access generates its ed25519 key with ssh-keygen, so that suite needs it
+#   zip + unzip             the workspace's Extract route spawns unzip, and its suite builds the fixtures with
+#                           zip; the sandbox runtime installs the same pair (tar and gzip come with the base)
 #   tmux                    the agent's shell-busy probe reads one tmux behaviour and nothing else (a window
 #                           whose command exited stays listed as a DEAD pane), so agent-terminals.integration
 #                           runs against a REAL private tmux server — stub it and the test asserts the stub
@@ -40,7 +42,7 @@ LABEL org.opencontainers.image.source=https://github.com/intentic/intentic
 # The docker apt repo is added the same way the sandbox's docker feature pack adds it
 # (_sandbox/sandbox/image-packs/docker.Dockerfile); resolved once, here, instead of in three jobs at runtime.
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends ca-certificates curl git python3 make g++ ripgrep openssh-client tmux \
+    && apt-get install -y --no-install-recommends ca-certificates curl git python3 make g++ ripgrep openssh-client tmux zip unzip \
     && install -m 0755 -d /etc/apt/keyrings \
     && curl -fsSL https://download.docker.com/linux/debian/gpg -o /etc/apt/keyrings/docker.asc \
     && chmod a+r /etc/apt/keyrings/docker.asc \
@@ -88,4 +90,4 @@ RUN curl -fsSL https://get.pnpm.io/install.sh | env PNPM_VERSION=12.4.1 SHELL=/b
 # Fail the image build, not some pipeline three days later, if any of the baked tooling is missing.
 RUN node --version && pnpm --version && git --version && docker --version && docker buildx version \
     && bun --version && rg --version && tmux -V && python3 --version && make --version | head -1 && g++ --version | head -1 \
-    && command -v ssh-keygen
+    && command -v ssh-keygen && command -v zip && command -v unzip && command -v tar && command -v gzip
