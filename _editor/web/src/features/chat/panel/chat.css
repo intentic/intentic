@@ -171,14 +171,31 @@
 /* THE LANE PAST THE READING COLUMN, and every mark that stands in it (ChatAsideLane): a turn's thinking, the notes the
    sandbox prepended, an errand's own words, a hidden run of tool calls. One bar per row carrying all of that row's
    marks, so two of them can never stack on each other out there. */
+.chat-turns {
+/* The room the marks stand in, past the column's own gutter: a thought and a run of tool calls measure 5.25rem side by
+   side, and a wider one slides back toward the text rather than off the edge (see the lane rule below). */
+    --chat-lane: 5.5rem;
+/* How far past the column's text a row keeps painting: that gutter, that lane, and the ring a pressed mark draws
+   outside itself. EVERY edge out here is cut to this one distance, which is why it is written down once. */
+    --chat-lane-reserve: calc(var(--chat-gutter) + var(--chat-lane) + 0.125rem);
+}
 .chat-mark-bar {
     padding-block: 0.125rem;
 }
-@container (min-width: 61rem) {
-/* A paint-contained row cannot clip the out-of-flow lane or its scaled ring. */
+/* A ROW PAINT-CLIPS AT ITS OWN EDGE (content-visibility), and a mark standing on that edge draws a focus ring outside
+   itself: without this the keyboard ring on the last mark is the one pixel the row cuts. */
+.chat-message:has(.chat-mark-bar) {
+    margin-right: -0.125rem;
+    padding-right: 0.125rem;
+}
+/* 52.5rem of column, a lane on each side of it, and the strips the scroller reserves: under that width the pane cannot
+   hold the lane clear of the scrollbar, so the marks stay in the column on their own right-aligned bar. */
+@container (min-width: 65.5rem) {
+/* The reserve, spent: negative margin then equal padding, so the row paints out to the lane's edge without the text
+   measure moving a pixel. */
     .chat-pane .chat-message:has(.chat-mark-bar) {
-        margin-right: -6.5rem;
-        padding-right: 6.5rem;
+        margin-right: calc(-1 * var(--chat-lane-reserve));
+        padding-right: var(--chat-lane-reserve);
         margin-block: -0.625rem;
         padding-block: 0.625rem;
     }
@@ -187,12 +204,15 @@
     .chat-pane .chat-mark-bar {
         padding-block: 0.875rem;
     }
-/* Left edge on the far side of the controls' gutter, right edge wherever the marks leave it: see the lane rule above. */
+/* Right edge ON THE RESERVE'S OWN EDGE, marks laid from the left of the lane: every row's first mark stands the same
+   distance past the text, and a lane that outgrows its room — a three-digit count, a popped-out transcript's larger
+   type — slides back toward the column instead of under the clip, where it used to lose a mark. */
     .chat-pane .chat-mark-lane {
         position: absolute;
         top: 50%;
-        left: calc(100% + var(--chat-gutter));
+        right: calc(0.125rem - var(--chat-lane-reserve));
         width: max-content;
+        min-width: var(--chat-lane);
         translate: 0 -50%;
     }
     .chat-pane .chat-mark-bar-open {
@@ -205,12 +225,12 @@
     }
 /* ...BUT ITS HAIRLINE MAY NOT FOLLOW IT OUT THERE. */
     .chat-pane .chat-prompt-pinned::after {
-        right: 6.5rem;
+        right: var(--chat-lane-reserve);
     }
 /* ...AND THE PINNED PROMPT HAS TO REACH THE MARGIN TOO, or the marks do not pass under it. */
     .chat-pane .chat-prompt {
-        margin-right: -6.5rem;
-        padding-right: 6.5rem;
+        margin-right: calc(-1 * var(--chat-lane-reserve));
+        padding-right: var(--chat-lane-reserve);
     }
 }
 /* HOW WHAT A MARK STANDS FOR ARRIVES (the Transition in ChatAsideLane). */

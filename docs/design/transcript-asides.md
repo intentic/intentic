@@ -35,7 +35,7 @@ So there is no second placement to learn, and nothing needed a new icon to carry
 | An errand's exact words | the errand's own glyph | the prompt the app sent |
 | A hidden run of tool calls | the most notable call's glyph + how many | the rows the shown mode draws |
 
-The name is on hover and on `aria-label`, because the lane is 6.5rem and "Sent with your message" is not.
+The name is on hover and on `aria-label`, because the lane is 5.5rem and "Sent with your message" is not.
 
 ## 3. One bar per row, not one per mark
 
@@ -49,7 +49,25 @@ an assistant turn's thinking and its hidden run are one row's worth of marks, an
 bar they share. It also means a reader never has two things open under one bar arguing about which the bar
 is for.
 
-## 4. What is NOT a mark
+## 4. The lane hangs from its outer edge
+
+A row paint-clips at its own box — `content-visibility: auto` is what lets a long transcript skip the turns nobody
+is looking at — so the marks only exist out there because the row reserves the margin they stand in. Two custom
+properties say it once: `--chat-lane` is the room the marks get past the column's gutter, and `--chat-lane-reserve`
+is that gutter, the lane and a focus ring together — the one distance the row's paint box, the pinned prompt and
+its hairline are all cut to. They used to be three hand-written `6.5rem`s against a lane that measured 5.25rem
+with two marks in it, and the second mark lost a third of itself to the clip.
+
+The lane hangs from the outer end of that reserve rather than from the column, with `min-width: var(--chat-lane)`
+holding its left edge out at the gutter. A row's first mark therefore stands where every other row's does, and a
+lane that outgrows its room — a three-digit count, a popped-out transcript's larger type — slides back toward the
+text rather than past the clip.
+
+And none of it happens until the pane can hold it: 52.5rem of column, a lane on each side of it, and the strips
+the scroller reserves on both edges. Under 65.5rem the marks stay in the column on their own bar, right-aligned on
+the same edge and in the same order — in flow, where nothing can cut them.
+
+## 5. What is NOT a mark
 
 **An errand is a turn**, not an aside on one. A mark with nothing in flow beside it would make a turn the
 app sent on the user's behalf look like a turn that came from nowhere. So it says one quiet line *on the
@@ -61,7 +79,7 @@ row.
 **Tool calls a reader asked to see** are rows, not a mark. That preference is the whole of the question the
 mark otherwise asks.
 
-## 5. `bg-canvas` is a hole, not a surface
+## 6. `bg-canvas` is a hole, not a surface
 
 Everything opened in the transcript used to be `rounded border border-line bg-canvas`. Canvas sits *below*
 the panel, so a box drawn on it reads as a hole cut through the turn rather than a part of it, and the
@@ -72,7 +90,7 @@ column's own radius. It is opaque rather than an alpha wash so a sticky gutter i
 line numbers) can reuse the fill and still hide what scrolls under it. This is the card option preview's
 answer (`flat-decision-cards.md` §4) spent everywhere else in the transcript.
 
-## 6. Two radii
+## 7. Two radii
 
 The column had four — `rounded` (0.25rem) on tool output, `rounded-md` on the prompt toggle and a code body,
 `rounded-lg` on the bubbles, and the mark's pill — mixed rather than laddered, which is what made an opened
@@ -82,7 +100,7 @@ tool call look like a different app from the message above it.
 (`--radius-md`) is kept for the two things that sit *inside* another surface — a held command inside a
 permission card, a hover row inside an inset — where a curve equal to its parent's reads as a mistake.
 
-## 7. Consequences
+## 8. Consequences
 
 - `ChatFold.vue`, `ChatThinking.vue` and `ChatToolRun.vue` are gone. `ChatAsideLane.vue` is the bar and the
   marks; `ChatTurnAsides.vue` is an assistant turn's two of them, shared by the chat and the Subagents page
