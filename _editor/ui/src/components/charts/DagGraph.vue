@@ -4,6 +4,7 @@ import { VueFlow, BaseEdge, Handle, Position } from "@vue-flow/core";
 import type { Edge, Node, VueFlowStore } from "@vue-flow/core";
 import "@vue-flow/core/dist/style.css";
 import { computed, nextTick, onBeforeUnmount, ref, shallowRef, useId, watch } from "vue";
+import { useDevice } from "../../composables/useDevice.js";
 import { type DagEdge, type DagNode, laneKey, lanePath, layoutDag, layoutSignature } from "./dagLayout.js";
 
 const {
@@ -20,6 +21,7 @@ const {
     nodeSep,
     fitAlign = `center`,
     fitPadding,
+    touchPan = false,
 } = defineProps<{
     nodes: readonly DagNode<T>[];
     edges: readonly DagEdge[];
@@ -42,6 +44,9 @@ const {
     fitAlign?: `center` | `start`;
     // Inset around the fitted picture as a fraction of the frame; `{x,y}` sets horizontal/vertical separately.
     fitPadding?: number | { readonly x: number; readonly y: number };
+    // Whether a finger may pan and pinch the graph. Off by default: on a phone a graph sits in a scrolling page, and
+    // d3-zoom claiming the touch would stop the page under it from scrolling. A full-pane host turns it on.
+    touchPan?: boolean;
 }>();
 
 // Which node is selected; re-clicking the selected node clears it.
@@ -56,6 +61,11 @@ defineSlots<{
 
 // Unique per instance: Vue Flow scopes its injected state by id, and two graphs may share a page.
 const flowId = useId();
+
+// A mouse always gets the gestures; a coarse pointer only where the host asked (touchPan). With every gesture off,
+// Vue Flow's zoom filter declines the touch and the browser scrolls the page instead.
+const { coarse } = useDevice();
+const gestures = computed(() => touchPan || !coarse.value);
 
 // Single source for layout inputs; positions, lanes, and the refit signature must all read the same spacing.
 const layoutOptions = computed(() => ({
@@ -255,6 +265,10 @@ const toggle = (id: string): void => {
             :nodes-connectable="false"
             :elements-selectable="true"
             :zoom-on-double-click="false"
+            :pan-on-drag="gestures"
+            :zoom-on-pinch="gestures"
+            :zoom-on-scroll="gestures"
+            :pan-on-scroll="false"
             @pane-ready="onReady"
             @nodes-initialized="refit()"
             @move-start="hold()"

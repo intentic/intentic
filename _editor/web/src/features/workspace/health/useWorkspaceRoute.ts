@@ -1,3 +1,4 @@
+import { useDevice } from "@intentic/ui";
 import { computed, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useWorkspaceTabs } from "../tabs/useWorkspaceTabs";
@@ -36,12 +37,19 @@ export function useWorkspaceRoute(): void {
     const activeFilePath = computed(() => (activeTab.value?.kind === `file` ? activeTab.value.path : ``));
 
     // Reconcile once at mount: a deep link wins; otherwise the singleton's open file is asserted into the URL.
+    // Not on a phone, where the URL is the state: a bare /workspace there is the list or the Review tab's Changes
+    // panel, and a file tab restored from storage on a cold load would put the viewer over whichever was asked for.
+    const { mobile } = useDevice();
     if (urlPath.value !== ``) {
         if (urlPath.value !== activeFilePath.value) {
             openFile(urlPath.value);
         }
     } else if (activeFilePath.value !== ``) {
-        void router.replace({ name: `workspace`, params: { path: activeFilePath.value.split(`/`) }, query: route.query });
+        if (mobile.value) {
+            activeId.value = null;
+        } else {
+            void router.replace({ name: `workspace`, params: { path: activeFilePath.value.split(`/`) }, query: route.query });
+        }
     }
 
     // State -> URL: an active-file change reflects into the path; guards against ping-pong with the watcher below.

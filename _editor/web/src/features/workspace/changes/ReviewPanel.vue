@@ -2,6 +2,7 @@
 import type { GitChange, GitDiffSide, LandedMessage, LandedMessageDraft, RepoChanges, RepoTarget } from "@intentic/api-contract";
 import { Button, ChangeStatusMark, growTextarea, ui, Modal, timeAgo, useDevice, type IconName, vAction } from "@intentic/ui";
 import { useNow } from "@intentic/ui/async";
+import { useWorkspaceTabs } from "../tabs/useWorkspaceTabs";
 import { plural } from "@intentic/base/format";
 import { computed, ref, watch } from "vue";
 import ProviderLogo from "../../chat/accounts/ProviderLogo.vue";
@@ -62,7 +63,10 @@ const now = useNow(() => pushFlow.running.value || pushFlow.held.value !== undef
 const scannable = computed(() => changes.repos.value.filter((repo) => repo.error === undefined));
 const unscannable = computed(() => changes.repos.value.filter((repo) => repo.error !== undefined));
 // The open mode rides the gesture: a click previews (replaced by the next look), a double-click keeps the tab.
-const emit = defineEmits<{ "open-diff": [payload: DiffPayload, mode: OpenMode]; "fill-diff": [payload: DiffPayload] }>();
+const emit = defineEmits<{ "open-diff": [payload: DiffPayload, mode: OpenMode] }>();
+// The body lands in the tabs store directly, not through the host: on a phone the host swaps this panel out for the
+// viewer the moment the diff opens, and an emit from an unmounted panel reaches nobody.
+const { fillDiff } = useWorkspaceTabs();
 
 const collapsed = ref<ReadonlySet<string>>(new Set());
 const toggleGroup = (repo: string): void => {
@@ -333,7 +337,7 @@ const openDiff = (repo: string, side: GitDiffSide, change: GitChange, mode: Open
         ...diffRawUrls({ source: `working`, repo, side }, change.path, change.status),
     };
     emit(`open-diff`, { ...tab, pending: true }, mode);
-    void changes.fileDiff(repo, change.path, side).then((body) => emit(`fill-diff`, { ...tab, ...body }));
+    void changes.fileDiff(repo, change.path, side).then((body) => fillDiff({ ...tab, ...body }));
 };
 
 // Prefetching is the app's own background loader now, not this panel's mount — it used to only start warming

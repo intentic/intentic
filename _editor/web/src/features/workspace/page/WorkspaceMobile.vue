@@ -92,7 +92,7 @@ const treeNotice = computed<NoticeModel | undefined>(() =>
 const { enqueue } = useUploadQueue();
 const { say } = useNotifications();
 // Open file lives in the URL, synced by useWorkspaceRoute; this view keeps only its own state (dir, diff).
-const { tabs, activeId, activeTab, openLine, openFile, openAtLine, openDiff, fillDiff } = useWorkspaceTabs();
+const { tabs, activeId, activeTab, openLine, openFile, openAtLine, openDiff } = useWorkspaceTabs();
 useWorkspaceRoute();
 
 // Route-driven navigation.
@@ -436,10 +436,10 @@ const onPick = (event: Event): void => {
             <NoticeStack :of="[actionError, treeNotice]" class="shrink-0 px-3 py-1.5" />
 
             <template v-if="segment === 'changes'">
-                <SavePanel v-if="maker" @open-diff="openDiffNav" @fill-diff="fillDiff" />
-                <ReviewPanel v-else @open-diff="openDiffNav" @fill-diff="fillDiff" />
+                <SavePanel v-if="maker" @open-diff="openDiffNav" />
+                <ReviewPanel v-else @open-diff="openDiffNav" />
             </template>
-            <HistoryPanel v-else-if="segment === 'history'" @open-diff="openDiffNav" @fill-diff="fillDiff" />
+            <HistoryPanel v-else-if="segment === 'history'" @open-diff="openDiffNav" />
 
             <template v-else>
                 <!-- Search: name filters the current directory instantly; content searches the daemon. -->

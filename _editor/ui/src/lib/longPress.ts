@@ -14,11 +14,28 @@ interface LongPressState {
     down: (event: PointerEvent) => void;
     move: (event: PointerEvent) => void;
     cancel: () => void;
-    click: (event: MouseEvent) => void;
     contextmenu: (event: Event) => void;
 }
 
 const states = new WeakMap<HTMLElement, LongPressState>();
+
+// The finger lifting after a long press is not a tap. By then the handler's sheet sits under it, so the release's
+// click would land on the sheet's mask and dismiss what the press just opened; the first click within the window
+// is dropped wherever it lands, not only on the pressed element.
+const RELEASE_WINDOW_MS = 1000;
+const swallowRelease = (): void => {
+    const swallow = (event: MouseEvent): void => {
+        event.stopImmediatePropagation();
+        event.preventDefault();
+        stop();
+    };
+    const timer = setTimeout(() => stop(), RELEASE_WINDOW_MS);
+    const stop = (): void => {
+        clearTimeout(timer);
+        document.removeEventListener(`click`, swallow, true);
+    };
+    document.addEventListener(`click`, swallow, true);
+};
 
 export const vLongpress: Directive<HTMLElement, (event: PointerEvent) => void> = {
     mounted(el, binding) {
@@ -38,6 +55,7 @@ export const vLongpress: Directive<HTMLElement, (event: PointerEvent) => void> =
                     state.timer = undefined;
                     state.fired = true;
                     navigator.vibrate?.(10);
+                    swallowRelease();
                     state.handler(event);
                 }, DURATION_MS);
             },
@@ -55,19 +73,12 @@ export const vLongpress: Directive<HTMLElement, (event: PointerEvent) => void> =
                     state.timer = undefined;
                 }
             },
-            click: (event) => {
-                if (!state.fired) {
-                    return;
-                }
-                event.stopPropagation();
-                event.preventDefault();
-                state.fired = false;
-            },
             contextmenu: (event) => {
                 // The browser's own long-press context menu / text selection would fight the handler.
                 if (state.timer !== undefined || state.fired) {
                     event.preventDefault();
                 }
+                state.fired = false;
             },
         };
         states.set(el, state);
@@ -75,7 +86,6 @@ export const vLongpress: Directive<HTMLElement, (event: PointerEvent) => void> =
         el.addEventListener(`pointermove`, state.move);
         el.addEventListener(`pointerup`, state.cancel);
         el.addEventListener(`pointercancel`, state.cancel);
-        el.addEventListener(`click`, state.click, true);
         el.addEventListener(`contextmenu`, state.contextmenu);
         el.style.webkitUserSelect = `none`;
         el.style.userSelect = `none`;
@@ -97,7 +107,6 @@ export const vLongpress: Directive<HTMLElement, (event: PointerEvent) => void> =
         el.removeEventListener(`pointermove`, state.move);
         el.removeEventListener(`pointerup`, state.cancel);
         el.removeEventListener(`pointercancel`, state.cancel);
-        el.removeEventListener(`click`, state.click, true);
         el.removeEventListener(`contextmenu`, state.contextmenu);
         states.delete(el);
     },

@@ -1,9 +1,9 @@
-/* Mobile geometry gate for route rendering, target sizes, and horizontal overflow. */
+/* Mobile geometry gate for route rendering, target sizes, horizontal overflow, and whether every scroller moves under a finger. */
 import { createReadStream, existsSync, mkdirSync, statSync } from "node:fs";
 import { createServer, type Server } from "node:http";
 import { extname, join, normalize } from "node:path";
 import { repoRoot } from "@intentic/constants/node";
-import { chromium, type Browser } from "@playwright/test";
+import { chromium, type Browser, type CDPSession, type Page } from "@playwright/test";
 
 const DEMO_DIR = join(repoRoot(import.meta.url), "_site/site/public/demo");
 /* Its own port, one above the shots harness's. */
@@ -27,6 +27,8 @@ interface Surface {
     readonly primary?: string;
     /* Click these controls before measuring content hidden behind a switch. */
     readonly click?: readonly string[];
+    /* Tap this after measuring: it opens a bottom sheet, whose scrollers are then swiped like the page's own. */
+    readonly sheet?: string;
     readonly settleMs?: number;
 }
 
@@ -51,8 +53,15 @@ const SURFACES: readonly Surface[] = [
     // The paperclip is the phone's one road for a photo, so the surface waits on it rather than on the box alone.
     // `primary` is visible transcript text: the paperclip has only an aria-label, which the height rule never reads.
     { path: "/agents/cnv_checkout_stripe", waitFor: 'button[aria-label="Attach files"]', primary: "text=The pricing page already has a CTA", settleMs: 2_600 },
-    // The Chat tab: lands on the active conversation's screen, never on the desktop's full-screen chat.
-    { path: "/chat", waitFor: 'textarea[name="draft"]', primary: "text=Add Stripe checkout", settleMs: 2_600 },
+    // The Chat tab: lands on the active conversation's screen, never on the desktop's full-screen chat. Its model
+    // picker is the sheet that once did not scroll under touch at all, so the gate swipes it.
+    {
+        path: "/chat",
+        waitFor: 'textarea[name="draft"]',
+        primary: "text=Add Stripe checkout",
+        sheet: 'button[aria-label^="Provider and model"]',
+        settleMs: 2_600,
+    },
     { path: "/ext/pipelines", waitFor: "text=pass rate", primary: "text=Draft the release note", settleMs: 1_600 },
     { path: "/ext/acceptance", waitFor: "text=criteria", primary: "text=Sign up for an account", settleMs: 1_400 },
     /* Primary selectors match raw textContent, so they must use text unaffected by CSS transforms. */
@@ -70,12 +79,20 @@ interface Overflow {
     readonly right: number;
 }
 
+interface Stuck {
+    readonly label: string;
+    readonly axis: "x" | "y";
+    readonly max: number;
+}
+
 interface Measured {
     readonly targets: number;
     readonly failures: readonly Offender[];
     readonly warnings: readonly Offender[];
     readonly overflow: readonly Overflow[];
     readonly primaryHeight: number | null;
+    /* Scrollers that did not move under a synthesized finger; see `sweepScrollers`. */
+    readonly stuck: readonly Stuck[];
 }
 
 /* Measure all geometry in one browser evaluation so every assertion sees one layout. */
@@ -179,10 +196,106 @@ const measure = async (page: import("@playwright/test").Page, primary: string | 
                 primaryHeight = deepest === undefined ? 0 : Math.round(deepest.getBoundingClientRect().height);
             }
 
-            return { targets, failures, warnings, overflow, primaryHeight };
+            return { targets, failures, warnings, overflow, primaryHeight, stuck: [] };
         },
         { failPx: FAIL_PX, warnPx: WARN_PX, primarySelector: primary },
     );
+};
+
+/* A finger, not a wheel: touchStart, a run of touchMoves, touchEnd. `dy` negative moves the finger up, so the content
+   scrolls down. Slow enough (500ms) to read as a drag on the gesture detector rather than a fling or a tap. */
+const swipe = async (page: Page, cdp: CDPSession, x: number, y: number, dx: number, dy: number): Promise<void> => {
+    const steps = 20;
+    await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [{ x, y }] });
+    for (let i = 1; i <= steps; i += 1) {
+        await cdp.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: [{ x: x + (dx * i) / steps, y: y + (dy * i) / steps }] });
+        await page.waitForTimeout(25);
+    }
+    await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+    await page.waitForTimeout(600);
+};
+
+interface Scroller {
+    readonly label: string;
+    readonly x: number;
+    readonly y: number;
+    readonly axes: readonly ("x" | "y")[];
+}
+
+/* Every on-screen element with room to scroll on either axis, marked so the swipe can read it back by index. `scope`
+   narrows the sweep to an open sheet. Markers from an earlier pass are cleared first: a teleported sheet sits after the
+   page in the DOM, and a stale index would read the page's scroller in its place. */
+const findScrollers = (page: Page, scope: string | undefined): Promise<Scroller[]> =>
+    page.evaluate((scopeSelector) => {
+        /* The axes an element has room to scroll on, by its own overflow, not an ancestor's. */
+        const axesOf = (el: Element): ("x" | "y")[] => {
+            const style = getComputedStyle(el);
+            const axes: ("x" | "y")[] = [];
+            if (/(auto|scroll)/.test(style.overflowY) && el.scrollHeight > el.clientHeight + 2) {
+                axes.push("y");
+            }
+            if (/(auto|scroll)/.test(style.overflowX) && el.scrollWidth > el.clientWidth + 2) {
+                axes.push("x");
+            }
+            return axes;
+        };
+        /* A finger needs a box to land on; slivers and off-screen scrollers are not the phone's to move. */
+        const landable = (box: DOMRect): boolean => box.width >= 40 && box.height >= 40 && box.bottom >= 40 && box.top <= innerHeight - 40;
+
+        for (const stale of document.querySelectorAll("[data-mobile-scroller]")) {
+            stale.removeAttribute("data-mobile-scroller");
+        }
+        const root = scopeSelector === undefined ? document : document.querySelector(scopeSelector);
+        if (root === null) {
+            return [];
+        }
+        const found: Scroller[] = [];
+        for (const el of root.querySelectorAll("*")) {
+            const axes = axesOf(el);
+            const box = el.getBoundingClientRect();
+            if (axes.length === 0 || !landable(box)) {
+                continue;
+            }
+            el.setAttribute("data-mobile-scroller", String(found.length));
+            const top = Math.max(0, box.top);
+            const bottom = Math.min(innerHeight, box.bottom);
+            const label = `<${el.tagName.toLowerCase()}> ${String(el.className).split(" ").slice(0, 3).join(".")}`;
+            found.push({ label, x: Math.round(box.left + box.width / 2), y: Math.round((top + bottom) / 2), axes });
+        }
+        return found;
+    }, scope);
+
+const scrollOf = (page: Page, index: number): Promise<{ top: number; left: number; maxTop: number; maxLeft: number } | null> =>
+    page.evaluate((i) => {
+        const el = document.querySelector(`[data-mobile-scroller="${i}"]`);
+        return el === null ? null : { top: el.scrollTop, left: el.scrollLeft, maxTop: el.scrollHeight - el.clientHeight, maxLeft: el.scrollWidth - el.clientWidth };
+    }, index);
+
+/* Swipes every scroller on the axis it claims, towards whichever end has room, and reports the ones that stayed put.
+   This is the assertion the geometry above cannot make: a scroller can be the right size and still be dead under a
+   finger (a contained non-scrolling ancestor, a graph claiming the touch). */
+const sweepScrollers = async (page: Page, cdp: CDPSession, scope: string | undefined): Promise<Stuck[]> => {
+    const stuck: Stuck[] = [];
+    const scrollers = await findScrollers(page, scope);
+    for (const [index, scroller] of scrollers.entries()) {
+        for (const axis of scroller.axes) {
+            const before = await scrollOf(page, index);
+            if (before === null) {
+                continue;
+            }
+            const max = axis === "y" ? before.maxTop : before.maxLeft;
+            const at = axis === "y" ? before.top : before.left;
+            const towardsEnd = at < max / 2;
+            const distance = towardsEnd ? -160 : 160;
+            await swipe(page, cdp, scroller.x, scroller.y, axis === "x" ? distance : 0, axis === "y" ? distance : 0);
+            const after = await scrollOf(page, index);
+            const moved = after !== null && Math.abs((axis === "y" ? after.top : after.left) - at) > 4;
+            if (!moved) {
+                stuck.push({ label: scroller.label, axis, max });
+            }
+        }
+    }
+    return stuck;
 };
 
 const TYPES: Record<string, string> = {
@@ -221,27 +334,44 @@ interface Result extends Measured {
     readonly error?: string;
 }
 
+/* Brings the route to the state the surface describes: loaded, its demo chrome hidden, its anchor rendered, its switches pressed. */
+const arrive = async (page: Page, surface: Surface): Promise<void> => {
+    await page.goto(`${ORIGIN}${BASE}${surface.path}`, { waitUntil: "domcontentloaded" });
+    // The demo's own switcher is a fixed bar across the bottom and is not the product — it would be
+    // measured as an off-screen overflow and as three undersized tabs on every single route.
+    await page.addStyleTag({ content: "#demo-switcher { display: none !important; }" });
+    if (surface.waitFor !== undefined) {
+        await page.waitForSelector(surface.waitFor, { timeout: 20_000 }).catch(() => undefined);
+    }
+    for (const target of surface.click ?? []) {
+        await page.click(target, { timeout: 20_000 }).catch(() => undefined);
+        await page.waitForTimeout(600);
+    }
+    await page.waitForTimeout(surface.settleMs ?? 1_000);
+};
+
+/* The page's scrollers, then the sheet's once opened; sheet entries are labelled so a dead one names its home. */
+const sweepSurface = async (page: Page, cdp: CDPSession, surface: Surface): Promise<Stuck[]> => {
+    const stuck = [...(await sweepScrollers(page, cdp, undefined))];
+    if (surface.sheet !== undefined) {
+        await page.tap(surface.sheet, { timeout: 20_000 }).catch(() => undefined);
+        await page.waitForTimeout(1_300);
+        stuck.push(...(await sweepScrollers(page, cdp, ".p-drawer")).map((entry) => ({ ...entry, label: `sheet ${entry.label}` })));
+    }
+    return stuck;
+};
+
 const audit = async (browser: Browser, surface: Surface): Promise<Result> => {
     // isMobile + hasTouch is what makes `(pointer: coarse)` match — see the header. Without it every
     // touch-target overlay is inert and this whole run measures the wrong rectangles.
     const context = await browser.newContext({ viewport: VIEWPORT, isMobile: true, hasTouch: true, colorScheme: "dark" });
     const page = await context.newPage();
-    const empty: Measured = { targets: 0, failures: [], warnings: [], overflow: [], primaryHeight: null };
+    const empty: Measured = { targets: 0, failures: [], warnings: [], overflow: [], primaryHeight: null, stuck: [] };
     try {
-        await page.goto(`${ORIGIN}${BASE}${surface.path}`, { waitUntil: "domcontentloaded" });
-        // The demo's own switcher is a fixed bar across the bottom and is not the product — it would be
-        // measured as an off-screen overflow and as three undersized tabs on every single route.
-        await page.addStyleTag({ content: "#demo-switcher { display: none !important; }" });
-        if (surface.waitFor !== undefined) {
-            await page.waitForSelector(surface.waitFor, { timeout: 20_000 }).catch(() => undefined);
-        }
-        for (const target of surface.click ?? []) {
-            await page.click(target, { timeout: 20_000 }).catch(() => undefined);
-            await page.waitForTimeout(600);
-        }
-        await page.waitForTimeout(surface.settleMs ?? 1_000);
+        await arrive(page, surface);
         const measured = await measure(page, surface.primary);
-        return { path: surface.path, ...measured, blank: surface.primary !== undefined && (measured.primaryHeight ?? 0) === 0 };
+        const stuck = await sweepSurface(page, await context.newCDPSession(page), surface);
+        return { path: surface.path, ...measured, stuck, blank: surface.primary !== undefined && (measured.primaryHeight ?? 0) === 0 };
     } catch (error) {
         return { path: surface.path, ...empty, blank: false, error: (error as Error).message.split("\n")[0] };
     } finally {
@@ -279,6 +409,7 @@ const run = async (): Promise<void> => {
                 result.blank ? `BLANK` : ``,
                 result.overflow.length > 0 ? `${result.overflow.length} off-screen` : ``,
                 result.failures.length > 0 ? `${result.failures.length} under ${FAIL_PX}px` : ``,
+                result.stuck.length > 0 ? `${result.stuck.length} stuck under touch` : ``,
             ].filter((flag) => flag !== ``);
             const mark = flags.length === 0 ? `✓` : `✗`;
             console.log(`${mark} ${result.path.padEnd(34)} ${result.targets} targets  ${flags.join(`, `) || `clean`}`);
@@ -288,13 +419,18 @@ const run = async (): Promise<void> => {
             for (const over of result.overflow.slice(0, 4)) {
                 console.log(`    off-screen: ${over.label} — right edge ${over.right} of ${VIEWPORT.width}`);
             }
+            for (const dead of result.stuck) {
+                console.log(`    stuck under touch: ${dead.label} — ${dead.axis} axis, ${dead.max}px of room`);
+            }
             if (result.warnings.length > 0) {
                 console.log(`    (${result.warnings.length} under ${WARN_PX}px — reported, not failing)`);
             }
         }
     }
 
-    const broken = results.filter((result) => result.error !== undefined || result.blank || result.overflow.length > 0 || result.failures.length > 0);
+    const broken = results.filter(
+        (result) => result.error !== undefined || result.blank || result.overflow.length > 0 || result.failures.length > 0 || result.stuck.length > 0,
+    );
     if (broken.length > 0) {
         console.error(`\n${broken.length} of ${results.length} mobile surfaces failed: ${broken.map((result) => result.path).join(`, `)}`);
         process.exitCode = 1;

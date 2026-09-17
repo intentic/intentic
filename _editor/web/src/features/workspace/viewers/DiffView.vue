@@ -182,7 +182,8 @@ onMounted(async () => {
         automaticLayout: true,
         renderSideBySide: split.value,
         // Always-visible slider: with scrollbars off, a hover-only slider would leave no position indicator at all.
-        minimap: { enabled: true, showSlider: `always` },
+        // No minimap on a phone: it spends a seventh of the width on a picture a finger cannot use.
+        minimap: { enabled: !mobile.value, showSlider: `always` },
         // Wraps both panes: a half-width pane folds lines the full-width file viewer wouldn't have to.
         wordWrap: `bounded`,
         wordWrapColumn: 160,

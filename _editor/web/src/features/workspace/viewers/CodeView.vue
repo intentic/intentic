@@ -5,6 +5,7 @@ const viewStates = new Map<string, Monaco.editor.ICodeEditorViewState>();
 </script>
 
 <script setup lang="ts">
+import { useDevice } from "@intentic/ui";
 import { onBeforeUnmount, onMounted, ref, shallowRef, watch } from "vue";
 import { modelLineOf } from "@intentic/code-read";
 import { requestCodeAnalysis } from "../health/codeAnalysisClient";
@@ -29,6 +30,15 @@ const emit = defineEmits<{ change: [value: string]; save: [value: string] }>();
 
 const { ensureMonaco, ensureLanguage } = useMonaco();
 const editorSelection = useEditorSelection();
+
+// Position indicator by pointer. A mouse gets the minimap, its slider shown always since the scrollbar is off (size 0
+// too, since `hidden` alone still reserves its 14px strip). A finger gets a slim scrollbar instead: the minimap would
+// spend a seventh of a phone's width on a picture nobody can drag.
+const { coarse } = useDevice();
+const pointerOptions = (): Pick<Monaco.editor.IStandaloneEditorConstructionOptions, `minimap` | `scrollbar`> =>
+    coarse.value
+        ? { minimap: { enabled: false }, scrollbar: { vertical: `auto`, verticalScrollbarSize: 6 } }
+        : { minimap: { enabled: true, showSlider: `always` }, scrollbar: { vertical: `hidden`, verticalScrollbarSize: 0 } };
 
 const host = ref<HTMLElement>();
 const editor = shallowRef<Monaco.editor.IStandaloneCodeEditor>();
@@ -179,8 +189,7 @@ onMounted(async () => {
         readOnly: !editable,
         domReadOnly: !editable,
         automaticLayout: true,
-        // Minimap slider is the only position indicator once the scrollbar is off; shown always instead of on hover.
-        minimap: { enabled: true, showSlider: `always` },
+        ...pointerOptions(),
         // Wraps a long line to be read, not scrolled to; continuation rows carry no gutter number. `bounded` wraps at
         // the viewport when narrow, else past this repo's 150-column width, so only real overflow folds.
         wordWrap: `bounded`,
@@ -188,9 +197,6 @@ onMounted(async () => {
         // Always the file's own numbering: with comments stripped, the model's own line count wouldn't match anything
         // the reader can act on (a jump, a chat reference, the diff). Identity when nothing is stripped.
         lineNumbers: (line) => String(fileLine(line)),
-        // Vertical scrollbar hidden: the minimap slider is already the scroll affordance (wheel/keyboard/drag still
-        // work). Size 0 too, since `hidden` alone still reserves its 14px strip.
-        scrollbar: { vertical: `hidden`, verticalScrollbarSize: 0 },
         overviewRulerLanes: 0,
         hideCursorInOverviewRuler: true,
         scrollBeyondLastLine: false,

@@ -31,7 +31,7 @@ const logoFailed = reactive(new Set<string>());
 <template>
     <!-- Vue Flow needs a sized container (the section flows): a fixed band with fit-view + pan/zoom inside. -->
     <div v-if="nodes.length > 0" class="h-96">
-        <DagGraph v-model="selectedId" :nodes="nodes" :edges="edges">
+        <DagGraph v-model="selectedId" :nodes="nodes" :edges="edges" touch-pan>
             <template #node="{ node }">
                 <span class="flex h-full items-center gap-2.5 py-2 pl-3 pr-2.5">
                     <!-- Category stripe (left): the coarse group, on its own layer so it coexists with the border/ring. -->

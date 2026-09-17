@@ -158,7 +158,6 @@ const {
     openFile,
     openAtLine,
     openDiff,
-    fillDiff,
     openDirectory,
     openHealth,
     openDocument,
@@ -834,10 +833,10 @@ const deskTooltip = computed(() => tooltipWithChord(`Show desk · your tabs stay
                     </template>
                 </div>
                 <template v-if="layout.sidebarPanel.value === 'changes'">
-                    <SavePanel v-if="maker" @open-diff="openDiff" @fill-diff="fillDiff" />
-                    <ReviewPanel v-else @open-diff="openDiff" @fill-diff="fillDiff" />
+                    <SavePanel v-if="maker" @open-diff="openDiff" />
+                    <ReviewPanel v-else @open-diff="openDiff" />
                 </template>
-                <HistoryPanel v-else-if="layout.sidebarPanel.value === 'history'" @open-diff="openDiff" @fill-diff="fillDiff" />
+                <HistoryPanel v-else-if="layout.sidebarPanel.value === 'history'" @open-diff="openDiff" />
                 <!-- One `filter` ref across three scopes; the Aa/ab/.* switches apply only to the text scope, which has a pattern. -->
                 <div v-if="layout.sidebarPanel.value === 'files'" class="flex shrink-0 flex-col gap-1 p-1.5">
                     <div class="relative">

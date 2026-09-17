@@ -145,7 +145,7 @@ const dagEdges = computed<DagEdge[]>(() =>
             No workspace packages found: pnpm-workspace.yaml names no package dirs.
         </Card>
         <div v-else class="min-h-0 flex-1">
-            <DagGraph v-model="selectedId" :nodes="dagNodes" :edges="dagEdges" :node-height="52">
+            <DagGraph v-model="selectedId" :nodes="dagNodes" :edges="dagEdges" :node-height="52" touch-pan>
                 <template #node="{ node }">
                     <span class="pointer-events-none absolute inset-y-0 left-0 w-0.5" :class="barOf(node.data.group)"></span>
                     <span class="flex h-full min-w-0 flex-col justify-center px-3">

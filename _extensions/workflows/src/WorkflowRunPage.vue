@@ -84,7 +84,7 @@ const chatLink = (conversationId: string) => {
         <div class="flex min-h-0 flex-1">
             <div class="min-w-0 flex-1">
                 <!-- Never magnified, or a short run would fill the page as billboards, same as the designer's canvas. -->
-                <DagGraph v-model="selectedId" :nodes="dag.nodes" :edges="dag.edges" :node-width="216" :node-height="62" :magnify="false">
+                <DagGraph v-model="selectedId" :nodes="dag.nodes" :edges="dag.edges" :node-width="216" :node-height="62" :magnify="false" touch-pan>
                     <template #node="{ node }"><WorkflowNodeCard :node="node.data" /></template>
                 </DagGraph>
             </div>

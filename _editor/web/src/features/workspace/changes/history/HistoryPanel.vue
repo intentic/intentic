@@ -5,6 +5,7 @@ import { useVocabulary } from "../../../../core-views/vocabulary";
 import { diffRawUrls } from "../diffRaw";
 import { useHistory } from "./useHistory";
 import { Button, ChangeStatusMark, ui, type IconName, Notice, timeAgo } from "@intentic/ui";
+import { useWorkspaceTabs } from "../../tabs/useWorkspaceTabs";
 import type { DiffPayload } from "@intentic/extension-api";
 import type { OpenMode } from "../../tabs/workspaceTabs";
 
@@ -15,7 +16,10 @@ import type { OpenMode } from "../../tabs/workspaceTabs";
 const { snapshots, error, isLoading, refetch, diff, fileDiff, restore, busy, actionError } = useHistory();
 const words = useVocabulary();
 // Click opens a preview tab (replaced by the next file looked at); double-click keeps it, see OpenMode.
-const emit = defineEmits<{ "open-diff": [payload: DiffPayload, mode: OpenMode]; "fill-diff": [payload: DiffPayload] }>();
+const emit = defineEmits<{ "open-diff": [payload: DiffPayload, mode: OpenMode] }>();
+// The body lands in the tabs store directly, not through the host: on a phone the host swaps this panel out for the
+// viewer the moment the diff opens, and an emit from an unmounted panel reaches nobody.
+const { fillDiff } = useWorkspaceTabs();
 
 const selectedId = ref<string | undefined>(undefined);
 const changes = ref<readonly SnapshotChange[]>([]);
@@ -68,7 +72,7 @@ const openDiff = (change: SnapshotChange, mode: OpenMode): void => {
         ...diffRawUrls({ source: `checkpoint`, snapshot: snapshotId, scope: change.scope }, change.path, change.status),
     };
     emit(`open-diff`, { ...tab, pending: true }, mode);
-    void fileDiff(snapshotId, change.scope, change.path).then((body) => emit(`fill-diff`, { ...tab, ...body }));
+    void fileDiff(snapshotId, change.scope, change.path).then((body) => fillDiff({ ...tab, ...body }));
 };
 
 const confirmRestore = (id: string): void => {

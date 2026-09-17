@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { ChangeStatus, IconName } from "@intentic/ui";
 import { Button, Modal, Notice, ui } from "@intentic/ui";
+import { useWorkspaceTabs } from "../tabs/useWorkspaceTabs";
 import { plural } from "@intentic/base/format";
 import type { DiffPayload } from "@intentic/extension-api";
 import type { GitChange, GitDiffSide, LandedMessage, RepoChanges, RepoTarget } from "@intentic/api-contract";
@@ -26,7 +27,10 @@ const words = useVocabulary();
 const pushFlow = usePushFlow();
 const { fleet } = useAgents();
 
-const emit = defineEmits<{ "open-diff": [payload: DiffPayload, mode: OpenMode]; "fill-diff": [payload: DiffPayload] }>();
+const emit = defineEmits<{ "open-diff": [payload: DiffPayload, mode: OpenMode] }>();
+// The body lands in the tabs store directly, not through the host: on a phone the host swaps this panel out for the
+// viewer the moment the diff opens, and an emit from an unmounted panel reaches nobody.
+const { fillDiff } = useWorkspaceTabs();
 
 // Repos git could read; the rest are listed with their reason and no actions, as in the developer's panel.
 const scannable = computed(() => changes.repos.value.filter((repo) => repo.error === undefined));
@@ -126,7 +130,7 @@ const openDiff = (file: ChangedFile, mode: OpenMode): void => {
         ...diffRawUrls({ source: `working`, repo: file.repo, side: file.side }, file.path, file.status),
     };
     emit(`open-diff`, { ...tab, pending: true }, mode);
-    void changes.fileDiff(file.repo, file.path, file.side).then((body) => emit(`fill-diff`, { ...tab, ...body }));
+    void changes.fileDiff(file.repo, file.path, file.side).then((body) => fillDiff({ ...tab, ...body }));
 };
 
 // WHAT A SAVE RECORDS, and under what sentence.
