@@ -477,6 +477,11 @@
     background: var(--color-card);
     pointer-events: none;
 }
+/* Nothing to mask in the quick bar: no transcript above the box and no page of ours below it, so the strip would be a
+   band of card colour hanging under a composer floating on someone else's page. */
+.chat-footer-bare::after {
+    content: none;
+}
 .composer-ghost {
     display: inline-flex;
     align-items: center;

@@ -1182,8 +1182,8 @@ watch(
 <!-- `.chat-scroller` is the IntersectionObserver root each prompt uses to tell if it's pinned. -->
         <div
             ref="scroller"
-            class="chat-scroller flex flex-1 flex-col overflow-x-hidden overflow-y-auto"
-            :class="{ 'chat-realize': realizing }"
+            class="chat-scroller flex flex-1 flex-col"
+            :class="[bare ? 'overflow-visible' : 'overflow-x-hidden overflow-y-auto', { 'chat-realize': realizing }]"
         >
             <div ref="content" class="flex min-w-0 flex-1 flex-col">
 <!-- Bare: the turns are the one part withheld, so no message component mounts and the scroller shrinks to the composer. -->
@@ -1263,7 +1263,12 @@ watch(
                 </div>
 
 <!-- The composer and its gating notices; last row of the transcript, stuck to the bottom edge, rather than a separate band. -->
-                <div ref="footer" class="chat-footer sticky bottom-0 z-10 mx-auto flex w-full max-w-[51rem] flex-col gap-2 px-2 py-3">
+<!-- `bare` has no transcript above it and no scroller edge below, so it drops both the padding and the strip that masks them. -->
+                <div
+                    ref="footer"
+                    class="chat-footer sticky bottom-0 z-10 mx-auto flex w-full max-w-[51rem] flex-col gap-2"
+                    :class="bare ? 'chat-footer-bare' : 'px-2 py-3'"
+                >
 <!-- The composer is hidden only when another notice explains a blocked or unavailable state. -->
                     <Notice v-if="denied" tone="danger">This Google account has no access to this sandbox, so chat is unavailable.</Notice>
                     <Notice v-else-if="blocked" tone="info" icon="clock">Chat is available after this sandbox finishes setup.</Notice>
@@ -1641,7 +1646,9 @@ watch(
         </div>
 
 <!-- The pane's status bar, the one part of the footer outside the scroller: it's about the pane (context, subscription, daemon liveness), not the message. -->
-        <ChatPaneStatus v-if="connected" :block="refusal" :hint="composerHint" />
+<!-- Withheld from `bare` with the transcript it reports on: floating over another page, readouts about a chat nobody is
+     looking at are a second row of text around a box asked for as one. -->
+        <ChatPaneStatus v-if="connected && !bare" :block="refusal" :hint="composerHint" />
 
 <!-- The four composer menus, each in the app's standard desktop-panel/mobile-sheet swap (ResponsiveOverlay), uncapped in height. -->
         <ResponsiveOverlay v-model="modelOpen" :anchor="modelPill?.el" header="Model" panel-class="w-[26rem]">

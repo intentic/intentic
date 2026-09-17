@@ -225,10 +225,12 @@ const seamWidth = computed<number>({
 <template>
 <!-- Docked, the panel is a column (bar on top, pane below); on a wide surface the bar becomes a rail on the left. -->
 <!-- `--capacity-rail` reserves the out-of-flow rail width without widening the transcript. -->
+<!-- The strip paints no surface of its own: it is one composer floating over a page, and the box draws its own edge.
+     Nor does it clip, so the `@` and `/` lists can stand above a composer that has no room over it. -->
     <div
         ref="root"
-        class="chat-panel ground-card relative flex min-h-0 overflow-hidden bg-card"
-        :class="[chatWide ? 'flex-row' : 'flex-col', bar ? '' : 'h-full']"
+        class="chat-panel relative flex min-h-0"
+        :class="[chatWide ? 'flex-row' : 'flex-col', bar ? '' : 'ground-card h-full overflow-hidden bg-card']"
         :style="{ '--capacity-rail': showsRail ? uiLength(CAPACITY_RAIL_PX) : `0px` }"
     >
 <!-- An overlay seam (`place="edge"`), not in-flow, since docked the panel's own axis is the bar-then-panes column, not this border. -->
@@ -283,7 +285,15 @@ const seamWidth = computed<number>({
             <ChatRunGraph v-if="showingGraph && shownRun" :run="shownRun" class="min-h-0 flex-1" @open="openRunColumn" />
 
 <!-- The panes share the room equally (mirroring the terminal panel's split cells) until the floor, then scroll sideways instead of crushing. -->
-            <div v-else ref="paneRow" class="chat-panes flex min-h-0 min-w-0 flex-1 overflow-x-auto" :style="{ '--min-pane': minPaneLength }">
+<!-- The strip holds one pane and so needs no sideways scroll — which would clip the `@` and `/` lists standing above a
+     composer whose box is the whole panel. -->
+            <div
+                v-else
+                ref="paneRow"
+                class="chat-panes flex min-h-0 min-w-0 flex-1"
+                :class="bar ? 'overflow-visible' : 'overflow-x-auto'"
+                :style="{ '--min-pane': minPaneLength }"
+            >
 <!-- A pane's own × only appears in a split: with one column, closing it is the panel's job, not a control living inside the pane. -->
                 <ChatPane
                     v-for="conversation in shown"

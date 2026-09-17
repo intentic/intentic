@@ -58,8 +58,8 @@ const mount = async (component: Parameters<typeof h>[0], props?: Record<string, 
 };
 
 const bar = (): HTMLElement | null => document.querySelector(`.chat-quick-float`);
-// The resting pill's own control: the one that grows the composer or, while a card waits, opens the chat.
-const press = (): HTMLButtonElement => document.querySelector<HTMLButtonElement>(`.chat-quick-pill button`)!;
+// The resting pill is itself the control: the one that grows the composer or, while a card waits, opens the chat.
+const press = (): HTMLButtonElement => document.querySelector<HTMLButtonElement>(`.chat-quick-pill`)!;
 const line = (): string => press().textContent?.trim() ?? ``;
 const opened = (): boolean => bar()?.classList.contains(`chat-quick-open`) === true;
 
@@ -188,6 +188,31 @@ it(`hands reach to whichever form is showing, in the frame it opens`, async () =
     expect([pill.hasAttribute(`inert`), host.hasAttribute(`inert`)]).toEqual([true, false]);
 });
 
+// The box is the size of what is in it: the form that isn't showing leaves the flow, so no height is ever measured,
+// declared or guessed. Measuring it is what left a box standing open at full width with nothing in it, having read
+// the composer's height while the panel was still parked offscreen.
+it(`sizes itself by whichever form is in flow, never by a measured height`, async () => {
+    await mount(ChatQuickBar);
+    const pill = document.querySelector(`.chat-quick-pill`)!;
+    const host = document.querySelector(`.chat-quick-host`)!;
+    expect([pill.classList.contains(`absolute`), host.classList.contains(`absolute`)]).toEqual([false, true]);
+    expect(bar()!.style.height).toBe(``);
+
+    press().click();
+    await settle();
+
+    expect([pill.classList.contains(`absolute`), host.classList.contains(`absolute`)]).toEqual([true, false]);
+    expect(bar()!.style.height).toBe(``);
+});
+
+// The pill is the whole resting form: a second control on it was one more thing to mean, in the one place the reader
+// came to write a sentence.
+it(`rests as one control and nothing else, so its only press is the composer`, async () => {
+    await mount(ChatQuickBar);
+
+    expect(document.querySelectorAll(`.chat-quick-float button`)).toHaveLength(1);
+});
+
 // The card holding the turn is drawn in the transcript, and the pill grows into a composer with none: offering one
 // here would read as the way to answer, and the answer is not a message.
 it(`turns into a door while a card waits for an answer, rather than a box that cannot send one`, async () => {
@@ -254,11 +279,22 @@ it(`the panel's floating presentation is the composer alone: no list, no transcr
     expect(document.querySelectorAll(`.chat-pane`)).toHaveLength(1);
 });
 
-it(`the same panel drawn anywhere else still has its transcript`, async () => {
+// The composer draws its own edge, so a panel surface behind it is a second one around the same box — and the padding
+// that surface needed is what made it read as a tray the message box was sitting in.
+it(`the strip paints no surface of its own: the composer is the whole of it`, async () => {
+    await mount(ChatPanel, { bar: true });
+
+    expect(document.querySelector(`.chat-panel`)!.classList.contains(`bg-card`)).toBe(false);
+    expect(document.querySelector(`.chat-footer`)!.classList.contains(`chat-footer-bare`)).toBe(true);
+});
+
+it(`the same panel drawn anywhere else still has its transcript, on its own surface`, async () => {
     const chat = useChat();
     chat.active.value.restoreMessages([{ role: `user`, text: `an earlier turn` }]);
     await mount(ChatPanel);
 
     expect(document.querySelectorAll(`.chat-turns`)).toHaveLength(1);
     expect(document.body.textContent).toContain(`an earlier turn`);
+    expect(document.querySelector(`.chat-panel`)!.classList.contains(`bg-card`)).toBe(true);
+    expect(document.querySelector(`.chat-footer`)!.classList.contains(`chat-footer-bare`)).toBe(false);
 });

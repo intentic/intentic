@@ -1,8 +1,6 @@
 <script setup lang="ts">
-import { ui } from "@intentic/ui";
 import { computed, onBeforeUnmount, ref, useTemplateRef, watch } from "vue";
 import { useRouter } from "vue-router";
-import { startAgent } from "../../agents/fleet/agentActions";
 import { chatParked } from "./chatPanelLayout";
 import { chatBarDock } from "../../../shell/window/dockSlots";
 import { focusComposer } from "../tabs/useChat-tabs";
@@ -13,6 +11,8 @@ import { useChat } from "../run/useChat";
 // the attachments and the stream are the conversation /chat would show.
 // It floats rather than sitting in the shell's grid: growing it must not reflow the page underneath, because the
 // reader opened it to say something ABOUT that page.
+// Open, THE COMPOSER IS THE WHOLE SURFACE: no frame, no title, no status row around it. Every one of those drew a
+// second edge around a box that already has one, and none of them carried anything a reader writing one message needs.
 
 const router = useRouter();
 const { active, streaming, draft, composerFocus, awaitingDecision } = useChat();
@@ -21,8 +21,6 @@ const expanded = ref(false);
 // Focus, not hover, is what keeps it open through a pointer that has wandered off.
 const holdsFocus = ref(false);
 const float = useTemplateRef(`float`);
-const pill = useTemplateRef(`pill`);
-const host = useTemplateRef(`host`);
 const slot = useTemplateRef(`slot`);
 
 const title = computed(() => active.value.title.value ?? undefined);
@@ -41,36 +39,6 @@ const standing = computed<Standing>(() => {
         return `unsent`;
     }
     return title.value === undefined ? `inviting` : `named`;
-});
-
-// BOTH HEIGHTS ARE MEASURED, never declared: the closed one follows the app's text size and the open one follows
-// whatever the composer is holding (a grown draft, an attachment strip, a notice). An `auto` height cannot be
-// animated and a guessed one either clips the box or leaves it hanging open on air, so the element carries a real
-// pixel height at both ends and CSS interpolates between two numbers.
-const closedHeight = ref(0);
-const openHeight = ref(0);
-let sizes: ResizeObserver | undefined;
-watch([pill, host], ([restingBox, grownBox]) => {
-    sizes?.disconnect();
-    if (typeof ResizeObserver === `undefined`) {
-        return;
-    }
-    sizes = new ResizeObserver(() => {
-        closedHeight.value = pill.value?.offsetHeight ?? 0;
-        openHeight.value = host.value?.offsetHeight ?? 0;
-    });
-    if (restingBox !== null) {
-        sizes.observe(restingBox);
-    }
-    if (grownBox !== null) {
-        sizes.observe(grownBox);
-    }
-});
-onBeforeUnmount(() => sizes?.disconnect());
-// Before the first measurement there is nothing to interpolate, so the box sizes itself and skips the animation.
-const framedHeight = computed(() => {
-    const height = expanded.value ? openHeight.value : closedHeight.value;
-    return height === 0 ? undefined : `${height}px`;
 });
 
 // Hover opens on intent, not on contact: the bottom of the area is also the way to a scrollbar and to the terminal,
@@ -155,10 +123,14 @@ watch(composerFocus, () => {
 });
 
 // Publishes the slot only while the pill is on screen; parked elsewhere, the panel goes back to the parking stage.
+// Leaving also closes the box, so the composer is never left grown over a surface that has its own.
 watch(
     [() => chatParked.value, slot],
     ([parked, element]) => {
         chatBarDock.value = parked ? element : null;
+        if (!parked) {
+            expanded.value = false;
+        }
     },
     { immediate: true, flush: `post` },
 );
@@ -174,14 +146,11 @@ const restingLine = computed(() => {
     return title.value ?? (standing.value === `working` ? `Working…` : `Ask anything…`);
 });
 
-const openFullChat = (): void => {
-    collapse();
-    void router.push(`/chat`);
-};
 // A question can only be answered where its card is drawn, so here the press is a door, not a disclosure.
 const onPress = (): void => {
     if (standing.value === `asking`) {
-        openFullChat();
+        collapse();
+        void router.push(`/chat`);
         return;
     }
     if (expanded.value) {
@@ -201,69 +170,43 @@ const onPress = (): void => {
     >
         <div
             ref="float"
-            class="chat-quick-float pointer-events-auto relative overflow-hidden rounded-2xl border border-line-strong bg-card shadow-2xl"
+            class="chat-quick-float pointer-events-auto relative"
             :class="{ 'chat-quick-open': expanded }"
-            :style="{ height: framedHeight }"
             @pointerenter="onEnter"
             @pointerleave="onLeave"
             @focusin="holdsFocus = true"
             @focusout="onFocusOut"
             @keydown.esc="onEscape"
         >
-<!-- The resting form: a small composer, out of flow so its height never adds to the grown one's. -->
+<!-- WHICHEVER FORM IS NOT SHOWING LEAVES THE FLOW instead of being measured out of it: the box is the size of what is
+     actually in it at both ends, so no reading can be stale and no frame can be left standing on air. -->
 <!-- `inert` is a boolean attribute — present is inert whatever it says — and Vue strips a `false` only for the
      attributes it knows are boolean, which this is not. Hence `|| undefined` on both: `inert="false"` is inert. -->
-            <div ref="pill" class="chat-quick-pill absolute inset-x-0 top-0 flex items-center gap-1 p-1" :inert="expanded || undefined">
-                <button
-                    type="button"
-                    class="flex h-8 min-w-0 flex-1 cursor-pointer items-center gap-2 rounded-xl px-2.5 text-left"
-                    :aria-expanded="standing === `asking` ? undefined : expanded"
-                    :aria-label="standing === `asking` ? `Open the chat: your agent is waiting for an answer` : `Write to your agent from here`"
-                    @click="onPress"
+            <button
+                type="button"
+                class="chat-quick-pill flex h-10 w-full cursor-pointer items-center gap-2 rounded-2xl border border-line-strong bg-card px-3 text-left shadow-lg"
+                :class="expanded ? `pointer-events-none absolute inset-x-0 bottom-0` : ``"
+                :inert="expanded || undefined"
+                :aria-expanded="standing === `asking` ? undefined : expanded"
+                :aria-label="standing === `asking` ? `Open the chat: your agent is waiting for an answer` : `Write to your agent from here`"
+                @click="onPress"
+            >
+                <Icon v-if="standing === `asking`" name="exclamation-circle" class="shrink-0 text-2xs text-warning" />
+                <Icon v-else-if="standing === `working`" name="spinner" spin class="shrink-0 text-2xs text-link" />
+                <Icon v-else name="comments" class="shrink-0 text-2xs text-subtle" />
+                <span
+                    class="min-w-0 flex-1 truncate text-2xs"
+                    :class="standing === `asking` ? `text-warning` : standing === `inviting` ? `text-subtle` : `text-muted`"
+                    >{{ restingLine }}</span
                 >
-                    <Icon v-if="standing === `asking`" name="exclamation-circle" class="shrink-0 text-2xs text-warning" />
-                    <Icon v-else-if="standing === `working`" name="spinner" spin class="shrink-0 text-2xs text-link" />
-                    <Icon v-else name="comments" class="shrink-0 text-2xs text-subtle" />
-                    <span
-                        class="min-w-0 flex-1 truncate text-2xs"
-                        :class="standing === `asking` ? `text-warning` : standing === `inviting` ? `text-subtle` : `text-muted`"
-                        >{{ restingLine }}</span
-                    >
-                </button>
-                <button
-                    type="button"
-                    :class="ui.iconButton(`h-8 w-8 shrink-0 rounded-xl`)"
-                    v-tooltip.top="'New agent'"
-                    aria-label="New agent"
-                    @click="startAgent()"
-                >
-                    <Icon name="plus" class="text-2xs" />
-                </button>
-            </div>
+            </button>
 
-<!-- The grown form: the panel's own composer, with only the two controls it has no room for. -->
-            <div ref="host" class="chat-quick-host" :inert="!expanded || undefined">
-                <div class="flex items-center gap-2 px-3">
-                    <span class="min-w-0 flex-1 truncate text-2xs text-subtle">{{ title ?? `New chat` }}</span>
-                    <button
-                        type="button"
-                        :class="ui.iconButton(`h-6 w-6 shrink-0 rounded-md`)"
-                        v-tooltip.top="'New agent'"
-                        aria-label="New agent"
-                        @click="startAgent()"
-                    >
-                        <Icon name="plus" class="text-2xs" />
-                    </button>
-                    <button
-                        type="button"
-                        :class="ui.iconButton(`h-6 w-6 shrink-0 rounded-md`)"
-                        v-tooltip.top="'Open the chat: the whole conversation'"
-                        aria-label="Open the chat"
-                        @click="openFullChat"
-                    >
-                        <Icon name="expand" class="text-2xs" />
-                    </button>
-                </div>
+<!-- The grown form: the panel's own composer, and nothing of this component's around it. -->
+            <div
+                class="chat-quick-host w-full"
+                :class="expanded ? `` : `pointer-events-none absolute inset-x-0 bottom-0`"
+                :inert="!expanded || undefined"
+            >
                 <div ref="slot" class="contents"></div>
             </div>
         </div>
@@ -271,14 +214,12 @@ const onPress = (): void => {
 </template>
 
 <style scoped>
-/* Width and height animate together, which is what makes the two forms read as one box growing rather than as one
-   control replaced by another. `height` is a real number at both ends (see the measurement above). */
+/* Width is the only thing animated — height is whatever the composer is holding, which is why there is no number here
+   for it. The two widths are the pill's reading measure and the composer's own (.chat-footer's max). */
 .chat-quick-float {
     width: 22rem;
     max-width: 100%;
-    transition:
-        width 260ms cubic-bezier(0.2, 0.8, 0.2, 1),
-        height 260ms cubic-bezier(0.2, 0.8, 0.2, 1);
+    transition: width 260ms cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
 .chat-quick-open {
