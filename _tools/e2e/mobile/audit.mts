@@ -217,8 +217,6 @@ const swipe = async (page: Page, cdp: CDPSession, x: number, y: number, dx: numb
 
 interface Scroller {
     readonly label: string;
-    readonly x: number;
-    readonly y: number;
     readonly axes: readonly ("x" | "y")[];
 }
 
@@ -257,19 +255,52 @@ const findScrollers = (page: Page, scope: string | undefined): Promise<Scroller[
                 continue;
             }
             el.setAttribute("data-mobile-scroller", String(found.length));
-            const top = Math.max(0, box.top);
-            const bottom = Math.min(innerHeight, box.bottom);
-            const label = `<${el.tagName.toLowerCase()}> ${String(el.className).split(" ").slice(0, 3).join(".")}`;
-            found.push({ label, x: Math.round(box.left + box.width / 2), y: Math.round((top + bottom) / 2), axes });
+            found.push({ label: `<${el.tagName.toLowerCase()}> ${String(el.className).split(" ").slice(0, 3).join(".")}`, axes });
         }
         return found;
     }, scope);
 
-const scrollOf = (page: Page, index: number): Promise<{ top: number; left: number; maxTop: number; maxLeft: number } | null> =>
+interface ScrollState {
+    readonly top: number;
+    readonly left: number;
+    readonly maxTop: number;
+    readonly maxLeft: number;
+    /* Where a finger lands NOW: an earlier swipe on an ancestor may have carried this element since it was listed. */
+    readonly x: number;
+    readonly y: number;
+}
+
+const scrollOf = (page: Page, index: number): Promise<ScrollState | null> =>
     page.evaluate((i) => {
         const el = document.querySelector(`[data-mobile-scroller="${i}"]`);
-        return el === null ? null : { top: el.scrollTop, left: el.scrollLeft, maxTop: el.scrollHeight - el.clientHeight, maxLeft: el.scrollWidth - el.clientWidth };
+        if (el === null) {
+            return null;
+        }
+        const box = el.getBoundingClientRect();
+        const top = Math.max(0, box.top);
+        const bottom = Math.min(innerHeight, box.bottom);
+        return {
+            top: el.scrollTop,
+            left: el.scrollLeft,
+            maxTop: el.scrollHeight - el.clientHeight,
+            maxLeft: el.scrollWidth - el.clientWidth,
+            x: Math.round(box.left + box.width / 2),
+            y: Math.round((top + bottom) / 2),
+        };
     }, index);
+
+/* Puts a swiped scroller back where it was listed, so the elements after it are still where they were measured. */
+const restore = (page: Page, index: number, state: ScrollState): Promise<void> =>
+    page.evaluate(
+        ([i, top, left]) => {
+            const el = document.querySelector(`[data-mobile-scroller="${i}"]`);
+            if (el !== null) {
+                el.scrollTop = top;
+                el.scrollLeft = left;
+            }
+        },
+        [index, state.top, state.left] as const,
+    );
 
 /* Swipes every scroller on the axis it claims, towards whichever end has room, and reports the ones that stayed put.
    This is the assertion the geometry above cannot make: a scroller can be the right size and still be dead under a
@@ -287,12 +318,13 @@ const sweepScrollers = async (page: Page, cdp: CDPSession, scope: string | undef
             const at = axis === "y" ? before.top : before.left;
             const towardsEnd = at < max / 2;
             const distance = towardsEnd ? -160 : 160;
-            await swipe(page, cdp, scroller.x, scroller.y, axis === "x" ? distance : 0, axis === "y" ? distance : 0);
+            await swipe(page, cdp, before.x, before.y, axis === "x" ? distance : 0, axis === "y" ? distance : 0);
             const after = await scrollOf(page, index);
             const moved = after !== null && Math.abs((axis === "y" ? after.top : after.left) - at) > 4;
             if (!moved) {
                 stuck.push({ label: scroller.label, axis, max });
             }
+            await restore(page, index, before);
         }
     }
     return stuck;
@@ -382,6 +414,9 @@ const audit = async (browser: Browser, surface: Surface): Promise<Result> => {
 
 const run = async (): Promise<void> => {
     const asJson = process.argv.includes("--json");
+    // `--only=/chat` runs one surface while iterating; the exit code still means what it means.
+    const only = process.argv.find((arg) => arg.startsWith("--only="))?.slice("--only=".length);
+    const surfaces = only === undefined ? SURFACES : SURFACES.filter((surface) => surface.path === only);
     if (!existsSync(join(DEMO_DIR, "index.html"))) {
         throw new Error(`No demo build at ${DEMO_DIR} — run: pnpm --filter @intentic/demo build`);
     }
@@ -391,7 +426,7 @@ const run = async (): Promise<void> => {
     const browser = await chromium.launch({ channel: "chromium" });
     const results: Result[] = [];
     try {
-        for (const surface of SURFACES) {
+        for (const surface of surfaces) {
             results.push(await audit(browser, surface));
         }
     } finally {
