@@ -25,6 +25,9 @@ const router = useRouter();
 const { active, messages, streaming, draft, composerFocus, awaitingDecision, contextUsage, provider } = useChat();
 
 const expanded = ref(false);
+// Whether this box has ever been open. Closing is the growth run backwards (chat.css), and an exit animation on an
+// element that STARTS in its exit state would play once on page load, with nothing having closed.
+const woken = ref(false);
 // Focus, not hover, is what keeps it open through a pointer that has wandered off.
 const holdsFocus = ref(false);
 const float = useTemplateRef(`float`);
@@ -137,6 +140,7 @@ const expand = (caret: boolean): void => {
     }
     if (!expanded.value) {
         expanded.value = true;
+        woken.value = true;
     }
     if (caret) {
         focusComposer();
@@ -271,7 +275,7 @@ const onPress = (): void => {
         <div
             ref="float"
             class="chat-quick-float pointer-events-none relative w-[51rem] max-w-full"
-            :class="{ 'chat-quick-open': expanded, 'chat-quick-peeking': peekOpen }"
+            :class="{ 'chat-quick-open': expanded, 'chat-quick-peeking': peekOpen, 'chat-quick-woken': woken }"
             @pointerenter="onEnter"
             @pointerleave="onLeave"
             @focusin="holdsFocus = true"
@@ -328,7 +332,7 @@ const onPress = (): void => {
                             :size="28"
                             :stroke="1.5"
                             class="absolute inset-0"
-                            :class="[rim.tone, rim.spin ? `animate-spin` : ``]"
+                            :class="[rim.tone, rim.spin ? `animate-spin [animation-duration:2.4s]` : ``]"
                         />
                         <IdentityTile :title="title" :provider="provider" class="h-5.5 w-5.5 text-xs" />
                     </span>
@@ -349,7 +353,7 @@ const onPress = (): void => {
                 :class="
                     expanded
                         ? `pointer-events-auto relative duration-[260ms] ease-out`
-                        : `pointer-events-none absolute inset-x-0 bottom-0 scale-95 opacity-0 duration-100 ease-in`
+                        : `pointer-events-none absolute inset-x-0 bottom-0 opacity-0 duration-100 ease-in`
                 "
                 :inert="!expanded || undefined"
             >
@@ -361,12 +365,10 @@ const onPress = (): void => {
      goes. Inside the float, so reading the turns is still "inside the box" and neither the peek nor the box closes
      under the pointer that went up to read them. -->
             <button
-                v-if="expanded && hasTranscript"
+                v-if="expanded && hasTranscript && !peekOpen"
                 type="button"
-                class="chat-quick-eye pointer-events-auto absolute -top-2.5 right-3 z-10 flex h-7 w-7 cursor-pointer items-center justify-center rounded-full border bg-card/80 shadow-md backdrop-blur-md transition-colors"
-                :class="chatBarPeek ? `border-primary-500/40 text-link` : `border-line-strong text-subtle hover:text-content`"
+                class="chat-quick-eye pointer-events-auto absolute -top-2.5 right-3 z-10 flex h-7 w-7 cursor-pointer items-center justify-center rounded-full border border-line-strong bg-card/80 text-subtle shadow-md backdrop-blur-md transition-colors hover:text-content"
                 v-tooltip.top="t(`chat.chatQuickBar.whatWasSaidHover`)"
-                :aria-expanded="chatBarPeek"
                 :aria-label="t(`chat.chatQuickBar.conversationSoFar`)"
                 @pointerenter="onPeekEnter"
                 @click="togglePeek"
