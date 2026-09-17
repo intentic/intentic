@@ -8,7 +8,6 @@ import {
     deviceState,
     deviceSwitches,
     deviceSyncingSandbox,
-    deviceTally,
     deviceTone,
     folderOwner,
     isSelf,
@@ -163,7 +162,6 @@ test(`folds a Windows install and its distro into one machine, Windows first, wi
     expect(machine?.groups.map((group) => group.sandboxId)).toEqual([`work-abc`]);
     expect(machine?.groups[0]?.folder?.localDir).toBe(`/home/ada/work`);
     expect(machine?.groups[0]?.ports).toHaveLength(1);
-    expect(deviceTally(pc()).find((item) => item.label === `running`)?.value).toBe(1);
 });
 
 test(`draws a many-sided machine's environments as lines of their own, and names the side a warning is about`, () => {
@@ -277,17 +275,6 @@ test(`offers no filter over a board small enough to read`, () => {
     expect(showFilter([card(row()), card(row()), card(row())])).toBe(true);
     // Or over one machine holding more sandboxes than a reader can hold in their head.
     expect(showFilter([card(row({}, folders(`a`, `b`, `c`, `d`)))])).toBe(true);
-});
-
-test(`counts the fleet's sandboxes by state, and keeps "running" visible at zero`, () => {
-    const stopped: Held = {
-        ...PAIRED,
-        sandboxes: [{ slug: `work-abc`, container: `sandbox-work-abc`, running: false, image: `img:1` }],
-    };
-    const tally = deviceTally([card(row({}, PAIRED)), card(row({ key: `omen`, label: `omen` }, stopped))]);
-    expect(tally.find((item) => item.label === `running`)?.value).toBe(1);
-    expect(tally.find((item) => item.label === `running`)?.always).toBe(true);
-    expect(tally.find((item) => item.label === `stopped`)?.value).toBe(1);
 });
 
 // the machine-wide switches

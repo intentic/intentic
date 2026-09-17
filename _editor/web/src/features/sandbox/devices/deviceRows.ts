@@ -9,12 +9,11 @@ import {
     type Machine,
     machinesOf,
 } from "@intentic/sandbox-contract";
-import type { StatusVariant, TallyItem } from "@intentic/ui";
+import type { StatusVariant } from "@intentic/ui";
 import {
     type DeviceFolderRow,
     type DeviceSandboxGroup,
     folderConflicts,
-    groupNeedsAttention,
     groupSummary,
     isSameSandbox,
     mirroringOff,
@@ -261,18 +260,6 @@ const FILTER_FLOOR = 3;
 
 export const showFilter = (machines: readonly MachineRow[]): boolean =>
     machines.length > 2 || machines.reduce((total, machine) => total + machine.groups.length, 0) > FILTER_FLOOR;
-
-// The orientation line, answered before a card is parsed: one measure (sandboxes) split by state. Counted per
-// machine, so a PC with two doors onto one engine counts each container once.
-// `running` stays visible even at zero so the tally never renders as nothing.
-export const deviceTally = (machines: readonly MachineRow[]): TallyItem[] => {
-    const groups = machines.flatMap((machine) => machine.groups);
-    return [
-        { label: `running`, value: groups.filter((group) => group.sandbox?.running === true).length, variant: `success`, always: true },
-        { label: `stopped`, value: groups.filter((group) => group.sandbox?.running === false).length, variant: `neutral` },
-        { label: `need attention`, value: groups.filter(groupNeedsAttention).length, variant: `warning` },
-    ];
-};
 
 // One sandbox as a board card states it, on a card nothing expands: enough to answer "which machine has
 // this" and "is it fine", and nothing that needs a click.

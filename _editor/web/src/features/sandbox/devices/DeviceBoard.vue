@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { Button, Icon, InfoHint, Notice, type NoticeModel, RowGroup, RowNote, SearchBar, SkeletonRows, StatusTally } from "@intentic/ui";
+import { Button, Icon, Notice, type NoticeModel, RowGroup, RowNote, SearchBar, SkeletonRows } from "@intentic/ui";
 import { computed, ref } from "vue";
 import DeviceBoardCard from "./DeviceBoardCard.vue";
-import { deviceTally, type MachineRow, rowMatches, showFilter } from "./deviceRows";
+import { type MachineRow, rowMatches, showFilter } from "./deviceRows";
 import { desktopApp } from "../../../app/environments/desktop";
 
 // Device cards list paired machines, one per PC however many doors it has; controls live on each machine's page.
@@ -32,25 +32,8 @@ const inDesktopApp = desktopApp() !== undefined;
 </script>
 
 <template>
-    <RowGroup label="Devices" :count="rows.length === 0 ? undefined : rows.length">
-<!-- The other half of the Ports tab's cross-link: both are about "ports" in opposite directions (out to the internet there, in to this machine here). -->
-        <template #info>
-            <InfoHint label="Devices">
-                <span class="block text-sm font-medium text-content">Your own machines</span>
-                <span class="mt-1 block text-xs text-muted">
-                    Every device paired with this sandbox: the folder it syncs, the ports it mirrors to your <b>localhost</b>, and the sandboxes
-                    running on it.
-                </span>
-                <span class="mt-2 block text-xs text-muted">
-                    A port that couldn't be mirrored shows under the sandbox that claimed it first. To expose a port to the public internet, use the
-                    <b>Ports</b> tab.
-                </span>
-            </InfoHint>
-        </template>
-
-        <!-- Is anything wrong right now, answered before a card is parsed; then the one thing this screen does. -->
+    <RowGroup label="Devices">
         <template #actions>
-            <StatusTally v-if="!isLoading && rows.length > 0" :items="deviceTally(rows)" />
             <Button size="small" severity="secondary" label="Add a device" @click="emit(`add`)">
                 <template #icon><Icon name="plus" /></template>
             </Button>
