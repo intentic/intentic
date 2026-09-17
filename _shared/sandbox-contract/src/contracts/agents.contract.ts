@@ -11,6 +11,7 @@ import {
     AgentPlaceSchema,
     AgentRenameSchema,
     AgentResumeAfterLimitSchema,
+    AgentStopWatchingSchema,
     AgentMoveAfterLimitSchema,
     AgentResumeAfterOutageSchema,
     AgentsArchivedSchema,
@@ -158,11 +159,11 @@ export const agentsContract = {
         .route({
             method: "POST",
             path: "/agents/{id}/stop-watching",
-            summary: "Stop every condition watch a conversation is parked on",
+            summary: "Stop a conversation's condition watches",
             description:
-                "Disarms all of this conversation's outside-condition watches, so none of them will wake it. All of them rather than one, because that is what the press means when it is made about a card. Nothing else about the conversation changes.",
+                "Disarms this conversation's outside-condition watches, so they will not wake it. Named without a watch id it disarms all of them, because that is what the press means when it is made about a card; a press made about one watch's own row names that watch and leaves the rest armed. Nothing else about the conversation changes.",
         })
-        .input(AgentIdSchema)
+        .input(AgentStopWatchingSchema)
         .output(AgentSummarySchema),
     seenAll: oc
         .route({

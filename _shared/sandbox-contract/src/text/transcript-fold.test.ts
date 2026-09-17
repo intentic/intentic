@@ -2,6 +2,7 @@ import { STATE_DIR } from "@intentic/constants";
 import { describe, expect, it } from "vitest";
 import type { AgentEvent } from "../events/agent-events.js";
 import type { TranscriptPatch, TranscriptRow } from "../events/transcript.js";
+import { watchWakePrompt } from "../events/watch-wake.js";
 import { applyTranscriptPatch, foldTurn, TranscriptFold, userRow } from "./transcript-fold.js";
 
 // Epoch ms stamped on the opening user row's sentAt.
@@ -439,6 +440,26 @@ describe("patches", () => {
             "replace",
             "replace",
         ]);
+    });
+
+    // The other half of the wake's delivery: a live turn takes it as a steer. It is the daemon's own words either way,
+    // so it must not become a user row here, and must not leave a rewind anchor pointing at a message nobody sent.
+    it("writes a watch's wake into a live turn as a notice, and never as a steer to rewind to", () => {
+        const prompt = watchWakePrompt({
+            outcome: "timeout",
+            id: "watch-1",
+            note: "the deploy",
+            elapsed: "2h",
+            command: "curl -sf https://example.test/health",
+            exitCode: 22,
+            output: "404",
+        });
+        const fold = new TranscriptFold(openingOf("ship it"));
+        fold.apply({ kind: "delta", text: "watching" });
+        fold.apply({ kind: "steer", text: prompt, sentAt: SENT_AT + 1 });
+        expect(fold.rows.map((row) => row.role)).toEqual(["user", "assistant", "notice"]);
+        expect(fold.rows.at(-1)?.text).toBe("the deploy — the watch gave up after 2h.");
+        expect(fold.steerRows).toEqual([]);
     });
 
     it("drop an empty bubble the turn opened and abandoned", () => {

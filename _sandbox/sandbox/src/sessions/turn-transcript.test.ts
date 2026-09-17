@@ -1,7 +1,9 @@
-import { type AgentEvent, RESUME_NOTES, withResumeNote } from "@intentic/sandbox-contract";
+import { WORKSPACE_ROOT } from "@intentic/constants";
+import { type AgentEvent, RESUME_NOTES, type TranscriptRow, watchWakePrompt, withResumeNote } from "@intentic/sandbox-contract";
 import { foldTurn, TranscriptFold } from "@intentic/sandbox-contract/transcript-fold";
 import { describe, expect, it } from "vitest";
 import { withRuntimeHistory } from "../agent/providers/runtime-history.js";
+import { restoredSessionMessages } from "./sessions.js";
 import { openingRows } from "./turn-transcript.js";
 
 // When the turn started: what its user row is stamped with (`TranscriptRow.sentAt`).
@@ -60,6 +62,23 @@ describe("openingRows", () => {
         expect(notice?.text).not.toBe(authNotice);
     });
 
+    // A condition watch's wake is delivered as an ordinary prompt, so without this it files machine prose under the
+    // user's name, in an editable bubble they could rewind the conversation to.
+    it("opens a watch's wake as a notice, never as something the user typed", () => {
+        const prompt = watchWakePrompt({
+            outcome: "met",
+            id: "watch-2",
+            note: "CI run 316",
+            elapsed: "43m",
+            command: "gh run view 316",
+            exitCode: 0,
+            output: "completed",
+        });
+        expect(openingRows({ prompt }, "/work", SENT_AT)).toEqual([
+            { role: "notice", text: "CI run 316 — the watch fired after 43m.", watchWake: { outcome: "met", note: "CI run 316", elapsed: "43m", sent: prompt } },
+        ]);
+    });
+
     // An @-mention and an upload share the same wire field; only the uploads become chips, since a plain mention is
     // already visible in the words themselves.
     it("draws uploads as chips and inline mentions as nothing", () => {
@@ -95,5 +114,56 @@ describe("openingRows", () => {
         }
         expect(headless.rows.map((row) => row.role)).toEqual(["assistant", "user", "assistant", "user"]);
         expect(headless.steerRows).toEqual([1, 3]);
+    });
+});
+
+// A prompt the daemon composed reaches the transcript by three separate paths, and each one turns it into rows on its
+// own: the daemon's record (openingRows), a live turn taking it as a steer (TranscriptFold), and a provider's own
+// session store read back (restoredSessionMessages). A reader that skips the disclosure does not fail loudly — it
+// quietly files machine prose under the user's name, and only in the one way it was reached. Comparing the three
+// against each other is what notices, including for a path added later.
+describe("a prompt nobody typed", () => {
+    const WAKE = watchWakePrompt({
+        outcome: "met",
+        id: "watch-2",
+        note: "CI run 316",
+        elapsed: "43m",
+        command: "gh run view 316",
+        exitCode: 0,
+        output: "completed",
+    });
+
+    // The provider store's own shape for one user message, which is what restoredSessionMessages reduces.
+    const stored = (text: string): { type: string; message: unknown } => ({
+        type: "user",
+        message: { role: "user", content: [{ type: "text", text }] },
+    });
+
+    const byEachReader = (prompt: string): TranscriptRow[][] => {
+        const fold = new TranscriptFold([]);
+        fold.apply({ kind: "steer", text: prompt, sentAt: SENT_AT });
+        return [openingRows({ prompt }, WORKSPACE_ROOT, SENT_AT), [...fold.rows], restoredSessionMessages([stored(prompt)], WORKSPACE_ROOT)];
+    };
+
+    it("reads the same whichever path it arrives by", () => {
+        const [recorded, steered, restored] = byEachReader(WAKE);
+        expect(recorded).toEqual([{ role: "notice", text: "CI run 316 — the watch fired after 43m.", watchWake: expect.objectContaining({ outcome: "met" }) }]);
+        expect(steered).toEqual(recorded);
+        expect(restored).toEqual(recorded);
+    });
+
+    it("is never a user row on any path, whatever else each one does with it", () => {
+        for (const rows of byEachReader(WAKE)) {
+            expect(rows.map((row) => row.role)).toEqual(["notice"]);
+        }
+    });
+
+    // The other half: a prompt the user DID type must still reach them as their own words on every path, or this
+    // guard could be satisfied by a reader that turns everything into a notice.
+    it("leaves a prompt the user typed as the user's own row everywhere", () => {
+        for (const rows of byEachReader("fix the build")) {
+            expect(rows.map((row) => row.role)).toEqual(["user"]);
+            expect(rows[0]?.text).toBe("fix the build");
+        }
     });
 });

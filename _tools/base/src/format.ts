@@ -27,3 +27,7 @@ export const escapeHtml = (text: string): string => text.replace(/[&<>"']/g, (ch
 
 // Constrains a value to [min, max]; used everywhere a pixel, percentage, or index must stay in bounds.
 export const clamp = (value: number, min: number, max: number): number => Math.min(max, Math.max(min, value));
+
+// A span in the fewest characters: seconds under two minutes, whole minutes above. Shared by the daemon's watch
+// wording and the board's own, which describe the same watch and must not round it two different ways.
+export const briefDuration = (seconds: number): string => (seconds < 120 ? `${seconds}s` : `${Math.round(seconds / 60)}m`);

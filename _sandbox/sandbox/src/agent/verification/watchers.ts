@@ -1,8 +1,8 @@
 import { execFile } from "node:child_process";
 import { access } from "node:fs/promises";
 import { sleep } from "@intentic/base/async";
-import { clamp } from "@intentic/base/format";
-import type { AgentTurn } from "@intentic/sandbox-contract";
+import { briefDuration, clamp } from "@intentic/base/format";
+import { type AgentTurn, type WatchOutcome, watchWakePrompt } from "@intentic/sandbox-contract";
 import type { Logger } from "pino";
 import type { WakeFn } from "../../automations/scheduler.js";
 import { turnCliEnv } from "../../capabilities/turn-env.js";
@@ -209,38 +209,20 @@ const publish = (conversationId: string): void =>
             })),
     );
 
-// Three endings that wake: `met` and `timeout` are promised at arm time; `restart-expired` is the world's own, a
-// deadline that passed while the daemon was down, evidence about us rather than about the world.
-type WatchOutcome = "met" | "timeout" | "restart-expired";
+const elapsed = (record: WatcherRecord): string => briefDuration(Math.round((Date.now() - record.armedAt) / 1000));
 
-const elapsed = (record: WatcherRecord): string => {
-    const seconds = Math.round((Date.now() - record.armedAt) / 1000);
-    return seconds < 120 ? `${seconds}s` : `${Math.round(seconds / 60)}m`;
-};
-
-// The wake's whole prompt: what was watched, how it ended, the check's last words, and one sentence saying this
-// continues the turn. A timeout says so first, since it calls for a different next step than a met condition.
-const report = (record: WatcherRecord, outcome: WatchOutcome): string => {
-    const head =
-        outcome === "met"
-            ? `The condition you were watching is now met (${elapsed(record)} after arming).`
-            : outcome === "timeout"
-              ? `The watch timed out after ${elapsed(record)} without the condition being met, the check never exited 0. Decide whether to re-arm it, investigate the check, or report back.`
-              : /* The restart ending, said as itself rather than dressed up as a timeout: the deadline passed while
-                 * the daemon was down, so the check did NOT run for part of that window and "it never happened" is
-                 * more than this watch actually knows. The one thing it does know is that the condition does not
-                 * hold now, because restore re-checks before it says any of this. */
-                `The watch was armed ${elapsed(record)} ago and its deadline passed while the daemon was restarting, so it stopped being checked partway through. It has just been re-checked once and the condition still does not hold. Decide whether to re-arm it, investigate the check, or report back.`;
-    const exit = record.last.exitCode === undefined ? "none (check was killed or failed to start)" : String(record.last.exitCode);
-    return [
-        `[watch ${record.id}] ${head}`,
-        `Watching: ${record.spec.note}`,
-        `Check command: ${record.spec.command}`,
-        `Last exit code: ${exit}`,
-        ...(record.last.output === "" ? [] : ["Last output (tail):", "```", record.last.output, "```"]),
-        "Continue the task this watch was armed for.",
-    ].join("\n");
-};
+// Composed through the contract, never spelled here: the same wording is what three readers turn back into the notice
+// row a person sees, so a wake worded locally would reach the model fine and reach the reader as their own typing.
+const report = (record: WatcherRecord, outcome: WatchOutcome): string =>
+    watchWakePrompt({
+        outcome,
+        id: record.id,
+        note: record.spec.note,
+        elapsed: elapsed(record),
+        command: record.spec.command,
+        exitCode: record.last.exitCode,
+        output: record.last.output,
+    });
 
 // Lands the report: a live turn takes it as a steer, otherwise a fresh turn resumes the current provider session.
 // `start` answering undefined means a turn is live but unsteerable; wait and retry.

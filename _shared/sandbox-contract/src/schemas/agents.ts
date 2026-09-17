@@ -418,6 +418,12 @@ export type AgentWatch = NonNullable<AgentSummary["watches"]>[number];
 // needs that type declared first.
 export const AgentIdSchema = z.object({ id: z.string().min(1).describe("Which conversation.") });
 
+// Naming no watch disarms every one, which is what a press made about the whole card means; a press made about one
+// watch's own transcript row names it, and leaves the conversation's other watches armed.
+export const AgentStopWatchingSchema = AgentIdSchema.extend({
+    watchId: z.string().optional().describe("Which watch to disarm. Absent disarms every watch this conversation is parked on."),
+});
+
 // Pages a transcript: a read returns its most recent turns and where they start (`from`); handing that back as `before`
 // asks for the page above. A stale cursor (a rewind, a fork) is clamped, never refused.
 export const AgentTranscriptQuerySchema = AgentIdSchema.extend({

@@ -1,4 +1,4 @@
-import type { AgentTurn, Rule } from "@intentic/sandbox-contract";
+import { type AgentTurn, isVerifyNudge, type Rule } from "@intentic/sandbox-contract";
 import type { Logger } from "pino";
 import { afterEach, expect, test, vi } from "vitest";
 import { WORKSPACE_ROOT } from "@intentic/constants";
@@ -61,6 +61,18 @@ test("a turn that changed code and proved nothing is sent a follow-up, as its ow
     // Runs where the work ran and picks the thread back up; a new provider or session asks the wrong agent.
     expect(started[0]).toMatchObject({ conversationId: "c1", agent: "codex", model: "gpt-5.1-codex", effort: "high", sessionId: "session-7" });
     expect(started[0]?.prompt).toBe(message);
+});
+
+// The nudge goes out as an ordinary prompt, so the chat has only its opening to tell it from something the user typed.
+// Sent without one it reaches the reader as their own words, in a bubble the edit pencil offers to rewind to.
+test("a follow-up opens with the words the chat recognises it by", async () => {
+    runtimeWith();
+    const edit = `${WORKSPACE_ROOT}/src/parser.ts`;
+    const message = await nudgeUnverifiedWork({ conversationId: "c1", seed, rules: [rule], ledger: edited(edit) });
+
+    expect(isVerifyNudge(message ?? "")).toBe(true);
+    // The findings still follow it whole: the opening is a preface, not a replacement.
+    expect(message).toContain(edit);
 });
 
 // Carries every field of the turn it nudges, not just provider/model/effort: `thinking`, `fast`, `actsAs` too, or a

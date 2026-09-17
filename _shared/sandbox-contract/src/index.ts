@@ -90,6 +90,8 @@ export * from "./events/cards.js";
 export * from "./events/resume.js";
 export * from "./events/system-events.js";
 export * from "./events/transcript.js";
+export * from "./events/verify-nudge.js";
+export * from "./events/watch-wake.js";
 export * from "./policy/card-status.js";
 export * from "./text/mentions.js";
 export * from "./protocol/sse.js";

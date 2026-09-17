@@ -43,7 +43,10 @@ mismatch is a type error rather than a runtime surprise.
   `TranscriptRow` (a speaker's bubble, a notice, a card), a `TranscriptPatch` (append, replace, drop, more text or
   thinking, a tool's progress)), the turn's own frames ([agent-events.ts](src/events/agent-events.ts): the
   `AgentEvent` union, the `TurnFact` view of it, and the `AttachFrame` union a window follows a run through), the
-  resume notes ([resume.ts](src/events/resume.ts)) and what is about the sandbox rather than a turn
+  resume notes ([resume.ts](src/events/resume.ts)), the two other prompts the daemon composes and sends as turns —
+  a condition watch's wake ([watch-wake.ts](src/events/watch-wake.ts)) and the unverified-work follow-up
+  ([verify-nudge.ts](src/events/verify-nudge.ts)), each recognisable by its opening so the chat can draw it as
+  something other than the user's own words — and what is about the sandbox rather than a turn
   ([system-events.ts](src/events/system-events.ts): heartbeat, boot, presence, what just moved).
 - [src/transcript-fold.ts](src/text/transcript-fold.ts), its own entry point (`@intentic/sandbox-contract/transcript-fold`):
   THE fold from a turn's frames to its rows, and the patches each frame is worth. The daemon runs it inside every

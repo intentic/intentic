@@ -13,7 +13,7 @@ import { implement, ORPCError } from "@orpc/server";
 import { streamAgent } from "../agent/routes/agent.routes.js";
 import { type HeldTurn, heldTurn } from "../agent/run/turn/turn-resume.js";
 import { opt } from "../agent/run/opt.js";
-import { cancelWatchersFor } from "../agent/verification/watchers.js";
+import { cancelWatcher, cancelWatchersFor } from "../agent/verification/watchers.js";
 import { emitWorkspaceEvent } from "../automations/workspace-events.js";
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../app-env.js";
@@ -326,8 +326,9 @@ export const createAgentsRoutes = (services: Services) => {
         // turn stops it). Legal in every state, including mid-turn, since a watch is a timer, not turn state.
         stopWatching: i.stopWatching.handler(async ({ input }) => {
             const entry = entryOf(input.id);
-            // Awaited: the disarm must reach the watch journal, or a recreate would restore it on boot.
-            await cancelWatchersFor(entry.id);
+            // Awaited: the disarm must reach the watch journal, or a recreate would restore it on boot. A named watch
+            // is disarmed alone; an unknown name is already-gone, not an error, since it may have fired mid-press.
+            await (input.watchId === undefined ? cancelWatchersFor(entry.id) : cancelWatcher(entry.id, input.watchId));
             // Reads back through `get`, not the live roster: an archived conversation can still hold armed watches.
             const summary = services.agents.get(entry.id);
             if (summary === undefined) {

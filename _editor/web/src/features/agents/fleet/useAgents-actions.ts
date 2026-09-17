@@ -140,17 +140,20 @@ export const resumeHeldTurn = async (id: string): Promise<void> => {
     await sandboxJson<{ run: string }>(`/agent/resume`, jsonBody(`POST`, { conversationId: id }));
 };
 
-// Disarms every outside condition this conversation is parked on. Optimistic, since dropping the watches is what moves
-// the card out of Active; a press that waited for the round trip would leave the card sitting in the lane it was
-// pressed out of.
-export const stopWatching = async (id: string): Promise<void> => {
+// Disarms outside conditions this conversation is parked on: all of them, or the one named. Optimistic, since dropping
+// the watches is what moves the card out of Active; a press that waited for the round trip would leave the card sitting
+// in the lane it was pressed out of.
+export const stopWatching = async (id: string, watchId?: string): Promise<void> => {
     const previous = registry.value.find((agent) => agent.id === id);
     const revert = previous?.watches;
     if (previous !== undefined) {
-        previous.watches = undefined;
+        // An empty array is not absence: the registry reads absence as "never watched", which would redraw the card.
+        const kept = watchId === undefined ? [] : (revert ?? []).filter((watch) => watch.id !== watchId);
+        previous.watches = kept.length > 0 ? kept : undefined;
     }
     try {
-        const summary = await sandboxJson<AgentSummary>(`/agents/${encodeURIComponent(id)}/stop-watching`, jsonBody(`POST`, {}));
+        const body = watchId === undefined ? {} : { watchId };
+        const summary = await sandboxJson<AgentSummary>(`/agents/${encodeURIComponent(id)}/stop-watching`, jsonBody(`POST`, body));
         registry.value = registry.value.map((agent) => (agent.id === id ? summary : agent));
     } catch (error) {
         const target = registry.value.find((agent) => agent.id === id);

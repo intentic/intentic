@@ -8,6 +8,7 @@ import {
     type TranscriptQuestion,
     type TranscriptRow,
     type TranscriptTool,
+    watchWakeRow,
 } from "@intentic/sandbox-contract";
 import { z } from "zod";
 import { stripAttachmentNote } from "../agent/prompt/attachment-note.js";
@@ -16,6 +17,7 @@ import { parseRuntimeHistory } from "../agent/providers/runtime-history.js";
 import { TaskChecklist } from "../agent/run/task-checklist.js";
 import { displayNameOf, editDiffContent, resultText, toolCategoryOf, toolLocations, toolTarget } from "../agent/tools/tool-calls.js";
 import { unwrapStoredPrompt } from "../agent/prompt/turn-preamble.js";
+import { rootRelative } from "./turn-transcript.js";
 import type { SearchIndex } from "./search-index.js";
 import { matchLines, sessionOverlay } from "./transcript-search.js";
 
@@ -160,6 +162,37 @@ export const readWorkspaceSessionTail = async (dir: string, id: string): Promise
     return restoredSessionMessages(messages.slice(lastTurnStart(messages)), dir);
 };
 
+// One stored user message, as rows. A prompt nobody typed becomes a row of its own — a watch's wake, a re-run's
+// interruption — because drawing either as a bubble credits the user with words the daemon wrote. `dir` is the
+// workspace root that attachment chips resolve against.
+const storedPromptRows = (text: string, dir: string): TranscriptRow[] => {
+    // Read exactly as the daemon's own record reads it (turn-transcript.ts), or one wake has two appearances.
+    const wake = watchWakeRow(text);
+    if (wake !== undefined) {
+        return [wake];
+    }
+    const unwrapped = unwrapStoredPrompt(text);
+    // A re-run's resumed prompt becomes a muted line, not a duplicate; its note rides separately on the card.
+    const resume = unwrapped.resume;
+    if (resume?.kind === "notice") {
+        return [{ role: "notice", text: resume.text }];
+    }
+    const stripped = stripAttachmentNote(unwrapped.text);
+    const attachments = rootRelative(stripped.attachments, dir);
+    // The stripped preamble rides along as a note, read the same way the daemon's own record keeps it.
+    const notes = [...unwrapped.notes, ...(resume?.kind === "note" ? [resume.note] : [])];
+    const added = notes.length > 0 ? { notes } : {};
+    const chips = attachments.length > 0 ? { attachments } : {};
+    const runtime = parseRuntimeHistory(stripped.text);
+    if (runtime !== undefined) {
+        const carried: TranscriptRow[] = [...runtime.history];
+        return runtime.prompt.length > 0 || attachments.length > 0
+            ? [...carried, { role: "user", text: runtime.prompt, ...chips, ...added }]
+            : carried;
+    }
+    return stripped.text.length > 0 || attachments.length > 0 ? [{ role: "user", text: stripped.text, ...chips, ...added }] : [];
+};
+
 // The stored-message reducer, shared with a subagent's transcript so both assemble by identical rules. The bubble
 // boundary is the prose block (`text_end`), exactly as the live stream draws it.
 export const restoredSessionMessages = (
@@ -266,27 +299,7 @@ export const restoredSessionMessages = (
             // Real words close whatever bubble was still open above them; a tool_results-only message never reaches
             // here.
             flush();
-            const unwrapped = unwrapStoredPrompt(text);
-            // A re-run's resumed prompt becomes a muted line, not a duplicate; its note rides separately on the card.
-            const resume = unwrapped.resume;
-            if (resume?.kind === "notice") {
-                out.push({ role: "notice", text: resume.text });
-                continue;
-            }
-            const stripped = stripAttachmentNote(unwrapped.text);
-            const attachments = stripped.attachments.map((path) => (path.startsWith(`${dir}/`) ? path.slice(dir.length + 1) : path));
-            // The stripped preamble rides along as a note, read the same way the daemon's own record keeps it.
-            const notes = [...unwrapped.notes, ...(resume?.kind === "note" ? [resume.note] : [])];
-            const added = notes.length > 0 ? { notes } : {};
-            const runtime = parseRuntimeHistory(stripped.text);
-            if (runtime !== undefined) {
-                out.push(...runtime.history);
-                if (runtime.prompt.length > 0 || attachments.length > 0) {
-                    out.push({ role: "user", text: runtime.prompt, ...(attachments.length > 0 ? { attachments } : {}), ...added });
-                }
-            } else if (stripped.text.length > 0 || attachments.length > 0) {
-                out.push({ role: "user", text: stripped.text, ...(attachments.length > 0 ? { attachments } : {}), ...added });
-            }
+            out.push(...storedPromptRows(text, dir));
             continue;
         }
 

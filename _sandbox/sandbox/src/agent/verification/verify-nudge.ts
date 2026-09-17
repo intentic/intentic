@@ -1,5 +1,5 @@
 import { sleep } from "@intentic/base/async";
-import type { AgentTurn, Rule, RuleBuiltin } from "@intentic/sandbox-contract";
+import { type AgentTurn, type Rule, type RuleBuiltin, verifyNudgePrompt } from "@intentic/sandbox-contract";
 import type { Logger } from "pino";
 import type { WakeFn } from "../../automations/scheduler.js";
 import type { Services } from "../../composition.js";
@@ -109,8 +109,10 @@ export const nudgeUnverifiedWork = async (nudge: VerifyNudge): Promise<string | 
     if (asks.length === 0 && findings.length === 0) {
         return undefined;
     }
-    // A failed check first: it is the thing the follow-up must repair, the asks are what it must then show.
-    const message = [...findings, ...asks.map((ask) => ask.message)].join("\n\n");
+    // A failed check first: it is the thing the follow-up must repair, the asks are what it must then show. Composed
+    // through the contract's opening, since the chat recognises a nudge by it and draws it as the app's errand rather
+    // than as words the user typed.
+    const message = verifyNudgePrompt([...findings, ...asks.map((ask) => ask.message)]);
     pending.add(nudge.conversationId);
     for (const ask of asks) {
         nudge.onFired?.(ask.rule);

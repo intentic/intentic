@@ -2,12 +2,15 @@
 import { QueryClient, VueQueryPlugin } from "@tanstack/vue-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { type App, createApp, h, nextTick, reactive } from "vue";
+import { type AgentWatch, verifyNudgePrompt, watchWakePrompt, watchWakeRow } from "@intentic/sandbox-contract";
 import { ERRANDS, errandPrompt } from "../run/errands";
 import type { ChatMessage } from "./transcript";
 import { IconStub } from "@intentic/ui/testing";
 
 const clock = vi.hoisted(() => ({ turnStartedAt: undefined as number | undefined }));
-const roster = vi.hoisted(() => ({ running: 0 }));
+const roster = vi.hoisted(() => ({ running: 0, watches: undefined as AgentWatch[] | undefined }));
+// Async like the action it stands in for: the row awaits it and swallows a failed disarm, so a sync stub rejects.
+const stopWatching = vi.hoisted(() => vi.fn(async () => undefined));
 // Pane state the edit pencil reads: mid-turn streaming and this message's own armed edit both hide it.
 const pane = vi.hoisted(() => ({ streaming: true, editing: undefined as ChatMessage | undefined }));
 const beginEdit = vi.hoisted(() => vi.fn());
@@ -157,12 +160,14 @@ vi.mock("../panel/useChat-view", async () => {
     };
 });
 
-// Roster count of this conversation's live subagents, which the loader reports waiting on.
+// Roster count of this conversation's live subagents, which the loader reports waiting on, and the outside conditions
+// it is parked on, which a watch's own notice row reads to say whether it is still waiting.
 vi.mock("../../agents/fleet/useAgents", () => ({
     useAgents: () => ({
-        agentById: () => ({ subagents: { running: roster.running, total: roster.running } }),
+        agentById: () => ({ subagents: { running: roster.running, total: roster.running }, watches: roster.watches }),
         setAutoLand: vi.fn(),
         setResumeAfterOutage: vi.fn(),
+        stopWatching,
     }),
 }));
 
@@ -197,6 +202,8 @@ beforeEach(() => {
     vi.setSystemTime(1_000_000);
     clock.turnStartedAt = Date.now() - 35_000;
     roster.running = 0;
+    roster.watches = undefined;
+    stopWatching.mockClear();
     markdown.parts = [];
     pane.streaming = true;
     pane.editing = undefined;
@@ -591,6 +598,20 @@ describe(`ChatMessageView errand row`, () => {
         await nextTick();
         expect(element.textContent).toContain(`src/auth/session.ts`);
     });
+
+    // The one errand the DAEMON composes rather than this app (verify-nudge.ts). Built here the way the daemon builds
+    // it, through the contract both ends share, so a reworded opening on either side fails rather than quietly
+    // un-recognising the nudge and filing it as something the user typed.
+    it(`recognises the sandbox's own follow-up, composed the way the daemon composes it`, () => {
+        const sent = verifyNudgePrompt([`This turn changed code and no check has passed since the last edit:\n- src/parser.ts`]);
+        const element = mount({ id: 4, role: `user`, text: sent });
+
+        expect(element.textContent).toContain(ERRANDS.verifyNudge.label);
+        expect(element.querySelector(`.chat-prompt`)).toBeNull();
+        expect(element.querySelector(`button[aria-label="Edit this message"]`)).toBeNull();
+        // The asks stay behind the mark: the row says what happened, not the whole of what was asked for.
+        expect(element.textContent).not.toContain(`src/parser.ts`);
+    });
 });
 
 // Notes mark: same bargain as the errand row, for sandbox-prepended context, in two steps — the mark says how much was
@@ -815,5 +836,114 @@ describe(`ChatMessageView pinned band`, () => {
         await nextTick();
 
         expect(row.className).not.toContain(`chat-prompt-pinned`);
+    });
+});
+
+// A watch is the one thing in a conversation that acts while nobody is looking: it is armed inside one turn and fires
+// into another, hours later. Both moments are rows nobody typed, and drawing either as a user bubble credits the
+// reader with words the daemon wrote — which the edit pencil would then offer to rewind the conversation to.
+describe(`condition watches`, () => {
+    const WAKE = watchWakePrompt({
+        outcome: `met`,
+        id: `watch-2`,
+        note: `CI run 316 on intentic/intentic`,
+        elapsed: `43m`,
+        command: `gh run view 316 --json status`,
+        exitCode: 0,
+        output: `completed success`,
+    });
+
+    // As the daemon's own readers build it (sandbox-contract/watch-wake.ts), rather than transcribed: a row hand-built
+    // here would keep passing after the composer changed under it.
+    const wakeRow = (prompt: string = WAKE): ChatMessage => ({ id: 9, ...watchWakeRow(prompt)! });
+
+    const armedRow = (): ChatMessage => ({
+        id: 8,
+        role: `notice`,
+        text: `Watching for CI run 316 on intentic/intentic, checked every 60s.`,
+        noticeWait: `watch`,
+        noticeWaitId: `watch-2`,
+        noticeAction: `watchStop`,
+    });
+
+    const armed = (over: Partial<AgentWatch> = {}): AgentWatch => ({
+        id: `watch-2`,
+        note: `CI run 316 on intentic/intentic`,
+        intervalSeconds: 60,
+        deadlineAt: Date.now() + 90 * 60_000,
+        ...over,
+    });
+
+    it(`draws a wake as a notice line, never as a prompt the user could edit`, () => {
+        const element = mount(wakeRow());
+        expect(element.querySelector(`.chat-prompt`)).toBeNull();
+        expect(element.querySelector(`button[aria-label="Edit this message"]`)).toBeNull();
+        expect(element.textContent).toContain(`CI run 316 on intentic/intentic — the watch fired after 43m.`);
+    });
+
+    // The board marks a watch with `eye` (AgentsView's Stop watching command); one conversation's watch reading as two
+    // different things in two places is how a reader stops connecting them.
+    it(`marks a settled wake with the board's own watch glyph`, () => {
+        const icons = [...mount(wakeRow()).querySelectorAll(`i`)].map((icon) => icon.getAttribute(`data-icon`));
+        expect(icons).toContain(`eye`);
+        expect(icons).not.toContain(`info-circle`);
+    });
+
+    it(`keeps the check out of the reading column until it is asked for, then shows what was actually sent`, async () => {
+        const element = mount(wakeRow());
+        expect(element.querySelector(`pre`)).toBeNull();
+
+        element.querySelector<HTMLButtonElement>(`button[aria-expanded="false"]`)!.click();
+        await nextTick();
+
+        // Verbatim, not a summary: the exit code and the check's own tail are the evidence for a line nobody typed.
+        expect(element.querySelector(`pre`)?.textContent).toBe(WAKE);
+        expect(element.querySelector(`pre`)?.textContent).toContain(`Last exit code: 0`);
+    });
+
+    // The one ending that calls for a different next step, so it is the one that carries weight rather than reading as
+    // the good news beside it.
+    it(`weights a watch that gave up differently from one that fired`, () => {
+        const gaveUp = watchWakePrompt({
+            outcome: `timeout`,
+            id: `watch-2`,
+            note: `the deploy`,
+            elapsed: `2h`,
+            command: `curl -sf https://example.test/health`,
+            exitCode: 22,
+            output: ``,
+        });
+        expect(mount(wakeRow(gaveUp)).querySelector(`.text-danger`)).not.toBeNull();
+        expect(mount(wakeRow()).querySelector(`.text-danger`)).toBeNull();
+    });
+
+    it(`counts an armed watch down to its deadline, so the row says when the chat next moves`, () => {
+        roster.watches = [armed()];
+        const element = mount(armedRow());
+        expect(element.querySelector(`i[data-spin]`)).not.toBeNull();
+        expect(element.textContent).toContain(`1h 30m`);
+    });
+
+    // Without the row's own id every armed watch settles when any one of them does, and a chat still parked on a
+    // deploy would read as finished.
+    it(`settles a row whose own watch is gone, while another stays armed`, () => {
+        roster.watches = [armed({ id: `watch-7`, note: `the deploy` })];
+        const element = mount(armedRow());
+        expect(element.querySelector(`i[data-spin]`)).toBeNull();
+        expect(element.textContent).toContain(`Watching for CI run 316 on intentic/intentic, checked every 60s.`);
+        expect(element.textContent).not.toContain(`Stop watching`);
+    });
+
+    it(`disarms the one watch the row names, leaving the conversation's others alone`, () => {
+        roster.watches = [armed(), armed({ id: `watch-7`, note: `the deploy` })];
+        const element = mount(armedRow());
+
+        [...element.querySelectorAll(`button`)].find((button) => button.textContent === `Stop watching`)!.click();
+
+        expect(stopWatching).toHaveBeenCalledWith(`agent-1`, `watch-2`);
+    });
+
+    it(`offers no stop on a wake, which has already happened`, () => {
+        expect(mount(wakeRow()).textContent).not.toContain(`Stop watching`);
     });
 });

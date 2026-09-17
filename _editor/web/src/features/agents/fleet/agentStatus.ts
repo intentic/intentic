@@ -1,4 +1,5 @@
 import type { IconName } from "@intentic/ui";
+import { briefDuration } from "@intentic/base/format";
 import { formatWeekdayTime } from "@intentic/ui/format";
 import type { AgentAttention, AgentOrigin, AgentStatus, AgentSummary, AgentWatch, LandConflictReason, LoopState } from "@intentic/sandbox-contract";
 
@@ -633,9 +634,10 @@ export const limitCountdown = (agent: AgentStanding, now: number): string | unde
     return at - now >= CLOCK_FROM_MS ? formatWeekdayTime(at) : formatElapsed(now, at);
 };
 
-// A watch's pacing in the fewest characters: seconds under two minutes, whole minutes above. Only used inside the
-// watch hint.
-const everyOf = (seconds: number): string => (seconds < 120 ? `${seconds}s` : `${Math.round(seconds / 60)}m`);
+// The watch a card's clock counts to: the first deadline to arrive is the next moment the card definitely moves. One
+// definition, since the chat's own watch row asks the same question about the same conversation.
+export const soonestWatch = (agent: AgentStanding): AgentWatch | undefined =>
+    agent.watches?.reduce((first: AgentWatch | undefined, next) => (first === undefined || next.deadlineAt < first.deadlineAt ? next : first), undefined);
 
 // Glyph, phrase and clock, matching the shape a running turn's own readout uses (`Bash · 1m 12s`), so the board
 // has one grammar for "what is this doing and for how long". The phrase is the agent's own note, not the word
@@ -649,15 +651,15 @@ export const watchLine = (
     now: number,
 ): { readonly text: string; readonly countdown: string; readonly hint: string } | undefined => {
     const watches = agent.watches;
-    if (watches === undefined || watches.length === 0) {
+    const soonest = soonestWatch(agent);
+    if (watches === undefined || soonest === undefined) {
         return undefined;
     }
-    const soonest = watches.reduce((first, next) => (next.deadlineAt < first.deadlineAt ? next : first));
     // `formatElapsed` measures the second argument from the first, so `now → deadline` gives the time left, in the
     // same vocabulary as a running turn's elapsed readout.
     const countdown = formatElapsed(now, soonest.deadlineAt);
     const detail = watches
-        .map((watch) => `${watch.note} (checked every ${everyOf(watch.intervalSeconds)}, gives up in ${formatElapsed(now, watch.deadlineAt)})`)
+        .map((watch) => `${watch.note} (checked every ${briefDuration(watch.intervalSeconds)}, gives up in ${formatElapsed(now, watch.deadlineAt)})`)
         .join(`; `);
     return {
         text: watches.length === 1 ? soonest.note : `Watching ${watches.length} conditions`,

@@ -1,6 +1,8 @@
 import type { McpSdkServerConfigWithInstance } from "@anthropic-ai/claude-agent-sdk";
 import { matchCommand } from "@intentic/sandbox-contract";
+import { briefDuration } from "@intentic/base/format";
 import { sdk } from "../../runtimes/claude/claude-sdk.js";
+import { turnRunOf } from "../run/turn/turn-runs.js";
 import { z } from "zod";
 import { commandRun } from "../../guard/actions.js";
 import { createCredentialOracle } from "../../guard/credential-files.js";
@@ -109,6 +111,16 @@ export const watchServer = (deps: WatchServerDeps): McpSdkServerConfigWithInstan
                             firstCheck: outcome.firstCheck,
                         });
                     }
+                    // The wait made visible: without this row the turn ends, the chat looks finished, and the wake
+                    // hours later arrives as a non-sequitur. Only an arm inside a turn writes one — a watch restored
+                    // after a restart is already on the record.
+                    turnRunOf(deps.conversationId)?.note({
+                        role: "notice",
+                        text: `Watching for ${args.note}, checked every ${briefDuration(outcome.intervalSeconds)}.`,
+                        noticeWait: "watch",
+                        noticeWaitId: outcome.id,
+                        noticeAction: "watchStop",
+                    });
                     return answer({
                         outcome: "armed",
                         watchId: outcome.id,

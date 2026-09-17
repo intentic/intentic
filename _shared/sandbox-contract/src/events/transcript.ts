@@ -120,6 +120,23 @@ export interface TranscriptTool {
     subagent?: TranscriptSubagent | undefined;
 }
 
+// Three endings that wake a conversation off a condition watch: the first two are promised when it is armed, the third
+// is the daemon's own (a deadline that passed while it was down). Composing and parsing the wake is watch-wake.ts.
+export const WatchOutcomeSchema = z.enum(["met", "timeout", "restart-expired"]);
+export type WatchOutcome = z.infer<typeof WatchOutcomeSchema>;
+
+// A condition watch waking the conversation, as the row carries it. The wake arrives as an ordinary turn prompt that
+// nobody typed, so the row keeps that prompt verbatim rather than a summary of it.
+export const TranscriptWatchWakeSchema = z.object({
+    outcome: WatchOutcomeSchema.describe("How the watch ended: the condition held, the deadline passed, or a restart cut it short."),
+    note: z.string().describe("The agent's own line on what it was waiting for."),
+    elapsed: z
+        .string()
+        .describe("How long the watch stood, already worded ('43m'): carried rather than recomputed, since the arming instant is not on the row."),
+    sent: z.string().describe("The whole prompt the model was woken with, disclosed under the row."),
+});
+export type TranscriptWatchWake = z.infer<typeof TranscriptWatchWakeSchema>;
+
 // One note the daemon put before a user's message: the model reads `text`, the chat draws `title` on a row that opens
 // to it. Shared by the live frame and the restored transcript, so it reads the same either way.
 export const TurnNoteSchema = z.object({
@@ -191,14 +208,19 @@ export const TranscriptRowSchema = z.object({
         ),
     // The one-press follow-up this notice offers, by name; the chat decides what it does, and whether it stands.
     noticeAction: z
-        .enum(["landHold", "outageOptOut", "depsInstall", "tierHold"])
+        .enum(["landHold", "outageOptOut", "depsInstall", "tierHold", "watchStop"])
         .optional()
         .describe("A one-press follow-up this notice offers, by name. The chat decides what it does and whether it still applies."),
     // An unfinished wait this notice describes, by name; whether it's still running is live state, not stored here.
     noticeWait: z
-        .enum(["credentialRenewal", "personaRoute"])
+        .enum(["credentialRenewal", "personaRoute", "watch"])
         .optional()
         .describe("The wait this notice describes, by name, so a reader can say whether it is still on."),
+    // Which one, for a wait whose kind can have several in flight at once; without it two armed watches settle together.
+    noticeWaitId: z
+        .string()
+        .optional()
+        .describe("Which instance of the wait this notice names, for a kind that can have several running at once."),
     // At most one card per row; a card closes its bubble. One field per kind, so a reader reaches it by name.
     plan: TranscriptPlanSchema.optional().describe("The plan this row asked approval for, and the answer."),
     question: TranscriptQuestionSchema.optional().describe("The questions this row asked, and the picks that answered them."),
@@ -207,6 +229,7 @@ export const TranscriptRowSchema = z.object({
     terminalHelp: TranscriptTerminalHelpSchema.optional().describe("The terminal hand-over this row asked for, and how it ended."),
     capabilityOffer: TranscriptCapabilityOfferSchema.optional().describe("The capability setup this row asked for, the decision, and the outcome."),
     paymentOffer: TranscriptPaymentOfferSchema.optional().describe("The payment this row asked for, the decision, and the receipt."),
+    watchWake: TranscriptWatchWakeSchema.optional().describe("The condition watch that woke this conversation, and the prompt it was woken with."),
     credentialOffer: TranscriptCredentialOfferSchema.optional().describe(
         "The gated credential this row asked to use, who may release it, and who did.",
     ),

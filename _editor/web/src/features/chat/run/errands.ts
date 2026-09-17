@@ -1,5 +1,5 @@
 import type { IconName } from "@intentic/ui";
-import { withoutResumeNote } from "@intentic/sandbox-contract";
+import { VERIFY_NUDGE_OPENING, withoutResumeNote } from "@intentic/sandbox-contract";
 import type { ChatMessage } from "../transcript/transcript";
 
 // An app-composed prompt, sent as an ordinary turn (so the agent, Stop and the queue treat it unchanged) but folded and
@@ -24,6 +24,14 @@ export const ERRANDS = {
         label: `Resolving the land conflict`,
         detail: `Sent by the app, landing this work refused`,
         opening: `Landing your work hit a merge conflict, none of it reached the user's workspace; it is all still on your branch. Rebase onto the main line and resolve the conflicts yourself. In each repo below (\`root\` is your working directory, any other name that subdirectory of it):`,
+    },
+    // Composed by the DAEMON, unlike the one above, so its opening is the contract's rather than a literal here: the
+    // two ends would drift the first time either was reworded on its own.
+    verifyNudge: {
+        icon: `check-circle`,
+        label: `Checking the work it just did`,
+        detail: `Sent by the sandbox, that turn ended unverified`,
+        opening: VERIFY_NUDGE_OPENING,
     },
 } as const satisfies Record<string, Errand>;
 

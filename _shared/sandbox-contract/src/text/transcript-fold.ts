@@ -2,6 +2,7 @@ import { cancelledCards, settledCards } from "../policy/card-status.js";
 import type { AgentEvent } from "../events/agent-events.js";
 import { CARD_FIELDS, holdsCard, isAwaitingDecision, type TranscriptCards, type TranscriptPatch, type TranscriptRow, type TranscriptSubagent, type TranscriptTool } from "../events/transcript.js";
 import { mentionedPathTokens } from "./mentions.js";
+import { watchWakeRow } from "../events/watch-wake.js";
 
 // Folds a turn's frames into rows once, live and for the settled record alike, so a reopened chat matches what was on
 // screen. `tag` selects the stream read: undefined is the main turn, a tool-call id is the subagent it spawned; other
@@ -236,17 +237,8 @@ export class TranscriptFold {
                 this.rows[index]!.usage = usage;
                 return [...closed, this.replace(index)];
             }
-            case "steer": {
-                // A steer also closes the bubble, or the next answer would print over it mid-call.
-                const patches = this.pushRow({
-                    role: "user",
-                    text: event.text,
-                    sentAt: event.sentAt,
-                    ...(event.attachments === undefined ? {} : { attachments: [...event.attachments] }),
-                });
-                this.steerRows.push(this.rows.length - 1);
-                return patches;
-            }
+            case "steer":
+                return this.steered(event);
             case "checkpoint":
                 // Anchors the pre-turn snapshot id and this turn's transcript position on its user row, for rewind.
                 return this.stampOpener((row) => {
@@ -368,6 +360,26 @@ export class TranscriptFold {
             case "done":
                 return [];
         }
+    }
+
+    /**
+     * A message pushed into a turn already running. A condition watch's wake arrives this way too, and it is the
+     * daemon's own words: it becomes a notice, and never an anchor the rewind can return a person to.
+     */
+    private steered(event: Extract<AgentEvent, { kind: "steer" }>): TranscriptPatch[] {
+        const wake = watchWakeRow(event.text);
+        if (wake !== undefined) {
+            return this.pushRow(wake);
+        }
+        // A steer also closes the bubble, or the next answer would print over it mid-call.
+        const patches = this.pushRow({
+            role: "user",
+            text: event.text,
+            sentAt: event.sentAt,
+            ...(event.attachments === undefined ? {} : { attachments: [...event.attachments] }),
+        });
+        this.steerRows.push(this.rows.length - 1);
+        return patches;
     }
 
     /** Appends a daemon-authored row (a decision notice, card feedback) after everything said so far. */

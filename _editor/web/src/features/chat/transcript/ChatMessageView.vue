@@ -112,7 +112,7 @@ const capabilityDescription = computed(() => {
 const { mobile } = useDevice();
 
 // landHold's one-press opt-out from future auto-land, scoped per-agent and gated on the current effective posture.
-const { agentById, setAutoLand, setResumeAfterOutage } = useAgents();
+const { agentById, setAutoLand, setResumeAfterOutage, stopWatching } = useAgents();
 const { settings: sandboxSettings } = useSandboxSettings();
 const holdOffer = computed(
     () =>
@@ -143,6 +143,20 @@ const watchDepsInstall = (): void => {
     if (installSession.value !== undefined) {
         openWorkTerminal(installSession.value);
     }
+};
+
+// The outside condition this row is about, while it is still armed (AgentSummary.watches). Named by id rather than
+// taken as "the conversation is watching something", so two armed watches settle their rows one at a time.
+const armedWatch = computed(() => {
+    const id = props.message.noticeWaitId;
+    return id === undefined ? undefined : agentById(conversation.value.conversationId)?.watches?.find((armed) => armed.id === id);
+});
+
+// Disarms the one watch this row names, leaving the conversation's others armed; offered only while it is still on,
+// so a fired watch's row keeps its words without keeping a button that would do nothing.
+const watchStopOffer = computed(() => props.message.noticeAction === `watchStop` && armedWatch.value !== undefined);
+const stopThisWatch = async (): Promise<void> => {
+    await stopWatching(conversation.value.conversationId, props.message.noticeWaitId).catch(() => undefined);
 };
 
 // One-press opt-out from automatic tier routing; flips the conversation's own tierHold flag, not the sandbox setting.
@@ -198,12 +212,22 @@ const showTyping = computed(() => props.streaming && !awaitingDecision.value);
 
 // Wait shown by this notice while running (ChatMessage.noticeWait); undefined once it ends. Each kind is asked of
 // whoever owns that wait, since none of them is a field on the row.
-const pendingWait = computed(() => {
+const pendingWait = computed<{ readonly at: number; readonly counts: "up" | "down" } | undefined>(() => {
     switch (props.message.noticeWait) {
-        case `credentialRenewal`:
-            return conversation.value.failures.credentialRenewal.value;
-        case `personaRoute`:
-            return personaRouteWait(conversation.value);
+        case `credentialRenewal`: {
+            const since = conversation.value.failures.credentialRenewal.value?.since;
+            return since === undefined ? undefined : { at: since, counts: `up` };
+        }
+        case `personaRoute`: {
+            const since = personaRouteWait(conversation.value)?.since;
+            return since === undefined ? undefined : { at: since, counts: `up` };
+        }
+        case `watch`: {
+            // Counts down, like the board's own watch clock: the deadline is the next moment this conversation
+            // definitely moves, and how long it has already waited says nothing about that.
+            const deadline = armedWatch.value?.deadlineAt;
+            return deadline === undefined ? undefined : { at: deadline, counts: `down` };
+        }
         default:
             return undefined;
     }
@@ -211,6 +235,20 @@ const pendingWait = computed(() => {
 
 // Clock for a pending notice wait only; stops once the wait ends.
 const now = useNow(() => pendingWait.value !== undefined);
+const waitClock = computed(() => {
+    const wait = pendingWait.value;
+    if (wait === undefined) {
+        return undefined;
+    }
+    return wait.counts === `up` ? formatElapsed(wait.at, now.value) : formatElapsed(now.value, wait.at);
+});
+
+// The wake itself: its evidence is one press away rather than in the reading column, since a fired watch is usually
+// read as "good, it happened" and only sometimes as "why did it say that".
+const watchEvidence = ref(false);
+// A watch that ended without its condition ever holding is the one outcome calling for a different next step, so it is
+// the one that carries weight in the row rather than reading as the good news beside it.
+const watchGaveUp = computed(() => props.message.watchWake !== undefined && props.message.watchWake.outcome !== `met`);
 
 // Edit pencil shows only for a user prompt with a rewindIndex, never mid-turn (agent/rewind.ts), and never while this
 // message's own edit is open.
@@ -492,17 +530,38 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
         </div>
         <div
             v-else-if="message.role === 'notice' && message.text !== ''"
-            class="flex flex-wrap items-center justify-center gap-x-2 gap-y-0.5 self-center py-0.5 text-2xs text-subtle"
+            class="flex flex-wrap items-center justify-center gap-x-2 gap-y-0.5 self-center py-0.5 text-2xs"
+            :class="watchGaveUp ? `text-danger` : `text-subtle`"
         >
 <!-- Mark, sentence and clock are one non-wrapping group inside the wrapping row: a sentence wider than the pane must wrap inside its own span. -->
             <span class="flex min-w-0 items-center gap-x-2">
-                <!-- Spins and shows elapsed time while the notice's wait runs, then settles to a plain line (ChatMessage.noticeWait). -->
+                <!-- Spins and shows the wait's clock while it runs, then settles to a plain line (ChatMessage.noticeWait). -->
                 <!-- A mark set at the row's own 11px has no counter left to read; both glyphs take a step up from the sentence. -->
                 <Icon v-if="pendingWait" name="spinner" spin class="shrink-0 text-xs text-info" />
-                <Icon v-else name="info-circle" class="shrink-0 text-xs" />
+                <!-- The board's own watch glyph, so one conversation's watch reads the same in both places. -->
+                <Icon v-else :name="message.watchWake ? `eye` : `info-circle`" class="shrink-0 text-xs" />
                 <span class="min-w-0">{{ message.text }}</span>
-                <span v-if="pendingWait" class="shrink-0 tabular-nums">{{ formatElapsed(pendingWait.since, now) }}</span>
+                <span v-if="waitClock" class="shrink-0 tabular-nums">{{ waitClock }}</span>
             </span>
+            <template v-if="watchStopOffer">
+                <button type="button" class="shrink-0 font-medium text-link hover:underline" @click="stopThisWatch">Stop watching</button>
+                <span class="shrink-0">(this chat stays put instead of picking itself back up)</span>
+            </template>
+            <!-- Nobody typed the wake, so what the model was told is one press away rather than taken on trust. -->
+            <button
+                v-if="message.watchWake"
+                type="button"
+                class="shrink-0 font-medium text-link hover:underline"
+                :aria-expanded="watchEvidence"
+                @click="watchEvidence = !watchEvidence"
+            >
+                {{ watchEvidence ? `Hide the check` : `Show the check` }}
+            </button>
+            <pre
+                v-if="watchEvidence && message.watchWake"
+                class="chat-inset max-h-64 w-full overflow-auto px-2.5 py-1.5 text-left text-2xs leading-relaxed whitespace-pre-wrap text-subtle"
+                >{{ message.watchWake.sent }}</pre
+            >
             <!-- Optional follow-up offer on a notice (see holdOffer): a link, not a button, stated as a trailing clause. -->
             <template v-if="holdOffer">
                 <button type="button" class="shrink-0 font-medium text-link hover:underline" @click="holdFutureLands">

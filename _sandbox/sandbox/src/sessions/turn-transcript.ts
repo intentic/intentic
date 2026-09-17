@@ -1,10 +1,25 @@
-import { type AgentTurn, capabilitiesOf, resumeDisclosure, type TranscriptRow, withoutResumeNote } from "@intentic/sandbox-contract";
+import { type AgentTurn, capabilitiesOf, resumeDisclosure, type TranscriptRow, watchWakeRow, withoutResumeNote } from "@intentic/sandbox-contract";
 import { userRow } from "@intentic/sandbox-contract/transcript-fold";
 import { stripAttachmentNote } from "../agent/prompt/attachment-note.js";
 import { parseRuntimeHistory } from "../agent/providers/runtime-history.js";
 import { takeSteerAnchors } from "../agent/anchors/steer-anchors.js";
 import type { Services } from "../composition.js";
 import type { TranscriptAgent } from "./agent-transcript.js";
+
+// Attachment paths as a row carries them: relative to the workspace root, absolute anywhere else left alone.
+export const rootRelative = (paths: readonly string[], root: string): string[] =>
+    paths.map((path) => (path.startsWith(`${root}/`) ? path.slice(root.length + 1) : path));
+
+// The row a prompt nobody typed becomes: a watch wake, or a re-run's interruption. Both replace the message rather than
+// riding it, since showing either as a user bubble credits the user with words the daemon wrote.
+const unspokenRow = (prompt: string): TranscriptRow | undefined => {
+    const wake = watchWakeRow(prompt);
+    if (wake !== undefined) {
+        return wake;
+    }
+    const resume = resumeDisclosure(prompt);
+    return resume?.kind === "notice" ? { role: "notice", text: resume.text } : undefined;
+};
 
 // Strips the daemon's own layers off `turn.prompt` (an outer resume note, a trailing attachment note) to recover the
 // user's words; the preamble frame is never among them. `turn.attachments` is authoritative when present; paths are
@@ -15,15 +30,15 @@ export const openingRows = (
     // When the turn started; the user row is stamped with this (`TranscriptRow.sentAt`).
     sentAt: number,
 ): TranscriptRow[] => {
+    const unspoken = unspokenRow(turn.prompt);
+    if (unspoken !== undefined) {
+        return [unspoken];
+    }
     const resume = resumeDisclosure(turn.prompt);
     const stripped = stripAttachmentNote(resume === undefined ? turn.prompt : withoutResumeNote(turn.prompt));
-    const attachments = (turn.attachments ?? stripped.attachments).map((path) => (path.startsWith(`${root}/`) ? path.slice(root.length + 1) : path));
+    const attachments = rootRelative(turn.attachments ?? stripped.attachments, root);
     // A handoff prompt embeds the folded-in transcript (runtime-history.ts); this keeps only what the user typed.
     const text = parseRuntimeHistory(stripped.text)?.prompt ?? stripped.text;
-    if (resume?.kind === "notice") {
-        // A re-run's interruption replaces the repeated words with one notice row instead of showing the message twice.
-        return [{ role: "notice", text: resume.text }];
-    }
     if (text.length === 0 && attachments.length === 0) {
         return [];
     }
