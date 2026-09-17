@@ -9,12 +9,13 @@ import { useWorkspaceTree } from "../explorer/useWorkspaceTree";
 import { readFileWindow } from "../files/fileWindow";
 import { deskGroups, deskOrder } from "./deskOrder";
 import { kindLabel, PEEK_BYTES, type PeekKind, peekLines, peekPlan } from "./peekContent";
+import { thumbnailUrl } from "./thumbnails";
 
 // `entry` undefined means closed. The card takes no pointer events: it overlaps the tiles beside its anchor, and the
 // pointer crossing onto one of them is how the look moves on.
 const { entry, anchor } = defineProps<{ entry: WorkspaceTreeEntry | undefined; anchor: HTMLElement | undefined }>();
 
-const { tree, entriesByPath, lazyChildren, loadChildren, readBlob } = useWorkspaceTree();
+const { tree, entriesByPath, lazyChildren, loadChildren } = useWorkspaceTree();
 const layout = useLayout();
 
 const plan = computed(() => (entry === undefined ? undefined : peekPlan(entry)));
@@ -47,22 +48,20 @@ watch(
     { immediate: true },
 );
 
-// --- File: text or picture, read once per hover and kept for a sweep back over the same tiles. ----------------------
+// --- File: text, a picture or a video; text is read once per hover and kept for a sweep back over the same tiles,
+// pictures and videos come from the cache the tiles already filled. --------------------------------------------------
 const text = ref<string>();
-const picture = ref<string>();
+const media = ref<string>();
 const loading = ref(false);
 
-const CACHE_SIZE = 32;
+const TEXT_CACHE_SIZE = 32;
 const textCache = new Map<string, string>();
-// Object URLs stay alive while cached; eviction revokes them, so the cap bounds memory as well as entries.
-const pictureCache = new Map<string, string>();
-const remember = (cache: Map<string, string>, key: string, value: string, onEvict?: (evicted: string) => void): void => {
-    cache.set(key, value);
-    if (cache.size > CACHE_SIZE) {
-        const [oldest] = cache;
+const rememberText = (key: string, value: string): void => {
+    textCache.set(key, value);
+    if (textCache.size > TEXT_CACHE_SIZE) {
+        const [oldest] = textCache;
         if (oldest !== undefined) {
-            cache.delete(oldest[0]);
-            onEvict?.(oldest[1]);
+            textCache.delete(oldest[0]);
         }
     }
 };
@@ -75,57 +74,57 @@ const fetchText = async (target: WorkspaceTreeEntry, signal: AbortSignal): Promi
     }
     return peekLines(window.content, window.bytes, window.size);
 };
-const fetchPicture = async (target: WorkspaceTreeEntry): Promise<string> => URL.createObjectURL(await readBlob(target.path));
-
-// How each readable kind is fetched, kept and shown; a folder's listing comes from the tree, not from here.
-interface Reader {
-    readonly cache: Map<string, string>;
-    readonly fetch: (target: WorkspaceTreeEntry, signal: AbortSignal) => Promise<string>;
-    readonly show: typeof text;
-    readonly evict?: (evicted: string) => void;
-}
-const READERS: Readonly<Partial<Record<PeekKind, Reader>>> = {
-    text: { cache: textCache, fetch: fetchText, show: text },
-    picture: { cache: pictureCache, fetch: fetchPicture, show: picture, evict: URL.revokeObjectURL },
-};
 
 let seq = 0;
 let controller: AbortController | undefined;
-const read = async (reader: Reader, target: WorkspaceTreeEntry, key: string, id: number, signal: AbortSignal): Promise<void> => {
-    try {
-        const value = await reader.fetch(target, signal);
-        remember(reader.cache, key, value, reader.evict);
-        if (id === seq) {
-            reader.show.value = value;
-        }
-    } catch {
-        // Aborted or refused: the card keeps its header, which is already the name and kind.
-    } finally {
-        if (id === seq) {
-            loading.value = false;
-        }
+// Lands a value only if this is still the hover that asked for it.
+const settle = (id: number, show: typeof text, value: string | undefined): void => {
+    if (id === seq) {
+        show.value = value;
+        loading.value = false;
     }
 };
-const load = async (target: WorkspaceTreeEntry | undefined): Promise<void> => {
+const readText = async (target: WorkspaceTreeEntry, id: number, signal: AbortSignal): Promise<void> => {
+    const key = cacheKey(target);
+    const cached = textCache.get(key);
+    if (cached !== undefined) {
+        settle(id, text, cached);
+        return;
+    }
+    loading.value = true;
+    try {
+        const value = await fetchText(target, signal);
+        rememberText(key, value);
+        settle(id, text, value);
+    } catch {
+        settle(id, text, undefined); // aborted or refused: the header already says the name and kind
+    }
+};
+const readMedia = async (target: WorkspaceTreeEntry, kind: "picture" | "video", id: number): Promise<void> => {
+    loading.value = true;
+    try {
+        settle(id, media, await thumbnailUrl(target, kind));
+    } catch {
+        settle(id, media, undefined);
+    }
+};
+const load = (target: WorkspaceTreeEntry | undefined): void => {
     controller?.abort();
     controller = undefined;
     const id = ++seq;
     text.value = undefined;
-    picture.value = undefined;
+    media.value = undefined;
     loading.value = false;
-    const reader = target === undefined ? undefined : READERS[peekPlan(target).kind];
-    if (target === undefined || reader === undefined) {
+    const kind: PeekKind = target === undefined ? `none` : peekPlan(target).kind;
+    if (target === undefined) {
         return;
     }
-    const key = cacheKey(target);
-    const cached = reader.cache.get(key);
-    if (cached !== undefined) {
-        reader.show.value = cached;
-        return;
+    if (kind === `text`) {
+        controller = new AbortController();
+        void readText(target, id, controller.signal);
+    } else if (kind === `picture` || kind === `video`) {
+        void readMedia(target, kind, id);
     }
-    loading.value = true;
-    controller = new AbortController();
-    await read(reader, target, key, id, controller.signal);
 };
 watch(() => entry, load, { immediate: true });
 
@@ -149,7 +148,7 @@ const reposition = (): void => {
         view: { width: view.innerWidth, height: view.innerHeight },
         side: `right`,
         cross: `start`,
-        gap: 10,
+        gap: 12,
         edge: 8,
     });
 };
@@ -183,7 +182,7 @@ onBeforeUnmount(() => controller?.abort());
             <div
                 v-if="entry !== undefined && plan !== undefined"
                 ref="box"
-                class="ui-desk-move pointer-events-none fixed z-[1000] w-80 overflow-hidden rounded-lg border border-line bg-card shadow-lg"
+                class="ui-desk-move pointer-events-none fixed z-[1000] w-[min(36rem,calc(100vw-2rem))] overflow-hidden rounded-lg border border-line bg-card shadow-lg"
                 :style="style"
                 role="tooltip"
             >
@@ -197,9 +196,14 @@ onBeforeUnmount(() => controller?.abort());
                         </span>
                     </div>
                 </div>
-                <!-- A fixed body for what is read over the wire, so the card never jumps as content lands; a folder's
-                     names come from the tree already on hand and take the room they need. -->
-                <div v-if="plan.kind !== 'none'" class="overflow-hidden border-t border-line bg-canvas" :class="plan.kind === 'folder' ? '' : 'h-56'">
+                <!-- Text gets a fixed body, so the card never jumps as lines land. A picture or video takes its own shape up
+                     to a cap the window sets, since the tile already fetched it and it lands at once; a folder's names come
+                     from the tree on hand and take the room they need. -->
+                <div
+                    v-if="plan.kind !== 'none'"
+                    class="overflow-hidden border-t border-line bg-canvas"
+                    :class="plan.kind === 'text' ? 'h-64' : plan.kind === 'folder' ? '' : 'max-h-[min(24rem,55vh)]'"
+                >
                     <template v-if="plan.kind === 'folder'">
                         <p v-if="folderChildren !== undefined && folderChildren.length === 0" class="px-3 py-3 text-2xs text-subtle">Nothing inside.</p>
                         <ul v-else-if="folderChildren !== undefined" class="flex flex-col gap-0.5 px-2 py-2">
@@ -217,7 +221,20 @@ onBeforeUnmount(() => controller?.abort());
                         </ul>
                     </template>
                     <template v-else-if="plan.kind === 'picture'">
-                        <img v-if="picture !== undefined" :src="picture" :alt="entry.name" class="h-full w-full object-contain p-2" />
+                        <img v-if="media !== undefined" :src="media" :alt="entry.name" class="block max-h-[min(24rem,55vh)] w-full object-contain p-2" />
+                    </template>
+                    <!-- Plays silently while looked at, the way a thumbnail strip does; the element streams by range. -->
+                    <template v-else-if="plan.kind === 'video'">
+                        <video
+                            v-if="media !== undefined"
+                            :src="media"
+                            autoplay
+                            muted
+                            loop
+                            playsinline
+                            preload="metadata"
+                            class="block max-h-[min(24rem,55vh)] w-full object-contain p-2"
+                        ></video>
                     </template>
                     <template v-else-if="text !== undefined">
                         <p v-if="text === ''" class="px-3 py-3 text-2xs text-subtle">Nothing in it yet.</p>

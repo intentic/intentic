@@ -21,6 +21,11 @@ describe(`what a hover can show`, () => {
         expect(peekPlan(file(`icon.svg`))).toEqual({ kind: `picture` });
     });
 
+    it(`plays a video`, () => {
+        expect(peekPlan(file(`intro.mp4`))).toEqual({ kind: `video` });
+        expect(peekPlan(file(`clip.webm`))).toEqual({ kind: `video` });
+    });
+
     it(`shows nothing of bytes it cannot read`, () => {
         expect(peekPlan(file(`report.pdf`))).toEqual({ kind: `none` });
         expect(peekPlan(file(`site.zip`))).toEqual({ kind: `none` });

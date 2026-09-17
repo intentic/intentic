@@ -2,13 +2,13 @@ import type { WorkspaceTreeEntry } from "@intentic/api-contract";
 import type { ShikiLang } from "@intentic/code-read/langs";
 import { categoryForEntry, type FileCategory } from "@intentic/ui/file-icon";
 import { resolveFile } from "../explorer/fileType";
-import { extOf } from "./deskOrder";
+import { extOf, isVideoName } from "./deskOrder";
 
-// What a hover can show of an entry, and what to call it. Text gets its first lines, a picture gets painted, a folder
-// lists what it holds; anything else (a PDF, an archive, a font) has no cheap look and gets its name and size only.
-// Pure, no framework code.
+// What a hover can show of an entry, and what to call it. Text gets its first lines, a picture gets painted, a video
+// plays silently, a folder lists what it holds; anything else (a PDF, an archive, a font) has no cheap look and gets
+// its name and size only. Pure, no framework code.
 
-export type PeekKind = "folder" | "text" | "picture" | "none";
+export type PeekKind = "folder" | "text" | "picture" | "video" | "none";
 
 export interface PeekPlan {
     readonly kind: PeekKind;
@@ -29,6 +29,9 @@ export const peekPlan = (entry: WorkspaceTreeEntry): PeekPlan => {
     }
     if (PICTURE_EXTS.has(extOf(entry.name))) {
         return { kind: `picture` };
+    }
+    if (isVideoName(entry.name)) {
+        return { kind: `video` };
     }
     const resolved = resolveFile(entry.path, entry.size);
     if (resolved.mode === `binary` || resolved.mode === `empty`) {

@@ -50,11 +50,14 @@ export const extOf = (name: string): string => {
     return dot > 0 ? name.slice(dot + 1).toLowerCase() : ``;
 };
 
+// A moving picture, by extension; what the browser can play is its own question, answered by the element.
+export const isVideoName = (name: string): boolean => VIDEO_EXTS.has(extOf(name));
+
 export const groupOf = (entry: WorkspaceTreeEntry): DeskGroupKey => {
     if (entry.type === `dir`) {
         return `folders`;
     }
-    return VIDEO_EXTS.has(extOf(entry.name)) ? `media` : BY_CATEGORY[categoryForEntry(entry.name)];
+    return isVideoName(entry.name) ? `media` : BY_CATEGORY[categoryForEntry(entry.name)];
 };
 
 // Numeric-aware and case-blind: img2 before img10, Readme beside readme. The code-point tie-break keeps two names the

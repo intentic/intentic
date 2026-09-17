@@ -86,8 +86,9 @@ const {
     // Per-directory actions from extensions; a function, not a map, since rows load lazily and can't be enumerated.
     rowActions?: (dir: string) => readonly RowAction[];
 }>();
-// `openFile` carries the gesture via `mode`: a click previews into one slot, a double-click keeps the tab.
-const emit = defineEmits<{ openFile: [path: string, mode: OpenMode]; openDirectory: [path: string] }>();
+// `openFile` carries the gesture via `mode`: a click previews into one slot, a double-click keeps the tab. `pick` is
+// the plain click or Enter itself, whatever it opens: the desk follows it (useDesk), so both views mark one entry.
+const emit = defineEmits<{ openFile: [path: string, mode: OpenMode]; openDirectory: [path: string]; pick: [entry: WorkspaceTreeEntry] }>();
 
 const {
     createFile,
@@ -469,6 +470,7 @@ const onRowClick = (event: MouseEvent, row: Row): void => {
         return;
     }
     selectSingle(path);
+    emit(`pick`, row.entry);
     activate(row.entry, false, `preview`);
 };
 
@@ -904,6 +906,7 @@ const onKeydown = (event: KeyboardEvent): void => {
     } else if (event.key === `Enter`) {
         if (leadEntry.value !== undefined) {
             // Enter behaves like a single click (preview), leaving the same one tab behind as clicking down the rows.
+            emit(`pick`, leadEntry.value);
             activate(leadEntry.value, true, `preview`);
         }
         event.preventDefault();

@@ -20,7 +20,7 @@ import DeskTile from "./DeskTile.vue";
 // Drawn by EditorPane in place of the empty state while the desk preference is on. Reads the same tree the explorer
 // draws, opens files into the same tabs; owns only which folder is open, the selection and the quick look.
 
-const { deskDir, openDir } = useDesk();
+const { deskDir, openDir, selected } = useDesk();
 const { tree, entriesByPath, lazyChildren, lazyHidden, lazyLoading, rootHidden, loadChildren, isLoading } = useWorkspaceTree();
 const { openFile } = useWorkspaceTabs();
 const layout = useLayout();
@@ -74,7 +74,7 @@ const here = computed(() => crumbs.value.at(-1)?.label ?? rootLabel.value);
 
 // Forward slides the tiles in from the right, back from the left: the direction the breadcrumb reads in.
 const direction = ref<"forward" | "back">(`forward`);
-const selected = ref<string>();
+// `selected` is the shared current entry (useDesk): a tile click lands here, and so does a click in the tree.
 const selectedEntry = computed(() => order.value.find((entry) => entry.path === selected.value));
 const scroller = ref<HTMLElement>();
 const go = (dir: string, toward: "forward" | "back"): void => {
@@ -141,9 +141,9 @@ const open = (entry: WorkspaceTreeEntry): void => {
 };
 
 // --- The quick look ------------------------------------------------------------------------------------------------
-// A dwell before the first card, so a pointer crossing the desk raises nothing; once one is up, the next tile shows
-// at once, and that readiness outlives a close by a moment, as tooltips do.
-const OPEN_DELAY_MS = 450;
+// A short dwell before the first card, so a pointer crossing the desk raises nothing; once one is up, the next tile
+// shows at once, and that readiness outlives a close by a moment, as tooltips do.
+const OPEN_DELAY_MS = 160;
 const CLOSE_DELAY_MS = 150;
 const WARM_MS = 300;
 const peekEntry = ref<WorkspaceTreeEntry>();

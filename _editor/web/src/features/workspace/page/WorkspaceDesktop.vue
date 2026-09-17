@@ -180,7 +180,7 @@ useWorkspaceRoute();
 const emptyWorkspace = computed(() => !isLoading.value && tree.value.length === 0);
 // The desk (features/workspace/desk): what is under the tabs while the preference is on. Showing it unsets the main
 // pane's active tab and closes nothing, so the strip is a click away from where it was.
-const { desk } = useDesk();
+const { desk, deskDir, selected, pick } = useDesk();
 const deskOffered = computed(() => desk.value && !emptyWorkspace.value);
 const deskCovered = computed(() => deskOffered.value && strip.value.main.active !== null);
 const showDesk = (): void => deselect(`main`);
@@ -318,8 +318,20 @@ const rowActions = (dir: string): readonly RowAction[] =>
         openDocument,
     });
 
-// The file the reader is in; with two panes, the focused one's. Feeds the tree's selection mark and presence.
+// The file the reader is in; with two panes, the focused one's. Feeds presence and, through `pick`, the current entry.
 const openPath = computed(() => (activeTab.value?.kind === `file` ? activeTab.value.path : undefined));
+// A file opening from anywhere (tree, desk, quick-open, chat) becomes the current entry: the desk moves to its folder.
+watch(
+    openPath,
+    (path) => {
+        if (path !== undefined) {
+            pick(path, `file`);
+        }
+    },
+    { immediate: true },
+);
+// What the tree marks and reveals: the current entry, failing that the folder the desk is in (nothing at the root).
+const treeMark = computed(() => selected.value ?? (deskDir.value === workspaceDir.value ? undefined : deskDir.value));
 // Presence: announces the open file; component-scoped since it stops existing when this view unmounts.
 watch(openPath, (path) => reportOpenPath(path), { immediate: true });
 onBeforeUnmount(() => reportOpenPath(undefined));
@@ -981,11 +993,12 @@ const deskTooltip = computed(() => tooltipWithChord(`Show desk · your tabs stay
                         :root-hidden="scopedRootHidden"
                         :barren="scopedBarren"
                         :filter="filter"
-                        :selected-path="openPath"
+                        :selected-path="treeMark"
                         :manageable-dirs="manageableDirs"
                         :row-actions="rowActions"
                         @open-file="openFile"
                         @open-directory="openDirectory"
+                        @pick="(entry) => pick(entry.path, entry.type)"
                     />
                 </div>
                 <!-- Root drop hint over the whole panel; files mode only, since review/history aren't drop targets. -->
