@@ -552,6 +552,35 @@ const applyReshape = (ask: ResourcesAsk): void => ops.applyReshape(ask);
                     <template #sync="{ group }">
                         <SandboxSyncToggles v-if="ops.selfGroup(group)" :machine="machine" :group="group" :ops="ops" />
                     </template>
+                    <!-- ONE PORT'S OWN SWITCH, for the two outcomes localhost is never going to sort out by itself: a
+                         number something else on this machine permanently holds, and one already set aside. Absent on a
+                         mirrored port, where the row is working and a button per port would say nothing six times. -->
+                    <template #port="{ group, port }">
+                        <Button
+                            v-if="port.state !== `mirrored` && ownerOf(group) && commandable(ownerOf(group)!.device, group)"
+                            size="small"
+                            severity="secondary"
+                            :text="true"
+                            class="-my-1"
+                            :label="port.state === `ignored` ? t(`sandbox.devicePage.mirrorPortAgain`) : t(`sandbox.devicePage.dontMirrorPort`)"
+                            :loading="ops.syncRunning(ops.rowKey(group), `mirror-ignore`, port.port)"
+                            :disabled="ops.working.value"
+                            v-tooltip.top="
+                                port.state === `ignored`
+                                    ? t(`sandbox.devicePage.putPortBackOnLocalhost`)
+                                    : t(`sandbox.devicePage.leavePortOffLocalhost`)
+                            "
+                            @click="
+                                void ops.runSync(
+                                    ownerOf(group)!,
+                                    ops.rowKey(group),
+                                    group.sandboxId,
+                                    port.state === `ignored` ? `mirror-unignore` : `mirror-ignore`,
+                                    { port: port.port },
+                                )
+                            "
+                        />
+                    </template>
                     <!-- The switch that clears the user's own localhost, under the ports it's about rather than with the container verbs. -->
                     <template #ports="{ group }">
                         <div class="mt-1 flex flex-wrap items-center gap-2">

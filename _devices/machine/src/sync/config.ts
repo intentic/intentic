@@ -2,7 +2,7 @@ import { readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { writeSecretFile } from "@intentic/local-agent";
-import type { PortSummary } from "@intentic/sandbox-contract";
+import type { PortSkipReason, PortSummary } from "@intentic/sandbox-contract";
 import { baseDir } from "../config.js";
 
 // Everything the sync half persists: its pairing list (in its own file, separate from the device half's), the
@@ -41,10 +41,12 @@ export interface MirroredPort {
 }
 
 // A port the sandbox serves that this machine did NOT put on localhost, and why: the only record that the port
-// was ever wanted. `heldBy` names the sandbox that won; its absence means a foreign process did.
+// was ever wanted. `reason` is what the report renders; `heldBy` names the sandbox that won, and is set only when
+// the reason is that one.
 export interface SkippedPort {
     readonly port: number;
     readonly host: PortSummary["host"];
+    readonly reason: PortSkipReason;
     readonly heldBy?: string | undefined;
     readonly command?: string | undefined;
 }
@@ -59,7 +61,9 @@ export type SyncMode = "sync" | "mirror";
 // reconcile's baseline and its negative. fileSyncAutoPaused marks a pause the watcher itself applied after an
 // hour unreachable, distinct from a person's `pause`, which the watcher never undoes. autoHealOff stops this agent
 // clearing the build output it left inside directories the sandbox deleted (residue.ts); it is off by default because
-// what that removes is content the session already ignores, which a build puts back.
+// what that removes is content the session already ignores, which a build puts back. ignoredPorts is mirrorOff's
+// per-port form: numbers this device is never to take, which is a standing choice and not a reading, so nothing the
+// watcher learns ever rewrites it.
 export interface Pairing {
     readonly sandboxUrl: string;
     readonly sandboxId: string;
@@ -68,6 +72,7 @@ export interface Pairing {
     readonly syncToken?: string;
     readonly mirroredPorts?: readonly MirroredPort[];
     readonly skippedPorts?: readonly SkippedPort[];
+    readonly ignoredPorts?: readonly number[];
     readonly mirrorOff?: boolean | undefined;
     readonly fileSyncAutoPaused?: boolean | undefined;
     readonly autoHealOff?: boolean | undefined;
@@ -117,6 +122,24 @@ export const removePairing = async (sandboxId: string): Promise<void> =>
 export const setMirrorOff = async (sandboxId: string, off: boolean): Promise<void> =>
     await updateState((state) => ({
         pairings: state.pairings.map((held) => (held.sandboxId === sandboxId ? { ...held, mirrorOff: off ? true : undefined } : held)),
+    }));
+
+// One port this device is not to take, the per-port form of the switch above. Machine-side because the conflict is
+// the device's: a number is contended on THIS localhost and free on the next one, so the same sandbox mirrors it
+// everywhere else. Stored sorted and deduped, since it is read as a set and shown as a list.
+export const setPortIgnored = async (sandboxId: string, port: number, ignored: boolean): Promise<void> =>
+    await updateState((state) => ({
+        pairings: state.pairings.map((held) => {
+            if (held.sandboxId !== sandboxId) {
+                return held;
+            }
+            // Destructured away rather than set to undefined: the key is absent when nothing is ignored, so a
+            // pairing carrying the resting state carries no field for it either.
+            const { ignoredPorts = [], ...rest } = held;
+            const kept = ignoredPorts.filter((held_port) => held_port !== port);
+            const next = ignored ? [...kept, port].toSorted((a, b) => a - b) : kept;
+            return next.length === 0 ? rest : { ...rest, ignoredPorts: next };
+        }),
     }));
 
 // Clearing derived residue, off. Local and durable for the same reason mirroring's switch is: it decides what this

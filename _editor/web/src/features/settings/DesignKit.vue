@@ -150,6 +150,8 @@ const KIT_PORTS: readonly DevicePortRow[] = [
     { port: 33177, sandboxId: `work-intentic-dev`, state: `mirrored`, command: `/usr/bin/node /work/backend-host-main.js` },
     { port: 33679, sandboxId: `work-intentic-dev`, state: `mirrored`, command: `node main.js` },
     { port: 6379, sandboxId: `work-intentic-dev`, state: `busy`, command: `/usr/bin/docker-proxy -proto tcp -host-port 6379` },
+    // The one outcome somebody chose, which is why it wears quiet ink while the two beside it wear a warning's.
+    { port: 5440, sandboxId: `work-intentic-dev`, state: `ignored`, command: `postgres` },
     { port: 5173, sandboxId: `lab-intentic-dev`, state: `held-by-sandbox`, heldBy: `work-intentic-dev`, command: `node vite` },
 ];
 // A healthy loop with both verbs offered: the standing case, where the quiet note is what makes the buttons legible.
@@ -505,6 +507,18 @@ const pickedTier = ref(`collaborator`);
                         <DeviceDetail :pairings="KIT_PAIRINGS" :ports="KIT_PORTS" :sandboxes="KIT_SANDBOXES">
                             <template #actions="{ group }">
                                 <SandboxVerbs v-if="group.sandbox" :running="group.sandbox.running" />
+                            </template>
+                            <!-- The same switch for ONE number, on the ports that never reached localhost: the layout
+                                 worth checking is a button landing at the end of a note that already wraps. -->
+                            <template #port="{ port }">
+                                <Button
+                                    v-if="port.state !== `mirrored`"
+                                    size="small"
+                                    severity="secondary"
+                                    :text="true"
+                                    class="-my-1"
+                                    :label="port.state === `ignored` ? `Mirror it` : `Don't mirror it`"
+                                />
                             </template>
                             <!-- Clears this device's localhost only, stops nothing in the sandbox; row three shows mirroring off. -->
                             <template #ports="{ group }">

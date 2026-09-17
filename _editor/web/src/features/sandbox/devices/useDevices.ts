@@ -186,12 +186,14 @@ export async function runDeviceAgentFlow(
     return { message, settled: message !== undefined };
 }
 
-// What a command acts on, beyond its own name: a pairing to scope the sync switches to, and for `sync-install`
-// which half to enroll and the folder on that device. No token and no command line — the daemon builds both.
+// What a command acts on, beyond its own name: a pairing to scope the sync switches to, for `sync-install` which
+// half to enroll and the folder on that device, and for the two per-port mirror switches the one number they are
+// about. No token and no command line — the daemon builds both.
 export interface DeviceCommandAsk {
     sandboxId?: string | undefined;
     mode?: `sync` | `mirror` | undefined;
     localDir?: string | undefined;
+    port?: number | undefined;
 }
 
 // Runs one device CLI action by a closed-set name; the daemon builds the argv (hosts/device-commands.ts),
@@ -208,6 +210,7 @@ export async function runDeviceCommand(hostId: string, command: DeviceCommand, a
             ...(ask.sandboxId === undefined ? {} : { sandboxId: ask.sandboxId }),
             ...(ask.mode === undefined ? {} : { mode: ask.mode }),
             ...(ask.localDir === undefined ? {} : { localDir: ask.localDir }),
+            ...(ask.port === undefined ? {} : { port: ask.port }),
         }),
     });
     if (!response.ok) {
@@ -260,7 +263,7 @@ export function useHostHolding(slug: () => string | undefined, path: () => strin
 // Reads /system/sync, not /system/devices, to avoid polling every laptop just to draw a badge.
 const HEALTH_POLL_MS = 60_000;
 
-export function useSyncHealth(): { stoppedOn: ComputedRef<string[]>; contendedPorts: ComputedRef<number[]> } {
+export function useSyncHealth(): { stoppedOn: ComputedRef<string[]>; heldPorts: ComputedRef<number[]> } {
     const { query } = useSandboxQuery({
         queryKey: SYNC_HEALTH.of(),
         queryFn: async () => SyncStatusSchema.parse(await sandboxJson(`/system/sync`)),
@@ -270,9 +273,13 @@ export function useSyncHealth(): { stoppedOn: ComputedRef<string[]>; contendedPo
     return {
         // Machines whose sync watcher has stopped, though other signals still read healthy.
         stoppedOn: computed(() => machines.value.filter((report) => !report.agent.running).map((report) => report.hostname)),
-        // Ports this sandbox serves that never reached localhost because another paired sandbox already holds them.
-        contendedPorts: computed(() => [
-            ...new Set(machines.value.flatMap((report) => report.ports.filter((port) => port.state !== `mirrored`).map((port) => port.port))),
+        // ONLY the ports another paired sandbox took, and deliberately not every port that missed localhost. The
+        // other outcomes are a machine working correctly and staying that way — a foreign program holding the
+        // number, or somebody telling this device to leave it alone — and counting those here is what put a
+        // standing badge on the tab of a fleet with nothing wrong with it. This one is ours, it has a remedy on
+        // the Devices tab (stop the sandbox holding the port), and it is an event: something changed to cause it.
+        heldPorts: computed(() => [
+            ...new Set(machines.value.flatMap((report) => report.ports.filter((port) => port.state === `held-by-sandbox`).map((port) => port.port))),
         ]),
     };
 }

@@ -7,7 +7,8 @@ import { t } from "../../i18n/index.js";
 export interface DevicePortRow {
     port: number;
     sandboxId: string;
-    state: `mirrored` | `held-by-sandbox` | `busy`;
+    // `ignored` is the only one of the four somebody chose; the other three are what the machine found.
+    state: `mirrored` | `held-by-sandbox` | `busy` | `ignored`;
     heldBy?: string | undefined;
     command?: string | undefined;
     // Which stack the sandbox's listener answered on; never rendered, but lets a dual-stack pair be
@@ -102,9 +103,11 @@ export interface DeviceSandboxGroup {
     ports: DevicePortRow[];
 }
 
-// A port that never reached localhost sorts to the bottom; within a group, number order is how people
-// look one up.
-const byOutcomeThenNumber = (a: DevicePortRow, b: DevicePortRow): number => (a.state === b.state ? a.port - b.port : a.state === `mirrored` ? -1 : 1);
+// Mirrored first, then what a reader can still do something about, then what they already decided; ties by number,
+// which is how people look one up. A rank rather than a pair of equality tests: two unlike outcomes compared by "is
+// it mirrored" answer the same in both directions, which is not an ordering at all.
+const OUTCOME_RANK: Readonly<Record<DevicePortRow[`state`], number>> = { mirrored: 0, "held-by-sandbox": 1, busy: 2, ignored: 3 };
+const byOutcomeThenNumber = (a: DevicePortRow, b: DevicePortRow): number => OUTCOME_RANK[a.state] - OUTCOME_RANK[b.state] || a.port - b.port;
 
 // IPv4 and IPv6 binds of the same server are one port to the reader; folded here since the outcome
 // (which both rows agree on) is what survives.
@@ -336,32 +339,50 @@ export interface GroupSummary {
 
 const plural = (count: number, one: string, many: string): string => `${count} ${count === 1 ? one : many}`;
 
-// The reasons to open this row, in the ink of a warning.
-const summaryFacts = (group: DeviceSandboxGroup): string[] => {
+const countOf = (group: DeviceSandboxGroup, state: DevicePortRow[`state`]): number => group.ports.filter((port) => port.state === state).length;
+
+// WHICH PORT OUTCOMES DESERVE A WARNING, AND WHICH ARE MERELY TRUE. Only one of the three has a remedy on this page:
+// a port another paired sandbox won is freed by stopping that sandbox, whose row is right here. A port a foreign
+// program holds is neither ours to take nor about to change on its own, and a port somebody told this device to leave
+// alone is the opposite of a fault. Counting all three alike is what made a correct, permanent outcome unfold this
+// row and badge the tab for as long as the machine kept working properly.
+const portCounts = (group: DeviceSandboxGroup): string[] => {
     const facts: string[] = [];
-    // Split in two since the halves are read differently and are each several independent rules.
-    if (mirroringOff(group.folder)) {
-        facts.push(`mirroring off`);
-    }
-    const reached = group.ports.filter((port) => port.state === `mirrored`).length;
+    const reached = countOf(group, `mirrored`);
     if (reached > 0) {
         facts.push(plural(reached, `port`, `ports`));
     }
-    // A fact, not a warning: the reader chose this. First, since it explains the absence of everything the
-    // ports half would otherwise say.
-    if (group.folder?.mode === `mirror`) {
-        facts.push(`ports only`);
+    const busy = countOf(group, `busy`);
+    if (busy > 0) {
+        facts.push(`${plural(busy, `port`, `ports`)} busy here`);
+    }
+    const alone = countOf(group, `ignored`);
+    if (alone > 0) {
+        facts.push(`${plural(alone, `port`, `ports`)} left alone`);
     }
     return facts;
 };
 
+// The reasons to open this row, in the ink of a warning.
+const summaryFacts = (group: DeviceSandboxGroup): string[] => {
+    // Split in two since the halves are read differently and are each several independent rules. With mirroring off
+    // that one word accounts for every port at once, so the per-outcome counts would only repeat it.
+    const off = mirroringOff(group.folder);
+    return [
+        ...(off ? [`mirroring off`] : portCounts(group)),
+        // A fact, not a warning: the reader chose this. It explains the absence of everything the folder half
+        // would otherwise say.
+        ...(group.folder?.mode === `mirror` ? [`ports only`] : []),
+    ];
+};
+
 const summaryWarnings = (group: DeviceSandboxGroup): string[] => {
     const warnings: string[] = [];
-    const missed = group.ports.filter((port) => port.state !== `mirrored`).length;
+    const taken = countOf(group, `held-by-sandbox`);
     // A pairing that syncs nothing is how it was set up, not a fault: one word on the closed line rather
     // than an opened row repeating it.
-    if (missed > 0 && !mirroringOff(group.folder)) {
-        warnings.push(`${plural(missed, `port`, `ports`)} not on localhost`);
+    if (taken > 0 && !mirroringOff(group.folder)) {
+        warnings.push(`${plural(taken, `port`, `ports`)} taken by another sandbox`);
     }
     if (group.folder?.conflicts) {
         warnings.push(plural(group.folder.conflicts, `conflict`, `conflicts`));
@@ -389,13 +410,19 @@ export const portHolder = (groups: readonly DeviceSandboxGroup[], port: DevicePo
     port.heldBy === undefined ? undefined : groups.find((group) => group.sandboxId === port.heldBy);
 
 // Why a port isn't on localhost, each state naming a different remedy: a contested port is freed by
-// stopping the sandbox holding it, a busy one by quitting the local process.
+// stopping the sandbox holding it, a busy one by quitting the local process, and an ignored one by the
+// button beside this sentence.
 // The program's name is the useful part of the sentence, so it goes where the sentence says "who".
 // A port lost to another paired sandbox links to the row that holds it, where its Stop button is; one
 // lost to a local program has no such remedy to offer.
 export const portNote = (port: DevicePortRow, holder?: DeviceSandboxGroup | undefined, program?: string | undefined): string | undefined => {
     if (port.state === `mirrored`) {
         return undefined;
+    }
+    // Said as somebody's decision rather than as an outcome: nothing failed, and no reader should go looking for
+    // what did.
+    if (port.state === `ignored`) {
+        return `not on localhost: this device is set to leave this port alone`;
     }
     // The command on a contended port belongs to the sandbox's own listener, never to whoever won the number.
     if (port.heldBy === undefined) {

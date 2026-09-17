@@ -74,7 +74,7 @@ export function useSandboxAttention() {
     const { pending, proposal } = useEnvironment();
     const { updateAvailable, updateStaged } = useSandboxVersion();
     const { missingRequiredCount } = useMissingSecretCount();
-    const { stoppedOn, contendedPorts } = useSyncHealth();
+    const { stoppedOn, heldPorts } = useSyncHealth();
 
     // Declared worst-first: the head sets the badge, the rest fills the popover. No-account is about the sandbox as a
     // whole, not one conversation's missing provider (composer's connect gate).
@@ -137,17 +137,20 @@ export function useSandboxAttention() {
                       kind: `needs` as const,
                   },
               ]),
-        // Neither is a debt: a contended port is the machine working correctly (Devices carries the count); a new
-        // version is nothing wrong until wanted, and the Overview card is the whole errand.
-        ...(contendedPorts.value.length === 0
+        // Neither is a debt: a port one of your own sandboxes took has a remedy on Devices whenever you want it; a
+        // new version is nothing wrong until wanted, and the Overview card is the whole errand.
+        // THIS USED TO COUNT EVERY PORT THAT MISSED LOCALHOST, which made a standing, correct outcome — a database
+        // already running on that number here — a note and a badge that never went away. Only the ports another
+        // paired sandbox took are counted now (`heldPorts`), which is the one case something can be done about.
+        ...(heldPorts.value.length === 0
             ? []
             : [
                   {
                       icon: `desktop` as const,
                       tone: `info` as const,
-                      message: `${contendedPorts.value.length} port${contendedPorts.value.length === 1 ? `` : `s`} couldn't be mirrored to your localhost`,
+                      message: `${heldPorts.value.length} port${heldPorts.value.length === 1 ? `` : `s`} taken by another sandbox on your machine`,
                       to: `/sandbox/devices`,
-                      count: contendedPorts.value.length,
+                      count: heldPorts.value.length,
                       kind: `note` as const,
                   },
               ]),

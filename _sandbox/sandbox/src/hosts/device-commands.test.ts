@@ -10,9 +10,9 @@ import {
 import { expect, test } from "vitest";
 import { COMMAND_TIMEOUT_MS, type DeviceCommandFacts, DEVICE_COMMANDS, doorRoute, outcomeOf, streamOf, succeeded } from "./device-commands.js";
 
-// What the daemon knows when it builds a line. Only `sandboxId`, `mode` and `localDir` ever arrive from a caller; the
-// rest is this sandbox's own knowledge of itself and of the door it is talking to, which is the whole reason these
-// lines are built here.
+// What the daemon knows when it builds a line. Only `sandboxId`, `mode`, `localDir` and `port` ever arrive from a
+// caller; the rest is this sandbox's own knowledge of itself and of the door it is talking to, which is the whole
+// reason these lines are built here.
 const facts = (over: Partial<DeviceCommandFacts> = {}): DeviceCommandFacts => ({
     sandboxId: undefined,
     ownSlug: "work-abc",
@@ -22,6 +22,7 @@ const facts = (over: Partial<DeviceCommandFacts> = {}): DeviceCommandFacts => ({
     hostFacts: undefined,
     mode: undefined,
     localDir: undefined,
+    port: undefined,
     pairedDir: undefined,
     connections: [],
     pairToken: undefined,
@@ -140,6 +141,8 @@ test("implements every action the contract names", () => {
     const commands: DeviceCommandInput["command"][] = [
         "mirror-off",
         "mirror-on",
+        "mirror-ignore",
+        "mirror-unignore",
         "sync-pause",
         "sync-resume",
         "sync-unpair",
@@ -390,6 +393,27 @@ test("builds each command line from the name and at most the row's own sandbox",
     expect(DEVICE_COMMANDS["sync-resume"].line(row)).toBe("intentic-machine sync resume --sandbox work-abc");
     expect(DEVICE_COMMANDS["sync-unpair"].line(row)).toBe("intentic-machine sync uninstall --sandbox work-abc");
     expect(DEVICE_COMMANDS["mirror-off"].line(facts())).toBe("intentic-machine sync mirror off");
-    expect(DEVICE_COMMANDS["sync-unpair"].scoped).toBe(true);
-    expect(DEVICE_COMMANDS["mirror-off"].scoped).toBeUndefined();
+    expect(DEVICE_COMMANDS["sync-unpair"].requires).toEqual(["sandboxId"]);
+    expect(DEVICE_COMMANDS["mirror-off"].requires).toBeUndefined();
+});
+
+// The per-port pair carries the number as a flag of its own, and is the only action here that cannot act on a whole
+// machine: a port with no sandbox named would be every pairing's copy of that number, which is not what any row means.
+test("builds the per-port mirror switches from the sandbox and the port together", () => {
+    const row = facts({ sandboxId: "work-abc", port: 5440 });
+    expect(DEVICE_COMMANDS["mirror-ignore"].line(row)).toBe("intentic-machine sync mirror ignore --sandbox work-abc --port 5440");
+    expect(DEVICE_COMMANDS["mirror-unignore"].line(row)).toBe("intentic-machine sync mirror unignore --sandbox work-abc --port 5440");
+    expect(DEVICE_COMMANDS["mirror-ignore"].requires).toEqual(["sandboxId", "port"]);
+    expect(DEVICE_COMMANDS["mirror-unignore"].requires).toEqual(["sandboxId", "port"]);
+});
+
+// The one caller-supplied value that reaches a command line as a number. The schema is what keeps it one: a string
+// carrying a shell metacharacter would otherwise land inside the argv the daemon builds.
+test("takes only a real port number from a caller", () => {
+    const ask = (port: unknown): unknown => DeviceCommandInputSchema.safeParse({ id: "host-1", command: "mirror-ignore", port }).success;
+    expect(ask(5440)).toBe(true);
+    expect(ask(65_536)).toBe(false);
+    expect(ask(0)).toBe(false);
+    expect(ask(5440.5)).toBe(false);
+    expect(ask("5440; rm -rf /")).toBe(false);
 });

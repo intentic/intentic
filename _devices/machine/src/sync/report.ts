@@ -66,11 +66,13 @@ const portRows = (pairing: Pairing): DevicePort[] => [
         state: `mirrored`,
         command: port.command,
     })),
+    // The reason comes off the record rather than being re-derived from `heldBy` here: the reconcile is what knows
+    // why it passed a port over, and a third reason (an ignore) is indistinguishable from a busy one at this end.
     ...(pairing.skippedPorts ?? []).map((port): DevicePort => ({
         port: port.port,
         host: port.host,
         sandboxId: pairing.sandboxId,
-        state: port.heldBy === undefined ? `busy` : `held-by-sandbox`,
+        state: port.reason,
         heldBy: port.heldBy,
         command: port.command,
     })),

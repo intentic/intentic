@@ -14,8 +14,9 @@ import type { ForwardExecutor } from "./mirror.js";
 process.env["HOME"] = mkdtempSync(join(tmpdir(), "machine-mirror-"));
 process.env["USERPROFILE"] = process.env["HOME"];
 const { runPidPath } = await import("../config.js");
-const { fetchWorkspacePorts, reconcileForwards, retirePairingMirror, shouldAutoPauseFileSync, signalExitCode, SyncAuthError } =
+const { fetchWorkspacePorts, reconcileForwards, retireMirroredPort, retirePairingMirror, shouldAutoPauseFileSync, signalExitCode, SyncAuthError } =
     await import("./mirror.js");
+const { readState, upsertPairing } = await import("./config.js");
 const { readResidentPid, runForeground, stopResident } = await import("../resident.js");
 const { forwardSessionName, mutagenForwardArgs } = await import("./mutagen.js");
 // setup() creates ~/.intentic/machine on write; the pidfile test writes there directly, so make it first.
@@ -64,6 +65,8 @@ const log = (): void => {};
 
 // Nothing else on this machine is mirroring: the single-pairing case, and the default for these tests.
 const unclaimed = new Map<number, string>();
+// Nothing set aside on this device: the resting state every case below but the ignore ones runs under.
+const nothingIgnored = new Set<number>();
 
 // The wire schema also carries title/purpose/origin, unused by the mirror but required to parse.
 const named = { title: "Vite dev server", purpose: "Started in one of your terminals.", origin: "terminal" as const };
@@ -114,7 +117,7 @@ describe("reconcileForwards (minimal-touch)", () => {
     it("leaves unchanged forwards alone and creates only new ports", async () => {
         const { executor, created, terminated } = fakeExecutor();
         const current: MirroredPort[] = [{ port: 3000, host: "127.0.0.1" }];
-        const next = await reconcileForwards(executor, current, [ws(3000), ws(4321)], unclaimed, log);
+        const next = await reconcileForwards(executor, current, [ws(3000), ws(4321)], unclaimed, nothingIgnored, log);
         // A carried-over row keeps its own shape; only a freshly created one learns what is listening behind it.
         expect(next).toEqual([
             { port: 3000, host: "127.0.0.1" },
@@ -130,7 +133,7 @@ describe("reconcileForwards (minimal-touch)", () => {
             { port: 3000, host: "127.0.0.1" },
             { port: 4321, host: "127.0.0.1" },
         ];
-        const next = await reconcileForwards(executor, current, [ws(3000)], unclaimed, log);
+        const next = await reconcileForwards(executor, current, [ws(3000)], unclaimed, nothingIgnored, log);
         expect(next).toEqual([{ port: 3000, host: "127.0.0.1" }]);
         expect(created).toEqual([]);
         expect(terminated).toEqual([4321]);
@@ -138,7 +141,7 @@ describe("reconcileForwards (minimal-touch)", () => {
 
     it("recreates a forward whose sandbox loopback family moved (127.0.0.1 → ::1)", async () => {
         const { executor, created, terminated } = fakeExecutor();
-        const next = await reconcileForwards(executor, [{ port: 3000, host: "127.0.0.1" }], [ws(3000, "::1")], unclaimed, log);
+        const next = await reconcileForwards(executor, [{ port: 3000, host: "127.0.0.1" }], [ws(3000, "::1")], unclaimed, nothingIgnored, log);
         expect(next).toEqual([{ port: 3000, host: "::1", command: "vite" }]);
         expect(terminated).toEqual([3000]);
         expect(created).toEqual([3000]);
@@ -146,7 +149,7 @@ describe("reconcileForwards (minimal-touch)", () => {
 
     it("skips a port a foreign local process already holds", async () => {
         const { executor, created } = fakeExecutor((port) => port !== 5000);
-        const next = await reconcileForwards(executor, [], [ws(5000)], unclaimed, log);
+        const next = await reconcileForwards(executor, [], [ws(5000)], unclaimed, nothingIgnored, log);
         expect(next).toEqual([]);
         expect(created).toEqual([]);
     });
@@ -156,11 +159,31 @@ describe("reconcileForwards (minimal-touch)", () => {
     it("yields a port another pairing already mirrors, without disturbing it", async () => {
         const { executor, created, terminated } = fakeExecutor();
         const claimed = new Map([[6480, "sandbox-first.example.dev"]]);
-        const next = await reconcileForwards(executor, [], [ws(6480), ws(7000)], claimed, log);
+        const next = await reconcileForwards(executor, [], [ws(6480), ws(7000)], claimed, nothingIgnored, log);
         expect(next).toEqual([{ port: 7000, host: "127.0.0.1", command: "vite" }]);
         expect(created).toEqual([7000]);
         // 6480 is neither created nor terminated: the other pairing's session keeps serving it.
         expect(terminated).toEqual([7000]);
+    });
+
+    // The whole point of the per-port switch: one number is left off localhost and every other port carries on.
+    it("never creates a forward for a port this device was told to leave alone", async () => {
+        const { executor, created, terminated } = fakeExecutor();
+        const next = await reconcileForwards(executor, [], [ws(5440), ws(5173)], unclaimed, new Set([5440]), log);
+        expect(next).toEqual([{ port: 5173, host: "127.0.0.1", command: "vite" }]);
+        expect(created).toEqual([5173]);
+        // 5440 never reaches the free-check, so nothing is terminated for it either.
+        expect(terminated).toEqual([5173]);
+    });
+
+    // Thrown while the port is up: the forward has to come down on this pass, and must not be carried into the
+    // next one as still established.
+    it("takes down a live forward the moment its port is set aside", async () => {
+        const { executor, created, terminated } = fakeExecutor();
+        const next = await reconcileForwards(executor, [{ port: 5440, host: "127.0.0.1" }], [ws(5440)], unclaimed, new Set([5440]), log);
+        expect(next).toEqual([]);
+        expect(terminated).toEqual([5440]);
+        expect(created).toEqual([]);
     });
 
     // A port this pairing already mirrors is its own; a claim map naming it must not make it release a port it's
@@ -168,7 +191,7 @@ describe("reconcileForwards (minimal-touch)", () => {
     it("keeps its own established forward even if the port is claimed", async () => {
         const { executor, created, terminated } = fakeExecutor();
         const claimed = new Map([[3000, "sandbox-other.example.dev"]]);
-        const next = await reconcileForwards(executor, [{ port: 3000, host: "127.0.0.1" }], [ws(3000)], claimed, log);
+        const next = await reconcileForwards(executor, [{ port: 3000, host: "127.0.0.1" }], [ws(3000)], claimed, nothingIgnored, log);
         expect(next).toEqual([{ port: 3000, host: "127.0.0.1" }]);
         expect(created).toEqual([]);
         expect(terminated).toEqual([]);
@@ -306,6 +329,42 @@ exit 0
         const quiet = join(dirname(runPidPath), "quiet-mutagen.sh");
         await writeFile(quiet, "#!/bin/sh\nexit 0\n", { mode: 0o755 });
         await expect(retirePairingMirror(quiet, "sandbox-none")).resolves.toBe(0);
+    });
+});
+
+// Setting one port aside has to take effect on this call, not on the watcher's next pass: that pass is seconds away
+// while the agent runs and never arrives while it does not, and until then the report would still claim the number.
+describe("retireMirroredPort", () => {
+    it("terminates that one forward and re-files its record as ignored", async () => {
+        const record = join(dirname(runPidPath), "port-terminated.txt");
+        const fakeMutagen = join(dirname(runPidPath), "port-mutagen.sh");
+        await writeFile(fakeMutagen, `#!/bin/sh\nif [ "$2" = "terminate" ]; then shift 2; echo "$@" > ${record}; fi\nexit 0\n`, { mode: 0o755 });
+        await upsertPairing({
+            sandboxUrl: "https://work.example.dev/",
+            sandboxId: "work",
+            mode: "mirror",
+            mirroredPorts: [
+                { port: 5440, host: "127.0.0.1", command: "postgres" },
+                { port: 5173, host: "127.0.0.1", command: "vite" },
+            ],
+        });
+
+        await expect(retireMirroredPort(fakeMutagen, "work", 5440)).resolves.toBe(true);
+
+        expect((await readFile(record, "utf8")).trim()).toBe(forwardSessionName("work", 5440));
+        const held = (await readState()).pairings.find((pairing) => pairing.sandboxId === "work");
+        // Only that port leaves; the sibling forward keeps its own connections.
+        expect(held?.mirroredPorts).toEqual([{ port: 5173, host: "127.0.0.1", command: "vite" }]);
+        // And it is still REPORTED, under the reason nobody tried, since that row is the only way back.
+        expect(held?.skippedPorts).toEqual([{ port: 5440, host: "127.0.0.1", reason: "ignored", command: "postgres" }]);
+    });
+
+    // Nothing came off localhost, which is a different sentence for the caller to print than "there you go".
+    it("answers false for a port this device was not mirroring", async () => {
+        const quiet = join(dirname(runPidPath), "quiet-port-mutagen.sh");
+        await writeFile(quiet, "#!/bin/sh\nexit 0\n", { mode: 0o755 });
+        await upsertPairing({ sandboxUrl: "https://lab.example.dev/", sandboxId: "lab", mode: "mirror" });
+        await expect(retireMirroredPort(quiet, "lab", 5440)).resolves.toBe(false);
     });
 });
 

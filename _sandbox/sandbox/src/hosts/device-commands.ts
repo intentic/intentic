@@ -49,6 +49,8 @@ export interface DeviceCommandFacts {
     readonly hostFacts: HostFacts | undefined;
     readonly mode: "sync" | "mirror" | undefined;
     readonly localDir: string | undefined;
+    /** The two per-port mirror switches only; already bounded to 1-65535 by the contract. */
+    readonly port: number | undefined;
     // The folder of the pairing a sync switch acts on, from readings already held. Which environment of that computer
     // runs mutagen for it is decided by where that folder is, so this is what routes the switch.
     readonly pairedDir: string | undefined;
@@ -84,8 +86,10 @@ interface DeviceCommandSpec {
     readonly line: (facts: DeviceCommandFacts, route?: DeviceCommandRoute) => string | undefined;
     /** Why a command could not be formed here, in the refusal's own words. */
     readonly needs?: string;
-    // True when the command refuses to run fleet-wide and needs a sandbox id; only the destructive action sets it.
-    readonly scoped?: boolean;
+    // What the CALLER has to name for this command to mean anything, refused before a line is built. Checked here
+    // rather than in the schema, since both fields are optional for the commands that don't take them: the
+    // destructive action refuses to run fleet-wide, and a port switch has nothing to act on without its number.
+    readonly requires?: readonly ("sandboxId" | "port")[];
     /** Above the 20s default for a command that downloads, builds, or has to reach a machine busy doing one. */
     readonly timeoutMs?: number;
     /** Mints a single-use desktop-sync pairing for this call; only the enrolling command asks. */
@@ -97,8 +101,12 @@ interface DeviceCommandSpec {
 }
 
 // With an id, acts on one paired sandbox; bare, acts on every sandbox the device pairs. Only the reversible verbs offer
-// the bare form; sync-unpair is scoped and refused without an id.
+// the bare form; sync-unpair and the port switches are refused without an id.
 const forSandbox = (base: string, sandboxId: string | undefined): string => (sandboxId === undefined ? base : `${base} --sandbox ${sandboxId}`);
+
+// The same for the port the two per-port switches act on. Absent is unreachable — `requires` turns the call away
+// before any line is built — so this never has to invent a number for a command that has to name one.
+const forPort = (base: string, port: number | undefined): string => (port === undefined ? base : `${base} --port ${port}`);
 
 // A leading `~` is expanded by the shell only outside quotes, so the daemon writes `$HOME` itself: the contract's own
 // schema refuses a `$` from the caller, which makes this the only one in the line.
@@ -155,6 +163,21 @@ export const DEVICE_COMMANDS: Readonly<Record<DeviceCommand, DeviceCommandSpec>>
         line: ({ sandboxId }) => forSandbox("intentic-machine sync mirror on", sandboxId),
         path: pairedFolder,
     },
+    // The per-port pair, and the reason it exists: a number permanently taken on that machine's localhost is not a
+    // contest that resolves, and turning every port off to be rid of one standing notice is the wrong trade. Both
+    // name one sandbox and one port, which is why they are the only commands here refused without both.
+    "mirror-ignore": {
+        done: "That port stays off this device's localhost. Every other port this sandbox serves keeps being mirrored.",
+        line: ({ sandboxId, port }) => forPort(forSandbox("intentic-machine sync mirror ignore", sandboxId), port),
+        path: pairedFolder,
+        requires: ["sandboxId", "port"],
+    },
+    "mirror-unignore": {
+        done: "That port is being mirrored again. It returns to that device's localhost within a few seconds.",
+        line: ({ sandboxId, port }) => forPort(forSandbox("intentic-machine sync mirror unignore", sandboxId), port),
+        path: pairedFolder,
+        requires: ["sandboxId", "port"],
+    },
     // Pausing sync also pauses the workspace's state backup, so it never writes into a folder mid-pause.
     "sync-pause": {
         done: "File syncing is paused on that device. Its ports keep being mirrored.",
@@ -179,7 +202,7 @@ export const DEVICE_COMMANDS: Readonly<Record<DeviceCommand, DeviceCommandSpec>>
         done: "That device has stopped syncing this sandbox. Its local folder is left exactly as it is.",
         line: ({ sandboxId }) => forSandbox("intentic-machine sync uninstall", sandboxId),
         path: pairedFolder,
-        scoped: true,
+        requires: ["sandboxId"],
     },
     // Enrolls the device we are already talking to, instead of printing its one-liner for someone to paste there. The
     // token is minted for this call alone and never leaves the daemon.
@@ -267,6 +290,7 @@ const commandFacts = async (services: Services, input: DeviceCommandInput): Prom
         hostFacts: door?.facts,
         mode: input.mode,
         localDir: input.localDir,
+        port: input.port,
         pairedDir: door?.report?.pairings.find((pairing) => pairing.sandboxId === input.sandboxId)?.localDir,
         connections: services.hostHub.connected().filter((key) => hostCardOf(key) === hostCardOf(input.id)).map(hostEnvironmentOf),
         pairToken: spec.mints === true ? services.syncPairings.mint(input.mode ?? "sync").token : undefined,
@@ -352,13 +376,18 @@ export const outcomeOf = (command: DeviceCommand, answer: { text: string; refuse
     return { ok: false, refused: false, message: [err, out].find((part) => part !== "") ?? answer.text.trim(), output: answer.text };
 };
 
+// The caller's word for each required field, so a refusal reads as a sentence rather than as a schema key.
+const REQUIRED_WORD: Readonly<Record<"sandboxId" | "port", string>> = { sandboxId: "sandbox", port: "port" };
+
 // Only an unreachable machine throws. Everything the machine actually answered, a refusal or a nonzero exit, comes back
 // as ok: false carrying its words.
 export const runDeviceCommand = async (services: Services, input: DeviceCommandInput): Promise<DeviceCommandResult> => {
     const spec = DEVICE_COMMANDS[input.command];
-    // Refused here, not in the schema, since the field is optional for the other switches and only this one needs it.
-    if (spec.scoped === true && input.sandboxId === undefined) {
-        throw new ORPCError("BAD_REQUEST", { message: `"${input.command}" has to name the sandbox it acts on.` });
+    // What this command cannot be run without, named in the caller's own vocabulary: a fleet-wide unpair and a port
+    // switch with no port are both requests that mean nothing, not devices that refused.
+    const missing = (spec.requires ?? []).filter((field) => input[field] === undefined).map((field) => REQUIRED_WORD[field]);
+    if (missing.length > 0) {
+        throw new ORPCError("BAD_REQUEST", { message: `"${input.command}" has to name the ${missing.join(" and the ")} it acts on.` });
     }
     const facts = await commandFacts(services, input);
     const route = doorRoute(spec, facts, input);

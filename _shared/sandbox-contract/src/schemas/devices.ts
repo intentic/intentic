@@ -123,9 +123,14 @@ export type DeviceAgentFlowInput = z.infer<typeof DeviceAgentFlowInputSchema>;
 // `sync-clean` removes the build output left in directories the sandbox has deleted, which is what stops those
 // deletions from ever landing. It deletes only content the session already ignores, so it is the one command here whose
 // worst outcome is a rebuild — which is why it is a button and not a turn.
+// `mirror-ignore`/`mirror-unignore` are `mirror-off`'s per-port form, and the reason they exist: a port number that is
+// permanently taken on one machine's localhost has no answer in an all-or-nothing switch, so the choice lives where the
+// conflict does — one port, one device, durable — instead of muting every port the pairing serves.
 export const DeviceCommandSchema = z.enum([
     "mirror-off",
     "mirror-on",
+    "mirror-ignore",
+    "mirror-unignore",
     "sync-pause",
     "sync-resume",
     "sync-unpair",
@@ -210,6 +215,8 @@ export const DeviceLocalDirSchema = z
     .min(1)
     .max(4096)
     .regex(/^(?:~|\/|[A-Za-z]:[\\/])[^"'`$;|&\n\r]*$/);
+// A TCP port number, the one value a caller supplies that reaches a command line as a number rather than a string.
+export const PortNumberSchema = z.number().int().min(1).max(65535);
 export const DeviceCommandInputSchema = z.object({
     id: z.string().min(1),
     command: DeviceCommandSchema,
@@ -218,6 +225,9 @@ export const DeviceCommandInputSchema = z.object({
     // for file sync, the folder on that device. The pairing token is minted by the daemon; no caller ever carries one.
     mode: z.enum(["sync", "mirror"]).optional(),
     localDir: DeviceLocalDirSchema.optional(),
+    // The two per-port mirror switches only. A number rather than a string, so nothing a caller sends can widen the
+    // command line it lands in.
+    port: PortNumberSchema.optional(),
 });
 export type DeviceCommandInput = z.infer<typeof DeviceCommandInputSchema>;
 // `ok` is the command's own exit status, not this route's: a refusal or non-zero exit is a real answer, not a thrown
@@ -294,9 +304,18 @@ export const DevicePortStateSchema = z.enum([
     "held-by-sandbox",
     // Something outside this product already binds the port; not ours to name or take.
     "busy",
+    // The owner told this device to leave this number alone (`sync mirror ignore`); nothing was attempted.
+    "ignored",
 ]);
+export type DevicePortState = z.infer<typeof DevicePortStateSchema>;
+
+// Why a port the sandbox serves is not on this machine's localhost: the state minus its one success. Named here
+// because the machine decides it and the browser renders it, so a new reason has to reach both at once.
+export const PortSkipReasonSchema = DevicePortStateSchema.exclude(["mirrored"]);
+export type PortSkipReason = z.infer<typeof PortSkipReasonSchema>;
+
 export const DevicePortSchema = z.object({
-    port: z.number().int().min(1).max(65535),
+    port: PortNumberSchema,
     host: z.enum(["127.0.0.1", "::1"]),
     // The sandbox serving the port, whose /ports listed it, not whoever ended up holding the local bind.
     sandboxId: z.string(),

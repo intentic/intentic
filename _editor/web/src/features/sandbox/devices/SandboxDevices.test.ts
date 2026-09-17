@@ -564,9 +564,25 @@ it(`folds a sandbox to a line that still says what is under it`, () => {
     expect(text).not.toContain(`img:a`);
 });
 
-it(`opens the sandbox that wants something and leaves the rest folded`, () => {
+// THE CASE THIS RULE EXISTS FOR. A port the machine itself already uses for something else — a database on 5440 —
+// is a permanent, correct outcome, and unfolding its row on every visit taught the reader to ignore the tab. Said on
+// the closed line, and nothing more.
+it(`leaves a sandbox folded when the only port it missed is one this machine already uses`, () => {
     granted();
     const text = mount([busyMachine()]).textContent ?? ``;
+    expect(text).toContain(`1 port busy here`);
+    expect(text).not.toContain(`/home/radarsu/intentic/radarsu-local-0738cd6b5027`);
+});
+
+// The one port outcome with a remedy on this very page — the sandbox holding the number has a Stop button — still
+// opens its row.
+it(`opens the sandbox that wants something and leaves the rest folded`, () => {
+    granted();
+    const machine = busyMachine();
+    const ports = machine.report!.ports.map((port) =>
+        port.port === 5440 ? { ...port, state: `held-by-sandbox` as const, heldBy: `sandbox-bce57bb9fe3b` } : port,
+    );
+    const text = mount([{ ...machine, report: { ...machine.report!, ports } }]).textContent ?? ``;
     expect(text).toContain(`/home/radarsu/intentic/radarsu-local-0738cd6b5027`);
     expect(text).toContain(`not on localhost`);
     // Being stopped on purpose is not an errand, so that row stays folded.
@@ -656,7 +672,7 @@ it(`names every sandbox a machine holds, and what each one came to, without bein
     expect(text).toContain(`2 ports`);
     // The third is stopped on purpose, which is a state rather than an errand.
     expect(text).toContain(`stopped`);
-    expect(text).toContain(`1 port not on localhost`);
+    expect(text).toContain(`1 port busy here`);
     // No chevron on a machine: a card is one link, so nothing on the board discloses.
     expect(disclosures(mount([busyMachine(), { ...syncOnly(), key: `other`, label: `other-pc` }]))).toEqual([]);
 });
@@ -1048,14 +1064,37 @@ it(`counts mirroring off as a fact rather than something to fix`, () => {
     expect(groups.filter(groupNeedsAttention)).toEqual([]);
 });
 
-// The same port with mirroring on still warns, so the fact-not-fault rule above doesn't swallow a real signal.
-it(`still warns about a port that missed localhost while mirroring is on`, () => {
+// The same port with mirroring on is still SAID — the fact-not-fault rule above must not swallow it — but as a fact:
+// nothing failed, and nothing on this page can free a number another program on that machine holds.
+it(`states a busy port as a fact rather than a warning while mirroring is on`, () => {
     const groups = sandboxGroups(
         [{ sandboxId: `work-abc`, mode: `sync`, localDir: `/home/ada/work`, mutagenStatus: `watching`, mirroring: `on` }],
         [{ port: 5173, sandboxId: `work-abc`, state: `busy` }],
     );
-    expect(groups.map((group) => groupSummary(group))).toEqual([{ facts: [], warnings: [`1 port not on localhost`] }]);
+    expect(groups.map((group) => groupSummary(group))).toEqual([{ facts: [`1 port busy here`], warnings: [] }]);
+    expect(groups.filter(groupNeedsAttention)).toEqual([]);
+});
+
+// The one that stays a warning, because it is the one with a remedy on this page: the row holding the number is
+// right here, with its own Stop button.
+it(`warns about a port another paired sandbox took`, () => {
+    const groups = sandboxGroups(
+        [{ sandboxId: `work-abc`, mode: `sync`, localDir: `/home/ada/work`, mutagenStatus: `watching`, mirroring: `on` }],
+        [{ port: 5173, sandboxId: `work-abc`, state: `held-by-sandbox`, heldBy: `lab-def` }],
+    );
+    expect(groups.map((group) => groupSummary(group))).toEqual([{ facts: [], warnings: [`1 port taken by another sandbox`] }]);
     expect(groups.filter(groupNeedsAttention)).toHaveLength(1);
+});
+
+// A port somebody told this device to leave alone is the opposite of a fault; it is counted so the row can say what
+// became of every port it serves, and it never unfolds anything.
+it(`counts a port set aside as a fact of its own`, () => {
+    const groups = sandboxGroups(
+        [{ sandboxId: `work-abc`, mode: `sync`, localDir: `/home/ada/work`, mutagenStatus: `watching`, mirroring: `on` }],
+        [{ port: 5440, sandboxId: `work-abc`, state: `ignored` }],
+    );
+    expect(groups.map((group) => groupSummary(group))).toEqual([{ facts: [`1 port left alone`], warnings: [] }]);
+    expect(groups.filter(groupNeedsAttention)).toEqual([]);
 });
 
 // A card under this list used to hold the whole subject in the singular; now each row states its own enrollment.

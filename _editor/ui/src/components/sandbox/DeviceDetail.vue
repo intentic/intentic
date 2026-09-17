@@ -59,6 +59,10 @@ defineSlots<{
     // Verbs for this row's ports, at the end of the ports line rather than in `actions`: a mirroring toggle
     // beside the container's own Stop would read as the same stop.
     ports?: (props: { group: DeviceSandboxGroup }) => unknown;
+    // One port's own verb, at the end of that port's line. Its own slot rather than another button under the
+    // block: what it acts on is the number beside it, and a switch for 5440 sitting under a list of six ports
+    // would be a switch for none of them.
+    port?: (props: { group: DeviceSandboxGroup; port: DevicePortRow }) => unknown;
     // Turning file sync ON, for a row that has no pairing to hang `folder` under. Its own slot because the
     // emptiness is the prompt: a reader looking at a sandbox this device does not sync wants the folder field,
     // not a line telling them there is no folder.
@@ -68,6 +72,11 @@ defineSlots<{
 }>();
 
 const groups = computed(() => sandboxGroups(pairings, ports, sandboxes));
+
+// Ink by outcome, not by whether the port reached localhost: one somebody told this device to leave alone is a
+// quiet fact, and colouring it like a port that wanted localhost and lost would undo the whole distinction.
+const portInk = (port: DevicePortRow): string =>
+    port.state === `mirrored` ? `text-content` : port.state === `ignored` ? `text-subtle` : `text-warning`;
 
 // Every row's conflict block, derived once and keyed by sandbox id rather than recomputed per template read.
 const conflicts = computed(() => new Map(groups.value.map((group) => [group.sandboxId, folderConflicts(group.folder)])));
@@ -280,27 +289,31 @@ onBeforeUnmount(() => clearTimeout(flashTimer));
                             <div v-else class="grid min-w-0 grid-cols-[auto_minmax(0,1fr)] items-baseline gap-x-4 gap-y-1">
                                 <template v-for="port in group.ports" :key="`${port.port}:${port.state}`">
                                     <!-- Only a port that reached localhost is prefixed with it; one that didn't is a bare number. -->
-                                    <span class="shrink-0 font-mono text-xs" :class="port.state === `mirrored` ? `text-content` : `text-warning`"
+                                    <span class="shrink-0 font-mono text-xs" :class="portInk(port)"
                                         >{{ port.state === `mirrored` ? t(`ui.deviceDetail.localhost`) : `` }}{{ port.port }}</span
                                     >
-                                    <!-- What's listening, named rather than quoted in full; the whole command line is one hover away. -->
-                                    <span
-                                        v-if="port.state === `mirrored`"
-                                        class="min-w-0 truncate font-mono text-xs text-subtle"
-                                        :title="port.command"
-                                        >{{ shortCommand(port.command) }}</span
-                                    >
-                                    <span v-else class="min-w-0 text-xs text-muted">
-                                        {{ portNote(port, portHolder(groups, port), shortCommand(port.command)) }}
-                                        <!-- Goes to the holder's own block, where its Stop button lives, rather than naming a winner with nowhere to go. -->
-                                        <button
-                                            v-if="portHolder(groups, port)"
-                                            type="button"
-                                            class="ml-1 rounded underline decoration-dotted underline-offset-2 transition-colors hover:text-content"
-                                            @click="showHolder(portHolder(groups, port)!)"
+                                    <span class="flex min-w-0 items-baseline gap-1">
+                                        <!-- What's listening, named rather than quoted in full; the whole command line is one hover away. -->
+                                        <span
+                                            v-if="port.state === `mirrored`"
+                                            class="min-w-0 truncate font-mono text-xs text-subtle"
+                                            :title="port.command"
+                                            >{{ shortCommand(port.command) }}</span
                                         >
-                                            {{ t(`ui.deviceDetail.show`) }}
-                                        </button>
+                                        <span v-else class="min-w-0 text-xs text-muted">
+                                            {{ portNote(port, portHolder(groups, port), shortCommand(port.command)) }}
+                                            <!-- Goes to the holder's own block, where its Stop button lives, rather than naming a winner with nowhere to go. -->
+                                            <button
+                                                v-if="portHolder(groups, port)"
+                                                type="button"
+                                                class="ml-1 rounded underline decoration-dotted underline-offset-2 transition-colors hover:text-content"
+                                                @click="showHolder(portHolder(groups, port)!)"
+                                            >
+                                                {{ t(`ui.deviceDetail.show`) }}
+                                            </button>
+                                        </span>
+                                        <!-- The caller's own verb for this one number; the component knows nothing about what it does. -->
+                                        <slot name="port" :group="group" :port="port" />
                                     </span>
                                 </template>
                             </div>

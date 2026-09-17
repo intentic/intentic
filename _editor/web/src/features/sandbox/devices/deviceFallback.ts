@@ -81,14 +81,19 @@ const SYNC_VERB: Partial<Record<SyncCommand, string>> = {
     "sync-clean": `sync clean`,
     "mirror-off": `sync mirror off`,
     "mirror-on": `sync mirror on`,
+    "mirror-ignore": `sync mirror ignore`,
+    "mirror-unignore": `sync mirror unignore`,
 };
 
 /**
  * The command that does this to one machine's file sync by hand, or undefined for the one that can't be typed.
  * A pairing named narrows it to that sandbox; without one the verb acts on every pairing, exactly as the bare
- * button does.
+ * button does. A port narrows it further, and only the two per-port mirror switches ever carry one.
  */
-export const syncFallback = (command: SyncCommand, sandboxId: string | undefined): string | undefined => {
+export const syncFallback = (command: SyncCommand, sandboxId: string | undefined, port?: number): string | undefined => {
     const verb = SYNC_VERB[command];
-    return verb === undefined ? undefined : `intentic-machine ${verb}${sandboxId === undefined ? `` : ` --sandbox ${sandboxId}`}`;
+    if (verb === undefined) {
+        return undefined;
+    }
+    return `intentic-machine ${verb}${sandboxId === undefined ? `` : ` --sandbox ${sandboxId}`}${port === undefined ? `` : ` --port ${port}`}`;
 };

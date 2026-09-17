@@ -10,9 +10,19 @@ import { buildCommand, buildRouteMap, type CommandContext } from "@stricli/core"
 import { resolveDaemonBase } from "../daemon-base.js";
 import { prepareSetup } from "../install.js";
 import { machineLauncher, readResidentPid, reconcileResidency, startResidentIfStopped } from "../resident.js";
-import { type Pairing, readState, removePairing, setAutoHealOff, setMirrorOff, type SyncMode, type SyncState, upsertPairing } from "./config.js";
+import {
+    type Pairing,
+    readState,
+    removePairing,
+    setAutoHealOff,
+    setMirrorOff,
+    setPortIgnored,
+    type SyncMode,
+    type SyncState,
+    upsertPairing,
+} from "./config.js";
 import { realBridgeExec, runGitBridge } from "./git-bridge.js";
-import { retirePairingMirror, teardownAllForwards } from "./mirror.js";
+import { retireMirroredPort, retirePairingMirror, teardownAllForwards } from "./mirror.js";
 import {
     ensureMutagen,
     ensureSyncSession,
@@ -398,12 +408,77 @@ const mirrorSwitch = (brief: string, off: boolean) =>
         },
     });
 
+// The one numeric flag this CLI takes. Parsed strictly rather than through a bare Number(): a NaN reaching the
+// session name below would terminate a forward nothing holds and then report that it worked.
+const parsePort = (value: string): number => {
+    const port = Number(value);
+    if (!Number.isInteger(port) || port < 1 || port > 65_535) {
+        throw new Error(`"${value}" is not a port number (1-65535).`);
+    }
+    return port;
+};
+
+interface MirrorPortFlags extends SandboxFlags {
+    readonly port: number;
+}
+
+// ONE PORT, not the whole pairing — the case the switch above has no answer for. A number that is permanently taken
+// on THIS machine's localhost (a database this device already runs on 5440) is not a contest that will ever resolve,
+// and turning every port off to be rid of one notice is the wrong trade. Machine-side because the conflict is the
+// device's: the same sandbox keeps mirroring that port on every other machine it pairs with.
+const mirrorPortSwitch = (brief: string, ignored: boolean) =>
+    buildCommand<MirrorPortFlags>({
+        docs: { brief },
+        parameters: {
+            flags: {
+                ...sandboxFlag,
+                port: { kind: "parsed", parse: parsePort, brief: "The port number, as the sandbox serves it" },
+            },
+        },
+        async func(this: CommandContext, flags: MirrorPortFlags) {
+            const out = (message: string): void => void this.process.stdout.write(`${message}\n`);
+            const selected = selectPairings(await readState(), flags.sandbox);
+            if (selected.length === 0) {
+                out("no sandboxes are paired on this machine: nothing to mirror. Enable it from a sandbox's Desktop sync card.");
+                return;
+            }
+            const mutagen = await ensureMutagen();
+            let taken = 0;
+            for (const pairing of selected) {
+                // oxlint-disable-next-line eslint/no-await-in-loop -- state is a single file; serial keeps the writes ordered
+                await setPortIgnored(pairing.sandboxId, flags.port, ignored);
+                if (ignored) {
+                    // Like `mirror off`: the taking-away happens now, since somebody who just asked for their port
+                    // back should have it before they can alt-tab. Giving it back is the watcher's, which holds the
+                    // transport a fresh forward dials over.
+                    // oxlint-disable-next-line eslint/no-await-in-loop -- one pairing's teardown at a time, as everywhere else here
+                    taken += (await retireMirroredPort(mutagen, pairing.sandboxId, flags.port)) ? 1 : 0;
+                }
+            }
+            if (ignored) {
+                out(
+                    `Port ${flags.port} will not be mirrored for: ${named(selected)}.${taken === 0 ? "" : ` Took localhost:${flags.port} off this device.`} Every other port is untouched.`,
+                );
+                return;
+            }
+            out(
+                `Port ${flags.port} will be mirrored again for: ${named(selected)}. It returns to localhost within a few seconds, unless something else on this machine is holding it.`,
+            );
+            // The watcher is what puts it back, so a stopped agent turns this command into a promise nothing keeps.
+            if ((await readResidentPid()) === undefined) {
+                out("Note: this machine's agent is NOT running, so nothing will mirror until you start it: `intentic-machine run`.");
+            }
+        },
+    });
+
 const mirror = buildRouteMap({
     routes: {
         off: mirrorSwitch("Stop putting a sandbox's ports on this device's localhost (file syncing continues)", true),
         on: mirrorSwitch("Put a sandbox's ports back on this device's localhost", false),
+        ignore: mirrorPortSwitch("Leave ONE port off this device's localhost, mirroring every other port as usual", true),
+        unignore: mirrorPortSwitch("Mirror a port this device was told to leave alone", false),
     },
-    docs: { brief: "Turn this device's port mirroring off or on, for one paired sandbox or all of them" },
+    docs: { brief: "Turn this device's port mirroring off or on, for a whole sandbox or for one port of it" },
 });
 
 // CLEARING BUILD OUTPUT IS NOT RESOLVING A CONFLICT, and this command is careful to be only the first. When the sandbox

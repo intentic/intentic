@@ -10,7 +10,7 @@ import { acpProviders, endpointProviders, endpointsLoaded, trialStatus } from ".
 // The four seams this list reads besides the accounts: each is a live query elsewhere, and none of them decides
 // whether a turn can run, which is the only question these tests ask.
 vi.mock(`../../capabilities/connect/useSecrets`, () => ({ useMissingSecretCount: () => ({ missingRequiredCount: { value: 0 } }) }));
-vi.mock(`../devices/useDevices`, () => ({ useSyncHealth: () => ({ stoppedOn: { value: [] }, contendedPorts: { value: [] } }) }));
+vi.mock(`../devices/useDevices`, () => ({ useSyncHealth: () => ({ stoppedOn: { value: [] }, heldPorts: { value: [] } }) }));
 vi.mock(`../environment/useEnvironment`, () => ({ useEnvironment: () => ({ pending: { value: undefined }, proposal: { value: undefined } }) }));
 vi.mock(`./useSandboxVersion`, () => ({ useSandboxVersion: () => ({ updateAvailable: { value: false }, updateStaged: { value: undefined } }) }));
 

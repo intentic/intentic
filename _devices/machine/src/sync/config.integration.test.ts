@@ -7,7 +7,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 // (dynamic import, after the env is set), landing the state file in temp rather than the real ~/.intentic/machine.
 process.env["HOME"] = mkdtempSync(join(tmpdir(), "sync-config-"));
 process.env["USERPROFILE"] = process.env["HOME"];
-const { readState, removePairing, setMirrorOff, updateState, upsertPairing } = await import("./config.js");
+const { readState, removePairing, setMirrorOff, setPortIgnored, updateState, upsertPairing } = await import("./config.js");
 const { rm, writeFile } = await import("node:fs/promises");
 const { agentHome } = await import("@intentic/local-agent");
 const syncStatePath = join(agentHome("machine").dir, "sync.json");
@@ -122,6 +122,43 @@ describe("setMirrorOff", () => {
         const held = (await readState()).pairings[0];
         expect(held?.localDir).toBe(local.localDir);
         expect(held?.syncToken).toBe(local.syncToken);
+    });
+});
+
+// The per-port form of the switch above, and the one the standing complaint is about: a number this machine already
+// uses for something else is contended here and free everywhere this sandbox is also paired, so the choice is one
+// device's and has to outlive its reboots.
+describe("setPortIgnored", () => {
+    it("sets one port aside on one pairing and leaves its siblings alone", async () => {
+        await upsertPairing(local);
+        await upsertPairing(web);
+
+        await setPortIgnored(local.sandboxId, 5440, true);
+
+        const { pairings } = await readState();
+        expect(pairings.find((held) => held.sandboxId === local.sandboxId)?.ignoredPorts).toEqual([5440]);
+        expect(pairings.find((held) => held.sandboxId === web.sandboxId)).toEqual(web);
+    });
+
+    // Read as a set and shown as a list, so asking twice is one entry and the order is the reader's, not the
+    // order the buttons happened to be pressed in.
+    it("holds each port once, in number order", async () => {
+        await upsertPairing(local);
+        await setPortIgnored(local.sandboxId, 5440, true);
+        await setPortIgnored(local.sandboxId, 5173, true);
+        await setPortIgnored(local.sandboxId, 5440, true);
+
+        expect((await readState()).pairings[0]?.ignoredPorts).toEqual([5173, 5440]);
+    });
+
+    // The same rule mirroring's own switch follows: releasing the last port leaves NO field, so a pairing that
+    // never set one aside and one that has given them all back are the same record.
+    it("drops the field once the last port comes back", async () => {
+        await upsertPairing(local);
+        await setPortIgnored(local.sandboxId, 5440, true);
+        await setPortIgnored(local.sandboxId, 5440, false);
+
+        expect((await readState()).pairings).toEqual([local]);
     });
 });
 

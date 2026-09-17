@@ -42,8 +42,9 @@ describe("buildReport", () => {
                     sandboxId: "work",
                     mirroredPorts: [{ port: 5173, host: "127.0.0.1", command: "node vite" }],
                     skippedPorts: [
-                        { port: 6480, host: "127.0.0.1", heldBy: "scratch", command: "node next" },
-                        { port: 8080, host: "::1" },
+                        { port: 6480, host: "127.0.0.1", reason: "held-by-sandbox", heldBy: "scratch", command: "node next" },
+                        { port: 8080, host: "::1", reason: "busy" },
+                        { port: 5440, host: "127.0.0.1", reason: "ignored", command: "postgres" },
                     ],
                 }),
             ],
@@ -53,6 +54,8 @@ describe("buildReport", () => {
             { port: 6480, host: "127.0.0.1", sandboxId: "work", state: "held-by-sandbox", heldBy: "scratch", command: "node next" },
             // No heldBy ⇒ something on the machine that is not one of our sandboxes has the port.
             { port: 8080, host: "::1", sandboxId: "work", state: "busy", heldBy: undefined, command: undefined },
+            // Somebody's own choice, carried as its own state: a reader must never be shown this as a contest lost.
+            { port: 5440, host: "127.0.0.1", sandboxId: "work", state: "ignored", heldBy: undefined, command: "postgres" },
         ]);
     });
 
@@ -122,15 +125,31 @@ describe("skippedPortsOf", () => {
         command,
     });
 
+    const nothingIgnored = new Set<number>();
+
     it("is empty when every wanted port was mirrored", () => {
-        expect(skippedPortsOf([summary(5173)], [{ port: 5173, host: "127.0.0.1" }], new Map())).toEqual([]);
+        expect(skippedPortsOf([summary(5173)], [{ port: 5173, host: "127.0.0.1" }], new Map(), nothingIgnored)).toEqual([]);
     });
 
     it("names the sandbox that took the port, and leaves it unnamed when a foreign process did", () => {
-        const skipped = skippedPortsOf([summary(6480, "node next"), summary(8080)], [], new Map([[6480, "scratch"]]));
+        const skipped = skippedPortsOf([summary(6480, "node next"), summary(8080)], [], new Map([[6480, "scratch"]]), nothingIgnored);
         expect(skipped).toEqual([
-            { port: 6480, host: "127.0.0.1", heldBy: "scratch", command: "node next" },
-            { port: 8080, host: "127.0.0.1", heldBy: undefined, command: undefined },
+            { port: 6480, host: "127.0.0.1", reason: "held-by-sandbox", heldBy: "scratch", command: "node next" },
+            { port: 8080, host: "127.0.0.1", reason: "busy", heldBy: undefined, command: undefined },
         ]);
+    });
+
+    // A set-aside port stays in the list — it is the only row the switch can be thrown back from — and carries the
+    // reason nobody tried, rather than the reason nobody measured.
+    it("files a port this device was told to leave alone as ignored, not as busy", () => {
+        const skipped = skippedPortsOf([summary(5440, "postgres")], [], new Map(), new Set([5440]));
+        expect(skipped).toEqual([{ port: 5440, host: "127.0.0.1", reason: "ignored", heldBy: undefined, command: "postgres" }]);
+    });
+
+    // Reconcile never entered the contest, so naming a winner here would be inventing a fact about a pass that
+    // never happened — and would hand the row a "show it" link to a sandbox that took nothing from it.
+    it("calls an ignored port ignored even when another sandbox holds the number", () => {
+        const skipped = skippedPortsOf([summary(5440)], [], new Map([[5440, "scratch"]]), new Set([5440]));
+        expect(skipped).toEqual([{ port: 5440, host: "127.0.0.1", reason: "ignored", heldBy: undefined, command: undefined }]);
     });
 });

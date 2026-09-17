@@ -42,8 +42,8 @@ const HUB = `sandbox`;
 // The two counts the index carries, and whatever is running behind the row. Extensions counts installed extensions
 // with a newer registry commit; info, not warning, since nothing here auto-updates. A run is not an errand, so it
 // adds no count of its own: it rides `running`, which the row draws as a turning mark.
-const sectionBadge = (slug: string, updates: number, contendedPorts: number, running: string | undefined): ViewBadge | undefined => {
-    const count = slug === `extensions` ? updates : slug === `devices` ? contendedPorts : 0;
+const sectionBadge = (slug: string, updates: number, heldPorts: number, running: string | undefined): ViewBadge | undefined => {
+    const count = slug === `extensions` ? updates : slug === `devices` ? heldPorts : 0;
     if (count === 0 && running === undefined) {
         return undefined;
     }
@@ -54,7 +54,7 @@ const sandbox = useSandbox();
 // Operating surfaces need the top revokable grant too; the daemon enforces it, this just keeps the index honest.
 const { canShip } = useRole();
 // The one count in this index anyone looks for; rides the /system/sync poll the sandbox chip already does, free.
-const { contendedPorts } = useSyncHealth();
+const { heldPorts } = useSyncHealth();
 const { allPanels: panels, isLoading } = usePanels();
 const { capabilities } = useCapabilities();
 // Extensions row's count reads the cached registry only (`read: false`), never triggering a clone.
@@ -99,7 +99,7 @@ const groups = computed<readonly NavGroup<HubTab>[]>(() => [
                 .filter((section) => canShip.value || section.maintainer !== true)
                 .map((section) => ({
                     ...section,
-                    badge: sectionBadge(section.slug, updatable.value, contendedPorts.value.length, runningIn(section.slug)),
+                    badge: sectionBadge(section.slug, updatable.value, heldPorts.value.length, runningIn(section.slug)),
                 })),
         }))
         .filter((group) => group.items.length > 0),

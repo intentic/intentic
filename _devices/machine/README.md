@@ -54,6 +54,15 @@ The **sync half** (`src/sync/`, the machine side of desktop sync):
   only way back from, so the button always names the pairing it ends. A machine whose pairings disagree (one
   mirroring, one not — which the per-pairing switches exist to allow) is drawn as such rather than collapsed to
   one position, and offered both directions.
+
+  **And one port at a time** (`sync mirror ignore|unignore --sandbox <id> --port <n>`). The switch above is
+  all-or-nothing, and the case it has no answer for is the common one: a single number this machine already uses
+  for something else — a Postgres on 5440 that the sandbox's compose file also publishes — loses the local bind
+  correctly, every tick, forever. That is not a contest that resolves, and turning every port off to be rid of one
+  standing notice is the wrong trade. An ignored port is skipped before the free-check, torn down at once if it was
+  already up, and still REPORTED — as `ignored`, its own state — because the row it appears on is the only place the
+  choice can be reversed. It lives here rather than in the sandbox for the same reason the switch above does: the
+  conflict belongs to one machine's localhost, and the same sandbox goes on mirroring that port everywhere else.
 - **Clear its own build output when it blocks a deletion** ([src/sync/residue.ts](src/sync/residue.ts)). Two-way-safe
   refuses to delete a directory holding content it never carried, so a `node_modules` this device built is enough to
   stop a directory the sandbox deleted from ever going away here. Nothing in that standoff is a disagreement — no edit,

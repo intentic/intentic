@@ -5,7 +5,7 @@ import { setTimeout as sleep } from "node:timers/promises";
 import { errorMessage } from "@intentic/base/errors";
 import { plural } from "@intentic/base/format";
 import type { Log } from "@intentic/local-agent";
-import { type PortSummary, PortsListSchema } from "@intentic/sandbox-contract";
+import { type PortSkipReason, type PortSummary, PortsListSchema } from "@intentic/sandbox-contract";
 import {
     mirrorHeartbeatPath,
     type MirroredPort,
@@ -122,26 +122,50 @@ const mutagenExecutor = (mutagen: string, pairing: Pairing, log: Log): ForwardEx
 
 // Minimal-touch reconcile: leaves unchanged forwards alone, terminates vanished ports, (re)creates new or
 // family-moved ones. `claimedBy` names ports other pairings already hold; first-paired wins a contested port.
-export const reconcileForwards = async (
+// `ignored` is the owner's own standing answer for a number on this device (config.ts `setPortIgnored`), and it is
+// checked before everything else: a port nobody may take is not a contest to resolve, so no free-check is spent on it
+// and no forward of it survives the switch being thrown.
+// The teardown half, split out so each half stays readable: every live forward this pass drops, and the reason it
+// says out loud. Ignored leads, since the owner's standing answer outranks whatever else became true of the number.
+const retireForwards = (
     executor: ForwardExecutor,
     current: readonly MirroredPort[],
-    desired: readonly PortSummary[],
-    claimedBy: ReadonlyMap<number, string>,
+    desiredByPort: ReadonlyMap<number, PortSummary>,
+    ignored: ReadonlySet<number>,
     log: Log,
-): Promise<MirroredPort[]> => {
-    const desiredByPort = new Map(desired.map((port) => [port.port, port]));
+): void => {
     for (const mirrored of current) {
         const match = desiredByPort.get(mirrored.port);
-        if (match === undefined) {
+        if (ignored.has(mirrored.port)) {
+            executor.terminate(mirrored.port);
+            log(`  localhost:${mirrored.port}: stopped (this device is set not to mirror that port)`);
+        } else if (match === undefined) {
             executor.terminate(mirrored.port);
             log(`  localhost:${mirrored.port}: stopped (no longer listening in the sandbox)`);
         } else if (match.host !== mirrored.host) {
             executor.terminate(mirrored.port); // family moved: the fresh session below dials the new address
         }
     }
+};
+
+export const reconcileForwards = async (
+    executor: ForwardExecutor,
+    current: readonly MirroredPort[],
+    desired: readonly PortSummary[],
+    claimedBy: ReadonlyMap<number, string>,
+    ignored: ReadonlySet<number>,
+    log: Log,
+): Promise<MirroredPort[]> => {
+    const desiredByPort = new Map(desired.map((port) => [port.port, port]));
+    retireForwards(executor, current, desiredByPort, ignored, log);
     const currentByPort = new Map(current.map((mirrored) => [mirrored.port, mirrored]));
     const next: MirroredPort[] = [];
     for (const summary of desired) {
+        // First, and before the unchanged-forward shortcut below: a live forward on a newly-ignored port was just
+        // terminated above, and keeping it in `next` would make the following pass believe it is still up.
+        if (ignored.has(summary.port)) {
+            continue;
+        }
         const existing = currentByPort.get(summary.port);
         if (existing !== undefined && existing.host === summary.host) {
             next.push(existing); // unchanged: the live forward keeps its connections
@@ -180,7 +204,9 @@ const sameMirrorSet = (a: readonly MirroredPort[], b: readonly MirroredPort[]): 
     return b.every((mirrored) => seen.has(mirrorKey(mirrored)));
 };
 
-const skippedKey = (skipped: SkippedPort): string => `${skipped.port}:${skipped.heldBy ?? ""}`;
+// The reason is part of the key: a port going from contended to ignored keeps its number and its holder, and a set
+// that could not tell those apart would leave the report saying the old thing until something else moved.
+const skippedKey = (skipped: SkippedPort): string => `${skipped.port}:${skipped.reason}:${skipped.heldBy ?? ""}`;
 
 const sameSkippedSet = (a: readonly SkippedPort[], b: readonly SkippedPort[]): boolean => {
     if (a.length !== b.length) {
@@ -192,15 +218,24 @@ const sameSkippedSet = (a: readonly SkippedPort[], b: readonly SkippedPort[]): b
 
 // Ports this pairing wanted but didn't get, derived from what reconcile already decided rather than returned
 // separately, so reconcileForwards stays a pure port-set function. Persisted so a skip is visible off the log.
+// An ignored port is still listed: it is the only row the switch can be thrown back from, and dropping it would make
+// a choice somebody made look like a port the sandbox stopped serving.
 export const skippedPortsOf = (
     desired: readonly PortSummary[],
     mirrored: readonly MirroredPort[],
     claimedBy: ReadonlyMap<number, string>,
+    ignored: ReadonlySet<number>,
 ): SkippedPort[] => {
     const got = new Set(mirrored.map((port) => port.port));
     return desired
         .filter((summary) => !got.has(summary.port))
-        .map((summary) => ({ port: summary.port, host: summary.host, heldBy: claimedBy.get(summary.port), command: summary.command }));
+        .map((summary): SkippedPort => {
+            const heldBy = claimedBy.get(summary.port);
+            // Ignored outranks the rest because reconcile never tried: no contest was entered and no bind measured,
+            // so the other two reasons are not facts about this pass at all.
+            const reason: PortSkipReason = ignored.has(summary.port) ? "ignored" : heldBy === undefined ? "busy" : "held-by-sandbox";
+            return { port: summary.port, host: summary.host, reason, heldBy: reason === "held-by-sandbox" ? heldBy : undefined, command: summary.command };
+        });
 };
 
 // Stamps the end of a pass; a failed write must not stop mirroring, so it silently under-claims.
@@ -217,6 +252,18 @@ const savePorts = async (sandboxId: string, mirroredPorts: readonly MirroredPort
         pairings: state.pairings.map((held) => (held.sandboxId === sandboxId ? { ...held, mirroredPorts, skippedPorts } : held)),
     }));
 
+// The whole of a pass for a pairing whose mirroring is off: torn down once, right after the switch flips, so later
+// passes find nothing left and cost a length check. Logged in the switch's own words, since reconcile's "no longer
+// listening" would misdescribe a sandbox still serving those ports.
+const retireSwitchedOff = async (mutagen: string, pairing: Pairing, log: Log): Promise<void> => {
+    const mirrored = pairing.mirroredPorts ?? [];
+    if (mirrored.length === 0 && (pairing.skippedPorts ?? []).length === 0) {
+        return;
+    }
+    await retirePairingMirror(mutagen, pairing.sandboxId);
+    log(`  ${pairing.sandboxId}: port mirroring is off on this device; took ${plural(mirrored.length, "port")} off localhost.`);
+};
+
 // One pairing's pass: reconciles its port forwards and returns what it ended up mirroring, so the caller can mark
 // those ports claimed for pairings after it. A SyncAuthError propagates for the caller to count.
 const servePairing = async (
@@ -231,17 +278,12 @@ const servePairing = async (
     // revoked enrollment is noticed. The switch only changes what's done with the answer.
     const ports = pairing.syncToken === undefined ? [] : await fetchWorkspacePorts(base, pairing.syncToken);
     if (pairing.mirrorOff === true) {
-        // Torn down once, right after the switch flips; later passes find nothing left and this costs a length check.
-        // Logged in the switch's own words, since reconcile's "no longer listening" would misdescribe a sandbox still
-        // serving those ports.
-        if (baseline.length > 0 || (pairing.skippedPorts ?? []).length > 0) {
-            await retirePairingMirror(mutagen, pairing.sandboxId);
-            log(`  ${pairing.sandboxId}: port mirroring is off on this device; took ${plural(baseline.length, "port")} off localhost.`);
-        }
+        await retireSwitchedOff(mutagen, pairing, log);
         return [];
     }
-    const next = await reconcileForwards(mutagenExecutor(mutagen, pairing, log), baseline, ports, claimedBy, log);
-    const skipped = skippedPortsOf(ports, next, claimedBy);
+    const ignored = new Set(pairing.ignoredPorts ?? []);
+    const next = await reconcileForwards(mutagenExecutor(mutagen, pairing, log), baseline, ports, claimedBy, ignored, log);
+    const skipped = skippedPortsOf(ports, next, claimedBy, ignored);
     // Either set changing triggers a write, even a port flipping mirrored-to-contended without changing set size.
     if (!sameMirrorSet(baseline, next) || !sameSkippedSet(pairing.skippedPorts ?? [], skipped)) {
         await savePorts(pairing.sandboxId, next, skipped);
@@ -538,7 +580,8 @@ const teardownForwards = async (mutagen: string, sandboxId?: string): Promise<nu
         spawnSync(mutagen, ["forward", "terminate", ...names], { stdio: "ignore", windowsHide: true });
     }
     // A stale baseline would make the next reconcile treat gone forwards as already mirrored. The skip set clears
-    // too: mirroring-off isn't the same as losing a contest.
+    // too: mirroring-off isn't the same as losing a contest. `ignoredPorts` survives, being a choice rather than a
+    // reading: mirroring switched off and back on must not silently take back a number somebody released.
     await updateState((state) => ({
         pairings: state.pairings.map((held) =>
             sandboxId === undefined || held.sandboxId === sandboxId ? { ...held, mirroredPorts: [], skippedPorts: [] } : held,
@@ -549,6 +592,37 @@ const teardownForwards = async (mutagen: string, sandboxId?: string): Promise<nu
 
 // Retires one pairing's mirroring; the loop re-reads the pairing list each tick, so others keep running.
 export const retirePairingMirror = async (mutagen: string, sandboxId: string): Promise<number> => await teardownForwards(mutagen, sandboxId);
+
+// Takes ONE port off this device's localhost now rather than at the watcher's next pass, and moves its record with
+// it: somebody who just asked for a number back should have it before they can alt-tab, and an agent that is stopped
+// (or a sandbox that is unreachable) would otherwise keep reporting the port as mirrored for as long as it stayed
+// that way. Answers whether anything was actually taken down, which is the difference between "your localhost is
+// yours again" and "that port was never on it".
+export const retireMirroredPort = async (mutagen: string, sandboxId: string, port: number): Promise<boolean> => {
+    spawnSync(mutagen, ["forward", "terminate", forwardSessionName(sandboxId, port)], { stdio: "ignore", windowsHide: true });
+    let wasMirrored = false;
+    await updateState((state) => ({
+        pairings: state.pairings.map((held) => {
+            if (held.sandboxId !== sandboxId) {
+                return held;
+            }
+            const mirrored = held.mirroredPorts ?? [];
+            const live = mirrored.find((forward) => forward.port === port);
+            wasMirrored = live !== undefined;
+            // Whichever list held the port carries the same three facts, so one lookup re-files it under its new
+            // reason; a port the sandbox isn't serving at all has no row to move and gets none invented for it.
+            const record = live ?? (held.skippedPorts ?? []).find((skipped) => skipped.port === port);
+            const others = (held.skippedPorts ?? []).filter((skipped) => skipped.port !== port);
+            return {
+                ...held,
+                mirroredPorts: mirrored.filter((forward) => forward.port !== port),
+                skippedPorts:
+                    record === undefined ? others : [...others, { port, host: record.host, reason: "ignored" as const, command: record.command }],
+            };
+        }),
+    }));
+    return wasMirrored;
+};
 
 // Tears down every forward this agent owns (full uninstall path). The caller has already stopped the resident
 // loop; Mutagen's daemon holds forwards regardless.
