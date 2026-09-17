@@ -1,3 +1,4 @@
+import { WORKSPACE_ROOT } from "@intentic/constants";
 import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -177,7 +178,7 @@ describe("absentInSandbox", () => {
                 },
             },
             `intentic-sync-box`,
-            `/work`,
+            WORKSPACE_ROOT,
             [`pkg-a`, `pkg-b`, `awkward name`],
         );
         expect(absent).toEqual(new Set([`pkg-a`]));

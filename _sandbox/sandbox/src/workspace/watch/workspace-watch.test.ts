@@ -1,4 +1,4 @@
-import { STATE_DIR } from "@intentic/constants";
+import { STATE_DIR, WORKSPACE_ROOT } from "@intentic/constants";
 import { IGNORED_DIRS } from "@intentic/workspace-ignore";
 import { afterEach, expect, test, vi } from "vitest";
 import {
@@ -113,7 +113,7 @@ test("every skip glob covers both the directory itself and its subtree", () => {
 });
 
 test("a build's write under a pruned dir reaches browsers only by being announced, and no watcher subscriber", () => {
-    const root = "/work";
+    const root = WORKSPACE_ROOT;
     // The watcher cannot report this one: a repo that tracks its build output has files no watched batch ever names.
     expect(isWatchIgnored(root, `${root}/app/dist/extension.js`)).toBe(true);
     let announced = 0;
@@ -139,7 +139,7 @@ test("the junk-dir globs are generated from the shared list, not restated", () =
 
 test("each skip rule still silences the path it exists for", () => {
     // One path per rule, so removing a rule fails here instead of silently costing handles on a big checkout.
-    const root = "/work";
+    const root = WORKSPACE_ROOT;
     for (const relPath of [
         "app/node_modules/dep/index.js",
         `${STATE_DIR}/local/browser/reddit/Default/Cookies`,

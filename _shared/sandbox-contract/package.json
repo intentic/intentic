@@ -184,14 +184,14 @@
             }
         },
         "./webext": {
-            "types": "./dist/webext.d.ts",
+            "types": "./dist/webext/index.d.ts",
             "import": {
-                "@intentic/src": "./src/webext.ts",
-                "default": "./dist/webext.js"
+                "@intentic/src": "./src/webext/index.ts",
+                "default": "./dist/webext/index.js"
             },
             "require": {
-                "@intentic/src": "./src/webext.ts",
-                "default": "./dist/webext.js"
+                "@intentic/src": "./src/webext/index.ts",
+                "default": "./dist/webext/index.js"
             }
         },
         "./webext-links": {
