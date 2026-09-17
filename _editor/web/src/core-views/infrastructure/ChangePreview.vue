@@ -89,16 +89,15 @@ const hasChanges = computed(() => sections.value.length > 0);
                 <span class="font-mono text-xs text-content">{{ key }}</span>
                 <SecretField :secret-key="key" no-hint />
             </div>
-            <div class="flex justify-end">
-                <Button
-                    :label="t(`ui.action.continue`)"
-                    :disabled="missingSecrets.length > 0 || running"
-                    :loading="running"
-                    @click="preview.continueAfterSecrets()"
-                >
-                    <template #icon><Icon name="arrow-right" /></template>
-                </Button>
-            </div>
+            <Button
+                class="self-end"
+                :label="t(`ui.action.continue`)"
+                :disabled="missingSecrets.length > 0 || running"
+                :loading="running"
+                @click="preview.continueAfterSecrets()"
+            >
+                <template #icon><Icon name="arrow-right" /></template>
+            </Button>
         </template>
 
         <Notice v-else-if="previewNotice" :of="previewNotice" />

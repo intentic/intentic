@@ -588,9 +588,7 @@ onMounted(progress.recover);
 
             <Card v-if="showConnect" class="mb-3 flex flex-col gap-3">
                 <ConnectHost />
-                <div class="flex justify-end">
-                    <Button type="button" :label="t(`ui.action.close`)" severity="secondary" :text="true" @click="showConnect = false" />
-                </div>
+                <Button type="button" class="self-end" :label="t(`ui.action.close`)" severity="secondary" :text="true" @click="showConnect = false" />
             </Card>
 
             <div class="flex flex-col gap-2.5">

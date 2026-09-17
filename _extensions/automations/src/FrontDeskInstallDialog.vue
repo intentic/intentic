@@ -128,9 +128,7 @@ const allowOrigin = async (origin: string): Promise<void> => {
         </div>
 
         <template #footer>
-            <div class="flex justify-end">
-                <Button :label="t(`frontDeskInstallDialog.done`)" @click="visible = false" />
-            </div>
+            <Button :label="t(`frontDeskInstallDialog.done`)" @click="visible = false" />
         </template>
     </Modal>
 </template>

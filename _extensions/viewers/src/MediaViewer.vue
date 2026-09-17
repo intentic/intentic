@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Button, Icon, vAction } from "@intentic/extension-ui";
+import { Button, Icon, type IconName, vAction } from "@intentic/extension-ui";
 import { formatDuration } from "@intentic/extension-ui/format";
 import { computed, onBeforeUnmount, ref, watch } from "vue";
 import { seekTargets, SPEEDS } from "./mediaControls";
@@ -265,6 +265,59 @@ const onKeyDown = (event: KeyboardEvent): void => {
     event.preventDefault();
 };
 
+// The transport's buttons, in row order: one shape, so the row is a list rather than nine copies of it. `press`
+// is bound with `v-action`, which locks the button for as long as an async toggle runs and no-ops on a sync one.
+interface Transport {
+    readonly key: string;
+    readonly icon: IconName;
+    /** Screen-reader name; the tooltip carries the keyboard shortcut instead. */
+    readonly label: string;
+    readonly hint: string;
+    readonly active?: boolean;
+    readonly press: () => unknown;
+}
+
+const leadControls = computed((): readonly Transport[] => [
+    {
+        key: `play`,
+        icon: playing.value ? `pause` : `play`,
+        label: playing.value ? t(`mediaViewer.pause`) : t(`mediaViewer.play`),
+        hint: playing.value ? t(`mediaViewer.pauseK`) : t(`mediaViewer.playK`),
+        press: togglePlay,
+    },
+    { key: `back`, icon: `backward`, label: t(`mediaViewer.back10Seconds`), hint: t(`mediaViewer.back10sJ`), press: () => skip(-10) },
+    { key: `forward`, icon: `forward`, label: t(`mediaViewer.forward10Seconds`), hint: t(`mediaViewer.forward10sL`), press: () => skip(10) },
+]);
+
+// Picture-in-picture and full screen are video-only; loop and download apply to both.
+const endControls = computed((): readonly Transport[] => [
+    { key: `loop`, icon: `repeat`, label: t(`mediaViewer.loop`), hint: t(`mediaViewer.loop`), active: looping.value, press: toggleLoop },
+    ...(hasVideo.value
+        ? [
+              {
+                  key: `pip`,
+                  icon: `picture-in-picture` as IconName,
+                  label: t(`mediaViewer.pictureInPicture`),
+                  hint: t(`mediaViewer.pictureInPictureP`),
+                  active: pictureInPicture.value,
+                  press: togglePictureInPicture,
+              },
+          ]
+        : []),
+    { key: `download`, icon: `download`, label: t(`mediaViewer.download`), hint: t(`mediaViewer.download`), press: () => emit(`download`) },
+    ...(hasVideo.value
+        ? [
+              {
+                  key: `fullscreen`,
+                  icon: (fullscreen.value ? `compress` : `expand`) as IconName,
+                  label: fullscreen.value ? t(`mediaViewer.exitFullScreen`) : t(`mediaViewer.fullScreen`),
+                  hint: t(`mediaViewer.fullScreenF`),
+                  press: toggleFullscreen,
+              },
+          ]
+        : []),
+]);
+
 // Idle fade and document-level listeners.
 let idleTimer: ReturnType<typeof setTimeout> | undefined;
 const wake = (): void => {
@@ -440,31 +493,15 @@ watch(
 
             <div class="flex items-center gap-1" :class="hasVideo ? `text-white` : `text-content`">
                 <button
+                    v-for="control in leadControls"
+                    :key="control.key"
                     type="button"
                     class="media-btn"
-                    :aria-label="playing ? t(`mediaViewer.pause`) : t(`mediaViewer.play`)"
-                    v-tooltip.top="playing ? t(`mediaViewer.pauseK`) : t(`mediaViewer.playK`)"
-                    @click="togglePlay"
+                    :aria-label="control.label"
+                    v-tooltip.top="control.hint"
+                    v-action="control.press"
                 >
-                    <Icon :name="playing ? `pause` : `play`" />
-                </button>
-                <button
-                    type="button"
-                    class="media-btn"
-                    :aria-label="t(`mediaViewer.back10Seconds`)"
-                    v-tooltip.top="t(`mediaViewer.back10sJ`)"
-                    @click="skip(-10)"
-                >
-                    <Icon name="backward" />
-                </button>
-                <button
-                    type="button"
-                    class="media-btn"
-                    :aria-label="t(`mediaViewer.forward10Seconds`)"
-                    v-tooltip.top="t(`mediaViewer.forward10sL`)"
-                    @click="skip(10)"
-                >
-                    <Icon name="forward" />
+                    <Icon :name="control.icon" />
                 </button>
 
                 <!-- Volume slider widens on hover; collapsed otherwise to save row space. -->
@@ -524,44 +561,16 @@ watch(
                     </div>
                 </div>
                 <button
+                    v-for="control in endControls"
+                    :key="control.key"
                     type="button"
                     class="media-btn"
-                    :class="{ 'text-primary-500': looping }"
-                    :aria-label="t(`mediaViewer.loop`)"
-                    v-tooltip.top="t(`mediaViewer.loop`)"
-                    @click="toggleLoop"
+                    :class="{ 'text-primary-500': control.active }"
+                    :aria-label="control.label"
+                    v-tooltip.top="control.hint"
+                    v-action="control.press"
                 >
-                    <Icon name="repeat" />
-                </button>
-                <button
-                    v-if="hasVideo"
-                    type="button"
-                    class="media-btn"
-                    :class="{ 'text-primary-500': pictureInPicture }"
-                    :aria-label="t(`mediaViewer.pictureInPicture`)"
-                    v-tooltip.top="t(`mediaViewer.pictureInPictureP`)"
-                    v-action="togglePictureInPicture"
-                >
-                    <Icon name="picture-in-picture" />
-                </button>
-                <button
-                    type="button"
-                    class="media-btn"
-                    :aria-label="t(`mediaViewer.download`)"
-                    v-tooltip.top="t(`mediaViewer.download`)"
-                    @click="emit(`download`)"
-                >
-                    <Icon name="download" />
-                </button>
-                <button
-                    v-if="hasVideo"
-                    type="button"
-                    class="media-btn"
-                    :aria-label="fullscreen ? t(`mediaViewer.exitFullScreen`) : t(`mediaViewer.fullScreen`)"
-                    v-tooltip.top="t(`mediaViewer.fullScreenF`)"
-                    v-action="toggleFullscreen"
-                >
-                    <Icon :name="fullscreen ? `compress` : `expand`" />
+                    <Icon :name="control.icon" />
                 </button>
             </div>
         </div>

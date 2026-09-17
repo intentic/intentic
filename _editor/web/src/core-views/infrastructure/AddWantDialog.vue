@@ -265,11 +265,9 @@ const submit = async (): Promise<void> => {
                         @update:model-value="(value: string | undefined) => (on = value ?? ``)"
                     />
                 </label>
-                <div class="flex justify-end">
-                    <Button type="submit" :label="t(`ui.action.add`)" :disabled="!canSubmit || submitting" :loading="submitting">
-                        <template #icon><Icon name="check" /></template>
-                    </Button>
-                </div>
+                <Button type="submit" class="self-end" :label="t(`ui.action.add`)" :disabled="!canSubmit || submitting" :loading="submitting">
+                    <template #icon><Icon name="check" /></template>
+                </Button>
             </form>
         </template>
 

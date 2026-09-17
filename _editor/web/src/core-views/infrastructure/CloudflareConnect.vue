@@ -108,16 +108,15 @@ const connect = async (): Promise<void> => {
                 </template>
             </CloudflareTokenField>
 
-            <div class="flex justify-end">
-                <Button
-                    type="submit"
-                    :label="t(`views.cloudflareConnect.connectCloudflare`)"
-                    :disabled="!canConnect || submitting"
-                    :loading="submitting"
-                >
-                    <template #icon><Icon name="check" /></template>
-                </Button>
-            </div>
+            <Button
+                type="submit"
+                class="self-end"
+                :label="t(`views.cloudflareConnect.connectCloudflare`)"
+                :disabled="!canConnect || submitting"
+                :loading="submitting"
+            >
+                <template #icon><Icon name="check" /></template>
+            </Button>
         </form>
     </div>
 </template>

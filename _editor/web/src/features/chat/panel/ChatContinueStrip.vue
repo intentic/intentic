@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Button, formatTokens, Icon, ResponsiveOverlay, useDevice } from "@intentic/ui";
+import { Button, formatTokens, Icon, type IconName, ResponsiveOverlay, useDevice } from "@intentic/ui";
 import { useNow } from "@intentic/ui/async";
 import { computed, ref, watch } from "vue";
 import { useAgents } from "../../agents/fleet/useAgents";
@@ -117,6 +117,29 @@ const setLimitResume = async (resume: boolean): Promise<void> => {
     }
 };
 
+// The wait's one slot: outage before allowance, arm or disarm, never two filled at once.
+const waitAction = computed(() => {
+    if (outage.value !== undefined) {
+        return outage.value.automatic !== undefined
+            ? { label: t(`ui.action.stop`), hint: t(`chat.chatContinueStrip.stopChatPickingTurn`), press: () => setOutageResume(false) }
+            : {
+                  label: t(`chat.chatContinueStrip.keepChatGoing`),
+                  hint: t(`chat.chatContinueStrip.keepTryingTurnUntil`),
+                  press: () => setOutageResume(true),
+              };
+    }
+    if (limitWait.value !== undefined) {
+        return limitWait.value.automatic !== undefined
+            ? { label: t(`ui.action.stop`), hint: t(`chat.chatContinueStrip.stopChatSendingTurn`), press: () => setLimitResume(false) }
+            : {
+                  label: t(`chat.chatContinueStrip.sendBack`),
+                  hint: t(`chat.chatContinueStrip.sendTurnAgainBy`, { pressCostLine: pressCostLine.value }),
+                  press: () => setLimitResume(true),
+              };
+    }
+    return undefined;
+});
+
 // The way on that skips waiting entirely, offered where the wait is announced: read off the reason (not
 // `limitWait`, which also needs a reset instant) since this needs only another pool. limitFallback.ts judges which
 // account may be offered.
@@ -215,6 +238,49 @@ const armAutoContinue = (): void => {
     setAutoContinue(true);
 };
 
+// The menu's rows, in the order they are offered: the other account (twice when the session is worth carrying —
+// same press, two prices), then the standing version of the press.
+const waysRows = computed((): readonly { key: string; icon: IconName; title: string; note: string; press: () => void }[] => {
+    const target = fallback.value;
+    return [
+        ...(target !== undefined && canCarry.value
+            ? [
+                  {
+                      key: `carry`,
+                      icon: `user` as IconName,
+                      title: t(`chat.chatContinueStrip.continueOnKeepingSession`, { fallback: fallbackLabel(target) }),
+                      note: carryLine.value,
+                      press: () => continueOnFallback(true),
+                  },
+              ]
+            : []),
+        ...(target !== undefined
+            ? [
+                  {
+                      key: `fresh`,
+                      icon: `user` as IconName,
+                      title: canCarry.value
+                          ? t(`chat.chatContinueStrip.continueOnFresh`, { model: fallbackLabel(target) })
+                          : t(`chat.chatContinueStrip.continueOn`, { model: fallbackLabel(target) }),
+                      note: freshLine.value,
+                      press: () => continueOnFallback(false),
+                  },
+              ]
+            : []),
+        ...(offerAutoContinue.value
+            ? [
+                  {
+                      key: `auto`,
+                      icon: `repeat` as IconName,
+                      title: t(`chat.chatContinueStrip.autoContinue`),
+                      note: t(`chat.chatContinueStrip.keepsContinuingWheneverTurn`),
+                      press: armAutoContinue,
+                  },
+              ]
+            : []),
+    ];
+});
+
 const autoContinueStrip = computed(() => autoContinue.value && connected.value);
 const autoContinueLine = computed(() =>
     autoContinueAt.value === undefined
@@ -231,56 +297,20 @@ const autoContinueLine = computed(() =>
         <Icon :name="ready ? `pause` : `clock`" class="shrink-0" />
         <!-- Status text has a minimum width beside shrinkable controls. -->
         <span class="min-w-[11rem] flex-1">{{ status }}</span>
-        <!-- This ending's wait: one slot, four possible fillings, never two at once. -->
+        <!-- This ending's wait: one slot, four possible fillings, never two at once. The words say what the press
+             does ("this chat", "keep going"), not the setting's name; the allowance's pair is named as an
+             appointment (fires once, at the published hour) rather than a retry. -->
         <Button
-            v-if="outage?.automatic !== undefined"
+            v-if="waitAction !== undefined"
             size="small"
             severity="secondary"
             :text="true"
             class="shrink-0"
             :disabled="!reachable || arming"
-            v-tooltip.top="t(`chat.chatContinueStrip.stopChatPickingTurn`)"
-            @click="() => setOutageResume(false)"
+            v-tooltip.top="waitAction.hint"
+            @click="waitAction.press"
         >
-            {{ t(`ui.action.stop`) }}
-        </Button>
-        <!-- The words say what the press does ("this chat", "keep going"), not the setting's name. -->
-        <Button
-            v-else-if="outage !== undefined"
-            size="small"
-            severity="secondary"
-            :text="true"
-            class="shrink-0"
-            :disabled="!reachable || arming"
-            v-tooltip.top="t(`chat.chatContinueStrip.keepTryingTurnUntil`)"
-            @click="() => setOutageResume(true)"
-        >
-            {{ t(`chat.chatContinueStrip.keepChatGoing`) }}
-        </Button>
-        <!-- The allowance's own pair, same slot and order; named as an appointment (fires once, at the published hour) rather than a retry. -->
-        <Button
-            v-else-if="limitWait?.automatic !== undefined"
-            size="small"
-            severity="secondary"
-            :text="true"
-            class="shrink-0"
-            :disabled="!reachable || arming"
-            v-tooltip.top="t(`chat.chatContinueStrip.stopChatSendingTurn`)"
-            @click="() => setLimitResume(false)"
-        >
-            {{ t(`ui.action.stop`) }}
-        </Button>
-        <Button
-            v-else-if="limitWait !== undefined"
-            size="small"
-            severity="secondary"
-            :text="true"
-            class="shrink-0"
-            :disabled="!reachable || arming"
-            v-tooltip.top="t(`chat.chatContinueStrip.sendTurnAgainBy`, { pressCostLine })"
-            @click="() => setLimitResume(true)"
-        >
-            {{ t(`chat.chatContinueStrip.sendBack`) }}
+            {{ waitAction.label }}
         </Button>
         <!-- The press and its variants: the reset when offered, Continue, inline Auto-continue in the two-action case, or a caret menu otherwise. -->
         <div ref="waysAnchor" class="flex shrink-0 items-center gap-1">
@@ -332,47 +362,17 @@ const autoContinueLine = computed(() =>
     <!-- The press's variants, shown in the dropdown when more than one alternative way on exists. -->
     <ResponsiveOverlay v-model="waysOpen" :anchor="waysAnchor" cross="end" :header="t(`chat.chatContinueStrip.otherWaysOn`)" panel-class="w-80 p-1">
         <div class="flex flex-col p-1">
-            <!-- The other account, twice when the session is worth carrying: same press, two prices. -->
             <button
-                v-if="fallback !== undefined && canCarry"
+                v-for="way in waysRows"
+                :key="way.key"
                 type="button"
                 class="ui-row-select flex items-start gap-2 rounded-lg px-2.5 py-1.5 text-left max-md:py-3"
-                @click="() => continueOnFallback(true)"
+                @click="way.press"
             >
-                <Icon name="user" class="mt-0.5 text-xs text-subtle" />
+                <Icon :name="way.icon" class="mt-0.5 text-xs text-subtle" />
                 <span class="flex min-w-0 flex-col">
-                    <span class="truncate text-sm text-content md:text-xs">{{
-                        t(`chat.chatContinueStrip.continueOnKeepingSession`, { fallback: fallbackLabel(fallback) })
-                    }}</span>
-                    <span class="text-2xs text-subtle">{{ carryLine }}</span>
-                </span>
-            </button>
-            <button
-                v-if="fallback !== undefined"
-                type="button"
-                class="ui-row-select flex items-start gap-2 rounded-lg px-2.5 py-1.5 text-left max-md:py-3"
-                @click="() => continueOnFallback(false)"
-            >
-                <Icon name="user" class="mt-0.5 text-xs text-subtle" />
-                <span class="flex min-w-0 flex-col">
-                    <span class="truncate text-sm text-content md:text-xs">{{
-                        canCarry
-                            ? t(`chat.chatContinueStrip.continueOnFresh`, { model: fallbackLabel(fallback) })
-                            : t(`chat.chatContinueStrip.continueOn`, { model: fallbackLabel(fallback) })
-                    }}</span>
-                    <span class="text-2xs text-subtle">{{ freshLine }}</span>
-                </span>
-            </button>
-            <button
-                v-if="offerAutoContinue"
-                type="button"
-                class="ui-row-select flex items-start gap-2 rounded-lg px-2.5 py-1.5 text-left max-md:py-3"
-                @click="armAutoContinue"
-            >
-                <Icon name="repeat" class="mt-0.5 text-xs text-subtle" />
-                <span class="flex min-w-0 flex-col">
-                    <span class="text-sm text-content md:text-xs">{{ t(`chat.chatContinueStrip.autoContinue`) }}</span>
-                    <span class="text-2xs text-subtle">{{ t(`chat.chatContinueStrip.keepsContinuingWheneverTurn`) }}</span>
+                    <span class="truncate text-sm text-content md:text-xs">{{ way.title }}</span>
+                    <span class="text-2xs text-subtle">{{ way.note }}</span>
                 </span>
             </button>
         </div>

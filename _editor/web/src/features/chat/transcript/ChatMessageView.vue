@@ -718,9 +718,7 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
                 :title="t(`chat.chatMessageView.agentsBrowserNeeds`, { account: message.browserHelp.account })"
                 :status="helpStatus(message.browserHelp)"
             >
-                <div class="chat-card-body flex flex-col gap-1">
-                    <span class="text-xs text-content/85">{{ message.browserHelp.message }}</span>
-                </div>
+                <div class="chat-card-body text-xs text-content/85">{{ message.browserHelp.message }}</div>
 
                 <template v-if="message.browserHelp.status === 'pending'" #actions>
                     <ChatDecisionButton tone="primary" icon="desktop" :to="helpBrowserAt(message.browserHelp.session)">{{
@@ -740,9 +738,7 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
                 :title="t(`chat.chatMessageView.agentsTerminalNeeds`)"
                 :status="helpStatus(message.terminalHelp)"
             >
-                <div class="chat-card-body flex flex-col gap-1">
-                    <span class="text-xs text-content/85">{{ message.terminalHelp.message }}</span>
-                </div>
+                <div class="chat-card-body text-xs text-content/85">{{ message.terminalHelp.message }}</div>
 
                 <template v-if="message.terminalHelp.status === 'pending'" #actions>
                     <ChatDecisionButton tone="primary" icon="terminal" @click="openHelpTerminal(message.terminalHelp)">{{

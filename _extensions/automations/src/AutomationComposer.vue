@@ -249,7 +249,7 @@ const finish = (id: string): void => {
                 {{ t(`automationComposer.pasteBefore`) }} <span class="font-mono">&lt;/body&gt;</span>
                 {{ t(`automationComposer.onAnyPageListed`) }}
             </p>
-            <div class="flex justify-end"><Button :label="t(`automationComposer.done`)" @click="finish(savedId ?? ``)" /></div>
+            <Button class="self-end" :label="t(`automationComposer.done`)" @click="finish(savedId ?? ``)" />
         </div>
         <div v-else class="flex flex-col gap-3">
             <p class="text-sm text-content">
@@ -263,7 +263,7 @@ const finish = (id: string): void => {
                 />
             </div>
             <p class="text-xs text-muted">{{ template?.setup ?? t(`automationComposer.anyExternalSystemWake`) }}</p>
-            <div class="flex justify-end"><Button :label="t(`automationComposer.done`)" @click="finish(savedId ?? ``)" /></div>
+            <Button class="self-end" :label="t(`automationComposer.done`)" @click="finish(savedId ?? ``)" />
         </div>
     </section>
 </template>

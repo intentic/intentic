@@ -114,11 +114,9 @@ const submit = (): void => {
                     />
                 </div>
             </Card>
-            <div class="flex justify-end">
-                <Button :label="t(`addAppDialog.add`)" :disabled="!canAdd" @click="submit">
-                    <template #icon><Icon name="plus" /></template>
-                </Button>
-            </div>
+            <Button class="self-end" :label="t(`addAppDialog.add`)" :disabled="!canAdd" @click="submit">
+                <template #icon><Icon name="plus" /></template>
+            </Button>
         </div>
     </Modal>
 </template>

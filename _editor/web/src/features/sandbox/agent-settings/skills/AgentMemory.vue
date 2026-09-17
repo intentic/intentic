@@ -122,9 +122,7 @@ const importMemory = async (): Promise<void> => {
                     {{ t(`sandbox.agentMemory.copyPromptIntoChat`) }}
                 </span>
                 <textarea :value="IMPORT_PROMPT" readonly rows="6" :class="ui.input('w-full font-mono resize-y text-subtle')"></textarea>
-                <div class="flex justify-end">
-                    <CopyButton :text="IMPORT_PROMPT" :label="t(`sandbox.agentMemory.copyPrompt`)" />
-                </div>
+                <CopyButton class="self-end" :text="IMPORT_PROMPT" :label="t(`sandbox.agentMemory.copyPrompt`)" />
             </label>
 
             <label class="flex flex-col gap-1.5">
@@ -138,16 +136,15 @@ const importMemory = async (): Promise<void> => {
                     :placeholder="t(`sandbox.agentMemory.pasteMemoryDetailsHere`)"
                     :class="ui.input('w-full font-mono resize-y')"
                 ></textarea>
-                <div class="flex justify-end">
-                    <Button
-                        :label="t(`sandbox.agentMemory.addToMemory`)"
-                        :loading="importing"
-                        :disabled="importText.trim().length === 0"
-                        @click="importMemory"
-                    >
-                        <template #icon><Icon name="sparkles" /></template>
-                    </Button>
-                </div>
+                <Button
+                    class="self-end"
+                    :label="t(`sandbox.agentMemory.addToMemory`)"
+                    :loading="importing"
+                    :disabled="importText.trim().length === 0"
+                    @click="importMemory"
+                >
+                    <template #icon><Icon name="sparkles" /></template>
+                </Button>
             </label>
         </div>
     </Card>

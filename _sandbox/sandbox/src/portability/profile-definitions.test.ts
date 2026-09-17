@@ -17,6 +17,13 @@ const files = readdirSync(PROFILES_DIR).filter((name) => name.endsWith(`.sandbox
 // seeded rule whose id has since been renamed there arrives as a stranger, so the promise reads as kept while the
 // switch the reader would look at stands off. Read as source because a daemon package cannot import the app's screens.
 const appRules = readFileSync(join(repoRoot(import.meta.url), `_editor/web/src/features/sandbox/environment/rules.ts`), `utf8`);
+// The NAME each row is called by is no longer a literal beside its id: rules.ts builds labels with `t()`, so the words
+// a profile promises live in the app's English catalog and that is where a rename would show.
+const appRuleLabels: readonly string[] = Object.values(
+    (JSON.parse(readFileSync(join(repoRoot(import.meta.url), `_editor/web/src/app/i18n/locales/en.json`), `utf8`)) as {
+        sandbox: { rules: Record<string, string> };
+    }).sandbox.rules,
+);
 
 describe(`the profile definitions the platform seeds`, () => {
     it(`ships at least one, or the seed path is dead code`, () => {
@@ -38,7 +45,7 @@ describe(`the profile definitions the platform seeds`, () => {
         const definition = parseDefinitionToml(readFileSync(join(PROFILES_DIR, name), `utf8`));
         for (const rule of definition.settings.rules ?? []) {
             expect(appRules, `no rule in the app carries the id "${rule.id}"`).toContain(`\`${rule.id}\``);
-            expect(appRules, `the app no longer labels a rule "${rule.label}"`).toContain(`\`${rule.label}\``);
+            expect(appRuleLabels, `the app no longer labels a rule "${rule.label}"`).toContain(rule.label);
         }
     });
 });

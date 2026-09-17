@@ -126,9 +126,7 @@ watch(
     >
         <div class="flex flex-col gap-1.5">
             <!-- Only a label gets a row of its own; an unlabelled block needs no empty chrome row above it. -->
-            <div v-if="label" class="flex items-center justify-between">
-                <span class="text-2xs font-medium text-muted">{{ label }}</span>
-            </div>
+            <div v-if="label" class="text-2xs font-medium text-muted">{{ label }}</div>
             <div ref="block" class="relative">
                 <div v-if="html" v-html="html"></div>
                 <pre
