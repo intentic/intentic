@@ -9,7 +9,12 @@ import { xButton, xInputOver } from "./xinput.js";
 // Every line the input wrote, in order.
 const driven = (act: (input: ReturnType<typeof xInputOver>) => void): string[] => {
     const written: string[] = [];
-    act(xInputOver((command) => written.push(command), () => {}));
+    act(
+        xInputOver(
+            (command) => written.push(command),
+            () => {},
+        ),
+    );
     return written;
 };
 
@@ -41,20 +46,22 @@ describe("chordOf", () => {
 });
 
 describe("xInputOver", () => {
-    test("a pointer event names the point it happened at", () => {
+    // Plain `mousemove`, never `--sync`: that flag waits up to 15 s for the pointer to leave a point it is already at,
+    // which is every press (the move before it parked the pointer there), every release and every same-pixel move.
+    test("a pointer event names the point it happened at, without waiting on the move", () => {
         const lines = driven((input) => {
             input.move(100, 200);
             input.down(100, 200, 0);
             input.up(100, 200, 0);
         });
 
-        expect(lines).toEqual(["mousemove --sync 100 200\n", "mousemove --sync 100 200 mousedown 1\n", "mousemove --sync 100 200 mouseup 1\n"]);
+        expect(lines).toEqual(["mousemove 100 200\n", "mousemove 100 200 mousedown 1\n", "mousemove 100 200 mouseup 1\n"]);
     });
 
     test("coordinates are rounded, because X has no fractional pixels", () => {
         const lines = driven((input) => input.move(100.4, 200.6));
 
-        expect(lines).toEqual(["mousemove --sync 100 201\n"]);
+        expect(lines).toEqual(["mousemove 100 201\n"]);
     });
 
     // X has no scroll delta: a wheel is a button pressed once per notch, so a delta has to become a count.
@@ -62,8 +69,8 @@ describe("xInputOver", () => {
         const down = driven((input) => input.wheel(10, 20, 0, 106));
         const up = driven((input) => input.wheel(10, 20, 0, -53));
 
-        expect(down).toEqual(["mousemove --sync 10 20 click 5\n", "mousemove --sync 10 20 click 5\n"]);
-        expect(up).toEqual(["mousemove --sync 10 20 click 4\n"]);
+        expect(down).toEqual(["mousemove 10 20 mousedown 5 mouseup 5\n", "mousemove 10 20 mousedown 5 mouseup 5\n"]);
+        expect(up).toEqual(["mousemove 10 20 mousedown 4 mouseup 4\n"]);
     });
 
     // Capped at WHEEL_MAX so a trackpad fling or a page reporting deltas in pages doesn't write hundreds of presses.
@@ -71,6 +78,7 @@ describe("xInputOver", () => {
         const lines = driven((input) => input.wheel(0, 0, 0, 100_000));
 
         expect(lines).toHaveLength(12);
+        expect(lines.some((command) => command.includes("--sync") || command.includes(" click "))).toBe(false);
     });
 
     // xdotool reads one command per line, and `type` takes the rest of its line as text; an unescaped newline would let

@@ -1,4 +1,3 @@
-
 import { type ChildProcess, spawn } from "node:child_process";
 import type { Display } from "./display.js";
 
@@ -34,10 +33,11 @@ const line = (parts: readonly (string | number)[]): string => `${parts.join(" ")
 // Gestures over any writer, separate from the process that usually receives them: what matters here is the text itself
 // (button numbers, wheel presses, never forging a command from a newline), none of which needs owning a child process.
 export const xInputOver = (write: (command: string) => void, stop: () => void): XInput => {
-    // X's pointer is one shared location; a press with no position lands wherever it was last left, after a reconnect
-    // or a warp. Naming the point every time makes each event self-contained; redundant moves cost nothing.
+    // Every event names its point: X's pointer is one shared location, and a press without one lands wherever it was
+    // last left. Never `--sync`: it waits 15 s for the pointer to leave a point it already holds, which a press always
+    // is; one connection replays the move before the press anyway.
     const at = (x: number, y: number, ...rest: readonly (string | number)[]): void =>
-        write(line(["mousemove", "--sync", Math.round(x), Math.round(y), ...rest]));
+        write(line(["mousemove", Math.round(x), Math.round(y), ...rest]));
 
     return {
         move: (x, y) => at(x, y),
@@ -45,9 +45,10 @@ export const xInputOver = (write: (command: string) => void, stop: () => void): 
         up: (x, y, button) => at(x, y, "mouseup", xButton(button)),
         wheel: (x, y, deltaX, deltaY) => {
             const clicks = (delta: number): number => Math.min(WHEEL_MAX, Math.round(Math.abs(delta) / WHEEL_STEP));
+            // A press and a release, not `click`, which sleeps 100 ms after every one; a fling is up to WHEEL_MAX of them.
             const press = (button: number, count: number): void => {
                 for (let index = 0; index < count; index++) {
-                    at(x, y, "click", button);
+                    at(x, y, "mousedown", button, "mouseup", button);
                 }
             };
             // Buttons 4/5 are vertical (up/down), 6/7 horizontal (left/right).
