@@ -1,0 +1,301 @@
+import http from "node:http";
+
+// The Docker Engine API over its unix socket, the handful of calls running one container needs. No `docker` CLI: the
+// sandbox's engine is a feature pack that may be absent, and its absence is an answer this reports, not a crash.
+
+export const DOCKER_SOCKET = "/var/run/docker.sock";
+
+export interface EngineResponse {
+    readonly status: number;
+    readonly body: string;
+}
+
+export interface ContainerState {
+    readonly running: boolean;
+    // The loopback port the container's port 80 is published on; undefined when it was created without one.
+    readonly hostPort: number | undefined;
+    readonly image: string;
+    readonly env: readonly string[];
+}
+
+export interface ContainerSpec {
+    readonly image: string;
+    readonly env: readonly string[];
+    readonly hostPort: number;
+    readonly labels: Readonly<Record<string, string>>;
+}
+
+export interface DockerEngine {
+    // undefined when the engine answers; else why it does not (no socket, not running).
+    readonly unreachable: () => Promise<string | undefined>;
+    readonly imagePresent: (ref: string) => Promise<boolean>;
+    // Streams the pull; `onProgress` gets a whole-image percentage as layers report.
+    readonly pull: (ref: string, onProgress: (percent: number | undefined) => void) => Promise<void>;
+    readonly inspect: (name: string) => Promise<ContainerState | undefined>;
+    readonly create: (name: string, spec: ContainerSpec) => Promise<void>;
+    readonly start: (name: string) => Promise<void>;
+    // Stops and deletes; a container that is already gone is not an error.
+    readonly remove: (name: string) => Promise<void>;
+}
+
+const request = (socketPath: string, method: string, path: string, body?: unknown): Promise<EngineResponse> =>
+    new Promise((resolve, reject) => {
+        const payload = body === undefined ? undefined : JSON.stringify(body);
+        const req = http.request(
+            {
+                socketPath,
+                method,
+                path,
+                headers: {
+                    host: "docker",
+                    ...(payload === undefined ? {} : { "content-type": "application/json", "content-length": Buffer.byteLength(payload) }),
+                },
+            },
+            (res) => {
+                const chunks: Buffer[] = [];
+                res.on("data", (chunk: Buffer) => chunks.push(chunk));
+                res.on("end", () => resolve({ status: res.statusCode ?? 0, body: Buffer.concat(chunks).toString("utf8") }));
+                res.on("error", reject);
+            },
+        );
+        req.on("error", reject);
+        if (payload !== undefined) {
+            req.write(payload);
+        }
+        req.end();
+    });
+
+const failure = (what: string, response: EngineResponse): Error => {
+    let message = response.body.trim();
+    try {
+        const parsed: unknown = JSON.parse(response.body);
+        if (typeof parsed === "object" && parsed !== null && typeof (parsed as { message?: unknown }).message === "string") {
+            message = (parsed as { message: string }).message;
+        }
+    } catch {
+        // Not JSON: the raw body is the message.
+    }
+    return new Error(`${what}: the Docker engine answered ${response.status}${message === "" ? "" : `, ${message}`}`);
+};
+
+// One layer's byte progress, kept per phase since a layer downloads first and extracts after.
+interface LayerProgress {
+    current: number;
+    total: number;
+}
+
+// Download is the long phase and extraction the short one; weighted so the number keeps moving through both.
+const DOWNLOAD_WEIGHT = 0.85;
+
+export interface PullProgress {
+    readonly downloading: Map<string, LayerProgress>;
+    readonly extracting: Map<string, LayerProgress>;
+}
+
+export const newPullProgress = (): PullProgress => ({ downloading: new Map(), extracting: new Map() });
+
+const ratioOf = (layers: Map<string, LayerProgress>): number | undefined => {
+    let current = 0;
+    let total = 0;
+    for (const layer of layers.values()) {
+        current += layer.current;
+        total += layer.total;
+    }
+    return total === 0 ? undefined : Math.min(1, current / total);
+};
+
+const complete = (layers: Map<string, LayerProgress>, id: string): void => {
+    const known = layers.get(id);
+    layers.set(id, { current: known?.total ?? 1, total: known?.total ?? 1 });
+};
+
+interface PullEvent {
+    readonly status?: string;
+    readonly id?: string;
+    readonly error?: string;
+    readonly progressDetail?: { readonly current?: number; readonly total?: number };
+}
+
+// One layer's event into the phase it reports on.
+const recordLayer = (progress: PullProgress, id: string, status: string, detail: { current?: number; total?: number }): void => {
+    if (status === "Downloading" && detail.total !== undefined) {
+        progress.downloading.set(id, { current: detail.current ?? 0, total: detail.total });
+    } else if (status === "Download complete" || status === "Already exists") {
+        complete(progress.downloading, id);
+    } else if (status === "Extracting" && detail.total !== undefined) {
+        progress.extracting.set(id, { current: detail.current ?? 0, total: detail.total });
+    } else if (status === "Pull complete") {
+        complete(progress.extracting, id);
+    }
+};
+
+// The whole-image percent, undefined until any layer has reported a size.
+const percentOf = (progress: PullProgress): number | undefined => {
+    const downloaded = ratioOf(progress.downloading);
+    if (downloaded === undefined) {
+        return undefined;
+    }
+    const extracted = ratioOf(progress.extracting) ?? 0;
+    return Math.round(100 * (DOWNLOAD_WEIGHT * downloaded + (1 - DOWNLOAD_WEIGHT) * extracted));
+};
+
+// Folds one line of the engine's pull stream into the progress and answers the percent after it. Throws on the
+// stream's own `error` line.
+export const pullProgressLine = (progress: PullProgress, line: string): number | undefined => {
+    if (line.trim() === "") {
+        return undefined;
+    }
+    const event = JSON.parse(line) as PullEvent;
+    if (event.error !== undefined) {
+        throw new Error(event.error);
+    }
+    if (event.id !== undefined && event.status !== undefined) {
+        recordLayer(progress, event.id, event.status, event.progressDetail ?? {});
+    }
+    return percentOf(progress);
+};
+
+const splitRef = (ref: string): { image: string; tag: string } => {
+    const colon = ref.lastIndexOf(":");
+    const slash = ref.lastIndexOf("/");
+    return colon > slash ? { image: ref.slice(0, colon), tag: ref.slice(colon + 1) } : { image: ref, tag: "latest" };
+};
+
+const pullImage = (socketPath: string, ref: string, onProgress: (percent: number | undefined) => void): Promise<void> =>
+    new Promise((resolve, reject) => {
+        const { image, tag } = splitRef(ref);
+        const req = http.request(
+            {
+                socketPath,
+                method: "POST",
+                path: `/images/create?fromImage=${encodeURIComponent(image)}&tag=${encodeURIComponent(tag)}`,
+                headers: { host: "docker" },
+            },
+            (res) => {
+                const progress = newPullProgress();
+                let buffered = "";
+                res.setEncoding("utf8");
+                res.on("data", (chunk: string) => {
+                    buffered += chunk;
+                    let newline = buffered.indexOf("\n");
+                    while (newline !== -1) {
+                        const line = buffered.slice(0, newline);
+                        buffered = buffered.slice(newline + 1);
+                        try {
+                            const percent = res.statusCode === 200 ? pullProgressLine(progress, line) : undefined;
+                            if (percent !== undefined) {
+                                onProgress(percent);
+                            }
+                        } catch (error) {
+                            // The stream's own error line: tearing the response down is what rejects, through `error` below.
+                            res.destroy(error instanceof Error ? error : new Error(String(error)));
+                            return;
+                        }
+                        newline = buffered.indexOf("\n");
+                    }
+                });
+                res.on("end", () => {
+                    if (res.statusCode === 200) {
+                        resolve();
+                    } else {
+                        reject(failure(`pulling ${ref}`, { status: res.statusCode ?? 0, body: buffered }));
+                    }
+                });
+                res.on("error", reject);
+            },
+        );
+        req.on("error", reject);
+        req.end();
+    });
+
+// The container spec the engine's create call takes: port 80 published on loopback only, and the sandbox reachable
+// from inside the container as host.docker.internal.
+export const createBody = (spec: ContainerSpec): Record<string, unknown> => ({
+    Image: spec.image,
+    Env: spec.env,
+    Labels: spec.labels,
+    ExposedPorts: { "80/tcp": {} },
+    HostConfig: {
+        PortBindings: { "80/tcp": [{ HostIp: "127.0.0.1", HostPort: String(spec.hostPort) }] },
+        ExtraHosts: ["host.docker.internal:host-gateway"],
+    },
+});
+
+interface InspectBody {
+    readonly State?: { readonly Running?: boolean };
+    readonly Config?: { readonly Image?: string; readonly Env?: string[] };
+    readonly NetworkSettings?: { readonly Ports?: Record<string, { readonly HostPort?: string }[] | null> };
+}
+
+// The loopback port the container's port 80 is published on, if any.
+const publishedPort = (parsed: InspectBody): number | undefined => {
+    const binding = parsed.NetworkSettings?.Ports?.["80/tcp"]?.[0]?.HostPort;
+    const port = binding === undefined ? Number.NaN : Number.parseInt(binding, 10);
+    return Number.isNaN(port) ? undefined : port;
+};
+
+// The state an inspect answer describes.
+export const parseInspect = (body: string): ContainerState => {
+    const parsed = JSON.parse(body) as InspectBody;
+    return {
+        running: parsed.State?.Running === true,
+        hostPort: publishedPort(parsed),
+        image: parsed.Config?.Image ?? "",
+        env: parsed.Config?.Env ?? [],
+    };
+};
+
+const probeEngine = async (socketPath: string): Promise<string | undefined> => {
+    try {
+        const response = await request(socketPath, "GET", "/_ping");
+        return response.status === 200 ? undefined : `the Docker engine answered ${response.status} to a ping`;
+    } catch (error) {
+        const code = (error as { code?: string }).code;
+        return code === "ENOENT" || code === "ECONNREFUSED" || code === "EACCES"
+            ? "Add the Docker capability on the Capabilities page to turn it on."
+            : `the Docker engine is not answering (${error instanceof Error ? error.message : String(error)})`;
+    }
+};
+
+const inspectContainer = async (socketPath: string, name: string): Promise<ContainerState | undefined> => {
+    const response = await request(socketPath, "GET", `/containers/${encodeURIComponent(name)}/json`);
+    if (response.status === 404) {
+        return undefined;
+    }
+    if (response.status !== 200) {
+        throw failure(`inspecting ${name}`, response);
+    }
+    return parseInspect(response.body);
+};
+
+const createContainer = async (socketPath: string, name: string, spec: ContainerSpec): Promise<void> => {
+    const response = await request(socketPath, "POST", `/containers/create?name=${encodeURIComponent(name)}`, createBody(spec));
+    if (response.status !== 201) {
+        throw failure(`creating ${name}`, response);
+    }
+};
+
+const startContainer = async (socketPath: string, name: string): Promise<void> => {
+    const response = await request(socketPath, "POST", `/containers/${encodeURIComponent(name)}/start`);
+    // 304: already running, which is what was asked for.
+    if (response.status !== 204 && response.status !== 304) {
+        throw failure(`starting ${name}`, response);
+    }
+};
+
+const removeContainer = async (socketPath: string, name: string): Promise<void> => {
+    const response = await request(socketPath, "DELETE", `/containers/${encodeURIComponent(name)}?force=true`);
+    if (response.status !== 204 && response.status !== 404) {
+        throw failure(`removing ${name}`, response);
+    }
+};
+
+export const createDockerEngine = (socketPath: string = DOCKER_SOCKET): DockerEngine => ({
+    unreachable: () => probeEngine(socketPath),
+    imagePresent: async (ref) => (await request(socketPath, "GET", `/images/${encodeURIComponent(ref)}/json`)).status === 200,
+    pull: (ref, onProgress) => pullImage(socketPath, ref, onProgress),
+    inspect: (name) => inspectContainer(socketPath, name),
+    create: (name, spec) => createContainer(socketPath, name, spec),
+    start: (name) => startContainer(socketPath, name),
+    remove: (name) => removeContainer(socketPath, name),
+});

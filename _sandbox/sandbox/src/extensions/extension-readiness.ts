@@ -21,12 +21,15 @@ export interface ReadinessCheck {
 
 // Gathers every file the manifest promises (what it is, where it says it is) so a failure can name it specifically.
 // Each is fatal at a different later moment: entry at activation, bin at the next turn, fragment at the next build.
+// The two prebuilt bundles a manifest can name: the UI entry and the backend server.
+const bundlePaths = (manifest: ExtensionManifest): { what: string; path: string }[] => [
+    ...(manifest.entry === undefined ? [] : [{ what: "entry bundle", path: manifest.entry }]),
+    ...(manifest.server === undefined ? [] : [{ what: "server bundle", path: manifest.server }]),
+];
+
 const promisedPaths = (manifest: ExtensionManifest): { readonly what: string; readonly path: string }[] => {
-    const promised: { what: string; path: string }[] = [];
+    const promised: { what: string; path: string }[] = bundlePaths(manifest);
     const contributes = manifest.contributes;
-    if (manifest.entry !== undefined) {
-        promised.push({ what: "entry bundle", path: manifest.entry });
-    }
     if (contributes?.bin !== undefined) {
         promised.push({ what: "bin directory", path: contributes.bin });
     }

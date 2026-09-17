@@ -6,6 +6,7 @@ import * as approvals from "@intentic/ext-approvals";
 import * as apps from "@intentic/ext-repo-apps";
 import * as automations from "@intentic/ext-automations";
 import * as gitHistory from "@intentic/ext-git-history";
+import * as onlyoffice from "@intentic/ext-onlyoffice";
 import * as pipelines from "@intentic/ext-pipelines";
 import * as preview from "@intentic/ext-preview";
 import * as projects from "@intentic/ext-projects";
@@ -31,6 +32,7 @@ const modules: readonly BuiltinModule[] = [
     pipelines,
     apps,
     gitHistory,
+    onlyoffice,
     preview,
     projects,
     viewers,

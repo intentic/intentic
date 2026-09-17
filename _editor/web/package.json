@@ -31,6 +31,7 @@
         "@intentic/ext-automations": "workspace:*",
         "@intentic/ext-approvals": "workspace:*",
         "@intentic/ext-git-history": "workspace:*",
+        "@intentic/ext-onlyoffice": "workspace:*",
         "@intentic/ext-pipelines": "workspace:*",
         "@intentic/ext-preview": "workspace:*",
         "@intentic/ext-projects": "workspace:*",
@@ -64,6 +65,7 @@
         "primevue": "catalog:",
         "tslib": "catalog:",
         "vue": "catalog:",
+        "vue-i18n": "catalog:",
         "vue-router": "catalog:",
         "zod": "catalog:"
     },

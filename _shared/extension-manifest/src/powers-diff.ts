@@ -12,6 +12,9 @@ export interface PowersDiff {
     readonly unchanged: string[];
 }
 
+const viewerPower = (viewer: { edit?: boolean | undefined; extensions: readonly string[]; fetch: string }): string =>
+    `${viewer.edit === true ? "opens and edits" : "opens"} .${viewer.extensions.join(", .")} files (${viewer.fetch})`;
+
 const powersOf = (manifest: ExtensionManifest): Map<string, string> => {
     const powers = new Map<string, string>();
     if (manifest.entry !== undefined) {
@@ -33,7 +36,7 @@ const powersOf = (manifest: ExtensionManifest): Map<string, string> => {
         }
     }
     for (const viewer of manifest.contributes?.viewers ?? []) {
-        powers.set(`viewer:${viewer.id}`, `opens .${viewer.extensions.join(", .")} files (${viewer.fetch})`);
+        powers.set(`viewer:${viewer.id}`, viewerPower(viewer));
     }
     for (const document of manifest.contributes?.documents ?? []) {
         powers.set(`document:${document.id}`, `marks workspace directories ("${document.label}")`);

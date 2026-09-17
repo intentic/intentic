@@ -11,8 +11,11 @@ export interface RegisteredViewer {
     readonly id: string;
     // Bare file extensions (no dot) this viewer handles, from its manifest.
     readonly extensions: readonly string[];
-    // Decoded text, whole-file bytes, or a streaming URL; from the manifest, so extensions can't widen their reach.
-    readonly fetch: "text" | "blob" | "url";
+    // Decoded text, whole-file bytes, a streaming URL, or the path alone; from the manifest, so extensions can't widen
+    // their reach.
+    readonly fetch: "text" | "blob" | "url" | "path";
+    // Writes the file back; outranks a render-only viewer claiming the same extension.
+    readonly edit: boolean;
     readonly component: () => Promise<Component>;
 }
 
@@ -30,9 +33,10 @@ export const registerViewer = (viewer: RegisteredViewer): Disposable => {
     };
 };
 
-// The viewer registered for a file extension (lowercased); last registration wins, so a later extension
-// can override a builtin.
+// The viewer registered for a file extension (lowercased): an editing viewer over a render-only one, and among
+// equals the last registration, so a later extension can override a builtin.
 export const viewerForExtension = (ext: string): RegisteredViewer | undefined => {
     const lower = ext.toLowerCase();
-    return viewers.value.toReversed().find((entry) => entry.extensions.includes(lower));
+    const claiming = viewers.value.filter((entry) => entry.extensions.includes(lower)).toReversed();
+    return claiming.find((entry) => entry.edit) ?? claiming[0];
 };

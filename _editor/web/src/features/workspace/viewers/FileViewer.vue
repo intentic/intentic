@@ -27,6 +27,7 @@ import { TEXT_EDIT_MAX_BYTES } from "../explorer/fileType";
 import type { LineJump } from "../tabs/workspaceTabs";
 import MarkdownViewer from "./MarkdownViewer.vue";
 import { resolveOpenFile, type OpenFile } from "./openFile";
+import type { RegisteredViewer } from "../../../core-views/viewerRegistry";
 
 // Dispatches an open file to its surface (editor, an extension's viewer, or a can't-show state) and owns the
 // fetch, since daemon routes are Bearer-authenticated and a browser can't do that itself. The read's true size,
@@ -41,8 +42,9 @@ const emit = defineEmits<{ gone: [path: string] }>();
 const open = ref<OpenFile>({ kind: `empty` });
 const lang = ref<string | undefined>(undefined);
 const text = ref<string | null>(null);
-// Held in the shape produced, not split into optional props: an unset prop still falls through as an attr.
-const viewerContent = shallowRef<{ text: string } | { blob: Blob } | { src: string } | undefined>(undefined);
+// Held in the shape produced, not split into optional props: an unset prop still falls through as an attr. A `path`
+// viewer gets only the scope it is viewed in (beside the path every viewer gets), and nothing when there is none.
+const viewerContent = shallowRef<{ text: string } | { blob: Blob } | { src: string } | { agent: string } | Record<never, never> | undefined>(undefined);
 // The extension viewer component itself, lazily imported alongside its content.
 const viewerComponent = shallowRef<Component | undefined>(undefined);
 const loading = ref(false);
@@ -59,6 +61,21 @@ const edit = useEditBuffers();
 const { ensureMonaco, ensureLanguage } = useMonaco();
 
 const readBlob = (target: string): Promise<Blob> => sandboxBlob(`/workspace/raw?${scopeQuery(new URLSearchParams({ path: target })).toString()}`);
+
+// The one content prop a viewer's manifest `fetch` kind asks for; a `path` viewer reads through its own backend, so
+// it gets the scope it is viewed in and nothing when there is none.
+const viewerContentFor = (fetch: RegisteredViewer[`fetch`], target: string, agent: string | undefined): Promise<NonNullable<typeof viewerContent.value>> => {
+    switch (fetch) {
+        case `text`:
+            return readText(target).then(({ content: body }) => ({ text: body }));
+        case `blob`:
+            return readBlob(target).then((blob) => ({ blob }));
+        case `url`:
+            return mediaUrl(target).then((src) => ({ src }));
+        case `path`:
+            return Promise.resolve(agent === undefined ? {} : { agent });
+    }
+};
 
 let seq = 0;
 // Current text read, aborted whenever superseded, so an appending file can't queue unbounded reads.
@@ -134,19 +151,24 @@ const reconcileOpenFile = (currentPath: string): void => {
     );
 };
 
+// Whether a refire is the same file in the same scope changing on disk, rather than another file taking the tab.
+const sameFileRefire = (previous: readonly [string, unknown, string | undefined] | undefined, currentPath: string): boolean =>
+    previous !== undefined && currentPath === previous[0] && workspaceAgent.value === previous[2];
+// A `path` viewer's backend either made the change (its own save) or reads it on the next open; remounting it would
+// reload an editor mid-session.
+const keepsOwnSurface = (current: OpenFile): boolean => current.kind === `viewer` && current.viewer.fetch === `path`;
+
 watch(
     // changeEpochOf is the complete change signal; the tree's size isn't a trigger, or a post-save refetch would
     // race markSaved. Scope is a trigger too: the same path in another copy is a different file.
     () => [path, changeEpochOf(path), workspaceAgent.value] as const,
     ([currentPath], previous, onCleanup) => {
         // Same-path re-fire in an editable view reconciles by content; anything else resets and re-fetches below.
-        if (
-            previous !== undefined &&
-            currentPath === previous[0] &&
-            workspaceAgent.value === previous[2] &&
-            (open.value.kind === `code` || open.value.kind === `markdown`)
-        ) {
+        if (sameFileRefire(previous, currentPath) && (open.value.kind === `code` || open.value.kind === `markdown`)) {
             reconcileOpenFile(currentPath);
+            return;
+        }
+        if (sameFileRefire(previous, currentPath) && keepsOwnSurface(open.value)) {
             return;
         }
         const resolution = resolveOpenFile(currentPath, meta?.size);
@@ -220,12 +242,7 @@ watch(
         if (resolution.kind === `viewer`) {
             const { viewer } = resolution;
             loading.value = true;
-            const content =
-                viewer.fetch === `text`
-                    ? readText(currentPath).then(({ content: body }) => ({ text: body }))
-                    : viewer.fetch === `blob`
-                      ? readBlob(currentPath).then((blob) => ({ blob }))
-                      : mediaUrl(currentPath).then((src) => ({ src }));
+            const content = viewerContentFor(viewer.fetch, currentPath, workspaceAgent.value);
             Promise.all([viewer.component(), content]).then(([component, loaded]) => {
                 if (id !== seq) {
                     return;
@@ -476,7 +493,7 @@ const onEditorSave = (value: string): void =>
             />
             <!-- Over the editable cap: windowed, read-only, seeded with the window the read above already got. -->
             <BigTextView v-else-if="open.kind === 'big-text' && firstWindow" :path="path" :first="firstWindow" @download="download" />
-<!-- Extension-contributed viewer: gets the path plus exactly one content prop (the manifest's `fetch` kind, never the others as undefined). -->
+<!-- Extension-contributed viewer: gets the path plus exactly one content prop (the manifest's `fetch` kind, never the others as undefined); a `path` viewer gets the scope instead, or nothing. -->
             <component :is="viewerComponent" v-else-if="viewerComponent" :path="path" v-bind="viewerContent" @download="download" />
             <FileUnsupported v-else-if="open.kind === 'too-large'" mode="too-large" :size="meta?.size" @download="download" />
             <FileUnsupported v-else-if="open.kind === 'empty'" mode="empty" />

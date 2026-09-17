@@ -12,12 +12,12 @@ import { RAW_MAX_BYTES, resolveFile } from "../explorer/fileType";
 export type OpenFile =
     // `big-text` is never resolved directly; the viewer switches to it once the daemon reports an oversize file.
     | { readonly kind: "code" | "markdown" | "big-text"; readonly lang: string | undefined }
-    // An extension viewer claimed this extension; `viewer.fetch` decides text / blob / streaming URL.
+    // An extension viewer claimed this extension; `viewer.fetch` decides text / blob / streaming URL / path only.
     | { readonly kind: "viewer"; readonly viewer: RegisteredViewer }
     | { readonly kind: "empty" | "binary" | "too-large" | "locked" };
 
 // Only a `blob` viewer can be defeated by size: /workspace/raw holds the whole answer in memory and 413s past the cap;
-// `url` and `text` viewers stream or window their reads instead.
+// `url` and `text` viewers stream or window their reads instead, and a `path` viewer reads nothing through the host.
 const oversizeForViewer = (viewer: RegisteredViewer, size: number | undefined): boolean =>
     viewer.fetch === `blob` && size !== undefined && size > RAW_MAX_BYTES;
 

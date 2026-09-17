@@ -37,10 +37,10 @@ TREES="
 @intentic/ext-whatsapp:$out/extensions/whatsapp
 @intentic/ext-google-workspace:$out/extensions/google-workspace
 "
-# The extensions whose dist the image needs. Empty since the feature backends (deployments, knowledge) moved to
-# their own repositories and install from the registry; a first-party extension that bakes a compiled bundle again
-# joins this list, and the copy loop below is what carries it.
-BUNDLES=""
+# The extensions whose dist the image needs: onlyoffice's backend bundle (dist/server.js, the manifest's `server`),
+# which the daemon's extension host runs in every sandbox. The feature backends (deployments, knowledge) are not
+# here: they moved to their own repositories and install from the registry. The copy loop below carries each entry.
+BUNDLES="onlyoffice"
 
 filters=()
 for entry in $TREES; do filters+=(--filter="${entry%%:*}"); done

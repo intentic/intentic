@@ -1,0 +1,44 @@
+{
+    "$schema": "https://intentic.dev/intentic-extension.schema.json",
+    "publisher": "intentic",
+    "name": "onlyoffice",
+    "version": "1.0.0",
+    "category": "workspace",
+    "logo": "onlyoffice",
+    "icon": "file-edit",
+    "engines": { "intentic": "^2.1.0" },
+    "server": "dist/server.js",
+    "permissions": {
+        "daemon": ["GET /ports", "POST /ports/forward", "GET /workspace/raw"]
+    },
+    "contributes": {
+        "viewers": [
+            {
+                "id": "office",
+                "edit": true,
+                "fetch": "path",
+                "extensions": [
+                    "docx",
+                    "dotx",
+                    "docm",
+                    "odt",
+                    "ott",
+                    "rtf",
+                    "doc",
+                    "xlsx",
+                    "xltx",
+                    "xlsm",
+                    "ods",
+                    "ots",
+                    "xls",
+                    "pptx",
+                    "potx",
+                    "pptm",
+                    "odp",
+                    "otp",
+                    "ppt"
+                ]
+            }
+        ]
+    }
+}

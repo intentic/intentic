@@ -101,8 +101,11 @@ which shape a directory is saves opening it:
 | **gateway pack** | `gateway.ts`, `client.ts`, `listener.ts` — a connector to somebody else's service, no `host.ts` because there is no view | `discord`, `google-workspace`, `imap`, `slack`, `telegram`, `whatsapp` |
 | **manifest-only pack** | nothing but the manifest: capabilities, skills, agent definitions or bin entries the daemon reads directly | `acp-agents`, `browsers`, `connectors`, `devices`, `pi-agent`, `social` |
 
-`viewers` is the fourth case and the only one: a backend bundle with no host and no gateway, because what it
-contributes is file viewers the editor loads.
+`viewers` is the fourth case: a UI bundle with no host and no gateway, because what it contributes is file viewers the
+editor loads. `onlyoffice` is the fifth and the only one of its kind here: the same viewer shape on the UI side plus a
+**backend bundle** (`server: dist/server.js`, built by `vite.server.config.ts`) baked into the image beside its
+manifest, because what it contributes needs a process of its own: the document server's lifecycle, a listener the
+server saves through, and the editor page the app frames.
 
 ## Names: the directory, the package, and the extension id
 
@@ -132,7 +135,8 @@ confusion that this paragraph fixes.
 | `pipelines` | UI view | CI runs: status, rerun/cancel, agent-driven fixes. |
 | `preview` | UI view | Per-repo dev-server preview panels. |
 | `projects` | UI view | The workspace's repositories as a dashboard of tiles. A tile makes its repository the shell's project scope (`api.workspace.setProject`), which narrows the workspace, the agents board and every repository-keyed view to it; New project makes a fresh one in a press (`POST /workspace/repos/new`). Seated for everyone, and the one tile that says which project is open. |
-| `viewers` | UI viewers | **Every file format the app can show that isn't source code**: images, SVG (picture + source), PDF, audio/video (a streaming player over `/workspace/media`), documents (docx, odt, rtf), spreadsheets (xlsx, ods), presentations and drawings (pptx, odp, odg), books (epub), via `contributes.viewers`. The core resolves a path to text or to opaque bytes and stops there; switch this off and those files fall back to a download. |
+| `viewers` | UI viewers | **Every file format the app can show that isn't source code**: images, SVG (picture + source), PDF, audio/video (a streaming player over `/workspace/media`), documents (docx, odt, rtf), spreadsheets (xlsx, ods), presentations and drawings (pptx, odp, odg), books (epub), via `contributes.viewers`. The core resolves a path to text or to opaque bytes and stops there; switch this off and those files fall back to a download. The office formats are render-only here and are taken over by `onlyoffice` while that is on. |
+| `onlyoffice` | UI viewer + backend | **Office documents opened in a real editor and saved back**: docx/xlsx/pptx and their template and macro variants, OpenDocument, RTF and the legacy binary formats, in ONLYOFFICE Docs. One `edit` viewer fed the `path` alone; a backend that runs the document server as a container in the sandbox's Docker engine (pulled on the owner's one explicit start, back on demand after that), serves the framed editor page and the save callback on a forwarded port of its own, and writes saves atomically into the workspace. Off, or without Docker, the formats fall back to `viewers`' renderers. |
 | `connectors` | data-only | CLI-tool connectors as manifest data: no code. |
 | `social` | data-only | The platforms the agent acts on **as the owner** through the shared logged-in Chromium (Reddit, X, YouTube): a card, a login URL and a cheatsheet each. The browser itself is core, this pack buys identity, not tooling. |
 | `devices` | data-only | The OS skill packs a connected device installs (Windows PowerShell, Linux shell + Wayland/X11). The tool surface, the enrollment and the scope enforcement are core; only the pack varies. |
@@ -149,7 +153,7 @@ confusion that this paragraph fixes.
 ## Listed, not baked: the six that live in their own repositories
 
 A first-party extension ships in the image when **a sandbox is not itself without it**: the work loop
-(`projects`, `activity`, `preview`, `repo-apps`, `viewers`, `git-history`), the only window onto an engine the
+(`projects`, `activity`, `preview`, `repo-apps`, `viewers`, `onlyoffice`, `git-history`), the only window onto an engine the
 daemon runs regardless (`automations`, `workflows`, `approvals`, `pipelines`), and the data that makes the
 Capabilities grid exist (the manifest-only packs and the gateway cards). Everything else is a practice you adopt
 or an integration you own, noticed only when reached for, and the place to reach is Extensions → Browse.
@@ -190,7 +194,10 @@ renders and what the on/off switch acts on. The paths differ only in where the *
   `intentic-extension.json` is baked into the image beside the daemon-side ones, so the daemon lists them
   even though it runs none of their code. Adding a new first-party UI extension = a new package here + one
   entry there + one `COPY` in the Dockerfile; miss the last and the tab shows the extension as `unlisted`,
-  miss the middle one and it shows as `missing`. (Note the three *core* view contributions in
+  miss the middle one and it shows as `missing`. One of them, `onlyoffice`, also has a backend: its `server`
+  bundle is compiled output, so it rides the image's `trees` build context (`BUNDLES` in
+  `_tools/scripts/image/prepare-image-trees.sh`, a second `COPY --from=trees` in the Dockerfile) and the
+  daemon's extension host runs it; a manifest baked without it shows as `absent`. (Note the three *core* view contributions in
   `_editor/web/src/core-views/coreViews.ts` are **not** extensions: they're privileged in-app views coupled to
   platform internals; see that file and ARCHITECTURE.md.)
 - **Baked into the sandbox image** (`connectors`, `social`, `devices`, `browsers`, `acp-agents`, `pi-agent`,

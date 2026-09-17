@@ -12,8 +12,17 @@ const component = async (): Promise<never> => {
 };
 
 const disposables: { dispose: () => void }[] = [];
-const register = (id: string, extensions: readonly string[], fetch: "text" | "blob" | "url"): void => {
-    disposables.push(registerViewer({ owner: `intentic.viewers`, id, extensions, fetch, component: component as never }));
+const register = (id: string, extensions: readonly string[], fetch: "text" | "blob" | "url" | "path", options: { owner?: string; edit?: boolean } = {}): void => {
+    disposables.push(
+        registerViewer({
+            owner: options.owner ?? `intentic.viewers`,
+            id,
+            extensions,
+            fetch,
+            edit: options.edit ?? false,
+            component: component as never,
+        }),
+    );
 };
 afterEach(() => {
     while (disposables.length > 0) {
@@ -68,6 +77,20 @@ describe(`resolveOpenFile with viewers registered`, () => {
         register(`media`, [`mp4`], `url`);
         expect(resolveOpenFile(`logo.png`, 0)).toEqual({ kind: `empty` });
         expect(resolveOpenFile(`clip.mp4`, 0)).toEqual({ kind: `empty` });
+    });
+
+    it(`prefers an editing viewer over a render-only one for the same extension, whichever registered first`, () => {
+        register(`office`, [`docx`], `path`, { owner: `intentic.onlyoffice`, edit: true });
+        register(`docx`, [`docx`], `blob`);
+        expect(resolveOpenFile(`brief.docx`, 1000)).toMatchObject({ kind: `viewer`, viewer: { id: `office`, fetch: `path` } });
+        // The editor switched off: the render-only viewer takes the format back.
+        disposables.shift()?.dispose();
+        expect(resolveOpenFile(`brief.docx`, 1000)).toMatchObject({ kind: `viewer`, viewer: { id: `docx`, fetch: `blob` } });
+    });
+
+    it(`never size-gates a path viewer: its backend reads the file, not /workspace/raw`, () => {
+        register(`office`, [`xlsx`], `path`, { edit: true });
+        expect(resolveOpenFile(`ledger.xlsx`, RAW_MAX_BYTES + 1)).toMatchObject({ kind: `viewer`, viewer: { id: `office` } });
     });
 });
 

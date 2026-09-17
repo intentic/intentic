@@ -60,7 +60,7 @@ First-party extensions live in `_extensions/` and reach the product by one of **
 `GET /extensions`, which is what the Sandbox hub's Extensions tab renders and what the on/off switch acts on.
 
 - **Compiled into the web bundle**: the included UI extensions (`activity`, `approvals`, `automations`,
-  `git-history`, `pipelines`, `preview`, `projects`, `repo-apps`, `viewers`, `workflows`), statically imported and keyed by manifest id
+  `git-history`, `onlyoffice`, `pipelines`, `preview`, `projects`, `repo-apps`, `viewers`, `workflows`), statically imported and keyed by manifest id
   ([extension-host/builtins.ts](../../_editor/web/src/extension-host/builtins.ts)). They ship no `entry` over the
   wire (the bundle IS the SPA) but their manifest is baked into the image beside the daemon-side ones, so
   the daemon lists them and the loader's only question per extension is where its code comes from. The two
@@ -162,7 +162,12 @@ deliberately NOT the all-routes panel token. Workspace files it touches directly
 
 The extracted features are **deployments** and **knowledge**: each one's routes, translation layer and
 schemas live entirely in its own repository (a listed extension: UI bundle and `dist/server.js` both committed
-there and cloned at install), and the daemon core carries neither feature at all. Deployments also
+there and cloned at install), and the daemon core carries neither feature at all. One INCLUDED extension has a
+backend too: **onlyoffice** ([_extensions/onlyoffice](../../_extensions/onlyoffice)), whose viewer is compiled into
+the web bundle while its `dist/server.js` is baked into the image from the `trees` build context and run by the
+same host. It is also why a viewer can be fed the `path` alone and can declare `edit`: an editor served by a
+separate process reads and writes the file through its own backend, and an editing viewer outranks a render-only
+one claiming the same extension (`core-views/viewerRegistry.ts`). Deployments also
 exercises the two kernel calls a real feature backend needs: `GET /capabilities/{id}/connection`, a
 capability's stored config, secrets included, refused to every signed-in caller so only a declared extension
 grant can read it: and `POST /agent` for its one-click fix turns.

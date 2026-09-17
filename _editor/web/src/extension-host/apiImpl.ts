@@ -208,14 +208,15 @@ export const createExtensionApi = (
                 if (declared === undefined) {
                     throw new Error(`viewer "${viewer.id}" is not declared in the manifest's contributes.viewers`);
                 }
-                // File extensions and fetch kind come from the approved manifest; the extension supplies only the
-                // component.
+                // File extensions, fetch kind and precedence come from the approved manifest; the extension supplies
+                // only the component.
                 return track(
                     registerViewer({
                         owner: extensionId,
                         id: viewer.id,
                         extensions: declared.extensions,
                         fetch: declared.fetch,
+                        edit: declared.edit === true,
                         component: viewer.component,
                     }),
                 );

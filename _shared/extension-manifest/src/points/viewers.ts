@@ -16,10 +16,20 @@ export const ViewerContributionSchema = z.object({
     // the daemon's raw-read cap.
     // url - a streaming URL the component points an element at, for anything range-read rather than parsed (audio,
     // video); the host mints the credential and keeps it out of the extension.
+    // path - nothing but the path (and the scope it is viewed in): the viewer reaches the file through its own backend,
+    // which is how an editor served by a separate process (a document server) gets to read and write it.
     fetch: z
-        .enum(["text", "blob", "url"])
+        .enum(["text", "blob", "url", "path"])
         .describe(
-            "How much of the file the host hands you. `text` for a format that is text (svg, a subtitle track). `blob` for one that must be parsed end to end before any of it shows (a .docx, a spreadsheet), bounded by the daemon's raw-read cap. `url` for anything range-read rather than parsed (audio, video): your component gets a streaming URL to point an element at, never the bytes.",
+            "How much of the file the host hands you. `text` for a format that is text (svg, a subtitle track). `blob` for one that must be parsed end to end before any of it shows (a .docx, a spreadsheet), bounded by the daemon's raw-read cap. `url` for anything range-read rather than parsed (audio, video): your component gets a streaming URL to point an element at, never the bytes. `path` for a viewer whose own backend reads and writes the file: you get the workspace path and the scope it is viewed in, nothing else.",
+        ),
+    // An editing viewer outranks a render-only one claiming the same extension; among equals the later registration
+    // wins. Declared, not timed: activation order is not stable across extensions.
+    edit: z
+        .boolean()
+        .optional()
+        .describe(
+            "Whether this viewer writes the file back. An editing viewer is chosen over a render-only viewer claiming the same extension, whatever order the two activated in.",
         ),
 });
 export type ViewerContribution = z.infer<typeof ViewerContributionSchema>;
