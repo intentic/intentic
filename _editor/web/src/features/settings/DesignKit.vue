@@ -19,6 +19,7 @@ import {
     InfoDialog,
     InfoHint,
     InfoTable,
+    InlineRename,
     type AgentPanel,
     DeviceAgentGroup,
     DeviceDetail,
@@ -183,6 +184,18 @@ const picked = ref<string | undefined>(`sonnet`);
 const query = ref(``);
 const filter = ref(``);
 const prose = ref(`A paragraph typed into the writing field.`);
+// Three renames side by side: one that saves, one with nothing to write to, one that always refuses, so the
+// failure state (field stays open, name still typed) is on screen next to the states it has to match.
+const renamed = ref(`radarsu-intentic`);
+const renamedRefused = ref(`claude-max`);
+const saveRename = async (name: string): Promise<void> => {
+    await new Promise((settle) => setTimeout(settle, 600));
+    renamed.value = name;
+};
+const refuseRename = async (): Promise<void> => {
+    await new Promise((settle) => setTimeout(settle, 600));
+    throw new Error(`The sandbox is offline.`);
+};
 const source = ref(`export const greet = (who: string): string => \`hello \${who}\`;\n`);
 // Held as a pair: `stored` is what drives the status line, so the demo needs a saved copy too.
 const NOTE = `## A note\n\nClick a line and type. The block you are in shows its markup; the rest stay clean.\n\n- Enter opens the next item\n- Enter on an empty one ends the list\n- [ ] and a task box is a task box\n`;
@@ -699,6 +712,17 @@ const pickedTier = ref(`collaborator`);
                     <div class="flex flex-col gap-1">
                         <span class="ui-field-label">ui.emptyState</span>
                         <div :class="ui.emptyState()">Nothing here yet.</div>
+                    </div>
+                    <div class="flex flex-col gap-1">
+                        <span class="ui-field-label">InlineRename · title, row, read-only, refusing</span>
+<!-- Typography is the caller's and the field takes it: the same component reads as a heading here and as a row's name below it. -->
+                        <div class="flex flex-col gap-2">
+                            <InlineRename :value="renamed" :write="saveRename" label="Sandbox name" action="Rename sandbox" class="text-lg font-semibold" />
+                            <InlineRename :value="renamed" :write="saveRename" label="Sandbox name" action="Rename sandbox" class="text-sm" />
+                            <InlineRename :value="undefined" :write="saveRename" label="Sandbox name" fallback="Unnamed" class="text-sm" />
+                            <InlineRename :value="renamedRefused" :write="refuseRename" label="Account name" class="text-sm" failure="Couldn't rename that account." />
+                            <InlineRename :value="renamed" :write="saveRename" label="Sandbox name" :editable="false" class="text-sm" />
+                        </div>
                     </div>
                 </div>
                 <div class="grid max-w-read-lg gap-3 md:grid-cols-2">

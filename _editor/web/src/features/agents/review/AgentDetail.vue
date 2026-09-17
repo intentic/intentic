@@ -1,10 +1,10 @@
 <script setup lang="ts">
 import { Button, ui, Modal, ResponsiveOverlay, SegmentedControl, useDevice, useLoadingReveal } from "@intentic/ui";
+import { createInlineRename } from "@intentic/ui/inline-rename";
 import { computed, onUnmounted, ref, watch } from "vue";
 import { RouterLink, useRoute, useRouter } from "vue-router";
 import ChatPanel from "../../chat/panel/ChatPanel.vue";
 import { agentStatusMeta, unregistered, writingNow } from "../fleet/agentStatus";
-import { createInlineRename } from "../../../lib/inlineRename";
 import { requestLandAgent, startAgent } from "../fleet/agentActions";
 import { mobileChatPath } from "../../../shell/tabRoots";
 import ChatSwitcherSheet from "../../chat/tabs/ChatSwitcherSheet.vue";

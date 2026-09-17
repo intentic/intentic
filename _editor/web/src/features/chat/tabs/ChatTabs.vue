@@ -1,12 +1,12 @@
 <script setup lang="ts">
 import { AnchoredOverlay, Button, ContextMenu, SearchBar } from "@intentic/ui";
+import { createInlineRename } from "@intentic/ui/inline-rename";
 import type { Disposable } from "@intentic/extension-api";
 import type { MenuItem } from "primevue/menuitem";
 import { type ComponentPublicInstance, computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useRouter } from "vue-router";
 import { startAgent } from "../../agents/fleet/agentActions";
 import { turnInFlight } from "../../agents/fleet/agentStatus";
-import { createInlineRename } from "../../../lib/inlineRename";
 import { useAgents } from "../../agents/fleet/useAgents";
 import OriginMark from "../../../components/OriginMark.vue";
 import RailColumn from "../../../components/RailColumn.vue";

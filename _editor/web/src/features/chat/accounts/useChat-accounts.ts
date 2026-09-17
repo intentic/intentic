@@ -1,4 +1,3 @@
-import { errorMessage } from "@intentic/ui/async";
 import {
     type AgentProvider,
     type KeyedProvider,
@@ -216,6 +215,8 @@ const replaceAccount = (target: AgentProvider, next: OauthAccount): void => {
 
 // Renames the display name only, applied optimistically then reconciled against the daemon's answer
 // on response. Doesn't use `accountBusy`, which gates Disconnect/startConnect, not renames.
+// THROWS rather than posting to `error`: the row that asked is holding an open field, and a sentence beside that
+// field beats a notice at the top of the section, over a list where every row looks alike.
 export const renameAccount = async (id: string, label: string): Promise<void> => {
     const target = managedProvider.value;
     const typed = label.trim();
@@ -229,19 +230,20 @@ export const renameAccount = async (id: string, label: string): Promise<void> =>
     let response: Response;
     try {
         response = await sandboxRequest(`${providerBase(target)}/rename`, jsonBody(`POST`, { id, label: typed }));
-    } catch (err) {
-        error.value = errorMessage(err, `Could not rename that account: is your sandbox online?`);
+    } catch {
         replaceAccount(target, current);
-        return;
+        throw new Error(`Couldn't reach your sandbox to rename that account.`);
     }
     if (!response.ok) {
         // A 404 means the row is gone elsewhere; re-read rather than restore a name onto a dead account.
-        error.value = response.status === 404 ? `That account is no longer connected.` : `Could not rename that account.`;
-        await refreshAccounts(target, false).catch(() => replaceAccount(target, current));
-        return;
+        if (response.status === 404) {
+            await refreshAccounts(target, false).catch(() => replaceAccount(target, current));
+            throw new Error(`That account is no longer connected.`);
+        }
+        replaceAccount(target, current);
+        throw new Error(`Couldn't rename that account.`);
     }
     replaceAccount(target, (await response.json()) as OauthAccount);
-    error.value = null;
 };
 
 // Disconnect one account of the managed provider by id; drop it from the list and fix the selection. Busy for

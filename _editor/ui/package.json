@@ -122,6 +122,10 @@
         "./loading-reveal": {
             "types": "./src/composables/loadingReveal.ts",
             "default": "./src/composables/loadingReveal.ts"
+        },
+        "./inline-rename": {
+            "types": "./src/composables/inlineRename.ts",
+            "default": "./src/composables/inlineRename.ts"
         }
     },
     "scripts": {

@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { Avatar, ui, RowGroup, RowNote, StatusBadge } from "@intentic/ui";
+import { Avatar, InlineRename, RowGroup, RowNote, StatusBadge } from "@intentic/ui";
 import { errorMessage } from "@intentic/ui/async";
-import { computed, nextTick, ref } from "vue";
+import { ref } from "vue";
 import { fileToSquareDataUrl } from "../../lib/imageDataUrl";
 import { useAuth } from "../auth/useAuth";
 import { useHostedPlan } from "./hosted-plan/useHostedPlan";
@@ -15,45 +15,9 @@ const { planBadge } = useHostedPlan();
 
 const avatarInput = ref<HTMLInputElement | null>(null);
 const avatarBusy = ref(false);
+// The avatar's own report, and the only thing that can put a line under this name: the rename carries its state
+// inside its own box, so entering and leaving edit mode never moves the row.
 const avatarError = ref<string | undefined>(undefined);
-
-const editing = ref(false);
-const name = ref(``);
-const nameInput = ref<HTMLInputElement | null>(null);
-const nameTouched = ref(false);
-const nameBusy = ref(false);
-const nameError = ref<string | undefined>(undefined);
-
-const nameValidationError = computed<string | undefined>(() => {
-    const trimmed = name.value.trim();
-    if (trimmed.length === 0) {
-        return `Name is required.`;
-    }
-    if (trimmed.length > 60) {
-        return `Name must be 60 characters or fewer.`;
-    }
-    return undefined;
-});
-const canSaveName = computed(() => {
-    const trimmed = name.value.trim();
-    return trimmed.length > 0 && trimmed.length <= 60 && trimmed !== user.value?.name;
-});
-
-const subline = computed<{ text: string; tone: string }>(() => {
-    if (avatarError.value !== undefined) {
-        return { text: avatarError.value, tone: `text-danger` };
-    }
-    if (nameError.value !== undefined) {
-        return { text: nameError.value, tone: `text-danger` };
-    }
-    if (editing.value && nameTouched.value && nameValidationError.value !== undefined) {
-        return { text: nameValidationError.value, tone: `text-danger` };
-    }
-    if (editing.value) {
-        return { text: `Enter saves · Esc cancels.`, tone: `text-muted` };
-    }
-    return { text: ``, tone: `text-muted` };
-});
 
 const pickAvatar = async (event: Event): Promise<void> => {
     const file = (event.target as HTMLInputElement).files?.[0];
@@ -80,35 +44,8 @@ const pickAvatar = async (event: Event): Promise<void> => {
     }
 };
 
-const startEdit = async (): Promise<void> => {
-    name.value = user.value?.name ?? ``;
-    nameError.value = undefined;
-    nameTouched.value = false;
-    editing.value = true;
-    await nextTick();
-    nameInput.value?.select();
-};
-
-const cancelEdit = (): void => {
-    editing.value = false;
-    nameError.value = undefined;
-};
-
-const saveName = async (): Promise<void> => {
-    const trimmed = name.value.trim();
-    if (nameBusy.value || !canSaveName.value) {
-        return;
-    }
-    nameBusy.value = true;
-    nameError.value = undefined;
-    try {
-        await updateProfile({ name: trimmed });
-        editing.value = false;
-    } catch (error) {
-        nameError.value = errorMessage(error, `Profile update failed.`);
-    } finally {
-        nameBusy.value = false;
-    }
+const writeName = async (name: string): Promise<void> => {
+    await updateProfile({ name });
 };
 </script>
 
@@ -136,71 +73,18 @@ const saveName = async (): Promise<void> => {
 
                 <div class="min-w-0 flex-1">
                     <div class="flex min-w-0 items-center gap-2">
-                        <div class="flex min-w-0 items-center">
-                            <div class="grid w-fit min-w-0 max-w-full grid-cols-1 grid-rows-1">
-                                <template v-if="editing">
-                                    <span
-                                        aria-hidden="true"
-                                        class="invisible col-start-1 row-start-1 flex h-8 min-w-0 items-center truncate rounded-md border border-transparent px-2 text-base font-medium"
-                                        >{{ name === `` ? ` ` : name }}</span
-                                    >
-                                    <input
-                                        ref="nameInput"
-                                        v-model="name"
-                                        type="text"
-                                        aria-label="Display name"
-                                        autocomplete="off"
-                                        maxlength="60"
-                                        class="ui-field-box col-start-1 row-start-1 h-8 w-full min-w-0 px-2 text-base font-medium"
-                                        :class="nameTouched && nameValidationError ? 'ui-field-error-box' : ''"
-                                        @blur="nameTouched = true"
-                                        @keydown.enter.prevent="saveName"
-                                        @keydown.esc.prevent="cancelEdit"
-                                    />
-                                </template>
-                                <h2
-                                    v-else
-                                    class="col-start-1 row-start-1 flex h-8 items-center rounded-md border border-transparent px-2 text-base font-medium"
-                                >
-                                    <span class="truncate">{{ user?.name ?? `Account` }}</span>
-                                </h2>
-                            </div>
-
-                            <div class="flex shrink-0 items-center gap-1">
-                                <template v-if="editing">
-                                    <button
-                                        type="button"
-                                        :class="ui.iconButton(`h-8 w-8 text-subtle hover:text-success`)"
-                                        :disabled="nameBusy || !canSaveName"
-                                        aria-label="Save display name"
-                                        v-tooltip.bottom="`Save · Enter`"
-                                        v-action="saveName"
-                                    >
-                                        <Icon :name="nameBusy ? `spinner` : `check`" :spin="nameBusy" />
-                                    </button>
-                                    <button
-                                        type="button"
-                                        :class="ui.iconButton(`h-8 w-8 text-subtle`)"
-                                        :disabled="nameBusy"
-                                        aria-label="Cancel rename"
-                                        v-tooltip.bottom="`Cancel · Esc`"
-                                        @click="cancelEdit"
-                                    >
-                                        <Icon name="times" />
-                                    </button>
-                                </template>
-                                <button
-                                    v-else
-                                    type="button"
-                                    :class="ui.iconButton(`h-8 w-8 text-subtle`)"
-                                    aria-label="Rename display name"
-                                    v-tooltip.bottom="`Rename display name`"
-                                    v-action="startEdit"
-                                >
-                                    <Icon name="pencil" class="text-xs" />
-                                </button>
-                            </div>
-                        </div>
+                        <!-- The name is the field: one box for both states, so the plan chip beside it never moves. -->
+                        <h2 class="flex min-w-0 text-base font-medium">
+                            <InlineRename
+                                :value="user?.name"
+                                :write="writeName"
+                                label="Display name"
+                                action="Rename display name"
+                                fallback="Account"
+                                :maxlength="60"
+                                failure="Couldn't save your display name."
+                            />
+                        </h2>
 
 <!-- THE LANE THIS ACCOUNT IS ON, the same chip the account menu wears (hostedHours.ts). -->
                         <StatusBadge
@@ -211,7 +95,7 @@ const saveName = async (): Promise<void> => {
                             v-tooltip.bottom="planBadge.detail"
                         />
                     </div>
-                    <p v-if="subline.text" class="h-4 truncate px-2 text-xs leading-4" :class="subline.tone">{{ subline.text }}</p>
+                    <p v-if="avatarError" class="h-4 truncate px-1 text-xs leading-4 text-danger">{{ avatarError }}</p>
                 </div>
             </div>
         </RowNote>

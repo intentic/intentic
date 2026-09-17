@@ -1,10 +1,10 @@
 <script setup lang="ts">
 import { Button, ui, ContextMenu, type IconName, SearchBar, SegmentedControl } from "@intentic/ui";
+import { createInlineRename } from "@intentic/ui/inline-rename";
 import { useNow } from "@intentic/ui/async";
 import type { MenuItem } from "primevue/menuitem";
 import { computed, nextTick, ref, watch } from "vue";
 import { useRouter } from "vue-router";
-import { createInlineRename } from "../../../lib/inlineRename";
 import { type ChatGrouping, useChatGrouping } from "../transcript/chatGrouping";
 import ChatPersonaRail from "../personas/ChatPersonaRail.vue";
 import {
@@ -801,7 +801,8 @@ const keepTab = (event: Event, id: string): void => {
                 </div>
             </RailLane>
         </div>
-        <!-- A failed rename already reverted the title; this explains why, cleared by the next rename. -->
+        <!-- A failed rename leaves the card's field open with the typed name in it; this says why, and is cleared by
+             the next attempt. -->
         <span v-if="edit.error !== undefined" class="shrink-0 truncate px-1 text-2xs text-danger" v-tooltip.bottom.overflow="edit.error">{{
             edit.error
         }}</span>

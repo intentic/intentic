@@ -117,7 +117,9 @@ const routedFinishing = computed(
 //   2. the name, renamable in place
 //   3. failing both, when it was connected
 // Grok is exempt from renaming: OpenCode owns its one account, so there's nothing to rename or confuse it with.
-const renamable = computed(() => managedProvider.value !== `grok`);
+// Handing the row no writer is how that is said; a row with one renames itself in place.
+const renameOf = (account: OauthAccount): ((label: string) => Promise<void>) | undefined =>
+    managedProvider.value === `grok` ? undefined : (label: string) => renameAccount(account.id, label);
 
 // Labels shared by more than one account: rows that cannot be told apart by name alone.
 const ambiguousLabels = computed(() => {
@@ -359,10 +361,9 @@ onUnmounted(() => clearTimeout(ringTimer));
                     :note="identityNote(account)"
                     :description="account.needsReauth ? (account.detail ?? `Signed out, reconnect to keep using it.`) : undefined"
                     :activity="account.needsReauth || !usageLoaded ? undefined : usageLine(account.id)"
-                    :renamable="renamable"
+                    :rename="renameOf(account)"
                     :headroom="headroom"
                     :exhausted="exhausted"
-                    @rename="(label: string) => renameAccount(account.id, label)"
                 >
                     <template #control>
                         <Button

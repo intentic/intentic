@@ -70,9 +70,10 @@ const mount = (sandbox: SandboxSummary): HTMLElement => {
 const logoTile = (el: HTMLElement): HTMLButtonElement => el.querySelector<HTMLButtonElement>(`button[aria-label$="logo"]`)!;
 const anyLogoTile = (el: HTMLElement): HTMLButtonElement => el.querySelector<HTMLButtonElement>(`button`)!;
 const fileField = (el: HTMLElement): HTMLInputElement => el.querySelector<HTMLInputElement>(`input[type="file"]`)!;
-const renameButton = (el: HTMLElement): HTMLButtonElement => el.querySelector<HTMLButtonElement>(`button[aria-label="Rename sandbox"]`)!;
+// The title itself is the rename control (<InlineRename>, pinned in design-system/inlineRename.test.ts); the
+// heading it sits in is this card's own decision.
+const titleButton = (el: HTMLElement): HTMLButtonElement => el.querySelector<HTMLButtonElement>(`h2 button`)!;
 const nameField = (el: HTMLElement): HTMLInputElement => el.querySelector<HTMLInputElement>(`input[aria-label="Sandbox name"]`)!;
-const saveNameButton = (el: HTMLElement): HTMLButtonElement => el.querySelector<HTMLButtonElement>(`button[aria-label="Save sandbox name"]`)!;
 
 // jsdom won't let a test assign `files` directly; this defines the property to simulate a picked file.
 const pickFile = async (el: HTMLElement): Promise<void> => {
@@ -99,35 +100,41 @@ it(`offers the logo to an owner at rest, with no edit mode to enter first`, () =
     expect(tile.getAttribute(`aria-label`)).toBe(`Add a logo`);
 });
 
-it(`keeps rename controls compact and attached to the name`, async () => {
+// The complaint this card was rebuilt for: entering the rename used to add a hint line under the title, so the
+// card grew by a line the moment you pressed the pencil. Nothing under the title may appear because of a mode.
+it(`grows by nothing when the rename opens`, async () => {
     const el = mount(sandboxRow());
-    const rename = renameButton(el);
-    expect(rename.textContent).toBe(``);
-    expect(rename.querySelector(`[data-icon="pencil"]`)).not.toBeNull();
+    const lines = el.querySelectorAll(`p`).length;
 
-    rename.click();
+    titleButton(el).click();
     await nextTick();
 
-    expect(nameField(el).value).toBe(`radarsu-intentic`);
-    expect(saveNameButton(el).textContent).toBe(``);
-    expect(saveNameButton(el).querySelector(`[data-icon="check"]`)).not.toBeNull();
-    expect(el.querySelector(`button[aria-label="Cancel rename"] [data-icon="times"]`)).not.toBeNull();
+    expect(el.querySelectorAll(`p`).length).toBe(lines);
+    expect(el.textContent).not.toContain(`Enter saves`);
 });
 
-it(`renames from the inline field without sending the logo`, async () => {
+it(`renames from the title's own field, without sending the logo`, async () => {
     const el = mount(sandboxRow());
-    renameButton(el).click();
+    expect(titleButton(el).textContent).toBe(`radarsu-intentic, Rename sandbox`);
+    titleButton(el).click();
     await nextTick();
 
     const field = nameField(el);
+    expect(field.value).toBe(`radarsu-intentic`);
     field.value = `workbench`;
     field.dispatchEvent(new Event(`input`));
-    await nextTick();
-    expect(saveNameButton(el).disabled).toBe(false);
-    saveNameButton(el).click();
+    field.dispatchEvent(new KeyboardEvent(`keydown`, { key: `Enter`, bubbles: true }));
 
     await vi.waitFor(() => expect(update).toHaveBeenCalledWith(`s1`, { name: `workbench` }));
     expect(update.mock.calls[0]?.[1]).not.toHaveProperty(`image`);
+});
+
+// Same rule as the logo tile beside it: a member is kept out of the control, not handed a dead one.
+it(`gives a member the name as text, with nothing to press`, () => {
+    const el = mount(sandboxRow({ role: `collaborator` }));
+    expect(titleButton(el)).toBeNull();
+    // The clipping span, not the heading: the heading also holds the invisible twin that measures the box.
+    expect(el.querySelector(`h2 span.truncate`)?.textContent).toBe(`radarsu-intentic`);
 });
 
 it(`goes straight to the file dialog when there is no logo yet`, () => {

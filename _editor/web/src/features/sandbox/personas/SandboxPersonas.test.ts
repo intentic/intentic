@@ -101,12 +101,16 @@ const buttonLabelled = (el: HTMLElement, label: string): HTMLButtonElement | und
 const nameField = (el: HTMLElement): HTMLInputElement => el.querySelector<HTMLInputElement>(`input[aria-label="Name this persona"]`)!;
 const byAriaLabel = (el: HTMLElement, label: string): HTMLElement | undefined =>
     el.querySelector<HTMLElement>(`[aria-label="${label}"]`) ?? undefined;
+// A row's name IS its rename control (<InlineRename>): the button reads as the name, with the verb behind it for a
+// screen reader, so that whole string is what identifies the row.
+const nameControl = (el: HTMLElement, name: string): HTMLButtonElement =>
+    [...el.querySelectorAll(`button`)].find((button) => button.textContent === `${name}, Rename persona`)!;
 
 // Reached through the row's one stable accessible control, since the row itself carries no label; `closest('.group')`
 // finds the header, not the drawer wrapper, since both share the class.
 const rowFor = (el: HTMLElement, id: string): HTMLElement => {
     const persona = personas.value.find((entry) => entry.id === id)!;
-    return byAriaLabel(el, `Rename ${persona.label ?? persona.id}`)!.closest(`.group`) as HTMLElement;
+    return nameControl(el, persona.label ?? persona.id).closest(`.group`) as HTMLElement;
 };
 // Waits for a tab to render rather than a tick count, since opening settles over an unstable number of them.
 const openCard = async (el: HTMLElement, id: string): Promise<void> => {
@@ -394,19 +398,19 @@ it(`keeps every permission on one screen rather than splitting them across tabs`
 it(`shows the name as text and turns it into a field only when clicked`, async () => {
     personas.value = [{ id: `work`, label: `Work`, capabilities: [`reddit-work`] }];
     const el = mount();
-    expect(el.querySelector(`input[aria-label="Name"]`)).toBeNull();
-    byAriaLabel(el, `Rename Work`)!.click();
+    expect(el.querySelector(`input[aria-label="Persona name"]`)).toBeNull();
+    nameControl(el, `Work`).click();
     await nextTick();
-    expect(el.querySelector(`input[aria-label="Name"]`)).not.toBeNull();
+    expect(el.querySelector(`input[aria-label="Persona name"]`)).not.toBeNull();
 });
 
 // Rename writes the whole card, not just the label; dropping the accounts would be a silent loss.
 it(`renames a persona on Enter, keeping the rest of its card`, async () => {
     personas.value = [{ id: `work`, label: `Work`, capabilities: [`reddit-work`, `x-company`] }];
     const el = mount();
-    byAriaLabel(el, `Rename Work`)!.click();
+    nameControl(el, `Work`).click();
     await nextTick();
-    const field = el.querySelector<HTMLInputElement>(`input[aria-label="Name"]`)!;
+    const field = el.querySelector<HTMLInputElement>(`input[aria-label="Persona name"]`)!;
     await type(field, `Work crew`);
     field.dispatchEvent(new KeyboardEvent(`keydown`, { key: `Enter`, bubbles: true }));
     await vi.waitFor(() => expect(save).toHaveBeenCalledTimes(1));
@@ -416,9 +420,9 @@ it(`renames a persona on Enter, keeping the rest of its card`, async () => {
 it(`abandons a rename on Escape without writing`, async () => {
     personas.value = [{ id: `work`, label: `Work`, capabilities: [] }];
     const el = mount();
-    byAriaLabel(el, `Rename Work`)!.click();
+    nameControl(el, `Work`).click();
     await nextTick();
-    const field = el.querySelector<HTMLInputElement>(`input[aria-label="Name"]`)!;
+    const field = el.querySelector<HTMLInputElement>(`input[aria-label="Persona name"]`)!;
     await type(field, `Nope`);
     field.dispatchEvent(new KeyboardEvent(`keydown`, { key: `Escape`, bubbles: true }));
     await nextTick();

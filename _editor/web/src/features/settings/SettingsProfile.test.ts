@@ -37,9 +37,9 @@ const mount = (): HTMLElement => {
 
 const avatarButton = (el: HTMLElement): HTMLButtonElement => el.querySelector<HTMLButtonElement>(`button[aria-label="Change avatar"]`)!;
 const fileField = (el: HTMLElement): HTMLInputElement => el.querySelector<HTMLInputElement>(`input[type="file"]`)!;
-const renameButton = (el: HTMLElement): HTMLButtonElement => el.querySelector<HTMLButtonElement>(`button[aria-label="Rename display name"]`)!;
+// The name itself is the rename control (<InlineRename>, pinned in design-system/inlineRename.test.ts).
+const nameButton = (el: HTMLElement): HTMLButtonElement => el.querySelector<HTMLButtonElement>(`h2 button`)!;
 const nameField = (el: HTMLElement): HTMLInputElement => el.querySelector<HTMLInputElement>(`input[aria-label="Display name"]`)!;
-const saveNameButton = (el: HTMLElement): HTMLButtonElement => el.querySelector<HTMLButtonElement>(`button[aria-label="Save display name"]`)!;
 
 const pickFile = async (el: HTMLElement): Promise<void> => {
     const field = fileField(el);
@@ -68,31 +68,30 @@ it(`offers the avatar as a live control with no separate change button`, () => {
     expect(avatarButton(el).querySelector(`[data-icon="camera"]`)).not.toBeNull();
 });
 
-it(`keeps rename controls compact and attached to the name`, async () => {
+// The row used to grow a hint line ("Enter saves · Esc cancels") the moment the pencil was pressed, which moved
+// the plan chip and everything under it. Opening the rename may add nothing to this row.
+it(`grows by nothing when the rename opens`, async () => {
     const el = mount();
-    const rename = renameButton(el);
-    expect(rename.textContent).toBe(``);
-    expect(rename.querySelector(`[data-icon="pencil"]`)).not.toBeNull();
+    const lines = el.querySelectorAll(`p`).length;
 
-    rename.click();
+    nameButton(el).click();
     await nextTick();
 
-    expect(nameField(el).value).toBe(`Artur Kurowski`);
-    expect(saveNameButton(el).textContent).toBe(``);
-    expect(saveNameButton(el).querySelector(`[data-icon="check"]`)).not.toBeNull();
-    expect(el.querySelector(`button[aria-label="Cancel rename"] [data-icon="times"]`)).not.toBeNull();
+    expect(el.querySelectorAll(`p`).length).toBe(lines);
+    expect(el.textContent).not.toContain(`Enter saves`);
 });
 
-it(`renames from the inline field without sending the avatar`, async () => {
+it(`renames from the name's own field, without sending the avatar`, async () => {
     const el = mount();
-    renameButton(el).click();
+    expect(nameButton(el).textContent).toBe(`Artur Kurowski, Rename display name`);
+    nameButton(el).click();
     await nextTick();
 
     const field = nameField(el);
+    expect(field.value).toBe(`Artur Kurowski`);
     field.value = `Artur K.`;
     field.dispatchEvent(new Event(`input`));
-    await nextTick();
-    saveNameButton(el).click();
+    field.dispatchEvent(new KeyboardEvent(`keydown`, { key: `Enter`, bubbles: true }));
 
     await vi.waitFor(() => expect(updateProfile).toHaveBeenCalledWith({ name: `Artur K.` }));
     expect(updateProfile.mock.calls[0]?.[0]).not.toHaveProperty(`image`);

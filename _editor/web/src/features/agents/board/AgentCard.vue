@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { Button, ProgressRing, SegmentRing, ui, useDevice } from "@intentic/ui";
+import { createInlineRename } from "@intentic/ui/inline-rename";
 import { errorMessage, useNow } from "@intentic/ui/async";
 import { computed, ref } from "vue";
 import { RouterLink } from "vue-router";
@@ -48,7 +49,6 @@ import SessionChip from "./SessionChip.vue";
 import { boxImageOf, boxNameOf } from "../fleet/fleetScope";
 import { accountBadge } from "./accountChip";
 import { providerAccounts } from "../../chat/accounts/providerAccounts";
-import { createInlineRename } from "../../../lib/inlineRename";
 import { markSegments } from "../review/markSegments";
 import { useAgents } from "../fleet/useAgents";
 import { canArchive, type FleetAgent } from "../fleet/useAgents-fleet";

@@ -99,23 +99,6 @@ vi.mock("../../chat/run/useChat", async () => {
 // Stubbed strip (nothing open) so this mount skips standing up the whole tab store for a header test.
 vi.mock("../../chat/panel/useChat-strip", () => ({ chatStrip: { value: { active: undefined, panes: [], tabs: [] } } }));
 
-vi.mock("../../../lib/inlineRename", async () => {
-    const { reactive } = await import("vue");
-    return {
-        createInlineRename: () =>
-            reactive({
-                editing: false,
-                draft: ``,
-                error: undefined as string | undefined,
-                begin: vi.fn(),
-                commit: vi.fn(),
-                cancel: vi.fn(),
-                blurCommit: vi.fn(),
-                focusInput: vi.fn(),
-            }),
-    };
-});
-
 vi.mock("./useAgentChanges", async () => {
     const { ref } = await import("vue");
     return {

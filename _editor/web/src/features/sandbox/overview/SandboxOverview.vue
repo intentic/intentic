@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { AnchoredOverlay, Card, ui, StatusBadge, vAction } from "@intentic/ui";
+import { AnchoredOverlay, Card, InlineRename, StatusBadge, vAction } from "@intentic/ui";
 import { errorMessage } from "@intentic/ui/async";
-import { computed, nextTick, ref } from "vue";
+import { computed, ref } from "vue";
 import { fileToSquareDataUrl } from "../../../lib/imageDataUrl";
 import { useSandboxVersion } from "./useSandboxVersion";
 import { useSandbox } from "../client/useSandbox";
@@ -32,15 +32,10 @@ const hosted = computed(() => (sandbox.active.value?.hosted ?? null) !== null);
 // Same standing sentence Billing and the avatar row use, kept in sync by sharing the source.
 const { machineStanding, offered: planOffered } = useHostedPlan();
 
-// Inline rename (owner only): controls sit beside the name so entering edit mode never changes the card's height.
-// The logo is separate and live at all times; picking a file saves immediately (`pickFile`), no commit step needed.
-const editing = ref(false);
-const name = ref(``);
+// The name renames itself in place (<InlineRename>, owner only). The logo is separate and live at all times;
+// picking a file saves immediately (`pickFile`), no commit step needed.
 const fileInput = ref<HTMLInputElement | null>(null);
-const nameInput = ref<HTMLInputElement | null>(null);
-const nameTouched = ref(false);
-const busy = ref(false);
-const error = ref<string | undefined>(undefined);
+const logoError = ref<string | undefined>(undefined);
 
 // Menu opens only over a tile that already has a logo (two choices to offer); an empty tile skips straight to the
 // file dialog. Anchored rather than a Popover, so every menu in the app measures the same way.
@@ -48,33 +43,13 @@ const logoTrigger = ref<HTMLButtonElement | null>(null);
 const logoMenuOpen = ref(false);
 const logoBusy = ref(false);
 const logo = computed(() => sandbox.active.value?.image ?? undefined);
-const avatarLetter = computed(() => (editing.value ? name.value : (sandbox.active.value?.name ?? ``)).trim().charAt(0));
-const nameError = computed<string | undefined>(() => {
-    const trimmed = name.value.trim();
-    if (trimmed.length === 0) {
-        return `Name is required.`;
-    }
-    if (trimmed.length > 60) {
-        return `Name must be 60 characters or fewer.`;
-    }
-    return undefined;
-});
-const canSave = computed(() => {
-    const trimmed = name.value.trim();
-    return trimmed.length > 0 && trimmed.length <= 60 && trimmed !== sandbox.active.value?.name;
-});
+const avatarLetter = computed(() => (sandbox.active.value?.name ?? ``).trim().charAt(0));
 
-// One line under the title for every state (idle status, rename hint, or an error from either control), so
-// nothing shifts height.
+// One line under the title, for the logo's own report and the sandbox's standing. The rename says nothing here:
+// it carries its own state inside its own box, so entering and leaving edit mode cannot move this card.
 const subline = computed<{ text: string; tone: string }>(() => {
-    if (error.value !== undefined) {
-        return { text: error.value, tone: `text-danger` };
-    }
-    if (editing.value && nameTouched.value && nameError.value !== undefined) {
-        return { text: nameError.value, tone: `text-danger` };
-    }
-    if (editing.value) {
-        return { text: `Enter saves · Esc cancels.`, tone: `text-muted` };
+    if (logoError.value !== undefined) {
+        return { text: logoError.value, tone: `text-danger` };
     }
     if (availability.value === `busy`) {
         return { text: `The sandbox is busy, live actions resume automatically.`, tone: `text-muted` };
@@ -85,22 +60,18 @@ const subline = computed<{ text: string; tone: string }>(() => {
     return { text: ``, tone: `text-muted` };
 });
 
-const startEdit = async (): Promise<void> => {
-    name.value = sandbox.active.value?.name ?? ``;
-    error.value = undefined;
-    nameTouched.value = false;
-    editing.value = true;
-    await nextTick();
-    nameInput.value?.select();
-};
-const cancelEdit = (): void => {
-    editing.value = false;
-    error.value = undefined;
+// The name goes straight to the platform; the row's cache write is what redraws this card and the rail chip.
+const writeName = async (name: string): Promise<void> => {
+    const id = sandbox.active.value?.id;
+    if (id === undefined) {
+        return;
+    }
+    await sandbox.update(id, { name });
 };
 
 // Offers replace/remove when there's a logo to act on; otherwise goes straight to the file dialog.
 const pressLogo = (): void => {
-    error.value = undefined;
+    logoError.value = undefined;
     if (logo.value === undefined) {
         fileInput.value?.click();
         return;
@@ -116,11 +87,11 @@ const writeLogo = async (image: string | null): Promise<void> => {
         return;
     }
     logoBusy.value = true;
-    error.value = undefined;
+    logoError.value = undefined;
     try {
         await sandbox.update(id, { image });
     } catch (err) {
-        error.value = errorMessage(err, `Couldn't save the logo.`);
+        logoError.value = errorMessage(err, `Couldn't save the logo.`);
     } finally {
         logoBusy.value = false;
     }
@@ -133,14 +104,14 @@ const pickFile = async (event: Event): Promise<void> => {
     if (file === undefined) {
         return;
     }
-    error.value = undefined;
+    logoError.value = undefined;
     // Contained, not cropped, since a centre slice of a wordmark loses it; a failed read is a file error, not a save
     // error.
     let square: string;
     try {
         square = await fileToSquareDataUrl(file, `contain`);
     } catch {
-        error.value = `Couldn't read that file as an image.`;
+        logoError.value = `Couldn't read that file as an image.`;
         return;
     }
     await writeLogo(square);
@@ -155,24 +126,6 @@ const changeLogo = (): void => {
 const removeLogo = async (): Promise<void> => {
     logoMenuOpen.value = false;
     await writeLogo(null);
-};
-
-const save = async (): Promise<void> => {
-    const id = sandbox.active.value?.id;
-    const trimmed = name.value.trim();
-    if (id === undefined || busy.value || !canSave.value) {
-        return;
-    }
-    busy.value = true;
-    error.value = undefined;
-    try {
-        await sandbox.update(id, { name: trimmed });
-        editing.value = false;
-    } catch (err) {
-        error.value = errorMessage(err, `Couldn't save sandbox settings.`);
-    } finally {
-        busy.value = false;
-    }
 };
 </script>
 
@@ -226,78 +179,25 @@ const save = async (): Promise<void> => {
                         </div>
                     </AnchoredOverlay>
 
-                    <div class="-ml-2 min-w-0 flex-1 @2xl:max-w-md">
+                    <div class="-ml-1 min-w-0 flex-1 @2xl:max-w-md">
                         <div class="flex items-center gap-2">
-                            <div class="flex min-w-0 items-center">
-                                <!-- Title and field share one box so mode changes do not shift layout. -->
-                                <div class="grid w-fit min-w-0 max-w-full grid-cols-1 grid-rows-1">
-                                    <template v-if="editing">
-                                        <span
-                                            aria-hidden="true"
-                                            class="invisible col-start-1 row-start-1 flex h-8 min-w-0 items-center truncate rounded-md border border-transparent px-2 text-lg font-semibold"
-                                            >{{ name === `` ? ` ` : name }}</span
-                                        >
-                                        <input
-                                            ref="nameInput"
-                                            v-model="name"
-                                            type="text"
-                                            aria-label="Sandbox name"
-                                            autocomplete="off"
-                                            maxlength="60"
-                                            class="ui-field-box col-start-1 row-start-1 h-8 w-full min-w-0 px-2 text-lg font-semibold"
-                                            :class="nameTouched && nameError ? 'ui-field-error-box' : ''"
-                                            @blur="nameTouched = true"
-                                            @keydown.enter.prevent="save"
-                                            @keydown.esc.prevent="cancelEdit"
-                                        />
-                                    </template>
-                                    <h2
-                                        v-else
-                                        class="col-start-1 row-start-1 flex h-8 items-center rounded-md border border-transparent px-2 text-lg font-semibold"
-                                    >
-                                        <span class="truncate">{{ sandbox.active.value?.name ?? `Sandbox` }}</span>
-                                    </h2>
-                                </div>
-
-                                <!-- Rename controls sit beside the name: a pencil at rest, compact check/cancel icons while editing. -->
-                                <div v-if="isOwner" class="flex shrink-0 items-center gap-1">
-                                    <template v-if="editing">
-                                        <button
-                                            type="button"
-                                            :class="ui.iconButton(`h-8 w-8 text-subtle hover:text-success`)"
-                                            :disabled="busy || !canSave"
-                                            aria-label="Save sandbox name"
-                                            v-tooltip.bottom="`Save · Enter`"
-                                            v-action="save"
-                                        >
-                                            <Icon :name="busy ? `spinner` : `check`" :spin="busy" />
-                                        </button>
-                                        <button
-                                            type="button"
-                                            :class="ui.iconButton(`h-8 w-8 text-subtle`)"
-                                            :disabled="busy"
-                                            aria-label="Cancel rename"
-                                            v-tooltip.bottom="`Cancel · Esc`"
-                                            @click="cancelEdit"
-                                        >
-                                            <Icon name="times" />
-                                        </button>
-                                    </template>
-                                    <button
-                                        v-else
-                                        type="button"
-                                        :class="ui.iconButton(`h-8 w-8 text-subtle`)"
-                                        aria-label="Rename sandbox"
-                                        v-tooltip.bottom="`Rename sandbox`"
-                                        v-action="startEdit"
-                                    >
-                                        <Icon name="pencil" class="text-xs" />
-                                    </button>
-                                </div>
-                            </div>
+                            <!-- The card's heading IS the rename: text at rest, a field in the same box, nothing added beside it.
+                                 It stays an <h2> around that, so renaming the sandbox doesn't cost the card its heading. -->
+                            <h2 class="flex min-w-0 text-lg font-semibold">
+                                <InlineRename
+                                    :value="sandbox.active.value?.name"
+                                    :write="writeName"
+                                    label="Sandbox name"
+                                    action="Rename sandbox"
+                                    fallback="Sandbox"
+                                    :editable="isOwner"
+                                    :maxlength="60"
+                                    failure="Couldn't save the sandbox's name."
+                                />
+                            </h2>
                             <StatusBadge class="shrink-0" :variant="availabilityBadge.variant" :label="availabilityBadge.label" dot />
                         </div>
-                        <p v-if="subline.text" class="h-4 truncate px-2 text-xs leading-4" :class="subline.tone">{{ subline.text }}</p>
+                        <p v-if="subline.text" class="h-4 truncate px-1 text-xs leading-4" :class="subline.tone">{{ subline.text }}</p>
                     </div>
                 </div>
             </div>

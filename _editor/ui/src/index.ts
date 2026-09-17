@@ -64,6 +64,10 @@ export { default as Icon } from "./components/primitives/Icon.vue";
 // sides of a binary diff all use it.
 export { default as ImageView } from "./components/primitives/ImageView.vue";
 export { type ImageViewState, isRenderableImage } from "./components/primitives/imageView.js";
+// The app's one rename: a name in place, with the field, the affordance and the failure state it takes. The state
+// machine behind it is at `@intentic/ui/inline-rename`, for the surfaces that draw their own field (a tab strip, a
+// card that must not open while it is being renamed) and must consult the edit.
+export { default as InlineRename } from "./components/forms/InlineRename.vue";
 export { default as InfoDialog } from "./components/overlays/InfoDialog.vue";
 export { default as InfoHint } from "./components/feedback/InfoHint.vue";
 export { default as InfoTable } from "./components/feedback/InfoTable.vue";

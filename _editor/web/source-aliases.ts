@@ -81,6 +81,10 @@ export const sourceAliases = (): Record<string, string> => ({
     // Gate deciding whether a wait indicator is shown; its test drives fake timers over plain reactivity and must not
     // boot the component graph to ask a question about a clock.
     "@intentic/ui/loading-reveal": fromRoot("_editor/ui/src/composables/loadingReveal.ts"),
+    // The rename state machine alone, for the four surfaces that draw their own field (a dragging card, a tab strip,
+    // a tree node) and so cannot use <InlineRename> itself; off the barrel because a tree row must not boot mermaid
+    // to know that Escape cancels.
+    "@intentic/ui/inline-rename": fromRoot("_editor/ui/src/composables/inlineRename.ts"),
     // Press-state machine (a clock and two booleans) shared by <Button> and the `v-action` directive, so the app has
     // one answer for how a press feels.
     "@intentic/ui/press": fromRoot("_editor/ui/src/lib/pressLock.ts"),

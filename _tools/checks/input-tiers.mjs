@@ -43,28 +43,6 @@ const ALLOWED = new Map([
             ],
         ]),
     ],
-    [
-        `_editor/web/src/features/settings/SettingsProfile.vue`,
-        new Map([
-            [
-                `h-8`,
-                `PINNED TO A HIDDEN SIZER TWIN, the same shape as SandboxOverview's title: the display name and the field that renames it share one grid cell with an invisible <span> carrying the same box, so the field is exactly as wide as the name it replaced and nothing beside it jumps when editing starts.`,
-            ],
-            [`px-2`, `The same sizer twin: the span it has to match writes this padding out too.`],
-            [`text-base`, `The same sizer twin: this is the heading's type size, and the field borrows it so the two boxes measure the same.`],
-        ]),
-    ],
-    [
-        `_editor/web/src/features/sandbox/overview/SandboxOverview.vue`,
-        new Map([
-            [
-                `h-8`,
-                `PINNED TO A HIDDEN SIZER TWIN. The sandbox title and the field that renames it are stacked in one grid cell, with an invisible <span> carrying the same box so the field is exactly as wide as the text it replaced. Its height, side padding and type are therefore not this field's decision to make — they are the heading's, and the two have to agree to the pixel or the glyphs beside them jump when the mode changes.`,
-            ],
-            [`px-2`, `The same sizer twin: the span it has to match writes this padding out too.`],
-            [`text-lg`, `The same sizer twin: this is the heading's type size, and the field borrows it so the two boxes measure the same.`],
-        ]),
-    ],
 ]);
 
 const tracked = templatesUnder(`_editor`, `_extensions`);

@@ -7,6 +7,7 @@ import {
     ui,
     ConfirmDialog,
     DisclosureRow,
+    InlineRename,
     Notice,
     type NoticeModel,
     PersonaFace,
@@ -20,7 +21,6 @@ import { noticeFrom } from "@intentic/ui/async";
 import ToggleSwitch from "primevue/toggleswitch";
 import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue";
 import PersonaForm, { type PersonaDraft } from "./PersonaForm.vue";
-import { createInlineRename } from "../../../lib/inlineRename";
 import { useBrowserAccounts } from "../../extensions/useBrowserAccounts";
 import { useCapabilities } from "../../capabilities/connect/useCapabilities";
 import { grantablesFrom, omittedNotesOf, type PersonaGrantable, personaSlug, powersDraftOf, storedPowers } from "./personaCard";
@@ -209,31 +209,16 @@ watch(
 );
 onBeforeUnmount(() => clearTimeout(pending));
 
-// One rename state for the whole list, not one per row (a v-for factory would build and discard one on every render).
 // Writes the whole card (an upsert), reading from the open draft if there is one so a rename doesn't clobber a switch
-// flipped a moment ago; the id stays frozen.
-const renamingId = ref<string | undefined>(undefined);
-const renameTarget = computed(() => personas.value.find((persona) => persona.id === renamingId.value));
-const rename = createInlineRename(
-    () => renameTarget.value?.label ?? renamingId.value,
-    async (name) => {
-        const id = renamingId.value;
-        if (id === undefined) {
-            return;
-        }
-        const open = draft.value?.original === id ? draft.value : undefined;
-        await save.mutateAsync(open !== undefined ? { ...cardFrom(open), label: name } : { ...renameTarget.value!, label: name });
-        if (open !== undefined) {
-            quietly(() => {
-                open.label = name;
-            });
-        }
-    },
-    `Couldn't rename this persona.`,
-);
-const beginRename = (persona: Persona): void => {
-    renamingId.value = persona.id;
-    rename.begin();
+// flipped a moment ago. The edit state is the row's own, inside its <InlineRename>; this is only where the name goes.
+const renameOf = (persona: Persona) => async (name: string): Promise<void> => {
+    const open = draft.value?.original === persona.id ? draft.value : undefined;
+    await save.mutateAsync(open !== undefined ? { ...cardFrom(open), label: name } : { ...persona, label: name });
+    if (open !== undefined) {
+        quietly(() => {
+            open.label = name;
+        });
+    }
 };
 
 // Whether a new chat is matched to a persona from its first message (settings.personaRouting; daemon's
@@ -331,35 +316,21 @@ const confirmRemove = async (): Promise<void> => {
                         <PersonaFace :persona :size="mark" />
                     </template>
 
-                    <!-- Click-to-rename on the app's inline-rename machine (Enter commits, Escape cancels, blur commits). -->
+                    <!-- The row's name renames itself: same box, same type, and the row never opens on that press. -->
                     <template #title>
-                        <input
-                            v-if="rename.editing && renamingId === persona.id"
-                            v-model="rename.draft"
-                            :class="ui.inputSm('w-full max-w-xs font-medium')"
-                            aria-label="Name"
-                            @vue:mounted="rename.focusInput"
-                            @click.stop
-                            @keydown.enter="rename.commit"
-                            @keydown.esc="rename.cancel"
-                            @blur="rename.blurCommit"
+                        <InlineRename
+                            :value="persona.label ?? persona.id"
+                            :write="renameOf(persona)"
+                            label="Persona name"
+                            action="Rename persona"
+                            failure="Couldn't rename this persona."
+                            class="font-medium"
                         />
-                        <button
-                            v-else
-                            type="button"
-                            class="cursor-text rounded px-1 py-0.5 text-left font-medium transition-colors -mx-1 hover:bg-overlay"
-                            :aria-label="`Rename ${persona.label ?? persona.id}`"
-                            @click.stop="beginRename(persona)"
-                        >
-                            {{ persona.label ?? persona.id }}
-                        </button>
                     </template>
 
-                    <!-- The description shows either the brief or the active rename error. -->
-                    <template v-if="(rename.error !== undefined && renamingId === persona.id) || persona.brief !== undefined" #description>
-                        <span v-if="rename.error !== undefined && renamingId === persona.id" class="text-danger">{{ rename.error }}</span>
-                        <!-- A persona brief is the matching text for new chats. -->
-                        <span v-else class="truncate">{{ persona.brief }}</span>
+                    <!-- A persona brief is the matching text for new chats. -->
+                    <template v-if="persona.brief !== undefined" #description>
+                        <span class="truncate">{{ persona.brief }}</span>
                     </template>
 
                     <template #meta>
