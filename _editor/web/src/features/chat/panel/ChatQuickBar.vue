@@ -298,7 +298,7 @@ const onPress = (): void => {
                 class="chat-quick-rest mx-auto w-fit max-w-full origin-bottom rounded-full border border-line-strong bg-card/80 shadow-lg backdrop-blur-md transition-[opacity,scale] motion-reduce:transition-none"
                 :class="
                     expanded
-                        ? `pointer-events-none absolute inset-x-0 bottom-0 scale-105 opacity-0 duration-100 ease-out`
+                        ? `pointer-events-none absolute inset-x-0 bottom-0 scale-110 opacity-0 duration-200 ease-out`
                         : `pointer-events-auto duration-150 ease-out`
                 "
             >
@@ -341,15 +341,15 @@ const onPress = (): void => {
             </div>
 
             <!-- The grown form: the panel's own composer, and nothing of this component's around it. IT GROWS OUT OF THE
-     PILL: `scale` from the bottom edge the two forms share, so the box opens from where the pill stood instead of
-     cutting in on top of it. Scale, not width or height — a size cannot move without the layout moving with it, and
-     the composer's own container queries are what that would have run through on every frame. -->
+     PILL — through a clip that opens from the pill's own footprint to the whole box (chat.css). The exit is this
+     element's own transition; the entry is the animation there, which is the only one of the two that can start from
+     a shape rather than from a value. -->
             <div
                 class="chat-quick-host w-full origin-bottom transition-[opacity,scale] motion-reduce:transition-none"
                 :class="
                     expanded
-                        ? `pointer-events-auto relative duration-[240ms] ease-[cubic-bezier(0.22,1.2,0.36,1)]`
-                        : `pointer-events-none absolute inset-x-0 bottom-0 scale-90 opacity-0 duration-100 ease-in`
+                        ? `pointer-events-auto relative duration-[260ms] ease-out`
+                        : `pointer-events-none absolute inset-x-0 bottom-0 scale-95 opacity-0 duration-100 ease-in`
                 "
                 :inert="!expanded || undefined"
             >
@@ -365,7 +365,7 @@ const onPress = (): void => {
                 type="button"
                 class="chat-quick-eye pointer-events-auto absolute -top-2.5 right-3 z-10 flex h-7 w-7 cursor-pointer items-center justify-center rounded-full border bg-card/80 shadow-md backdrop-blur-md transition-colors"
                 :class="chatBarPeek ? `border-primary-500/40 text-link` : `border-line-strong text-subtle hover:text-content`"
-                v-tooltip.top="chatBarPeek ? t(`chat.chatQuickBar.hideConversation`) : t(`chat.chatQuickBar.whatWasSaidHover`)"
+                v-tooltip.top="t(`chat.chatQuickBar.whatWasSaidHover`)"
                 :aria-expanded="chatBarPeek"
                 :aria-label="t(`chat.chatQuickBar.conversationSoFar`)"
                 @pointerenter="onPeekEnter"
