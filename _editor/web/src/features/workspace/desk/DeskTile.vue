@@ -15,9 +15,12 @@ const {
     renaming = false,
     dropTarget = false,
     dragging = false,
-    draggable = false,
+    dropDir,
+    where,
 } = defineProps<{
     entry: WorkspaceTreeEntry;
+    // A result's folder, relative to the open one; a tile of the open folder itself has none.
+    where?: string;
     selected?: boolean;
     // Kept private by the sandbox: opens its explanation, never its contents.
     locked?: boolean;
@@ -33,7 +36,8 @@ const {
     dropTarget?: boolean;
     // Being dragged: drawn faint where it still stands.
     dragging?: boolean;
-    draggable?: boolean;
+    // The folder a drop on this tile lands in (useEntryDrag reads it off the element); none for a locked one.
+    dropDir?: string;
 }>();
 
 // The rename field's text; the owner reads it back on commit.
@@ -47,8 +51,7 @@ const emit = defineEmits<{
     contextmenu: [event: MouseEvent];
     commit: [];
     cancel: [];
-    dragstart: [event: DragEvent];
-    dragend: [];
+    pointerdown: [event: PointerEvent];
     dragover: [event: DragEvent];
     dragleave: [event: DragEvent];
     drop: [event: DragEvent];
@@ -141,22 +144,23 @@ const seekFrame = (event: Event): void => {
 </script>
 
 <template>
-    <!-- A div, not a button: the rename field lives inside it, and a field inside a button takes no keystrokes in Firefox. -->
+    <!-- A div, not a button: the rename field lives inside it, and a field inside a button takes no keystrokes in Firefox.
+         Moved by pointer (useEntryDrag); no native drag may start here, since one the page starts freezes the tab in Brave. -->
     <div
         role="option"
         :aria-selected="selected"
         :data-desk-tile="entry.path"
+        :data-drop-dir="dropDir"
         :tabindex="tabindex"
-        :draggable="draggable"
         class="ui-row-select flex w-full flex-col items-center gap-1.5 rounded-lg px-2 pt-3 pb-2 text-center select-none"
         :class="{ 'ui-row-select-on': selected, 'ui-row-select-drop': dropTarget, 'opacity-60': pending, 'opacity-40': dragging }"
         @click="emit('select', $event)"
         @dblclick="emit('open')"
         @contextmenu="emit('contextmenu', $event)"
+        @pointerdown="emit('pointerdown', $event)"
         @pointerenter="emit('enter', $event.currentTarget as HTMLElement)"
         @pointerleave="emit('leave')"
-        @dragstart="emit('dragstart', $event)"
-        @dragend="emit('dragend')"
+        @dragstart.prevent
         @dragover="emit('dragover', $event)"
         @dragleave="emit('dragleave', $event)"
         @drop="emit('drop', $event)"
@@ -208,5 +212,6 @@ const seekFrame = (event: Event): void => {
         <span v-else class="line-clamp-2 w-full text-xs leading-snug [overflow-wrap:anywhere]" :class="quiet ? 'text-subtle' : 'text-content/90'">{{
             entry.name
         }}</span>
+        <span v-if="where !== undefined && !renaming" class="w-full truncate text-2xs text-subtle" :title="where">{{ where }}</span>
     </div>
 </template>

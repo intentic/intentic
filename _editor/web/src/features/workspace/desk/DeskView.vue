@@ -12,7 +12,8 @@ import { workspaceDir } from "../health/workspaceScope";
 import { useWorkspaceTabs } from "../tabs/useWorkspaceTabs";
 import { isGridKey, moveInGrid, type TileBox } from "./deskGrid";
 import { deskGroups, deskOrder, labelsShown } from "./deskOrder";
-import { DESK_DIR_ACTIONS, useDesk } from "./useDesk";
+import { contentMatches, nameMatches, RESULTS_CAP } from "./deskResults";
+import { DESK_DIR_ACTIONS, DESK_SEARCH, useDesk } from "./useDesk";
 import { useDeskActions } from "./useDeskActions";
 import DeskPeek from "./DeskPeek.vue";
 import DeskTile from "./DeskTile.vue";
@@ -50,8 +51,65 @@ watch(
     { immediate: true },
 );
 
-const shown = computed(() => withProvisionalEntries(deskDir.value, children.value ?? []).filter((entry) => explorerShows(entry, filters.value)));
-const groups = computed(() => deskGroups(shown.value));
+const shows = (entry: WorkspaceTreeEntry): boolean => explorerShows(entry, filters.value);
+
+// --- The query: the sidebar's own (DESK_SEARCH), answered here under the open folder ---------------------------------
+// Names the desk matches itself over the loaded tree; text and smart are the daemon's, and the desk draws the files
+// its groups name. Typing on the desk writes the same query, so the tree narrows with it.
+const search = inject(DESK_SEARCH, undefined);
+const query = computed<string>({
+    get: () => search?.filter.value ?? ``,
+    set: (value) => {
+        if (search !== undefined) {
+            search.filter.value = value;
+        }
+    },
+});
+const querying = computed(() => query.value.trim() !== ``);
+const searching = computed(() => search?.searching.value === true);
+const entryAt = (path: string): WorkspaceTreeEntry | undefined =>
+    entriesByPath.value.get(path) ?? lazyChildren.value.get(parentDir(path))?.find((entry) => entry.path === path);
+const childrenOfEntry = (folder: WorkspaceTreeEntry): readonly WorkspaceTreeEntry[] | undefined => folder.children ?? lazyChildren.value.get(folder.path);
+const results = computed(() => {
+    if (search === undefined || !querying.value) {
+        return [];
+    }
+    return search.contentMode.value
+        ? contentMatches(
+              search.groups.value.map((group) => group.path),
+              deskDir.value,
+              entryAt,
+          )
+        : nameMatches(query.value, deskDir.value, children.value ?? [], childrenOfEntry, shows);
+});
+// The folder each result sits in, for the line under its name; "" (the open folder itself) draws nothing.
+const whereByPath = computed(() => new Map(results.value.map((result) => [result.entry.path, result.where])));
+const clearQuery = (): void => {
+    search?.clear();
+    scroller.value?.focus({ preventScroll: true });
+};
+const placeholder = computed(() => (search?.scope.value === `text` ? `Search text` : search?.scope.value === `smart` ? `Smart search` : `Filter names`));
+const queryField = ref<HTMLInputElement>();
+// The field owns its keys; Escape hands the desk back, Enter lands on the first result so the next Enter opens it.
+const onFieldKey = (event: KeyboardEvent): void => {
+    if (event.key === `Escape`) {
+        clearQuery();
+        return;
+    }
+    if (event.key === `Enter`) {
+        const first = order.value[0];
+        if (first !== undefined) {
+            select(first.path);
+            tileEl(first.path)?.focus({ preventScroll: true });
+        }
+    }
+};
+
+// The tiles: the query's results, or the open folder's entries as the explorer's switches leave them.
+const listed = computed<readonly WorkspaceTreeEntry[]>(() =>
+    querying.value ? results.value.map((result) => result.entry) : withProvisionalEntries(deskDir.value, children.value ?? []).filter(shows),
+);
+const groups = computed(() => deskGroups(listed.value));
 const order = computed(() => deskOrder(groups.value));
 const showLabels = computed(() => labelsShown(groups.value));
 // Two quiet lines under the tiles, each only when it has a number to say.
@@ -96,11 +154,12 @@ const {
     cancelDelete,
     onCopyEvent,
     onPasteEvent,
+    dragging,
     dragPaths,
+    over,
     dropDir,
-    dropOffer,
-    onDragStart,
-    onDragEnd,
+    onPointerDown,
+    consumeSuppressedClick,
     onDragOver,
     onDragLeave,
     onDrop,
@@ -139,7 +198,13 @@ const go = (dir: string, toward: "forward" | "back"): void => {
     closePeek();
     cancelRename();
     cancelCreate();
-    selected.value = undefined;
+    // A query is about the folder it was typed in; going somewhere else starts fresh.
+    if (querying.value) {
+        search?.clear();
+    }
+    // The folder entered is the current entry: the tree marks and reveals it; nothing here is marked, since the desk
+    // is now inside it.
+    selected.value = dir === workspaceDir.value ? undefined : dir;
     direction.value = toward;
     openDir(dir);
     // The tile that had the keyboard is about to unmount; the desk itself keeps it, so the next key still lands here.
@@ -177,9 +242,20 @@ watch([children, () => tree.value.length], () => {
 
 // --- Tiles ---------------------------------------------------------------------------------------------------------
 const dimmed = (entry: WorkspaceTreeEntry): boolean => entry.ignored === true || entry.link?.state !== undefined;
-const tabindexOf = (entry: WorkspaceTreeEntry): number => (selected.value === undefined ? (entry === order.value[0] ? 0 : -1) : selected.value === entry.path ? 0 : -1);
+// The tab stop: the marked tile, else the first, so Tab always enters somewhere.
+const tabindexOf = (entry: WorkspaceTreeEntry): number => (selectedEntry.value === undefined ? (entry === order.value[0] ? 0 : -1) : selected.value === entry.path ? 0 : -1);
 // A folder takes a drop itself; a file stands in for the folder holding it, as with paste.
 const dropDirOf = (entry: WorkspaceTreeEntry): string => (entry.type === `dir` && entry.link?.state === undefined ? entry.path : deskDir.value);
+// What a tile offers a move: that folder, unless the sandbox keeps it private.
+const dropTargetOf = (entry: WorkspaceTreeEntry): string | undefined => (locked(dropDirOf(entry)) ? undefined : dropDirOf(entry));
+// A tile lights as a target for a move (useEntryDrag) or for OS files (dropDir); a file tile never does, its folder is the desk.
+const targeted = (entry: WorkspaceTreeEntry): boolean => entry.type === `dir` && (dropDir.value === entry.path || over.value === entry.path);
+// The release that ended a drag lands as a click on the tile it started on; it was a drop, not a pick.
+const onTileSelect = (entry: WorkspaceTreeEntry, event: MouseEvent): void => {
+    if (!consumeSuppressedClick()) {
+        select(entry.path, event);
+    }
+};
 
 const open = (entry: WorkspaceTreeEntry): void => {
     closePeek();
@@ -238,7 +314,7 @@ const closePeek = (): void => {
 const onTileEnter = (entry: WorkspaceTreeEntry, el: HTMLElement): void => {
     clearTimers();
     // Nothing to look into: the padlock and the placeholder say all there is; a drag or a rename is not a look.
-    if (locked(entry.path) || pending(entry.path) || dragPaths.value.length > 0 || editing.value) {
+    if (locked(entry.path) || pending(entry.path) || dragging.value || editing.value) {
         closePeek();
         return;
     }
@@ -280,29 +356,44 @@ const moveSelection = (key: Parameters<typeof moveInGrid>[2]): void => {
     el.scrollIntoView({ block: `nearest` });
     onTileEnter(next, el);
 };
-const onKeydown = (event: KeyboardEvent): void => {
-    // The verbs first (Delete, F2, select all); while a name is being typed, every key is the field's.
-    if (handleKey(event)) {
-        return;
-    }
+// Keys that leave the folder, drop the selection or open the tile; false for any other key.
+const onNavigationKey = (event: KeyboardEvent): boolean => {
     if (event.key === `Backspace` || (event.altKey && event.key === `ArrowLeft`)) {
         event.preventDefault();
         up();
-        return;
+        return true;
     }
     if (event.key === `Escape`) {
         clear();
         closePeek();
-        return;
+        return true;
     }
-    if (event.key === `Enter` && selectedEntry.value !== undefined) {
-        event.preventDefault();
-        open(selectedEntry.value);
+    if (event.key === `Enter`) {
+        if (selectedEntry.value !== undefined) {
+            event.preventDefault();
+            open(selectedEntry.value);
+        }
+        return true;
+    }
+    return false;
+};
+// A printable key with no chord held is typing, and on a file browser typing is filtering.
+const typesIntoFilter = (event: KeyboardEvent): boolean =>
+    event.key.length === 1 && !event.ctrlKey && !event.metaKey && !event.altKey && search !== undefined;
+const onKeydown = (event: KeyboardEvent): void => {
+    // The verbs first (Delete, F2, select all); while a name is being typed, every key is the field's.
+    if (handleKey(event) || onNavigationKey(event)) {
         return;
     }
     if (isGridKey(event.key)) {
         event.preventDefault();
         moveSelection(event.key);
+        return;
+    }
+    if (typesIntoFilter(event)) {
+        event.preventDefault();
+        query.value += event.key;
+        queryField.value?.focus();
     }
 };
 const onTile = (event: Event): boolean => event.target instanceof Element && event.target.closest(`[data-desk-tile]`) !== null;
@@ -337,6 +428,7 @@ const onBackgroundMenu = (event: MouseEvent): void => {
         @copy="onCopyEvent($event, 'copy')"
         @cut="onCopyEvent($event, 'cut')"
         @paste="onPasteEvent"
+        :data-drop-dir="deskDir"
         @dragenter.stop.prevent
         @dragover="onDragOver($event, deskDir)"
         @dragleave="onDragLeave($event, deskDir)"
@@ -352,7 +444,8 @@ const onBackgroundMenu = (event: MouseEvent): void => {
                     v-else
                     type="button"
                     class="-mx-1 rounded px-1 text-muted transition-colors hover:text-content"
-                    :class="{ 'ui-row-select-drop': dropDir === crumb.path }"
+                    :class="{ 'ui-row-select-drop': dropDir === crumb.path || over === crumb.path }"
+                    :data-drop-dir="crumb.path"
                     @click="go(crumb.path, 'back')"
                     @dragover="onDragOver($event, crumb.path)"
                     @dragleave="onDragLeave($event, crumb.path)"
@@ -361,6 +454,40 @@ const onBackgroundMenu = (event: MouseEvent): void => {
                     {{ crumb.label }}
                 </button>
             </template>
+            <!-- The sidebar's query, here too; the placeholder names the scope the sidebar set, since it may be closed. -->
+            <div v-if="search !== undefined" class="ml-auto flex items-center gap-2 pl-4">
+                <span v-if="querying && !searching" class="text-2xs tabular-nums text-subtle"
+                    >{{ results.length.toLocaleString() }}{{ results.length >= RESULTS_CAP ? "+" : "" }}</span
+                >
+                <div class="relative">
+                    <Icon
+                        class="pointer-events-none absolute top-1/2 left-2 -translate-y-1/2 text-2xs text-subtle"
+                        aria-hidden="true"
+                        :name="searching ? `spinner` : `search`"
+                        :spin="searching"
+                    />
+                    <input
+                        ref="queryField"
+                        v-model="query"
+                        type="text"
+                        :placeholder="placeholder"
+                        :aria-label="placeholder"
+                        class="ui-field-box ui-field-sm w-44 min-w-0 pr-6 pl-7"
+                        @keydown.stop="onFieldKey"
+                        @click.stop
+                        @contextmenu.stop
+                    />
+                    <button
+                        v-if="query"
+                        type="button"
+                        class="absolute top-1/2 right-1.5 flex -translate-y-1/2 items-center rounded text-2xs text-subtle transition-colors hover:text-content"
+                        aria-label="Clear filter"
+                        @click.stop="clearQuery"
+                    >
+                        <Icon name="times" />
+                    </button>
+                </div>
+            </div>
         </nav>
 
         <!-- Keyed on the folder: a change slides the old tiles out and the new ones in, a step in the direction travelled. -->
@@ -403,7 +530,9 @@ const onBackgroundMenu = (event: MouseEvent): void => {
                             <p v-if="createError !== undefined" class="text-center text-2xs text-danger">{{ createError }}</p>
                         </div>
                     </div>
-                    <p v-if="order.length === 0 && !loading && creating === undefined" class="py-12 text-center text-xs text-subtle">Nothing here.</p>
+                    <p v-if="order.length === 0 && !loading && !searching && creating === undefined" class="py-12 text-center text-xs text-subtle">
+                        {{ querying ? `Nothing matches "${query.trim()}" in ${here}.` : `Nothing here.` }}
+                    </p>
                     <section v-for="group in groups" :key="group.key">
                         <!-- Named only when there is a second kind to tell apart; a folder of one kind reads without a label. -->
                         <h3 v-if="showLabels" class="px-2 pt-3 pb-1 text-2xs text-muted">
@@ -415,24 +544,24 @@ const onBackgroundMenu = (event: MouseEvent): void => {
                                 :key="entry.path"
                                 v-model:draft="renameDraft"
                                 :entry="entry"
+                                :where="whereByPath.get(entry.path) || undefined"
                                 :selected="marked.has(entry.path)"
                                 :locked="locked(entry.path)"
                                 :pending="pending(entry.path)"
                                 :dimmed="dimmed(entry)"
                                 :tabindex="tabindexOf(entry)"
                                 :renaming="renaming === entry.path"
-                                :drop-target="entry.type === 'dir' && dropDir === entry.path"
-                                :dragging="dragPaths.includes(entry.path)"
-                                :draggable="!locked(entry.path) && !pending(entry.path)"
-                                @select="(event) => select(entry.path, event)"
+                                :drop-dir="dropTargetOf(entry)"
+                                :drop-target="targeted(entry)"
+                                :dragging="dragging && dragPaths.includes(entry.path)"
+                                @select="(event) => onTileSelect(entry, event)"
                                 @open="open(entry)"
                                 @enter="(el) => onTileEnter(entry, el)"
                                 @leave="onTileLeave"
                                 @contextmenu="(event) => openMenu(event, entry)"
                                 @commit="commitRename"
                                 @cancel="cancelRename"
-                                @dragstart="(event) => onDragStart(event, entry)"
-                                @dragend="onDragEnd"
+                                @pointerdown="(event) => onPointerDown(event, entry)"
                                 @dragover="(event) => onDragOver(event, dropDirOf(entry))"
                                 @dragleave="(event) => onDragLeave(event, dropDirOf(entry))"
                                 @drop="(event) => onDrop(event, dropDirOf(entry))"
@@ -440,23 +569,23 @@ const onBackgroundMenu = (event: MouseEvent): void => {
                         </div>
                     </section>
                 </template>
-                <p v-if="hiddenTooling > 0" class="px-2 pt-4 text-2xs text-subtle">
+                <p v-if="hiddenTooling > 0 && !querying" class="px-2 pt-4 text-2xs text-subtle">
                     {{ hiddenTooling.toLocaleString() }} tooling {{ hiddenTooling === 1 ? "file" : "files" }} hidden
                 </p>
-                <p v-if="hiddenByCap > 0" class="px-2 pt-4 text-2xs text-subtle">
+                <p v-if="hiddenByCap > 0 && !querying" class="px-2 pt-4 text-2xs text-subtle">
                     {{ hiddenByCap.toLocaleString() }} more {{ hiddenByCap === 1 ? "entry" : "entries" }} in this folder, search to reach them
                 </p>
             </div>
         </Transition>
 
-        <!-- A drop on the desk itself lands in the open folder; the ring says so while a drag is over it and no tile has it. -->
+        <!-- A drop on the desk itself lands in the open folder; the pill says so while a drag is over it and no tile has it. -->
         <div
-            v-if="dropDir === deskDir"
+            v-if="dropDir === deskDir || (dragging && over === deskDir)"
             class="pointer-events-none sticky inset-x-0 bottom-0 z-10 flex justify-center pb-3"
             aria-hidden="true"
         >
             <span class="rounded-full border border-primary-500/60 bg-canvas/90 px-3 py-1 text-2xs font-medium text-primary-500 backdrop-blur">
-                {{ dropOffer === 'move' ? `Move into ${here}` : `Drop to add to ${here}` }}
+                {{ dragging ? `Move into ${here}` : `Drop to add to ${here}` }}
             </span>
         </div>
 

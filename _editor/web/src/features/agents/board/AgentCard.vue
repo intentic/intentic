@@ -379,7 +379,8 @@ const reviewCard = (): void => {
 const HOVER_ACTION = `touch-target flex h-5 w-5 shrink-0 items-center justify-center rounded text-muted transition-opacity hover:bg-content/10 hover:text-content`;
 
 // Starts the drag only when the press begins on the card body; the rename pencil and its input run their own pointer
-// gestures.
+// gestures. The card moves by pointer and nothing native may start inside it (`@dragstart.prevent` on the root): a
+// native drag of one of its selectable spans freezes the tab in Brave (brave/brave-browser#57753).
 const grab = (event: PointerEvent): void => {
     // Primary button only: a right-press opens the card's menu, and dragging should not also start under it.
     if (event.button !== 0) {
@@ -415,6 +416,7 @@ const grab = (event: PointerEvent): void => {
             pending !== undefined ? 'pointer-events-none opacity-60' : '',
         ]"
         @pointerdown="grab"
+        @dragstart.prevent
         @click="openCard"
         @dblclick="reviewCard"
         @keydown.enter.self.prevent="openCard()"

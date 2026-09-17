@@ -9,6 +9,7 @@ import type { OpenMode } from "../tabs/workspaceTabs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { type App, createApp, h, nextTick, ref } from "vue";
 import { IconStub } from "@intentic/ui/testing";
+import { useEntryDrag } from "./transfer/useEntryDrag";
 
 // jsdom implements no scrollIntoView; spied rather than stubbed so calls can be inspected.
 const scrolled = vi.hoisted(() => {
@@ -590,19 +591,30 @@ describe(`where a drop on a row lands`, () => {
     ];
     const rowNamed = (el: HTMLElement, name: string): HTMLElement =>
         [...el.querySelectorAll(`[role="treeitem"]`)].find((row) => row.textContent?.trim() === name) as HTMLElement;
-    // jsdom has neither DragEvent nor DataTransfer; the stub carries just types and getData. Tests an
-    // internal row move since it lands as a readable daemon call.
-    const dropOn = async (row: HTMLElement, dragged: string, types: string[] = [`application/x-intentic-path`]): Promise<void> => {
-        const event = new Event(`drop`, { bubbles: true, cancelable: true });
-        Object.defineProperty(event, `dataTransfer`, {
-            value: { types, getData: (type: string): string => (type === `application/x-intentic-path` ? dragged : ``) },
-        });
-        row.dispatchEvent(event);
-        // Drains two microtask ticks to settle both a move and a no-op silently, not as a slow call.
+    // Drains two microtask ticks to settle both a move and a no-op silently, not as a slow call.
+    const settleMove = async (): Promise<void> => {
         for (let tick = 0; tick < 2; tick += 1) {
             await new Promise((resolve) => setTimeout(resolve, 0));
             await nextTick();
         }
+    };
+    // Rows move by pointer (useEntryDrag): a press, travel past the threshold, a release. jsdom lays nothing out, so
+    // the element the drag ends over is named outright.
+    const dragOnto = async (source: HTMLElement, target: HTMLElement): Promise<void> => {
+        document.elementFromPoint = () => target;
+        source.dispatchEvent(new MouseEvent(`pointerdown`, { bubbles: true, button: 0, clientX: 10, clientY: 10 }));
+        window.dispatchEvent(new MouseEvent(`pointermove`, { bubbles: true, cancelable: true, clientX: 40, clientY: 40 }));
+        window.dispatchEvent(new MouseEvent(`pointermove`, { bubbles: true, cancelable: true, clientX: 60, clientY: 60 }));
+        window.dispatchEvent(new MouseEvent(`pointerup`, { bubbles: true, clientX: 60, clientY: 60 }));
+        await settleMove();
+    };
+    // An OS drag, the one the rows still read natively; jsdom has neither DragEvent nor DataTransfer, so the stub
+    // carries just its types.
+    const dropOn = async (row: HTMLElement, types: string[]): Promise<void> => {
+        const event = new Event(`drop`, { bubbles: true, cancelable: true });
+        Object.defineProperty(event, `dataTransfer`, { value: { types, getData: (): string => `` } });
+        row.dispatchEvent(event);
+        await settleMove();
     };
     const moves = (): unknown[] => daemon.calls.filter((call) => call.path === `/workspace/move`).map((call) => JSON.parse(String(call.init?.body)));
 
@@ -614,7 +626,7 @@ describe(`where a drop on a row lands`, () => {
         restoreFrom([`src`, `src/api`]);
         const el = await mount({ tree: DROP_TREE });
 
-        await dropOn(rowNamed(el, `routes.ts`), `README.md`);
+        await dragOnto(rowNamed(el, `README.md`), rowNamed(el, `routes.ts`));
 
         expect(moves()).toEqual([{ from: `README.md`, to: `src/api/README.md` }]);
     });
@@ -623,7 +635,7 @@ describe(`where a drop on a row lands`, () => {
         restoreFrom([`src`]);
         const el = await mount({ tree: DROP_TREE });
 
-        await dropOn(rowNamed(el, `api`), `README.md`);
+        await dragOnto(rowNamed(el, `README.md`), rowNamed(el, `api`));
 
         expect(moves()).toEqual([{ from: `README.md`, to: `src/api/README.md` }]);
     });
@@ -632,17 +644,29 @@ describe(`where a drop on a row lands`, () => {
         restoreFrom([`src`]);
         const el = await mount({ tree: DROP_TREE });
 
-        await dropOn(rowNamed(el, `util.ts`), `src/main.ts`);
+        await dragOnto(rowNamed(el, `main.ts`), rowNamed(el, `util.ts`));
 
         expect(moves()).toEqual([]);
     });
 
-    // Browsers make images and links drag sources too; rows must refuse types other than the internal one.
-    it(`refuses a drag carrying neither files nor rows`, async () => {
+    // A release that ended a drag is not a click: the row it started on must not open or reselect from it.
+    it(`does not treat the release that ended a drag as a click on the row`, async () => {
+        restoreFrom([`src`, `src/api`]);
+        const el = await mount({ tree: DROP_TREE });
+        const source = rowNamed(el, `README.md`);
+
+        await dragOnto(source, rowNamed(el, `routes.ts`));
+        source.dispatchEvent(new MouseEvent(`click`, { bubbles: true }));
+
+        expect(daemon.calls.filter((call) => call.path.startsWith(`/workspace/file`))).toEqual([]);
+    });
+
+    // Browsers make images and links drag sources too; rows read only a drag of OS files natively.
+    it(`refuses a native drag carrying no files`, async () => {
         restoreFrom([`src`]);
         const el = await mount({ tree: DROP_TREE });
 
-        await dropOn(rowNamed(el, `util.ts`), ``, [`text/uri-list`]);
+        await dropOn(rowNamed(el, `util.ts`), [`text/uri-list`]);
 
         expect(daemon.calls).toEqual([]);
     });
@@ -666,7 +690,11 @@ describe(`files still arriving`, () => {
         expect(rows(el)).toEqual([`src`, `api`, `main.ts`, `notes.md`, `README.md`]);
         const row = rowNamed(el, `notes.md`);
         expect(row.className).toContain(`ui-row-select-arriving`);
-        expect(row.getAttribute(`draggable`)).toBe(`false`);
+        // A placeholder has nothing on disk to move: a press-and-drag on it starts no drag.
+        row.dispatchEvent(new MouseEvent(`pointerdown`, { bubbles: true, button: 0, clientX: 10, clientY: 10 }));
+        window.dispatchEvent(new MouseEvent(`pointermove`, { bubbles: true, cancelable: true, clientX: 60, clientY: 60 }));
+        expect(useEntryDrag().dragging.value).toBe(false);
+        window.dispatchEvent(new MouseEvent(`pointerup`, { bubbles: true }));
         expect(row.querySelector(`[data-icon="spinner"]`)).not.toBeNull();
     });
 

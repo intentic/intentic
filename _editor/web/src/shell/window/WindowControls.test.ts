@@ -5,8 +5,9 @@
 // pending when its bars land; the measurement has to follow the document instead. Frames are pumped by hand here,
 // and the assertions that matter are the ones made without pumping one.
 import { IconStub } from "@intentic/ui/testing";
-import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { type App, createApp } from "vue";
+import { workDesktopWindow } from "../../app/environments/desktop";
 import WindowControls from "./WindowControls.vue";
 
 // Partial, over the real module: the component reaches for whatever the desktop lane grows next, and a mock listing
@@ -126,4 +127,70 @@ it(`draws the window's three buttons and marks the document frameless for as lon
     app = undefined;
 
     expect(document.documentElement.hasAttribute(`data-frameless`)).toBe(false);
+});
+
+/* THE PRESS THAT MOVES THE WINDOW. The move loop the platform starts is asynchronous and cannot be told the button
+   is already up, so the page asks for it only once the press has travelled with the button held, and never once the
+   page itself has started a drag. A click on the background, or a drag a surface took over, used to leave the window
+   glued to the pointer. */
+describe(`a press on the background`, () => {
+    const verb = vi.mocked(workDesktopWindow);
+    let ground: HTMLElement;
+
+    // Below the title band (the buttons are 36 high), on a plain element: nothing claims it, so it is the window's.
+    const press = (x: number, y: number, detail = 1): void => {
+        ground.dispatchEvent(new MouseEvent(`mousedown`, { bubbles: true, button: 0, clientX: x, clientY: y, detail }));
+    };
+    const travel = (x: number, y: number, buttons = 1): void => {
+        window.dispatchEvent(new MouseEvent(`pointermove`, { bubbles: true, buttons, clientX: x, clientY: y }));
+    };
+
+    beforeEach(() => {
+        // jsdom lays nothing out: an element wide enough that no press lands on its scrollbar edge.
+        vi.spyOn(HTMLElement.prototype, `clientWidth`, `get`).mockReturnValue(1280);
+        vi.spyOn(HTMLElement.prototype, `clientHeight`, `get`).mockReturnValue(800);
+        ground = document.createElement(`div`);
+        document.body.append(ground);
+        mountControls();
+        verb.mockClear();
+    });
+
+    it(`asks for the window only once the press has travelled with the button down`, () => {
+        press(600, 300);
+        expect(verb).not.toHaveBeenCalled();
+        travel(602, 301);
+        expect(verb, `a shaky click is not a drag`).not.toHaveBeenCalled();
+        travel(612, 300);
+        expect(verb).toHaveBeenCalledWith(`drag`);
+        expect(verb).toHaveBeenCalledTimes(1);
+        travel(640, 300);
+        expect(verb, `asked once per press`).toHaveBeenCalledTimes(1);
+    });
+
+    it(`never asks after the button came up`, () => {
+        press(600, 300);
+        window.dispatchEvent(new MouseEvent(`pointerup`, { bubbles: true, button: 0, clientX: 600, clientY: 300 }));
+        travel(640, 300);
+        expect(verb).not.toHaveBeenCalled();
+    });
+
+    it(`never asks while the button is no longer held, even if its release was never seen`, () => {
+        press(600, 300);
+        travel(640, 300, 0);
+        expect(verb).not.toHaveBeenCalled();
+        travel(680, 300);
+        expect(verb, `the press was let go when the button read up`).not.toHaveBeenCalled();
+    });
+
+    it(`never asks once the page started a drag of its own`, () => {
+        press(600, 300);
+        window.dispatchEvent(new Event(`dragstart`, { bubbles: true }));
+        travel(640, 300);
+        expect(verb).not.toHaveBeenCalled();
+    });
+
+    it(`still maximises on the second click in the band, on the press itself`, () => {
+        press(600, 10, 2);
+        expect(verb).toHaveBeenCalledWith(`maximize`);
+    });
 });

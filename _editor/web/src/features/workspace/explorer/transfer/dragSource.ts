@@ -1,6 +1,7 @@
-// Whose drag is this, and what does it offer: every drop target in the workspace answers the same way. An in-app image
-// or link drag is typed `Files` too, like an OS file drop, so `fromThisDocument` (set on dragstart, cleared on dragend
-// or pointerdown) tells them apart.
+// Whose drag is this: every drop target in the workspace answers the same way. The one drag the page reads is an OS
+// file drag, which begins outside the page; an in-app image or link drag is typed `Files` too, so `fromThisDocument`
+// (set on dragstart, cleared on dragend or pointerdown) tells them apart. Rows and tiles move by pointer instead
+// (useEntryDrag), never by the platform's own drag loop.
 
 let fromThisDocument = false;
 const markDragSource = (): void => {
@@ -10,13 +11,8 @@ const clearDragSource = (): void => {
     fromThisDocument = false;
 };
 
-// What a drag offers this surface: OS files, tree rows to move, or nothing usable (an in-app image/link), which
-// declines with no hint.
-export const dragOffer = (event: DragEvent): { files: boolean; rows: boolean } => {
-    const types = event.dataTransfer?.types;
-    // OS-file drags expose the "Files" type; an internal tree-row move exposes our custom path key instead.
-    return { files: !fromThisDocument && (types?.includes(`Files`) ?? false), rows: types?.includes(`application/x-intentic-path`) ?? false };
-};
+// Whether a drag offers this surface files from outside; an in-app image or link drag declines with no hint.
+export const filesOffered = (event: DragEvent): boolean => !fromThisDocument && (event.dataTransfer?.types.includes(`Files`) ?? false);
 
 // Keeps the mark honest while a workspace surface is mounted; returns the disposer. Capture phase, so stopPropagation
 // elsewhere can't hide a drag's start or end.

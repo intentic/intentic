@@ -95,15 +95,63 @@ const onArrivals = (records: MutationRecord[]): void => {
 
 /* --- The page as the handle ---------------------------------------------------------------------------------- */
 
+/* A PRESS ASKS FOR THE WINDOW ONLY ONCE IT HAS BECOME A DRAG: the primary button still down after a few pixels of
+   travel, with nothing on the page having taken the gesture in between (a `dragstart` is the page's own drag). Asking
+   on the press itself was a freeze: the platform's move loop starts a moment later and asynchronously (a navigation,
+   then `start_dragging` off the callback), and a press released before it began — a click on the background, a drag
+   the page took over — left the window glued to the pointer with no release to end it (tauri-apps/tauri#10767). */
+const DRAG_THRESHOLD_PX = 4;
+let armed: { readonly x: number; readonly y: number } | undefined;
+
+const disarm = (): void => {
+    if (armed === undefined) {
+        return;
+    }
+    armed = undefined;
+    window.removeEventListener(`pointermove`, onArmedMove, true);
+    window.removeEventListener(`pointerup`, disarm, true);
+    window.removeEventListener(`pointercancel`, disarm, true);
+    window.removeEventListener(`dragstart`, disarm, true);
+    window.removeEventListener(`blur`, disarm);
+};
+const onArmedMove = (event: PointerEvent): void => {
+    if (armed === undefined) {
+        return;
+    }
+    // The button is up and its release was never seen (the platform ate it): there is nothing to drag with.
+    if ((event.buttons & 1) === 0) {
+        disarm();
+        return;
+    }
+    if (Math.hypot(event.clientX - armed.x, event.clientY - armed.y) < DRAG_THRESHOLD_PX) {
+        return;
+    }
+    disarm();
+    workDesktopWindow(`drag`);
+};
+const arm = (x: number, y: number): void => {
+    disarm();
+    armed = { x, y };
+    // Capture, so a surface that stops its own pointer events can neither hide the travel nor the release.
+    window.addEventListener(`pointermove`, onArmedMove, true);
+    window.addEventListener(`pointerup`, disarm, true);
+    window.addEventListener(`pointercancel`, disarm, true);
+    window.addEventListener(`dragstart`, disarm, true);
+    window.addEventListener(`blur`, disarm);
+};
+
 const onPress = (event: MouseEvent): void => {
     // The primary button only: a right-press anywhere is that place's own context menu.
     if (event.button !== 0) {
         return;
     }
     const gesture = windowGesture(pressOf(event), domLayout(cornerOf().bottom));
-    if (gesture !== undefined) {
-        // The gesture IS the verb: both names are the app's own (environments/desktop.ts `DesktopWindowVerb`).
-        workDesktopWindow(gesture);
+    // A maximise is a click, answered on the press; a drag is answered once it is one (the names are the app's own,
+    // environments/desktop.ts `DesktopWindowVerb`).
+    if (gesture === `maximize`) {
+        workDesktopWindow(`maximize`);
+    } else if (gesture === `drag`) {
+        arm(event.clientX, event.clientY);
     }
 };
 
@@ -145,6 +193,7 @@ onUnmounted(() => {
         return;
     }
     document.documentElement.removeAttribute(`data-frameless`);
+    disarm();
     observer?.disconnect();
     observer = undefined;
     watched.clear();

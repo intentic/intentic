@@ -8,7 +8,8 @@ import { useNotifications } from "../../../shell/notifications/notifications";
 import { entryMenuItems } from "../explorer/entryMenu";
 import { deletedReceipt, deleteHeader, joinPath, newNameError } from "../explorer/entryNames";
 import type { RowAction } from "../explorer/rowActions";
-import { dragOffer } from "../explorer/transfer/dragSource";
+import { filesOffered } from "../explorer/transfer/dragSource";
+import { useEntryDrag } from "../explorer/transfer/useEntryDrag";
 import { filesToEntries } from "../explorer/transfer/dropEntries";
 import { movableInto, pastePairs } from "../explorer/transfer/explorerPaste";
 import { selectRange } from "../explorer/treeSelect";
@@ -81,10 +82,12 @@ export function useDeskActions(ctx: DeskActionsContext) {
     };
 
     // ---- selection: a set, with the shared lead as its cursor and an anchor for Shift ranges ----
-    // Starts on the current entry: the desk mounts afresh each time it shows, and the tree already marks that one.
-    const marked = ref<ReadonlySet<string>>(new Set(ctx.lead.value === undefined ? [] : [ctx.lead.value]));
-    const anchor = ref<string | undefined>(ctx.lead.value);
     const paths = computed(() => ctx.order.value.map((entry) => entry.path));
+    // Starts on the current entry when it is a tile here: the desk mounts afresh each time it shows, and the tree
+    // already marks that one.
+    const lead = ctx.lead.value;
+    const marked = ref<ReadonlySet<string>>(new Set(lead !== undefined && paths.value.includes(lead) ? [lead] : []));
+    const anchor = ref<string | undefined>(lead);
 
     const select = (path: string, modifiers?: SelectModifiers): void => {
         if (modifiers?.shiftKey === true && anchor.value !== undefined) {
@@ -114,9 +117,11 @@ export function useDeskActions(ctx: DeskActionsContext) {
         anchor.value = undefined;
         ctx.lead.value = undefined;
     };
-    // A lead set elsewhere (the tree, a folder change) collapses the set to it; one toggled out of the set stays the lead.
+    // A lead set elsewhere (the tree, a folder change) collapses the set to it, or to nothing when the lead is not a
+    // tile here (the open folder itself, an entry of another folder): the verbs act on what can be seen, and only that.
+    // One toggled out of the set stays the lead.
     watch(ctx.lead, (path) => {
-        if (path === undefined) {
+        if (path === undefined || !paths.value.includes(path)) {
             marked.value = new Set();
         } else if (!marked.value.has(path)) {
             marked.value = new Set([path]);
@@ -343,50 +348,36 @@ export function useDeskActions(ctx: DeskActionsContext) {
         void paste();
     };
 
-    // ---- drag: tiles move into a folder tile, a crumb, or the open folder itself; OS files upload there ----
-    const dragPaths = ref<readonly string[]>([]);
-    // The folder a drag is over and may land in; undefined over nothing, or over a target it can't take.
-    const dropDir = ref<string | undefined>(undefined);
-    // What the drag carries: entries to move (from these tiles or the tree's rows), or files from outside to add.
-    const dropOffer = ref<"move" | "files">(`files`);
-    const canMoveInto = (source: string, dir: string): boolean => !(dir === parentDir(source) || dir === source || dir.startsWith(`${source}/`));
-    const invalidTarget = (dir: string): boolean => dragPaths.value.length > 0 && dragPaths.value.every((source) => !canMoveInto(source, dir));
-
-    const onDragStart = (event: DragEvent, entry: WorkspaceTreeEntry): void => {
-        if (event.dataTransfer === null) {
+    // ---- drag: tiles move by pointer (useEntryDrag) into a folder tile, a crumb, or the open folder itself; OS files
+    // arrive by the platform's own drag, the one drag read natively, since one the page starts freezes the tab in Brave.
+    const { dragging, paths: dragPaths, over, begin: beginEntryDrag, consumeSuppressedClick } = useEntryDrag();
+    const onPointerDown = (event: PointerEvent, entry: WorkspaceTreeEntry): void => {
+        // A modified press is a selection gesture, and a press on the name field is the field's.
+        if (event.shiftKey || event.ctrlKey || event.metaKey || event.altKey || renaming.value === entry.path) {
             return;
         }
         // Dragging a selected tile moves the whole selection; otherwise just that tile. Locked tiles never travel.
         const targets = unlockedOnly(marked.value.has(entry.path) ? [...marked.value] : [entry.path]);
         if (targets.length === 0) {
-            event.preventDefault();
             return;
         }
-        if (!marked.value.has(entry.path)) {
-            select(entry.path);
-        }
-        event.dataTransfer.setData(`application/x-intentic-path`, targets.join(`\n`));
-        event.dataTransfer.effectAllowed = `move`;
-        dragPaths.value = targets;
+        beginEntryDrag(event, { paths: targets, onDrop: (dir) => void run(() => moveIntoMany(targets, dir), `Couldn't move those items.`) });
     };
-    const onDragEnd = (): void => {
-        dragPaths.value = [];
-        dropDir.value = undefined;
-    };
+
+    // The folder an OS file drag is over; undefined over nothing, or over a folder the sandbox keeps private.
+    const dropDir = ref<string | undefined>(undefined);
     const onDragOver = (event: DragEvent, dir: string): void => {
-        const offer = dragOffer(event);
-        // Not a file or an internal row drag: left alone so the browser declines it.
-        if (!offer.files && !offer.rows) {
+        // Not OS files: left alone so the browser declines it.
+        if (!filesOffered(event)) {
             return;
         }
         // Stopped here: the page's own drop zone sits behind the desk and must not also claim this drag.
         event.preventDefault();
         event.stopPropagation();
-        const invalid = locked(dir) || invalidTarget(dir);
+        const invalid = locked(dir);
         if (event.dataTransfer !== null) {
-            event.dataTransfer.dropEffect = invalid ? `none` : offer.rows ? `move` : `copy`;
+            event.dataTransfer.dropEffect = invalid ? `none` : `copy`;
         }
-        dropOffer.value = offer.rows ? `move` : `files`;
         dropDir.value = invalid ? undefined : dir;
     };
     // `dragleave` also fires when the pointer crosses into a child; only a real exit clears the target.
@@ -400,8 +391,7 @@ export function useDeskActions(ctx: DeskActionsContext) {
         }
     };
     const onDrop = (event: DragEvent, dir: string): void => {
-        const offer = dragOffer(event);
-        if (event.dataTransfer === null || (!offer.files && !offer.rows)) {
+        if (event.dataTransfer === null || !filesOffered(event)) {
             return;
         }
         event.preventDefault();
@@ -410,23 +400,18 @@ export function useDeskActions(ctx: DeskActionsContext) {
         if (locked(dir) || refuseWrite()) {
             return;
         }
-        const dataTransfer = event.dataTransfer;
-        const internal = dataTransfer.getData(`application/x-intentic-path`);
-        if (internal !== ``) {
-            void run(() => moveIntoMany(internal.split(`\n`), dir), `Couldn't move those items.`);
-            return;
-        }
-        if (offer.files) {
-            // Synchronous: webkitGetAsEntry must fire while the drag's items are still alive.
-            enqueueFromDataTransfer(dir, dataTransfer);
-        }
+        // Synchronous: webkitGetAsEntry must fire while the drag's items are still alive.
+        enqueueFromDataTransfer(dir, event.dataTransfer);
     };
-    // A drag that ends anywhere (dropped elsewhere, cancelled) clears the hint; capture, so a stopped drop still counts.
-    window.addEventListener(`dragend`, onDragEnd, true);
-    window.addEventListener(`drop`, onDragEnd, true);
+    // A file drag that ends anywhere (dropped elsewhere, cancelled) clears the hint; capture, so a stopped drop still counts.
+    const clearDropDir = (): void => {
+        dropDir.value = undefined;
+    };
+    window.addEventListener(`dragend`, clearDropDir, true);
+    window.addEventListener(`drop`, clearDropDir, true);
     onScopeDispose(() => {
-        window.removeEventListener(`dragend`, onDragEnd, true);
-        window.removeEventListener(`drop`, onDragEnd, true);
+        window.removeEventListener(`dragend`, clearDropDir, true);
+        window.removeEventListener(`drop`, clearDropDir, true);
     });
 
     // ---- the menu (entryMenu.ts), acting on the whole selection when the right-clicked tile is part of it ----
@@ -498,8 +483,9 @@ export function useDeskActions(ctx: DeskActionsContext) {
     // ---- keys the verbs answer; the view keeps travel, Enter, Backspace and Escape ----
     // F2 renames the lead, and only when it stands alone: a rename over a selection would name one of several.
     const renameLead = (): void => {
-        if (ctx.lead.value !== undefined && marked.value.size <= 1) {
-            beginRename(ctx.lead.value);
+        const path = ctx.lead.value;
+        if (path !== undefined && marked.value.has(path) && marked.value.size === 1) {
+            beginRename(path);
         }
     };
     const KEY_VERBS: ReadonlyMap<string, () => void> = new Map([
@@ -544,11 +530,12 @@ export function useDeskActions(ctx: DeskActionsContext) {
         cancelDelete,
         onCopyEvent,
         onPasteEvent,
+        dragging,
         dragPaths,
+        over,
         dropDir,
-        dropOffer,
-        onDragStart,
-        onDragEnd,
+        onPointerDown,
+        consumeSuppressedClick,
         onDragOver,
         onDragLeave,
         onDrop,

@@ -39,8 +39,9 @@ import type { SearchScope } from "../search/useWorkspaceSearch";
 import { MATCH_TOGGLES } from "../search/useSearchOptions";
 import { useWorkspaceTabs } from "../tabs/useWorkspaceTabs";
 import { useWorkspaceTree } from "../explorer/useWorkspaceTree";
-import { DESK_DIR_ACTIONS, useDesk } from "../desk/useDesk";
-import { dragOffer, watchDragSource } from "../explorer/transfer/dragSource";
+import { DESK_DIR_ACTIONS, DESK_SEARCH, useDesk } from "../desk/useDesk";
+import { filesOffered, watchDragSource } from "../explorer/transfer/dragSource";
+import EntryDragGhost from "../explorer/transfer/EntryDragGhost.vue";
 import { filesToEntries } from "../explorer/transfer/dropEntries";
 import DirectoryChecks from "../directory-ui/DirectoryChecks.vue";
 import DirectoryPersonas from "../directory-ui/DirectoryPersonas.vue";
@@ -76,7 +77,6 @@ const {
     refetch,
     expanded,
     collapseAll,
-    moveIntoMany,
     run,
     busy,
     actionError,
@@ -180,7 +180,7 @@ useWorkspaceRoute();
 const emptyWorkspace = computed(() => !isLoading.value && tree.value.length === 0);
 // The desk (features/workspace/desk): what is under the tabs while the preference is on. Showing it unsets the main
 // pane's active tab and closes nothing, so the strip is a click away from where it was.
-const { desk, deskDir, selected, pick } = useDesk();
+const { desk, selected, pick } = useDesk();
 const deskOffered = computed(() => desk.value && !emptyWorkspace.value);
 const deskCovered = computed(() => deskOffered.value && strip.value.main.active !== null);
 const showDesk = (): void => deselect(`main`);
@@ -333,17 +333,15 @@ watch(
     },
     { immediate: true },
 );
-// What the tree marks and reveals: the current entry, failing that the folder the desk is in (nothing at the root).
-const treeMark = computed(() => selected.value ?? (deskDir.value === workspaceDir.value ? undefined : deskDir.value));
+// The desk's search is the sidebar's: one query, each view answering it in its own scope (DeskView).
+provide(DESK_SEARCH, { filter, scope: searchScope, contentMode, groups: searchGroups, searching, clear: clearFilter });
 // Presence: announces the open file; component-scoped since it stops existing when this view unmounts.
 watch(openPath, (path) => reportOpenPath(path), { immediate: true });
 onBeforeUnmount(() => reportOpenPath(undefined));
 
 const fileInput = ref<HTMLInputElement>();
-// Root drop zone highlight; an enter/leave depth stops bubbling over child rows from flickering it off.
+// Root drop zone highlight for OS files; an enter/leave depth stops bubbling over child rows from flickering it off.
 const rootDragging = ref(false);
-// True while the drag carries OS files (not an internal tree-row move); gates the viewer's drop overlay.
-const externalDrag = ref(false);
 let dragDepth = 0;
 // Whether a drag is an upload from this document; shared with tree rows so a row can't accept a rejected drop.
 let unwatchDragSource: (() => void) | undefined;
@@ -691,21 +689,18 @@ const WORKSPACE_COMMANDS: readonly Omit<CommandRegistration, `owner`>[] = [
 ];
 let workspaceCommandDisposables: readonly Disposable[] = [];
 
-// Root-level upload: drops on the explorer background or the browse button land at /work root; directories
-// recurse via collectDroppedFiles.
+// Root-level upload: OS files dropped on the explorer background or the browse button land at /work root; directories
+// recurse via collectDroppedFiles. Rows and tiles move by pointer (useEntryDrag), so no other drag is read here.
 const resetRootDrag = (): void => {
     dragDepth = 0;
     rootDragging.value = false;
-    externalDrag.value = false;
 };
 const onRootDragEnter = (event: DragEvent): void => {
-    const offer = dragOffer(event);
-    if (!offer.files && !offer.rows) {
+    if (!filesOffered(event)) {
         return;
     }
     dragDepth += 1;
     rootDragging.value = true;
-    externalDrag.value = offer.files;
 };
 const onRootDragLeave = (): void => {
     dragDepth -= 1;
@@ -714,23 +709,13 @@ const onRootDragLeave = (): void => {
     }
 };
 const onRootDrop = (event: DragEvent): void => {
-    const offer = dragOffer(event);
+    const files = filesOffered(event);
     resetRootDrag();
     // A read-only member sees the tier immediately, not a refusal after the files are dropped.
-    if (event.dataTransfer === null || refuseWrite()) {
+    if (event.dataTransfer === null || !files || refuseWrite()) {
         return;
     }
     const dataTransfer = event.dataTransfer;
-    // An internal tree-row drag moves rows to the tree's own root; OS files upload there too; a drag from this document
-    // is neither.
-    const internal = dataTransfer.getData(`application/x-intentic-path`);
-    if (internal !== ``) {
-        void run(() => moveIntoMany(internal.split(`\n`), workspaceDir.value), `Couldn't move those files.`);
-        return;
-    }
-    if (!offer.files) {
-        return;
-    }
     // Lands in the folder the explorer is rooted at, like the row move above: with a project open, the workspace root
     // isn't on screen, so files dropped there would vanish from the view that took the drop.
     // Runs the capture synchronously (webkitGetAsEntry needs the drop's items alive) and shows scanning instantly.
@@ -996,12 +981,13 @@ const deskTooltip = computed(() => tooltipWithChord(`Show desk · your tabs stay
                         :root-hidden="scopedRootHidden"
                         :barren="scopedBarren"
                         :filter="filter"
-                        :selected-path="treeMark"
+                        :selected-path="selected"
                         :manageable-dirs="manageableDirs"
                         :row-actions="rowActions"
                         @open-file="openFile"
                         @open-directory="openDirectory"
                         @pick="(entry) => pick(entry.path, entry.type)"
+                        @clear="selected = undefined"
                     />
                 </div>
                 <!-- Root drop hint over the whole panel; files mode only, since review/history aren't drop targets. -->
@@ -1104,9 +1090,9 @@ const deskTooltip = computed(() => tooltipWithChord(`Show desk · your tabs stay
                 >
                     <EditorPane pane="side" @select="selectTab" @keep="keepTab" @close="closeTab" @contextmenu="openTabMenu" />
                 </div>
-                <!-- Drop-to-root hint for external drags only; an internal move uses row rings instead of this. -->
+                <!-- Drop-to-root hint for OS files; a row or tile on the move lights the folder it is over instead. -->
                 <div
-                    v-if="rootDragging && externalDrag && canEditFiles"
+                    v-if="rootDragging && canEditFiles"
                     class="pointer-events-none absolute inset-2 z-10 flex flex-col items-center justify-center gap-2 rounded-sm border-2 border-dashed border-primary-500/60 bg-primary-500/6 text-primary-500"
                 >
                     <Icon name="upload" class="text-2xl" />
@@ -1139,6 +1125,8 @@ const deskTooltip = computed(() => tooltipWithChord(`Show desk · your tabs stay
         <!-- Opened by a directory row's person icon: who works there, and how to add one. Mounted here, not the tree. -->
         <DirectoryPersonas v-model="personaDir" />
         <DirectoryChecks v-model="checksDir" />
+        <!-- The pill a row or tile becomes while the pointer carries it, over either surface. -->
+        <EntryDragGhost />
     </div>
 </template>
 

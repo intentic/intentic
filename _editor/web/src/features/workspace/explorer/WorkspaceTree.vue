@@ -28,7 +28,8 @@ import PresenceAvatars from "../../../shell/presence/PresenceAvatars.vue";
 import { useNotifications } from "../../../shell/notifications/notifications";
 import { specialChip } from "./specialPaths";
 import { useVocabulary } from "../../../core-views/vocabulary";
-import { dragOffer } from "./transfer/dragSource";
+import { filesOffered } from "./transfer/dragSource";
+import { useEntryDrag } from "./transfer/useEntryDrag";
 import { filesToEntries } from "./transfer/dropEntries";
 import { type ExplorerFilters, explorerShows, technicalHidden } from "./explorerFilter";
 import { movableInto, pastePairs } from "./transfer/explorerPaste";
@@ -90,7 +91,7 @@ const {
 }>();
 // `openFile` carries the gesture via `mode`: a click previews into one slot, a double-click keeps the tab. `pick` is
 // the plain click or Enter itself, whatever it opens: the desk follows it (useDesk), so both views mark one entry.
-const emit = defineEmits<{ openFile: [path: string, mode: OpenMode]; openDirectory: [path: string]; pick: [entry: WorkspaceTreeEntry] }>();
+const emit = defineEmits<{ openFile: [path: string, mode: OpenMode]; openDirectory: [path: string]; pick: [entry: WorkspaceTreeEntry]; clear: [] }>();
 
 const {
     createFile,
@@ -137,9 +138,8 @@ const creating = ref<{ dir: string; type: "file" | "dir" } | undefined>(undefine
 const createDraft = ref(``);
 // Paths pending delete confirmation: also drives the confirm dialog's visibility.
 const confirmPaths = ref<readonly string[] | undefined>(undefined);
+// The folder an OS file drag is over; rows on the move light their target through useEntryDrag instead.
 const dragOverPath = ref<string | undefined>(undefined);
-// Paths dragged within the tree; dragover checks this since dataTransfer's payload isn't readable until drop.
-const dragPaths = ref<readonly string[]>([]);
 const menu = ref<{ show: (event: Event) => void } | undefined>(undefined);
 const menuEntry = ref<WorkspaceTreeEntry | undefined>(undefined);
 // Row elements by path (roving-tabindex focus): plain Map, kept in sync by the :ref callback on each button.
@@ -157,7 +157,6 @@ watch(
     },
 );
 
-const canMoveInto = (source: string, dir: string): boolean => !(dir === source || dir === parentDir(source) || dir.startsWith(`${source}/`));
 
 // Sandbox-private paths (isLockedWorkspacePath): no rename, delete, cut, copy, drag, or drop-into; a click opens an
 // explanation instead. Derived from the path, so children inherit it for free.
@@ -422,6 +421,13 @@ const focusLead = async (): Promise<void> => {
 const focusRow = (path: string): void => rowEls.get(path)?.focus();
 // A click below the rows parks focus on the container, so cut/copy/paste work right after clicking in.
 const claimFocus = (): void => treeEl.value?.focus();
+// That same click drops the selection, like clicking a desktop's wallpaper; the lead stays, so the keyboard picks up
+// where it was. `clear` lets the desk drop its own mark too, since both views mark one current entry.
+const onBackgroundClick = (): void => {
+    selection.value = new Set();
+    anchor.value = null;
+    emit(`clear`);
+};
 
 // ---- selection primitives ----
 const selectSingle = (path: string): void => {
@@ -460,6 +466,10 @@ const runAction = (entry: WorkspaceTreeEntry, action: RowAction): void => {
 };
 
 const onRowClick = (event: MouseEvent, row: Row): void => {
+    // The release that ended a drag lands here too; it was a drop, not a click.
+    if (consumeSuppressedClick()) {
+        return;
+    }
     const path = row.entry.path;
     focusRow(path);
     if (event.shiftKey && anchor.value !== null) {
@@ -907,46 +917,37 @@ const onKeydown = (event: KeyboardEvent): void => {
     // Ctrl/Cmd+X/C/V are absent here: they arrive as the clipboard events above instead.
 };
 
-// ---- drag: internal move (or multi-select) or OS-file upload; dropping into a folder's own subtree no-ops. ----
+// ---- drag: rows move by pointer (useEntryDrag), never by the platform's own drag loop, which in Brave freezes the tab
+// once the page starts one; OS files arrive by that loop and are the one drag these handlers still read. ----
 // A folder takes the drop itself; a file stands in for its parent, as with New File and paste.
 const dropDirOf = (row: Row): string => (row.entry.type === `dir` ? row.entry.path : parentDir(row.entry.path));
-const isInvalidMoveTarget = (dir: string): boolean => dragPaths.value.length > 0 && dragPaths.value.every((source) => !canMoveInto(source, dir));
-const onRowDragStart = (event: DragEvent, row: Row): void => {
-    if (event.dataTransfer === null) {
+// What a row offers a move: its folder, unless the sandbox keeps that folder private or the link leads nowhere.
+const dropTargetOf = (row: Row): string | undefined => (locked(dropDirOf(row)) || deadLink(row.entry) ? undefined : dropDirOf(row));
+const { dragging: rowDragging, paths: dragPaths, over: dragOver, begin: beginEntryDrag, consumeSuppressedClick } = useEntryDrag();
+const onRowPointerDown = (event: PointerEvent, row: Row): void => {
+    const path = row.entry.path;
+    // A modified press is a selection gesture, and a press on the name field is the field's.
+    if (event.shiftKey || event.ctrlKey || event.metaKey || event.altKey || renamingPath.value === path) {
         return;
     }
-    const path = row.entry.path;
     // Dragging a selected row moves the whole selection; otherwise just that row. Locked rows never travel.
     const paths = unlockedOnly(selection.value.has(path) ? [...selection.value] : [path]);
     if (paths.length === 0) {
-        event.preventDefault();
         return;
     }
-    if (!selection.value.has(path)) {
-        selection.value = new Set(paths);
-        anchor.value = path;
-        lead.value = path;
-    }
-    event.dataTransfer.setData(`application/x-intentic-path`, paths.join(`\n`));
-    event.dataTransfer.effectAllowed = `move`;
-    dragPaths.value = paths;
-};
-const onRowDragEnd = (): void => {
-    dragPaths.value = [];
-    dragOverPath.value = undefined;
+    beginEntryDrag(event, { paths, onDrop: (dir) => void run(() => moveIntoMany(paths, dir), `Couldn't move those items.`) });
 };
 const onRowDragOver = (event: DragEvent, row: Row): void => {
-    const offer = dragOffer(event);
-    // Not a file or an internal row drag: left alone so the browser declines it, as the background does.
-    if (!offer.files && !offer.rows) {
+    // Not OS files: left alone so the browser declines it, as the background does.
+    if (!filesOffered(event)) {
         return;
     }
     // preventDefault even on an invalid target so the drop lands here (a no-op) instead of bubbling to the root.
     event.preventDefault();
     const dir = dropDirOf(row);
-    const invalid = locked(dir) || isInvalidMoveTarget(dir);
+    const invalid = locked(dir);
     if (event.dataTransfer !== null) {
-        event.dataTransfer.dropEffect = invalid ? `none` : dragPaths.value.length > 0 ? `move` : `copy`;
+        event.dataTransfer.dropEffect = invalid ? `none` : `copy`;
     }
     // Highlights the destination folder, not the hovered row; a root-level file has none to highlight.
     dragOverPath.value = invalid || dir === `` ? undefined : dir;
@@ -957,26 +958,15 @@ const onRowDragLeave = (row: Row): void => {
     }
 };
 const onRowDrop = (event: DragEvent, row: Row): void => {
-    const offer = dragOffer(event);
-    if (event.dataTransfer === null || (!offer.files && !offer.rows)) {
+    if (event.dataTransfer === null || !filesOffered(event)) {
         return;
     }
     event.preventDefault();
     event.stopPropagation();
     const dir = dropDirOf(row);
+    dragOverPath.value = undefined;
     // Swallowed here so a refused drop can't bubble to the root and land files unexpectedly.
     if (locked(dir) || refuseWrite()) {
-        dragOverPath.value = undefined;
-        return;
-    }
-    dragOverPath.value = undefined;
-    const dataTransfer = event.dataTransfer;
-    const internal = dataTransfer.getData(`application/x-intentic-path`);
-    if (internal !== ``) {
-        void run(() => moveIntoMany(internal.split(`\n`), dir), `Couldn't move those items.`);
-        return;
-    }
-    if (!offer.files) {
         return;
     }
     // Opened before the files are read, so the placeholder rows appear inside the folder that took the drop rather than
@@ -985,7 +975,7 @@ const onRowDrop = (event: DragEvent, row: Row): void => {
         toggleExpand(dir);
     }
     // Runs synchronously, since webkitGetAsEntry must fire while the drag items are still alive.
-    enqueueFromDataTransfer(dir, dataTransfer);
+    enqueueFromDataTransfer(dir, event.dataTransfer);
 };
 
 // Text menu items for a row's hover-only action icons, unreachable by touch or keyboard otherwise. The one non-pointer
@@ -1055,8 +1045,10 @@ const openMenu = (event: MouseEvent, entry: WorkspaceTreeEntry | undefined): voi
             role="tree"
             aria-multiselectable="true"
             tabindex="-1"
+            :data-drop-dir="rootDir"
             @keydown="onKeydown"
             @mousedown.self="claimFocus"
+            @click.self="onBackgroundClick"
             @copy="onCopyEvent($event, 'copy')"
             @cut="onCopyEvent($event, 'cut')"
             @paste="onPasteEvent"
@@ -1102,14 +1094,15 @@ const openMenu = (event: MouseEvent, entry: WorkspaceTreeEntry | undefined): voi
                         :aria-selected="selection.has(row.entry.path)"
                         :aria-expanded="expandable(row) ? row.isExpanded : undefined"
                         :tabindex="tabbablePath === row.entry.path ? 0 : -1"
-                        :draggable="renamingPath !== row.entry.path && !locked(row.entry.path) && !pending(row.entry.path)"
+                        :data-drop-dir="dropTargetOf(row)"
                         class="ui-row-select group flex w-full items-center gap-1.5 py-0.5 pr-2 text-left text-[0.8125rem]"
                         :class="{
                             'ui-row-select-on': selection.has(row.entry.path),
                             'ui-row-select-pointed': row.entry.path === pointedBarren,
-                            'ui-row-select-drop': row.entry.path === dragOverPath,
+                            'ui-row-select-drop': row.entry.path === dragOverPath || (dragOver !== undefined && dragOver !== '' && row.entry.path === dragOver),
                             'ui-row-select-changed': isRecentlyChanged(row.entry.path),
                             'opacity-50': clipboard?.mode === 'cut' && clipboard.paths.includes(row.entry.path),
+                            'opacity-40': rowDragging && dragPaths.includes(row.entry.path),
                             'ui-row-select-arriving': pending(row.entry.path),
                         }"
                         v-tooltip.right="pendingTooltip(row.entry.path)"
@@ -1117,8 +1110,8 @@ const openMenu = (event: MouseEvent, entry: WorkspaceTreeEntry | undefined): voi
                         @click="onRowClick($event, row)"
                         @dblclick="onRowDblClick(row)"
                         @contextmenu.prevent.stop="openMenu($event, row.entry)"
-                        @dragstart="onRowDragStart($event, row)"
-                        @dragend="onRowDragEnd"
+                        @pointerdown="onRowPointerDown($event, row)"
+                        @dragstart.prevent
                         @dragover="onRowDragOver($event, row)"
                         @dragleave="onRowDragLeave(row)"
                         @drop="onRowDrop($event, row)"
