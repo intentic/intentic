@@ -3,7 +3,7 @@ import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { errorMessage } from "@intentic/base/errors";
 import { mintCertificate } from "./certs.js";
-import { createNetwork, IPS, isRunning, logsOf, removeContainer, removeNetwork, startContainer, sweepStrays } from "./containers.js";
+import { createNetwork, execIn, IPS, isRunning, logsOf, removeContainer, removeNetwork, startContainer, sweepStrays } from "./containers.js";
 import { dockerAvailable, freePort, HOST, plainUrlFor, requireLoopback, urlFor } from "./docker.js";
 import { IMAGES } from "./images.js";
 
@@ -55,12 +55,14 @@ export interface World {
     stop(): Promise<void>;
 }
 
+const tailOf = async (container: string): Promise<string> => `\n--- ${container} ---\n${await logsOf(container)}`;
+
 // Waits for a service, naming what it waited for and what it last saw, so a timeout is fixable, not a mystery.
 // `container` checks for an exit on every poll, so a crash reports immediately instead of hanging out the full budget.
 export const waitForHttp = async (url: string, what: string, timeoutMs: number, container?: string): Promise<void> => {
     const deadline = Date.now() + timeoutMs;
     let last = `never attempted`;
-    const tail = async (): Promise<string> => (container === undefined ? `` : `\n--- ${container} ---\n${await logsOf(container)}`);
+    const tail = async (): Promise<string> => (container === undefined ? `` : await tailOf(container));
     while (Date.now() < deadline) {
         try {
             const response = await fetch(url, { signal: AbortSignal.timeout(5_000) });
@@ -77,6 +79,38 @@ export const waitForHttp = async (url: string, what: string, timeoutMs: number, 
         await new Promise((resolveWait) => setTimeout(resolveWait, 500));
     }
     throw new Error(`${what} never answered at ${url} within ${Math.round(timeoutMs / 1000)}s, last attempt: ${last}${await tail()}`);
+};
+
+// A STARTED POSTGRES IS NOT A POSTGRES THAT TAKES CONNECTIONS, and the api is what pays for the difference: its
+// first act is `prisma migrate deploy`, which has no retry, so a database still in initdb stops the container on
+// `P1001: Can't reach database server at postgres:5432` — the world then reports the api as the thing that died.
+// The published port proves nothing here: docker-proxy binds it the moment the container exists and accepts a
+// connection before a server is listening, so `requireLoopback` passes over the whole init.
+//
+// This is the gate the self-hosted compose file already holds (`depends_on: postgres: condition: service_healthy`,
+// _tools/selfhost/platform/docker-compose.yml), asked the same way and of the same image.
+const waitForPostgres = async (container: string, timeoutMs: number): Promise<void> => {
+    const deadline = Date.now() + timeoutMs;
+    let last = `never attempted`;
+    while (Date.now() < deadline) {
+        // OVER TCP (-h), which is the interface the api uses. The default unix socket answers DURING init — the
+        // entrypoint runs the schema setup against a temporary server that listens on nothing else.
+        const failure = await execIn(container, [`pg_isready`, `-h`, `127.0.0.1`, `-p`, `5432`, `-U`, DB.user, `-d`, DB.name], 15_000).then(
+            () => undefined,
+            (error: unknown) => errorMessage(error),
+        );
+        if (failure === undefined) {
+            return;
+        }
+        last = failure;
+        if (!(await isRunning(container))) {
+            throw new Error(`postgres exited before it accepted connections, last attempt: ${last}${await tailOf(container)}`);
+        }
+        await new Promise((resolveWait) => setTimeout(resolveWait, 500));
+    }
+    throw new Error(
+        `postgres never accepted connections within ${Math.round(timeoutMs / 1000)}s, last attempt: ${last}${await tailOf(container)}`,
+    );
 };
 
 export const startWorld = async (): Promise<World> => {
@@ -141,6 +175,10 @@ export const startWorld = async (): Promise<World> => {
         });
         started.push(names.upstream);
         await waitForHttp(`${plainUrlFor(upstreamPort)}/health`, `the stand-in model`, 60_000, names.upstream);
+
+        // Here rather than beside the container that needs it, so postgres finishes initialising while the
+        // stand-in model boots instead of afterwards.
+        await waitForPostgres(names.postgres, 120_000);
 
         // At least 32 characters; shorter triggers a Better Auth warning that's noise in this log.
         const betterAuthSecret = `onboarding-journey-secret-0123456789abcdef`;
