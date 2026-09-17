@@ -45,8 +45,10 @@ Two things in the platform decide this shape, and both were verified rather than
   be loaded into the app document, so the editor lives in an iframe of a page this listener serves, and the listener
   proxies everything else (`/web-apps/…`, the socket.io upgrade) to the container so the page, the script and the
   editor frames share one origin. That origin is the daemon's forwarded-port hostname (`POST /ports/forward`), which
-  the preview proxy already frames for the editor and pipes WebSockets through; asked for again on every open, since
-  the forward table is in-memory and a busy sandbox can evict a slot.
+  the preview proxy frames for the editor and pipes WebSockets through; asked for again on every open, since the
+  forward table is in-memory and a busy sandbox can evict a slot. The proxy's `frame-ancestors` names the editor
+  origins AND `'self'`: the document frame `api.js` creates has this extension's own page as an ancestor, and without
+  `'self'` the browser refuses it (`panels/preview-proxy.ts`, and the nested-frame test beside it).
 
 The core learned two small things for this: a viewer can be fed the `path` alone (its backend reads the file), and
 a viewer can declare `edit`, which outranks a render-only viewer for the same extension whatever order the two

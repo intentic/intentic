@@ -194,7 +194,9 @@ const withFrameAncestors = (policy: string, sources: string): string => {
     return [...directives, `frame-ancestors ${sources}`].join("; ");
 };
 
-// A preview may be framed only by the configured editor origins, regardless of the upstream app's own navigation policy.
+// A preview may be framed only by the configured editor origins and by itself, regardless of the upstream app's own
+// navigation policy. `'self'` is load-bearing: an app that frames its own pages (a document editor's inner frame, any
+// nested route) has that frame's ancestors checked too, and the outer page is this preview's origin, not the editor's.
 const frameableHeaders = (
     headers: http.IncomingHttpHeaders,
     policies: readonly string[] | undefined,
@@ -202,7 +204,7 @@ const frameableHeaders = (
 ): http.IncomingHttpHeaders => {
     const rewritten = { ...headers };
     delete rewritten["x-frame-options"];
-    const sources = ancestors.length === 0 ? `'none'` : ancestors.join(" ");
+    const sources = [`'self'`, ...ancestors].join(" ");
     rewritten["content-security-policy"] =
         policies === undefined ? `frame-ancestors ${sources}` : policies.map((entry) => withFrameAncestors(entry, sources));
     return rewritten;

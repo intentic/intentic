@@ -95,8 +95,31 @@ test("replaces an app's anti-framing headers with the configured editor origins"
 
     expect(response.headers["x-frame-options"]).toBeUndefined();
     expect(response.headers["content-security-policy"]).toBe(
-        "default-src 'self'; script-src 'self'; frame-ancestors https://app.intentic.dev https://*.webview.example.net",
+        "default-src 'self'; script-src 'self'; frame-ancestors 'self' https://app.intentic.dev https://*.webview.example.net",
     );
+});
+
+// An app's nested frame has the app's own page as an ancestor: without 'self' the browser refuses it, and an editor
+// that frames itself (ONLYOFFICE's document frame inside its host page) shows "refused to connect" in the preview.
+test("lets a forwarded app frame its own pages, and nobody else beyond the editor origins", async () => {
+    const appPort = await listen(
+        http.createServer((_req, res) => {
+            res.writeHead(200, { "content-type": "text/html" });
+            res.end("<iframe src='/inner'></iframe>");
+        }),
+    );
+    const proxyPort = await listen(
+        previewProxy({
+            panelOf: noPanels,
+            slotTargetOf: (slot) => (slot === "a1b2c3d4e5f6" ? { port: appPort, host: "127.0.0.1", scheme: "http" } : undefined),
+            sandboxId: "abcdef012345",
+        }),
+    );
+
+    const response = await raw(proxyPort, "port-a1b2c3d4e5f6-abcdef012345.sbx.example.test", "/inner");
+
+    expect(response.status).toBe(200);
+    expect(response.headers["content-security-policy"]).toBe("frame-ancestors 'self' https://app.intentic.dev https://*.webview.example.net");
 });
 
 test("a Host without a preview-/port- prefix (a stray *.<zone> subdomain) is a 404", async () => {
