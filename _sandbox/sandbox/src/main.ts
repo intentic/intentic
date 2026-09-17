@@ -59,7 +59,7 @@ import { checkEventsDir } from "./intentic/check-run.js";
 import { INFRA_APPLY_KEY } from "./intentic/infra-apply.js";
 import { killStaleManagedSessions, panelKeyOf, panelSession } from "./processes/managed-processes.js";
 import { killOrphanServiceProcesses } from "./processes/service-processes.js";
-import { createPreviewProxy } from "./panels/preview-proxy.js";
+import { createPreviewProxy, isPreviewHost } from "./panels/preview-proxy.js";
 import { publicRoot } from "./public/public-files.js";
 import { createPublicHandler } from "./public/public-serve.js";
 import { linkClaudeState } from "./sessions/session-store.js";
@@ -96,6 +96,14 @@ import { startSidecarService } from "./derived/sidecar-service.js";
 import { startRepoWatch, subscribeRepoChanges } from "./workspace/watch/repo-watch.js";
 import { startRefWatch, subscribeRefChanges } from "./git/remote/ref-watch.js";
 import { announceUnwatchedWrite, startWorkspaceWatch, subscribeWorkspaceChanges } from "./workspace/watch/workspace-watch.js";
+
+// The preview proxy as the loopback listener's second tenant: it takes the plain connections whose Host names one of
+// its labels for this sandbox, so a browser on this machine frames previews without the tunnel.
+const loopbackPreviewLane = (
+    previewProxy: ReturnType<typeof createPreviewProxy> | undefined,
+    sandboxId: string | undefined,
+): { readonly server: ReturnType<typeof createPreviewProxy>; readonly owns: (hostHeader: string | undefined) => boolean } | undefined =>
+    previewProxy === undefined ? undefined : { server: previewProxy, owns: (hostHeader) => isPreviewHost(hostHeader, sandboxId) };
 
 // Sandbox container's entrypoint; config comes from env injected at run time, never baked in. Listeners come up
 // immediately (`/health`, `/events`); data routes wait behind the readiness gate below until the boot chain finishes.
@@ -306,36 +314,6 @@ const main = async (): Promise<void> => {
         "intentic sandbox daemon listening",
     );
 
-    // Same app on a second, loopback-only port, so a local browser skips the tunnel round trip. HTTP and TLS share this
-    // one port by sniffing the first byte; its own WebSocket server, since `ws` binds one per HTTP server.
-    const localCertificate = traits.extraListeners ? readLocalCertificate(config) : undefined;
-    const localSockets = new WebSocketServer({ noServer: true }) as unknown as WebSocketServerLike;
-    // Meaningless when the only listener is already loopback; the local profile serves just one plain port.
-    const localServer = !traits.extraListeners
-        ? undefined
-        : createLoopbackListener({
-              fetch: app.fetch,
-              port: config.local.port,
-              hostname: host,
-              sockets: localSockets,
-              certificate: localCertificate,
-          });
-    shutdown.push(() => localServer?.close());
-    if (localServer !== undefined) {
-        logger.info({ port: config.local.port, tls: localServer.tls(), hostname: localCertificate?.hostname }, "loopback listener ready");
-    }
-    // Renews in the background and hands the listener whatever comes back, never rejecting. Never on a hosted machine
-    // (SANDBOX_VM): there is no same-machine browser to serve, and issuing one there wastes a shared cert quota for
-    // nothing.
-    const localCertRenewal =
-        role.container && traits.extraListeners && !config.sandbox.vm
-            ? startLocalCertificateRenewal(config, logger, (certificate) => {
-                  localServer?.useCertificate(certificate);
-                  logger.info({ hostname: certificate.hostname }, "loopback listener is serving TLS");
-              })
-            : undefined;
-    shutdown.push(() => localCertRenewal?.stop());
-
     // Routes preview-, port-, and public- subdomains by the Host header to a panel, a forwarded port, or the outbox;
     // always listening, answering 502 rather than refusing. public/'s existence is checked per request.
     const previewProxy = !traits.extraListeners
@@ -357,6 +335,39 @@ const main = async (): Promise<void> => {
           });
     previewProxy?.listen(config.preview.port, host);
     shutdown.push(() => previewProxy?.close());
+
+    // Same app on a second, loopback-only port, so a local browser skips the tunnel round trip. HTTP and TLS share this
+    // one port by sniffing the first byte; its own WebSocket server, since `ws` binds one per HTTP server. The preview
+    // proxy shares it too, for the plain connections whose Host names one of its labels: a browser on this machine
+    // then frames `port-<slot>-<id>.localhost:<this port>` instead of the tunnel.
+    const localCertificate = traits.extraListeners ? readLocalCertificate(config) : undefined;
+    const localSockets = new WebSocketServer({ noServer: true }) as unknown as WebSocketServerLike;
+    // Meaningless when the only listener is already loopback; the local profile serves just one plain port.
+    const localServer = !traits.extraListeners
+        ? undefined
+        : createLoopbackListener({
+              fetch: app.fetch,
+              port: config.local.port,
+              hostname: host,
+              sockets: localSockets,
+              certificate: localCertificate,
+              preview: loopbackPreviewLane(previewProxy, sandboxIdFromToken(config.connectToken)),
+          });
+    shutdown.push(() => localServer?.close());
+    if (localServer !== undefined) {
+        logger.info({ port: config.local.port, tls: localServer.tls(), hostname: localCertificate?.hostname }, "loopback listener ready");
+    }
+    // Renews in the background and hands the listener whatever comes back, never rejecting. Never on a hosted machine
+    // (SANDBOX_VM): there is no same-machine browser to serve, and issuing one there wastes a shared cert quota for
+    // nothing.
+    const localCertRenewal =
+        role.container && traits.extraListeners && !config.sandbox.vm
+            ? startLocalCertificateRenewal(config, logger, (certificate) => {
+                  localServer?.useCertificate(certificate);
+                  logger.info({ hostname: certificate.hostname }, "loopback listener is serving TLS");
+              })
+            : undefined;
+    shutdown.push(() => localCertRenewal?.stop());
 
     /* HOW THE WORLD REACHES THIS SANDBOX: one outbound dial (platform/ingress-tunnel.ts), or nothing at all. */
     /* HOW THIS SANDBOX IS REACHED, asked once here because two things downstream need the same answer:. */

@@ -1,6 +1,17 @@
 {
     "1.0.0": {
-        "manifest": ["category", "contributes", "engines", "entry", "icon", "logo", "name", "permissions", "publisher", "version"],
+        "manifest": [
+            "category",
+            "contributes",
+            "engines",
+            "entry",
+            "icon",
+            "logo",
+            "name",
+            "permissions",
+            "publisher",
+            "version"
+        ],
         "contributes": [
             "agent",
             "bin",
@@ -34,7 +45,18 @@
         ]
     },
     "2.0.0": {
-        "manifest": ["category", "contributes", "engines", "entry", "icon", "logo", "name", "permissions", "publisher", "version"],
+        "manifest": [
+            "category",
+            "contributes",
+            "engines",
+            "entry",
+            "icon",
+            "logo",
+            "name",
+            "permissions",
+            "publisher",
+            "version"
+        ],
         "contributes": [
             "agent",
             "bin",
@@ -66,10 +88,26 @@
             "views",
             "workspace"
         ],
-        "listener": ["automation", "events", "provider"]
+        "listener": [
+            "automation",
+            "events",
+            "provider"
+        ]
     },
     "2.1.0": {
-        "manifest": ["category", "contributes", "engines", "entry", "icon", "logo", "name", "permissions", "publisher", "server", "version"],
+        "manifest": [
+            "category",
+            "contributes",
+            "engines",
+            "entry",
+            "icon",
+            "logo",
+            "name",
+            "permissions",
+            "publisher",
+            "server",
+            "version"
+        ],
         "contributes": [
             "agent",
             "bin",
@@ -101,10 +139,26 @@
             "views",
             "workspace"
         ],
-        "listener": ["automation", "events", "provider"]
+        "listener": [
+            "automation",
+            "events",
+            "provider"
+        ]
     },
     "2.2.0": {
-        "manifest": ["category", "contributes", "engines", "entry", "icon", "logo", "name", "permissions", "publisher", "server", "version"],
+        "manifest": [
+            "category",
+            "contributes",
+            "engines",
+            "entry",
+            "icon",
+            "logo",
+            "name",
+            "permissions",
+            "publisher",
+            "server",
+            "version"
+        ],
         "contributes": [
             "agent",
             "automationTemplates",
@@ -137,10 +191,26 @@
             "views",
             "workspace"
         ],
-        "listener": ["automation", "events", "provider"]
+        "listener": [
+            "automation",
+            "events",
+            "provider"
+        ]
     },
     "2.3.0": {
-        "manifest": ["category", "contributes", "engines", "entry", "icon", "logo", "name", "permissions", "publisher", "server", "version"],
+        "manifest": [
+            "category",
+            "contributes",
+            "engines",
+            "entry",
+            "icon",
+            "logo",
+            "name",
+            "permissions",
+            "publisher",
+            "server",
+            "version"
+        ],
         "contributes": [
             "agent",
             "automationTemplates",
@@ -173,8 +243,21 @@
             "views",
             "workspace"
         ],
-        "listener": ["automation", "events", "provider"],
-        "sandboxApi": ["fetch", "json", "key", "origin", "reachable", "request", "role", "rpc"]
+        "listener": [
+            "automation",
+            "events",
+            "provider"
+        ],
+        "sandboxApi": [
+            "fetch",
+            "json",
+            "key",
+            "origin",
+            "reachable",
+            "request",
+            "role",
+            "rpc"
+        ]
     },
     "2.4.0": {
         "manifest": [
@@ -223,8 +306,21 @@
             "views",
             "workspace"
         ],
-        "listener": ["automation", "events", "provider"],
-        "sandboxApi": ["fetch", "json", "key", "origin", "reachable", "request", "role", "rpc"]
+        "listener": [
+            "automation",
+            "events",
+            "provider"
+        ],
+        "sandboxApi": [
+            "fetch",
+            "json",
+            "key",
+            "origin",
+            "reachable",
+            "request",
+            "role",
+            "rpc"
+        ]
     },
     "2.5.0": {
         "manifest": [
@@ -274,8 +370,21 @@
             "views",
             "workspace"
         ],
-        "listener": ["automation", "events", "provider"],
-        "sandboxApi": ["fetch", "json", "key", "origin", "reachable", "request", "role", "rpc"]
+        "listener": [
+            "automation",
+            "events",
+            "provider"
+        ],
+        "sandboxApi": [
+            "fetch",
+            "json",
+            "key",
+            "origin",
+            "reachable",
+            "request",
+            "role",
+            "rpc"
+        ]
     },
     "2.6.0": {
         "manifest": [
@@ -325,8 +434,21 @@
             "views",
             "workspace"
         ],
-        "listener": ["automation", "events", "provider"],
-        "sandboxApi": ["fetch", "json", "key", "origin", "reachable", "request", "role", "rpc"],
+        "listener": [
+            "automation",
+            "events",
+            "provider"
+        ],
+        "sandboxApi": [
+            "fetch",
+            "json",
+            "key",
+            "origin",
+            "reachable",
+            "request",
+            "role",
+            "rpc"
+        ],
         "moduleExports": [
             "extensionApiVersion",
             "flattenQuery",
@@ -387,8 +509,21 @@
             "views",
             "workspace"
         ],
-        "listener": ["automation", "events", "provider"],
-        "sandboxApi": ["fetch", "json", "key", "origin", "reachable", "request", "role", "rpc"],
+        "listener": [
+            "automation",
+            "events",
+            "provider"
+        ],
+        "sandboxApi": [
+            "fetch",
+            "json",
+            "key",
+            "origin",
+            "reachable",
+            "request",
+            "role",
+            "rpc"
+        ],
         "moduleExports": [
             "extensionApiVersion",
             "flattenQuery",
@@ -451,8 +586,21 @@
             "views",
             "workspace"
         ],
-        "listener": ["automation", "events", "provider"],
-        "sandboxApi": ["fetch", "json", "key", "origin", "reachable", "request", "role", "rpc"],
+        "listener": [
+            "automation",
+            "events",
+            "provider"
+        ],
+        "sandboxApi": [
+            "fetch",
+            "json",
+            "key",
+            "origin",
+            "reachable",
+            "request",
+            "role",
+            "rpc"
+        ],
         "moduleExports": [
             "extensionApiVersion",
             "flattenQuery",
@@ -517,8 +665,21 @@
             "views",
             "workspace"
         ],
-        "listener": ["automation", "events", "provider"],
-        "sandboxApi": ["fetch", "json", "key", "origin", "reachable", "request", "role", "rpc"],
+        "listener": [
+            "automation",
+            "events",
+            "provider"
+        ],
+        "sandboxApi": [
+            "fetch",
+            "json",
+            "key",
+            "origin",
+            "reachable",
+            "request",
+            "role",
+            "rpc"
+        ],
         "moduleExports": [
             "extensionApiVersion",
             "flattenQuery",
@@ -583,8 +744,21 @@
             "views",
             "workspace"
         ],
-        "listener": ["automation", "events", "provider"],
-        "sandboxApi": ["fetch", "json", "key", "origin", "reachable", "request", "role", "rpc"],
+        "listener": [
+            "automation",
+            "events",
+            "provider"
+        ],
+        "sandboxApi": [
+            "fetch",
+            "json",
+            "key",
+            "origin",
+            "reachable",
+            "request",
+            "role",
+            "rpc"
+        ],
         "moduleExports": [
             "extensionApiVersion",
             "flattenQuery",
@@ -661,8 +835,21 @@
             "views",
             "workspace"
         ],
-        "listener": ["automation", "events", "provider"],
-        "sandboxApi": ["fetch", "json", "key", "origin", "reachable", "request", "role", "rpc"],
+        "listener": [
+            "automation",
+            "events",
+            "provider"
+        ],
+        "sandboxApi": [
+            "fetch",
+            "json",
+            "key",
+            "origin",
+            "reachable",
+            "request",
+            "role",
+            "rpc"
+        ],
         "moduleExports": [
             "extensionApiVersion",
             "flattenQuery",
@@ -746,8 +933,21 @@
             "views",
             "workspace"
         ],
-        "listener": ["automation", "events", "provider"],
-        "sandboxApi": ["fetch", "json", "key", "origin", "reachable", "request", "role", "rpc"],
+        "listener": [
+            "automation",
+            "events",
+            "provider"
+        ],
+        "sandboxApi": [
+            "fetch",
+            "json",
+            "key",
+            "origin",
+            "reachable",
+            "request",
+            "role",
+            "rpc"
+        ],
         "moduleExports": [
             "extensionApiVersion",
             "flattenQuery",
@@ -831,8 +1031,21 @@
             "views",
             "workspace"
         ],
-        "listener": ["automation", "events", "provider"],
-        "sandboxApi": ["fetch", "json", "key", "origin", "reachable", "request", "role", "rpc"],
+        "listener": [
+            "automation",
+            "events",
+            "provider"
+        ],
+        "sandboxApi": [
+            "fetch",
+            "json",
+            "key",
+            "origin",
+            "reachable",
+            "request",
+            "role",
+            "rpc"
+        ],
         "moduleExports": [
             "extensionApiVersion",
             "flattenQuery",
@@ -919,8 +1132,124 @@
             "views",
             "workspace"
         ],
-        "listener": ["automation", "events", "provider"],
-        "sandboxApi": ["fetch", "json", "key", "origin", "reachable", "request", "role", "rpc"],
+        "listener": [
+            "automation",
+            "events",
+            "provider"
+        ],
+        "sandboxApi": [
+            "fetch",
+            "json",
+            "key",
+            "origin",
+            "reachable",
+            "request",
+            "role",
+            "rpc"
+        ],
+        "moduleExports": [
+            "extensionApiVersion",
+            "flattenQuery",
+            "hostSlot",
+            "mergeQuery",
+            "readDaemonStream",
+            "resetSandboxScope",
+            "sandboxLedger",
+            "sandboxPoll",
+            "sandboxRef",
+            "sandboxScopeGuard",
+            "sandboxValue",
+            "satisfiesEngines"
+        ],
+        "workspaceApi": [
+            "capabilities",
+            "file",
+            "fillDiff",
+            "inProject",
+            "onDidChange",
+            "onDidChangeFiles",
+            "onDidChangeProject",
+            "onDidChangeRefs",
+            "openDiff",
+            "project",
+            "readJson",
+            "repos",
+            "setProject",
+            "write"
+        ],
+        "chatApi": [
+            "composeLoop",
+            "composeWorkflow",
+            "openAgent",
+            "openSession"
+        ]
+    },
+    "2.15.0": {
+        "manifest": [
+            "$schema",
+            "art",
+            "category",
+            "contributes",
+            "engines",
+            "entry",
+            "icon",
+            "logo",
+            "name",
+            "permissions",
+            "publisher",
+            "server",
+            "version"
+        ],
+        "contributes": [
+            "agent",
+            "automationTemplates",
+            "bin",
+            "capabilities",
+            "commands",
+            "documents",
+            "environment",
+            "files",
+            "listener",
+            "processes",
+            "settings",
+            "viewers",
+            "views"
+        ],
+        "api": [
+            "apiVersion",
+            "audience",
+            "chat",
+            "commands",
+            "documents",
+            "href",
+            "models",
+            "navigate",
+            "processes",
+            "route",
+            "sandbox",
+            "settings",
+            "terminal",
+            "theme",
+            "viewers",
+            "views",
+            "workspace"
+        ],
+        "listener": [
+            "automation",
+            "events",
+            "provider"
+        ],
+        "sandboxApi": [
+            "fetch",
+            "json",
+            "key",
+            "origin",
+            "previewAddress",
+            "reachable",
+            "request",
+            "role",
+            "rpc"
+        ],
         "moduleExports": [
             "extensionApiVersion",
             "flattenQuery",

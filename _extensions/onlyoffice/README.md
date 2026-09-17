@@ -65,6 +65,37 @@ tabs on one file join one session; a file changed on disk by someone else gets a
 from the new bytes; and this backend's own save records the stat it left behind, so a re-open after a Ctrl+S keeps
 the session. `forcesave` is on, so Ctrl+S writes to the workspace at once; closing the last editor writes too.
 
+## Settings
+
+One setting, `autoStart` (boolean, off): start the document server with the sandbox instead of on the first document.
+It lives where every extension's settings live, `.intentic/config/extension-settings.json` under `intentic.onlyoffice`
+(tracked config, per sandbox, keyed by the manifest id so a re-install keeps it; secrets would go to the vault, this
+one is not secret). It is surfaced twice on purpose: on **Sandbox ▸ Extensions ▸ ONLYOFFICE** through the host's
+schema-driven form, which is the canonical home for anything an extension declares; and **on the viewer's own card**,
+while the server is not started or is starting, because that is the moment the two-minute wait is felt and the
+decision is obvious. Both write the same store (`api.settings`), so each sees the other's edit. Turning it on while
+nothing runs also starts the server: the owner asked for a server, not for a note to self. The backend reads the
+value once at boot (`GET /extensions/{id}/settings`, a declared daemon permission) and starts the container in the
+background when it is on, pulling the image first if it has never been pulled.
+
+## Performance
+
+Measured on a 24-page docx, over loopback (the floor): a cold editor load is 329 requests and 14.4 MB (the server
+serves its editor unbundled, plus a 3.5 MB font engine), ready in 0.9 s; a warm load is 6 requests, since every
+versioned asset is `immutable`. What the owner pays on top is the tunnel: a request from the sandbox's own machine to
+its public hostname costs 270–320 ms against 3–5 ms on the daemon's loopback lane, and every byte crosses Cloudflare
+twice, bounded by the machine's upload bandwidth. So a cold load through the tunnel is tens of seconds, a warm open a
+few, and a large document's converted `Editor.bin` is the recurring cost. Nothing in this extension's own path is
+measurable beside that (`/open` is one daemon call, a stat and a healthcheck).
+
+The answer is the daemon's loopback lane, which now serves previews too: the loopback listener hands plain
+connections whose Host names a preview label to the preview proxy, `port-<slot>-<id>.localhost` resolves to loopback
+in every major browser without DNS, and `api.sandbox.previewAddress(url)` answers with that twin whenever the app is
+on the loopback lane and the lane answers as this sandbox's preview proxy (a one-shot probe, remembered per origin).
+The viewer frames what that returns; the proxy names the lane to the document server as `X-Forwarded-Host`, so the
+download URLs it hands the editor stay on it. Off the sandbox's machine nothing changes: the public address is what
+it was. The Ports view's open-in-a-tab still opens the public address (the kit has no endpoint state to ask).
+
 ## Conventions & gotchas
 
 - The first start is the owner's: opening a document shows a card, not a 2 GB pull. After that the engine brings the

@@ -10,6 +10,8 @@ const PROBE_INTERVAL_MS = 3000;
 const PROBE_SLOW_AFTER_MS = 30_000;
 // Generous enough for first-start propagation, bounded so a dead name isn't polled forever.
 const PROBE_GIVE_UP_MS = 180_000;
+// One attempt's ceiling; well over a tunnel round trip, well under the poll interval's patience.
+const PROBE_ATTEMPT_TIMEOUT_MS = 8000;
 
 // What the address resolves to; only `serving` is framed, the rest are screens to show instead.
 export type PreviewState = "serving" | "starting" | "several" | "stopped" | "unforwarded";
@@ -48,7 +50,8 @@ const STATES: readonly PreviewState[] = ["serving", "starting", "several", "stop
 // its shape). Never throws.
 const askOnce = async (url: string): Promise<{ state: PreviewState; servers: readonly PreviewServer[] } | undefined> => {
     try {
-        const response = await fetch(new URL(PROBE_PATH, url).toString(), { cache: "no-store" });
+        // Bounded: a lane that accepts the connection and then sits on it (a proxy with nothing behind it) is a miss.
+        const response = await fetch(new URL(PROBE_PATH, url).toString(), { cache: "no-store", signal: AbortSignal.timeout(PROBE_ATTEMPT_TIMEOUT_MS) });
         if (!response.ok) {
             return undefined;
         }
@@ -67,6 +70,13 @@ const askOnce = async (url: string): Promise<{ state: PreviewState; servers: rea
     } catch {
         return undefined;
     }
+};
+
+// One attempt, for an address that either answers now or never will (a loopback name resolves instantly, and a lane
+// that serves no previews will not start to). Never throws.
+export const probePreviewOnce = async (url: string): Promise<PreviewProbe> => {
+    const answer = await askOnce(url);
+    return answer === undefined ? { outcome: "unreachable" } : { outcome: "reached", state: answer.state, servers: answer.servers };
 };
 
 // Polls `url` until its preview proxy answers. Never throws: every outcome is a thing to show, not an error to

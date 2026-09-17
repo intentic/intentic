@@ -29,6 +29,7 @@ import { onFilesChanged } from "./fileEvents";
 import { onRefsChanged } from "./refEvents";
 import { registerView } from "../core-views/registry";
 import { registerViewer } from "../core-views/viewerRegistry";
+import { previewAddress } from "../features/preview/previewAddress";
 import { router } from "../router";
 import { registerFileBindings } from "./fileBindings";
 import { recordSandboxCall } from "./sandboxUsage";
@@ -319,6 +320,7 @@ export const createExtensionApi = (
             // The same optimistic default useRole makes (`owner` until the platform summary loads); this gates
             // affordances, the daemon gates acts.
             role: () => useSandbox().active.value?.role ?? `owner`,
+            previewAddress: (url) => previewAddress(url),
         },
         workspace: {
             repos: () => host.repos(),

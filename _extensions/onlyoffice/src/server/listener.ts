@@ -55,9 +55,14 @@ const withoutHopByHop = (headers: http.IncomingHttpHeaders): http.IncomingHttpHe
     return kept;
 };
 
-// The request as the document server should see it: X-Forwarded-Host/Proto naming the public origin, so every absolute
-// URL it generates points where the browser can reach. Left alone when the origin is not known (loopback use).
+// The request as the document server should see it: X-Forwarded-Host/Proto naming the origin the browser used, so
+// every absolute URL it generates points where the browser can reach. The daemon's preview proxy sets both on each lane
+// it serves (the public hostname, the loopback twin), and what it said wins; the backend's own public origin is the
+// fallback for a hop that named nothing, and nothing is added when neither is known (loopback use).
 export const towardsDocumentServer = (headers: http.IncomingHttpHeaders, publicOrigin: string | undefined): http.IncomingHttpHeaders => {
+    if (typeof headers["x-forwarded-host"] === "string" && headers["x-forwarded-host"] !== "") {
+        return headers;
+    }
     if (publicOrigin === undefined) {
         return headers;
     }

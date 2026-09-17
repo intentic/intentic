@@ -3,7 +3,11 @@
 What runs inside the box: the process that owns the files, serves the editor, and drives every agent turn.
 
 The daemon ([_sandbox/sandbox](../../_sandbox/sandbox)) is the whole per-user product surface, not just a chat
-endpoint. One Node process serves the oRPC contract on `:8787` and a preview proxy on `:5173`;
+endpoint. One Node process serves the oRPC contract on `:8787` and a preview proxy on `:5173`, and a loopback
+listener on `:8788` (published on the machine's own loopback) that serves the same app for a same-machine browser AND
+hands plain connections whose Host names a preview label (`port-<slot>-<id>.localhost` and its siblings) to that
+preview proxy, so previews have a loopback lane too (`platform/listeners/loopback-listener.ts`; the editor asks for
+it through `previewAddress`, and the proxy names the lane to the app as `X-Forwarded-Host`/`-Proto`);
 terminals, panel dev servers, and agent shell commands all run in a shared `tmux` server so they
 survive reconnects. Its subsystems:
 

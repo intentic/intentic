@@ -6,6 +6,7 @@ import { Readable } from "node:stream";
 import type { ExtensionServerApi, ExtensionServerContext } from "@intentic/extension-api";
 import type { DocsState, OpenRequest, OpenResult } from "../contract.js";
 import { documentTypeOf, extensionOf } from "../formats.js";
+import { autoStartOf } from "../settings.js";
 import { createDockerEngine } from "./docker.js";
 import { DocumentServer, IMAGE } from "./document-server.js";
 import { editorConfig, hostPage } from "./host-page.js";
@@ -72,11 +73,24 @@ const writeAtomically = async (file: string, bytes: Buffer): Promise<void> => {
     await rename(temporary, file);
 };
 
-export const activateServer = async (api: ExtensionServerApi, _context: ExtensionServerContext): Promise<void> => {
+export const activateServer = async (api: ExtensionServerApi, context: ExtensionServerContext): Promise<void> => {
     const secret = await loadSecret(join(api.workspaceRoot, SECRET_PATH));
     const engine = createDockerEngine();
     const docs = new DocumentServer({ engine, image: IMAGE, secret, log: api.log });
     const sessions = new Sessions();
+
+    // The owner's standing choice: bring the server up with the sandbox rather than on the first document. Read once at
+    // boot; a later flip is acted on by the viewer, which starts the server as it saves the setting.
+    const settings = await api.daemon
+        .json<{ settings: Record<string, unknown> }>(`/extensions/${encodeURIComponent(context.extensionId)}/settings`)
+        .catch((error: unknown) => {
+            api.log(`settings unreadable, treating auto-start as off: ${error instanceof Error ? error.message : String(error)}`);
+            return undefined;
+        });
+    if (autoStartOf(settings?.settings)) {
+        api.log(`starting the document server with the sandbox (auto-start is on)`);
+        void docs.start();
+    }
 
     // Where the browser reaches the listener: the daemon's forwarded-port hostname, asked for again on every open
     // since the forward table is in-memory and a busy sandbox can evict a slot.

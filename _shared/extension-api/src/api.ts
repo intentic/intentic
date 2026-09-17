@@ -198,6 +198,11 @@ export interface IntenticApi {
         // The signed-in user's trust tier, reactive like `reachable`. For affordances only: every route is
         // still floored by the daemon independently.
         role(): "owner" | "maintainer" | "collaborator" | "viewer";
+        // The address this browser should frame or open a preview at, given the public one the daemon handed out (a
+        // forwarded port's `previewUrl`, a panel's): its loopback twin when the app is on the daemon's loopback lane
+        // and that lane answers as this sandbox's preview proxy, else the public address as given. On the sandbox's
+        // own machine the difference is hundreds of milliseconds a request, so never frame the public address directly.
+        previewAddress(url: string): Promise<string>;
     };
     readonly workspace: {
         // The open project's repositories only (see `project`); everything when no project is open.

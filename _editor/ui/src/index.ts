@@ -12,6 +12,7 @@ export {
     type PreviewState,
     type ProbeOptions,
     probePreview,
+    probePreviewOnce,
 } from "./lib/portPreview.js";
 export { ui } from "./lib/ui.js";
 export { default as AgentRunButton } from "./components/sandbox/AgentRunButton.vue";

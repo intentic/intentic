@@ -144,6 +144,12 @@ describe(`everything else`, () => {
         expect(await response.text()).toBe(`upstream says hi`);
     });
 
+    it(`keeps the forwarded host the proxy in front already named: the lane the browser is on, not the backend's guess`, async () => {
+        const response = await call(`/web-apps/x`, { headers: { "x-forwarded-host": `port-abc-def.localhost:30559`, "x-forwarded-proto": `http` } });
+        expect(response.headers.get(`x-upstream-forwarded-host`)).toBe(`port-abc-def.localhost:30559`);
+        expect(response.headers.get(`x-upstream-forwarded-proto`)).toBe(`http`);
+    });
+
     it(`leaves the forwarded headers alone while no public origin is known`, async () => {
         const was = publicOrigin;
         publicOrigin = undefined;

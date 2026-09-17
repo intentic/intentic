@@ -13,6 +13,23 @@ export type { PanelUpstreamResolver } from "./panel-upstream.js";
 // Resolves a forward slot to its mapped port and upstream scheme.
 export type SlotResolver = (slot: string) => PortTarget | undefined;
 
+// Whether a Host names one of this proxy's labels (preview-, port-, public-) for this sandbox: what the loopback
+// listener asks before handing a connection here instead of to the daemon app. The daemon's own `sandbox-<id>` is not
+// one of them.
+export const isPreviewHost = (hostHeader: string | undefined, sandboxId: string | undefined): boolean =>
+    panelFromHost(hostHeader, sandboxId) !== undefined ||
+    portSlotFromHost(hostHeader, sandboxId) !== undefined ||
+    publicSlotFromHost(hostHeader, sandboxId) !== undefined;
+
+// What a proxied app is told about the address it was reached at, in the fields every reverse proxy uses: the Host the
+// browser used and the scheme it used. An app that builds absolute URLs from them (a document server handing its
+// editor a download address) then names something the browser can reach, rather than the localhost Host is rewritten
+// to below. The edge's own X-Forwarded-Proto is kept when it arrives ahead of this hop.
+const forwardedFrom = (req: http.IncomingMessage): http.IncomingHttpHeaders => ({
+    "x-forwarded-host": req.headers.host ?? "",
+    "x-forwarded-proto": req.headers["x-forwarded-proto"] ?? ((req.socket as { encrypted?: boolean }).encrypted === true ? "https" : "http"),
+});
+
 // CORS-open so a browser can tell reachable from not; the string must match @intentic/ui's portPreview.ts.
 export const PREVIEW_PROBE_PATH = "/__intentic/preview-probe";
 
@@ -53,11 +70,12 @@ interface ProbeBody {
     readonly servers?: readonly PanelServer[];
 }
 
-// Rewrite Host + Origin at the door of an app that never agreed to be reached by its preview name.
-const asLocalhost = (headers: http.IncomingHttpHeaders, target: PortTarget): http.IncomingHttpHeaders => {
+// Rewrite Host + Origin at the door of an app that never agreed to be reached by its preview name; the name it was
+// reached by rides along as X-Forwarded-Host.
+const asLocalhost = (req: http.IncomingMessage, target: PortTarget): http.IncomingHttpHeaders => {
     const localhost = `localhost:${target.port}`;
-    const rewritten: http.IncomingHttpHeaders = { ...headers, host: localhost };
-    if (headers.origin !== undefined) {
+    const rewritten: http.IncomingHttpHeaders = { ...req.headers, ...forwardedFrom(req), host: localhost };
+    if (req.headers.origin !== undefined) {
         rewritten.origin = `${target.scheme}://${localhost}`;
     }
     return rewritten;
@@ -98,13 +116,13 @@ const panelUpstream = async (req: http.IncomingMessage, deps: PreviewProxyDeps, 
     }
     if (upstream.state === "serving") {
         return upstream.assigned
-            ? { kind: "proxy", dial: "127.0.0.1", port: upstream.port, scheme: "http", headers: req.headers, frameable: true }
+            ? { kind: "proxy", dial: "127.0.0.1", port: upstream.port, scheme: "http", headers: { ...req.headers, ...forwardedFrom(req) }, frameable: true }
             : {
                   kind: "proxy",
                   dial: "127.0.0.1",
                   port: upstream.port,
                   scheme: "http",
-                  headers: asLocalhost(req.headers, { port: upstream.port, host: "127.0.0.1", scheme: "http" }),
+                  headers: asLocalhost(req, { port: upstream.port, host: "127.0.0.1", scheme: "http" }),
                   frameable: true,
               };
     }
@@ -163,7 +181,7 @@ const resolveRequest = async (req: http.IncomingMessage, deps: PreviewProxyDeps)
             dial: target.host,
             port: target.port,
             scheme: target.scheme,
-            headers: asLocalhost(req.headers, target),
+            headers: asLocalhost(req, target),
             frameable: true,
         };
     }

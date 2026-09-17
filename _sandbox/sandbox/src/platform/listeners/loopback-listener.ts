@@ -1,3 +1,4 @@
+import type { Server as HttpServer } from "node:http";
 import { createSecureServer } from "node:http2";
 import { type AddressInfo, createServer as createNetServer, type Server as NetServer, type Socket } from "node:net";
 import { Duplex } from "node:stream";
@@ -14,6 +15,20 @@ const TLS_HANDSHAKE_BYTE = 0x16;
 // How long an unclassified connection (a port scanner, a half-open probe) may hold a socket before being dropped.
 const FIRST_BYTE_TIMEOUT_MS = 10_000;
 
+// A request head is read off a plain connection before anything owns it, so its Host can pick the server; past this
+// many bytes without a blank line it is the app's problem.
+const HEAD_LIMIT_BYTES = 16 * 1024;
+
+const headComplete = (head: Buffer): boolean => head.includes("\r\n\r\n") || head.length >= HEAD_LIMIT_BYTES;
+
+// The Host header of a plain request head, undefined when there is none yet.
+export const hostOf = (head: Buffer): string | undefined => {
+    const text = head.toString("latin1");
+    const end = text.indexOf("\r\n\r\n");
+    const match = /^host:[ \t]*([^\r\n]*)/im.exec(end === -1 ? text : text.slice(0, end));
+    return match?.[1]?.trim();
+};
+
 export interface LoopbackCertificate {
     readonly certificate: string;
     readonly privateKey: string;
@@ -26,6 +41,10 @@ export interface LoopbackListenerOptions {
     readonly sockets: WebSocketServerLike;
     // Absent until issuance lands; the listener then serves plain HTTP alone (every browser but Safari).
     readonly certificate: LoopbackCertificate | undefined;
+    // The preview proxy, given every plain connection whose Host it owns (`port-<slot>-<id>.localhost` and its
+    // siblings): previews then have a loopback lane too, on this same published port, for a browser on this machine.
+    // Plain HTTP only: TLS hides the Host until the handshake, and `*.localhost` needs no certificate to be trusted.
+    readonly preview?: { readonly server: HttpServer; readonly owns: (hostHeader: string | undefined) => boolean } | undefined;
 }
 
 export interface LoopbackListener {
@@ -74,7 +93,7 @@ const handOff = (server: ServerType, socket: Socket, first: Buffer, tls: boolean
 };
 
 export const createLoopbackListener = (options: LoopbackListenerOptions): LoopbackListener => {
-    const { fetch, port, hostname, sockets, certificate } = options;
+    const { fetch, port, hostname, sockets, certificate, preview } = options;
 
     // The plain half, always present: needs no DNS, so it still answers when the network is offline.
     const plain = createAdaptorServer({ fetch, hostname, websocket: { server: sockets } });
@@ -114,7 +133,27 @@ export const createLoopbackListener = (options: LoopbackListenerOptions): Loopba
                 socket.destroy();
                 return;
             }
-            handOff(wantsTls ? (secure as ServerType) : plain, socket, first, wantsTls);
+            if (wantsTls || preview === undefined) {
+                handOff(wantsTls ? (secure as ServerType) : plain, socket, first, wantsTls);
+                return;
+            }
+            // Plain HTTP with a preview proxy to choose from: the head decides, and whoever gets it gets it whole.
+            let head = first;
+            const settle = (): void => {
+                socket.off(`data`, more);
+                handOff(preview.owns(hostOf(head)) ? preview.server : plain, socket, head, false);
+            };
+            const more = (chunk: Buffer): void => {
+                head = Buffer.concat([head, chunk]);
+                if (headComplete(head)) {
+                    settle();
+                }
+            };
+            if (headComplete(head)) {
+                settle();
+            } else {
+                socket.on(`data`, more);
+            }
         });
         // A connection that errors before classification belongs to nobody; nothing else will report it.
         socket.once(`error`, () => socket.destroy());

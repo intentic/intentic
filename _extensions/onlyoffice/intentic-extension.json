@@ -6,12 +6,21 @@
     "category": "workspace",
     "logo": "onlyoffice",
     "icon": "file-edit",
-    "engines": { "intentic": "^2.1.0" },
+    "engines": { "intentic": "^2.15.0" },
     "server": "dist/server.js",
     "permissions": {
-        "daemon": ["GET /ports", "POST /ports/forward", "GET /workspace/raw"]
+        "daemon": ["GET /ports", "POST /ports/forward", "GET /workspace/raw", "GET /extensions/*/settings"]
     },
     "contributes": {
+        "settings": [
+            {
+                "key": "autoStart",
+                "type": "boolean",
+                "title": "Start the document server with the sandbox",
+                "description": "Brings ONLYOFFICE Docs up when the sandbox starts, in the background, so the first document opens without the two-minute cold start. Pulls the 2 GB image on the first boot if it isn't there yet. Off: the first document you open starts it.",
+                "default": false
+            }
+        ],
         "viewers": [
             {
                 "id": "office",

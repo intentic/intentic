@@ -8,6 +8,7 @@ import {
     type PickerGroup,
     type PreviewProbe,
     probePreview,
+    probePreviewOnce,
     SegmentedControl,
     StatusBadge,
     type StatusVariant,
@@ -18,6 +19,8 @@ import { computed, nextTick, onUnmounted, ref, watch } from "vue";
 import { RouterLink, useRouter } from "vue-router";
 import type { PanelLaunch } from "@intentic/api-contract";
 import { frameSandbox, pickTarget, type PreviewTarget } from "./previewModel";
+import { loopbackPreviewUrl } from "./previewLane";
+import { useEndpoint } from "../sandbox/secrets/useEndpoint";
 import { usePreviewTargets } from "./usePreviewTargets";
 import { previewAddress, previewOpened, previewSelectedId, selectPreviewTarget, setPreviewAddress } from "./previewSurface";
 import { togglePreviewFloating, usePreviewFloating } from "./previewFloating";
@@ -153,12 +156,29 @@ const probing = ref(false);
 const reach = ref<PreviewProbe | undefined>(undefined);
 let probeGeneration = 0;
 
+const { daemonBase, usingLocal } = useEndpoint();
+
 const probeThenShow = async (url: string): Promise<void> => {
     const generation = ++probeGeneration;
     const current = (): boolean => generation === probeGeneration;
     probeSlow.value = false;
     probing.value = true;
     reach.value = undefined;
+    // On the sandbox's own machine the loopback twin is asked first: it answers at once or not at all, and framing it
+    // spares every request the tunnel's round trip. Anything but a serving answer falls through to the public address.
+    const local = loopbackPreviewUrl(url, daemonBase.value, usingLocal.value);
+    if (local !== undefined) {
+        const nearby = await probePreviewOnce(local);
+        if (!current()) {
+            return;
+        }
+        if (nearby.outcome === `reached` && nearby.state === `serving`) {
+            probing.value = false;
+            reach.value = nearby;
+            previewSrc.value = local;
+            return;
+        }
+    }
     const probe = await probePreview(url, {
         stillWanted: current,
         onWaiting: (_elapsed, slow) => {

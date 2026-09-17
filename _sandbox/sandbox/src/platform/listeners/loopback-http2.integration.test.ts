@@ -1,5 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { mkdtempSync, readFileSync } from "node:fs";
+import { createServer, request as httpRequest } from "node:http";
 import { connect } from "node:http2";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -7,7 +8,7 @@ import { upgradeWebSocket, type WebSocketServerLike } from "@hono/node-server";
 import { Hono } from "hono";
 import { afterAll, expect, test } from "vitest";
 import { WebSocket, WebSocketServer } from "ws";
-import { createLoopbackListener } from "./loopback-listener.js";
+import { createLoopbackListener, hostOf } from "./loopback-listener.js";
 
 // Pins the loopback listener's h2 negotiation: getting it wrong doesn't error, it silently exhausts the browser's
 // six-connections-per-origin limit and freezes the workspace.
@@ -62,6 +63,11 @@ app.get(
     upgradeWebSocket(() => ({ onMessage: (event, ws) => ws.send(`echo:${String(event.data)}`) })),
 );
 
+// Stands in for the preview proxy: an unbound server the listener feeds the connections whose Host it owns.
+const preview = createServer((req, res) => {
+    res.writeHead(200, { "content-type": "text/plain" });
+    res.end(`preview saw ${req.headers.host ?? "?"}`);
+});
 // The real thing main.ts builds, not a reconstruction of its options, so a regression here is a real failure.
 const server = createLoopbackListener({
     fetch: app.fetch,
@@ -69,6 +75,7 @@ const server = createLoopbackListener({
     hostname: "127.0.0.1",
     sockets: new WebSocketServer({ noServer: true }) as unknown as WebSocketServerLike,
     certificate: { certificate: readFileSync(join(dir, "cert.pem"), "utf8"), privateKey: readFileSync(join(dir, "key.pem"), "utf8") },
+    preview: { server: preview, owns: (hostHeader) => hostHeader?.startsWith("port-") === true },
 });
 const port = await server.listening;
 const session = connect(`https://127.0.0.1:${port}`, { rejectUnauthorized: false });
@@ -163,4 +170,30 @@ test("a certificate handed over after boot is served without restarting the list
     // The plain half must survive the handover too, not be traded away for h2.
     expect(await (await fetch(`http://127.0.0.1:${laterPort}/ping`)).text()).toBe("pong");
     later.close();
+});
+
+// Previews on the loopback lane: a plain connection whose Host names a preview label goes to the preview proxy whole,
+// and a plain connection to the daemon's own address still reaches the app. Both on this one published port.
+test("a preview-labelled Host on the plain lane reaches the preview proxy, the daemon's own address the app", async () => {
+    const plain = (host: string): Promise<string> =>
+        new Promise((resolve, reject) => {
+            // A fresh connection per Host, as a browser opens one per origin; node's agent would otherwise reuse the socket the
+            // preview proxy already owns.
+            const request = httpRequest({ host: "127.0.0.1", port, path: "/ping", headers: { host }, agent: false }, (response) => {
+                let body = "";
+                response.setEncoding("utf8");
+                response.on("data", (chunk: string) => (body += chunk));
+                response.on("end", () => resolve(body));
+            });
+            request.on("error", reject);
+            request.end();
+        });
+    expect(await plain(`port-a1b2c3d4e5f6-abcdef012345.localhost:${port}`)).toBe(`preview saw port-a1b2c3d4e5f6-abcdef012345.localhost:${port}`);
+    expect(await plain(`127.0.0.1:${port}`)).toBe("pong");
+});
+
+test("the Host of a request head is read whatever the header's case, and only from the head", () => {
+    expect(hostOf(Buffer.from("GET / HTTP/1.1\r\nHOST: port-x.localhost:1\r\nAccept: */*\r\n\r\nhost: not-me\r\n"))).toBe("port-x.localhost:1");
+    expect(hostOf(Buffer.from("GET / HTTP/1.1\r\nAccept: */*\r\n\r\n"))).toBeUndefined();
+    expect(hostOf(Buffer.from("GET / HTTP/1.1\r\nHo"))).toBeUndefined();
 });

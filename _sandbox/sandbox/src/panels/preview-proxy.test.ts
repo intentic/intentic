@@ -99,6 +99,36 @@ test("replaces an app's anti-framing headers with the configured editor origins"
     );
 });
 
+// Host is rewritten to localhost at the app's door, so the name the browser used rides along as X-Forwarded-Host, with
+// the scheme beside it: an app building absolute URLs from them (a document server handing its editor a download
+// address) names something the browser can reach.
+test("tells a forwarded app the Host and scheme it was reached by", async () => {
+    const appPort = await listen(
+        http.createServer((req, res) => {
+            res.writeHead(200, {
+                "content-type": "text/plain",
+                "x-seen-host": req.headers.host ?? "",
+                "x-seen-forwarded-host": req.headers["x-forwarded-host"] ?? "",
+                "x-seen-forwarded-proto": req.headers["x-forwarded-proto"] ?? "",
+            });
+            res.end("ok");
+        }),
+    );
+    const proxyPort = await listen(
+        previewProxy({
+            panelOf: noPanels,
+            slotTargetOf: (slot) => (slot === "a1b2c3d4e5f6" ? { port: appPort, host: "127.0.0.1", scheme: "http" } : undefined),
+            sandboxId: "abcdef012345",
+        }),
+    );
+
+    const response = await raw(proxyPort, `port-a1b2c3d4e5f6-abcdef012345.localhost:${proxyPort}`, "/");
+
+    expect(response.headers["x-seen-host"]).toBe(`localhost:${appPort}`);
+    expect(response.headers["x-seen-forwarded-host"]).toBe(`port-a1b2c3d4e5f6-abcdef012345.localhost:${proxyPort}`);
+    expect(response.headers["x-seen-forwarded-proto"]).toBe("http");
+});
+
 // An app's nested frame has the app's own page as an ancestor: without 'self' the browser refuses it, and an editor
 // that frames itself (ONLYOFFICE's document frame inside its host page) shows "refused to connect" in the preview.
 test("lets a forwarded app frame its own pages, and nobody else beyond the editor origins", async () => {

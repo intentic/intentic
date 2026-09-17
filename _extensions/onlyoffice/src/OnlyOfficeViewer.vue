@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { appLink, Button, Icon, ProgressRing, ui } from "@intentic/extension-ui";
+import { appLink, Button, Checkbox, Icon, ProgressRing, ui } from "@intentic/extension-ui";
 import { computed, onBeforeUnmount, ref, watch } from "vue";
 import type { DocsState } from "./contract.js";
 import { openDocument, startDocs } from "./docs.js";
 import { host } from "./host.js";
+import { AUTO_START } from "./settings.js";
 
 /* A document in ONLYOFFICE Docs: an iframe on the editor's own origin once the document server answers, and until then a card saying what stands between the reader and it. */
 
@@ -37,8 +38,13 @@ const load = async (): Promise<void> => {
             return;
         }
         if (`url` in result) {
+            // The public address the backend built, or its loopback twin when this browser is on the sandbox's machine.
+            const address = await host().sandbox.previewAddress(result.url);
+            if (mine !== generation) {
+                return;
+            }
             status.value = undefined;
-            url.value = result.url;
+            url.value = address;
             return;
         }
         status.value = result.status;
@@ -71,9 +77,28 @@ watch(
     },
     { immediate: true },
 );
+// The standing choice, offered where the wait is felt; the same value the Extensions tab edits, kept in step through
+// the host's settings store.
+const autoStart = ref(host().settings.get(AUTO_START) === true);
+const settingsWatch = host().settings.onDidChange((key) => {
+    if (key === AUTO_START) {
+        autoStart.value = host().settings.get(AUTO_START) === true;
+    }
+});
+// Turning it on while nothing runs is also the start: the owner asked for a server, not for a note to self.
+const setAutoStart = async (value: boolean): Promise<void> => {
+    autoStart.value = value;
+    await host().settings.set(AUTO_START, value);
+    if (value && status.value?.state === `not-started`) {
+        await start();
+    }
+};
+const settingsLink = appLink(host().href(`/sandbox/extensions`), () => host().navigate(`/sandbox/extensions`));
+
 onBeforeUnmount(() => {
     generation++;
     clearTimeout(pending);
+    settingsWatch.dispose();
 });
 
 const percent = computed(() => (status.value?.state === `pulling` ? status.value.percent : undefined));
@@ -98,6 +123,11 @@ const capabilitiesLink = appLink(host().href(`/capabilities`), () => host().navi
             <Icon name="file-edit" class="text-4xl text-subtle" />
             <p class="max-w-sm text-sm text-muted">Open, edit and save this document in ONLYOFFICE Docs. The first start downloads the document server, about 2 GB, once.</p>
             <Button class="mt-1" @click="start">Start ONLYOFFICE Docs</Button>
+            <label class="mt-2 flex cursor-pointer items-center gap-2 text-xs text-muted">
+                <Checkbox :model-value="autoStart" binary @update:model-value="setAutoStart" />
+                Start it with the sandbox from now on
+            </label>
+            <a v-bind="settingsLink" class="text-xs text-subtle hover:underline">Extension settings</a>
         </template>
         <template v-else-if="status?.state === 'pulling'">
             <ProgressRing :value="percent ?? 0" :size="40" :stroke="3" />
@@ -106,6 +136,10 @@ const capabilitiesLink = appLink(host().href(`/capabilities`), () => host().navi
         <template v-else-if="status?.state === 'starting'">
             <Icon name="spinner" spin class="text-4xl text-subtle" />
             <p class="max-w-sm text-sm text-muted">Starting the document server… A cold start takes about two minutes: it regenerates its fonts and themes every time. It stays up afterwards.</p>
+            <label class="mt-2 flex cursor-pointer items-center gap-2 text-xs text-muted">
+                <Checkbox :model-value="autoStart" binary @update:model-value="setAutoStart" />
+                Start it with the sandbox from now on
+            </label>
         </template>
         <template v-else-if="status?.state === 'no-address'">
             <Icon name="exclamation-circle" class="text-4xl text-subtle" />

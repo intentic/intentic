@@ -85,4 +85,9 @@
 // and so never narrowed, and each was about to reimplement "is this path under the project" by hand. The second lets
 // a tile stand for one named thing: the Projects tile wears the open project's initials in place of its glyph, which
 // no icon name could say. Additive: a view that never asks and a tile that names no monogram are unchanged.
-export const extensionApiVersion = "2.14.0";
+// 2.15.0 adds `api.sandbox.previewAddress(url)`: the address this browser should frame or open a preview at. The daemon
+// hands out one public address per forwarded port, which crosses the tunnel twice even when the browser sits on the
+// sandbox's own machine; the daemon's loopback lane now serves previews too, under `port-<slot>-<id>.localhost`, and
+// only the host knows which lane the app is on and whether that lane answers. An extension framing a forwarded port
+// (ONLYOFFICE's editor) had no way to ask. Additive: a view that keeps framing the public address gets what it got.
+export const extensionApiVersion = "2.15.0";
