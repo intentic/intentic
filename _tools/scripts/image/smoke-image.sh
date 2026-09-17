@@ -46,14 +46,16 @@ set -euo pipefail
 
 [ "$#" -gt 0 ] || { echo "usage: smoke-image.sh <image-ref> [<image-ref>...]" >&2; exit 2; }
 
-# The pull below goes through the shared registry retry, the same judgment the pushes use: a conversation with
-# ghcr.io that the network drops is the same "wait and try again" whichever way the bytes were moving. Its
-# defaults are sized for GHCR's rate-limit window, which is a clock worth waiting out in minutes; what drops a
-# pull here is a TCP connect that clears in seconds, so these gaps are short. Set before the source so an
-# operator's own values still win.
+# The pull below goes through image-pull.sh, which wraps the shared registry retry — a conversation with
+# ghcr.io that the network drops is the same "wait and try again" whichever way the bytes were moving — and
+# adds the half a pull has that a push does not: the unpack into this runner's image store, which is the
+# daemon's fault and not the registry's when it breaks (that file has the release it cost). The retry defaults
+# are sized for GHCR's rate-limit window, which is a clock worth waiting out in minutes; what drops a pull here
+# is a TCP connect that clears in seconds, so these gaps are short. Set before the source so an operator's own
+# values still win.
 : "${REGISTRY_RETRY_ATTEMPTS:=4}"
 : "${REGISTRY_RETRY_DELAY:=15}"
-. "$(dirname "$0")/../lib/registry-retry.sh"
+. "$(dirname "$0")/../lib/image-pull.sh"
 
 # The boot budget alone — the pull is a separate step below and its own clock — kept generous because these
 # runners boot cold while they are still busy with the build behind them, and testcontainers gives the same
@@ -161,9 +163,9 @@ smoke() { # <image-ref>
     # Left inside `docker run`, that failure was also MIS-DIAGNOSED. The run exits without creating anything,
     # the loop below finds no container and blames the daemon — "the container EXITED (code ?) — the daemon
     # never came up" — and then dumps logs that say "No such container". Every word of that points at the image
-    # under test, and none of it was true. Pulling here names the registry as the registry.
-    if ! registry_retry docker pull "$image"; then
-        echo "  ✗ could not pull $image — the REGISTRY refused or dropped it, which says nothing about this image" >&2
+    # under test, and none of it was true. Pulling here names the registry as the registry — and, since
+    # 1.285.0 died on the unpack rather than the download, names this runner's image store as itself.
+    if ! image_pull "$image"; then
         return 1
     fi
 

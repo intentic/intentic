@@ -1,7 +1,7 @@
 #!/usr/bin/env node
-// Checks registry-retry.sh and npm-publish-retry.sh: each is a pattern list deciding which publish failure gets
-// retried, asserted against failures that actually killed a release, in both directions. Patterns are read back out of
-// the scripts, compiled as POSIX ERE case-insensitively; the backoff loop is drilled through bash when available.
+// Checks registry-retry.sh, npm-publish-retry.sh and image-pull.sh: each is a pattern list deciding which failure a
+// release rides out, asserted against failures that actually killed one, in both directions. Patterns are read back out
+// of the scripts, compiled as POSIX ERE case-insensitively; the retry loop is drilled through bash when available.
 import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -141,6 +141,63 @@ rm -f "$landed"
 `,
         expect: { flaky: [2, 0], forbidden: [1, 1], "lost-answer": [1, 0] },
     },
+    {
+        id: "image-pull",
+        script: "_tools/scripts/lib/image-pull.sh",
+        predicate: "image_pull_unpack_fault",
+        // The unpack, which is the half of a pull the registry has no part in: this daemon's own store losing content
+        // mid-extraction, with every byte already downloaded.
+        rideItOut: [
+            [
+                "the snapshot chain that killed 1.285.0",
+                'failed to prepare extraction snapshot "extract-867389931-0Kfz sha256:278bf3cda0236f4a22b831e080996f5133d1fffd0b2ab161f274ffffee5f5a60": NotFound: parent snapshot sha256:ceeb23b44c468b37b32588cfb2d4eb623eece649685b8d0e535b2b10a1dced5f does not exist: not found',
+            ],
+            ["the same race with no parent to name", "failed to prepare extraction snapshot: content sha256:278bf3cda023: not found"],
+            [
+                "a blob collected out from under the unpack",
+                "failed to extract layer sha256:278bf3cda023: failed to get reader from content store: content digest sha256:ceeb23b44c46: not found",
+            ],
+        ],
+        // A pull is not re-run for anything re-running cannot fix: a disk with no room for 5 GB stays that way, and
+        // every verdict the registry reaches is registry-retry.sh's to judge one layer in.
+        failAtOnce: [
+            ["a full disk", "failed to register layer: write /var/lib/docker/overlay2/2f0c/merged/opt/sandbox/node_modules/a: no space left on device"],
+            [
+                "a tag that is not there",
+                'Error response from daemon: failed to resolve reference "ghcr.io/intentic/sandbox:no-such-tag": ghcr.io/intentic/sandbox:no-such-tag: not found',
+            ],
+            ["no login", 'Error response from daemon: Head "https://ghcr.io/v2/intentic/sandbox/manifests/1.285.0-amd64": unauthorized'],
+            [
+                "a throttled registry, which is the other helper's to ride out",
+                'failed to resolve reference: denied: permission_denied: 403 "Forbidden" You have exceeded a secondary rate limit.',
+            ],
+        ],
+        // Three properties the pattern list alone can't show: a lost snapshot is dropped and re-pulled until it lands, a
+        // store that keeps losing it gives up rather than pulling 5 GB forever, and a registry verdict is not re-asked.
+        drill: String.raw`
+export REGISTRY_RETRY_ATTEMPTS=1 IMAGE_PULL_ATTEMPTS=3 IMAGE_PULL_DELAY=0
+LOST='failed to prepare extraction snapshot "extract-867389931-0Kfz sha256:278bf3cda023": NotFound: parent snapshot sha256:ceeb23b44c46 does not exist: not found'
+MISSING='Error response from daemon: failed to resolve reference "ghcr.io/intentic/sandbox:no-such-tag": ghcr.io/intentic/sandbox:no-such-tag: not found'
+
+# The stub docker: "pull" prints the failure under test and counts the attempt, "image rm" is the drop between
+# attempts, which always succeeds because there may be nothing left to drop.
+docker() {
+    case "$1" in
+        pull)
+            echo x >> "$count"
+            [ "$FLAKY" = yes ] && [ "$(wc -l < "$count")" -ge 2 ] && { echo 'Status: Downloaded newer image'; return 0; }
+            printf '%s\n' "$OUTPUT"
+            return 1 ;;
+        image) return 0 ;;
+    esac
+}
+
+FLAKY=yes OUTPUT="$LOST"    run cleared     image_pull ghcr.io/intentic/sandbox:1.285.0-amd64
+FLAKY=no  OUTPUT="$LOST"    run store-gone  image_pull ghcr.io/intentic/sandbox:1.285.0-amd64
+FLAKY=no  OUTPUT="$MISSING" run missing-tag image_pull ghcr.io/intentic/sandbox:no-such-tag
+`,
+        expect: { cleared: [2, 0], "store-gone": [3, 1], "missing-tag": [1, 1] },
+    },
 ];
 
 // The pattern lists, read back out of the scripts.
@@ -245,4 +302,4 @@ run() {
     );
 }
 
-finish([["a publish retry helper no longer decides the way the releases it was written for needed", problems]], vouched);
+finish([["a retry helper no longer decides the way the releases it was written for needed", problems]], vouched);

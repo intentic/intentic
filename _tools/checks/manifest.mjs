@@ -28,7 +28,7 @@ export const CHECKS = [
     { id: "invariant-registry", file: "invariant-registry.mjs", needs: "checkout", gate: "tidy", about: "every daemon subsystem registers a runtime invariant or says why not" },
     { id: "daemon-boundaries", file: "daemon-boundaries.mjs", needs: "checkout", gate: "tidy", about: "no new whole-Services taker, no new mutual subsystem cycle" },
     { id: "publish-set", file: "publish-set.mjs", needs: "checkout", gate: "code", about: "PUB is dependency-closed and topologically ordered" },
-    { id: "publish-retry", file: "publish-retry.mjs", needs: "checkout", gate: "code", about: "the publish failures a release rides out, and the ones it must not" },
+    { id: "publish-retry", file: "publish-retry.mjs", needs: "checkout", gate: "code", about: "the publish and pull failures a release rides out, and the ones it must not" },
     { id: "release-api", file: "release-api.mjs", needs: "checkout", gate: "code", about: "github.sh answers a question with text or nothing, and fails loudly on a write" },
     { id: "engines", file: "engines-blessed.mjs", needs: "checkout", gate: "code", about: "engines.json blesses only versions this repo pins" },
     { id: "build-cache", file: "build-cache-mounts.mjs", needs: "checkout", gate: "code", about: "sandbox image fragments keep the build-cache contract" },

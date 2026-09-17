@@ -474,11 +474,30 @@ if (`$freeGb -ge 0 -and `$freeGb -lt `$LowDiskGb) {
         `$deep = `$freeGb -lt (`$LowDiskGb / 2)
         `$cacheArgs = if (`$deep) { '-af' } else { '-f --filter until=72h' }
         Say "disk: reclaiming rebuildable docker state (`$(if (`$deep) { 'all build cache' } else { 'build cache older than 72h' }))"
+        # THE IMAGE STORE IS ONLY REBUILDABLE WHEN NOTHING IS WRITING TO IT, and this section treated it as
+        # rebuildable unconditionally. `image prune` takes every DANGLING image, and a `docker pull` in flight
+        # is producing exactly that: layers unpacked and not yet tagged, each the parent the next one extracts
+        # onto. Reclaimed mid-pull, the extraction is left with no parent and the pull dies with every byte
+        # already downloaded -- "parent snapshot sha256:ceeb23b4 does not exist: not found", which is how
+        # release 1.285.0 lost its amd64 smoke gate while this reconciler was taking its three-minute pass over
+        # the same daemon. smoke-image.sh now survives one (image-pull.sh); not causing it is this end's half.
+        #
+        # SKIPPED WHILE THE FLEET IS WORKING, NOT DEFERRED FOREVER, the same shape as the engine restart above:
+        # the next pass three minutes later still finds the host under the floor, and a host DEEP under it
+        # prunes anyway -- an engine wedged on a disk with nothing left fails every job on this machine, which
+        # is worse than one pull that has to be pulled again. The build caches are BuildKit's own and rebuilt
+        # on demand by the next build, so they stay in scope either way, and on this host they are the bulk.
+        `$busyNow = BusyRunners
+        `$skipImages = (`$busyNow -gt 0) -and (-not `$deep)
+        if (`$skipImages) {
+            Say "disk: `$busyNow job(s) are executing -- reclaiming build cache only and leaving the image store alone: pruning dangling images out from under a running pull is how a release loses the parent snapshot it is extracting onto"
+        }
         # A BUDGET, because the pass runs under a 15-minute ExecutionTimeLimit and a prune on a full disk is
         # slow. Whatever does not fit is not lost -- the next pass three minutes later still sees a host under
         # the floor and picks up where this one stopped.
         `$pruneDeadline = (Get-Date).AddMinutes(5)
         foreach (`$cmd in @("buildx prune --builder intentic-cache `$cacheArgs", "builder prune `$cacheArgs", 'image prune -f')) {
+            if (`$cmd -eq 'image prune -f' -and `$skipImages) { continue }
             if ((Get-Date) -ge `$pruneDeadline) { Say 'disk: prune budget spent -- the rest waits for the next pass'; break }
             RunBounded 'wsl.exe' "-d `$Distro -- docker `$cmd" 180 | Out-Null
         }
