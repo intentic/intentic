@@ -1,10 +1,10 @@
-/* `fileq read <file>` (also the default command): one file as markdown — a capsule line saying what happened, the content up to a token budget. */
+/* `fileq read <file>` (also the default command): one file as markdown — a capsule line saying what happened, the content up to a token budget; `--plain` is the body alone, whole, for a program (git's textconv) rather than an agent. */
 import { createHash } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
 import { basename, join, resolve } from "node:path";
 import { buildCommand, type CommandContext } from "@stricli/core";
 import { errorMessage } from "@intentic/base/errors";
-import { neutralizeDoc, type DerivedDoc } from "../lib/derivers/deriver.js";
+import { deriverStamp, neutralizeDoc, type DerivedDoc } from "../lib/derivers/deriver.js";
 import { detectFormat } from "../lib/formats.js";
 import { DERIVERS, ensureSidecar, type Outcome } from "../lib/derive.js";
 import { defaultOutDir, tokensOf, workspaceRoot } from "../lib/env.js";
@@ -13,6 +13,7 @@ import { numberParser } from "../lib/flags.js";
 interface ReadFlags {
     readonly budget: number;
     readonly json: boolean;
+    readonly plain: boolean;
 }
 
 export const readCommand = buildCommand({
@@ -21,6 +22,7 @@ export const readCommand = buildCommand({
         flags: {
             budget: { kind: "parsed", parse: numberParser, default: "4000", brief: "Max stdout tokens; 0 prints only the capsule" },
             json: { kind: "boolean", default: false, brief: "Machine-readable result on stdout" },
+            plain: { kind: "boolean", default: false, brief: "The markdown alone, whole and unbudgeted; nothing saved for a file outside the workspace (git textconv)" },
         },
         positional: {
             kind: "tuple",
@@ -30,14 +32,19 @@ export const readCommand = buildCommand({
     async func(this: CommandContext, flags: ReadFlags, file: string) {
         const absPath = resolve(file);
         const root = workspaceRoot();
-        const result = root === undefined ? await readOutsideWorkspace(absPath) : await readInWorkspace(root, absPath);
+        const save = !flags.plain;
+        const result = root === undefined ? await readOutsideWorkspace(absPath, save) : await readInWorkspace(root, absPath, save);
         if (result === undefined) {
             process.exitCode = 1;
             return;
         }
+        if (flags.plain) {
+            this.process.stdout.write(result.body === "" ? "" : `${result.body}\n`);
+            return;
+        }
         if (flags.json) {
             this.process.stdout.write(
-                `${JSON.stringify({ file: absPath, format: result.format, tokens: result.tokens, path: result.savedPath, source: result.source, notes: result.notes })}\n`,
+                `${JSON.stringify({ file: absPath, format: result.format, deriver: result.deriver, tokens: result.tokens, path: result.savedPath, source: result.source, notes: result.notes })}\n`,
             );
             return;
         }
@@ -55,6 +62,8 @@ export const readCommand = buildCommand({
 
 interface ReadResult {
     readonly format: string;
+    // The reader's stamp (`docx v1`), the same one a sidecar's front matter names, so a caller can keep it beside the text.
+    readonly deriver: string;
     readonly body: string;
     readonly tokens: number;
     readonly savedPath: string;
@@ -63,10 +72,10 @@ interface ReadResult {
     readonly notes: string[];
 }
 
-const readInWorkspace = async (root: string, absPath: string): Promise<ReadResult | undefined> => {
+const readInWorkspace = async (root: string, absPath: string, save: boolean): Promise<ReadResult | undefined> => {
     const outcome = await ensureSidecar(root, absPath);
     if (outcome.kind === "skipped" && outcome.reason === "outside-workspace") {
-        return readOutsideWorkspace(absPath);
+        return readOutsideWorkspace(absPath, save);
     }
     return fromOutcome(outcome);
 };
@@ -76,6 +85,7 @@ const fromOutcome = (outcome: Outcome): ReadResult | undefined => {
         case "derived":
             return {
                 format: outcome.format,
+                deriver: deriverStamp(DERIVERS[outcome.format]),
                 body: outcome.body,
                 tokens: outcome.tokens,
                 savedPath: outcome.sidecarPath,
@@ -84,7 +94,15 @@ const fromOutcome = (outcome: Outcome): ReadResult | undefined => {
                 notes: outcome.doc.notes,
             };
         case "fresh":
-            return { format: outcome.format, body: outcome.body, tokens: outcome.tokens, savedPath: outcome.sidecarPath, source: "fresh", notes: [] };
+            return {
+                format: outcome.format,
+                deriver: deriverStamp(DERIVERS[outcome.format]),
+                body: outcome.body,
+                tokens: outcome.tokens,
+                savedPath: outcome.sidecarPath,
+                source: "fresh",
+                notes: [],
+            };
         case "removed":
         case "skipped": {
             const reason = outcome.kind === "removed" ? "missing" : outcome.reason;
@@ -94,8 +112,9 @@ const fromOutcome = (outcome: Outcome): ReadResult | undefined => {
     }
 };
 
-/* Outside a workspace there is no sidecar tree; derive in memory and save the whole thing under the XDG. */
-const readOutsideWorkspace = async (absPath: string): Promise<ReadResult | undefined> => {
+/* Outside a workspace there is no sidecar tree; derive in memory and save the whole thing under the XDG, unless the
+   caller wants only the text (`--plain`: git hands textconv a temp file per blob, and a saved copy of each would pile up). */
+const readOutsideWorkspace = async (absPath: string, save: boolean): Promise<ReadResult | undefined> => {
     const format = await detectFormat(absPath).catch(() => undefined);
     if (format === undefined) {
         process.stdout.write(`fileq: cannot read ${absPath}: unsupported or missing\n`);
@@ -111,7 +130,6 @@ const readOutsideWorkspace = async (absPath: string): Promise<ReadResult | undef
         return undefined;
     }
     const outDir = defaultOutDir();
-    await mkdir(outDir, { recursive: true });
     const hash = createHash("sha256").update(absPath).digest("hex").slice(0, 8);
     const savedPath = join(
         outDir,
@@ -119,8 +137,20 @@ const readOutsideWorkspace = async (absPath: string): Promise<ReadResult | undef
             .toLowerCase()
             .replaceAll(/[^a-z0-9.]+/g, "-")}-${hash}.md`,
     );
-    await writeFile(savedPath, `${doc.markdown}\n`);
-    return { format, body: doc.markdown, tokens: tokensOf(doc.markdown), savedPath, source: "derived", title: doc.title, notes: doc.notes };
+    if (save) {
+        await mkdir(outDir, { recursive: true });
+        await writeFile(savedPath, `${doc.markdown}\n`);
+    }
+    return {
+        format,
+        deriver: deriverStamp(DERIVERS[format]),
+        body: doc.markdown,
+        tokens: tokensOf(doc.markdown),
+        savedPath,
+        source: "derived",
+        title: doc.title,
+        notes: doc.notes,
+    };
 };
 
 const clip = (markdown: string, budgetTokens: number, path: string): string => {

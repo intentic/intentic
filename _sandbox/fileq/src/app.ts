@@ -1,5 +1,6 @@
 import { buildApplication, buildRouteMap } from "@stricli/core";
 import { deriveCommand } from "./commands/derive.command.js";
+import { gitAttributesCommand } from "./commands/git-attributes.command.js";
 import { readCommand } from "./commands/read.command.js";
 import { sweepCommand } from "./commands/sweep.command.js";
 import { version } from "./version.js";
@@ -16,6 +17,11 @@ fresh by content hash — reading a file twice derives once.
   fileq read <file> --budget 8000
   fileq derive <file…>    converge named files' sidecars (stale→derive, gone→remove)
   fileq sweep             converge the whole workspace, prune orphaned sidecars
+  fileq read --plain <f>  the markdown alone, for a program; git's textconv driver
+  fileq git-attributes    the gitattributes that route documents through it
+
+git diff, git show and git log -p on a document print its text, not "Binary
+files differ": the sandbox names every derivable extension diff=fileq.
 
 Not fileq's business: plain text (read it directly), the open web (webq),
 files needing OCR or transcription (later tiers say so in their sidecars).
@@ -28,6 +34,7 @@ export const app = buildApplication(
             read: readCommand,
             derive: deriveCommand,
             sweep: sweepCommand,
+            gitAttributes: gitAttributesCommand,
         },
         defaultCommand: "read",
         docs: { brief: "fileq, agent-native file reading: binary files as clean budgeted markdown", fullDescription: HELP },

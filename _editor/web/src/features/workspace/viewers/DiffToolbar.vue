@@ -7,7 +7,7 @@ import type { ChangeStatus } from "@intentic/extension-api";
 import { basename, parentDir } from "@intentic/ui/path";
 import ReviewStat from "../../../components/ReviewStat.vue";
 import type { LineStat } from "@intentic/code-read";
-import { isProsePath } from "../explorer/fileType";
+import { isDelimitedPath, isDocumentPath, isProsePath, rendersAsBytes } from "../explorer/fileType";
 import { useT } from "@intentic/ui/i18n";
 
 // Bar above a diff: which file, and how it's read. Shared by every diff surface (workspace tab, agent review,
@@ -33,7 +33,7 @@ const { path, status, code, additions, deletions, from } = defineProps<{
 }>();
 
 const { mobile } = useDevice();
-const { showComments, toggleShowComments, diffLayout, setDiffLayout, diffProse, setDiffProse } = useLayout();
+const { showComments, toggleShowComments, diffLayout, setDiffLayout, diffProse, setDiffProse, diffDocument, setDiffDocument } = useLayout();
 
 // A document offers a second reading, tracked changes over the text; code has only the code. In the prose reading the
 // layout and comment controls have nothing to act on, so they step aside.
@@ -43,6 +43,26 @@ const READING_OPTIONS = computed(() => [
     { label: t(`workspace.diffToolbar.prose`), value: `prose`, title: t(`workspace.diffToolbar.textWhatAddedUnderlined`) },
     { label: t(`workspace.diffToolbar.code`), value: `code`, title: t(`workspace.diffToolbar.filesLinesSideBy`) },
 ]);
+
+// A binary document (a .docx, a .pdf, a deck) reads either as tracked changes over the text rendered from it or as its
+// two versions drawn whole; a notebook's other reading is its JSON, and a csv reads as a grid or as its lines. All
+// share one preference, since each pair is "the structure" against "the raw file". Comments never apply to either.
+const document = computed(() => isDocumentPath(path) || isDelimitedPath(path));
+const documentChanges = computed(() => document.value && diffDocument.value === `changes`);
+const DOCUMENT_OPTIONS = computed(() => {
+    if (isDelimitedPath(path)) {
+        return [
+            { label: t(`workspace.diffToolbar.table`), value: `changes`, title: t(`workspace.diffToolbar.rowsAndCellsChangedMarked`) },
+            { label: t(`workspace.diffToolbar.code`), value: `sides`, title: t(`workspace.diffToolbar.filesLinesSideBy`) },
+        ];
+    }
+    return [
+        { label: t(`workspace.diffToolbar.changes`), value: `changes`, title: t(`workspace.diffToolbar.documentTextWhatAdded`) },
+        rendersAsBytes(path, undefined)
+            ? { label: t(`workspace.diffToolbar.beforeAfter`), value: `sides`, title: t(`workspace.diffToolbar.bothVersionsDrawnWhole`) }
+            : { label: t(`workspace.diffToolbar.code`), value: `sides`, title: t(`workspace.diffToolbar.filesLinesSideBy`) },
+    ];
+});
 
 // Desktop-only; DiffView forces unified on a phone without overwriting the stored preference.
 const LAYOUT_OPTIONS = computed((): { label: string; value: DiffLayout }[] => [
@@ -79,7 +99,14 @@ const LAYOUT_OPTIONS = computed((): { label: string; value: DiffLayout }[] => [
             @update:model-value="(value: string) => setDiffProse(value === `prose`)"
         />
         <SegmentedControl
-            v-if="!mobile && !proseOn"
+            v-if="document"
+            :model-value="diffDocument"
+            :options="DOCUMENT_OPTIONS"
+            size="xs"
+            @update:model-value="(value: string) => setDiffDocument(value === `changes` ? `changes` : `sides`)"
+        />
+        <SegmentedControl
+            v-if="!mobile && !proseOn && !documentChanges"
             :model-value="diffLayout"
             :options="LAYOUT_OPTIONS"
             size="xs"
@@ -87,7 +114,7 @@ const LAYOUT_OPTIONS = computed((): { label: string; value: DiffLayout }[] => [
         />
         <!-- Labelled, not just a glyph: a default that silently removes lines has to keep saying so at a glance. -->
         <button
-            v-if="!proseOn"
+            v-if="!proseOn && !document"
             type="button"
             class="ui-chip shrink-0 justify-center gap-1 rounded-md px-1.5 py-0.5 font-medium max-md:h-9 max-md:w-9"
             :class="showComments ? `ui-chip-on` : ``"

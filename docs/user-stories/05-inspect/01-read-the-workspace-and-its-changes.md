@@ -13,3 +13,5 @@ I open the workspace. Every repository under it is in the tree; opening a file o
 - [ ] Selecting a changed file shows its diff, with the old and new content distinguishable
 - [ ] Searching by a filename finds the file, and searching by a phrase inside a file finds that file
 - [ ] A binary or image file opens as a preview rather than as unreadable text
+- [ ] A changed document (a .docx, a .pdf, a spreadsheet) shows what changed in its text as tracked changes, with both versions drawn whole one press away
+- [ ] Two versions of a picture can be laid over each other (swipe, onion skin), not only set side by side

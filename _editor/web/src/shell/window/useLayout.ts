@@ -17,6 +17,8 @@ export type DiffLayout = "split" | "unified";
 // Where a diff lands the reader (see DIFF_OPEN_KEY); `top` is Monaco's default, the other two are reading strategies
 // turned into a hunk by codeLanding.ts.
 export type DiffOpen = "top" | "imports" | "biggest";
+// How a document's diff reads: tracked changes over its text, or both versions drawn whole.
+export type DiffDocument = "changes" | "sides";
 
 const STORAGE_KEY = `ui-chat-position`;
 const WIDTH_KEY = `ui-chat-width`;
@@ -106,6 +108,10 @@ const DIFF_LAYOUT_KEY = `ui-diff-layout`;
 // `auto` follows the audience (a maker reads prose, a developer code), and a press either way records an override.
 const DIFF_PROSE_KEY = `ui-diff-prose`;
 
+// How a document's diff (a .docx, a .pdf, a deck) reads, for every such diff at once: `changes` is tracked changes over
+// the text the sandbox renders from it, `sides` is both versions drawn whole by the format's own viewer.
+const DIFF_DOCUMENT_KEY = `ui-diff-document`;
+
 // Where a diff opens the reader; Monaco's own landing (first change) is usually the import list rather than the change
 // under review.
 // - imports: first change past the import list; the default, since nothing above it can be missed.
@@ -193,6 +199,7 @@ const hideFileComments = boolPref(HIDE_FILE_COMMENTS_KEY);
 const diffLayout = enumPref(DIFF_LAYOUT_KEY, [`split`, `unified`] as const, `split`);
 const diffProseChoice = enumPref(DIFF_PROSE_KEY, [`auto`, `on`, `off`] as const, `auto`);
 const diffProse = computed<boolean>(() => (diffProseChoice.value === `auto` ? useAudience().maker.value : diffProseChoice.value === `on`));
+const diffDocument = enumPref(DIFF_DOCUMENT_KEY, [`changes`, `sides`] as const, `changes`);
 const diffOpen = enumPref(DIFF_OPEN_KEY, [`top`, `imports`, `biggest`] as const, `imports`);
 const markdownOutline = boolPref(MARKDOWN_OUTLINE_KEY, true);
 
@@ -302,6 +309,10 @@ const setDiffProse = (on: boolean): void => {
     diffProseChoice.value = on ? `on` : `off`;
 };
 
+const setDiffDocument = (value: DiffDocument): void => {
+    diffDocument.value = value;
+};
+
 const setDiffOpen = (value: DiffOpen): void => {
     diffOpen.value = value;
 };
@@ -329,6 +340,7 @@ export function useLayout() {
         hideFileComments,
         diffLayout,
         diffProse,
+        diffDocument,
         diffOpen,
         markdownOutline,
         set,
@@ -355,6 +367,7 @@ export function useLayout() {
         toggleHideFileComments,
         setDiffLayout,
         setDiffProse,
+        setDiffDocument,
         setDiffOpen,
         toggleMarkdownOutline,
     };

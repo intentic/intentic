@@ -406,6 +406,13 @@ RUN chmod +x /opt/sandbox/node_modules/@intentic/webq/dist/cli.js \
 # setting gates. The skill that teaches agents it exists rides settings/skills.ts, not a plugin dir.
 RUN chmod +x /opt/sandbox/node_modules/@intentic/fileq/dist/cli.js \
     && ln -s /opt/sandbox/node_modules/@intentic/fileq/dist/cli.js /usr/local/bin/fileq
+# An agent's own `git diff`, `git show` and `git log -p` on a document print fileq's text instead of "Binary files
+# differ": the global attributes file names every derivable extension `diff=fileq` (a repo's own .gitattributes still
+# wins), and the textconv driver is `fileq read --plain`, which saves nothing for the temp file git hands it. The
+# daemon's diff routes are untouched: diff-partial.ts passes --no-textconv, and /diff/derived renders the sides itself.
+RUN fileq git-attributes > /etc/gitattributes \
+    && git config --global core.attributesFile /etc/gitattributes \
+    && git config --global diff.fileq.textconv 'fileq read --plain'
 # The `codex` CLI is the codex feature pack (a global install pinned to @openai/codex-sdk's exact dependency —
 # image-packs/codex.Dockerfile): prepare-image-trees.sh prunes the ~350 MiB @openai/codex platform package OUT of the
 # daemon tree, so the pack's copy is the only one and the daemon directly spawns its app-server surface.

@@ -33,6 +33,17 @@ vi.mock("../../sandbox/client/sandboxClient", () => ({
 }));
 
 const { default: BinaryDiffView } = await import("./BinaryDiffView.vue");
+const { registerViewer } = await import("../../../core-views/viewerRegistry");
+
+// A stand-in for an extension's document viewer: draws the byte count of what it was handed, so a test can tell
+// which side each instance got and that it got a blob, not a URL.
+const FakeDocViewer = {
+    props: { path: String, blob: Blob },
+    render() {
+        const size = (this as unknown as { blob?: Blob }).blob?.size ?? -1;
+        return h(`article`, { class: `fake-doc`, "data-bytes": String(size) }, `document of ${size} bytes`);
+    },
+};
 
 let app: App | undefined;
 const mount = (props: { path: string; before?: string; after?: string }): HTMLElement => {
@@ -144,6 +155,85 @@ describe(`BinaryDiffView`, () => {
         expect(images).toHaveLength(2);
         expect(images[0]?.getAttribute(`src`)).toBe(images[1]?.getAttribute(`src`));
         expect(element.textContent).not.toContain(`+1 B`);
+    });
+
+    it(`draws a format an extension's viewer claims with that viewer, one instance per side, each fed its own bytes`, async () => {
+        const registration = registerViewer({
+            owner: `intentic.viewers`,
+            id: `docx`,
+            extensions: [`docx`],
+            fetch: `blob`,
+            edit: false,
+            component: async () => FakeDocViewer,
+        });
+        try {
+            const element = mount({
+                path: `Specyfikacja.docx`,
+                before: `/diff/raw?source=working&which=before`,
+                after: `/diff/raw?source=working&which=after`,
+            });
+            await settleComparison();
+
+            const drawn = [...element.querySelectorAll(`article.fake-doc`)].map((node) => node.getAttribute(`data-bytes`));
+            expect(drawn).toEqual([`3`, `4`]);
+            expect(element.textContent).not.toContain(`no preview`);
+        } finally {
+            registration.dispose();
+        }
+    });
+
+    // The editing viewer reads a workspace path through its own backend; a diff side is bytes at a rev-spec, which it
+    // cannot open, so the render-only viewer under it draws the panes.
+    it(`passes over a path-fed editing viewer for the render-only one that can take a blob`, async () => {
+        const render = registerViewer({ owner: `intentic.viewers`, id: `docx`, extensions: [`docx`], fetch: `blob`, edit: false, component: async () => FakeDocViewer });
+        const office = registerViewer({
+            owner: `intentic.onlyoffice`,
+            id: `office`,
+            extensions: [`docx`],
+            fetch: `path`,
+            edit: true,
+            component: async () => ({ render: () => h(`iframe`, { class: `office` }) }),
+        });
+        try {
+            const element = mount({ path: `brief.docx`, after: `/diff/raw?source=working&which=after` });
+            await settleComparison();
+
+            expect(element.querySelectorAll(`article.fake-doc`)).toHaveLength(1);
+            expect(element.querySelector(`iframe.office`)).toBeNull();
+        } finally {
+            office.dispose();
+            render.dispose();
+        }
+    });
+
+    // Two same-shaped captures a pixel apart cannot be told apart across two panes; laid over each other they can.
+    it(`offers swipe and onion skin for two pictures, and lays them over each other in one pane when picked`, async () => {
+        const element = mount({
+            path: `shots/board.png`,
+            before: `/diff/raw?source=working&which=before`,
+            after: `/diff/raw?source=working&which=after`,
+        });
+        await settleComparison();
+
+        const swipe = [...element.querySelectorAll(`button`)].find((button) => button.textContent?.trim() === `Swipe`);
+        expect(swipe?.textContent?.trim()).toBe(`Swipe`);
+        swipe?.click();
+        await settle();
+
+        const overlay = element.querySelector(`[role="slider"]`);
+        expect(overlay?.getAttribute(`aria-valuenow`)).toBe(`50`);
+        // Both pictures in the one pane, the after one clipped at the handle.
+        const images = [...overlay!.querySelectorAll(`img`)];
+        expect(images.map((image) => image.getAttribute(`src`))).toEqual([`blob:fake/3`, `blob:fake/4`]);
+        expect(images[1]?.getAttribute(`style`)).toContain(`inset(0 0 0 50%)`);
+        expect(element.textContent).not.toContain(`Before`);
+    });
+
+    it(`keeps two pictures side by side for a file with only one side to show`, async () => {
+        const element = mount({ path: `rg-5.png`, after: `/diff/raw?source=working&which=after` });
+        await settleComparison();
+
+        expect([...element.querySelectorAll(`button`)].some((button) => button.textContent?.trim() === `Swipe`)).toBe(false);
     });
 
     it(`says so plainly when the daemon reported a binary change with no bytes on either end`, async () => {

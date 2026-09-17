@@ -17,7 +17,8 @@ export interface ProseBlock {
     readonly segments: readonly ProseSegment[];
 }
 
-type Op<T> = { readonly kind: SegmentKind; readonly item: T };
+// One step of an edit script over any items; the table diff (tableDiff.ts) walks the same script over rows.
+export type Op<T> = { readonly kind: SegmentKind; readonly item: T };
 
 // Past this many cells the paragraph table is not worth building; the block reads as replaced whole.
 const MAX_CELLS = 4_000_000;
@@ -57,7 +58,7 @@ const walkTable = <T>(table: Uint32Array, before: readonly T[], after: readonly 
 
 // A longest-common-subsequence edit script, by table. Fine at paragraph and word counts; a block too large for the
 // table is reported as removed then added, which is honest rather than slow.
-const diffSequence = <T>(before: readonly T[], after: readonly T[], equal: (left: T, right: T) => boolean): Op<T>[] | undefined =>
+export const diffSequence = <T>(before: readonly T[], after: readonly T[], equal: (left: T, right: T) => boolean): Op<T>[] | undefined =>
     before.length * after.length > MAX_CELLS ? undefined : walkTable(lcsTable(before, after, equal), before, after, equal);
 
 // Words, runs of whitespace, and runs of punctuation are the units; a changed comma then marks the comma, not the word.

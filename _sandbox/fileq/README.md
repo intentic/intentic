@@ -99,6 +99,15 @@ end state; nothing here precludes it. The zip-of-XML derivers (pptx, odt, ods, o
 entity decoding and attribute reading over machine-written markup — rather than a parser, and `src/lib/tools.ts`
 is the one place a deriver asks whether a binary is on PATH.
 
+## Git reads documents through it
+
+`fileq git-attributes` prints a gitattributes file naming every derivable extension `diff=fileq`; the sandbox image
+installs it as `core.attributesFile` with `diff.fileq.textconv = fileq read --plain`, so an agent's `git diff`,
+`git show` and `git log -p` on a .docx, .xlsx or .pdf print the change to its text rather than "Binary files
+differ". `--plain` is the body alone, whole, and saves nothing for a file outside the workspace, since git hands the
+driver one temp file per blob. The daemon never relies on it: its own patch route passes `--no-textconv`, and the
+review surfaces render both versions through `/diff/derived` (the daemon's `derived/derived-blob.ts`).
+
 ## Conventions & gotchas
 
 - Sidecars live under `.intentic/local/cache/` on purpose: portability `derived` (exports re-derive, never

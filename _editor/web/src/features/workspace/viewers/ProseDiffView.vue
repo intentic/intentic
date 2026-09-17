@@ -1,16 +1,20 @@
 <script setup lang="ts">
 import { ui } from "@intentic/ui";
-import { computed, ref } from "vue";
+import { computed, ref, watch } from "vue";
 import { foldUnchanged, type ProseBlock, proseDiff } from "./proseDiff";
 import { useT } from "@intentic/ui/i18n";
 
 // A document's change drawn as tracked changes: one text, insertions underlined, deletions struck through, long
-// unchanged stretches folded to a line. What a maker reads instead of a code diff for a markdown file; the toolbar's
-// Prose/Code control is the way to the other reading.
+// unchanged stretches folded to a line. What a maker reads instead of a code diff for a markdown file, and what a
+// document's derived text is compared as (DerivedDiffView); the toolbar's reading control is the way to the other.
 
 const t = useT();
 
-const { before = ``, after = `` } = defineProps<{ before?: string; after?: string }>();
+// `unchangedNote`: what to say over two texts that differ only in spacing; a host comparing renderings says it in its
+// own words, since there the whole file may have changed while its text did not, and `false` says nothing at all.
+const { before = ``, after = ``, unchangedNote } = defineProps<{ before?: string; after?: string; unchangedNote?: string | false }>();
+// How many paragraphs differ, for a host that states it in its own bar.
+const emit = defineEmits<{ changed: [number] }>();
 
 const blocks = computed(() => proseDiff(before, after));
 // Folds the reader has opened, by the index of the first paragraph they hide; a new diff starts folded.
@@ -23,6 +27,7 @@ const open = (at: number): void => {
 const unfolded = (at: number, count: number): readonly ProseBlock[] => blocks.value.slice(at, at + count);
 
 const changed = computed(() => blocks.value.filter((block) => block.kind !== `same`).length);
+watch(changed, (count) => emit(`changed`, count), { immediate: true });
 
 const HEADING_CLASS: Record<number, string> = {
     1: `text-xl font-semibold`,
@@ -48,7 +53,7 @@ const blockClass = (block: ProseBlock): string =>
 
 <template>
     <div class="h-full min-h-0 overflow-auto px-6 py-4">
-        <p v-if="changed === 0" class="mb-4 text-2xs text-subtle">{{ t(`workspace.proseDiffView.nothingInTextChanged`) }}</p>
+        <p v-if="changed === 0 && unchangedNote !== false" class="mb-4 text-2xs text-subtle">{{ unchangedNote ?? t(`workspace.proseDiffView.nothingInTextChanged`) }}</p>
         <div class="mx-auto flex max-w-3xl flex-col gap-4 leading-relaxed text-content">
             <template v-for="(run, index) in runs" :key="index">
                 <template v-if="run.kind === `fold`">

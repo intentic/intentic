@@ -9,6 +9,7 @@ import { automationsContract } from "./contracts/automations.contract.js";
 import { capabilitiesContract } from "./contracts/capabilities.contract.js";
 import { choresContract } from "./contracts/chores.contract.js";
 import { ciContract } from "./contracts/ci.contract.js";
+import { diffContract } from "./contracts/diff.contract.js";
 import { endpointsContract } from "./contracts/endpoints.contract.js";
 import { exitContract } from "./contracts/exit.contract.js";
 import { extensionsContract } from "./contracts/extensions.contract.js";
@@ -52,6 +53,7 @@ export { endpointsContract, type TrialHealth, TrialStatusSchema, type TrialStatu
 export { exitContract } from "./contracts/exit.contract.js";
 export { extensionsContract } from "./contracts/extensions.contract.js";
 export { personasContract } from "./contracts/personas.contract.js";
+export { diffContract } from "./contracts/diff.contract.js";
 export { gitContract } from "./contracts/git.contract.js";
 export { historyContract } from "./contracts/history.contract.js";
 // Not part of `sandboxContract` below: spoken over a device's WebSocket, with the machine implementing it.
@@ -153,6 +155,7 @@ export * from "./schemas/environment.js";
 export * from "./schemas/exit.js";
 export * from "./schemas/extension-updates.js";
 export * from "./schemas/providers/fast-mode.js";
+export * from "./schemas/diff.js";
 export * from "./schemas/git/git.js";
 export * from "./schemas/git/git-history.js";
 export * from "./schemas/history.js";
@@ -211,6 +214,7 @@ export const sandboxContract = {
     capabilities: capabilitiesContract,
     chores: choresContract,
     ci: ciContract,
+    diff: diffContract,
     endpoints: endpointsContract,
     extensions: extensionsContract,
     personas: personasContract,

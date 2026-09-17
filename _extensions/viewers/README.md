@@ -37,6 +37,11 @@ The host resolves an open file to a viewer, gets the content the way its MANIFES
 in: `text` for the SVG's markup, `blob` for formats that must be parsed whole, `src` (a streaming
 `/workspace/media` URL) for audio and video, which are read a window at a time and never held.
 
+The same components draw the two sides of a diff (the workspace's `BinaryDiffView`, the Before / After reading of
+a changed document): one instance per side, each handed that side's bytes as its declared content prop, the `src`
+kind as a blob URL. A viewer that takes a `path` cannot be given a blob, so the diff passes over it for the
+render-only viewer under it, whatever their rank when opening the file.
+
 Every format here is read in this repository rather than by a library: `src/pptx` resolves each shape against its
 layout, its master and the theme, since a slide states almost nothing about itself — a title carries neither its
 position nor its size, and its colour is a theme slot with modifiers on it. What comes out is boxes at pixel

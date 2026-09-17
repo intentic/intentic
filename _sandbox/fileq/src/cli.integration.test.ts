@@ -107,6 +107,33 @@ describe("read", () => {
         expect(out).toContain("for the whole document]");
     });
 
+    it("--plain prints the markdown alone, whole, with no capsule to strip", async () => {
+        const long = Array.from({ length: 200 }, (_, i) => `Paragraph ${i} with a good number of words in it to cost tokens.`);
+        writeFileSync(join(root, "plain.docx"), docxBytes("Plain", long));
+        const { out, exit } = await fileq("read", "--plain", join(root, "plain.docx"));
+        expect(exit).toBe(0);
+        expect(out.startsWith("fileq:")).toBe(false);
+        expect(out).not.toContain("saved:");
+        expect(out).not.toContain("[cut at");
+        expect(out).toContain("Paragraph 199 with a good number");
+    });
+
+    it("--plain on a file outside the workspace saves nothing, since git hands textconv one temp file per blob", async () => {
+        const outside = mkdtempSync(join(tmpdir(), "fileq-outside-"));
+        const home = mkdtempSync(join(tmpdir(), "fileq-home-"));
+        process.env["FILEQ_HOME"] = home;
+        try {
+            writeFileSync(join(outside, "memo.docx"), docxBytes("Memo", ["Kept in memory only."]));
+            const { out } = await fileq("read", "--plain", join(outside, "memo.docx"));
+            expect(out).toContain("Kept in memory only.");
+            expect(existsSync(join(home, "out"))).toBe(false);
+        } finally {
+            delete process.env["FILEQ_HOME"];
+            rmSync(outside, { recursive: true, force: true });
+            rmSync(home, { recursive: true, force: true });
+        }
+    });
+
     it("is the default command", async () => {
         const { out } = await fileq(join(root, "notes.docx"));
         expect(out).toContain("fileq:");
@@ -150,5 +177,17 @@ describe("sweep", () => {
         const { out } = await fileq("sweep", "--json");
         const summary = JSON.parse(out) as { derived: number; fresh: number };
         expect(summary.fresh).toBeGreaterThan(0);
+    });
+});
+
+describe("git-attributes", () => {
+    it("names every derivable extension diff=fileq, except the ones that are text underneath", async () => {
+        const { out, exit } = await fileq("git-attributes");
+        expect(exit).toBe(0);
+        expect(out).toContain("*.docx diff=fileq\n");
+        expect(out).toContain("*.ipynb diff=fileq\n");
+        expect(out).toContain("*.png diff=fileq\n");
+        expect(out).not.toContain("*.html");
+        expect(out).not.toContain("*.htm ");
     });
 });

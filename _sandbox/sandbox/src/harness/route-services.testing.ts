@@ -35,6 +35,7 @@ import {
 } from "./route-stores.testing.js";
 import { createCredentialGrants } from "../secrets/credential-grants.js";
 import type { SecretUse } from "../secrets/secret-uses.js";
+import { deriveBytes } from "../derived/derived-blob.js";
 import { deriveText, readDerivedText } from "../derived/derived-text.js";
 import { sidecarStatus } from "../derived/sidecar-service.js";
 import { IN_MEMORY, openSearchIndex } from "../sessions/search-index.js";
@@ -443,7 +444,7 @@ export const services = (overrides: ServiceOverrides = {}): Services => {
         agentOrigins: { forRepo: async () => ({}), identify: () => ({}), metrics: () => ({}) },
         files: fakeFiles(),
         // The real readers: a shadow is read off disk, so a fake here would only test the fake.
-        derived: { read: readDerivedText, derive: deriveText, status: sidecarStatus },
+        derived: { read: readDerivedText, derive: deriveText, deriveBytes, status: sidecarStatus },
         workspaceTree: async () => ({ root: WORKSPACE_ROOT, tree: [], hidden: 0, barren: [] }),
         // Inert resident search, no index, no rg; the search route test overrides `run` with a canned outcome.
         iq: unstubbed<Services["iq"]>("iq", {

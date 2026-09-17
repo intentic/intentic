@@ -1,5 +1,6 @@
 import type { GitDiffSide } from "@intentic/api-contract";
 import type { ChangeStatus } from "@intentic/extension-api";
+import { type DiffSourceQuery, DiffSourceQuerySchema } from "@intentic/sandbox-contract";
 
 // Binary diff bytes come from a separate /diff/raw request per side; built once so all diff sources query it
 // identically. Sides are inferred from status, not the response: added has no before, deleted no after, and a
@@ -22,3 +23,17 @@ export const diffRawUrls = (source: DiffRawSource, path: string, status: ChangeS
     ...(status === `added` || status === `renamed` ? {} : { beforeRaw: sideUrl(source, path, `before`) }),
     ...(status === `deleted` ? {} : { afterRaw: sideUrl(source, path, `after`) }),
 });
+
+// A side URL read back into the source it was built from, for the derived-text twin of the same diff (/diff/derived
+// takes the identical query, `which` aside). The URL is the one thing every diff surface hands its viewer, so no payload
+// grows a field for this; an extension's own openDiff rides along.
+export const derivedDiffSource = (sides: { readonly beforeRaw?: string; readonly afterRaw?: string }): DiffSourceQuery | undefined => {
+    const url = sides.beforeRaw ?? sides.afterRaw;
+    if (url === undefined) {
+        return undefined;
+    }
+    const params = new URLSearchParams(url.slice(url.indexOf(`?`) + 1));
+    params.delete(`which`);
+    const parsed = DiffSourceQuerySchema.safeParse(Object.fromEntries(params));
+    return parsed.success ? parsed.data : undefined;
+};

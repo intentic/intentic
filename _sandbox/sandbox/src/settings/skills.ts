@@ -69,6 +69,11 @@ shadow's age by eye.
 - Plain text (md, csv, txt, code) is not fileq's business: Read it directly — but see below for the big ones.
 - Web pages belong to \`webq\`; images for a vision model belong to the Read tool, which shows the pixels.
 
+## What changed in a document
+\`git diff\`, \`git show\` and \`git log -p\` on a .docx, .xlsx, .pptx, .pdf or .ipynb print the change to its
+text, not "Binary files differ": every derivable extension is routed through fileq as git's textconv. Read the
+diff; do not convert both versions by hand.
+
 Exit codes: 0 content, 1 nothing derivable, 2 broken invocation or install.
 
 ## Text-shaped files that are too big to cat

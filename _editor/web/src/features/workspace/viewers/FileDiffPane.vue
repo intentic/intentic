@@ -3,17 +3,24 @@ import type { PartialFileDiff } from "@intentic/sandbox-contract";
 import { formatBytes } from "@intentic/ui";
 import { computed } from "vue";
 import type { LineStat } from "@intentic/code-read";
-import { isProsePath, rendersAsBytes } from "../explorer/fileType";
+import { isDelimitedPath, isDocumentPath, isProsePath, rendersAsBytes } from "../explorer/fileType";
 import { useLayout } from "../../../shell/window/useLayout";
+import { derivedDiffSource } from "../changes/diffRaw";
 import BinaryDiffView from "./BinaryDiffView.vue";
+import DerivedDiffView from "./DerivedDiffView.vue";
 import { patchedSides } from "./diffPatch";
 import DiffView from "./DiffView.vue";
 import ProseDiffView from "./ProseDiffView.vue";
+import { sheetOfDelimited } from "./tableDiff";
+import TableDiffView from "./TableDiffView.vue";
 
-// One file's diff, whichever of four shapes it arrives in; every review surface (Changes tab, phone, agent
-// review) renders this same fork. Loading state stays with the host; content does not. The four shapes, decided
+// One file's diff, whichever of six shapes it arrives in; every review surface (Changes tab, phone, agent
+// review) renders this same fork. Loading state stays with the host; content does not. The six shapes, decided
 // in this order:
-// bytes → no text to diff isn't nothing to see: a .png renders as its two sides.
+// document → a .docx, .pdf, deck or notebook read as tracked changes over the text the daemon renders from each
+// version (DerivedDiffView), while the toolbar's reading says so and the surface named where the sides live.
+// table → a .csv/.tsv read as a grid of cells (TableDiffView), under the same reading; its lines are the other one.
+// bytes → no text to diff isn't nothing to see: a .png renders as its two sides, a .docx as two documents.
 // partial → too big to send whole; rebuilt from the daemon's patch into two sides with the file's own line
 // numbers, under a bar stating what's shown.
 // nothing → partial with no patch to show; only the sizes are said.
@@ -36,8 +43,18 @@ const emit = defineEmits<{ stat: [LineStat | undefined] }>();
 
 // A document's whole two sides read as tracked changes when the toolbar's reading says so (DiffToolbar, the same
 // preference); a partial or binary diff has no text to word.
-const { diffProse } = useLayout();
+const { diffProse, diffDocument, setDiffDocument } = useLayout();
 const prose = computed(() => diffProse.value && isProsePath(path));
+
+// The derived-text reading of a document, when the side URLs name a diff the daemon can render both versions of.
+const source = computed(() => derivedDiffSource({ beforeRaw, afterRaw }));
+const derived = computed(() => diffDocument.value === `changes` && isDocumentPath(path) && source.value !== undefined);
+
+// Delimited text as a grid, when whole sides are here to parse; a partial (oversized) csv keeps the line diff.
+const table = computed(() => diffDocument.value === `changes` && isDelimitedPath(path) && partial === undefined);
+const filename = computed(() => path.slice(path.lastIndexOf(`/`) + 1));
+const beforeSheets = computed(() => (before === undefined ? [] : [sheetOfDelimited(before, filename.value)]));
+const afterSheets = computed(() => (after === undefined ? [] : [sheetOfDelimited(after, filename.value)]));
 
 // Patch unpicked into two sides plus each line's file line; undefined when there's no patch, or no regions.
 const patched = computed(() => (partial?.patch === undefined ? undefined : patchedSides(partial.patch, partial.more === true)));
@@ -70,7 +87,9 @@ const note = computed(() => {
 </script>
 
 <template>
-    <BinaryDiffView v-if="rendersAsBytes(path, binary)" :path="path" :before="beforeRaw" :after="afterRaw" :at="at" />
+    <DerivedDiffView v-if="derived && source" :path="path" :source="source" :at="at" @sides="setDiffDocument(`sides`)" />
+    <BinaryDiffView v-else-if="rendersAsBytes(path, binary)" :path="path" :before="beforeRaw" :after="afterRaw" :at="at" />
+    <TableDiffView v-else-if="table" :before="beforeSheets" :after="afterSheets" />
     <div v-else-if="partial !== undefined" class="flex h-full min-h-0 flex-col">
         <div class="flex shrink-0 items-center gap-2 border-b border-line px-3 py-1.5 text-2xs text-muted">
             <Icon :name="patched ? `compress` : `info-circle`" class="shrink-0 text-[0.7rem]" />

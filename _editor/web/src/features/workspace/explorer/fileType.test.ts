@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { codeLangForPath } from "@intentic/code-read";
-import { rendersAsBytes, resolveFile, TEXT_EDIT_MAX_BYTES } from "./fileType";
+import { isDelimitedPath, isDocumentPath, isSpreadsheetPath, rendersAsBytes, resolveFile, TEXT_EDIT_MAX_BYTES } from "./fileType";
 
 // Empty (0-byte) files: text types stay editable (code/markdown); binary ones show the "empty" fallback.
 describe(`resolveFile empty files`, () => {
@@ -146,5 +146,30 @@ describe(`resolveFile large text`, () => {
 
     it(`treats an unknown size optimistically: the read is bounded either way`, () => {
         expect(resolveFile(`mystery.log`, undefined)).toEqual({ mode: `code`, lang: `log` });
+    });
+});
+
+// Which diffs open as tracked changes over rendered text: the formats fileq reads, minus the ones that are looked at.
+describe(`isDocumentPath`, () => {
+    it(`claims documents, spreadsheets, decks, books, notebooks and archives`, () => {
+        for (const name of [`Brief.DOCX`, `a/b.pdf`, `deck.pptx`, `book.epub`, `sheet.xlsx`, `sheet.ods`, `notes.odt`, `notes.rtf`, `nb.ipynb`, `dist.zip`, `lib.jar`, `pkg.whl`, `dump.tar`, `dump.tgz`]) {
+            expect(isDocumentPath(name), name).toBe(true);
+        }
+    });
+
+    it(`leaves pictures, recordings, fonts and code to their own diffs`, () => {
+        for (const name of [`shot.png`, `logo.svg`, `clip.mp4`, `song.mp3`, `Inter.woff2`, `main.ts`, `README.md`, `notes.txt`, `.gitignore`]) {
+            expect(isDocumentPath(name), name).toBe(false);
+        }
+    });
+});
+
+// Which documents diff as a grid rather than as paragraphs, and which text does.
+describe(`isSpreadsheetPath and isDelimitedPath`, () => {
+    it(`names the workbook formats and the delimited text formats, and nothing else`, () => {
+        expect([`a.xlsx`, `b.ODS`, `c.ots`].map(isSpreadsheetPath)).toEqual([true, true, true]);
+        expect([`a.docx`, `d.csv`, `e.pptx`].map(isSpreadsheetPath)).toEqual([false, false, false]);
+        expect([`d.csv`, `e.TSV`].map(isDelimitedPath)).toEqual([true, true]);
+        expect([`a.xlsx`, `f.txt`, `g.md`].map(isDelimitedPath)).toEqual([false, false, false]);
     });
 });

@@ -29,6 +29,48 @@ export const isProsePath = (path: string): boolean => {
     return MARKDOWN_EXTS.has(ext) || ext === "txt";
 };
 
+// A file whose diff can read as tracked changes over the text fileq renders from it (viewers/DerivedDiffView.vue):
+// documents, spreadsheets, decks, books, notebooks and archives. Pictures and recordings are not: their two sides are
+// looked at, not read. A notebook is text by every other rule here and unreadable as JSON, so it is in.
+const DOCUMENT_EXTS = new Set([
+    "docx",
+    "odt",
+    "ott",
+    "rtf",
+    "epub",
+    "pdf",
+    "pptx",
+    "odp",
+    "otp",
+    "odg",
+    "xlsx",
+    "ods",
+    "ots",
+    "ipynb",
+    "zip",
+    "jar",
+    "war",
+    "whl",
+    "tar",
+    "tgz",
+    "gz",
+    "bz2",
+    "xz",
+    "zst",
+    "7z",
+    "rar",
+]);
+export const isDocumentPath = (path: string): boolean => DOCUMENT_EXTS.has(nameExt(path).ext);
+
+// A document whose rendered text is one table per sheet, so its diff is a grid of cells, not paragraphs
+// (viewers/TableDiffView.vue).
+const SPREADSHEET_EXTS = new Set(["xlsx", "ods", "ots"]);
+export const isSpreadsheetPath = (path: string): boolean => SPREADSHEET_EXTS.has(nameExt(path).ext);
+
+// Text that is a table: read as rows and cells by the same grid diff, with the line diff as its other reading.
+const DELIMITED_EXTS = new Set(["csv", "tsv"]);
+export const isDelimitedPath = (path: string): boolean => DELIMITED_EXTS.has(nameExt(path).ext);
+
 // Never read as text; also covers viewer-extension formats. SVG stays out: it's text (XML), not binary.
 const BINARY_EXTS = new Set([
     "woff",

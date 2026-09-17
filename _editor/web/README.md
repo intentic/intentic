@@ -124,6 +124,11 @@ the whole point of the lean-core split: see the extension system in [ARCHITECTUR
 - **New file viewer:** contribute a `viewers` entry from an extension (see
   [`_extensions/viewers`](../../_extensions/viewers)): the host owns the fetch and hands your component the
   bytes. Don't add a branch to `FileViewer.vue`.
+- **New reading of a diff:** `viewers/FileDiffPane.vue` is the one fork every review surface renders (document,
+  table, bytes, patch, text) and `DiffToolbar.vue` owns the reading control. A binary format joins the document
+  reading by being readable to `fileq` and named in `explorer/fileType.ts` (`isDocumentPath`); its Before / After
+  reading is whatever viewer an extension registers for the extension, mounted once per side. See
+  [docs/design/derived-diff.md](../../docs/design/derived-diff.md).
 - **New sandbox call from an extension:** add the daemon route, declare it in the extension's manifest
   route allowlist, then call it via `api.sandbox.json` (validate the response against the
   `@intentic/sandbox-contract` schema). An undeclared route is refused by the host.

@@ -1,15 +1,18 @@
 <script setup lang="ts">
-import { Button, formatBytes, ImageView, type ImageViewState, isRenderableImage, useDevice, ui } from "@intentic/ui";
+import { Button, formatBytes, ImageView, type ImageViewState, isRenderableImage, SegmentedControl, useDevice, ui } from "@intentic/ui";
 import { errorMessage } from "@intentic/ui/async";
-import { computed, ref, watch } from "vue";
+import { type Component, computed, ref, shallowRef, watch } from "vue";
 import { sandboxBlob } from "../../sandbox/client/sandboxClient";
 import { useLayout } from "../../../shell/window/useLayout";
+import { type RegisteredViewer, renderViewerForExtension } from "../../../core-views/viewerRegistry";
+import ImageCompareView from "./ImageCompareView.vue";
 import { compareSides, type ImageSize, imageSize, type SidesComparison } from "./imageSides";
 import { useT } from "@intentic/ui/i18n";
 
-// Before/after viewer for binary diffs (mainly images): DiffView's framing, bytes instead of text. Bytes come from
-// sandboxBlob as revocable blob: URLs, since daemon routes are Bearer-authenticated. Both panes share one zoom/pan
-// `view`; only renderable images draw inline, others hand over the bytes.
+// Before/after viewer for binary diffs: DiffView's framing, bytes instead of text. Bytes come from sandboxBlob as
+// revocable blob: URLs, since daemon routes are Bearer-authenticated. A picture draws inline, both panes sharing one
+// zoom/pan `view`, or laid over itself as a swipe or an onion skin (ImageCompareView); a format an extension's viewer
+// claims is drawn by that viewer, once per side; anything else hands over the bytes.
 
 // `at`: sandbox the bytes are on, absent for the active one; a wrong address could answer from a different file.
 const t = useT();
@@ -25,12 +28,41 @@ const split = computed(() => !mobile.value && diffLayout.value === `split` && be
 // picture here can't be switched off by disabling a viewer extension.
 const renderable = computed(() => isRenderableImage(path));
 const filename = computed(() => path.slice(path.lastIndexOf(`/`) + 1));
+const extension = computed(() => {
+    const dot = filename.value.lastIndexOf(`.`);
+    return dot > 0 ? filename.value.slice(dot + 1) : ``;
+});
+
+// The extension viewer that can draw this format from bytes, for everything that isn't a picture. Reactive: switching
+// the viewers extension off mid-review drops the panes to the download floor, the same as opening the file would.
+const viewer = computed<RegisteredViewer | undefined>(() => (renderable.value ? undefined : renderViewerForExtension(extension.value)));
+// Its component, imported once for both panes; a stale import (viewer changed under it) is dropped by the token.
+const viewerComponent = shallowRef<Component>();
+let viewerSeq = 0;
+watch(
+    viewer,
+    (next) => {
+        const token = ++viewerSeq;
+        viewerComponent.value = undefined;
+        if (next === undefined) {
+            return;
+        }
+        void next.component().then((component) => {
+            if (token === viewerSeq) {
+                viewerComponent.value = component;
+            }
+        });
+    },
+    { immediate: true },
+);
 
 interface Side {
     readonly url?: string;
     readonly size?: number;
     // Kept, not just measured: the comparison reuses this same Blob, not a second copy.
     readonly blob?: Blob;
+    // The bytes decoded, only for a viewer whose manifest asks for `text`.
+    readonly text?: string;
     readonly natural?: ImageSize;
     readonly error?: string;
     readonly loading: boolean;
@@ -40,6 +72,18 @@ const loaded = ref<Record<"before" | "after", Side>>({ before: { loading: false 
 const comparison = ref<SidesComparison>();
 // Magnification and corner both panes show; zooming one zooms the other.
 const view = ref<ImageViewState>({ fit: true });
+
+// How two pictures are compared: beside each other, or laid over each other. Offered once both are drawn; a new
+// file starts side by side, the reading that says what each picture is before any overlay says what moved.
+type CompareMode = "sides" | "swipe" | "onion";
+const compareMode = ref<CompareMode>(`sides`);
+const COMPARE_OPTIONS = computed((): { label: string; value: CompareMode; title: string }[] => [
+    { label: t(`workspace.binaryDiffView.twoUp`), value: `sides`, title: t(`workspace.binaryDiffView.bothPicturesBesideEachOther`) },
+    { label: t(`workspace.binaryDiffView.swipe`), value: `swipe`, title: t(`workspace.binaryDiffView.afterWipedOverBefore`) },
+    { label: t(`workspace.binaryDiffView.onionSkin`), value: `onion`, title: t(`workspace.binaryDiffView.afterFadedOverBefore`) },
+]);
+const overlayable = computed(() => renderable.value && loaded.value.before.url !== undefined && loaded.value.after.url !== undefined);
+const overlay = computed(() => overlayable.value && compareMode.value !== `sides`);
 
 // One fetch per present side, each revoking its own object URL on prop change or unmount. A monotonic token
 // drops a stale response for a file already left.
@@ -58,6 +102,7 @@ watch(
         comparison.value = undefined;
         // A new file starts whole, at its own fit: the last file's magnification says nothing about this one.
         view.value = { fit: true };
+        compareMode.value = `sides`;
 
         for (const [side, source] of [
             [`before`, beforeUrl],
@@ -80,6 +125,14 @@ watch(
                             loaded.value = { ...loaded.value, [side]: { ...loaded.value[side], natural } };
                         }
                     });
+                    // A text-fed viewer (an .svg) gets the markup, decoded once here rather than by each pane.
+                    if (viewer.value?.fetch === `text`) {
+                        void blob.text().then((text) => {
+                            if (token === seq) {
+                                loaded.value = { ...loaded.value, [side]: { ...loaded.value[side], text } };
+                            }
+                        });
+                    }
                 },
                 (error: unknown) => {
                     if (token === seq) {
@@ -108,6 +161,22 @@ watch(
         });
     },
 );
+
+// The one content prop the viewer's manifest `fetch` kind asks for, and nothing spare: a leftover attr would fall
+// through onto a viewer whose root is itself a component and win over its own binding. Undefined until the side has
+// what that kind needs.
+const viewerContent = (side: Side): { blob: Blob } | { text: string } | { src: string } | undefined => {
+    switch (viewer.value?.fetch) {
+        case `blob`:
+            return side.blob === undefined ? undefined : { blob: side.blob };
+        case `text`:
+            return side.text === undefined ? undefined : { text: side.text };
+        case `url`:
+            return side.url === undefined ? undefined : { src: side.url };
+        default:
+            return undefined;
+    }
+};
 
 // Saves one side's bytes via the object URL already rendering it: no second fetch, nothing extra to revoke.
 const download = (side: Side, label: string): void => {
@@ -164,12 +233,20 @@ const panes = computed(() =>
 <template>
     <div class="flex h-full min-h-0 flex-col">
         <!-- Verdict sits above both panes, as a statement about the pair, and the first thing read when the halves look alike. -->
-        <div v-if="verdict" class="flex shrink-0 items-center gap-2 border-b border-line px-3 py-1.5 text-2xs text-muted">
-            <Icon name="info-circle" class="shrink-0 text-[0.7rem]" />
-            <span class="min-w-0 truncate" v-tooltip.bottom.overflow="verdict">{{ verdict }}</span>
+        <div v-if="verdict || overlayable" class="flex shrink-0 items-center gap-2 border-b border-line px-3 py-1.5 text-2xs text-muted">
+            <template v-if="verdict">
+                <Icon name="info-circle" class="shrink-0 text-[0.7rem]" />
+                <span class="min-w-0 truncate" v-tooltip.bottom.overflow="verdict">{{ verdict }}</span>
+            </template>
+            <span class="flex-1"></span>
+            <SegmentedControl v-if="overlayable" :model-value="compareMode" :options="COMPARE_OPTIONS" size="xs" @update:model-value="(value: string) => (compareMode = value as CompareMode)" />
         </div>
 
-        <div class="flex min-h-0 flex-1 flex-col overflow-auto" :class="split ? 'md:flex-row' : ''">
+        <!-- One pane for two pictures: the reading for a change too small to see across two panes. -->
+        <div v-if="overlay && loaded.before.url && loaded.after.url" class="min-h-0 flex-1">
+            <ImageCompareView :before="loaded.before.url" :after="loaded.after.url" :mode="compareMode === `swipe` ? `swipe` : `onion`" />
+        </div>
+        <div v-else class="flex min-h-0 flex-1 flex-col overflow-auto" :class="split ? 'md:flex-row' : ''">
             <div
                 v-for="(pane, index) in panes"
                 :key="pane.key"
@@ -220,7 +297,19 @@ const panes = computed(() =>
                         :view="panes.length > 1 ? view : undefined"
                         @update:view="(next) => (view = next)"
                     />
-                    <!-- Not an image: nothing to compare visually, so say what it is and hand over the bytes. -->
+<!-- The extension's own rendering of this format, one instance per side, fed exactly the content prop its manifest names. -->
+                    <component
+                        :is="viewerComponent"
+                        v-else-if="viewerComponent && viewerContent(pane.side)"
+                        :path="path"
+                        v-bind="viewerContent(pane.side)"
+                        @download="download(pane.side, pane.label.toLowerCase())"
+                    />
+                    <!-- A viewer that is still importing, or a text viewer still decoding: the side is here, its surface isn't yet. -->
+                    <div v-else-if="viewer && pane.side.url" class="flex h-full items-center justify-center text-muted">
+                        <Icon name="spinner" class="text-xl" spin />
+                    </div>
+                    <!-- Nothing draws this format: say what it is and hand over the bytes. -->
                     <div v-else class="flex h-full flex-col items-center justify-center gap-3 px-6 text-center">
                         <Icon name="box" class="text-3xl text-subtle" />
                         <p class="max-w-sm text-xs text-muted">{{ t(`workspace.binaryDiffView.binaryFileNoPreview`) }}</p>

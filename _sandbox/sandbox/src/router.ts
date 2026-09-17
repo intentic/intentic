@@ -9,6 +9,7 @@ import { routePersona } from "./agent/prompt/persona-router.js";
 import { createPersonasRoutes } from "./personas/personas.routes.js";
 import { createChoresRoutes } from "./chores/chores.routes.js";
 import { createCiRoutes } from "./ci/ci.routes.js";
+import { createDiffRoutes } from "./git/changes/diff-derived.js";
 import type { Services } from "./composition.js";
 import { createApprovalsRoutes } from "./approvals/approvals.routes.js";
 import { createExtensionsRoutes } from "./extensions/extensions.routes.js";
@@ -51,6 +52,7 @@ export const createRouter = (services: Services) => ({
     capabilities: createCapabilitiesRoutes(services),
     chores: createChoresRoutes(services),
     ci: createCiRoutes(services),
+    diff: createDiffRoutes(services),
     approvals: createApprovalsRoutes(services),
     extensions: createExtensionsRoutes(services),
     personas: createPersonasRoutes(services, (ask, signal) => routePersona(services, ask, signal)),

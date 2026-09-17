@@ -4155,12 +4155,18 @@
         },
         "binaryDiffView": {
             "after": "After",
+            "afterFadedOverBefore": "La imagen posterior fundida sobre la anterior",
+            "afterWipedOverBefore": "La imagen posterior desplazada sobre la anterior desde un tirador que arrastras",
             "againstBeforeSide": "{delta} against the before side",
             "before": "Before",
             "binaryFileNeitherSide": "Binary file: neither side has content to show.",
             "binaryFileNoPreview": "Binary file: no preview for this type.",
+            "bothPicturesBesideEachOther": "Ambas imágenes lado a lado, con zoom y desplazamiento al unísono",
             "downloadVersion": "Download the {toLowerCase} version",
-            "downloadVersion2": "Download the {toLowerCase} version of {filename}"
+            "downloadVersion2": "Download the {toLowerCase} version of {filename}",
+            "onionSkin": "Superponer",
+            "swipe": "Deslizar",
+            "twoUp": "Lado a lado"
         },
         "changeOrigins": {
             "readingLandedDiff": "Reading the landed diff…"
@@ -4193,6 +4199,24 @@
             "symbols": "Symbols",
             "toStartAgentRefactoring": "to start an agent refactoring it.",
             "top": "· top {count} of {hotspots}"
+        },
+        "derivedDiffView": {
+            "couldNotRenderVersions": "No se pudieron leer como texto las versiones de este documento.",
+            "formattingNotShown": "formato, imágenes y maquetación no se muestran",
+            "longDocumentOnlyStart": "Documento largo: aquí solo se compara el inicio de cada versión.",
+            "notFileItselfBothVersions": "No es el archivo en sí: el texto que este sandbox generó de cada versión, la misma lectura con la que trabaja un agente. El formato, las imágenes y la maquetación no están en él.",
+            "paragraphsChanged": "{count} párrafo cambiado | {count} párrafos cambiados",
+            "renderingBothVersions": "Leyendo ambas versiones como texto…",
+            "rowsChanged": "{count} fila cambiada | {count} filas cambiadas",
+            "showBothVersionsInstead": "Mostrar ambas versiones en su lugar",
+            "sideAfter": "posterior",
+            "sideBefore": "anterior",
+            "stillGoingNothingFailed": "Sigue en marcha — nada ha fallado. El texto se guarda cuando llega, así que al volver a este archivo estará aquí.",
+            "textDiffersOnlySpacing": "El texto solo difiere en espacios o saltos de línea.",
+            "textOfBothVersions": "Texto de ambas versiones",
+            "textSameInBothVersions": "El texto es el mismo en ambas versiones; lo que cambió es el formato, las imágenes o los metadatos del archivo.",
+            "versionAlreadyRenderedCostsNothing": "Una versión ya leída no cuesta nada; una nueva tarda un momento. Un PDF escaneado se reconoce página a página, y ese es el que puede tardar.",
+            "versionCouldNotBeRead": "La versión {side} de {filename} no se pudo leer como texto: {reason}."
         },
         "derivedTextView": {
             "copyDerivedText": "Copy derived text",
@@ -4254,13 +4278,19 @@
             "readingFile": "Reading the file…"
         },
         "diffToolbar": {
+            "beforeAfter": "Antes / Después",
+            "bothVersionsDrawnWhole": "Ambas versiones completas, lado a lado",
+            "changes": "Cambios",
             "code": "Code",
             "comments": "Comments",
             "commentsHiddenClickTo": "Comments hidden, click to show them",
             "commentsShownClickTo": "Comments shown, click to diff the code alone",
+            "documentTextWhatAdded": "El texto del documento con lo añadido subrayado y lo eliminado tachado",
             "filesLinesSideBy": "The file's lines, side by side or inline",
             "prose": "Prose",
+            "rowsAndCellsChangedMarked": "Filas y celdas, con las celdas cambiadas marcadas",
             "split": "Split",
+            "table": "Tabla",
             "textWhatAddedUnderlined": "The text with what was added underlined and what was removed struck through",
             "unified": "Unified"
         },
@@ -4363,6 +4393,12 @@
             "noFileChangesRecorded": "No file changes recorded.",
             "refresh": "Refresh {toLowerCase}",
             "working": "Working"
+        },
+        "imageCompareView": {
+            "fadeBetweenPictures": "Fundir entre la imagen anterior y la posterior",
+            "onionCaption": "posterior al {percent} %",
+            "swipeBetweenPictures": "Deslizar entre la imagen anterior y la posterior",
+            "swipeCaption": "antes · {percent} % · después"
         },
         "lockedFile": {
             "access": "Access",
@@ -4499,6 +4535,16 @@
         },
         "specialPaths": {
             "materialToConsultNever": "Material to consult, never workspace code: excluded from search, dependency setup and sync."
+        },
+        "tableDiffView": {
+            "emptySheet": "(hoja vacía)",
+            "longTableOnlyFirstRows": "Tabla larga: solo se comparan las primeras {rows} filas de cada lado.",
+            "neitherVersionHoldsTable": "Ninguna versión contiene una tabla.",
+            "newSheet": "hoja nueva",
+            "rowsChanged": "{count} fila cambiada | {count} filas cambiadas",
+            "sheetRemoved": "hoja eliminada",
+            "unchanged": "sin cambios",
+            "unchangedRows": "{count} fila sin cambios | {count} filas sin cambios"
         },
         "uploadProgressBody": {
             "dependencyInstallQueued": "Dependency install queued",

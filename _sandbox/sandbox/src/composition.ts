@@ -5,6 +5,7 @@ import type {
     AgentEvent,
     AgentOrigin,
     Capability,
+    DerivedSide,
     HostFacts,
     HostScopes,
     RunnerFacts,
@@ -88,6 +89,7 @@ import { withTrialEndpoint } from "./trial/trial-endpoint.js";
 import { type DismissalsStore, fileDismissalsStore } from "./capabilities/dismissals-store.js";
 import { filePersonasStore, type PersonasStore } from "./personas/personas-store.js";
 import { fileHeavyCommandsStore, type HeavyCommandsStore } from "./platform/resources/heavy-commands.js";
+import { type BlobSource, deriveBytes } from "./derived/derived-blob.js";
 import { deriveText, readDerivedText } from "./derived/derived-text.js";
 import { sidecarStatus } from "./derived/sidecar-service.js";
 import { type CiStore, fileCiStore } from "./ci/ci-store.js";
@@ -602,6 +604,8 @@ export interface Services extends ClaudeSlice, CodexSlice, CursorSlice, GrokSlic
     readonly derived: {
         readonly read: (root: string, relPath: string) => Promise<WorkspaceDerived>;
         readonly derive: (root: string, relPath: string) => Promise<WorkspaceDerived>;
+        // Bytes that are no workspace file (a past version at a rev-spec), rendered and kept by content hash.
+        readonly deriveBytes: (root: string, bytes: Uint8Array, source: BlobSource) => Promise<DerivedSide>;
         // How the background pass is doing; the one derived answer no file on disk carries.
         readonly status: () => SidecarStatus;
     };
@@ -1276,6 +1280,7 @@ export const createServices = (config: Config, logger: Logger): Services => {
         derived: {
             read: readDerivedText,
             derive: deriveText,
+            deriveBytes,
             status: sidecarStatus,
         },
         workspaceTree: coalescingWorkspaceTree(walkWorkspaceTree),

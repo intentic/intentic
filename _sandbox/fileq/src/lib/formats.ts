@@ -123,3 +123,17 @@ export const detectFormat = async (absPath: string): Promise<Format | undefined>
     }
     return byExtension;
 };
+
+// Formats whose text diff is already the better reading: a textconv over them would replace a line diff with a
+// rendering of the same text.
+const TEXT_UNDERNEATH: ReadonlySet<Format> = new Set(["html"]);
+
+/**
+ * A gitattributes file naming every derivable extension as `diff=fileq`, so `git diff`, `git show` and `git log -p`
+ * print fileq's text for a document instead of "Binary files differ" once `diff.fileq.textconv` is `fileq read --plain`.
+ */
+export const gitAttributeLines = (): string[] =>
+    Object.entries(EXTENSION_FORMAT)
+        .filter(([, format]) => !TEXT_UNDERNEATH.has(format))
+        .map(([extension]) => `*${extension} diff=fileq`)
+        .toSorted();

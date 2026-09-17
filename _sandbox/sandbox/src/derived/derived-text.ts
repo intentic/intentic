@@ -5,7 +5,7 @@ import { detectFormat } from "@intentic/fileq/formats";
 import { parseSidecarFront, sha256OfFile, sidecarBody, sidecarPathFor } from "@intentic/fileq/sidecar";
 import type { WorkspaceDerived } from "@intentic/sandbox-contract";
 import { readWorkspaceFileWindow } from "../workspace/files/workspace-files.js";
-import { defaultExec, FILEQ_MAX_BUFFER, isMissingBinary, stdoutOf, type ExecFn } from "./fileq.js";
+import { defaultExec, DERIVE_TIMEOUT_MS, FILEQ_MAX_BUFFER, isMissingBinary, stdoutOf, withFileqSlot, type ExecFn } from "./fileq.js";
 import { sidecarStateOf, sidecarStatus } from "./sidecar-service.js";
 
 // Reading a file's shadow for a person rather than an agent: the same markdown `fileq read` serves, plus the front
@@ -16,9 +16,6 @@ import { sidecarStateOf, sidecarStatus } from "./sidecar-service.js";
 // What one response carries. Well past any real document's shadow and far under the daemon's own read ceiling, so a
 // pathological one is cut rather than sent.
 const MAX_DERIVED_BYTES = 512 * 1024;
-// An interactive derive: long enough for a scanned pdf's OCR, short enough that a browser is not left holding a
-// request nobody will wait for.
-const DERIVE_TIMEOUT_MS = 120_000;
 
 // Whether this file has a reader at all, which is what decides between offering to derive it and saying nothing can.
 // Magic first, like everywhere else in fileq, so a renamed archive still answers yes; a file that is not there answers
@@ -90,39 +87,13 @@ const skipReason = (stdout: string): string | undefined => {
     }
 };
 
-// Derivations asked for right now, by path. Opening a file asks for one without anyone pressing a button, so a reader
-// walking a folder of documents would otherwise have a child process per file, all at once, on the box their agent is
-// working on. Two callers wanting the same file wait on the same child rather than spawning a second.
+// Derivations asked for right now, by path: two callers wanting the same file wait on the same child rather than
+// spawning a second. The box-wide cap on children is fileq.ts's slot.
 const inFlight = new Map<string, Promise<WorkspaceDerived>>();
-// One at a time past this, which is what the background pass already holds itself to for the same reason.
-const MAX_CONCURRENT = 2;
-const waiting: (() => void)[] = [];
-let running = 0;
-
-const acquire = async (): Promise<void> => {
-    if (running < MAX_CONCURRENT) {
-        running += 1;
-        return;
-    }
-    // Woken already counted (see release): a waiter that incremented for itself would leave a gap between the
-    // decrement and the wake-up, and a third caller arriving in that gap would find the count one too low.
-    await new Promise<void>((resolve) => waiting.push(resolve));
-};
-
-const release = (): void => {
-    const next = waiting.shift();
-    if (next === undefined) {
-        running -= 1;
-        return;
-    }
-    // The slot is handed over rather than given back, so `running` never dips between the two.
-    next();
-};
 
 const deriveOnce = async (root: string, relPath: string, exec: ExecFn): Promise<WorkspaceDerived> => {
-    await acquire();
     try {
-        await exec("fileq", ["derive", "--json", relPath], { timeout: DERIVE_TIMEOUT_MS, maxBuffer: FILEQ_MAX_BUFFER });
+        await withFileqSlot(() => exec("fileq", ["derive", "--json", relPath], { timeout: DERIVE_TIMEOUT_MS, maxBuffer: FILEQ_MAX_BUFFER }));
         return await readDerivedText(root, relPath);
     } catch (error) {
         if (isMissingBinary(error)) {
@@ -138,8 +109,6 @@ const deriveOnce = async (root: string, relPath: string, exec: ExecFn): Promise<
         }
         // Exit 1 is fileq's "nothing derivable here", and the line it printed says which of its reasons applied.
         return await readDerivedText(root, relPath, skipReason(stdoutOf(error)));
-    } finally {
-        release();
     }
 };
 

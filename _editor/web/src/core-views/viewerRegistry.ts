@@ -33,10 +33,21 @@ export const registerViewer = (viewer: RegisteredViewer): Disposable => {
     };
 };
 
-// The viewer registered for a file extension (lowercased): an editing viewer over a render-only one, and among
-// equals the last registration, so a later extension can override a builtin.
-export const viewerForExtension = (ext: string): RegisteredViewer | undefined => {
+// Every viewer claiming an extension (lowercased), latest registration first, so a later extension can override a
+// builtin.
+const claimants = (ext: string): RegisteredViewer[] => {
     const lower = ext.toLowerCase();
-    const claiming = viewers.value.filter((entry) => entry.extensions.includes(lower)).toReversed();
+    return viewers.value.filter((entry) => entry.extensions.includes(lower)).toReversed();
+};
+
+// The viewer registered for a file extension: an editing viewer over a render-only one, and among equals the last
+// registration.
+export const viewerForExtension = (ext: string): RegisteredViewer | undefined => {
+    const claiming = claimants(ext);
     return claiming.find((entry) => entry.edit) ?? claiming[0];
 };
+
+// The viewer that can draw bytes handed to it, for a surface holding content rather than a workspace path (one side
+// of a diff): a `path` viewer reads through its own backend and cannot be given a blob, so it is passed over even
+// when it edits.
+export const renderViewerForExtension = (ext: string): RegisteredViewer | undefined => claimants(ext).find((entry) => entry.fetch !== `path`);

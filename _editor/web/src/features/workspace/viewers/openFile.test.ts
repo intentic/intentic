@@ -1,6 +1,6 @@
 import { PLAN_DOCUMENTS_DIR, STATE_DIR } from "@intentic/sandbox-contract";
 import { afterEach, describe, expect, it } from "vitest";
-import { registerViewer } from "../../../core-views/viewerRegistry";
+import { registerViewer, renderViewerForExtension } from "../../../core-views/viewerRegistry";
 import { RAW_MAX_BYTES } from "../explorer/fileType";
 import { resolveOpenFile } from "./openFile";
 
@@ -116,5 +116,20 @@ describe(`resolveOpenFile viewer precedence`, () => {
         register(`image`, [`png`], `blob`);
         register(`fancy-image`, [`png`], `url`);
         expect(resolveOpenFile(`logo.png`, 1000)).toMatchObject({ kind: `viewer`, viewer: { id: `fancy-image` } });
+    });
+});
+
+describe(`renderViewerForExtension, for a surface holding bytes rather than a path`, () => {
+    it(`passes over a path-fed editing viewer, whatever its rank, for one that can be handed the bytes`, () => {
+        register(`docx`, [`docx`], `blob`);
+        register(`office`, [`docx`], `path`, { owner: `intentic.onlyoffice`, edit: true });
+        expect(resolveOpenFile(`brief.docx`, 1000)).toMatchObject({ kind: `viewer`, viewer: { id: `office` } });
+        expect(renderViewerForExtension(`docx`)).toMatchObject({ id: `docx`, fetch: `blob` });
+        expect(renderViewerForExtension(`DOCX`)).toMatchObject({ id: `docx` });
+    });
+
+    it(`answers nothing when only a path viewer claims the extension`, () => {
+        register(`office`, [`xlsx`], `path`, { owner: `intentic.onlyoffice`, edit: true });
+        expect(renderViewerForExtension(`xlsx`)).toBeUndefined();
     });
 });
