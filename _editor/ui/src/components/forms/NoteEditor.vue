@@ -1,6 +1,7 @@
 <!-- One markdown note, read and edited on a single <MarkdownDocument> surface, never a separate read/write view. -->
 <script setup lang="ts">
 import Button from "../primitives/Button.vue";
+import { useT } from "../../i18n/index.js";
 import { ui } from "../../lib/ui.js";
 import CopyButton from "../primitives/CopyButton.vue";
 import Icon from "../primitives/Icon.vue";
@@ -27,6 +28,7 @@ const { verb = `Delete`, paged = false } = defineProps<{
     paged?: boolean;
 }>();
 
+const t = useT();
 const emit = defineEmits<{ edit: []; cancel: []; save: []; remove: [] }>();
 
 /** The source surface's text. The caller binds its draft-or-file computed straight to this. */
@@ -51,12 +53,12 @@ const confirming = defineModel<boolean>(`confirming`, { default: false });
 
         <template #actions>
             <template v-if="editing">
-                <Button label="Cancel" size="small" severity="secondary" @click="emit(`cancel`)" />
-                <Button label="Save" size="small" :loading="saving" @click="emit(`save`)">
+                <Button :label="t(`ui.action.cancel`)" size="small" severity="secondary" @click="emit(`cancel`)" />
+                <Button :label="t(`ui.action.save`)" size="small" :loading="saving" @click="emit(`save`)">
                     <template #icon><Icon name="save" /></template>
                 </Button>
             </template>
-<!-- Caller's own controls sit before Copy, shown only while reading; editing replaces everything to their right. -->
+            <!-- Caller's own controls sit before Copy, shown only while reading; editing replaces everything to their right. -->
             <template v-else>
                 <slot name="actions" />
                 <CopyButton :text="raw" v-tooltip.top="'Copy the raw note'" />
@@ -89,7 +91,7 @@ const confirming = defineModel<boolean>(`confirming`, { default: false });
 
         <p v-if="loading && !editing" class="px-4 py-6 text-xs text-subtle">Loading…</p>
         <template v-else>
-<!-- `save="none"`: this frame's Cancel/Save pair is the save policy, so the document must not offer its own. -->
+            <!-- `save="none"`: this frame's Cancel/Save pair is the save policy, so the document must not offer its own. -->
             <div
                 v-if="editing"
                 class="px-4 py-3"

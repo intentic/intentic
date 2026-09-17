@@ -3,8 +3,11 @@
 import { computed, type CSSProperties, nextTick, onBeforeUnmount, ref, useTemplateRef, watch } from "vue";
 import Icon from "../primitives/Icon.vue";
 import { createInlineRename } from "../../composables/inlineRename.js";
+import { useT } from "../../i18n/index.js";
 import { placeAnchored } from "../../lib/anchorPlacement.js";
 import { ui } from "../../lib/ui.js";
+
+const t = useT();
 
 // NOTHING ENTERS OR LEAVES THE ROW WHEN THE MODE CHANGES, which is the whole point of the component: the resting
 // name, the field and the one-glyph slot beside them occupy the same boxes in every state, so no neighbour moves,
@@ -120,7 +123,9 @@ onBeforeUnmount(disarm);
              the cell is sized by its widest item, so without it the field opens a good deal wider than the name. -->
         <span class="grid w-fit min-w-0 max-w-full grid-cols-1 grid-rows-1">
             <span aria-hidden="true" class="invisible col-start-1 row-start-1 whitespace-pre border border-transparent px-1">{{ shown }}</span>
-            <span v-if="rename.editing" aria-hidden="true" class="invisible col-start-1 row-start-1 whitespace-pre border border-transparent px-1">{{ rename.draft }}</span>
+            <span v-if="rename.editing" aria-hidden="true" class="invisible col-start-1 row-start-1 whitespace-pre border border-transparent px-1">{{
+                rename.draft
+            }}</span>
 
             <input
                 v-if="rename.editing"
@@ -166,7 +171,7 @@ onBeforeUnmount(disarm);
                 type="button"
                 :class="ui.iconButton(`h-5 w-5`)"
                 :disabled="rename.busy"
-                aria-label="Save"
+                :aria-label="t(`ui.action.save`)"
                 v-tooltip.top="`Save · Enter`"
                 @mousedown.prevent
                 @click.stop="rename.commit()"
@@ -175,7 +180,15 @@ onBeforeUnmount(disarm);
             </button>
             <!-- Hidden from assistive tech on purpose: it repeats the resting control, which is already focusable
                  and already says the verb. -->
-            <button v-else type="button" tabindex="-1" aria-hidden="true" :class="ui.iconButton(`h-5 w-5`)" v-tooltip.top="action" @click.stop="rename.begin()">
+            <button
+                v-else
+                type="button"
+                tabindex="-1"
+                aria-hidden="true"
+                :class="ui.iconButton(`h-5 w-5`)"
+                v-tooltip.top="action"
+                @click.stop="rename.begin()"
+            >
                 <Icon name="pencil" class="text-2xs opacity-60 transition-opacity group-hover/rename:opacity-100" />
             </button>
         </template>

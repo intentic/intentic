@@ -2,6 +2,7 @@
 <script setup lang="ts">
 import Button from "./Button.vue";
 import { computed, ref } from "vue";
+import { useT } from "../../i18n/index.js";
 import { clipboardOf } from "../../lib/clipboard.js";
 import { vAction } from "../../lib/pressAction.js";
 import { ui } from "../../lib/ui.js";
@@ -26,6 +27,7 @@ const {
 // Fired only on a write that actually landed, for a caller whose flow depends on the copy having happened.
 const emit = defineEmits<{ copied: [] }>();
 
+const t = useT();
 const copied = ref(false);
 // The pressed element: a `<Button>` component for the emphasised spellings, a plain element for the
 // quiet one, so `$el` is resolved either way.
@@ -55,9 +57,9 @@ const copy = async (): Promise<void> => {
     </Button>
     <button v-else-if="label" ref="root" type="button" :class="ui.overlayChip()" v-action="copy">
         <Icon :name="copied ? 'check' : 'copy'" :class="[`text-2xs`, copied ? `text-success` : ``]" />
-        {{ copied ? `Copied` : label }}
+        {{ copied ? t(`ui.action.copied`) : label }}
     </button>
-    <button v-else ref="root" type="button" aria-label="Copy" :class="ui.iconButton(`text-subtle`)" v-action="copy">
+    <button v-else ref="root" type="button" :aria-label="t(`ui.action.copy`)" :class="ui.iconButton(`text-subtle`)" v-action="copy">
         <Icon class="text-2xs" :name="copied ? 'check' : 'copy'" :class="copied ? 'text-success' : ''" />
     </button>
 </template>

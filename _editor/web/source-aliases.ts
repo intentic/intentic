@@ -97,6 +97,12 @@ export const sourceAliases = (): Record<string, string> => ({
     // Gate deciding what an extension's own artwork may paint into a registry row; tested without a DOM, network, or
     // <BrandMark>.
     "@intentic/ui/brand-mark": fromRoot("_editor/ui/src/components/brand/brandMark.ts"),
+    // The translator, the catalog registry and the language switch. Before `@intentic/ui/locales`, which it
+    // re-exports, and off the barrel because main.ts awaits it before anything is created.
+    "@intentic/ui/i18n": fromRoot("_editor/ui/src/i18n/index.ts"),
+    // The shipped-language table and the negotiation rule, with no vue-i18n behind them: index.html's pre-paint
+    // script re-implements this in ES5, and the test that holds the two together must be able to read it alone.
+    "@intentic/ui/locales": fromRoot("_editor/ui/src/i18n/locales.ts"),
     // Preference primitive (Vue state plus localStorage) used by every `ui-*` key in web/composables; through the
     // barrel, reading one would cost loading mermaid.
     "@intentic/ui/preference": fromRoot("_editor/ui/src/composables/preference.ts"),
@@ -131,6 +137,7 @@ export const sourceAliases = (): Record<string, string> => ({
     // kit. Resolving to the published artifact would make the app ask itself for components it hasn't provided yet.
     "@intentic/extension-ui/names": fromRoot("_shared/extension-ui/names.mjs"),
     "@intentic/extension-ui/format": fromRoot("_shared/extension-ui/src/format.ts"),
+    "@intentic/extension-ui/i18n": fromRoot("_shared/extension-ui/src/i18n.ts"),
     "@intentic/extension-ui": fromRoot("_shared/extension-ui/src/index.ts"),
     "@intentic/api-contract": fromRoot("_shared/api-contract/src/index.ts"),
     // The "+" grid's card/category data; omitted from this map, the app would silently resolve a stale `dist` instead

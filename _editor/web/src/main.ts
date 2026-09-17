@@ -5,6 +5,7 @@ import { installUi } from "@intentic/ui";
 import { VueQueryPlugin } from "@tanstack/vue-query";
 import { createApp } from "vue";
 import App from "./App.vue";
+import { startAppI18n } from "./app/i18n";
 import { initAnalytics } from "./app/analytics";
 import { dropOutdatedMirrors } from "./app/buildEpoch";
 import { describeError, installClientDiagnostics, reportClient } from "./app/clientDiagnostics";
@@ -47,6 +48,11 @@ installPerfReporter((_op, _ms, fields, requestId) =>
 
 // iOS shell only (no-op elsewhere); must precede mount so a launch tap isn't dropped before a listener exists.
 installNotificationTaps(router);
+
+// The reader's language, fetched before a single component renders in the wrong one. On `en` this resolves in the
+// same tick; on any other language it is one chunk, and paying for it here is what buys a first paint that is
+// already correct instead of one that corrects itself.
+await startAppI18n();
 
 // Minimal app-wide wiring: router, PrimeVue, vue-query; server state in useQuery, client state in composables.
 const app = createApp(App);

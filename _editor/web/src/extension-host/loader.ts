@@ -1,5 +1,6 @@
 import type { ExtensionModule } from "@intentic/extension-api";
 import { errorMessage } from "@intentic/ui/async";
+import { registerCatalog } from "@intentic/ui/i18n";
 import type { ExtensionManifest } from "@intentic/extension-manifest";
 import { extensionApiVersion, satisfiesEngines, resetSandboxScope } from "@intentic/extension-api";
 import { extensionIdOf } from "@intentic/extension-manifest";
@@ -55,6 +56,12 @@ const hasUi = (manifest: ExtensionManifest): boolean =>
 const runActivate = async (summary: ExtensionSummary, host: HostBindings, module: ExtensionModule, startedIn: number): Promise<void> => {
     if ((summary.manifest.contributes?.settings ?? []).length > 0) {
         await extensionSettingsStore(summary.id).load();
+    }
+    if (module.messages !== undefined) {
+        // BEFORE activate(), and awaited: activate() is where an extension registers the panels and commands whose
+        // titles it has just translated. Registering them first and loading the words after is how a rail label shows
+        // up in English under a reader who is not.
+        await registerCatalog({ namespace: `ext.${extensionIdOf(summary.manifest)}`, ...module.messages });
     }
     if (startedIn !== scope) {
         return;

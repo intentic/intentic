@@ -2,8 +2,11 @@
 <script setup lang="ts" generic="T">
 import Button from "../primitives/Button.vue";
 import type { IconName } from "../../icons/iconSets.js";
+import { useT } from "../../i18n/index.js";
 import Icon from "../primitives/Icon.vue";
 import Modal from "./Modal.vue";
+
+const t = useT();
 
 const {
     open,
@@ -48,8 +51,8 @@ const NAMED = 5;
         </ul>
         <slot />
         <template #footer>
-            <Button label="Cancel" severity="secondary" :text="true" @click="emit(`cancel`)" />
-<!-- autofocus on the CONFIRM button is deliberate and is what the call sites already did: the dialog is dismissable by mask, Esc and Cancel. -->
+            <Button :label="t(`ui.action.cancel`)" severity="secondary" :text="true" @click="emit(`cancel`)" />
+            <!-- autofocus on the CONFIRM button is deliberate and is what the call sites already did: the dialog is dismissable by mask, Esc and Cancel. -->
             <Button :label="confirmLabel" :severity="destructive ? `danger` : undefined" autofocus :loading="loading" @click="emit(`confirm`)">
                 <template v-if="confirmIcon !== undefined" #icon><Icon :name="confirmIcon" /></template>
             </Button>

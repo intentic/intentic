@@ -13,7 +13,8 @@ export const formatBytes = (bytes: number | undefined): string => {
         value /= 1024;
         unit++;
     }
-    return `${value < 10 ? value.toFixed(1) : Math.round(value)} ${units[unit]}`;
+    // The unit symbols stay as they are: KB/MB/GB are read as symbols rather than words in every language we ship.
+    return `${value < 10 ? formatFixed(value, 1) : formatFixed(Math.round(value), 0)} ${units[unit]}`;
 };
 
 // A span of playable seconds as a clock, hours omitted under an hour ("0:14", "3:07:22"). Infinity or NaN render
@@ -46,70 +47,118 @@ export const initialsOf = (name: string): string | undefined => {
     return (second === undefined ? first.slice(0, 2) : `${first[0]}${second[0]}`).toUpperCase();
 };
 
-// Absolute dates always spell the month ("Jul 28, 2026"), never the ambiguous numeric default. Locale and 24-hour
-// format are pinned so the same instant renders identically everywhere; only the timezone stays the viewer's own.
-// Formatters are built once, since constructing an Intl.DateTimeFormat is expensive.
-const DATE = new Intl.DateTimeFormat(`en-US`, { year: `numeric`, month: `short`, day: `numeric` });
-const DAY_MONTH = new Intl.DateTimeFormat(`en-US`, { month: `short`, day: `numeric` });
-const DATE_TIME = new Intl.DateTimeFormat(`en-US`, {
-    year: `numeric`,
-    month: `short`,
-    day: `numeric`,
-    hour: `2-digit`,
-    minute: `2-digit`,
-    hour12: false,
-});
-const TIMESTAMP = new Intl.DateTimeFormat(`en-US`, {
-    year: `numeric`,
-    month: `short`,
-    day: `numeric`,
-    hour: `2-digit`,
-    minute: `2-digit`,
-    second: `2-digit`,
-    hour12: false,
-});
-const TIME = new Intl.DateTimeFormat(`en-US`, { hour: `2-digit`, minute: `2-digit`, second: `2-digit`, hour12: false });
-const CLOCK = new Intl.DateTimeFormat(`en-US`, { hour: `2-digit`, minute: `2-digit`, hour12: false });
-const WEEKDAY_TIME = new Intl.DateTimeFormat(`en-US`, { weekday: `short`, hour: `2-digit`, minute: `2-digit`, hour12: false });
+// Absolute dates always spell the month ("Jul 28, 2026"), never the ambiguous numeric default, and the 24-hour
+// clock is the house style in every language — `hour12` stays pinned, since that is a design choice and not
+// something a locale gets to answer. The timezone stays the viewer's own. Everything else follows the language the
+// app is in: `setFormatLocale` below is called by the i18n layer, in the same tick the visible language changes.
+const DATE_STYLES = {
+    date: { year: `numeric`, month: `short`, day: `numeric` },
+    dayMonth: { month: `short`, day: `numeric` },
+    dateTime: { year: `numeric`, month: `short`, day: `numeric`, hour: `2-digit`, minute: `2-digit`, hour12: false },
+    timestamp: { year: `numeric`, month: `short`, day: `numeric`, hour: `2-digit`, minute: `2-digit`, second: `2-digit`, hour12: false },
+    time: { hour: `2-digit`, minute: `2-digit`, second: `2-digit`, hour12: false },
+    clock: { hour: `2-digit`, minute: `2-digit`, hour12: false },
+    weekdayTime: { weekday: `short`, hour: `2-digit`, minute: `2-digit`, hour12: false },
+} as const satisfies Record<string, Intl.DateTimeFormatOptions>;
+
+type DateStyle = keyof typeof DATE_STYLES;
+
+let formatLocale = `en`;
+
+// Built on first use and kept, since constructing an Intl formatter is expensive and these run per row; cleared
+// wholesale when the language changes, which happens at most once per reader per session.
+const dateFormats = new Map<DateStyle, Intl.DateTimeFormat>();
+const relativeFormats = new Map<Intl.RelativeTimeFormatNumeric, Intl.RelativeTimeFormat>();
+const numberFormats = new Map<number, Intl.NumberFormat>();
+
+// Half of Europe writes "1,4 MB". A decimal point is a language's answer, not a constant, so every number this
+// module prints with a fraction goes through here.
+const formatFixed = (value: number, digits: number): string => {
+    let format = numberFormats.get(digits);
+    if (format === undefined) {
+        format = new Intl.NumberFormat(formatLocale, { minimumFractionDigits: digits, maximumFractionDigits: digits });
+        numberFormats.set(digits, format);
+    }
+    return format.format(value);
+};
+
+const dateFormat = (style: DateStyle): Intl.DateTimeFormat => {
+    const had = dateFormats.get(style);
+    if (had !== undefined) {
+        return had;
+    }
+    const built = new Intl.DateTimeFormat(formatLocale, DATE_STYLES[style]);
+    dateFormats.set(style, built);
+    return built;
+};
+
+const relativeFormat = (numeric: Intl.RelativeTimeFormatNumeric): Intl.RelativeTimeFormat => {
+    const had = relativeFormats.get(numeric);
+    if (had !== undefined) {
+        return had;
+    }
+    // `narrow` is what keeps these chip-width ("5m ago", "vor 3 Std.", "2 dni temu") rather than sentence-width;
+    // French is the one language whose narrow form CLDR spells as a signed number ("-5 min"), which reads fine in
+    // a timestamp column and is not worth a per-language exception to avoid.
+    const built = new Intl.RelativeTimeFormat(formatLocale, { style: `narrow`, numeric });
+    relativeFormats.set(numeric, built);
+    return built;
+};
+
+/**
+ * Points every formatter in this module at a language. Called only by the i18n layer — app code changes the
+ * language through `setLocale`, which drives this so dates and text can never be in two different languages.
+ */
+export const setFormatLocale = (tag: string): void => {
+    if (tag === formatLocale) {
+        return;
+    }
+    formatLocale = tag;
+    dateFormats.clear();
+    relativeFormats.clear();
+    numberFormats.clear();
+};
 
 /** A calendar day on its own: "Jul 28, 2026". */
-export const formatDate = (at: number): string => DATE.format(at);
+export const formatDate = (at: number): string => dateFormat(`date`).format(at);
 
 /** A day where the year is already implied by its surroundings: "Jul 28". */
-export const formatDayMonth = (at: number): string => DAY_MONTH.format(at);
+export const formatDayMonth = (at: number): string => dateFormat(`dayMonth`).format(at);
 
 /** Day and wall-clock minute: "Jul 28, 2026, 15:45". The default for a visible "when" label. */
-export const formatDateTime = (at: number): string => DATE_TIME.format(at);
+export const formatDateTime = (at: number): string => dateFormat(`dateTime`).format(at);
 
 /** The exact moment, seconds included: "Jul 28, 2026, 15:45:12". For `title` tooltips behind a coarser label. */
-export const formatTimestamp = (at: number): string => TIMESTAMP.format(at);
+export const formatTimestamp = (at: number): string => dateFormat(`timestamp`).format(at);
 
 /** Clock time alone, for rows already grouped under a day: "15:45:12". */
-export const formatTime = (at: number): string => TIME.format(at);
+export const formatTime = (at: number): string => dateFormat(`time`).format(at);
 
 // Wall-clock minute alone: "15:45". The narrowest "when" label, for a row that states the day separately (e.g.
 // the chat transcript's per-prompt stamp).
-export const formatClock = (at: number): string => CLOCK.format(at);
+export const formatClock = (at: number): string => dateFormat(`clock`).format(at);
 
 /** A weekday and time, for instants within the coming week: "Tue 15:45". */
-export const formatWeekdayTime = (at: number): string => WEEKDAY_TIME.format(at);
+export const formatWeekdayTime = (at: number): string => dateFormat(`weekdayTime`).format(at);
 
-// Coarse relative time ("just now", "Nm ago", "Nh ago"), always rounded down since an age is a floor. `days`
-// switches the day-and-beyond case between a rolling "Nd ago" and the absolute timestamp; `now` is injectable
-// for tests.
+// Coarse relative time ("now", "5m ago", "3h ago"), always rounded down since an age is a floor. `days` switches
+// the day-and-beyond case between a rolling "2d ago" and the absolute timestamp; `now` is injectable for tests.
+// The wording is CLDR's, not ours: these phrases are the one part of the interface no translator has to supply,
+// and getting Polish's four plural forms right by hand is precisely the trap `Intl` exists to close.
 export const timeAgo = (at: number, { now = Date.now(), days = false }: { now?: number; days?: boolean } = {}): string => {
     const minutes = Math.floor((now - at) / 60_000);
     if (minutes < 1) {
-        return `just now`;
+        // `auto` is what turns a bare zero into a word ("now", "teraz", "jetzt") instead of "in 0s".
+        return relativeFormat(`auto`).format(0, `second`);
     }
     if (minutes < 60) {
-        return `${minutes}m ago`;
+        return relativeFormat(`always`).format(-minutes, `minute`);
     }
     const hours = Math.floor(minutes / 60);
     if (hours < 24) {
-        return `${hours}h ago`;
+        return relativeFormat(`always`).format(-hours, `hour`);
     }
-    return days ? `${Math.floor(hours / 24)}d ago` : formatDateTime(at);
+    return days ? relativeFormat(`always`).format(-Math.floor(hours / 24), `day`) : formatDateTime(at);
 };
 
 // Relative time under a day old, else a bare calendar day rather than `timeAgo`'s full absolute fallback, which

@@ -1,3 +1,4 @@
+import { activeLocale } from "@intentic/ui/i18n";
 import { watch } from "vue";
 import { useCapabilities } from "../features/capabilities/connect/useCapabilities";
 import { usePanels } from "../features/extensions/usePanels";
@@ -48,6 +49,20 @@ export function useExtensionHost(): void {
         retireExtensions();
         loadedFor = undefined;
         loading = false;
+    });
+
+    // A contribution's label is a string an extension handed us inside `activate`, not a binding we can re-read, so
+    // the only way it follows a language change is to run `activate` again. Safe to do bluntly: `activeLocale` moves
+    // only once the new language's messages are already loaded, so the pass below re-registers into a tree that is
+    // complete, and a reader changes language about once.
+    watch(activeLocale, () => {
+        retireExtensions();
+        loadedFor = undefined;
+        loading = true;
+        void reloadExtensions().finally(() => {
+            loading = false;
+            loadedFor = activeSandboxId.value;
+        });
     });
 
     watch(

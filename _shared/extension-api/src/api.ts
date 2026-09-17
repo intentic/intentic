@@ -42,7 +42,7 @@ export interface ViewBadge {
     readonly tone?: "neutral" | "info" | "warning" | "danger" | undefined;
     // What happened and how much; rendered after the view's name, so phrase it as a continuation, not a sentence.
     readonly tooltip?: string | undefined;
-/* WORK IN FLIGHT BEHIND THIS TILE RIGHT NOW ("2 running"), phrased as a continuation like `tooltip`. */
+    /* WORK IN FLIGHT BEHIND THIS TILE RIGHT NOW ("2 running"), phrased as a continuation like `tooltip`. */
     readonly running?: string | undefined;
 }
 
@@ -131,11 +131,11 @@ export interface PickedModel {
     readonly effort?: string | undefined;
     // What the shell calls that tier ("X-High"); absent whenever `effort` is.
     readonly effortLabel?: string | undefined;
-/* WHAT THE PRESS DOES TO THE ATTEMPT THE PICKER WAS OPENED OVER (`attempt` on `pick`): continue it, or start over from it. */
+    /* WHAT THE PRESS DOES TO THE ATTEMPT THE PICKER WAS OPENED OVER (`attempt` on `pick`): continue it, or start over from it. */
     readonly resume?: "continue" | "start-over" | undefined;
-/* WHETHER THE MODEL REASONS BEFORE IT ANSWERS, where that is a choice it offers. */
+    /* WHETHER THE MODEL REASONS BEFORE IT ANSWERS, where that is a choice it offers. */
     readonly thinking?: boolean | undefined;
-/* WHETHER THE WORK IS BOUGHT AT THE FASTER RATE, for a higher price. */
+    /* WHETHER THE WORK IS BOUGHT AT THE FASTER RATE, for a higher price. */
     readonly fast?: boolean | undefined;
 }
 
@@ -255,9 +255,9 @@ export interface IntenticApi {
         // Opens (or focuses) the tab for a stored session id. A session the daemon no longer holds opens an
         // empty tab rather than failing.
         openSession(sessionId: string): void;
-/* Open (or focus) the docked chat for a fleet agent by its id: the same thing a card press on the agents board does. */
+        /* Open (or focus) the docked chat for a fleet agent by its id: the same thing a card press on the agents board does. */
         openAgent(agentId: string): void;
-/* AIM A NEW CHAT AT A WORKFLOW: the host opens a session exactly as "New agent" does, with the composer's workflow badge set to this design. */
+        /* AIM A NEW CHAT AT A WORKFLOW: the host opens a session exactly as "New agent" does, with the composer's workflow badge set to this design. */
         composeWorkflow(workflowId: string): void;
         // Like `composeWorkflow`, but arms the composer's loop badge: the next message becomes the loop's
         // goal, and Send starts it running.
@@ -280,7 +280,7 @@ export interface IntenticApi {
             readonly thinking?: boolean | undefined;
             readonly fast?: boolean | undefined;
         }): PickedModel;
-/* Open the picker over `anchor`, a popover on desktop, a sheet on mobile, starting on the selection the caller is holding. */
+        /* Open the picker over `anchor`, a popover on desktop, a sheet on mobile, starting on the selection the caller is holding. */
         pick(options: {
             readonly anchor: HTMLElement;
             readonly provider: string;
@@ -290,11 +290,11 @@ export interface IntenticApi {
             readonly effort?: string | undefined;
             readonly thinking?: boolean | undefined;
             readonly fast?: boolean | undefined;
-/* THE VERB ON THE PANEL'S OWN BUTTON — "Fix with agent", "Run all 21 stories", "Save this step". */
+            /* THE VERB ON THE PANEL'S OWN BUTTON — "Fix with agent", "Run all 21 stories", "Save this step". */
             readonly action?: string | undefined;
-/* OFFER THE MODEL'S OWN RUN SETTINGS — reasoning effort, extended thinking, speed. */
+            /* OFFER THE MODEL'S OWN RUN SETTINGS — reasoning effort, extended thinking, speed. */
             readonly chooseRun?: boolean;
-/* THE ATTEMPT ALREADY MADE AT WHAT THIS RUN WOULD ANSWER, when there is one: a line naming it, and whether it can be continued from here. */
+            /* THE ATTEMPT ALREADY MADE AT WHAT THIS RUN WOULD ANSWER, when there is one: a line naming it, and whether it can be continued from here. */
             readonly attempt?: { readonly summary: string; readonly continuable: boolean } | undefined;
         }): Promise<PickedModel | undefined>;
     };
@@ -331,9 +331,29 @@ export interface ExtensionContext {
     readonly subscriptions: Disposable[];
 }
 
+/** Messages as they are authored: nested objects down to strings. */
+export type MessageTree = { readonly [key: string]: string | MessageTree };
+
+/**
+ * An extension's own words. The host mounts them under `ext.<extension id>`, so nothing an extension writes can
+ * collide with the app's keys or another extension's, and `extensionT` from @intentic/extension-ui reads them back
+ * with the namespace already applied.
+ *
+ * `base` is English and is part of the bundle; every other language is fetched only if the reader is in it. The host
+ * loads the right one BEFORE calling `activate`, so a contribution's title is never briefly in the wrong language.
+ */
+export interface ExtensionMessages {
+    /** English, imported statically — it is the fallback for a key no translation carries, which cannot be a fetch. */
+    readonly base: MessageTree;
+    /** One chunk per language, keyed by its code. Never called for English. */
+    readonly load: (locale: string) => Promise<{ readonly default: MessageTree }>;
+}
+
 // The bundle's default (or named) exports: `activate` runs once after the engines check, `deactivate`
 // runs before the host discards the extension.
 export interface ExtensionModule {
     activate(api: IntenticApi, context: ExtensionContext): void | Promise<void>;
     deactivate?(): void | Promise<void>;
+    /** Absent in an extension that ships one language, which the host then renders as written. */
+    readonly messages?: ExtensionMessages;
 }

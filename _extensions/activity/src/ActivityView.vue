@@ -16,6 +16,7 @@ import { computed } from "vue";
 import ActivityTimeline from "./ActivityTimeline.vue";
 import { matches, toEpisodes, toSources } from "./episodes";
 import { host } from "./host";
+import { t } from "./i18n";
 import SourceFilter from "./SourceFilter.vue";
 import { useActivity } from "./useActivity";
 
@@ -76,7 +77,7 @@ const voiceMinutes = computed(() => (status.value?.voice === undefined ? 0 : Mat
         </div>
 
         <!-- All three filters narrow the feed, so all three live in the instrument, ordered who, when, what. -->
-        <FilterBar v-model="search" placeholder="Filter by text, channel, session…" :count="visible.length" :busy="isLoading">
+        <FilterBar v-model="search" :placeholder="t(`filter`)" :count="visible.length" :busy="isLoading">
             <template #controls>
                 <SourceFilter v-model="source" :sources="sources" :total="windowed.length" :failed="failed" />
                 <span class="h-4 w-px bg-line" aria-hidden="true"></span>

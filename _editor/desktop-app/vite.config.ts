@@ -9,7 +9,7 @@ const root = repoRoot(import.meta.url);
 // The launcher window's UI. Dev server port is pinned for tauri.conf.json's devUrl; the production
 // build is plain static files bundled into the app (frontendDist: ../dist).
 export default defineConfig({
-/* The analytics key, baked in at build time, this app is a compiled binary. */
+    /* The analytics key, baked in at build time, this app is a compiled binary. */
     define: { __POSTHOG_KEY__: JSON.stringify(process.env.POSTHOG_KEY ?? ``) },
     plugins: [vue(), tailwindcss()],
     resolve: {
@@ -17,6 +17,7 @@ export default defineConfig({
             // Subpath before the barrel: a string alias also matches `<key>/…`, so the barrel would swallow this
             // and resolve into a directory.
             "@intentic/ui/device-agent": join(root, `_editor/ui/src/components/sandbox/deviceAgent.ts`),
+            "@intentic/ui/i18n": join(root, `_editor/ui/src/i18n/index.ts`),
             "@intentic/ui": join(root, `_editor/ui/src/index.ts`),
         },
     },

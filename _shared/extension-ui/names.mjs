@@ -38,6 +38,8 @@ export const extensionUiNames = [
     "formatTokens",
     "formatWeekdayTime",
     "freshness",
+    "activeLocale",
+    "extensionT",
     "Icon",
     "ImageView",
     "InfoDialog",

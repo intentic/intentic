@@ -9,6 +9,8 @@
             "@intentic/ui/src/*": ["../../_editor/ui/src/*"],
             "@intentic/ui": ["../../_editor/ui/src/index.ts"],
             "@intentic/ui/icon": ["../../_editor/ui/src/components/primitives/Icon.vue"],
+            "@intentic/ui/i18n": ["../../_editor/ui/src/i18n/index.ts"],
+            "@intentic/ui/locales": ["../../_editor/ui/src/i18n/locales.ts"],
             "@intentic/ui/markdown-view": ["../../_editor/ui/src/components/markdown/Markdown.vue"],
             "@intentic/ui/format": ["../../_editor/ui/src/lib/format.ts"],
             "@intentic/ui/highlighter": ["../../_editor/ui/src/composables/useHighlighter.ts"],

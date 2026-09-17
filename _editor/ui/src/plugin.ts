@@ -8,6 +8,7 @@ import PopoverStyle from "primevue/popover/style";
 import ToggleSwitchStyle from "primevue/toggleswitch/style";
 import type { App } from "vue";
 import Icon from "./components/primitives/Icon.vue";
+import { installI18n } from "./i18n/index.js";
 import { Theme } from "./styles/theme.js";
 import { vAction } from "./lib/pressAction.js";
 import { vLongpress } from "./lib/longPress.js";
@@ -42,6 +43,11 @@ const preloadPrimeComponentStyles = (): void => {
 // Design system's single entry point: wires the PrimeVue preset, dark-mode selector, and `cssLayer` order
 // (`utilities` last, so Tailwind always beats PrimeVue). Call once from the app's main.ts.
 export function installUi(app: App): void {
+    // Before anything else: components in this kit translate their own labels, so `$t` has to exist for every one of
+    // them, in every app that mounts the kit. Installing it here rather than asking each entry point to remember is
+    // what stops a missing call from surfacing as a blank label deep in a lazy view. The catalogs are separate and
+    // asynchronous — `startI18n()` is what an entry point awaits before it mounts.
+    installI18n(app);
     app.use(PrimeVue, {
         ripple: true,
         theme: {

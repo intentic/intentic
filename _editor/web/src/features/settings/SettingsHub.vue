@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { NavGroup } from "@intentic/ui";
+import { useT } from "@intentic/ui/i18n";
 import HubLayout from "../../shell/hub/HubLayout.vue";
 import type { HubTab } from "../../shell/hub/hubNav";
 import { hubWorkKey, hubWorkRunning } from "../../shell/hub/hubWork";
@@ -17,6 +18,7 @@ import { SETTINGS_DEFAULT_SECTION, settingsSections } from "./settingsNav";
 // <HubLayout> as the sandbox hub, one unlabelled group since NavRail omits the heading for a single group. The rows
 // themselves live in settingsNav.ts, shared with the palette's "Settings: …" destinations.
 
+const t = useT();
 const { offered: planOffered } = useHostedPlan();
 
 const HUB = `settings`;
@@ -36,7 +38,7 @@ const GROUPS = computed<readonly NavGroup<HubTab>[]>(() => [
 </script>
 
 <template>
-    <HubLayout title="Settings" :route-name="HUB" :default-slug="DEFAULT" :groups="GROUPS">
+    <HubLayout :title="t(`settings.title`)" :route-name="HUB" :default-slug="DEFAULT" :groups="GROUPS">
         <template #default="{ slug }">
             <SettingsProfile v-if="slug === `profile`" />
             <SettingsBilling v-else-if="slug === `billing`" />

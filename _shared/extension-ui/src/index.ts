@@ -169,6 +169,11 @@ export {
     freshness,
     timeAgo,
 } from "./format.js";
+// The extension's own words. `extensionT(id)` is the translator for the catalog the host mounted from the module's
+// `messages` export; `activeLocale` is the language on screen, for a contribution that formats something itself.
+// The `Locale` type comes off `@intentic/extension-ui/i18n`, not from here: this file's re-exports become runtime
+// bindings on the host bridge, and a type has none.
+export { activeLocale, extensionT } from "./i18n.js";
 // Types only, so an extension can build a figure straight from facts it holds instead of round-tripping through
 // markdown. The parser and document splitter stay in `<Markdown>`, not here.
 export type {

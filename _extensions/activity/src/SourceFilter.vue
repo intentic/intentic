@@ -2,6 +2,7 @@
 import { type IconName, Picker, type PickerOptions } from "@intentic/extension-ui";
 import { computed } from "vue";
 import { DIRECT, SCHEDULE, type Source } from "./episodes";
+import { t } from "./i18n";
 
 // The feed's source filter: bounded by how many things can reach the agent, not by how much they send, so the list
 // stays finite while traffic grows. Splits into CONNECTIONS (outside the browser) and DIRECT (you) as separate groups.
@@ -72,5 +73,5 @@ const picked = computed<string>({ get: () => selected.value ?? ``, set: (value) 
 </script>
 
 <template>
-    <Picker v-model="picked" :options="groups" aria-label="Activity source" header="Source" class="min-w-36 text-xs" />
+    <Picker v-model="picked" :options="groups" :aria-label="t(`sourceLabel`)" :header="t(`source`)" class="min-w-36 text-xs" />
 </template>

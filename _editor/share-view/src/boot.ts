@@ -1,4 +1,5 @@
 import Icon from "@intentic/ui/icon";
+import { installI18n } from "@intentic/ui/i18n";
 import { vTooltip } from "@intentic/ui/src/lib/tooltip.js";
 import type { App } from "vue";
 
@@ -7,4 +8,7 @@ import type { App } from "vue";
 export const installShareUi = (app: App): void => {
     app.component(`Icon`, Icon);
     app.directive(`tooltip`, vTooltip);
+    // Named here rather than inherited from `installUi`, which this page deliberately does not call. The chat
+    // components it compiles in are the app's own, and they translate their own labels.
+    installI18n(app);
 };

@@ -1,0 +1,90 @@
+{
+    "settings": {
+        "appearance": {
+            "changes": {
+                "diffOpen": "Where a diff opens",
+                "diffOpenBiggest": "Biggest change",
+                "diffOpenBiggestHint": "The block with the most changed lines: earlier changes end up above you",
+                "diffOpenImports": "Past imports",
+                "diffOpenImportsHint": "The first change that isn't an import: nothing above it but the import list",
+                "diffOpenTop": "Top",
+                "diffOpenTopHint": "The first change in the file, imports and all",
+                "group": "Changes",
+                "groupByModule": "Group by module",
+                "groupByModuleHint": "Group files by package in review lists.",
+                "largestFirst": "Most added first",
+                "largestFirstHint": "Order review lists by how much each file added, instead of by path, within each package."
+            },
+            "chat": {
+                "group": "Chat",
+                "showToolCalls": "Show tool calls",
+                "showToolCallsHint": "Display individual tool calls in transcript."
+            },
+            "desk": {
+                "group": "Desk",
+                "hint": "Folders and files as large tiles in the main area when nothing is open. Hover a tile to look inside it.",
+                "title": "Desk"
+            },
+            "explorer": {
+                "colorful": "Colorful",
+                "fileNesting": "File nesting",
+                "fileNestingHint": "Fold a folder's files under its package.json in the explorer.",
+                "group": "File tree",
+                "hideTechnical": "Hide technical files",
+                "hideTechnicalHint": "Lockfiles, configuration, dot files and build output. On by default when you don't write code.",
+                "hideTests": "Hide tests",
+                "hideTestsHint": "Hide test files and folders in explorer.",
+                "minimal": "Minimal",
+                "showIgnored": "Show ignored files",
+                "showIgnoredHint": "Show node_modules, build output, and gitignored paths.",
+                "title": "Explorer",
+                "vivid": "Vivid"
+            },
+            "look": {
+                "colour": "Colour",
+                "group": "Look",
+                "iconRail": "Icon rail",
+                "iconRailComfortable": "Comfortable",
+                "iconRailCompact": "Compact",
+                "language": "Language",
+                "languageHint": "The language this interface is written in. Your files, your chats and your agents are untouched.",
+                "textSize": "Text size",
+                "textSizeComfortable": "Comfortable",
+                "textSizeComfortableHint": "110% — the size the interface was drawn at",
+                "textSizeCompact": "Compact",
+                "textSizeLarge": "Large",
+                "theme": "Theme"
+            },
+            "terminal": {
+                "group": "Terminal",
+                "workTerminals": "Work terminals"
+            },
+            "theme": {
+                "dark": "Dark",
+                "light": "Light",
+                "sanctum": "Sanctum",
+                "sanctumHint": "The look of intentic.dev: ash stone, a gold rule round every panel, carved and cast plaques, and the site's own type.",
+                "system": "System",
+                "systemHint": "Follows your operating system: Sanctum when it is dark, the light look when it is not."
+            },
+            "work": {
+                "developer": "I write code",
+                "developerHint": "Git's own words, the file tree as the home, every panel.",
+                "group": "How you work",
+                "hint": "Changes the words the app uses and which page is home. Nothing about your files or your agents.",
+                "maker": "I don't",
+                "makerHint": "Plain words, a project page as the home, tooling files out of the way.",
+                "title": "How you work"
+            }
+        },
+        "section": {
+            "appearance": "Appearance",
+            "billing": "Billing",
+            "data": "Data",
+            "keybindings": "Keybindings",
+            "notifications": "Notifications",
+            "profile": "Profile"
+        },
+        "title": "Settings"
+    }
+}

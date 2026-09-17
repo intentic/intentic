@@ -71,6 +71,26 @@
                 var uiTextSize = localStorage.getItem("ui-text-size");
                 if (uiTextSize === "default" || uiTextSize === "large")
                     document.documentElement.setAttribute("data-text-size", uiTextSize);
+                // WHICH LANGUAGE THIS PAGE IS IN, decided before it paints. `lang` is what picks a fallback face,
+                // a language's quote marks and its hyphenation, so writing it from a module restyles text already
+                // on screen. A stored choice wins; with none, the browser's own preference order decides, matching
+                // on the primary subtag because we ship base languages and it offers "pl-PL". `negotiate` in
+                // _editor/ui/src/i18n/locales.ts runs this same rule a module later, and src/bootLocale.test.ts
+                // fails if the two ever part.
+                var UI_LOCALES = ["en", "de", "es", "fr", "pl"];
+                var uiLocale = localStorage.getItem("ui-locale");
+                if (UI_LOCALES.indexOf(uiLocale) === -1) {
+                    uiLocale = "en";
+                    var offered = navigator.languages || [navigator.language];
+                    for (var n = 0; n < offered.length; n++) {
+                        var primary = String(offered[n]).toLowerCase().split("-")[0];
+                        if (UI_LOCALES.indexOf(primary) !== -1) {
+                            uiLocale = primary;
+                            break;
+                        }
+                    }
+                }
+                document.documentElement.setAttribute("lang", uiLocale);
                 // THE LIGHT THIS PAGE PAINTS IN, decided before it paints. Anything but a pinned "light"/"dark"
                 // means nobody has chosen, so the OS answers — and `no-preference` matches neither query, so a
                 // browser that will not say reads as light. useTheme runs this same rule a module later, which is

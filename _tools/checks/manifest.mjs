@@ -38,6 +38,7 @@ export const CHECKS = [
     { id: "md-links", file: "md-links.mjs", needs: "checkout", gate: "tidy", about: "every relative link in the documentation resolves" },
     { id: "metaphor-home", file: "metaphor-home.mjs", needs: "checkout", gate: "tidy", about: "the four-noun picture is defined once, reached from the docs, and never from the home page" },
     { id: "alias-targets", file: "alias-targets.mjs", needs: "checkout", gate: "code", about: "every resolver alias points at a path that exists" },
+    { id: "i18n", file: "i18n-catalogs.mjs", needs: "checkout", gate: "code", about: "every message catalog holds the same keys in every shipped language (--fix seeds them)" },
     { id: "tailwind", file: "tailwind-bypass.mjs", needs: "checkout", gate: "tidy", scoped: true, about: "no arbitrary colours or pixel sizes in class attributes" },
     { id: "display", file: "display-descenders.mjs", needs: "checkout", gate: "tidy", scoped: true, about: "clipped display type keeps its descender clearance" },
     { id: "marks", file: "mark-alignment.mjs", needs: "checkout", gate: "tidy", scoped: true, about: "a mark beside text is placed by the `.mark` rule, never by a hand-tuned offset" },

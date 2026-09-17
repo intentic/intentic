@@ -94,6 +94,14 @@
             "types": "./src/components/feedback/countBadge.ts",
             "default": "./src/components/feedback/countBadge.ts"
         },
+        "./i18n": {
+            "types": "./src/i18n/index.ts",
+            "default": "./src/i18n/index.ts"
+        },
+        "./locales": {
+            "types": "./src/i18n/locales.ts",
+            "default": "./src/i18n/locales.ts"
+        },
         "./preference": {
             "types": "./src/composables/preference.ts",
             "default": "./src/composables/preference.ts"
@@ -151,7 +159,8 @@
         "shiki": "catalog:",
         "tailwind-merge": "catalog:",
         "tslib": "catalog:",
-        "vue": "catalog:"
+        "vue": "catalog:",
+        "vue-i18n": "catalog:"
     },
     "devDependencies": {
         "@intentic/constants": "workspace:*",

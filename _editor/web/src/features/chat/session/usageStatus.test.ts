@@ -88,7 +88,10 @@ describe(`bindingWindow`, () => {
 
     it(`is the fullest pool the MODEL spends when the surface knows one: a spent Opus slice is not Haiku's ceiling`, () => {
         const reading = usage({
-            windows: [window({ kind: `seven_day`, utilization: 30 }), window({ kind: `model:Opus`, label: `Opus`, utilization: 100, gates: { models: [`Opus`] } })],
+            windows: [
+                window({ kind: `seven_day`, utilization: 30 }),
+                window({ kind: `model:Opus`, label: `Opus`, utilization: 100, gates: { models: [`Opus`] } }),
+            ],
         });
         expect(bindingWindow(reading, { id: `claude-haiku-4-5` })?.kind).toBe(`seven_day`);
         expect(bindingWindow(reading, { id: `claude-opus-4-6` })?.kind).toBe(`model:Opus`);
@@ -115,17 +118,20 @@ describe(`usagePercent`, () => {
     });
 });
 
+// The words are CLDR's since the interface learned five languages: `timeAgo` is Intl.RelativeTimeFormat, so the
+// minute/hour/day forms are byte-identical to the hand-written ones they replaced, and the under-a-minute label is
+// "now" rather than "just now" — the word every language has for a zero-length age.
 describe(`formatAge`, () => {
     const now = 1_000_000_000_000;
     it(`coarsens the snapshot's age so a persisted reading never reads as live`, () => {
-        expect(formatAge(now - 30_000, now)).toBe(`just now`);
+        expect(formatAge(now - 30_000, now)).toBe(`now`);
         expect(formatAge(now - 15 * 60_000, now)).toBe(`15m ago`);
         expect(formatAge(now - 3 * 3_600_000, now)).toBe(`3h ago`);
         expect(formatAge(now - 2 * 86_400_000, now)).toBe(`2d ago`);
     });
     it(`never overstates how fresh a reading is`, () => {
         expect(formatAge(now - 119 * 60_000, now)).toBe(`1h ago`);
-        expect(formatAge(now - 59_000, now)).toBe(`just now`);
+        expect(formatAge(now - 59_000, now)).toBe(`now`);
     });
 });
 
@@ -253,19 +259,34 @@ describe(`modelAllowance`, () => {
     });
 
     it(`carries the pool's own figures, so the sentence and the meter can't disagree`, () => {
-        const reading = usage({ windows: [window({ kind: `model:Fable`, label: `Fable`, utilization: 94.4, resetsAt: 1_700_000, gates: { models: [`Fable`] } })] });
-        expect(modelAllowance(reading, { id: `claude-fable-5`, label: `Claude Fable 5` })).toEqual({ name: `Fable`, percent: 94, resetsAt: 1_700_000 });
+        const reading = usage({
+            windows: [window({ kind: `model:Fable`, label: `Fable`, utilization: 94.4, resetsAt: 1_700_000, gates: { models: [`Fable`] } })],
+        });
+        expect(modelAllowance(reading, { id: `claude-fable-5`, label: `Claude Fable 5` })).toEqual({
+            name: `Fable`,
+            percent: 94,
+            resetsAt: 1_700_000,
+        });
     });
 
     it(`says nothing for a plan that doesn't meter this model on its own`, () => {
-        expect(modelAllowance(usage({ windows: [window({ kind: `five_hour` }), window({ kind: `seven_day` })] }), { id: `claude-opus-4-6` })).toBeUndefined();
+        expect(
+            modelAllowance(usage({ windows: [window({ kind: `five_hour` }), window({ kind: `seven_day` })] }), { id: `claude-opus-4-6` }),
+        ).toBeUndefined();
         expect(modelAllowance(scoped(`Opus`), { id: `grok-4-fast`, label: `Grok 4 Fast` })).toBeUndefined();
         expect(modelAllowance(undefined, { id: `claude-opus-4-6`, label: `Claude Opus 4.6` })).toBeUndefined();
     });
 
     it(`names a Google family pool for the model it gates, in the provider's own words`, () => {
         const google = usage({
-            windows: [window({ kind: `google:3p-weekly`, label: `Claude and GPT models · Weekly Limit`, utilization: 73, gates: { models: [`claude`, `gpt`] } })],
+            windows: [
+                window({
+                    kind: `google:3p-weekly`,
+                    label: `Claude and GPT models · Weekly Limit`,
+                    utilization: 73,
+                    gates: { models: [`claude`, `gpt`] },
+                }),
+            ],
         });
         expect(modelAllowance(google, { id: `claude-opus-4-6-thinking` })?.name).toBe(`Claude and GPT models · Weekly Limit`);
         expect(modelAllowance(google, { id: `gemini-3-pro` })).toBeUndefined();
@@ -334,8 +355,7 @@ describe(`liveUsage under a standing refusal`, () => {
     // Two pools, so what is pinned can be told apart from what is left alone.
     const pools = (over: Partial<AccountUsage> = {}): AccountUsage =>
         usage({ windows: [window({ kind: `five_hour`, utilization: 40 }), window({ kind: `seven_day`, utilization: 99.2 })], ...over });
-    const percentsOf = (reading: AccountUsage | undefined): (number | undefined)[] =>
-        (reading?.windows ?? []).map((entry) => entry.utilization);
+    const percentsOf = (reading: AccountUsage | undefined): (number | undefined)[] => (reading?.windows ?? []).map((entry) => entry.utilization);
 
     // Resets both connection stores; a leaked row from another test would count as another account.
     const noRouted: TranslatorAccounts = { codex: [], grok: [], kimi: [], gemini: [] };
@@ -506,7 +526,10 @@ describe(`planLimitRows`, () => {
     });
 
     it(`carries the translator's own bench of a routed credential onto its row`, () => {
-        const rows = planLimitRows({}, { ...noRouted, kimi: [{ name: `kimi-1`, label: `Kimi Code`, cooling: { until: 9_000, reason: `quota exceeded` } }] });
+        const rows = planLimitRows(
+            {},
+            { ...noRouted, kimi: [{ name: `kimi-1`, label: `Kimi Code`, cooling: { until: 9_000, reason: `quota exceeded` } }] },
+        );
         expect(rows[0]?.cooling).toEqual({ until: 9_000, reason: `quota exceeded` });
     });
 });
