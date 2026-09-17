@@ -1522,7 +1522,7 @@ const submitLabel = computed(() => {
 
                             <div
                                 :class="[
-                                    'sticky bottom-0 -mx-1 flex flex-wrap items-center gap-3 bg-canvas px-1 py-3',
+                                    'sticky bottom-0 -mx-1 flex flex-wrap items-center gap-3 px-1 py-3',
                                     auditable ? 'justify-between' : 'justify-end',
                                     shaking ? 'ui-shake' : '',
                                 ]"
