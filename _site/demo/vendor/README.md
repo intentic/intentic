@@ -9,7 +9,9 @@ The listed first-party extensions the demo runs, at the commits the registry pin
   daemon would, so the demo exercises the real install path rather than a compiled-in copy.
 - `knowledge/`: the fs-free half of the knowledge engine as source, **committed** so the fixture that stands in for
   its backend type-checks with nothing fetched. A generated copy with its origin in every file's first line, refreshed
-  by the same sync.
+  by the same sync — but only when the pin moves: `knowledge/source.json` names the commit the copy holds, and a build
+  that matches it leaves GitHub alone. Listing the engine's files is the one call this script makes to
+  `api.github.com`, which anonymously allows 60 an hour per IP and so is exhausted by a busy runner host.
 
 ```sh
 pnpm sync                                   # from GitHub at the pins

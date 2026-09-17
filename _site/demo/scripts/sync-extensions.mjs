@@ -7,7 +7,10 @@
 //   node scripts/sync-extensions.mjs --local ../../../extensions   # from local checkouts, one directory per extension
 //
 // A pin is the registry's own commit for that extension: the demo runs exactly the bytes an install would.
-import { mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+//
+// The engine copy is re-fetched only when its pin moves — vendor/knowledge/source.json names the commit it holds —
+// so an ordinary build reads raw.githubusercontent alone and never the rate-limited api.github.com.
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 const here = import.meta.dirname;
@@ -26,8 +29,13 @@ const KNOWLEDGE_ENGINE = { id: "intentic.knowledge", dir: "src/notes", skip: /(\
 
 const SHA = /^[0-9a-f]{40}$/;
 
+// A token lifts GitHub's 60-requests-an-hour anonymous limit, which is per IP and so is shared by every job on a
+// runner host; absent is fine, since a build at an unmoved pin asks GitHub for the bundles alone.
+const token = process.env.GITHUB_TOKEN ?? process.env.GH_TOKEN;
+const headers = token === undefined || token === "" ? {} : { authorization: `Bearer ${token}` };
+
 const fetchText = async (url) => {
-    const response = await fetch(url);
+    const response = await fetch(url, { headers });
     if (!response.ok) {
         throw new Error(`${url}: ${response.status} ${response.statusText}`);
     }
@@ -80,15 +88,34 @@ for (const [id, pin] of Object.entries(pins)) {
 
     if (id === KNOWLEDGE_ENGINE.id) {
         const engine = join(vendor, "knowledge");
-        rmSync(engine, { recursive: true, force: true });
-        mkdirSync(join(engine, "notes"), { recursive: true });
+        const marker = join(engine, "source.json");
+        // The engine copy is COMMITTED, so a build that did not move the pin has nothing to fetch — and skipping it
+        // keeps the only api.github.com call in this script (the notes listing) out of every build. That call is
+        // anonymous at 60 an hour per IP, shared by every job on a runner host, which is how a green pipeline began
+        // failing on "403 rate limit exceeded". A --local sync writes a working tree rather than the pinned commit,
+        // so it leaves no marker and the next sync from GitHub restores the pin.
+        const synced = existsSync(marker) ? JSON.parse(readFileSync(marker, "utf8")) : undefined;
+        if (local === undefined && synced?.repo === pin.repo && synced?.sha === pin.sha) {
+            console.log(`${id}: engine source already at ${source.label}`);
+            continue;
+        }
+        // Every file in hand BEFORE the committed copy is touched: a read that throws half way used to leave the tree
+        // with the engine deleted, which is a failed fetch turning into a working tree that no longer type-checks.
+        const fetched = [[join(engine, "wire-types.ts"), header(source) + (await source.read(KNOWLEDGE_ENGINE.types))]];
         for (const file of await source.list(KNOWLEDGE_ENGINE.dir)) {
             if (KNOWLEDGE_ENGINE.skip.test(file)) {
                 continue;
             }
-            writeFileSync(join(engine, "notes", file), header(source) + (await source.read(`${KNOWLEDGE_ENGINE.dir}/${file}`)));
+            fetched.push([join(engine, "notes", file), header(source) + (await source.read(`${KNOWLEDGE_ENGINE.dir}/${file}`))]);
         }
-        writeFileSync(join(engine, "wire-types.ts"), header(source) + (await source.read(KNOWLEDGE_ENGINE.types)));
+        rmSync(engine, { recursive: true, force: true });
+        mkdirSync(join(engine, "notes"), { recursive: true });
+        for (const [path, text] of fetched) {
+            writeFileSync(path, text);
+        }
+        if (local === undefined) {
+            writeFileSync(marker, `${JSON.stringify({ repo: pin.repo, sha: pin.sha }, undefined, 4)}\n`);
+        }
         console.log(`${id}: engine source into vendor/knowledge`);
     }
 }
