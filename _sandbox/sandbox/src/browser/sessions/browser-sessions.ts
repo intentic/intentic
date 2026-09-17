@@ -2,10 +2,11 @@ import { setTimeout as sleep } from "node:timers/promises";
 import type { HookCallbackMatcher, HookEvent } from "@anthropic-ai/claude-agent-sdk";
 import type { BrowserPage, BrowserSession } from "@intentic/sandbox-contract";
 import { browserSessionName } from "@intentic/sandbox-contract/session-names";
-import type { Browser, BrowserContext, Page } from "playwright";
+import type { Browser, BrowserContext, Dialog, Page } from "playwright";
 import { resolveRequest } from "../../agent/tools/agent-requests.js";
 import { publishRuntimeChange } from "../../system/runtime-watch.js";
 import { releaseDisplay } from "../cast/display.js";
+import { placeWindow } from "../cast/region.js";
 import { ROUTED_BROWSER_SERVER } from "../tools/browser-tools.js";
 import { armPasskeys } from "../tools/passkeys.js";
 
@@ -31,6 +32,8 @@ interface PageRecord {
     title: string | undefined;
     // Marked, not deleted: close/disconnect order isn't guaranteed; deletion could empty a finished session's strip.
     closed: boolean;
+    // The JavaScript dialog the page has open, held for whoever answers first; see watchPage.
+    dialog: Dialog | undefined;
 }
 
 // What the daemon knows about one agent browser; `context` is set only once the CDP attach lands.
@@ -108,13 +111,42 @@ const notePage = async (record: BrowserSessionRecord, entry: PageRecord): Promis
     publishRuntimeChange("browsers");
 };
 
+// Clears the held dialog once Chromium reports it closed, by whichever hand: the owner's answer over the view, or the
+// agent's browser_handle_dialog. Playwright's own Dialog says nothing after the fact, so a raw session listens.
+const watchDialogClose = async (context: BrowserContext, entry: PageRecord): Promise<void> => {
+    const session = await context.newCDPSession(entry.page).catch(() => undefined);
+    if (session === undefined) {
+        return;
+    }
+    session.on("Page.javascriptDialogClosed", () => {
+        if (entry.dialog !== undefined) {
+            entry.dialog = undefined;
+            publishRuntimeChange("browsers");
+        }
+    });
+    entry.page.once("close", () => void session.detach().catch(() => undefined));
+    await session.send("Page.enable").catch(() => undefined);
+};
+
 const watchPage = (record: BrowserSessionRecord, page: Page): void => {
-    const entry: PageRecord = { id: `p${record.nextPageId}`, page, url: page.url(), title: undefined, closed: false };
+    const entry: PageRecord = { id: `p${record.nextPageId}`, page, url: page.url(), title: undefined, closed: false, dialog: undefined };
     record.nextPageId += 1;
     record.pages.set(entry.id, entry);
     // Best-effort: arm failures are swallowed silently here (no logger), unlike the logged guided-login path.
     if (record.passkeyStore !== undefined && record.context !== undefined) {
         void armPasskeys(record.context, page, record.passkeyStore).catch(() => undefined);
+    }
+    // Held, never answered here: a Playwright client dismisses any dialog nobody listens for, which is what this
+    // daemon's attach did to every alert the agent's page opened, taking browser_handle_dialog with it. The owner
+    // answers over the view (answerBrowserDialog), the agent through its tool; Chromium closes it once for both.
+    page.on("dialog", (dialog) => {
+        entry.dialog = dialog;
+        publishRuntimeChange("browsers");
+    });
+    if (record.context !== undefined) {
+        void watchDialogClose(record.context, entry);
+        // A popup lands wherever a display with no window manager puts it; over its opener, where the viewer looks.
+        void placeWindow(record.context, page).catch(() => undefined);
     }
     void notePage(record, entry);
     page.on("framenavigated", (frame) => {
@@ -338,23 +370,61 @@ const summarizePage = (entry: PageRecord, activeId: string | undefined): Browser
     return entry.title === undefined ? page : { ...page, title: entry.title };
 };
 
+// The one open dialog a running session has, if any; a page holds at most one, and Chromium queues the rest behind it.
+const openDialog = (record: BrowserSessionRecord): BrowserSession["dialog"] => {
+    for (const entry of record.pages.values()) {
+        const dialog = entry.dialog;
+        if (dialog !== undefined && !entry.closed) {
+            const defaultValue = dialog.defaultValue();
+            return {
+                pageId: entry.id,
+                kind: dialog.type() as "alert" | "confirm" | "prompt" | "beforeunload",
+                message: dialog.message(),
+                ...(defaultValue === "" ? {} : { defaultValue }),
+            };
+        }
+    }
+    return undefined;
+};
+
+// Answers the dialog the session lists. A dialog the agent answered first throws inside Playwright and is dropped
+// here the same way: Chromium's close event has already cleared it, or is about to.
+export const answerBrowserDialog = async (name: string, accept: boolean, text?: string): Promise<void> => {
+    const record = sessions.get(name);
+    const entry = record === undefined ? undefined : [...record.pages.values()].find((candidate) => candidate.dialog !== undefined);
+    const dialog = entry?.dialog;
+    if (entry === undefined || dialog === undefined) {
+        return;
+    }
+    entry.dialog = undefined;
+    publishRuntimeChange("browsers");
+    await (accept ? dialog.accept(text) : dialog.dismiss()).catch(() => undefined);
+};
+
+// Logged-in label leads with owner so same-site identities stay distinct; web has none, so it's page-first.
+const labelOf = (server: string, page: string | undefined): string =>
+    server === "web" ? (page ?? server) : page === undefined ? server : `${server} · ${page}`;
+
+// A field present only with a value, per exactOptionalPropertyTypes: an absent one is omitted, never set undefined.
+const optional = <K extends string, V>(key: K, value: V | undefined): Partial<Record<K, V>> =>
+    value === undefined ? {} : ({ [key]: value } as Record<K, V>);
+
 const summarize = (record: BrowserSessionRecord): BrowserSession => {
     const running = record.finishedAt === undefined;
     // Running session's active tab is the one being driven; finished one's is the one it ended on.
     const activeId = running ? record.activePageId : record.lastPageId;
     const active = activeId === undefined ? undefined : record.pages.get(activeId);
-    // Logged-in label leads with owner so same-site identities stay distinct; web has none, so it's page-first.
-    const page = active?.title ?? hostOf(active?.url);
-    const session: BrowserSession = {
+    return {
         name: record.name,
-        label: record.server === "web" ? (page ?? record.server) : page === undefined ? record.server : `${record.server} · ${page}`,
+        label: labelOf(record.server, active?.title ?? hostOf(active?.url)),
         server: record.server,
         running,
         activityAt: record.activityAt,
         pages: [...record.pages.values()].filter((entry) => !running || !entry.closed).map((entry) => summarizePage(entry, activeId)),
+        ...optional("help", record.help),
+        ...optional("dialog", running ? openDialog(record) : undefined),
+        ...optional("finishedAt", record.finishedAt),
     };
-    const withHelp = record.help === undefined ? session : { ...session, help: record.help };
-    return running ? withHelp : { ...withHelp, finishedAt: record.finishedAt };
 };
 
 export const listBrowserSessions = (): BrowserSession[] => {

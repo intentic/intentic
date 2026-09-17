@@ -9,20 +9,21 @@ export const VIEW_HEIGHT = 800;
 
 // Quality for frames while the page is moving; below this JPEG starts smearing small text.
 const MOTION_QUALITY = 82;
-// Delay after motion settles before taking a high-resolution still; avoids firing on every scroll frame.
-const STILL_DELAY_MS = 400;
-const STILL_QUALITY = 85;
+// Delay after motion settles before taking a high-resolution still; avoids firing on every scroll frame. Shared with
+// the video path (stills.ts), which settles by the same rules.
+export const STILL_DELAY_MS = 400;
+export const STILL_QUALITY = 85;
 // Still capture scale relative to the layout viewport; past this a 1280 CSS px page has nothing more to show.
-const STILL_SCALE = 2;
+export const STILL_SCALE = 2;
 // Window during which frames after a still capture are treated as the capture's own re-raster echo, not real motion.
-const CAPTURE_ECHO_MS = 250;
+export const CAPTURE_ECHO_MS = 250;
 // Echo window is the capture's own duration times this factor, floored at CAPTURE_ECHO_MS, capped at STILL_IDLE_MS.
-const CAPTURE_ECHO_FACTOR = 3;
+export const CAPTURE_ECHO_FACTOR = 3;
 // A frame inside the window is not always an echo; it may be the result of the click that ended the quiet. A dropped
 // frame always re-arms another still, and byte-identical WebP output confirms the page never moved.
 // Cap on the back-off between idle stills; keeps a truly idle page from being polled forever without missing a late
 // change.
-const STILL_IDLE_MS = 5000;
+export const STILL_IDLE_MS = 5000;
 
 const SCREENCAST_OPTIONS = { format: "jpeg", quality: MOTION_QUALITY, maxWidth: VIEW_WIDTH, maxHeight: VIEW_HEIGHT, everyNthFrame: 1 } as const;
 
@@ -71,10 +72,12 @@ export type ScreencastClientMessage =
           readonly deltaX?: number;
           readonly deltaY?: number;
       }
-    | { readonly type: "text"; readonly text: string }
+    // `raw` asks for the keystroke on the X display rather than the page: what Chromium's own find bar needs, since a
+    // CDP key event goes to the page whatever the browser has focused.
+    | { readonly type: "text"; readonly text: string; readonly raw?: boolean }
     // A keystroke or chord; plain typing arrives via `text` instead. No `meta`: the target Chromium is Linux, so a
     // Mac's Cmd arrives already translated to `ctrl`.
-    | { readonly type: "key"; readonly key: string; readonly ctrl?: boolean; readonly shift?: boolean; readonly alt?: boolean }
+    | { readonly type: "key"; readonly key: string; readonly ctrl?: boolean; readonly shift?: boolean; readonly alt?: boolean; readonly raw?: boolean }
     // Requests the owner's selection for their own clipboard, since Ctrl+C over the picture would otherwise copy to the
     // sandbox's. Answered by a `selection` frame going the other way.
     | { readonly type: "selection" }
@@ -84,8 +87,19 @@ export type ScreencastClientMessage =
     // Stream a specific page (the tab strip); pins the view so the agent opening a tab does not move it, see `pinned`
     // below.
     | { readonly type: "bind"; readonly pageId: string }
-    // No `go`/`back`/`reload`: the browser's own chrome is part of the picture now, so the real address bar and back
-    // button get clicked directly. See live-view.ts.
+    // The chrome is the client's own (tabs, address bar, navigation); these are what its buttons send. The picture
+    // carries the page alone, see live-view.ts.
+    | { readonly type: "navigate"; readonly url: string }
+    | { readonly type: "back" }
+    | { readonly type: "forward" }
+    | { readonly type: "reload" }
+    | { readonly type: "stop" }
+    | { readonly type: "newTab"; readonly url?: string }
+    | { readonly type: "closeTab"; readonly pageId: string }
+    // The client's picture box in CSS px; the daemon sizes the browser window so the viewport is exactly that.
+    | { readonly type: "resize"; readonly width: number; readonly height: number }
+    // Answers the JavaScript dialog the session lists (browser-sessions.ts); `text` is a prompt's reply.
+    | { readonly type: "dialog"; readonly accept: boolean; readonly text?: string }
     // Tab backgrounded or route left; stops encoding and sending rather than pushing frames at a hidden `<img>`
     // forever.
     | { readonly type: "pause" }
@@ -109,12 +123,15 @@ const CDP_SHIFT = 8;
 const cdpModifiers = (held: { readonly ctrl?: boolean; readonly shift?: boolean; readonly alt?: boolean }): number =>
     (held.alt === true ? CDP_ALT : 0) | (held.ctrl === true ? CDP_CTRL : 0) | (held.shift === true ? CDP_SHIFT : 0);
 
-// Non-text keys a form needs; printable characters arrive as a `text` frame via Input.insertText instead.
+// Non-text keys a form needs; printable characters arrive as a `text` frame via Input.insertText instead. Space is
+// the one printable sent as a key: a button or checkbox answers the keystroke, not an inserted character.
 const SPECIAL_KEYS: Record<string, { code: string; vk: number; text?: string }> = {
     Enter: { code: "Enter", vk: 13, text: "\r" },
+    " ": { code: "Space", vk: 32, text: " " },
     Backspace: { code: "Backspace", vk: 8 },
     Tab: { code: "Tab", vk: 9 },
     Delete: { code: "Delete", vk: 46 },
+    Insert: { code: "Insert", vk: 45 },
     Escape: { code: "Escape", vk: 27 },
     ArrowLeft: { code: "ArrowLeft", vk: 37 },
     ArrowUp: { code: "ArrowUp", vk: 38 },
@@ -122,6 +139,9 @@ const SPECIAL_KEYS: Record<string, { code: string; vk: number; text?: string }> 
     ArrowDown: { code: "ArrowDown", vk: 40 },
     Home: { code: "Home", vk: 36 },
     End: { code: "End", vk: 35 },
+    PageUp: { code: "PageUp", vk: 33 },
+    PageDown: { code: "PageDown", vk: 34 },
+    ...Object.fromEntries(Array.from({ length: 12 }, (_, index) => [`F${index + 1}`, { code: `F${index + 1}`, vk: 112 + index }])),
 };
 
 // Chromium derives editing commands (select-all, copy, undo) from a key event's code/vk, not the character it would

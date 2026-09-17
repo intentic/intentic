@@ -4,12 +4,33 @@
 // revoked.
 
 // Every picture kind this socket carries (matches the daemon's screencast.ts/videocast.ts numbering):
-// 0 jpeg, 1 webp — one whole image per change (frames path)
+// 0 jpeg, 1 webp — one whole image per change (frames path); on the video path a webp is a sharp still of the
+//   settled page, laid over the video (videoSink)
 // 2 svg — the recorded demo's drawn pages, format travels with the frame
 // 3 keyframe, 4 delta — video path; two tags so the client, not the VideoDecoder, knows what can start a decode
+// 5, 6 — the same two, quiet: nothing in them a still the client holds does not show, so decoded but not painted
 const MEDIA_TYPES = [`image/jpeg`, `image/webp`, `image/svg+xml`] as const;
+export const FRAME_WEBP = 1;
 export const FRAME_H264_KEY = 3;
 export const FRAME_H264_DELTA = 4;
+export const FRAME_H264_KEY_QUIET = 5;
+export const FRAME_H264_DELTA_QUIET = 6;
+
+// What a video tag says, or undefined for a tag that is not video.
+export const videoTag = (tag: number | undefined): { readonly key: boolean; readonly quiet: boolean } | undefined => {
+    switch (tag) {
+        case FRAME_H264_KEY:
+            return { key: true, quiet: false };
+        case FRAME_H264_DELTA:
+            return { key: false, quiet: false };
+        case FRAME_H264_KEY_QUIET:
+            return { key: true, quiet: true };
+        case FRAME_H264_DELTA_QUIET:
+            return { key: false, quiet: true };
+        default:
+            return undefined;
+    }
+};
 
 export interface FrameUrls {
     // The URL for this frame, or undefined for a message too short to be one.

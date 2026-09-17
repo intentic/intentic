@@ -12,7 +12,7 @@ import { workloadStamp } from "../../platform/boot/leftovers.js";
 import { freePort as bindEphemeral } from "../../processes/free-port.js";
 import { browserOutputDir } from "../cast/browser-artifacts.js";
 import { type ProfileExit, resolveProfileExit } from "../sessions/browser-exit.js";
-import { type Display, ensureDisplay } from "../cast/display.js";
+import { chromiumWindowArgs, type Display, ensureDisplay } from "../cast/display.js";
 import { acceptLanguage, browserFingerprint, type BrowserFingerprint } from "../sessions/fingerprint.js";
 import { isProfileOpen, passkeyPath, profileOwner, sessionDir } from "../sessions/session-store.js";
 import { ensureStealthScript } from "../sessions/stealth.js";
@@ -128,10 +128,7 @@ export const writeBrowserConfig = async (
     const config = {
         browser: {
             launchOptions: {
-                args: [
-                    `--remote-debugging-port=${port}`,
-                    ...(display === undefined ? [] : ["--window-position=0,0", `--window-size=${display.width},${display.height}`]),
-                ],
+                args: [`--remote-debugging-port=${port}`, ...(display === undefined ? [] : chromiumWindowArgs(display))],
                 ...(exit === undefined ? {} : { proxy: { server: exit.proxy } }),
             },
             contextOptions: {

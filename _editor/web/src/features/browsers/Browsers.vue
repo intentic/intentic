@@ -4,16 +4,19 @@ import { Button, AnchoredOverlay, CopyButton, Icon, ui, vAction } from "@intenti
 import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue";
 import { RouterLink, useRoute } from "vue-router";
 import { activePageOf } from "./activePage";
+import { toUrl } from "./address";
 import { closeBrowser, useBrowsersQuery } from "./browsersQuery";
+import type { BrowserCommand } from "./keyIntent";
 import { useBrowserView } from "./useBrowserView";
 import BrowserSelectMenu from "../capabilities/connect/BrowserSelectMenu.vue";
 import { relativeTime } from "../chat/models/catalog";
 import { postTurnControl } from "../chat/run/turnStream";
 import { useT } from "@intentic/ui/i18n";
 
-// Live view of the agent's Chromium (@playwright/mcp) with open pages as a tab strip; a route, not a terminal pane,
-// since a browser holds several pages and one stream can't show which. One line of chrome (browser chip, tabs,
-// address) leaves the rest of the height to the picture; asks are cards over it, and a finished session keeps its
+// Live view of the agent's Chromium (@playwright/mcp) drawn as a browser of its own: the tab strip, the address bar
+// and the navigation buttons are this pane's, fed by the session and steering the page over the view's socket, and
+// the picture is the page alone, sized to the box it gets. A route, not a terminal pane, since a browser holds
+// several pages and one stream can't show which; asks are cards over the picture, and a finished session keeps its
 // tab list as a record rather than dialling a dead socket.
 
 const t = useT();
@@ -46,6 +49,16 @@ const activePage = computed<BrowserPage | undefined>(() => activePageOf(current.
 const pickPage = (page: BrowserPage): void => {
     pickedPage.value = page.id;
     view.bindPage(page.id);
+};
+
+// The tab beside the selected one, wrapping; what Ctrl+Tab and Ctrl+Shift+Tab pick.
+const pickNeighbour = (step: 1 | -1): void => {
+    const pages = current.value?.pages ?? [];
+    const at = pages.findIndex((page) => page.id === activePage.value?.id);
+    const next = pages[(at + step + pages.length) % pages.length];
+    if (next !== undefined) {
+        pickPage(next);
+    }
 };
 
 // Each browser has its own URL, which is why switcher rows and the queue are links rather than pushing the router;
@@ -84,32 +97,52 @@ const sessionMeta = (session: BrowserSession): string =>
         .filter((part) => part !== undefined)
         .join(` · `);
 
-// The host (never truncated, names the site) and the path (gives way first) share one line with the tabs, so the
-// address doubles as its own tooltip and copy target.
+// The address bar shows the active page's address until the owner types into it; Enter sends what they typed
+// (address.ts decides what that is), Escape puts the page's own back.
 const address = computed(() => activePage.value?.url ?? `about:blank`);
-const addressParts = computed<{ host: string; rest: string; secure: boolean | undefined }>(() => {
+const addressInput = ref<HTMLInputElement | undefined>();
+const addressDraft = ref<string | undefined>();
+const shownAddress = computed(() => addressDraft.value ?? (address.value === `about:blank` ? `` : address.value));
+const secure = computed<boolean | undefined>(() => {
     try {
         const url = new URL(address.value);
-        if (url.host === ``) {
-            // about:blank, or anything else without an authority: no site to vouch for.
-            return { host: address.value, rest: ``, secure: undefined };
-        }
-        return { host: url.host, rest: `${url.pathname === `/` ? `` : url.pathname}${url.search}${url.hash}`, secure: url.protocol === `https:` };
+        // about:blank, or anything else without an authority: no site to vouch for.
+        return url.host === `` ? undefined : url.protocol === `https:`;
     } catch {
-        return { host: address.value, rest: ``, secure: undefined };
+        return undefined;
     }
 });
+const focusAddress = (): void => {
+    addressDraft.value = shownAddress.value;
+    addressInput.value?.focus();
+    void nextTick(() => addressInput.value?.select());
+};
+const submitAddress = (): void => {
+    const url = toUrl(addressDraft.value ?? ``);
+    addressDraft.value = undefined;
+    addressInput.value?.blur();
+    if (url !== undefined) {
+        view.navigate(url);
+        stageEl.value?.focus();
+    }
+};
+const revertAddress = (): void => {
+    addressDraft.value = undefined;
+    addressInput.value?.blur();
+    stageEl.value?.focus();
+};
 
-// Two picture elements: canvas for decoded video, img for frames when there's no display to grab. Pointer
-// coordinates measure against whichever is painting (viewportCoords), not the stage around it; both use
-// `object-contain`.
+// Two picture surfaces: a video canvas with a still canvas over it, or an img for frames when there's no display to
+// grab. Pointer coordinates measure against whichever is painting (viewportCoords), not the stage around it; all
+// use `object-contain`.
 const frameEl = ref<HTMLElement | undefined>();
 const canvasEl = ref<HTMLCanvasElement | undefined>();
+const stillEl = ref<HTMLCanvasElement | undefined>();
 const stageEl = ref<HTMLElement | undefined>();
 // Whichever of the two is painting; every pointer handler measures against this instead of its own copy.
 const pictureEl = computed<HTMLElement | undefined>(() => canvasEl.value ?? frameEl.value);
-// The canvas mounts/unmounts with the picture kind; the decoder outlives it, so they're connected here.
-watch(canvasEl, (canvas) => view.attachCanvas(canvas));
+// The canvases mount/unmount with the picture kind; the decoder outlives them, so they're connected here.
+watch([canvasEl, stillEl], ([canvas, still]) => view.attachCanvases(canvas, still));
 
 // The button names the state it's in ("You're driving · hand back", not an action-only label); the window rings
 // while driving, since a stray keystroke is the one real mistake here. Escape is not an exit, keyIntent forwards
@@ -120,6 +153,24 @@ const takeControl = (): void => {
         stageEl.value?.focus();
     }
 };
+
+// What the browser's own shortcuts do here: the tabs and the address bar are this pane's, the rest is the view's.
+const COMMANDS: Record<BrowserCommand, () => void> = {
+    newTab: () => view.newTab(),
+    closeTab: () => {
+        if (activePage.value !== undefined) {
+            view.closeTab(activePage.value.id);
+        }
+    },
+    address: focusAddress,
+    nextTab: () => pickNeighbour(1),
+    prevTab: () => pickNeighbour(-1),
+    back: view.back,
+    forward: view.forward,
+    reload: view.reload,
+    find: view.find,
+};
+const onCommand = (command: BrowserCommand): void => COMMANDS[command]();
 
 const close = (name: string): void => void closeBrowser(name);
 
@@ -133,6 +184,24 @@ const helpOpen = ref(true);
 // several at once; the selected browser's own ask is the card above, not counted here.
 const queuedHelp = computed(() => sessions.value.filter((session) => session.help !== undefined && session.name !== selected.value));
 
+// A JavaScript dialog the page has open, held by the daemon until someone answers; the prompt's text starts as what
+// the page prefilled, and follows the dialog rather than the pane, so a second prompt doesn't inherit the first's.
+const dialog = computed(() => current.value?.dialog);
+const dialogText = ref(``);
+watch(
+    dialog,
+    (open) => {
+        dialogText.value = open?.defaultValue ?? ``;
+    },
+    { immediate: true },
+);
+const answerDialog = (accept: boolean): void => {
+    if (dialog.value === undefined) {
+        return;
+    }
+    view.answerDialog(accept, dialog.value.kind === `prompt` && accept ? dialogText.value : undefined);
+};
+
 const switcherOpen = ref(false);
 const switcherTrigger = ref<HTMLElement | undefined>();
 const moreOpen = ref(false);
@@ -142,6 +211,7 @@ const queueOpen = ref(false);
 // Everything tied to the browser being left behind (picked page, draft note, open menus) resets with it.
 watch(selected, () => {
     pickedPage.value = undefined;
+    addressDraft.value = undefined;
     helpNote.value = ``;
     helpOpen.value = true;
     switcherOpen.value = false;
@@ -177,51 +247,30 @@ const resolveHelp = async (helped: boolean): Promise<void> => {
     }
 };
 
-// The window is sized to fit the matte, matching the video's actual shape, which differs by capture mode (an
-// X-display grab is the whole window at 1280x880; CDP frames are the page alone at 1280x800) and arrives with the
-// daemon's `ready`. Measured via ResizeObserver rather than CSS `aspect-ratio`, since the available height depends
-// on the chrome bar's own text-scaled height.
-const matteEl = ref<HTMLElement | undefined>();
-const chromeEl = ref<HTMLElement | undefined>();
-const matte = ref<{ width: number; height: number }>({ width: 0, height: 0 });
-const chromeHeight = ref(0);
+// The stage's box is what the daemon sizes the page's viewport to, so the picture is the page at 1:1 rather than
+// scaled into whatever is left; measured via ResizeObserver, since the chrome's own text-scaled height is part of
+// what's left.
+const stageWidth = ref(0);
 let observer: ResizeObserver | undefined;
-
-watch([matteEl, chromeEl], ([matteNow, chromeNow]) => {
+watch(stageEl, (stage) => {
     observer?.disconnect();
     observer = undefined;
-    if (matteNow === undefined) {
+    if (stage === undefined) {
         return;
     }
     observer = new ResizeObserver((entries) => {
         for (const entry of entries) {
-            if (entry.target === matteEl.value) {
-                matte.value = { width: entry.contentRect.width, height: entry.contentRect.height };
-            } else {
-                chromeHeight.value = (entry.target as HTMLElement).offsetHeight;
-            }
+            stageWidth.value = entry.contentRect.width;
+            view.requestSize(entry.contentRect.width, entry.contentRect.height);
         }
     });
-    observer.observe(matteNow);
-    if (chromeNow !== undefined) {
-        observer.observe(chromeNow);
-    }
+    observer.observe(stage);
 });
 onBeforeUnmount(() => observer?.disconnect());
 
-// Full width until the first measurement lands: a too-tall frame clipped by the matte beats showing nothing.
-const windowWidth = computed<string>(() => {
-    const { width, height } = matte.value;
-    if (width === 0 || height === 0) {
-        return `100%`;
-    }
-    const room = Math.max(0, height - chromeHeight.value);
-    return `${Math.floor(Math.min(width, (room * view.viewWidth.value) / view.viewHeight.value))}px`;
-});
-
-// Read off the measured window, not a viewport breakpoint, since this pane's width has nothing to do with the
+// Read off the measured stage, not a viewport breakpoint, since this pane's width has nothing to do with the
 // screen's. Only the account chip and the wheel's long label give way; tabs and address never do.
-const compact = computed(() => matte.value.width > 0 && matte.value.width < 640);
+const compact = computed(() => stageWidth.value > 0 && stageWidth.value < 640);
 
 // Keeps the selected tab scrolled into view, so a narrow strip can't leave the active page off-screen when the
 // agent switches pages. `scrollIntoView` is one-shot; nothing to clean up.
@@ -247,15 +296,14 @@ watch(
             </div>
         </div>
 
-        <!-- The canvas the window sits on and is measured against. -->
-        <div v-else ref="matteEl" class="flex min-h-0 flex-1 items-center justify-center overflow-hidden p-3">
+        <!-- The window fills what it gets; the page inside is sized to match (see the stage's observer). -->
+        <div v-else class="flex min-h-0 flex-1 overflow-hidden p-3">
             <div
-                class="flex max-h-full min-h-0 flex-col overflow-hidden rounded-lg border bg-card shadow-lg transition-colors"
+                class="flex min-h-0 w-full flex-col overflow-hidden rounded-lg border bg-card shadow-lg transition-colors"
                 :class="view.driving.value ? 'border-primary-600 ring-1 ring-primary-600' : 'border-line'"
-                :style="{ width: windowWidth }"
             >
-                <!-- Which browser, which page, where it is, and the wheel. -->
-                <div ref="chromeEl" class="flex shrink-0 items-center gap-1 border-b border-line px-1.5 py-1">
+                <!-- Row one: which browser, its tabs, and the wheel. -->
+                <div class="flex shrink-0 items-center gap-1 border-b border-line px-1.5 py-1">
                     <!-- A chip instead of a row of pills: with several browsers it's a label plus caret rather than a band with its own scrollbar. -->
                     <button
                         ref="switcherTrigger"
@@ -308,46 +356,43 @@ watch(
 
                     <span class="h-4 w-px shrink-0 bg-line"></span>
 
-                    <!-- The agent's own tab strip; capped at half the row so the address stays legible with many tabs open. -->
-                    <div ref="stripEl" class="scrollbar-none flex min-w-0 max-w-[50%] flex-1 items-center gap-0.5 overflow-x-auto">
-                        <button
-                            v-for="page in current?.pages ?? []"
-                            :key="page.id"
-                            type="button"
-                            :data-selected="page.id === activePage?.id"
-                            class="ui-chip min-w-0 shrink-0 rounded-md px-1.5 py-1"
-                            :class="page.id === activePage?.id ? `ui-chip-on` : ``"
-                            v-tooltip.bottom="page.url"
-                            @click="pickPage(page)"
-                        >
-                            <Icon name="globe" class="shrink-0 text-3xs" />
-                            <span class="max-w-40 truncate">{{ pageLabel(page) }}</span>
-                        </button>
+                    <!-- The tab strip: the browser's open pages, the selected one in front, each closable, plus one to open. -->
+                    <div ref="stripEl" class="scrollbar-none flex min-w-0 flex-1 items-center gap-0.5 overflow-x-auto">
+                        <!-- The tab and its close are siblings, not nested (a button cannot hold one); the close shows on the selected tab and on hover. -->
+                        <div v-for="page in current?.pages ?? []" :key="page.id" :data-selected="page.id === activePage?.id" class="group/tab flex shrink-0 items-center">
+                            <button
+                                type="button"
+                                class="ui-chip min-w-0 shrink-0 rounded-md px-1.5 py-1"
+                                :class="page.id === activePage?.id ? `ui-chip-on` : ``"
+                                v-tooltip.bottom="page.url"
+                                @click="pickPage(page)"
+                            >
+                                <Icon name="globe" class="shrink-0 text-3xs" />
+                                <span class="max-w-40 truncate">{{ pageLabel(page) }}</span>
+                            </button>
+                            <button
+                                v-if="current?.running"
+                                type="button"
+                                :class="ui.iconButton(page.id === activePage?.id ? '' : 'opacity-0 group-hover/tab:opacity-100 focus-visible:opacity-100')"
+                                :aria-label="t(`browsers.browsers.closeTab`)"
+                                @click="view.closeTab(page.id)"
+                            >
+                                <Icon name="times" class="text-3xs" />
+                            </button>
+                        </div>
                         <span v-if="(current?.pages.length ?? 0) === 0" class="px-1 text-2xs text-muted">{{
                             t(`browsers.browsers.noPagesOpen`)
                         }}</span>
-                    </div>
-
-                    <span class="h-4 w-px shrink-0 bg-line"></span>
-
-                    <!-- The host carries the padlock and never truncates; the path gives way first. -->
-                    <div class="group flex min-w-0 flex-1 items-center gap-1 rounded-md px-1.5 py-0.5" v-tooltip.bottom="address">
-                        <Icon
-                            v-if="addressParts.secure !== undefined"
-                            :name="addressParts.secure ? 'lock' : 'unlock'"
-                            class="shrink-0 text-3xs"
-                            :class="addressParts.secure ? 'text-muted' : 'text-warning'"
-                        />
-                        <span class="min-w-0 truncate font-mono text-2xs">
-                            <span class="text-content">{{ addressParts.host }}</span
-                            ><span class="text-muted">{{ addressParts.rest }}</span>
-                        </span>
-                        <!-- No tooltip of its own: the address line above already has one, and nesting tooltips would open a second box on the first. -->
-                        <CopyButton
-                            :text="address"
-                            class="shrink-0 opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
-                            :aria-label="t(`browsers.browsers.copyAddress`)"
-                        />
+                        <button
+                            v-if="current?.running"
+                            type="button"
+                            :class="ui.iconButton()"
+                            :aria-label="t(`browsers.browsers.newTab`)"
+                            v-tooltip.bottom="t(`browsers.browsers.newTab`)"
+                            @click="view.newTab()"
+                        >
+                            <Icon name="plus" class="text-2xs" />
+                        </button>
                     </div>
 
                     <!-- The wheel, and what happens to it when the browser is gone. -->
@@ -416,32 +461,76 @@ watch(
                     </AnchoredOverlay>
                 </div>
 
-                <!-- Exactly the remote viewport's shape, so switching between a live and closed browser doesn't resize the window under the pointer. -->
-                <div
-                    class="relative min-h-0 w-full"
-                    :class="current?.running ? 'bg-terminal' : ''"
-                    :style="{ aspectRatio: `${view.viewWidth.value} / ${view.viewHeight.value}` }"
-                >
+                <!-- Row two: history, reload, and the address bar, all this pane's own and answered by the page. -->
+                <div v-if="current?.running" class="flex shrink-0 items-center gap-0.5 border-b border-line px-1.5 py-1">
+                    <button type="button" :class="ui.iconButton()" :aria-label="t(`browsers.browsers.back`)" v-tooltip.bottom="t(`browsers.browsers.back`)" @click="view.back()">
+                        <Icon name="backward" class="text-2xs" />
+                    </button>
+                    <button
+                        type="button"
+                        :class="ui.iconButton()"
+                        :aria-label="t(`browsers.browsers.forward`)"
+                        v-tooltip.bottom="t(`browsers.browsers.forward`)"
+                        @click="view.forward()"
+                    >
+                        <Icon name="forward" class="text-2xs" />
+                    </button>
+                    <button type="button" :class="ui.iconButton()" :aria-label="t(`browsers.browsers.reload`)" v-tooltip.bottom="t(`browsers.browsers.reload`)" @click="view.reload()">
+                        <Icon name="refresh" class="text-2xs" />
+                    </button>
+                    <!-- The padlock reads off the page's real address, not the draft; typing changes nothing until Enter. -->
+                    <!-- The shell draws the frame and takes the focus; the field inside is bare, as the design system's inline fields are. -->
+                    <div class="ui-field-shell group flex min-w-0 flex-1 items-center gap-1 px-1.5">
+                        <Icon
+                            v-if="secure !== undefined"
+                            :name="secure ? 'lock' : 'unlock'"
+                            class="shrink-0 text-3xs"
+                            :class="secure ? 'text-muted' : 'text-warning'"
+                        />
+                        <input
+                            ref="addressInput"
+                            :value="shownAddress"
+                            type="text"
+                            spellcheck="false"
+                            autocomplete="off"
+                            :placeholder="t(`browsers.browsers.addressPlaceholder`)"
+                            class="field-bare min-w-0 flex-1 font-mono md:text-xs"
+                            @focus="focusAddress"
+                            @input="addressDraft = ($event.target as HTMLInputElement).value"
+                            @keydown.enter.prevent="submitAddress"
+                            @keydown.esc.prevent="revertAddress"
+                            @blur="addressDraft = undefined"
+                        />
+                        <!-- No tooltip of its own: the address line above already has one, and nesting tooltips would open a second box on the first. -->
+                        <CopyButton
+                            :text="address"
+                            class="shrink-0 opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
+                            :aria-label="t(`browsers.browsers.copyAddress`)"
+                        />
+                    </div>
+                </div>
+
+                <!-- The page: whatever the stage's box is, the daemon sizes the viewport to it. -->
+                <div class="relative min-h-0 flex-1" :class="current?.running ? 'bg-terminal' : ''">
                     <div
                         v-if="current?.running"
                         ref="stageEl"
                         tabindex="0"
                         class="absolute inset-0 flex select-none items-center justify-center outline-none"
+                        :style="view.kind.value === 'video' ? { cursor: view.driving.value ? view.cursor.value : 'default' } : undefined"
                         @mousemove="pictureEl && view.onMouseMove($event, pictureEl)"
                         @mousedown="pictureEl && view.onMouseDown($event, pictureEl)"
                         @mouseup="pictureEl && view.onMouseUp($event, pictureEl)"
                         @wheel="pictureEl && view.onWheel($event, pictureEl)"
-                        @keydown="view.onKeyDown"
+                        @keydown="view.onKeyDown($event, onCommand)"
                         @paste="view.onPaste"
                         @contextmenu.prevent
                     >
-                        <!-- The whole browser window, decoded off its own X display, so selects/autofill/file-pickers are all in the picture. -->
-                        <canvas
-                            v-if="view.kind.value === 'video'"
-                            ref="canvasEl"
-                            class="h-full w-full object-contain"
-                            :class="view.driving.value ? 'cursor-none' : ''"
-                        />
+                        <!-- The page's viewport off the browser's own X display: video beneath, a sharp still of the settled page over it (videoSink); the same box, so a click aims the same on either. -->
+                        <template v-if="view.kind.value === 'video'">
+                            <canvas ref="canvasEl" class="absolute inset-0 h-full w-full object-contain" />
+                            <canvas ref="stillEl" class="pointer-events-none absolute inset-0 h-full w-full object-contain" />
+                        </template>
                         <!-- Display-less browsers expose one compositor surface without a cursor. -->
                         <img
                             v-else
@@ -477,6 +566,37 @@ watch(
                                 t(`browsers.browsers.closed`, { finishedAt: relativeTime(current.finishedAt) })
                             }}</template>
                             {{ t(`browsers.browsers.everyPageOpenedStill`) }}
+                        </div>
+                    </div>
+
+                    <!-- A dialog the page opened, held by the daemon: answered here or by the agent, whichever first. Centred like the browser's own would be. -->
+                    <div v-if="dialog !== undefined" class="absolute inset-0 z-20 flex items-start justify-center bg-canvas/40 p-6">
+                        <div class="flex w-full max-w-md flex-col gap-3 rounded-lg border border-line bg-card p-4 shadow-lg">
+                            <div class="text-xs font-medium text-content">
+                                {{ dialog.kind === `beforeunload` ? t(`browsers.browsers.leavePage`) : t(`browsers.browsers.pageSays`) }}
+                            </div>
+                            <div v-if="dialog.kind !== `beforeunload`" class="whitespace-pre-wrap break-words text-xs text-content">{{ dialog.message }}</div>
+                            <input
+                                v-if="dialog.kind === `prompt`"
+                                v-model="dialogText"
+                                type="text"
+                                class="ui-field-box ui-field-sm w-full"
+                                @keydown.enter.prevent="answerDialog(true)"
+                                @keydown.esc.prevent="answerDialog(false)"
+                            />
+                            <div class="flex justify-end gap-2">
+                                <Button
+                                    v-if="dialog.kind !== `alert`"
+                                    size="small"
+                                    severity="secondary"
+                                    @click="answerDialog(false)"
+                                >
+                                    {{ dialog.kind === `beforeunload` ? t(`browsers.browsers.stay`) : t(`browsers.browsers.cancel`) }}
+                                </Button>
+                                <Button size="small" @click="answerDialog(true)">
+                                    {{ dialog.kind === `beforeunload` ? t(`browsers.browsers.leave`) : t(`browsers.browsers.ok`) }}
+                                </Button>
+                            </div>
                         </div>
                     </div>
 

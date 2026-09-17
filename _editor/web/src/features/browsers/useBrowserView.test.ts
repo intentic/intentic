@@ -334,3 +334,103 @@ test("copying an empty selection writes nothing", async () => {
     await vi.waitFor(() => expect(wire()).toContainEqual({ type: `key`, key: `c`, ctrl: true }));
     expect(writeText).not.toHaveBeenCalled();
 });
+
+// The chrome is the pane's own: its buttons speak to the daemon in verbs, never as keystrokes into a picture of a
+// toolbar. What each verb puts on the wire is the contract screencast.ts's ScreencastClientMessage reads.
+test("the chrome's verbs go to the daemon as messages", async () => {
+    const { view, wire } = await connected();
+
+    view.navigate(`https://example.com/`);
+    view.back();
+    view.forward();
+    view.reload();
+    view.newTab();
+    view.newTab(`https://example.org/`);
+    view.closeTab(`p2`);
+    view.answerDialog(true, `hi`);
+    view.answerDialog(false);
+
+    expect(wire()).toEqual([
+        { type: `navigate`, url: `https://example.com/` },
+        { type: `back` },
+        { type: `forward` },
+        { type: `reload` },
+        { type: `newTab` },
+        { type: `newTab`, url: `https://example.org/` },
+        { type: `closeTab`, pageId: `p2` },
+        { type: `dialog`, accept: true, text: `hi` },
+        { type: `dialog`, accept: false },
+    ]);
+});
+
+// Ctrl+T over the picture used to be the host's tab; now it is the browser's, answered by the pane's own strip, and
+// nothing about it travels as a keystroke.
+test("a browser chord is handed to the pane as a command, not sent to the page", async () => {
+    const { view, wire } = await connected();
+    view.driving.value = true;
+    const commands: string[] = [];
+
+    const chord = press(`t`, { ctrl: true });
+    view.onKeyDown(chord, (command) => commands.push(command));
+
+    expect(commands).toEqual([`newTab`]);
+    expect(wire()).toHaveLength(0);
+    expect(chord.preventDefault).toHaveBeenCalledTimes(1);
+});
+
+// Chromium's find bar is browser chrome, so its keystrokes have to land on the display rather than the page; the
+// view marks them raw from the chord that opened the bar until the Escape that closes it, or a click.
+test("keystrokes go raw to the display while the find bar is open", async () => {
+    const { view, wire } = await connected();
+    view.driving.value = true;
+
+    view.find();
+    view.onKeyDown(press(`a`));
+    view.onKeyDown(press(`Enter`));
+    view.onKeyDown(press(`Escape`));
+    view.onKeyDown(press(`b`));
+
+    expect(wire()).toEqual([
+        { type: `key`, key: `f`, ctrl: true, raw: true },
+        { type: `text`, text: `a`, raw: true },
+        { type: `key`, key: `Enter`, raw: true },
+        { type: `key`, key: `Escape`, raw: true },
+        { type: `text`, text: `b` },
+    ]);
+});
+
+// The box the picture gets is what the daemon sizes the page to; asked once it holds still, and not again for the
+// same box, since every ask restarts the encoder.
+test("the picture box's size is asked of the daemon once it settles, and only when it changes", async () => {
+    const { view, wire, socket } = await connected();
+    socket().deliver({ type: `ready`, kind: `video`, width: 1280, height: 880, scale: 1, codec: `avc1.42C028` });
+
+    view.requestSize(900.4, 600.2);
+    view.requestSize(900.4, 600.2);
+    await vi.waitFor(() => expect(wire()).toContainEqual({ type: `resize`, width: 900, height: 600 }));
+    expect(wire().filter((message) => (message as { type?: string }).type === `resize`)).toHaveLength(1);
+
+    // A fresh `ready` for a stream the daemon restarted is not a new box; nothing is asked again.
+    socket().deliver({ type: `ready`, kind: `video`, width: 900, height: 600, scale: 1, codec: `avc1.42C028` });
+    expect(wire().filter((message) => (message as { type?: string }).type === `resize`)).toHaveLength(1);
+});
+
+// On the video path a webp is the settled page's sharp still, laid over the canvas; it must never reach the <img>
+// the frames path uses, which would show it beside the video.
+test("a still on the video path goes to the canvas, not the img", async () => {
+    vi.stubGlobal(
+        `VideoDecoder`,
+        class {
+            state = `configured`;
+            configure(): void {}
+            decode(): void {}
+            close(): void {}
+        },
+    );
+    const { view, socket } = await connected();
+    socket().deliver({ type: `ready`, kind: `video`, width: 1280, height: 880, scale: 1, codec: `avc1.42C028` });
+
+    socket().deliverFrame([1, 0x52, 0x49]);
+
+    expect(view.frame.value).toBeUndefined();
+});

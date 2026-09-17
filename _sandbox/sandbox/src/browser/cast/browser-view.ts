@@ -1,6 +1,6 @@
 import { upgradeWebSocket } from "@hono/node-server";
 import type { WSContext } from "hono/ws";
-import { browserSessionContext, browserSessionDisplayKey, browserSessionPage } from "../sessions/browser-sessions.js";
+import { answerBrowserDialog, browserSessionContext, browserSessionDisplayKey, browserSessionPage } from "../sessions/browser-sessions.js";
 import { startLiveView, type LiveView } from "./live-view.js";
 import type { ScreencastClientMessage } from "./screencast.js";
 import type { Services } from "../../composition.js";
@@ -51,7 +51,7 @@ export const createBrowserViewRoute = (services: Services) =>
 
         // Conversation-level half of this socket (keepalive, streaming, selection, visibility), split from the input
         // half: this one answers for the view, not the browser. Returns whether it handled the frame.
-        const handleControl = async (message: ScreencastClientMessage, ws: Socket): Promise<boolean> => {
+        const handleView = async (message: ScreencastClientMessage, ws: Socket): Promise<boolean> => {
             switch (message.type) {
                 case "ping":
                     // Keepalive against tunnel idle-reaping, answered before attach so a slow start isn't read as a
@@ -78,6 +78,33 @@ export const createBrowserViewRoute = (services: Services) =>
                     return false;
             }
         };
+
+        // The half answered by the session rather than the view: a tab and a dialog belong to the browser, which the
+        // session tracks (browser-sessions.ts) whether anyone is watching or not.
+        const handleSession = async (message: ScreencastClientMessage): Promise<boolean> => {
+            switch (message.type) {
+                case "closeTab":
+                    // Closing what is already gone is the outcome asked for; the strip relists either way.
+                    await browserSessionPage(session, message.pageId)
+                        ?.close()
+                        .catch(() => undefined);
+                    return true;
+                case "dialog":
+                    await answerBrowserDialog(session, message.accept, message.text);
+                    return true;
+                default:
+                    return false;
+            }
+        };
+
+        const handleControl = async (message: ScreencastClientMessage, ws: Socket): Promise<boolean> =>
+            (await handleView(message, ws)) || handleSession(message);
+
+        // The socket as live-view.ts sees it; `backlog` is what it holds unsent, read off the raw ws.
+        const sinkOf = (ws: Socket) => ({
+            send: (data: string | Uint8Array<ArrayBuffer>) => ws.send(data),
+            backlog: () => (ws.raw as { bufferedAmount?: number } | undefined)?.bufferedAmount ?? 0,
+        });
 
         return {
             onOpen: async (_event, ws) => {
@@ -107,7 +134,7 @@ export const createBrowserViewRoute = (services: Services) =>
                 }
                 try {
                     // Display key decides video vs frames; a headless session has none, so frames answers instead.
-                    view = await startLiveView(context, browserSessionDisplayKey(session) ?? "", { send: (data) => ws.send(data) }, (reason) => {
+                    view = await startLiveView(context, browserSessionDisplayKey(session) ?? "", sinkOf(ws), (reason) => {
                         services.logger.warn({ reason }, "browser-view stream failed");
                     });
                 } catch (err) {

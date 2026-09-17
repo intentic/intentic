@@ -367,15 +367,31 @@ A reader's tour of `src/`: which directory answers which question, and the file 
 - [src/browser/cast/live-view.ts](../src/browser/cast/live-view.ts): what "watching a browser" actually sends, and the one
   place the choice is made for both surfaces. A browser is headed on a virtual X display OF ITS OWN
   ([src/browser/cast/display.ts](../src/browser/cast/display.ts)), so the display is the browser: H.264 grabbed off it
-  ([src/browser/cast/videocast.ts](../src/browser/cast/videocast.ts)) carries the whole window — chrome, the real cursor,
-  an open `<select>`, the autofill drop-down, the file picker, the permission prompt — and XTEST drives that
-  same display ([src/browser/cast/xinput.ts](../src/browser/cast/xinput.ts)), so all of it is clickable. One coordinate
-  space containing everything, which is what let the drop-down reimplementation and the HTML address bar be
-  deleted rather than maintained: both existed only because the old picture was one page's compositor surface
-  with nothing outside it. It is also ~1% of the bytes: three seconds of a settled page is ~23 kB where one
-  JPEG frame of it was 150-250 kB. The CDP screencast ([src/browser/cast/screencast.ts](../src/browser/cast/screencast.ts))
-  remains for the one case with no display to grab — a sandbox without the browser pack, whose Chromium can
-  only run headless — and says so in its `ready` so the client builds the right decoder.
+  ([src/browser/cast/videocast.ts](../src/browser/cast/videocast.ts)) carries the page's viewport
+  ([src/browser/cast/region.ts](../src/browser/cast/region.ts) reads where that is off the page, since the toolbar's
+  height moves with Chromium versions and the scale factor) and everything Chromium draws over it — an open
+  `<select>`, the context menu, the autofill drop-down, a popup window, placed over its opener because a display
+  with no window manager puts it nowhere — and XTEST drives that same display
+  ([src/browser/cast/xinput.ts](../src/browser/cast/xinput.ts)), so all of it is clickable. Chromium's own toolbar
+  stays out of the picture: the tabs, the address bar and navigation are the CLIENT's, fed by the session and
+  steered by messages (`navigate`, `newTab`, `resize`…), which is also why the keyboard goes to the page over CDP
+  rather than XTEST — a key event addressed to the page cannot land in an omnibox nobody can see — and only a
+  native menu with the keyboard, or Chromium's find bar (`raw`), is typed on the display. The window is sized to
+  the client's own box (`Browser.setWindowBounds`, in the corner of a screen larger than any window, so every menu
+  Chromium flips at a screen edge flips into the viewport), the pointer is the client's own, and once the encoder
+  goes quiet a 2× still of the page replaces the video ([src/browser/cast/stills.ts](../src/browser/cast/stills.ts),
+  the frames path's settle rules read off x264's output), with the frames after it tagged quiet so the client
+  keeps the sharp picture until something really moves. A viewer whose socket backs up past a second of video is
+  dropped to the next keyframe rather than fed further behind. It is ~1% of the bytes of frames: three seconds of a
+  settled page is ~23 kB where one JPEG frame of it was 150-250 kB. The CDP screencast
+  ([src/browser/cast/screencast.ts](../src/browser/cast/screencast.ts)) remains for the one case with no display to
+  grab — a sandbox without the browser pack, whose Chromium can only run headless — and says so in its `ready` so
+  the client builds the right decoder. Where all of this came from, with the measurements:
+  [docs/design/browser-surface-analysis.md](../../../docs/design/browser-surface-analysis.md).
+- A JavaScript dialog the agent's page opens is HELD by [src/browser/sessions/browser-sessions.ts](../src/browser/sessions/browser-sessions.ts)
+  and listed on the session, for whoever answers first: the owner over the live view, or the agent through
+  `browser_handle_dialog`. It has to be held explicitly: a Playwright client dismisses any dialog nobody listens
+  for, which is what this daemon's own attach did to every alert the agent's page opened until the view listened.
 - The session a site's sign-in lives in crosses BOTH ways, on its own HTTPS door rather than the socket,
   because a socket answer is an MCP result and an MCP result is something the model reads:
   [src/webext/session-import.ts](../src/webext/session-import.ts) takes one from the owner's own browser into a

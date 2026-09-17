@@ -1,15 +1,18 @@
 import { type ChildProcess, spawn } from "node:child_process";
 import { errorMessage } from "@intentic/base/errors";
-import type { Display } from "./display.js";
+import type { Region } from "./region.js";
 
 // Grabs the browser as video off its X display, not one page's compositor, since an inter-frame codec suits a picture
-// that mostly doesn't change. Captures everything on the display (cursor, menus, file pickers, chrome) in one
-// coordinate space xinput.ts also drives. One encoder per viewer: every stream begins at a keyframe, no join problem.
+// that mostly doesn't change. Grabs the page's viewport region (region.ts): everything Chromium draws there, a native
+// <select>, a context menu, a popup window placed over the page, in one coordinate space xinput.ts also drives; the
+// browser's own toolbar stays out, since the client draws its own. One encoder per viewer: every stream begins at a
+// keyframe, no join problem.
 
 // 30fps is where a page stops looking stepped; 60 costs about twice as much for a barely visible difference.
 const FPS = 30;
-// Recovery point every two seconds, so a decoder that dropped something can recover without a socket rebuild.
-const KEYFRAME_INTERVAL = FPS * 2;
+// Recovery point every second: a viewer whose socket backed up (live-view.ts) resumes at the next one, so a freeze
+// under congestion is bounded at this.
+const KEYFRAME_INTERVAL = FPS;
 // CRF 24 is visually clean for text at this size; the rate ceiling bounds what a pathological page can cost.
 const CRF = 24;
 const MAX_RATE = "6M";
@@ -26,14 +29,18 @@ export interface Videocast {
     readonly stop: () => void;
 }
 
-// Tags continue screencast.ts's table so one socket carries every kind; decoders can't infer that bit.
+// Tags continue screencast.ts's table so one socket carries every kind; decoders can't infer that bit. The quiet pair
+// says the frame shows nothing a still the client holds does not (stills.ts): decoded, to keep the stream whole, but
+// not painted over the sharper picture.
 export const FRAME_H264_KEY = 3;
 export const FRAME_H264_DELTA = 4;
+export const FRAME_H264_KEY_QUIET = 5;
+export const FRAME_H264_DELTA_QUIET = 6;
 
 // A coded frame as it goes on the wire: one tag byte, then the access unit. The mirror of encodeFrame.
-export const encodeVideo = (frame: VideoFrame): Uint8Array<ArrayBuffer> => {
+export const encodeVideo = (frame: VideoFrame, quiet = false): Uint8Array<ArrayBuffer> => {
     const wire = new Uint8Array(frame.bytes.byteLength + 1);
-    wire[0] = frame.key ? FRAME_H264_KEY : FRAME_H264_DELTA;
+    wire[0] = frame.key ? (quiet ? FRAME_H264_KEY_QUIET : FRAME_H264_KEY) : quiet ? FRAME_H264_DELTA_QUIET : FRAME_H264_DELTA;
     wire.set(frame.bytes, 1);
     return wire;
 };
@@ -115,8 +122,9 @@ export const readCodec = (unit: Buffer): string | undefined => {
 };
 
 // `-nostdin` avoids ffmpeg blocking on the daemon's own unwritten stdin pipe before it even opens the display.
-// `-draw_mouse 1` draws the X server's real cursor at xinput.ts's actual position, in Chromium's own shape.
-export const startVideocast = (display: Display, handlers: VideocastHandlers): Videocast => {
+// `-draw_mouse 0`: the pointer is the client's own, drawn where the owner's hand is rather than a round trip behind
+// it; the shape comes from the page (screencast.ts's cursorReporter).
+export const startVideocast = (display: { readonly name: string }, region: Region, handlers: VideocastHandlers): Videocast => {
     // Bytes arrived mid-frame, waiting for the rest; typed since a socket chunk may back any ArrayBufferLike.
     let pending: Buffer = Buffer.alloc(0);
     let stopped = false;
@@ -130,13 +138,13 @@ export const startVideocast = (display: Display, handlers: VideocastHandlers): V
             "-f",
             "x11grab",
             "-draw_mouse",
-            "1",
+            "0",
             "-video_size",
-            `${display.width}x${display.height}`,
+            `${region.width}x${region.height}`,
             "-framerate",
             String(FPS),
             "-i",
-            `${display.name}.0`,
+            `${display.name}.0+${region.x},${region.y}`,
             "-c:v",
             "libx264",
             "-preset",

@@ -5,7 +5,7 @@ import { STATE_DIR, WORKSPACE_ROOT } from "@intentic/constants";
 import type { Capability } from "@intentic/sandbox-contract";
 import { expect, test } from "vitest";
 import { browserServerSpec, browserServersOf, isolatedBrowserSpec, writeBrowserConfig } from "./browser-tools.js";
-import { type Display, DISPLAY_HEIGHT, DISPLAY_WIDTH } from "../cast/display.js";
+import { chromiumWindowArgs, type Display, DISPLAY_HEIGHT, DISPLAY_WIDTH } from "../cast/display.js";
 import { browserFingerprint } from "../sessions/fingerprint.js";
 import { acquireProfileLock, markConnected, releaseProfileLock } from "../sessions/session-store.js";
 
@@ -61,8 +61,10 @@ test("a headed config sizes the WINDOW and turns viewport emulation off", async 
     const config = JSON.parse(readFileSync(path, "utf8")) as {
         browser: { launchOptions: { args: string[] }; contextOptions: { viewport?: unknown } };
     };
-    expect(config.browser.launchOptions.args).toContain(`--window-size=${DISPLAY_WIDTH},${DISPLAY_HEIGHT}`);
-    expect(config.browser.launchOptions.args).toContain("--window-position=0,0");
+    // Placed by display.ts's rule (the screen's bottom-right corner), not at the origin: see region.ts.
+    for (const arg of chromiumWindowArgs(DISPLAY)) {
+        expect(config.browser.launchOptions.args).toContain(arg);
+    }
     expect(config.browser.contextOptions.viewport).toBeNull();
 });
 

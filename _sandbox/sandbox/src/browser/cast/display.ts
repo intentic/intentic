@@ -4,12 +4,24 @@ import { connect } from "node:net";
 import { pollUntil } from "@intentic/base/async";
 
 // A virtual X display per browser, not shared, since the picture now comes from the display itself (videocast.ts,
-// xinput.ts): sharing would overlap windows and share one cursor across browsers. Cheap (Xvfb, ~15 MB), bounded by
+// xinput.ts): sharing would overlap windows and share one cursor across browsers. Cheap (Xvfb, ~16 MB), bounded by
 // connected accounts; ships with the browser capability, so an unconnected sandbox has none.
 
-// Screen and window Chromium fills exactly; input uses display coordinates, ignoring chrome height.
-export const DISPLAY_WIDTH = 1280;
-export const DISPLAY_HEIGHT = 880;
+// The screen, larger than any window: a window grows to the owner's own pane (region.ts) without the X server
+// changing shape, which Xvfb cannot do.
+export const DISPLAY_WIDTH = 2560;
+export const DISPLAY_HEIGHT = 1600;
+// A browser window's size before any viewer has asked for one.
+export const WINDOW_WIDTH = 1280;
+export const WINDOW_HEIGHT = 880;
+
+// The launch flags placing a window in the screen's bottom-right corner, the corner region.ts keeps it in: Chromium
+// flips a menu that would leave the screen, so a window whose right and bottom edges are the screen's keeps every
+// <select> and context menu inside the viewport that is grabbed.
+export const chromiumWindowArgs = (display: Display): string[] => [
+    `--window-position=${display.width - WINDOW_WIDTH},${display.height - WINDOW_HEIGHT}`,
+    `--window-size=${WINDOW_WIDTH},${WINDOW_HEIGHT}`,
+];
 
 // Display numbers climb from FIRST (:99, unchanged from before); LAST only backstops a runaway.
 const FIRST = 99;

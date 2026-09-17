@@ -106,6 +106,17 @@ export const BrowserSessionSchema = z.object({
         .describe(
             "The agent has hit something only a person can clear: a captcha, a password it does not hold, a check on your phone. Present only while it is waiting.",
         ),
+    // A JavaScript dialog a page has open; held by the daemon for whoever answers first, the owner over the live view
+    // or the agent through its tool. Present only while open.
+    dialog: z
+        .object({
+            pageId: z.string().describe("Which page opened it."),
+            kind: z.enum(["alert", "confirm", "prompt", "beforeunload"]).describe("What it asks: an alert wants dismissing, a confirm a yes or no, a prompt a text."),
+            message: z.string().describe("What the page says."),
+            defaultValue: z.string().optional().describe("A prompt's prefilled answer."),
+        })
+        .optional()
+        .describe("A dialog a page has open and is waiting on. You or the agent answers it; present only while it is open."),
     pages: z
         .array(BrowserPageSchema)
         .describe("Every page it has open. A browser holds several at once, which is the reason it is listed apart from the terminals."),

@@ -1,15 +1,16 @@
 import { createBackoff } from "@intentic/base/async";
 import { onScopeDispose, ref, type Ref, shallowRef, watch } from "vue";
-import { FRAME_H264_DELTA, FRAME_H264_KEY, frameUrls } from "./frameUrls";
-import { keyIntent, type KeyFrame } from "./keyIntent";
+import { FRAME_WEBP, frameUrls, videoTag } from "./frameUrls";
+import { keyIntent, type BrowserCommand, type KeyFrame } from "./keyIntent";
 import { pointerFrame, type PointerAction } from "./pointerFrame";
 import { canDecodeVideo, videoSink } from "./videoSink";
 import { socketUrl as wsSocketUrl } from "../sandbox/client/wsTicket";
 
 // One live view of the agent's browser over /system/browser-view, with clicks/keys going back. `ready` picks video
-// (H.264 off the browser's own X display into a canvas, the whole window) or frames (CDP's page-only compositor
-// surface into an img); kind and geometry always come off the wire. No scrollback to preserve like a terminal, so
-// this is plain reactive state, and nothing is sent until the user takes control.
+// (H.264 of the page's viewport off the browser's own X display into a canvas, with a sharp still laid over it once
+// the page settles) or frames (CDP's page-only compositor surface into an img); kind and geometry always come off the
+// wire. The chrome around the picture is the pane's own, steered by the verbs below. No scrollback to preserve like
+// a terminal, so this is plain reactive state, and nothing is sent to the page until the user takes control.
 
 const PING_MS = 30_000;
 const RETRY_MS = 1000;
@@ -20,11 +21,13 @@ const STABLE_MS = 5000;
 const STALE_MS = 90_000;
 // Assumed only between the socket opening and `ready` landing, when there's nothing to click on yet.
 const VIEW_WIDTH = 1280;
-const VIEW_HEIGHT = 880;
+const VIEW_HEIGHT = 800;
 // Roughly one display frame, the rate CDP can act on anyway; each move is a few dozen bytes of JSON.
 const MOVE_THROTTLE_MS = 16;
 // How long Ctrl+C waits for the page's selection before the keystroke goes through anyway.
 const SELECTION_TIMEOUT_MS = 1500;
+// A size is asked once the box has held still this long: every step of a drag would otherwise restart the encoder.
+const RESIZE_DEBOUNCE_MS = 250;
 
 // Mirrors the daemon's SelectMenu (screencast.ts); the browser package can't import that contract, so it's
 // re-declared here.
@@ -35,23 +38,25 @@ export interface SelectMenu {
 }
 
 export interface BrowserView {
-    // Which picture this is, so the pane mounts a canvas or an img; undefined until `ready`.
+    // Which picture this is, so the pane mounts canvases or an img; undefined until `ready`.
     readonly kind: Ref<"video" | "frames" | undefined>;
-    // Remote geometry pointer coordinates map onto (whole window on video, page alone on frames); off the wire, never
-    // assumed.
+    // Remote geometry pointer coordinates map onto (the page's viewport, in the display's pixels on video); off the
+    // wire, never assumed.
     readonly viewWidth: Ref<number>;
     readonly viewHeight: Ref<number>;
-    // Where the video paints; the pane hands its canvas over on mount, nothing else uses it.
-    readonly attachCanvas: (canvas: HTMLCanvasElement | undefined) => void;
+    // Display pixels per CSS pixel of the picture: shown at width/scale CSS px, the page is 1:1.
+    readonly viewScale: Ref<number>;
+    // Where the video and its still paint; the pane hands its canvases over on mount, nothing else uses them.
+    readonly attachCanvases: (video: HTMLCanvasElement | undefined, still: HTMLCanvasElement | undefined) => void;
     // The current frame as an object URL, frames path only; undefined until the first lands, always undefined on video.
     readonly frame: Ref<string | undefined>;
     // What to say while there's no picture: connecting, reconnecting, or why there never will be one.
     readonly status: Ref<string | undefined>;
     // True while the user's input is being forwarded; off by default.
     readonly driving: Ref<boolean>;
-    // CSS cursor keyword from the daemon; a screencast carries none, Chromium draws it in the window.
+    // CSS cursor keyword from the daemon: the picture carries no pointer, the pane draws the local one in this shape.
     readonly cursor: Ref<string>;
-    // Stream a specific page instead of following the agent; pins daemon-side until the page closes.
+    // Stream a specific page instead of following the agent; brings it in front.
     readonly bindPage: (pageId: string) => void;
     // A native <select> renders outside the page, so no frame shows it; the daemon reports options instead.
     readonly select: Ref<SelectMenu | undefined>;
@@ -63,14 +68,37 @@ export interface BrowserView {
     readonly onMouseDown: (event: MouseEvent, frame: HTMLElement) => void;
     readonly onMouseUp: (event: MouseEvent, frame: HTMLElement) => void;
     readonly onWheel: (event: WheelEvent, frame: HTMLElement) => void;
-    readonly onKeyDown: (event: KeyboardEvent) => void;
+    // The chrome's own verbs (keyIntent's `command`) go to `onCommand`, which the pane answers with its tabs and
+    // address bar; the page's keys go to the browser.
+    readonly onKeyDown: (event: KeyboardEvent, onCommand?: (command: BrowserCommand) => void) => void;
     // Left to the host: the remote clipboard is the sandbox's own, and the host's paste event carries the real one.
     readonly onPaste: (event: ClipboardEvent) => void;
+    readonly navigate: (url: string) => void;
+    readonly back: () => void;
+    readonly forward: () => void;
+    readonly reload: () => void;
+    readonly stop: () => void;
+    readonly newTab: (url?: string) => void;
+    readonly closeTab: (pageId: string) => void;
+    // Chromium's own find bar: opened on the display, and fed every keystroke there until Escape or a click.
+    readonly find: () => void;
+    // The picture box's size in CSS px; the daemon sizes the browser window so the viewport is exactly that.
+    readonly requestSize: (width: number, height: number) => void;
+    // Answers the dialog the session lists; `text` is a prompt's reply.
+    readonly answerDialog: (accept: boolean, text?: string) => void;
 }
 
 // Authenticated wss URL, or undefined if unreachable/not signed in; base and token are read together after the
 // token await, from one active-sandbox snapshot.
 const socketUrl = (name: string): Promise<string | undefined> => wsSocketUrl(`/system/browser-view`, { session: name });
+
+interface Size {
+    readonly width: number;
+    readonly height: number;
+}
+
+const sameSize = (left: Size | undefined, right: Size | undefined): boolean =>
+    left !== undefined && right !== undefined && left.width === right.width && left.height === right.height;
 
 // Follows `name` as the view switches browsers; a change tears the old socket down and opens a new one, with
 // nothing to preserve across the switch.
@@ -81,6 +109,7 @@ export const useBrowserView = (name: Ref<string | undefined>): BrowserView => {
     const kind = ref<"video" | "frames" | undefined>();
     const viewWidth = ref(VIEW_WIDTH);
     const viewHeight = ref(VIEW_HEIGHT);
+    const viewScale = ref(1);
     const cursor = ref(`default`);
     const select = ref<SelectMenu | undefined>();
     const socket = shallowRef<WebSocket | undefined>();
@@ -99,6 +128,13 @@ export const useBrowserView = (name: Ref<string | undefined>): BrowserView => {
     // The Ctrl+C in flight, waiting on the page's answer; one at a time, since a second press before the first
     // resolves is the same question twice.
     let pendingSelection: ((text: string) => void) | undefined;
+    // Keystrokes go to the display rather than the page while Chromium's find bar has them; see `find`.
+    let rawKeys = false;
+    // The box's last measured size, and the last one asked of the daemon; a box the daemon already has is not asked
+    // again, and a box measured before `ready` is asked once the picture is known to be video.
+    let boxSize: Size | undefined;
+    let askedSize: Size | undefined;
+    let resizeTimer: number | undefined;
 
     const send = (message: object): void => {
         if (socket.value?.readyState === WebSocket.OPEN) {
@@ -106,12 +142,22 @@ export const useBrowserView = (name: Ref<string | undefined>): BrowserView => {
         }
     };
 
+    const askSize = (): void => {
+        if (kind.value !== `video` || boxSize === undefined || sameSize(boxSize, askedSize)) {
+            return;
+        }
+        askedSize = boxSize;
+        send({ type: `resize`, ...boxSize });
+    };
+
     // Tells the client which decoder to build and what a click's coordinates mean. Sent before any picture; on video,
-    // right as the codec is read out of the stream, just before the first keyframe.
-    const onReady = (message: { kind?: string; width?: number; height?: number; codec?: string }): void => {
+    // right as the codec is read out of the stream, just before the first keyframe, and again for every fresh stream
+    // (a resize, another window).
+    const onReady = (message: { kind?: string; width?: number; height?: number; scale?: number; codec?: string }): void => {
         kind.value = message.kind === `video` ? `video` : `frames`;
         viewWidth.value = message.width ?? viewWidth.value;
         viewHeight.value = message.height ?? viewHeight.value;
+        viewScale.value = message.scale !== undefined && message.scale > 0 ? message.scale : 1;
         if (kind.value === `video`) {
             if (!canDecodeVideo()) {
                 status.value = `This browser can't play the live view. Chrome, Edge, Safari 16.4+ or Firefox 130+ can.`;
@@ -120,6 +166,7 @@ export const useBrowserView = (name: Ref<string | undefined>): BrowserView => {
             video.configure(message.codec ?? ``);
         }
         status.value = `Waiting for the first frame…`;
+        askSize();
     };
 
     // What the remote page shows under the pointer, sent only on change (see `cursor` in the interface for why it
@@ -134,9 +181,15 @@ export const useBrowserView = (name: Ref<string | undefined>): BrowserView => {
     const takePicture = (data: ArrayBuffer): void => {
         const bytes = new Uint8Array(data);
         const tag = bytes[0];
-        if (tag === FRAME_H264_KEY || tag === FRAME_H264_DELTA) {
-            video.push(bytes.subarray(1), tag === FRAME_H264_KEY);
+        const coded = videoTag(tag);
+        if (coded !== undefined) {
+            video.push(bytes.subarray(1), coded.key, coded.quiet);
             status.value = undefined;
+            return;
+        }
+        if (tag === FRAME_WEBP && kind.value === `video`) {
+            // The settled page, sharp; laid over the video until it moves.
+            video.still(bytes.subarray(1));
             return;
         }
         const picture = pictures.from(data);
@@ -166,6 +219,7 @@ export const useBrowserView = (name: Ref<string | undefined>): BrowserView => {
             kind?: string;
             width?: number;
             height?: number;
+            scale?: number;
             codec?: string;
             message?: string;
             text?: string;
@@ -257,6 +311,8 @@ export const useBrowserView = (name: Ref<string | undefined>): BrowserView => {
         // Supersedes any straggler socket; its handlers see `socket.value !== ws` and stay silent.
         socket.value?.close();
         socket.value = ws;
+        // A fresh socket knows nothing of the box; the first `ready` asks again.
+        askedSize = undefined;
         let ping: number | undefined;
         let openedAt = 0;
         let lastFrameAt = 0;
@@ -301,6 +357,7 @@ export const useBrowserView = (name: Ref<string | undefined>): BrowserView => {
 
     const teardown = (): void => {
         window.clearTimeout(reconnect);
+        window.clearTimeout(resizeTimer);
         // A copy waiting on a socket that's going away resolves empty rather than hanging until its timeout.
         pendingSelection?.(``);
         pendingSelection = undefined;
@@ -314,6 +371,8 @@ export const useBrowserView = (name: Ref<string | undefined>): BrowserView => {
             teardown();
             closing = false;
             pinned = undefined;
+            rawKeys = false;
+            askedSize = undefined;
             ladder.reset();
             frame.value = undefined;
             driving.value = false;
@@ -354,11 +413,21 @@ export const useBrowserView = (name: Ref<string | undefined>): BrowserView => {
             send(pointer);
         }
     };
+
+    // A page keystroke, on the display instead while the find bar has the keyboard.
+    const sendKey = (chord: KeyFrame): void => {
+        send(rawKeys ? { ...chord, raw: true } : chord);
+        if (rawKeys && chord.key === `Escape`) {
+            rawKeys = false;
+        }
+    };
+
     return {
         kind,
         viewWidth,
         viewHeight,
-        attachCanvas: video.attach,
+        viewScale,
+        attachCanvases: video.attach,
         frame,
         status,
         driving,
@@ -380,8 +449,7 @@ export const useBrowserView = (name: Ref<string | undefined>): BrowserView => {
                 return;
             }
             // Only enough to stop a 1000 Hz mouse flooding the socket; one frame at 60 Hz is the rate the far side can
-            // act on
-            // anyway.
+            // act on anyway.
             const now = Date.now();
             if (now - lastMove < MOVE_THROTTLE_MS) {
                 return;
@@ -389,7 +457,11 @@ export const useBrowserView = (name: Ref<string | undefined>): BrowserView => {
             lastMove = now;
             sendPointer(`move`, event, element);
         },
-        onMouseDown: (event, element) => sendPointer(`down`, event, element),
+        onMouseDown: (event, element) => {
+            // A click puts the keyboard back on the page, wherever the find bar left it.
+            rawKeys = false;
+            sendPointer(`down`, event, element);
+        },
         onMouseUp: (event, element) => sendPointer(`up`, event, element),
         onWheel: (event, element) => {
             if (!driving.value) {
@@ -399,8 +471,8 @@ export const useBrowserView = (name: Ref<string | undefined>): BrowserView => {
             sendPointer(`wheel`, event, element);
         },
         // Which half of the keyboard a keystroke belongs to is keyIntent's call (paste stays with the host, select-all
-        // doesn't); nothing happens unless the user has taken the wheel.
-        onKeyDown: (event) => {
+        // doesn't, a browser verb is the pane's); nothing happens unless the user has taken the wheel.
+        onKeyDown: (event, onCommand) => {
             if (!driving.value) {
                 return;
             }
@@ -409,10 +481,12 @@ export const useBrowserView = (name: Ref<string | undefined>): BrowserView => {
                 return;
             }
             event.preventDefault();
-            if (intent.kind === `text`) {
-                send({ type: `text`, text: intent.text });
+            if (intent.kind === `command`) {
+                onCommand?.(intent.command);
+            } else if (intent.kind === `text`) {
+                send(rawKeys ? { type: `text`, text: intent.text, raw: true } : { type: `text`, text: intent.text });
             } else if (intent.kind === `key`) {
-                send(intent.frame);
+                sendKey(intent.frame);
             } else {
                 void copyOut(intent.frame);
             }
@@ -425,5 +499,26 @@ export const useBrowserView = (name: Ref<string | undefined>): BrowserView => {
             event.preventDefault();
             send({ type: `text`, text });
         },
+        navigate: (url) => send({ type: `navigate`, url }),
+        back: () => send({ type: `back` }),
+        forward: () => send({ type: `forward` }),
+        reload: () => send({ type: `reload` }),
+        stop: () => send({ type: `stop` }),
+        newTab: (url) => send(url === undefined ? { type: `newTab` } : { type: `newTab`, url }),
+        closeTab: (pageId) => send({ type: `closeTab`, pageId }),
+        find: () => {
+            send({ type: `key`, key: `f`, ctrl: true, raw: true });
+            rawKeys = true;
+        },
+        requestSize: (width, height) => {
+            const size = { width: Math.round(width), height: Math.round(height) };
+            if (size.width <= 0 || size.height <= 0 || sameSize(size, boxSize)) {
+                return;
+            }
+            boxSize = size;
+            window.clearTimeout(resizeTimer);
+            resizeTimer = window.setTimeout(askSize, RESIZE_DEBOUNCE_MS);
+        },
+        answerDialog: (accept, text) => send(text === undefined ? { type: `dialog`, accept } : { type: `dialog`, accept, text }),
     };
 };

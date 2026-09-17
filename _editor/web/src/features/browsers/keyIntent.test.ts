@@ -79,14 +79,45 @@ describe("the clipboard", () => {
     });
 });
 
+describe("the chrome's own verbs", () => {
+    // The tabs and the address bar are the client's, so these are answered there and never travel as keystrokes:
+    // forwarded, Ctrl+L would focus an omnibox the picture does not show and swallow everything typed after it.
+    test("tab, address and navigation chords are commands, not keystrokes", () => {
+        expect(keyIntent(press(`t`, { ctrl: true }))).toEqual({ kind: `command`, command: `newTab` });
+        expect(keyIntent(press(`w`, { meta: true }))).toEqual({ kind: `command`, command: `closeTab` });
+        expect(keyIntent(press(`r`, { ctrl: true }))).toEqual({ kind: `command`, command: `reload` });
+        expect(keyIntent(press(`F5`))).toEqual({ kind: `command`, command: `reload` });
+        expect(keyIntent(press(`l`, { ctrl: true }))).toEqual({ kind: `command`, command: `address` });
+        expect(keyIntent(press(`f`, { ctrl: true }))).toEqual({ kind: `command`, command: `find` });
+    });
+
+    test("history goes by alt with an arrow", () => {
+        expect(keyIntent(press(`ArrowLeft`, { alt: true }))).toEqual({ kind: `command`, command: `back` });
+        expect(keyIntent(press(`ArrowRight`, { alt: true }))).toEqual({ kind: `command`, command: `forward` });
+    });
+
+    test("tabs cycle by Ctrl+Tab and Ctrl+PageDown, backwards with Shift or PageUp", () => {
+        expect(keyIntent(press(`Tab`, { ctrl: true }))).toEqual({ kind: `command`, command: `nextTab` });
+        expect(keyIntent(press(`Tab`, { ctrl: true, shift: true }))).toEqual({ kind: `command`, command: `prevTab` });
+        expect(keyIntent(press(`PageDown`, { ctrl: true }))).toEqual({ kind: `command`, command: `nextTab` });
+        expect(keyIntent(press(`PageUp`, { ctrl: true }))).toEqual({ kind: `command`, command: `prevTab` });
+    });
+
+    // A button or checkbox answers a space keystroke; an inserted character reaches only a text field.
+    test("space is a keystroke, not an inserted character", () => {
+        expect(keyIntent(press(` `))).toEqual({ kind: `key`, frame: { type: `key`, key: ` ` } });
+        expect(keyIntent(press(`PageDown`))).toEqual({ kind: `key`, frame: { type: `key`, key: `PageDown` } });
+    });
+});
+
 describe("what the host keeps", () => {
     // These are lost either way: a remote page driven this way ignores window-level chords, so taking them only costs
     // the user their own browser.
     test("window shortcuts are not the page's to take", () => {
-        for (const key of [`t`, `w`, `n`, `r`, `f`, `p`, `s`]) {
+        for (const key of [`n`, `p`, `s`]) {
             expect(keyIntent(press(key, { ctrl: true }))).toEqual({ kind: `host` });
         }
-        expect(keyIntent(press(`F5`))).toEqual({ kind: `host` });
+        expect(keyIntent(press(`F11`))).toEqual({ kind: `host` });
     });
 
     // Shift moves a letter chord into the browser's own territory (devtools, reopen tab, incognito); `i` sits in both
@@ -109,8 +140,8 @@ describe("what the host keeps", () => {
         });
     });
 
-    test("alt chords belong to the host's own menus and history", () => {
-        expect(keyIntent(press(`ArrowLeft`, { alt: true }))).toEqual({ kind: `host` });
+    test("alt chords other than history belong to the host's own menus", () => {
+        expect(keyIntent(press(`f`, { alt: true }))).toEqual({ kind: `host` });
         expect(keyIntent(press(`a`, { ctrl: true, alt: true }))).toEqual({ kind: `host` });
     });
 });

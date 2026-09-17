@@ -2,16 +2,16 @@
 import { Button, ui, Modal, Notice, type NoticeModel } from "@intentic/ui";
 import { noticeOf } from "@intentic/ui/async";
 import { computed, onBeforeUnmount, ref, watch } from "vue";
-import { FRAME_H264_KEY } from "../../browsers/frameUrls";
-import { keyIntent, type KeyFrame } from "../../browsers/keyIntent";
+import { FRAME_WEBP, videoTag } from "../../browsers/frameUrls";
+import { keyIntent, type BrowserCommand, type KeyFrame } from "../../browsers/keyIntent";
 import { pointerFrame, type PointerAction } from "../../browsers/pointerFrame";
 import { videoSink } from "../../browsers/videoSink";
 import { socketUrl as wsSocketUrl } from "../../sandbox/client/wsTicket";
 import { useT } from "@intentic/ui/i18n";
 
-// One connected account's Chromium, driven live over /system/browser-profile (video in, input replayed via XTEST).
-// `capability` picks which connection's browser to open, since a site may be connected more than once; `label`
-// names the account. `login` opens sign-in; `browse` reopens the same signed-in profile.
+// One connected account's Chromium, driven live over /system/browser-profile (video of the page's viewport in, input
+// replayed via XTEST and CDP). `capability` picks which connection's browser to open, since a site may be connected
+// more than once; `label` names the account. `login` opens sign-in; `browse` reopens the same signed-in profile.
 
 const t = useT();
 
@@ -22,28 +22,39 @@ const emit = defineEmits<{ (event: "update:visible", value: boolean): void; (eve
 const MOVE_THROTTLE_MS = 16;
 // How long a Ctrl+C waits for the page's selection before the keystroke proceeds without it.
 const SELECTION_TIMEOUT_MS = 1500;
+// A size is asked once the surface has held still this long; the modal only changes shape with the window.
+const RESIZE_DEBOUNCE_MS = 250;
 
 // Whether anything has painted yet; the picture itself lives in the canvas, not in reactive state.
 const painting = ref(false);
-// Decoder painting into the canvas connected below; reports back through `status`/`errorMsg`.
+// Decoder painting into the canvases connected below; reports back through `status`/`errorMsg`.
 const video = videoSink((message) => {
     status.value = "error";
     errorMsg.value = noticeOf(message);
 });
 const status = ref<"connecting" | "ready" | "saving" | "error">("connecting");
 const errorMsg = ref<NoticeModel>();
-// Default size until `ready` reports the real one; window proportions (chrome included), not a bare page's.
+// The picture's size in display pixels, and display pixels per CSS pixel, both off `ready`; pointer coordinates are
+// measured against the first.
 const viewW = ref(1280);
-const viewH = ref(880);
+const viewH = ref(800);
+const viewScale = ref(1);
+// What the page shows under the pointer; the picture carries no cursor of its own.
+const cursor = ref("default");
 const surface = ref<HTMLElement>();
 // Null, not undefined, once the dialog's content has unmounted: that is what Vue writes to a template ref.
 const canvasEl = ref<HTMLCanvasElement | null>(null);
-// Canvas mounts with the dialog; the decoder outlives it, so the two are wired together here.
-watch(canvasEl, (canvas) => video.attach(canvas ?? undefined));
+const stillEl = ref<HTMLCanvasElement | null>(null);
+// Canvases mount with the dialog; the decoder outlives them, so the two are wired together here.
+watch([canvasEl, stillEl], ([canvas, still]) => video.attach(canvas ?? undefined, still ?? undefined));
 let socket: WebSocket | undefined;
 let lastMove = 0;
 // Ctrl+C in flight, waiting on the page's answer; one at a time.
 let pendingSelection: ((text: string) => void) | undefined;
+// Keystrokes go to the display while Chromium's find bar has them.
+let rawKeys = false;
+let resizeTimer: number | undefined;
+let observer: ResizeObserver | undefined;
 const browsing = computed(() => props.mode === "browse");
 
 const sendMsg = (message: object): void => {
@@ -51,6 +62,28 @@ const sendMsg = (message: object): void => {
         socket.send(JSON.stringify(message));
     }
 };
+
+// The surface's own box, so the viewport is exactly what the modal shows rather than scaled into it.
+const askSize = (): void => {
+    const box = surface.value?.getBoundingClientRect();
+    if (box === undefined || box.width < 1 || box.height < 1) {
+        return;
+    }
+    sendMsg({ type: "resize", width: Math.round(box.width), height: Math.round(box.height) });
+};
+
+watch(surface, (element) => {
+    observer?.disconnect();
+    observer = undefined;
+    if (element === undefined) {
+        return;
+    }
+    observer = new ResizeObserver(() => {
+        window.clearTimeout(resizeTimer);
+        resizeTimer = window.setTimeout(askSize, RESIZE_DEBOUNCE_MS);
+    });
+    observer.observe(element);
+});
 
 const close = (): void => {
     // A pending copy on a closing socket resolves empty instead of hanging to its timeout.
@@ -60,14 +93,19 @@ const close = (): void => {
     socket = undefined;
 };
 
-// Sets the picture's size (the window's, chrome included, so it matches click coordinates) and configures the
-// decoder. Codec is read out of the stream by the daemon rather than assumed.
-const onReady = (message: { width?: number; height?: number; codec?: string }): void => {
+// Sets the picture's size and configures the decoder. Codec is read out of the stream by the daemon rather than
+// assumed; a fresh `ready` also follows every resize, since that is a fresh stream.
+const onReady = (message: { width?: number; height?: number; scale?: number; codec?: string }): void => {
+    const first = status.value !== "ready";
     status.value = "ready";
     viewW.value = message.width ?? viewW.value;
     viewH.value = message.height ?? viewH.value;
+    viewScale.value = message.scale !== undefined && message.scale > 0 ? message.scale : 1;
     video.configure(message.codec ?? "");
-    surface.value?.focus();
+    if (first) {
+        surface.value?.focus();
+        askSize();
+    }
 };
 
 const onSelection = (text: string | undefined): void => {
@@ -83,10 +121,22 @@ const onSaved = (): void => {
 
 // Everything on this socket that isn't a picture frame, kept as its own dispatch rather than inline branches.
 const handleJson = (raw: string): void => {
-    const message = JSON.parse(raw) as { type: string; width?: number; height?: number; codec?: string; message?: string; text?: string };
+    const message = JSON.parse(raw) as {
+        type: string;
+        width?: number;
+        height?: number;
+        scale?: number;
+        codec?: string;
+        message?: string;
+        text?: string;
+        cursor?: string;
+    };
     switch (message.type) {
         case "ready":
             onReady(message);
+            break;
+        case "cursor":
+            cursor.value = message.cursor ?? "default";
             break;
         case "selection":
             onSelection(message.text);
@@ -96,10 +146,23 @@ const handleJson = (raw: string): void => {
             break;
         case "error":
             status.value = "error";
-            errorMsg.value = noticeOf(message.message ?? "The browser couldn't be opened.");
+            errorMsg.value = noticeOf(message.message ?? t(`capabilities.browserProfileDialog.couldntStartBrowser`));
             break;
         default:
             break;
+    }
+};
+
+// A picture: one tag byte, then video (keyframe or delta, quiet or not) into the decoder, or a sharp still of the
+// settled page over it.
+const takePicture = (data: ArrayBuffer): void => {
+    const bytes = new Uint8Array(data);
+    const coded = videoTag(bytes[0]);
+    if (coded !== undefined) {
+        video.push(bytes.subarray(1), coded.key, coded.quiet);
+        painting.value = true;
+    } else if (bytes[0] === FRAME_WEBP) {
+        video.still(bytes.subarray(1));
     }
 };
 
@@ -110,7 +173,7 @@ const connect = async (): Promise<void> => {
     const url = await wsSocketUrl(`/system/browser-profile`, { capability: props.capability, mode: props.mode });
     if (url === undefined) {
         status.value = "error";
-        errorMsg.value = noticeOf("Sandbox isn't reachable, or you're not signed in.");
+        errorMsg.value = noticeOf(t(`capabilities.browserProfileDialog.couldntStartBrowser`));
         return;
     }
     const ws = new WebSocket(url);
@@ -118,11 +181,8 @@ const connect = async (): Promise<void> => {
     ws.binaryType = "arraybuffer";
     socket = ws;
     ws.addEventListener("message", (event) => {
-        // A coded frame: one tag byte (keyframe or delta), then the access unit, straight into the decoder.
         if (event.data instanceof ArrayBuffer) {
-            const bytes = new Uint8Array(event.data);
-            video.push(bytes.subarray(1), bytes[0] === FRAME_H264_KEY);
-            painting.value = true;
+            takePicture(event.data);
             return;
         }
         handleJson(String(event.data));
@@ -130,7 +190,7 @@ const connect = async (): Promise<void> => {
     ws.addEventListener("error", () => {
         if (status.value !== "saving") {
             status.value = "error";
-            errorMsg.value = errorMsg.value ?? noticeOf("Connection failed.");
+            errorMsg.value = errorMsg.value ?? noticeOf(t(`capabilities.browserProfileDialog.couldntStartBrowser`));
         }
     });
 };
@@ -144,6 +204,8 @@ watch(
 );
 onBeforeUnmount(() => {
     close();
+    observer?.disconnect();
+    window.clearTimeout(resizeTimer);
     // A decoder holds buffers from its stream; close it or a dialog opened/closed repeatedly leaks them.
     video.close();
 });
@@ -175,6 +237,8 @@ const onMouseMove = (event: MouseEvent): void => {
 };
 const onMouseDown = (event: MouseEvent): void => {
     surface.value?.focus();
+    // A click puts the keyboard back on the page, wherever the find bar left it.
+    rawKeys = false;
     sendPointer("down", event);
 };
 const onMouseUp = (event: MouseEvent): void => sendPointer("up", event);
@@ -205,6 +269,24 @@ const copyOut = async (chord: KeyFrame): Promise<void> => {
     sendMsg(chord);
 };
 
+// The browser verbs this window has: history and reload, and Chromium's find bar. No tab strip here, so the tab
+// verbs are nobody's.
+const onCommand = (command: BrowserCommand): void => {
+    if (command === "back" || command === "forward" || command === "reload") {
+        sendMsg({ type: command });
+    } else if (command === "find") {
+        sendMsg({ type: "key", key: "f", ctrl: true, raw: true });
+        rawKeys = true;
+    }
+};
+
+const sendKey = (frame: KeyFrame): void => {
+    sendMsg(rawKeys ? { ...frame, raw: true } : frame);
+    if (rawKeys && frame.key === "Escape") {
+        rawKeys = false;
+    }
+};
+
 // Which half of the keyboard a keystroke belongs to is keyIntent's call (see that module).
 const onKeyDown = (event: KeyboardEvent): void => {
     const intent = keyIntent(event);
@@ -212,10 +294,12 @@ const onKeyDown = (event: KeyboardEvent): void => {
         return;
     }
     event.preventDefault();
-    if (intent.kind === "text") {
-        sendMsg({ type: "text", text: intent.text });
+    if (intent.kind === "command") {
+        onCommand(intent.command);
+    } else if (intent.kind === "text") {
+        sendMsg(rawKeys ? { type: "text", text: intent.text, raw: true } : { type: "text", text: intent.text });
     } else if (intent.kind === "key") {
-        sendMsg(intent.frame);
+        sendKey(intent.frame);
     } else {
         void copyOut(intent.frame);
     }
@@ -265,13 +349,12 @@ const finish = (): void => {
 
         <Notice v-if="errorMsg" :of="errorMsg" class="mb-3" />
 
-        <!-- No address bar any more: the picture is now the whole window, so the real address bar and back button are Chromium's own. -->
-        <!-- Capped, not just proportioned: aspect-ratio alone could derive a height taller than the modal. -->
+        <!-- The page's viewport, sized to this box: the daemon fits the browser window to it, so the picture is the page at 1:1. -->
         <div
             ref="surface"
             tabindex="0"
-            class="relative mx-auto max-h-[calc(var(--height-panel-lg)-5rem)] w-full select-none overflow-hidden rounded-lg border border-line bg-canvas outline-none"
-            :style="{ aspectRatio: `${viewW} / ${viewH}` }"
+            class="relative mx-auto h-[calc(var(--height-panel-lg)-5rem)] w-full select-none overflow-hidden rounded-lg border border-line bg-canvas outline-none"
+            :style="{ cursor }"
             @mousemove="onMouseMove"
             @mousedown="onMouseDown"
             @mouseup="onMouseUp"
@@ -280,8 +363,9 @@ const finish = (): void => {
             @paste="onPaste"
             @contextmenu.prevent
         >
-            <!-- Whole window decoded from H.264; the only pointer shown is the X server's own, so `cursor-none` hides the local one. -->
-            <canvas v-show="painting" ref="canvasEl" class="h-full w-full cursor-none object-contain" />
+            <!-- Video beneath, the sharp still of the settled page above it (videoSink); both the same box so a click aims the same. -->
+            <canvas v-show="painting" ref="canvasEl" class="absolute inset-0 h-full w-full object-contain" />
+            <canvas v-show="painting" ref="stillEl" class="pointer-events-none absolute inset-0 h-full w-full object-contain" />
             <div v-if="!painting" class="absolute inset-0 flex items-center justify-center gap-2 text-xs text-muted">
                 <Icon name="spinner" spin />
                 <span>{{

@@ -2,7 +2,8 @@ import { upgradeWebSocket } from "@hono/node-server";
 import { errorMessage } from "@intentic/base/errors";
 import type { WSContext } from "hono/ws";
 import type { BrowserContext, Page } from "playwright";
-import { ensureDisplay, releaseDisplay } from "../cast/display.js";
+import { chromiumWindowArgs, ensureDisplay, releaseDisplay } from "../cast/display.js";
+import { placeWindow } from "../cast/region.js";
 import { startLiveView, type LiveView } from "../cast/live-view.js";
 import { armPasskeys } from "../tools/passkeys.js";
 import type { ScreencastClientMessage } from "../cast/screencast.js";
@@ -183,15 +184,8 @@ export const createBrowserProfileRoute = (services: Services) =>
                         // --no-sandbox: container is the isolation boundary, running as root.
                         // --disable-dev-shm-usage: avoids crashing on a container's tiny /dev/shm.
                         // --disable-blink-features=AutomationControlled: drops navigator.webdriver.
-                        // --window-position=0,0: pins the window so a screen grab is exactly this window (no window
-                        // manager on Xvfb).
-                        args: [
-                            "--no-sandbox",
-                            "--disable-blink-features=AutomationControlled",
-                            "--disable-dev-shm-usage",
-                            "--window-position=0,0",
-                            `--window-size=${display.width},${display.height}`,
-                        ],
+                        // Window flags: the corner region.ts keeps every window in (no window manager on Xvfb).
+                        args: ["--no-sandbox", "--disable-blink-features=AutomationControlled", "--disable-dev-shm-usage", ...chromiumWindowArgs(display)],
                     });
                     // Patches residual server tells (SwiftShader GPU, host core count) before first navigation.
                     await context.addInitScript(stealthInit(fingerprint));
@@ -202,15 +196,22 @@ export const createBrowserProfileRoute = (services: Services) =>
                     // Security key armed before first navigation; an identity's accounts share one key, as they share
                     // cookies.
                     const storePath = passkeyPath(services.workspace.root, profile);
-                    const arm = (target: Page): void =>
+                    const arm = (target: Page): void => {
                         void armPasskeys(ctx, target, storePath).catch((err: unknown) =>
                             services.logger.warn({ err }, "browser-profile: passkey arm failed"),
                         );
+                        // A sign-in popup (an OAuth window) goes over the page it came from, where the owner looks.
+                        void placeWindow(ctx, target).catch(() => undefined);
+                    };
                     ctx.on("page", arm);
                     arm(page);
                     // Told to the owner, not just the log: a picture that stops without a word is a window that looks
                     // alive and answers nothing, since this route has no frames path to fall back to.
-                    view = await startLiveView(ctx, profile, { send: (data) => ws.send(data) }, (reason) => {
+                    const sink = {
+                        send: (data: string | Uint8Array<ArrayBuffer>) => ws.send(data),
+                        backlog: () => (ws.raw as { bufferedAmount?: number } | undefined)?.bufferedAmount ?? 0,
+                    };
+                    view = await startLiveView(ctx, profile, sink, (reason) => {
                         services.logger.warn({ reason }, "browser-profile stream failed");
                         if (!closed) {
                             ws.send(JSON.stringify({ type: "error", message: `The browser's picture stopped: ${reason}` }));
