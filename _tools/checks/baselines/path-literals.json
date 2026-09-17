@@ -64,7 +64,6 @@
     "_sandbox/sandbox/src/workflows/handover-branches.test.ts": 11,
     "_sandbox/sandbox/src/workspace/watch/state-janitor.integration.test.ts": 13,
     "_sandbox/sandbox/src/workspace/watch/workspace-watch.integration.test.ts": 6,
-    "_sandbox/sandbox/src/workspace/watch/workspace-watch.test.ts": 1,
     "_sandbox/webq/src/lib/version.ts": 1,
     "_search/iq-engine/src/host/client.ts": 1,
     "_search/lsp/src/checker.integration.test.ts": 1,
