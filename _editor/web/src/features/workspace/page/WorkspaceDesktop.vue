@@ -49,7 +49,8 @@ import DirectoryPersonas from "../directory-ui/DirectoryPersonas.vue";
 import EditorPane from "../files/EditorPane.vue";
 import HistoryPanel from "../changes/history/HistoryPanel.vue";
 import ReviewPanel from "../changes/ReviewPanel.vue";
-import SavePanel from "../changes/SavePanel.vue";
+import SaveActions from "../changes/save/SaveActions.vue";
+import SavePanel from "../changes/save/SavePanel.vue";
 import WorkspaceDirChip from "../explorer/WorkspaceDirChip.vue";
 import WorkspaceScopeChip from "../explorer/WorkspaceScopeChip.vue";
 import WorkspaceSearchResults from "../search/WorkspaceSearchResults.vue";
@@ -850,6 +851,9 @@ const deskTooltip = computed(() => tooltipWithChord(`Show desk · your tabs stay
                 <div class="view-header flex items-center gap-1 px-1.5 shadow-none">
                     <SegmentedControl v-model="sidebarMode" size="xs" :options="sidebarModeOptions" />
                     <span class="flex-1"></span>
+                    <!-- The maker's whole-tree presses ride this row rather than a bar along the panel's floor, and lead
+                         it: what acts on the work sits left of what only changes what is shown. -->
+                    <SaveActions v-if="maker && layout.sidebarPanel.value === 'changes'" />
                     <button
                         type="button"
                         :class="ui.iconButton(layout.sidebarPanel.value === 'history' ? 'bg-overlay text-content' : '')"

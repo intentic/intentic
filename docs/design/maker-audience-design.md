@@ -280,7 +280,7 @@ working-tree diff at all (the tile, the tree row and the panel are the only thre
 one). The badge has to lead somewhere.
 
 So the Changes panel is the one surface with an audience of its own rather than a hidden one:
-`features/workspace/changes/SavePanel.vue` reads the same `useChanges()` the developer's `ReviewPanel.vue`
+`features/workspace/changes/save/SavePanel.vue` reads the same `useChanges()` the developer's `ReviewPanel.vue`
 does, and drops every decision git asks a developer to make.
 
 - **No index.** One press records every repository whole (`commit` with `stage: {}`), so there is nothing to
@@ -289,12 +289,19 @@ does, and drops every decision git asks a developer to make.
   landing (`landed-subject.ts`), when every uncommitted file came from one assistant and nothing was
   truncated; the constant `Your edits` otherwise, which is the subject `version-landed.ts` already writes for
   the tree's own remainder. Nothing here asks a model — it only spends what land time produced.
-- **Grouped by who, not by where.** Headings are the assistant that landed the files and "Your own edits",
-  since one project with one repository makes repository headings say nothing.
-- **Plain marks.** Git's `M`/`A`/`D` letters become a glyph and a word (changed, new, removed).
+- **Grouped by who, not by where.** Headings are the assistant that landed the files and "Your edits",
+  since one project with one repository makes repository headings say nothing. A heading is a step UP the type
+  scale from the names under it — it was once the smallest text in the panel, which is what stopped it reading
+  as one — and its files hang off a rail, so the run of rows belongs to the name above it even mid-scroll.
+- **Plain marks.** Git's `M`/`A`/`D` letters become a glyph, and under the file's own name the same thing in a
+  word (changed, new, removed) beside the folder it is in. The name leads: a maker recognises "Offer.docx", not
+  `drop/2026/Offer.docx`.
 - **Throw away** is per file and all-at-once, each behind a sentence naming what goes back and what leaves the
   disk. **Back up** appears only for a project that owes its remote, and goes through `usePushFlow.askSync`
-  like every other door to a push.
+  like every other door to a push. Both whole-tree presses are glyphs in the sidebar's own icon row
+  (`SaveActions.vue`, over `useSaveActions.ts`), not a bar along the panel's floor: a press that acts on
+  everything belongs where the panel is titled, and the panel has one button of its own — Save, shrink-wrapped
+  to its label rather than stretched across the column.
 
 Still hidden: the terminal panel, the checks and persona row actions, and the management panel's Git and
 Health tabs. Restore points stay: they are the maker's way back. Every hidden thing is back behind "Switch to

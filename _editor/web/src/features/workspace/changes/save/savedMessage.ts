@@ -1,6 +1,6 @@
 import type { LandedMessage, RepoChanges } from "@intentic/api-contract";
-import { ALL_SIDES, commitMessageOf, originsOf } from "./changeOrigins";
-import { truncatedTotal } from "./truncation";
+import { ALL_SIDES, commitMessageOf, originsOf } from "../changeOrigins";
+import { truncatedTotal } from "../truncation";
 
 // What a maker's one Save press records the tree under. A maker never writes a commit message, so the subject is
 // chosen for them: the sentence the commit-message model already wrote for an assistant's landing when the whole
