@@ -492,10 +492,13 @@
     padding-top: 0.75rem;
 }
 /* A scrollbar arriving with the peek would take its width out of the composer's, for the same reason. The peek opens
-   pinned to the newest turn and is read by hovering, so the wheel is the gesture it is actually driven by. */
+   pinned to the newest turn and is read by hovering, so the wheel is the gesture it is actually driven by — and with
+   no bar to say "there is more above", the top edge says it instead, by fading the turns out rather than cutting the
+   line they were on in half. */
 .chat-panel.chat-peeking .chat-scroller {
     scrollbar-gutter: auto;
     scrollbar-width: none;
+    mask-image: linear-gradient(to bottom, transparent 0, #000 1.5rem);
 }
 .chat-panel.chat-peeking .chat-scroller::-webkit-scrollbar {
     width: 0;

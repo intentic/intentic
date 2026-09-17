@@ -66,8 +66,8 @@ const opened = (): boolean => bar()?.classList.contains(`chat-quick-open`) === t
 
 const hoverIn = (): void => void bar()?.dispatchEvent(new Event(`pointerenter`));
 const hoverOut = (): void => void bar()?.dispatchEvent(new Event(`pointerleave`));
-// The transcript's only affordance: the tab on the box's top edge, which is also the edge it unfolds from.
-const handle = (): HTMLButtonElement | null => document.querySelector<HTMLButtonElement>(`.chat-quick-handle`);
+// The transcript's only affordance: the eye in the corner of the box it looks into.
+const handle = (): HTMLButtonElement | null => document.querySelector<HTMLButtonElement>(`.chat-quick-eye`);
 const hoverHandle = (): void => void handle()?.dispatchEvent(new Event(`pointerenter`));
 const escape = (): void =>
     void bar()?.dispatchEvent(new KeyboardEvent(`keydown`, { key: `Escape`, bubbles: true, cancelable: true }));

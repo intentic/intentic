@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { ProgressRing } from "@intentic/ui";
 import { computed, onBeforeUnmount, ref, useTemplateRef, watch } from "vue";
 import { useRouter } from "vue-router";
 import { chatBarPeek, chatParked } from "./chatPanelLayout";
@@ -6,6 +7,7 @@ import { chatBarDock } from "../../../shell/window/dockSlots";
 import { focusComposer } from "../tabs/useChat-tabs";
 import { useChat } from "../run/useChat";
 import { useT } from "@intentic/ui/i18n";
+import IdentityTile from "../../capabilities/connect/IdentityTile.vue";
 
 // The chat's home while it is parked: a pill floating over the bottom of the area that grows into the focused chat's
 // own composer. The panel teleports here (PoppablePanels), so this is never a second composer — the words, the model,
@@ -20,7 +22,7 @@ import { useT } from "@intentic/ui/i18n";
 const t = useT();
 
 const router = useRouter();
-const { active, messages, streaming, draft, composerFocus, awaitingDecision } = useChat();
+const { active, messages, streaming, draft, composerFocus, awaitingDecision, contextUsage, provider } = useChat();
 
 const expanded = ref(false);
 // Focus, not hover, is what keeps it open through a pointer that has wandered off.
@@ -46,6 +48,21 @@ const standing = computed<Standing>(() => {
         return `unsent`;
     }
     return title.value === undefined ? `inviting` : `named`;
+});
+
+// What the identity ring reads, the fleet card's two readings in the card's own order (tileRim): a turn in flight is
+// an arc going round, and otherwise it is how full this chat's context window is. Nothing measured leaves the plain
+// track, which is what the card draws too.
+const rim = computed<{ percent: number; tone: string; spin: boolean } | undefined>(() => {
+    if (streaming.value) {
+        return { percent: 25, tone: `text-link`, spin: true };
+    }
+    const usage = contextUsage.value;
+    if (usage === undefined || usage.contextWindow <= 0) {
+        return undefined;
+    }
+    const percent = Math.min(100, Math.round((usage.tokens / usage.contextWindow) * 100));
+    return { percent, tone: percent >= 80 ? `text-warning` : `text-primary-500`, spin: false };
 });
 
 // Hover opens on intent, not on contact: the bottom of the area is also the way to a scrollbar and to the terminal,
@@ -261,13 +278,13 @@ const onPress = (): void => {
             @focusout="onFocusOut"
             @keydown.esc="onEscape"
         >
-            <!-- The peek's surface, drawn HERE rather than by the panel, because it has to arrive without the composer
+            <!-- The peek's glass, drawn HERE rather than by the panel, because it has to arrive without the composer
      arriving with it — and the composer is the panel's own child, so anything done to that element is done to the box
-     the reader is typing in. It spills past the box on three sides, which is how the card grows AROUND a composer
-     that does not move: 8px of it either side, 12px under it, exactly the room a card would have padded. -->
+     the reader is typing in. It is exactly the box's own rect: the transcript reads on it, and its bottom is hidden
+     under the composer, so no surface of ours ever stretches past the box the reader is typing in. */ -->
             <div
                 v-if="chatBarPeek"
-                class="chat-quick-card pointer-events-auto absolute top-0 -right-2 -bottom-3 -left-2 rounded-2xl border border-line-strong bg-card shadow-2xl"
+                class="chat-quick-card pointer-events-auto absolute inset-0 rounded-2xl border border-line-strong bg-card/70 shadow-2xl backdrop-blur-2xl"
             ></div>
 
             <!-- WHICHEVER FORM IS NOT SHOWING LEAVES THE FLOW instead of being measured out of it: the box is the size of what is
@@ -278,24 +295,43 @@ const onPress = (): void => {
             <!-- The wrapper is what leaves the flow, so the transform stays the pill's own: centring it with a translate
      of its own would have slid it half its width across the box every time it faded. -->
             <div
-                class="chat-quick-rest mx-auto w-fit max-w-full rounded-full border border-line-strong bg-card/80 shadow-lg backdrop-blur-md transition-[opacity,scale] motion-reduce:transition-none"
+                class="chat-quick-rest mx-auto w-fit max-w-full origin-bottom rounded-full border border-line-strong bg-card/80 shadow-lg backdrop-blur-md transition-[opacity,scale] motion-reduce:transition-none"
                 :class="
                     expanded
-                        ? `pointer-events-none absolute inset-x-0 bottom-0 scale-95 opacity-0 duration-100 ease-in`
+                        ? `pointer-events-none absolute inset-x-0 bottom-0 scale-105 opacity-0 duration-100 ease-out`
                         : `pointer-events-auto duration-150 ease-out`
                 "
             >
                 <button
                     type="button"
-                    class="chat-quick-pill ui-chip h-9 max-w-[22rem] px-3 text-left"
+                    class="chat-quick-pill ui-chip h-9 max-w-[22rem] py-0 pr-3.5 pl-1 text-left"
                     :inert="expanded || undefined"
                     :aria-expanded="standing === `asking` ? undefined : expanded"
                     :aria-label="standing === `asking` ? t(`chat.chatQuickBar.openChatAgentWaiting`) : t(`chat.chatQuickBar.writeToAgentHere`)"
                     @click="onPress"
                 >
-                    <Icon v-if="standing === `asking`" name="exclamation-circle" class="shrink-0 text-2xs text-warning" />
-                    <Icon v-else-if="standing === `working`" name="spinner" spin class="shrink-0 text-2xs text-link" />
-                    <Icon v-else name="comments" class="shrink-0 text-2xs text-subtle" />
+                    <!-- The board's own identity mark, ring and all (AgentCard): one chat wears one face wherever it is named,
+                         and the ring is the reading it already had room for — the turn in flight, or how full the window is. -->
+                    <span
+                        class="relative flex h-7 w-7 shrink-0 items-center justify-center rounded-full"
+                        :class="
+                            rim !== undefined
+                                ? ``
+                                : standing === `asking`
+                                  ? `ring-(length:--ring-track) ring-inset ring-warning/50`
+                                  : `ring-(length:--ring-track) ring-inset ring-content/12`
+                        "
+                    >
+                        <ProgressRing
+                            v-if="rim !== undefined"
+                            :value="rim.percent"
+                            :size="28"
+                            :stroke="1.5"
+                            class="absolute inset-0"
+                            :class="[rim.tone, rim.spin ? `animate-spin` : ``]"
+                        />
+                        <IdentityTile :title="title" :provider="provider" class="h-5.5 w-5.5 text-xs" />
+                    </span>
                     <span
                         class="min-w-0 truncate text-2xs"
                         :class="standing === `asking` ? `text-warning` : standing === `inviting` ? `text-subtle` : `text-muted`"
@@ -304,34 +340,38 @@ const onPress = (): void => {
                 </button>
             </div>
 
-            <!-- The grown form: the panel's own composer, and nothing of this component's around it. It rises the last few
-     pixels into place rather than cutting in, which is the whole of the motion: no size of anything changes. -->
+            <!-- The grown form: the panel's own composer, and nothing of this component's around it. IT GROWS OUT OF THE
+     PILL: `scale` from the bottom edge the two forms share, so the box opens from where the pill stood instead of
+     cutting in on top of it. Scale, not width or height — a size cannot move without the layout moving with it, and
+     the composer's own container queries are what that would have run through on every frame. -->
             <div
-                class="chat-quick-host w-full transition-[opacity,translate] motion-reduce:transition-none"
+                class="chat-quick-host w-full origin-bottom transition-[opacity,scale] motion-reduce:transition-none"
                 :class="
                     expanded
-                        ? `pointer-events-auto relative duration-[170ms] ease-[cubic-bezier(0.16,1,0.3,1)]`
-                        : `pointer-events-none absolute inset-x-0 bottom-0 translate-y-1.5 opacity-0 duration-100 ease-in`
+                        ? `pointer-events-auto relative duration-[240ms] ease-[cubic-bezier(0.22,1.2,0.36,1)]`
+                        : `pointer-events-none absolute inset-x-0 bottom-0 scale-90 opacity-0 duration-100 ease-in`
                 "
                 :inert="!expanded || undefined"
             >
                 <div ref="slot" class="contents"></div>
             </div>
 
-            <!-- The transcript's handle, straddling the edge the transcript comes out of: the box grows UPWARD from it, so the
-     composer never moves under the pointer and the page it was opened to talk about stays where it was. Inside the
-     float, so reading the turns is still "inside the box" and neither the peek nor the box closes under the pointer. -->
+            <!-- ONE MARK FOR LOOKING, in the corner of the box it looks into: an eye, lit while it is open, and never a
+     second glyph for closing — a chevron flipping over the box said "fold" about something that only ever appears and
+     goes. Inside the float, so reading the turns is still "inside the box" and neither the peek nor the box closes
+     under the pointer that went up to read them. -->
             <button
                 v-if="expanded && hasTranscript"
                 type="button"
-                class="chat-quick-handle pointer-events-auto absolute top-0 left-1/2 z-10 flex h-5 w-12 -translate-x-1/2 -translate-y-1/2 cursor-pointer items-center justify-center rounded-full border border-line-strong bg-card text-subtle shadow-md transition-colors hover:text-content"
+                class="chat-quick-eye pointer-events-auto absolute -top-2.5 right-3 z-10 flex h-7 w-7 cursor-pointer items-center justify-center rounded-full border bg-card/80 shadow-md backdrop-blur-md transition-colors"
+                :class="chatBarPeek ? `border-primary-500/40 text-link` : `border-line-strong text-subtle hover:text-content`"
                 v-tooltip.top="chatBarPeek ? t(`chat.chatQuickBar.hideConversation`) : t(`chat.chatQuickBar.whatWasSaidHover`)"
                 :aria-expanded="chatBarPeek"
                 :aria-label="t(`chat.chatQuickBar.conversationSoFar`)"
                 @pointerenter="onPeekEnter"
                 @click="togglePeek"
             >
-                <Icon :name="chatBarPeek ? `chevron-down` : `chevron-up`" class="text-2xs" />
+                <Icon name="eye" class="text-2xs" />
             </button>
         </div>
     </div>
