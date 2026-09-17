@@ -18,7 +18,9 @@ const PUSH_TIMEOUT_MS = 15 * 60_000;
 const PUSH_OUTPUT_BYTES = 24_000;
 
 // What this needs from the daemon, stated explicitly so a test stands up a handful of seams, not all of Services.
-export type PushRunDeps = Pick<Services, "logger" | "terminalRun" | "pushSender" | "activity">;
+// `workspace` is the rule runner's, not this module's: it decides from the command's cwd whether the run is building
+// the tree the review reads (rule-command.ts).
+export type PushRunDeps = Pick<Services, "logger" | "terminalRun" | "pushSender" | "activity" | "workspace">;
 
 export interface PushRuns {
     // Resolves once the run is visible to `state`, not when it finishes: resolving early would hand the first poll an

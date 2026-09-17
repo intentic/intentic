@@ -16,6 +16,7 @@ import { implement, ORPCError } from "@orpc/server";
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../app-env.js";
 import { repoGitDir, syncRootExcludes } from "../history/history.js";
+import { checkRunningIn, isBuildOutputPath } from "../workspace/deps/checks-in-flight.js";
 import { isValidRepoId } from "../workspace/layout/repo-discovery.js";
 import { currentRepos } from "../workspace/watch/repo-watch.js";
 import { isControlPlanePath, isReviewableStatePath, resolveWithin } from "../workspace/files/workspace-files-paths.js";
@@ -52,6 +53,13 @@ export const capRepoChanges = (
         },
     };
 };
+
+// The worktree rows that are the owner's to review. A check running in this repo is the daemon building the project,
+// so its output dirs are mid-rewrite: a file the build has emptied but not yet written back is not a deletion to show,
+// let alone to offer for staging. Held back only while that check runs (checks-in-flight.ts); the first scan after it
+// reports whatever the build left standing. A build leaves the index alone, so `staged` stands as read.
+const ownWork = (repo: string, unstaged: GitChange[]): GitChange[] =>
+    checkRunningIn(repo) ? unstaged.filter((change) => !isBuildOutputPath(change.path)) : unstaged;
 
 // Fairness bound on concurrent repo scans, not a throughput cap; sized from the machine's own core count.
 const SCAN_CONCURRENCY = Math.max(2, Math.min(8, availableParallelism()));
@@ -216,6 +224,7 @@ export const createGitRoutes = (services: Services) => {
                     // Turns "these files are conflicted" into "a rebase stopped here".
                     services.git.operationInProgress(dir),
                 ]);
+                const worktree = ownWork(repo, unstaged);
                 // `remote` feeds the sync bar; `landed` is which agent touched each path, independently of it.
                 const [remote, landed] = await Promise.all([
                     services.git.remoteState(dir, { branch }),
@@ -231,7 +240,7 @@ export const createGitRoutes = (services: Services) => {
                 if (
                     conflicted.length > 0 ||
                     staged.length > 0 ||
-                    unstaged.length > 0 ||
+                    worktree.length > 0 ||
                     remote.ahead > 0 ||
                     remote.behind > 0 ||
                     publishable ||
@@ -239,7 +248,7 @@ export const createGitRoutes = (services: Services) => {
                     // show.
                     operation !== undefined
                 ) {
-                    const capped = capRepoChanges(conflicted, staged, unstaged);
+                    const capped = capRepoChanges(conflicted, staged, worktree);
                     // Code-only +/- per row (code-counts.ts), computed here so a badge never moves after it's drawn.
                     // Done after the cap (uncounted rows aren't shipped) and per side (a partial file has two diffs).
                     const [countedConflicted, countedStaged, countedUnstaged] = await Promise.all([

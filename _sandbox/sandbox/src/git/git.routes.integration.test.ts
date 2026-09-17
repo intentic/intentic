@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { expect, test } from "vitest";
 
 import { createApp } from "../app.js";
+import { markCheckRunning } from "../workspace/deps/checks-in-flight.js";
 
 import { clientFor, errorCode } from "../harness/route-client.testing.js";
 import { fakeFiles, fakeHistory, tempWorkspace } from "../harness/route-fakes.testing.js";
@@ -131,6 +132,45 @@ test("git.changes aggregates dirty repos across root + roles + clones, skipping 
             { repo: "shop", conflicted: [], staged: [], unstaged: [], error: "broken repo" },
         ],
     });
+});
+
+// The daemon's own check builds the project, emptying an output dir the repo may track and writing it back file by
+// file. A scan landing in that window read those tracked files as deleted; `dist/` is pruned from the watcher, so no
+// path batch followed to say they came back.
+test("a repo's build outputs leave the review while the daemon's check builds it, and return once it settles", async () => {
+    const workspace = tempWorkspace([{ name: "ext" }]);
+    const review = async (): Promise<unknown> => {
+        // One client per read: a router memoizes its scan for COALESCE_MS, and these three reads share a tick.
+        const client = clientFor(
+            createApp(
+                services({
+                    workspace,
+                    git: {
+                        ...services().git,
+                        changedFiles: async (dir) =>
+                            dir === join(workspace.root, "ext")
+                                ? {
+                                      branch: "main",
+                                      conflicted: [],
+                                      staged: [],
+                                      unstaged: [
+                                          { path: "dist/bin/tool", status: "deleted" as const },
+                                          { path: "src/tool.ts", status: "modified" as const },
+                                      ],
+                                      blobs: new Map(),
+                                  }
+                                : { conflicted: [], staged: [], unstaged: [], blobs: new Map() },
+                    },
+                }),
+            ),
+        );
+        return (await client.git.changes()).repos.map((repo) => repo.unstaged.map((change) => change.path));
+    };
+    expect(await review()).toEqual([["dist/bin/tool", "src/tool.ts"]]);
+    const checkDone = markCheckRunning("ext");
+    expect(await review()).toEqual([["src/tool.ts"]]);
+    checkDone();
+    expect(await review()).toEqual([["dist/bin/tool", "src/tool.ts"]]);
 });
 
 test("the git-history graph resolves the 'root' scope to /work: reads, and a HEAD-mover that checkpoints first", async () => {

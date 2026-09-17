@@ -63,10 +63,11 @@ const hangingProcesses = (): ManagedProcesses => {
     } as unknown as ManagedProcesses;
 };
 
-// Fresh module per case, since the module's queue is process-wide and mustn't leak between tests.
-const freshQueue = async (): Promise<typeof import("./verify-deps.js")> => {
+// Fresh module per case, since the module's queue is process-wide and mustn't leak between tests. The check window
+// comes from the same reset graph, so a case reads the registry its own run writes rather than the static import's.
+const freshQueue = async (): Promise<typeof import("./verify-deps.js") & typeof import("./checks-in-flight.js")> => {
     vi.resetModules();
-    return import("./verify-deps.js");
+    return { ...(await import("./checks-in-flight.js")), ...(await import("./verify-deps.js")) };
 };
 
 const deps = (
@@ -226,7 +227,7 @@ test("a finished check says it wrote the tree where nothing was watching", async
 });
 
 test("a check that outran the watch window says so too: it wrote before it was stopped", async () => {
-    const { queueVerify } = await freshQueue();
+    const { queueVerify, checkRunningIn } = await freshQueue();
     const root = await workspace();
     await ready(root, { test: "vitest run" });
     const feed: string[] = [];
@@ -235,6 +236,33 @@ test("a check that outran the watch window says so too: it wrote before it was s
     await settle(() => feed.length > 0);
     expect(feed).toEqual(["deps.verify_lost"]);
     expect(announced.count).toBe(1);
+    // A stopped check is still a check that ended: leaving its window open would hide the repo's build outputs for good.
+    expect(checkRunningIn("app")).toBe(false);
+});
+
+// The window the review reads (git.routes.ts ownWork): open while the build is rewriting the project's output dirs,
+// and already closed when the announcement lands, so the rescan it triggers reports the tree the build settled on.
+test("the check window is open while the build runs and closed before the announcement that rescans", async () => {
+    const { queueVerify, checkRunningIn } = await freshQueue();
+    const root = await workspace();
+    await ready(root, { verify: "pnpm run build" });
+    const feed: string[] = [];
+    const whileStarting: boolean[] = [];
+    const whenAnnounced: boolean[] = [];
+    const panels = fakeProcesses(root, 0, []);
+    const processes = {
+        ...panels,
+        start: async (key: string, spec: ProcessSpec) => {
+            whileStarting.push(checkRunningIn("app"));
+            await panels.start(key, spec);
+        },
+    } as unknown as ManagedProcesses;
+    queueVerify({ ...deps(root, processes, [], feed), announce: () => void whenAnnounced.push(checkRunningIn("app")) }, context, ["app"]);
+    await settle(() => feed.length > 0);
+    expect(feed).toEqual(["deps.verify_green"]);
+    expect(whileStarting).toEqual([true]);
+    expect(whenAnnounced).toEqual([false]);
+    expect(checkRunningIn("app")).toBe(false);
 });
 
 test("a chain with no event sink at all still checks and still records", async () => {

@@ -1,6 +1,8 @@
+import { isAbsolute, relative, sep } from "node:path";
 import { errorMessage } from "@intentic/base/errors";
 import type { Services } from "../composition.js";
 import { plainText } from "@intentic/base/plain-text";
+import { markCheckRunning } from "../workspace/deps/checks-in-flight.js";
 
 // Engine under every `command` action, lifted out of the pre-push check so turn.ending gets the same guarantees: a real
 // tmux terminal, a ceiling that times out to `failed` rather than silence, a kill that tags itself timeout or cancel
@@ -15,7 +17,16 @@ export interface RuleCommandRun {
     readonly output: string;
 }
 
-export type RuleCommandDeps = Pick<Services, "logger" | "terminalRun">;
+export type RuleCommandDeps = Pick<Services, "logger" | "terminalRun" | "workspace">;
+
+// A check that runs on the main tree builds the project there, emptying output dirs the repo may track: the review
+// holds those rows back for as long as the window is open (checks-in-flight.ts). Returns the call that closes it. An
+// isolated turn's own worktree lies outside the workspace and is reviewed against its branch rather than scanned, so
+// it opens no window and closes nothing.
+const openCheckWindow = (root: string, cwd: string): (() => void) => {
+    const project = relative(root, cwd);
+    return project.startsWith("..") || isAbsolute(project) ? () => undefined : markCheckRunning(project.split(sep).join("/"));
+};
 
 export interface RuleCommandRequest {
     readonly command: string;
@@ -33,12 +44,13 @@ export interface RuleCommandRequest {
 }
 
 export const runRuleCommand = async (deps: RuleCommandDeps, request: RuleCommandRequest): Promise<RuleCommandRun> => {
-    const { logger, terminalRun } = deps;
+    const { logger, terminalRun, workspace } = deps;
     // Already aborted fires no `abort` event; checked before destructuring so a listener isn't attached too late.
     if (request.signal?.aborted === true) {
         return { status: "cancelled", output: "" };
     }
     const { command, timeoutMs, cwd, session, window, outputBytes, signal, onStarted } = request;
+    const checkDone = openCheckWindow(workspace.root, cwd);
     const abort = new AbortController();
     let timedOut = false;
     // Measured from the command's start; unref'd so a rule's watchdog never keeps the daemon alive alone.
@@ -72,5 +84,7 @@ export const runRuleCommand = async (deps: RuleCommandDeps, request: RuleCommand
     } finally {
         clearTimeout(watchdog);
         signal?.removeEventListener("abort", relay);
+        // However the run ended, including killed: a window left open would hide the repo's build outputs for good.
+        checkDone();
     }
 };

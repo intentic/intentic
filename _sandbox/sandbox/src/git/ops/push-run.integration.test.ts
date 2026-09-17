@@ -3,6 +3,7 @@ import { chmod, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
+import { WORKSPACE_ROOT } from "@intentic/constants";
 import type { PushRun } from "@intentic/sandbox-contract";
 import { unstubbed } from "@intentic/testing";
 import { SETTLES } from "@intentic/testing/vitest";
@@ -119,6 +120,9 @@ const fakes = (over: { visible?: boolean; starts?: boolean } = {}): Fakes => {
                 feed.push(event.type);
             },
         }),
+        // Read only by the rule runner, to tell a build on the reviewed tree from one outside it; these clones are
+        // temp dirs, so every run here is outside.
+        workspace: unstubbed<Services["workspace"]>("workspace", { root: WORKSPACE_ROOT }),
     });
     return { services, notified: () => notified, feed: () => feed, runs: () => runs };
 };

@@ -5,6 +5,7 @@ import type { WorkspaceEvent } from "@intentic/sandbox-contract";
 import type { Logger } from "pino";
 import type { ActivityStore } from "../../activity/activity-store.js";
 import type { ManagedProcesses } from "../../processes/managed-processes.js";
+import { markCheckRunning } from "./checks-in-flight.js";
 import type { DependencyOrigin } from "./dependency-origin.js";
 import { statePath } from "../layout/state-paths.js";
 import type { VerifyStore } from "./verify-store.js";
@@ -104,16 +105,26 @@ const verifyProject = async (verify: PendingVerify, dir: string, command: string
     const logPath = join(artifacts, `${key}.log`);
     const statusPath = join(artifacts, `${key}.status`);
     const queued = await queuedCommand(command, deps);
-    await deps.processes.start(key, {
-        command: `mkdir -p ${artifacts} && rm -f ${statusPath} && { ${queued}; } 2>&1 | tee ${logPath}; echo $pipestatus[1] > ${statusPath}`,
-        cwd: join(deps.workspace.root, dir),
-        oneShot: true,
-    });
-    const settled = await watchPanel(deps, key);
-    // A check runs the project's own build, which empties and rewrites an output dir the repo may track; `dist/` is
-    // pruned from the watcher, so nothing else can say those files came back, and a review scanned mid-build keeps
-    // reporting them deleted for as long as it stays cached. Sent however the watch ended: it wrote either way.
-    deps.announce();
+    // Open across the whole run: the build inside it empties and rewrites an output dir the repo may track, and a
+    // review scanning mid-build would otherwise report the rewrite as the owner's own deletion.
+    const checkDone = markCheckRunning(dir);
+    let settled = false;
+    try {
+        await deps.processes.start(key, {
+            command: `mkdir -p ${artifacts} && rm -f ${statusPath} && { ${queued}; } 2>&1 | tee ${logPath}; echo $pipestatus[1] > ${statusPath}`,
+            cwd: join(deps.workspace.root, dir),
+            oneShot: true,
+        });
+        settled = await watchPanel(deps, key);
+    } finally {
+        // Closed before the announcement, so the rescan it triggers reads the settled tree rather than the held-back
+        // one.
+        checkDone();
+        // `dist/` is pruned from the watcher, so nothing else can say those files came back, and a review scanned
+        // mid-build keeps reporting them deleted for as long as it stays cached. Sent however the run ended: it wrote
+        // either way.
+        deps.announce();
+    }
     if (!settled) {
         await deps.processes.stop(key);
         activity(
