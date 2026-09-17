@@ -25,7 +25,7 @@ which jobs a push starts — and it asserts each one exists rather than silently
 | [repo-root.sh](lib/repo-root.sh) | the monorepo root, **found** rather than counted (`repo_root`) |
 | [packages.sh](lib/packages.sh) | `PUB` / `VERSIONED`: the first-party release set, in topological order |
 | [packages.mjs](lib/packages.mjs) | the same list, read out of that file for the readers written in JavaScript (`publishSet`, `manifestOf`) |
-| [github.sh](lib/github.sh) | the GitHub REST calls a release makes: releases, assets, `make_latest`, the `stable` tag |
+| [github.sh](lib/github.sh) | the GitHub REST calls a release makes: releases, assets, `make_latest`, the `stable` tag — and which refused **asset upload** is worth sending the bytes again |
 | [registry-retry.sh](lib/registry-retry.sh) | which failed **registry call** is worth a second attempt, and which must fail at once |
 | [image-pull.sh](lib/image-pull.sh) | pull an image, and tell a registry fault from this runner's own **image store** losing the unpack |
 | [npm-publish-retry.sh](lib/npm-publish-retry.sh) | the same judgment for an **npm publish** the transparency log dropped |

@@ -16,9 +16,15 @@ const CASES = [
     { name: "release-id-404", about: "gh_release_id on a tag with no Release yet (the v1.246.0 failure)", status: 0, answer: "" },
     { name: "latest-tag-404", about: "gh_latest_tag on a repo that has never released", status: 0, answer: "" },
     { name: "asset-names-404", about: "gh_asset_names when the asset list cannot be read", status: 0, answer: "" },
+    { name: "asset-by-name-404", about: "gh_asset_by_name when the asset list cannot be read", status: 0, answer: "" },
     { name: "release-id-ok", about: "gh_release_id reading an id back off a real body", status: 0, answer: "42" },
     { name: "latest-tag-ok", about: "gh_latest_tag reading a tag back off a real body", status: 0, answer: "v1.2.3" },
+    // A row GitHub has not marked `uploaded` is a refused upload holding the name, not an attached asset: naming it
+    // here is what makes the re-run ship it again instead of skipping it.
+    { name: "asset-names-finished-only", about: "gh_asset_names leaving out a half-written asset", status: 0, answer: "ic-linux-amd64" },
+    { name: "asset-by-name-ok", about: "gh_asset_by_name reading a row's id and state back", status: 0, answer: "7 starter" },
     { name: "upload-fails", about: "gh_upload_asset when the upload is refused", status: 22, answer: "" },
+    { name: "delete-asset-fails", about: "gh_delete_asset when clearing a half-written asset is refused", status: 22, answer: "" },
     { name: "make-latest-fails", about: "gh_make_latest when the flag flip is refused", status: 22, answer: "" },
 ];
 
@@ -26,6 +32,9 @@ const DRILL = String.raw`
 set -euo pipefail
 . "$SCRIPT"
 export GH_API_TOKEN=stub
+# A refused upload is judged on curl's message, and the stub has none, so nothing here retries — the zero gap is
+# only so a helper that started retrying anyway fails this check in a second rather than in a minute.
+export GH_UPLOAD_DELAY=0
 
 # The stub curl: MODE=refuse exits the way --fail does on a 4xx (22), MODE=answer prints $BODY. It replaces the
 # binary for every gh_api call, which is the whole surface these helpers have.
@@ -45,9 +54,14 @@ run() {
 MODE=refuse run release-id-404   gh_release_id  intentic/intentic v1.246.0
 MODE=refuse run latest-tag-404   gh_latest_tag  intentic/intentic
 MODE=refuse run asset-names-404  gh_asset_names intentic/intentic 42
+MODE=refuse run asset-by-name-404 gh_asset_by_name intentic/intentic 42 ic-linux-amd64
 MODE=answer BODY='{"id":42}'          run release-id-ok gh_release_id intentic/intentic v1.2.3
 MODE=answer BODY='{"tag_name":"v1.2.3"}' run latest-tag-ok gh_latest_tag intentic/intentic
+ASSETS='[{"id":7,"name":"Intentic-1.2.3-x86_64.AppImage","state":"starter"},{"id":8,"name":"ic-linux-amd64","state":"uploaded"}]'
+MODE=answer BODY="$ASSETS" run asset-names-finished-only gh_asset_names intentic/intentic 42
+MODE=answer BODY="$ASSETS" run asset-by-name-ok gh_asset_by_name intentic/intentic 42 Intentic-1.2.3-x86_64.AppImage
 MODE=refuse run upload-fails     gh_upload_asset intentic/intentic 42 /dev/null asset.bin
+MODE=refuse run delete-asset-fails gh_delete_asset intentic/intentic 7
 MODE=refuse run make-latest-fails gh_make_latest intentic/intentic 42
 `;
 

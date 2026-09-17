@@ -94,21 +94,134 @@ gh_create_release() {
         gh_field id
 }
 
-# The names of a release's attached assets, one per line — what an idempotent upload checks before it spends
+# A release's asset list as GitHub's own JSON, or empty. One place asks, because the two readers below want
+# different halves of the same answer and a release has at most a few dozen assets.
+gh_assets() {
+    gh_api "https://api.github.com/repos/$1/releases/$2/assets?per_page=100" 2>/dev/null || true
+}
+
+# The names of a release's FINISHED assets, one per line — what an idempotent upload checks before it spends
 # the bytes, since GitHub 422s a duplicate name.
+#
+# `state === "uploaded"` is the load-bearing word. GitHub writes the asset row when an upload STARTS and marks
+# it uploaded only once every byte is in, so a refused upload can leave a row holding the name with nothing
+# behind it. Reporting that as attached is worse than reporting nothing: the re-run skips it, ship-stable.sh
+# flips `make_latest`, and the release goes out with an installer whose download is a 404.
 gh_asset_names() {
-    gh_api "https://api.github.com/repos/$1/releases/$2/assets?per_page=100" 2>/dev/null |
-        node -pe 'JSON.parse(require("fs").readFileSync(0, "utf8")).map((a) => a.name).join("\n")' 2>/dev/null || true
+    gh_assets "$1" "$2" |
+        node -pe 'JSON.parse(require("fs").readFileSync(0, "utf8")).filter((a) => a.state === "uploaded").map((a) => a.name).join("\n")' 2>/dev/null || true
+}
+
+# One asset by name, as `<id> <state>`, or empty when the release has no row under that name.
+gh_asset_by_name() {
+    gh_assets "$1" "$2" |
+        node -pe 'const a = JSON.parse(require("fs").readFileSync(0, "utf8")).find((x) => x.name === process.argv[1]); a === undefined ? "" : a.id + " " + a.state' "$3" 2>/dev/null || true
+}
+
+# Detach one asset. Fails loudly, like every other write here.
+gh_delete_asset() {
+    gh_api --request DELETE --output /dev/null "https://api.github.com/repos/$1/releases/assets/$2"
+}
+
+# --- attaching a file, and the upload endpoint dropping it ---------------------------------------------------
+# THE RELEASE'S HEAVIEST BYTES GO TO A DIFFERENT HOST THAN THE REST OF THE API. uploads.github.com takes the
+# installers and the cross-compiled binaries — nineteen assets, a few hundred megabytes, all in flight at once
+# because publish-github.sh sends them in parallel — and under that burst it answers some of them with its own
+# 5xx:
+#
+#   curl: (22) The requested URL returned error: 500
+#   curl: (22) The requested URL returned error: 504
+#   one or more release assets failed to upload
+#
+# That is what killed v1.289.0 (run 35244797817): thirteen assets attached, six refused — three 500s and three
+# 504s — and the publish died after the tag was already pushed, taking the container images and the `stable`
+# pointer with it. Nothing was wrong with the files, the token or the release; the same bytes go up fine on the
+# re-run, which is the whole argument for trying again rather than failing a version nobody can take back.
+#
+# A REFUSED UPLOAD MAY STILL HAVE LANDED, and may equally have left a half-written row holding the name, so
+# every failure asks the release what it now holds under that name before deciding anything. Attached and
+# `uploaded` is a write whose ANSWER was lost — the asset is up, and a second attempt would earn a 422 for a
+# success. Attached in any other state is this attempt's wreckage: it is deleted, which frees the name and is
+# itself reason enough for another attempt whatever the refusal said, because a name held by half an upload is
+# state on GitHub's side rather than anything this repo can get wrong.
+#
+# ONLY THAT CLASS OF FAILURE RETRIES. A 401, 403, 404 or an unreadable file must fail on the FIRST attempt:
+# four silent backoffs before the same error turns a red release into a slow red release that reads like a
+# flake. So the decision is made on curl's own message, not on its exit status, which is 22 for every HTTP
+# verdict alike. BOTH DIRECTIONS ARE ASSERTED, against the text v1.289.0 actually printed, by the
+# `publish-retry` check (_tools/checks/publish-retry.mjs, shared with the registry and npm retries) — which
+# reads the pattern list below back out of this file rather than keeping a second copy, and exercises the loop.
+
+# Attempts and the base gap, in seconds. Jittered, because these uploads run in parallel and are refused
+# TOGETHER: a fixed gap brings the whole burst back at the same instant, which is the burst that was refused.
+GH_UPLOAD_ATTEMPTS="${GH_UPLOAD_ATTEMPTS:-4}"
+GH_UPLOAD_DELAY="${GH_UPLOAD_DELAY:-10}"
+
+# The refusals worth sending the bytes again. Matched on the MESSAGE: the status classes GitHub uses to say
+# "later" (408, 429 and every 5xx), then the ordinary transport set — an endpoint under load cutting a
+# multi-hundred-megabyte PUT short is the same "try it again" as an explicit 429. 4xx is otherwise absent on
+# purpose: 401, 403, 404 and 422 are verdicts about US.
+gh_upload_transient() {
+    grep -Eqi \
+        -e 'returned error: (408|429|5[0-9][0-9])' \
+        -e 'transfer closed with' \
+        -e 'empty reply from server' \
+        -e '(recv|send) failure' \
+        -e 'connection reset by peer' \
+        -e 'operation timed out' \
+        -e 'ssl connect error' \
+        -e 'stream [0-9]+ was not closed cleanly' \
+        -e 'failed to connect to' \
+        -e 'could not resolve host' \
+        -- "$1"
 }
 
 # Attach one file. The name defaults to the file's own basename, and is passed explicitly by the caller that
 # renames as it uploads (the provenance bundle).
 gh_upload_asset() {
-    local repo="$1" release_id="$2" file="$3" name="${4:-}"
+    local repo="$1" release_id="$2" file="$3" name="${4:-}" attempt=1 status delay log found id state cleared
     [ -n "$name" ] || name="$(basename "$file")"
-    gh_api --output /dev/null --header "Content-Type: application/octet-stream" \
-        --data-binary "@${file}" \
-        "https://uploads.github.com/repos/${repo}/releases/${release_id}/assets?name=${name}"
+    log="$(mktemp)"
+    while :; do
+        status=0
+        # curl's own words are kept to judge the failure by, and printed as they were on the way out: with
+        # --silent --show-error there is nothing on stderr for an upload that worked.
+        gh_api --output /dev/null --header "Content-Type: application/octet-stream" \
+            --data-binary "@${file}" \
+            "https://uploads.github.com/repos/${repo}/releases/${release_id}/assets?name=${name}" 2>"$log" || status=$?
+        if [ "$status" -eq 0 ]; then
+            rm -f "$log"
+            return 0
+        fi
+        cat "$log" >&2
+
+        cleared=no
+        found="$(gh_asset_by_name "$repo" "$release_id" "$name")"
+        if [ -n "$found" ]; then
+            id="${found%% *}"
+            state="${found#* }"
+            if [ "$state" = uploaded ]; then
+                rm -f "$log"
+                echo "  landed   ${name} is attached after all — the upload went through and the answer did not" >&2
+                return 0
+            fi
+            if gh_delete_asset "$repo" "$id"; then
+                cleared=yes
+            fi
+        fi
+
+        if [ "$attempt" -ge "$GH_UPLOAD_ATTEMPTS" ] || { [ "$cleared" = no ] && ! gh_upload_transient "$log"; }; then
+            rm -f "$log"
+            return "$status"
+        fi
+        delay=$((GH_UPLOAD_DELAY * attempt))
+        if [ "$delay" -gt 0 ]; then
+            delay=$((delay + RANDOM % delay))
+        fi
+        echo "==> ${name} was refused by GitHub's upload endpoint (attempt ${attempt}/${GH_UPLOAD_ATTEMPTS}) — waiting ${delay}s and attaching it again" >&2
+        sleep "$delay"
+        attempt=$((attempt + 1))
+    done
 }
 
 # Flip the flag the whole world follows: `releases/latest/download/*` — every connect script and every site

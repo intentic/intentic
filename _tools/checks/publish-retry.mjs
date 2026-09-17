@@ -1,7 +1,7 @@
 #!/usr/bin/env node
-// Checks registry-retry.sh, npm-publish-retry.sh and image-pull.sh: each is a pattern list deciding which failure a
-// release rides out, asserted against failures that actually killed one, in both directions. Patterns are read back out
-// of the scripts, compiled as POSIX ERE case-insensitively; the retry loop is drilled through bash when available.
+// Checks registry-retry.sh, npm-publish-retry.sh, image-pull.sh and github.sh: each is a pattern list deciding which
+// failure a release rides out, asserted against failures that actually killed one, in both directions. Patterns are read
+// back out of the scripts, compiled as POSIX ERE case-insensitively; the retry loop is drilled through bash when available.
 import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -197,6 +197,59 @@ FLAKY=no  OUTPUT="$LOST"    run store-gone  image_pull ghcr.io/intentic/sandbox:
 FLAKY=no  OUTPUT="$MISSING" run missing-tag image_pull ghcr.io/intentic/sandbox:no-such-tag
 `,
         expect: { cleared: [2, 0], "store-gone": [3, 1], "missing-tag": [1, 1] },
+    },
+    {
+        id: "github-upload",
+        script: "_tools/scripts/lib/github.sh",
+        predicate: "gh_upload_transient",
+        // uploads.github.com under a nineteen-asset burst, in curl's words — the only words there are, since --fail
+        // throws the body away and answers 22 for every HTTP verdict alike.
+        rideItOut: [
+            ["the 500s that killed v1.289.0", "curl: (22) The requested URL returned error: 500"],
+            ["the 504s from that same publish", "curl: (22) The requested URL returned error: 504 Gateway Timeout"],
+            ["an endpoint asking us to slow down", "curl: (22) The requested URL returned error: 429"],
+            ["a hundred megabytes cut short mid-PUT", "curl: (18) transfer closed with 41582592 bytes remaining to read"],
+            ["the connection dropped under the upload", "curl: (56) Recv failure: Connection reset by peer"],
+            ["an upload that went quiet", "curl: (28) Operation timed out after 300000 milliseconds with 0 bytes received"],
+            ["the endpoint answering nothing at all", "curl: (52) Empty reply from server"],
+            ["the HTTP/2 stream torn down", "curl: (92) HTTP/2 stream 5 was not closed cleanly: INTERNAL_ERROR (err 2)"],
+        ],
+        // Every verdict GitHub reaches ABOUT US. The 422 is here because the pattern list must not be what retries it:
+        // a duplicate name is settled by asking what the release holds, not by sending the bytes again and again.
+        failAtOnce: [
+            ["a token GitHub does not know", "curl: (22) The requested URL returned error: 401"],
+            ["a token without contents:write", "curl: (22) The requested URL returned error: 403"],
+            ["a release id that is not there", "curl: (22) The requested URL returned error: 404"],
+            ["a name the release already holds", "curl: (22) The requested URL returned error: 422"],
+            ["an artifact nobody built", "curl: (26) Failed to open/read local data from file/application"],
+        ],
+        // Five properties the pattern list alone can't show: a dropped upload lands on the retry, a verdict about us
+        // fails at once, a lost answer is reported as attached, a half-written row is cleared and the name re-used, and
+        // a row that will not clear gives up rather than uploading forever.
+        drill: String.raw`
+export GH_UPLOAD_ATTEMPTS=3 GH_UPLOAD_DELAY=0
+REFUSED='curl: (22) The requested URL returned error: 500'
+FORBIDDEN='curl: (22) The requested URL returned error: 403'
+DUPLICATE='curl: (22) The requested URL returned error: 422'
+
+# The stub upload: prints the refusal under test where curl's own stderr goes, and counts the attempt.
+gh_api() {
+    echo x >> "$count"
+    [ "$FLAKY" = yes ] && [ "$(wc -l < "$count")" -ge 2 ] && return 0
+    printf '%s\n' "$OUTPUT" >&2
+    return 22
+}
+# What the release holds under that name afterwards: nothing, the finished asset, or a half-written row.
+gh_asset_by_name() { printf '%s' "$HELD"; }
+gh_delete_asset() { return 0; }
+
+HELD=''           FLAKY=yes OUTPUT="$REFUSED"   run flaky       gh_upload_asset intentic/intentic 42 /dev/null asset.bin
+HELD=''           FLAKY=no  OUTPUT="$FORBIDDEN" run forbidden   gh_upload_asset intentic/intentic 42 /dev/null asset.bin
+HELD='7 uploaded' FLAKY=no  OUTPUT="$DUPLICATE" run lost-answer gh_upload_asset intentic/intentic 42 /dev/null asset.bin
+HELD='7 starter'  FLAKY=yes OUTPUT="$DUPLICATE" run wreckage    gh_upload_asset intentic/intentic 42 /dev/null asset.bin
+HELD='7 starter'  FLAKY=no  OUTPUT="$DUPLICATE" run wreck-stays gh_upload_asset intentic/intentic 42 /dev/null asset.bin
+`,
+        expect: { flaky: [2, 0], forbidden: [1, 22], "lost-answer": [1, 0], wreckage: [2, 0], "wreck-stays": [3, 22] },
     },
 ];
 

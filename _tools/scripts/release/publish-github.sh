@@ -99,8 +99,11 @@ if [ -z "$release_id" ]; then
 fi
 
 # Uploads are one-shot per name — GitHub 422s a duplicate — so already-attached assets are skipped and a re-run
-# only ships what is missing. They go out at once: these are the release's heaviest bytes by far (installers +
-# eight cross-compiled binaries) and they are independent of one another.
+# only ships what is missing. FINISHED ones, at that: a refused upload can leave a row holding the name with
+# nothing behind it, and gh_asset_names answers with the assets GitHub calls `uploaded` for exactly that reason
+# (github.sh says the rest, including the release it cost). They go out at once: these are the release's
+# heaviest bytes by far (installers + eight cross-compiled binaries) and they are independent of one another —
+# which is also why each one rides out the upload endpoint's own 5xx rather than taking the release down.
 existing="$(gh_asset_names "$REPO" "$release_id")"
 
 upload_one() {
