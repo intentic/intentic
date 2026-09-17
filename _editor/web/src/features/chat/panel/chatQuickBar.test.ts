@@ -7,6 +7,7 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { type App, createApp, h, nextTick, ref } from "vue";
 import { resetChat, useChat } from "../run/useChat";
 import { focusComposer } from "../tabs/useChat-tabs";
+import { chatBarPeek } from "./chatPanelLayout";
 import { draftConversation, reveal } from "./useChat-reveal";
 
 import { queryClient } from "../../../lib/queryPersistence";
@@ -65,6 +66,11 @@ const opened = (): boolean => bar()?.classList.contains(`chat-quick-open`) === t
 
 const hoverIn = (): void => void bar()?.dispatchEvent(new Event(`pointerenter`));
 const hoverOut = (): void => void bar()?.dispatchEvent(new Event(`pointerleave`));
+// The transcript's only affordance: the tab on the box's top edge, which is also the edge it unfolds from.
+const handle = (): HTMLButtonElement | null => document.querySelector<HTMLButtonElement>(`.chat-quick-handle`);
+const hoverHandle = (): void => void handle()?.dispatchEvent(new Event(`pointerenter`));
+const escape = (): void =>
+    void bar()?.dispatchEvent(new KeyboardEvent(`keydown`, { key: `Escape`, bubbles: true, cancelable: true }));
 // Past both delays the pill uses, so a test never has to restate either one.
 const waitOutHover = async (): Promise<void> => {
     vi.advanceTimersByTime(1_000);
@@ -78,6 +84,7 @@ beforeEach(async () => {
     document.body.innerHTML = ``;
     localStorage.clear();
     chatFullDock.value = null;
+    chatBarPeek.value = false;
     resetChat();
     // The home this whole surface exists for; `side` keeps its column, and then there is nothing to park.
     useLayout().setChatHome(`rail`);
@@ -258,7 +265,70 @@ it(`closes on Escape, unless the composer claimed that press`, async () => {
     await settle();
     expect(opened()).toBe(true);
 
-    bar()?.dispatchEvent(new KeyboardEvent(`keydown`, { key: `Escape`, bubbles: true, cancelable: true }));
+    escape();
+    await settle();
+    expect(opened()).toBe(false);
+});
+
+// The box can say what is being written but not what was said, and the transcript is the one thing it has no room
+// for — so the way to it is an affordance, not a navigation, offered only where there is something to read.
+it(`offers the transcript only on the open box, and only once something has been said`, async () => {
+    const chat = useChat();
+    await mount(ChatQuickBar);
+    press().click();
+    await settle();
+    expect(handle()).toBeNull();
+
+    chat.active.value.restoreMessages([{ role: `user`, text: `an earlier turn` }]);
+    await settle();
+    expect(handle()).not.toBeNull();
+
+    // Resting, the pill is the whole form: its own line already carries what the chat is up to.
+    press().click();
+    await settle();
+    expect(handle()).toBeNull();
+});
+
+// Two things end with one pointer, and they must not end together: the transcript is what the pointer asked for, so it
+// goes the moment the pointer does, while the box keeps the grace that lets an overshot edge be crossed back.
+it(`folds the transcript away with the pointer, before the box itself goes`, async () => {
+    const chat = useChat();
+    chat.active.value.restoreMessages([{ role: `user`, text: `an earlier turn` }]);
+    await mount(ChatQuickBar);
+    press().click();
+    await settle();
+
+    hoverHandle();
+    vi.advanceTimersByTime(200);
+    await settle();
+    expect(chatBarPeek.value).toBe(true);
+
+    hoverOut();
+    await settle();
+    expect([chatBarPeek.value, opened()]).toEqual([false, true]);
+
+    await waitOutHover();
+    expect(opened()).toBe(false);
+});
+
+// A press keeps what a hover only borrows — the transcript's only door for a keyboard or a touch, neither of which can
+// hover — and then one Escape undoes one thing, in the order they were opened.
+it(`keeps the transcript on a press, and gives it back one Escape before the box`, async () => {
+    const chat = useChat();
+    chat.active.value.restoreMessages([{ role: `user`, text: `an earlier turn` }]);
+    await mount(ChatQuickBar);
+    press().click();
+    await settle();
+
+    handle()!.click();
+    await settle();
+    expect(chatBarPeek.value).toBe(true);
+
+    escape();
+    await settle();
+    expect([chatBarPeek.value, opened()]).toEqual([false, true]);
+
+    escape();
     await settle();
     expect(opened()).toBe(false);
 });
@@ -286,6 +356,20 @@ it(`the strip paints no surface of its own: the composer is the whole of it`, as
 
     expect(document.querySelector(`.chat-panel`)!.classList.contains(`bg-card`)).toBe(false);
     expect(document.querySelector(`.chat-footer`)!.classList.contains(`chat-footer-bare`)).toBe(true);
+});
+
+// A peek is this pane's turns arriving, not a transcript built beside the one /chat draws — and turns need a surface,
+// which is the one moment the strip paints one.
+it(`a peek lifts the withheld turns, on the one surface they can be read over a page`, async () => {
+    const chat = useChat();
+    chat.active.value.restoreMessages([{ role: `user`, text: `an earlier turn` }]);
+    chatBarPeek.value = true;
+    await mount(ChatPanel, { bar: true });
+
+    expect(document.querySelectorAll(`.chat-turns`)).toHaveLength(1);
+    expect(document.body.textContent).toContain(`an earlier turn`);
+    expect(document.querySelector(`.chat-panel`)!.classList.contains(`bg-card`)).toBe(true);
+    expect(document.querySelector(`.chat-footer`)!.classList.contains(`chat-footer-bare`)).toBe(false);
 });
 
 it(`the same panel drawn anywhere else still has its transcript, on its own surface`, async () => {

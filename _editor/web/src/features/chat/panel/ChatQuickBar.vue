@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, useTemplateRef, watch } from "vue";
 import { useRouter } from "vue-router";
-import { chatParked } from "./chatPanelLayout";
+import { chatBarPeek, chatParked } from "./chatPanelLayout";
 import { chatBarDock } from "../../../shell/window/dockSlots";
 import { focusComposer } from "../tabs/useChat-tabs";
 import { useChat } from "../run/useChat";
@@ -13,9 +13,11 @@ import { useChat } from "../run/useChat";
 // reader opened it to say something ABOUT that page.
 // Open, THE COMPOSER IS THE WHOLE SURFACE: no frame, no title, no status row around it. Every one of those drew a
 // second edge around a box that already has one, and none of them carried anything a reader writing one message needs.
+// The one thing the box cannot answer on its own — "what did it just say?" — is a handle on its top edge, and what
+// that reveals is this same pane's transcript, unfolding upward over the page (chatBarPeek).
 
 const router = useRouter();
-const { active, streaming, draft, composerFocus, awaitingDecision } = useChat();
+const { active, messages, streaming, draft, composerFocus, awaitingDecision } = useChat();
 
 const expanded = ref(false);
 // Focus, not hover, is what keeps it open through a pointer that has wandered off.
@@ -24,6 +26,8 @@ const float = useTemplateRef(`float`);
 const slot = useTemplateRef(`slot`);
 
 const title = computed(() => active.value.title.value ?? undefined);
+// Nothing said yet is nothing to look back at, so the handle isn't drawn on a chat that has no turns.
+const hasTranscript = computed(() => messages.value.length > 0);
 
 // What the pill is for right now, most urgent first. `asking` is the one that isn't about the composer at all: a
 // permission card or a question is drawn in the transcript, which a pill has none of, so it can only carry the news.
@@ -46,12 +50,23 @@ const standing = computed<Standing>(() => {
 const HOVER_INTENT_MS = 250;
 // Long enough to cross the gap back after overshooting the pill's own edge.
 const HOVER_GRACE_MS = 400;
+// The handle is a target reached on purpose, so its guard only has to outlast a pointer leaving the box across it.
+const PEEK_INTENT_MS = 140;
 let timer: ReturnType<typeof setTimeout> | undefined;
+let peekTimer: ReturnType<typeof setTimeout> | undefined;
 const cancelTimer = (): void => {
     clearTimeout(timer);
     timer = undefined;
 };
-onBeforeUnmount(cancelTimer);
+const closePeek = (): void => {
+    clearTimeout(peekTimer);
+    peekTimer = undefined;
+    chatBarPeek.value = false;
+};
+onBeforeUnmount(() => {
+    cancelTimer();
+    closePeek();
+});
 
 // Words in the box are the one thing a close could lose sight of, so they hold it open; a live turn does not, since
 // the pill says so on its own line.
@@ -76,6 +91,7 @@ const expand = (caret: boolean): void => {
 };
 const collapse = (): void => {
     cancelTimer();
+    closePeek();
     expanded.value = false;
 };
 
@@ -87,6 +103,8 @@ const onEnter = (): void => {
 };
 const onLeave = (): void => {
     cancelTimer();
+    // The transcript goes with the pointer that asked for it, whether or not a draft is holding the box open.
+    closePeek();
     if (expanded.value && collapsible.value) {
         timer = setTimeout(() => {
             if (collapsible.value) {
@@ -96,11 +114,17 @@ const onLeave = (): void => {
     }
 };
 // Escape belongs to the composer first: it stops a streaming turn, abandons an armed edit and quits hands-free, and
-// says so by calling preventDefault on the ones it claimed. Closing the pill is what's left over.
+// says so by calling preventDefault on the ones it claimed. Then the transcript, then the box: one press undoes one
+// thing, in the order they were opened.
 const onEscape = (event: KeyboardEvent): void => {
-    if (!event.defaultPrevented) {
-        collapse();
+    if (event.defaultPrevented) {
+        return;
     }
+    if (chatBarPeek.value) {
+        closePeek();
+        return;
+    }
+    collapse();
 };
 const onFocusOut = (event: FocusEvent): void => {
     const next = event.relatedTarget;
@@ -111,6 +135,20 @@ const onFocusOut = (event: FocusEvent): void => {
     if (collapsible.value) {
         collapse();
     }
+};
+
+// Hover reads, a press keeps: the handle is also the transcript's only door for a keyboard or a touch, neither of
+// which can hover at all.
+const onPeekEnter = (): void => {
+    clearTimeout(peekTimer);
+    if (!chatBarPeek.value) {
+        peekTimer = setTimeout(() => (chatBarPeek.value = true), PEEK_INTENT_MS);
+    }
+};
+const togglePeek = (): void => {
+    clearTimeout(peekTimer);
+    peekTimer = undefined;
+    chatBarPeek.value = !chatBarPeek.value;
 };
 
 // Anything that asks for the caret — "New agent" from any surface, a board starter filling the box, a card summoned
@@ -129,7 +167,7 @@ watch(
     ([parked, element]) => {
         chatBarDock.value = parked ? element : null;
         if (!parked) {
-            expanded.value = false;
+            collapse();
         }
     },
     { immediate: true, flush: `post` },
@@ -168,10 +206,12 @@ const onPress = (): void => {
         class="chat-quick-seat pointer-events-none z-20 flex w-full justify-center self-end px-4 pb-4"
         style="grid-area: workspace"
     >
+<!-- NOTHING HERE TRANSITIONS. The swap is one render: an animated width reflowed the composer's own container queries
+     every frame of it, and the opacity crossfade between the two forms spent its first 100ms showing neither. -->
         <div
             ref="float"
-            class="chat-quick-float pointer-events-auto relative"
-            :class="{ 'chat-quick-open': expanded }"
+            class="chat-quick-float pointer-events-auto relative max-w-full"
+            :class="expanded ? `chat-quick-open w-[51rem]` : `w-[22rem]`"
             @pointerenter="onEnter"
             @pointerleave="onLeave"
             @focusin="holdsFocus = true"
@@ -180,12 +220,13 @@ const onPress = (): void => {
         >
 <!-- WHICHEVER FORM IS NOT SHOWING LEAVES THE FLOW instead of being measured out of it: the box is the size of what is
      actually in it at both ends, so no reading can be stale and no frame can be left standing on air. -->
-<!-- `inert` is a boolean attribute — present is inert whatever it says — and Vue strips a `false` only for the
-     attributes it knows are boolean, which this is not. Hence `|| undefined` on both: `inert="false"` is inert. -->
+<!-- It fades to nothing rather than to `display: none`, since the caret a summons sends arrives in the same render and
+     an unrendered box cannot take it. `inert` is a boolean attribute — present is inert whatever it says — and Vue
+     strips a `false` only for the attributes it knows are boolean, which this is not. Hence `|| undefined` on both. -->
             <button
                 type="button"
                 class="chat-quick-pill flex h-10 w-full cursor-pointer items-center gap-2 rounded-2xl border border-line-strong bg-card px-3 text-left shadow-lg"
-                :class="expanded ? `pointer-events-none absolute inset-x-0 bottom-0` : ``"
+                :class="expanded ? `pointer-events-none absolute inset-x-0 bottom-0 opacity-0` : ``"
                 :inert="expanded || undefined"
                 :aria-expanded="standing === `asking` ? undefined : expanded"
                 :aria-label="standing === `asking` ? `Open the chat: your agent is waiting for an answer` : `Write to your agent from here`"
@@ -204,51 +245,27 @@ const onPress = (): void => {
 <!-- The grown form: the panel's own composer, and nothing of this component's around it. -->
             <div
                 class="chat-quick-host w-full"
-                :class="expanded ? `` : `pointer-events-none absolute inset-x-0 bottom-0`"
+                :class="expanded ? `` : `pointer-events-none absolute inset-x-0 bottom-0 opacity-0`"
                 :inert="!expanded || undefined"
             >
                 <div ref="slot" class="contents"></div>
             </div>
+
+<!-- The transcript's handle, straddling the edge the transcript comes out of: the box grows UPWARD from it, so the
+     composer never moves under the pointer and the page it was opened to talk about stays where it was. Inside the
+     float, so reading the turns is still "inside the box" and neither the peek nor the box closes under the pointer. -->
+            <button
+                v-if="expanded && hasTranscript"
+                type="button"
+                class="chat-quick-handle absolute top-0 left-1/2 z-10 flex h-5 w-12 -translate-x-1/2 -translate-y-1/2 cursor-pointer items-center justify-center rounded-full border border-line-strong bg-card text-subtle shadow-md hover:text-content"
+                v-tooltip.top="chatBarPeek ? `Hide the conversation` : `What was said: hover to read, press to keep it open`"
+                :aria-expanded="chatBarPeek"
+                aria-label="The conversation so far"
+                @pointerenter="onPeekEnter"
+                @click="togglePeek"
+            >
+                <Icon :name="chatBarPeek ? `chevron-down` : `chevron-up`" class="text-2xs" />
+            </button>
         </div>
     </div>
 </template>
-
-<style scoped>
-/* Width is the only thing animated — height is whatever the composer is holding, which is why there is no number here
-   for it. The two widths are the pill's reading measure and the composer's own (.chat-footer's max). */
-.chat-quick-float {
-    width: 22rem;
-    max-width: 100%;
-    transition: width 260ms cubic-bezier(0.2, 0.8, 0.2, 1);
-}
-
-.chat-quick-open {
-    width: 51rem;
-}
-
-/* The two forms cross over: each is gone before the other is legible, so no frame shows both. OPACITY ONLY — a
-   transitioned `visibility` still reads as hidden for the whole 160ms, and the caret a summons sends at the same
-   instant cannot land in a hidden box. What keeps the faded one out of the way of a click or a Tab is `inert`, an
-   attribute, which flips in the render rather than over a duration. */
-.chat-quick-pill,
-.chat-quick-host {
-    transition: opacity 160ms ease;
-}
-
-.chat-quick-open .chat-quick-pill,
-.chat-quick-float:not(.chat-quick-open) .chat-quick-host {
-    opacity: 0;
-}
-
-.chat-quick-open .chat-quick-host {
-    transition-delay: 100ms;
-}
-
-@media (prefers-reduced-motion: reduce) {
-    .chat-quick-float,
-    .chat-quick-pill,
-    .chat-quick-host {
-        transition: none;
-    }
-}
-</style>

@@ -101,8 +101,11 @@ const props = defineProps<{
     closable: boolean;
     // Composer and its notices alone, no transcript: what the quick bar hosts, so writing from another area is this
     // chat's own composer rather than a second one. The turns are withheld, never the chat — the stream, the draft and
-    // every pick are the same conversation the full surface shows.
+    // every pick are the same conversation the full surface shows. A peek lifts it, and what arrives is these turns.
     bare?: boolean;
+    // This pane is the floating strip's. Independent of `bare`, which is about the turns: this is about everything the
+    // strip has no reader for — the status row is about a chat nobody is looking at, over a page they are.
+    strip?: boolean;
 }>();
 
 // The typewriter is this pane's; only the focused pane runs one (TranscriptClock.watched). Written as an effect,
@@ -1126,6 +1129,19 @@ watch(
     { flush: `post` },
 );
 
+// A transcript arriving in a pane that had none (the strip, peeked at) starts at its newest message, for the same
+// reason a different transcript does: a freshly mounted scroller sits at the top, which is a chat's oldest words.
+watch(
+    () => props.bare,
+    (withheld) => {
+        if (!withheld) {
+            pin();
+            grow();
+        }
+    },
+    { flush: `post` },
+);
+
 // Follows the transcript on length/streaming changes rather than trusting the composable's resize observations,
 // which the browser can coalesce or defer past the layout that produced them, leaving new content below the fold.
 // O(1), post-flush, so the row exists to scroll to.
@@ -1646,9 +1662,9 @@ watch(
         </div>
 
 <!-- The pane's status bar, the one part of the footer outside the scroller: it's about the pane (context, subscription, daemon liveness), not the message. -->
-<!-- Withheld from `bare` with the transcript it reports on: floating over another page, readouts about a chat nobody is
-     looking at are a second row of text around a box asked for as one. -->
-        <ChatPaneStatus v-if="connected && !bare" :block="refusal" :hint="composerHint" />
+<!-- Withheld from the strip, peek or no peek: floating over another page, readouts about a chat are a second row of text
+     around a box asked for as one. -->
+        <ChatPaneStatus v-if="connected && !strip" :block="refusal" :hint="composerHint" />
 
 <!-- The four composer menus, each in the app's standard desktop-panel/mobile-sheet swap (ResponsiveOverlay), uncapped in height. -->
         <ResponsiveOverlay v-model="modelOpen" :anchor="modelPill?.el" header="Model" panel-class="w-[26rem]">

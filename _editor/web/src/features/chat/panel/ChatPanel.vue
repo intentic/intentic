@@ -8,7 +8,7 @@ import type { Conversation } from "../session/conversation";
 import { traceFocus } from "../run/focusTrace";
 import { openRunSessions } from "../run/openRun";
 import { DEFAULT_RAIL_WIDTH, railWidth } from "../../agents/board/columnWidth";
-import { chatOnRail, chatWide } from "./chatPanelLayout";
+import { chatBarPeek, chatOnRail, chatWide } from "./chatPanelLayout";
 import { useChat } from "../run/useChat";
 import { useChatFloating } from "./chatFloating";
 import { useWorkflowRuns } from "../../agents/fleet/useWorkflowRuns";
@@ -39,6 +39,19 @@ const { mobile } = useDevice();
 
 // The panel's own element; the left-edge resize handle measures against it.
 const root = ref<HTMLElement>();
+
+// The strip, asked for its transcript (ChatQuickBar's handle). It withholds the turns until then, so a peek is this
+// pane's own turns arriving — never a second transcript beside the one /chat draws.
+const peeking = computed(() => bar && chatBarPeek.value);
+// What the panel lies on. The strip is one composer floating over someone else's page, so it paints nothing: the box
+// draws its own edge and a surface behind it reads as a tray. A peek is the exception, since turns cannot be read
+// over a page showing through them — and that card is capped, so the transcript scrolls instead of filling the view.
+const ground = computed(() => {
+    if (!bar) {
+        return `ground-card h-full overflow-hidden bg-card`;
+    }
+    return peeking.value ? `ground-card max-h-[60vh] overflow-hidden rounded-2xl border border-line-strong bg-card shadow-2xl` : ``;
+});
 
 // How narrow a chat may shrink (useLayout's MIN_PANE_PX), imported rather than restated since the docked column
 // shares the same floor. Written as a custom property in app pixels, not rem, so it can't drift from the column's
@@ -230,7 +243,7 @@ const seamWidth = computed<number>({
     <div
         ref="root"
         class="chat-panel relative flex min-h-0"
-        :class="[chatWide ? 'flex-row' : 'flex-col', bar ? '' : 'ground-card h-full overflow-hidden bg-card']"
+        :class="[chatWide ? 'flex-row' : 'flex-col', ground]"
         :style="{ '--capacity-rail': showsRail ? uiLength(CAPACITY_RAIL_PX) : `0px` }"
     >
 <!-- An overlay seam (`place="edge"`), not in-flow, since docked the panel's own axis is the bar-then-panes column, not this border. -->
@@ -301,7 +314,8 @@ const seamWidth = computed<number>({
                     :conversation="conversation"
                     :focused="conversation.conversationId === activeId"
                     :closable="split"
-                    :bare="bar"
+                    :bare="bar && !peeking"
+                    :strip="bar"
                     @focus="setActive(conversation.conversationId)"
                     @close="closePane(conversation.conversationId)"
                 />
