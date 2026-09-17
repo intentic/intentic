@@ -193,9 +193,12 @@ const railGroupOf = (id: string): RailGroup => {
 
 // Cuts a rail-ordered run into its bands, dropping empty ones so nothing draws a separator over an
 // unactivated band. Shared by the desktop rail and mobile menu so they can't disagree.
+// Matched on the band's id, never on object identity: `activeGroups()` builds the table each time it is asked, since
+// the labels in it are words that follow the reader's language, so two calls hand back equal groups that are not the
+// same objects. An `===` here is how the rail silently emptied itself.
 export const railBands = <T>(items: readonly T[], idOf: (item: T) => string): { readonly group: RailGroup; readonly items: readonly T[] }[] =>
     activeGroups()
-        .map((group) => ({ group, items: items.filter((item) => railGroupOf(idOf(item)) === group) }))
+        .map((group) => ({ group, items: items.filter((item) => railGroupOf(idOf(item)).id === group.id) }))
         .filter((band) => band.items.length > 0);
 
 // detect() failures are contained: one broken extension contributes nothing this round, not a blanked sidebar.

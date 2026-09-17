@@ -6,6 +6,7 @@ import { describe, expect, it } from "vitest";
 import { useAudience } from "../app/useAudience";
 import {
     activationBadge,
+    railBands,
     railGroups,
     detectActivations,
     homeViewId,
@@ -491,5 +492,15 @@ describe(`the maker's rail`, () => {
             .filter((item) => item.seat === `always`)
             .map((item) => item.id);
         expect(permanent).toEqual([`projects`, `chat`, `agents`, `preview`]);
+    });
+
+    // THE RAIL IS WHAT THIS BANDING DRAWS: a band that matches nothing renders an empty column, which is what the
+    // shell showed when the group table became a function and `railBands` was still matching groups by identity —
+    // two calls hand back equal groups that are not the same objects. Asserted on the tiles themselves, not on the
+    // band count, so the failure reads as "the rail is empty" rather than as an internal detail.
+    it(`lands every seated tile in a band, however many times the group table is built`, () => {
+        const tiles = [{ id: `chat` }, { id: `agents` }, { id: `approvals` }, { id: `live-status` }, { id: `stranger` }];
+        const banded = railBands(tiles, (tile) => tile.id).flatMap((band) => band.items.map((item) => item.id));
+        expect(banded.toSorted()).toEqual(tiles.map((tile) => tile.id).toSorted());
     });
 });
