@@ -87,21 +87,26 @@ Competitors to name where a site asks, each with a matching `/compare/` page on 
 
 ## Assets
 
-Pre-sized for upload forms, in [`press-kit/`](press-kit/). Built 2026-09-16 from the site's own shots, every
-file under 1 MB so nothing trips an upload cap.
+Pre-sized for upload forms, in [`press-kit/`](press-kit/). Every file is the app in its **Light** look, so the
+kit, the card and the listing page all read as one product.
 
 | File | Size | For |
 | --- | --- | --- |
 | `logo-512.png` | 512×512 | the square logo/icon field every directory has |
 | `cover-1200x630.png` | 1200×628 | OG card, cover image, "featured image" |
-| `screenshot-1-fleet-board.png` | 1600w | the fleet board: lead with this one |
-| `screenshot-2-review-a-diff.png` | 1600w | the Changes panel, side-by-side diff |
-| `screenshot-3-capabilities.png` | 1600w | the capability catalogue |
-| `screenshot-4-workspace.png` | 1600w | the editor and file tree |
-| `screenshot-5-phone.png` | 1200h | the fleet board on a phone |
+| `screenshot-1-fleet-board.png` | 1500×940 | the fleet board: lead with this one |
+| `screenshot-2-review-a-diff.png` | 1500×940 | the Changes panel and a side-by-side diff |
+| `screenshot-3-capabilities.png` | 1500×940 | the capability catalogue |
+| `screenshot-4-phone.png` | 430×932 | the fleet board on a phone |
 
-Originals live in `_site/site/src/assets/product/` at 2604px and up; regenerate from there rather than
-upscaling these.
+**Light, not the dark skin the site defaults to.** A directory listing and a social feed are both mostly white
+paper, and the dark app reads there as a hole rather than a product. Owner's call, 2026-09-17.
+
+To recapture: `pnpm -C _site/demo dev --port 47148`, then in the browser set `ui-color-scheme=light` and
+`ui-skin=none` in `localStorage` and reload (see the `seeing-the-app` skill). Two things have to be out of any
+shot: the demo's own `SHOW ME` switcher (`.demo-switcher-label`'s parent) and the rail tooltip, which is
+`.ui-tooltip-body` and survives moving the pointer, so hide it with a stylesheet rule rather than chasing it.
+The dark originals are still in `_site/site/src/assets/product/` at 2604px, for the site's own dark pages.
 
 ## Ranked targets
 
@@ -292,3 +297,26 @@ Preparation only. Nothing was filed: see "What the owner has to do" for why.
 - **Wrote the length ladder** above, so no submission needs new copy written at the form.
 - **Drafted the opensource.builders issue** in the maintainer's required template, unposted.
 - Budget for the round set to free tiers only, with Fazier's badge-for-listing trade approved.
+
+## Done 2026-09-17: the card every share renders
+
+The old OG card was a black rectangle with the page title set in it, and the page title is what the platform
+already prints underneath the picture. It spent its whole area repeating a sentence the reader was being shown
+anyway, and showed nothing of the product. Owner's verdict: "very ugly", and not something to put on social.
+
+Rewrote `_site/site/scripts/og-template.mjs`:
+
+- **Light skin, not dark.** `#f5ede7`, the same value BaseLayout ships as the light `theme-color`. The desk
+  palette's oklch tokens resolved to sRGB, so the card cannot drift from the site.
+- **The landing card says the brand line**, `You delegate. Agents work. You approve.`, instead of the page
+  title. Every other page still gets its own title, since for those the title is the useful thing.
+- **A real screenshot of the light app** runs off the bottom edge under the text: the fleet board, three lanes
+  of agents, and the plan with **Approve** under it, which is the brand line's third beat shown rather than
+  claimed. `marginTop: auto` pins it, so a three-line title eats the gap above the picture instead of pushing
+  it off the card.
+- The assets it inlines live in `_site/site/scripts/og/`.
+
+Checked at 1200px, at 500px (feed size) and at 320px: the headline, the sub and the wordmark all hold, and the
+screenshot reads as a dense working app even where its text does not resolve. Route matching is covered by a
+throwaway check over `""`, `/`, `index.html`, `desk`, `desk/`, `/desk/` and `desk/index.html`, all of which
+have to land on the landing card; `oxlint`, `prettier` and `check-desk-palette.mjs` all pass.
