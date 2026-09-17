@@ -17,17 +17,8 @@ const files = readdirSync(PROFILES_DIR).filter((name) => name.endsWith(`.sandbox
 // seeded rule whose id has since been renamed there arrives as a stranger, so the promise reads as kept while the
 // switch the reader would look at stands off. Read as source because a daemon package cannot import the app's screens.
 const appRules = readFileSync(join(repoRoot(import.meta.url), `_editor/web/src/features/sandbox/environment/rules.ts`), `utf8`);
-// The NAME each row is called by is no longer a literal beside its id: rules.ts builds labels with `t()`, so the words
-// a profile promises live in the app's English catalog and that is where a rename would show.
-const appRuleLabels: readonly string[] = Object.values(
-    (JSON.parse(readFileSync(join(repoRoot(import.meta.url), `_editor/web/src/app/i18n/locales/en.json`), `utf8`)) as {
-        sandbox: { rules: Record<string, string> };
-    }).sandbox.rules,
-);
-
-// A LABEL IS NO LONGER IN THAT FILE. The app names its rules through `t(...)`, so the words a profile writes into a
-// TOML are the app's English catalogue's, and matching them against the screen's source can only ever fail. These are
-// the same two rows either way: `sandbox.rules` holds exactly what the toggles label, in the language the seeds speak.
+// The NAME each row is called by is not a literal beside its id: rules.ts labels through `t()`, so the words a profile
+// writes into a TOML are the app's English catalogue's, and `sandbox.rules` holds exactly what the toggles label.
 const appRuleLabels: readonly string[] = Object.values(
     (
         JSON.parse(readFileSync(join(repoRoot(import.meta.url), `_editor/web/src/app/i18n/locales/en.json`), `utf8`)) as {
