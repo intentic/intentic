@@ -157,6 +157,12 @@ export const AgentSummarySchema = z.object({
     id: z.string().describe("The conversation id, which is how every other call addresses it."),
     sessionId: z.string().optional().describe("The provider session behind the last turn. It is retired whenever the model or account changes."),
     title: z.string().optional().describe("What to call it: the first prompt cut to one line, unless somebody renamed it."),
+    titleAction: z
+        .string()
+        .optional()
+        .describe(
+            "One word for the kind of work the naming pass read in it (fix, audit, redesign). Never part of the displayed name: a board tints and glyphs a card by it. Absent for a title nothing named an action for.",
+        ),
     status: AgentStatusSchema.describe(
         "What it is doing. Stopping and stopped are the two halves of somebody pressing stop, because a cancel is not instant; dismissing is the same window for a question waved away, which ends the turn too but owes the user nothing; resuming means the sandbox is already putting right whatever killed the turn; landing means its work is being carried into the workspace right now, and nothing may act on its branch until that settles.",
     ),

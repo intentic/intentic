@@ -1,7 +1,7 @@
 import type { IconName } from "@intentic/ui";
 
 // What kind of work a session's title names, as a tint and glyph shown on the fleet board and chat rail. Read from
-// the title's action word (titleType below), mapped to a Conventional Commit type: colour groups the work by kind
+// the session's stored action word, or the title's leading verb, mapped to a Conventional Commit type: colour groups the work by kind
 // rather than by hash, and the icon repeats that fact in a second channel for anyone colour can't reach. Hues come
 // from the identityHue palette (8, to stay legible in both schemes), assigned by connotation (green growth, red
 // repair, amber verification); rare types share a hue with their nearest kin (revert with fix, build/ci with
@@ -34,8 +34,8 @@ const PREFIXED = /^([a-z]+)(?:\([^)]*\))?!?:\s+\S/i;
 const ARTICLE = /^(?:the|a|an)\s+/i;
 
 // Curated rather than inferred: English hands out noun/verb ambiguity too freely, and an unrecognized word gets no
-// category rather than a wrong one. Word list matches what the naming pass writes (agent/title-namer.ts asks for
-// one action word) plus the imperatives title.ts derives when no model has named a session.
+// category rather than a wrong one. Word list matches what the naming pass stores (agent/title-namer.ts asks the
+// model for one action word) plus the imperatives title.ts derives when no model has named a session.
 const VERBS: Readonly<Record<string, readonly string[]>> = {
     fix: [`fix`, `repair`, `correct`, `resolve`, `patch`, `debug`, `prevent`, `stop`, `guard`, `harden`, `tighten`, `ensure`, `restore`, `diagnose`],
     feat: [
@@ -152,14 +152,12 @@ const VERBS: Readonly<Record<string, readonly string[]>> = {
 
 const TYPE_OF_VERB = new Map(Object.entries(VERBS).flatMap(([type, verbs]) => verbs.map((verb): [string, string] => [verb, type])));
 
-// The action tag on a model-written title (` · fix`), anchored to the end and one word, so a path like `Auth ·
-// session · token refresh` only offers its last segment. A tag matching no verb table is the title's last noun,
-// not an action, and the reading declines.
-const ACTION_TAG = /\s+·\s+([\w-]+)$/;
-
-// The kind of work a title names, or undefined. Tries the tail first (only the naming pass's shape puts a bare
-// action word after a separator); a title without one falls through to the leading-verb reading.
-const titleType = (title: string): string | undefined => {
+// The kind of work a title names, or undefined. The naming pass's own action word (AgentSummary.titleAction, which
+// the title itself never carries) is authoritative; a title without one falls through to the leading-verb reading.
+const titleType = (title: string, action: string | undefined): string | undefined => {
+    if (action !== undefined) {
+        return TYPE_OF_VERB.get(action.toLowerCase());
+    }
     const clean = title.replaceAll(/\s+/gu, ` `).trim().replace(/\.+$/, ``).trim();
     if (clean === ``) {
         return undefined;
@@ -168,17 +166,12 @@ const titleType = (title: string): string | undefined => {
     if (prefixed !== null && prefixed[1]!.toLowerCase() in CATEGORIES) {
         return prefixed[1]!.toLowerCase();
     }
-    const tagged = ACTION_TAG.exec(clean);
-    // An empty head (`· fix`) has no title to categorize; it falls through and is read as that one word.
-    if (tagged !== null && clean.slice(0, tagged.index).trim() !== ``) {
-        return TYPE_OF_VERB.get(tagged[1]!.toLowerCase());
-    }
     const [lead = ``] = clean.replace(ARTICLE, ``).split(` `, 1);
     return TYPE_OF_VERB.get(lead.toLowerCase());
 };
 
-export const sessionCategory = (title: string | undefined): SessionCategory | undefined => {
-    const type = title === undefined ? undefined : titleType(title);
+export const sessionCategory = (title: string | undefined, action?: string): SessionCategory | undefined => {
+    const type = title === undefined ? undefined : titleType(title, action);
     if (type === undefined) {
         return undefined;
     }

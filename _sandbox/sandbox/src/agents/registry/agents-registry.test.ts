@@ -470,16 +470,33 @@ describe("agents registry", () => {
         await registry.init();
         await registry.begin(turn({ prompt: "we have recently added the fleet board" }), 1_000);
 
-        expect((await registry.setTitle("c1", "Fleet board broadcast · wire", "model"))?.title).toBe("Fleet board broadcast · wire");
+        expect((await registry.setTitle("c1", "Fleet board broadcast", "model", "wire"))?.title).toBe("Fleet board broadcast");
         // A repeated model-sourced title does not override the first.
         await registry.setTitle("c1", "A second reading", "model");
-        expect(registry.get("c1")?.title).toBe("Fleet board broadcast · wire");
+        expect(registry.get("c1")?.title).toBe("Fleet board broadcast");
 
         registry.observe("c1", { kind: "plan", requestId: "r1", text: "# Fix the fleet broadcast fan-out" });
         expect(registry.get("c1")?.title).toBe("Fix the fleet broadcast fan-out");
         // A plan's title is never replaced by a later model-sourced one.
         await registry.setTitle("c1", "A late reading", "model");
         expect(registry.get("c1")?.title).toBe("Fix the fleet broadcast fan-out");
+    });
+
+    it("keeps the naming pass's action word beside the title, and drops it when another source renames", async () => {
+        const registry = createAgentsRegistry(memoryStore(), standings(), presences());
+        await registry.init();
+        await registry.begin(turn(), 1_000);
+
+        // The word is never part of the name; it rides the summary so a board can read the kind of work.
+        expect(await registry.setTitle("c1", "Fleet board broadcast", "model", "wire")).toMatchObject({
+            title: "Fleet board broadcast",
+            titleAction: "wire",
+        });
+
+        // A rename names no action, so the old one cannot outlive the title it described.
+        const renamed = await registry.setTitle("c1", "Login fix", "user");
+        expect(renamed?.title).toBe("Login fix");
+        expect(renamed?.titleAction).toBeUndefined();
     });
 
     // The two failure sentences (agent/failure-sentences.ts); guarding only one is how the other got through.
@@ -498,7 +515,7 @@ describe("agents registry", () => {
         // The derived title must stay replaceable; a later honest model title still lands.
         await registry.setTitle("c1", sentence, "model");
         expect(registry.get("c1")?.title).toBe("Fix the login bug");
-        expect((await registry.setTitle("c1", "Fleet board broadcast · wire", "model"))?.title).toBe("Fleet board broadcast · wire");
+        expect((await registry.setTitle("c1", "Fleet board broadcast", "model"))?.title).toBe("Fleet board broadcast");
     });
 
     it.each(FAILURE_SENTENCES)("a stolen title reading %s forfeits its rank, so the next name heals it", async (sentence) => {
@@ -520,7 +537,7 @@ describe("agents registry", () => {
         };
         const registry = createAgentsRegistry(memoryStore([poisoned]), standings(), presences());
         await registry.init();
-        expect((await registry.setTitle("c1", "Fleet board broadcast · wire", "model"))?.title).toBe("Fleet board broadcast · wire");
+        expect((await registry.setTitle("c1", "Fleet board broadcast", "model"))?.title).toBe("Fleet board broadcast");
     });
 
     it("never lets a plan rename what the user named, and still allows a second rename", async () => {

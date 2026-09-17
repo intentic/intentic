@@ -58,6 +58,20 @@ const sanitizeTitle = (prompt: string): string | undefined => sanitizeLine(promp
 // stored one forfeits its rank so the next honest title replaces it.
 const cannotBeAName = (title: string): boolean => isFailureSentence(title) || isToolCallStandIn(title) || isSelfIdentityAnswer(title);
 
+// Whether an automatic source may overwrite what is stored: it must be a name at all, and must strictly outrank the
+// stored one, whose rank is forfeit when it cannot be a name. A rename ("user") never asks; it always lands.
+const outranksTitle = (
+    entry: { readonly title?: string | undefined; readonly titleSource?: AgentTitleSource | undefined },
+    clean: string,
+    source: AgentTitleSource,
+): boolean => {
+    if (cannotBeAName(clean)) {
+        return false;
+    }
+    const currentRank = entry.title !== undefined && cannotBeAName(entry.title) ? -1 : TITLE_RANK[entry.titleSource ?? "derived"];
+    return TITLE_RANK[source] > currentRank;
+};
+
 // One-line scrub on its own limit (MAX_NOTE_LENGTH), never the title's 80-character card width: sharing that ceiling
 // once truncated changelog entries mid-word. A backstop; the drafter clips on a word boundary before this is reached.
 const sanitizeNote = (note: string): string | undefined => sanitizeLine(note, MAX_NOTE_LENGTH);
@@ -405,7 +419,8 @@ export interface AgentsRegistry {
     readonly recordTier: (id: string, tier: "fast" | "standard") => Promise<void>;
     // Sets the title per the source ranking (AgentTitleSourceSchema): a rename always lands, an automatic source only
     // moves it up. A rejected promotion still returns the entry's current summary, not `undefined`.
-    readonly setTitle: (id: string, title: string, source: AgentTitleSource) => Promise<AgentSummary | undefined>;
+    // `action` is the naming pass's one work word, stored beside the title and never shown; any other source clears it.
+    readonly setTitle: (id: string, title: string, source: AgentTitleSource, action?: string) => Promise<AgentSummary | undefined>;
     // Records what the landed work did, as a commit subject; no ranking, the newest land simply describes the most
     // current claim. Broadcast so the Changes panel picks it up immediately.
     readonly setLandedSubject: (id: string, draft: { subject: string; note?: string; breaking?: string }) => Promise<void>;
@@ -559,6 +574,7 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
             ...opt("startedBy", entry.startedBy),
             ...(entry.forkedFrom !== undefined ? { forkedFrom: entry.forkedFrom } : {}),
             ...(entry.title !== undefined ? { title: entry.title } : {}),
+            ...opt("titleAction", entry.titleAction),
             ...(entry.model !== undefined ? { model: entry.model } : {}),
             ...(entry.effort !== undefined ? { effort: entry.effort } : {}),
             ...(entry.thinking !== undefined ? { thinking: entry.thinking } : {}),
@@ -637,25 +653,20 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
     let writes: Promise<unknown> = Promise.resolve();
     // The one place the title-rank comparison is applied, so every caller agrees on who may rename what. A rename
     // always lands, even a second one; anything else must strictly outrank what's there.
-    const promoteTitle = (id: string, title: string | undefined, source: AgentTitleSource): boolean => {
+    const promoteTitle = (id: string, title: string | undefined, source: AgentTitleSource, action?: string): boolean => {
         const entry = entryOf(id);
         const clean = title === undefined ? undefined : sanitizeTitle(title);
         if (entry === undefined || clean === undefined) {
             return false;
         }
-        // A failure sentence or tool-call stand-in is never a name, however it arrived; refused here, and a stored one
-        // loses its rank (see cannotBeAName).
-        if (source !== "user" && cannotBeAName(clean)) {
+        if (source !== "user" && !outranksTitle(entry, clean, source)) {
             return false;
         }
-        const currentRank = entry.title !== undefined && cannotBeAName(entry.title) ? -1 : TITLE_RANK[entry.titleSource ?? "derived"];
-        if (source !== "user" && TITLE_RANK[source] <= currentRank) {
+        if (entry.title === clean && entry.titleSource === source && entry.titleAction === action) {
             return false;
         }
-        if (entry.title === clean && entry.titleSource === source) {
-            return false;
-        }
-        replace({ ...entry, title: clean, titleSource: source });
+        // Assigned, not spread over: a title from a source that names no action loses the previous one's category.
+        replace({ ...entry, title: clean, titleSource: source, titleAction: action });
         return true;
     };
 
@@ -917,11 +928,11 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
             replace({ ...entry, tier });
             await persist();
         },
-        setTitle: async (id, title, source) => {
+        setTitle: async (id, title, source, action) => {
             if (entryOf(id) === undefined || sanitizeTitle(title) === undefined) {
                 return undefined;
             }
-            if (promoteTitle(id, title, source)) {
+            if (promoteTitle(id, title, source, action)) {
                 await persist();
                 broadcast();
             }

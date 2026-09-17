@@ -47,6 +47,9 @@ export const PersistedAgentSchema = z.object({
     // Display name, one sanitized line; `titleSource` says how it got there and gates the next promotion.
     title: z.string().optional(),
     titleSource: AgentTitleSourceSchema.optional(),
+    // One action word the naming pass wrote for this title (`fix`, `audit`), split off the name and never displayed;
+    // the board reads it as the kind of work. Cleared whenever the title is replaced from any other source.
+    titleAction: z.string().optional(),
     provider: AgentProviderSchema,
     harness: AgentHarnessSchema,
     // Turn settings last run under; persisted since a client on another device has nowhere else to learn them.

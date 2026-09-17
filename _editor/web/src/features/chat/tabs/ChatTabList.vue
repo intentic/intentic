@@ -267,7 +267,7 @@ const modelOf = (entry: OpenChat): string | undefined => {
     if (model !== null && model !== ``) {
         return modelLabelFor(provider, model);
     }
-    return sessionCategory(tabLabel(conversation)) === undefined ? undefined : providerLabel(provider);
+    return sessionCategory(tabLabel(conversation), agent?.titleAction) === undefined ? undefined : providerLabel(provider);
 };
 
 // Live-line text prefers the registry's activity frames (richer); falls back to the conversation's own
@@ -646,6 +646,7 @@ const keepTab = (event: Event, id: string): void => {
                             v-else
                             :data-chat-tab="c.conversationId"
                             :title="tabLabel(c)"
+                            :title-action="agent?.titleAction"
                             :needle="needle"
                             :match-case="matchCase"
                             :provider="agent?.provider ?? c.provider.value"
@@ -767,6 +768,7 @@ const keepTab = (event: Event, id: string): void => {
                         v-for="agent in notOpen"
                         :key="agent.id"
                         :title="agent.title ?? 'Untitled agent'"
+                        :title-action="agent.titleAction"
                         :needle="needle"
                         :match-case="matchCase"
                         :provider="agent.provider"

@@ -12,6 +12,8 @@ const EXCERPT_CAP = 4_000;
 
 const excerpt = (text: string): string => (text.length <= EXCERPT_CAP ? text : `${text.slice(0, EXCERPT_CAP)}\n… (truncated)`);
 
+// The action word is asked for but never displayed: it is split off (splitTitleAction) and stored as the session's
+// work category, which is what tints the board's cards. Only the subject is shown.
 // Subject before action, since a board is scanned down its left edge and the discriminating word must lead, not a verb.
 // Five words is the ceiling, and the examples are kept just as short, or the model matches their length instead.
 const namePrompt = (prompt: string): string =>
@@ -54,6 +56,9 @@ const LABEL = /^(?:title|name|session\s*(?:title|name)?)\s*:\s*/i;
 // Spaced separator or bullet before one word only, so a hyphenated noun like `Auth refresh-loop` is not split.
 const TAIL_SEPARATOR = /(?:\s+[|•·—–-]+\s+|\s*[|•·]\s*)(\S+)$/;
 
+// The normalized tail this pass writes, cut off the displayed name: one word after a spaced middle dot.
+const ACTION_TAG = /\s+·\s+([\w-]+)$/;
+
 export const cleanSessionTitle = (reply: string): string => {
     const first = reply
         .trim()
@@ -68,6 +73,17 @@ export const cleanSessionTitle = (reply: string): string => {
     // Symmetric surrounding quotes only: an apostrophe or quoted term inside the name is kept.
     const unquoted = /^(["'`])(.*)\1$/.exec(bare);
     return (unquoted?.[2] ?? bare).trim().replace(TAIL_SEPARATOR, ` · $1`);
+};
+
+// Subject and action apart: the subject alone is the displayed title, the action is stored beside it and only ever
+// read as a work category (the board's tint and glyph). A tag with nothing before it is the whole name, not an action.
+export const splitTitleAction = (name: string): { readonly title: string; readonly action?: string } => {
+    const tagged = ACTION_TAG.exec(name);
+    if (tagged === null) {
+        return { title: name };
+    }
+    const subject = name.slice(0, tagged.index).trim();
+    return subject === `` ? { title: name } : { title: subject, action: tagged[1]!.toLowerCase() };
 };
 
 // Past this many words the reply ignored the task; refused rather than truncated (role-answer.ts).
@@ -89,11 +105,12 @@ export const nameAgentTitle = async (services: Services, conversationId: string,
     if ((entry.titleSource ?? "derived") !== "derived" && !poisoned) {
         return;
     }
-    const { value: title } = await askRoleModel(
+    const { value: named } = await askRoleModel(
         services,
         `session-title`,
         { prompt: namePrompt(prompt), answer: titleAnswer },
         new AbortController().signal,
     );
-    await services.agents.setTitle(conversationId, title, "model");
+    const { title, action } = splitTitleAction(named);
+    await services.agents.setTitle(conversationId, title, "model", action);
 };

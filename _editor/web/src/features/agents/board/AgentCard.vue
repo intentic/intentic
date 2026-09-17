@@ -101,7 +101,7 @@ const emit = defineEmits<{
 const { mobile } = useDevice();
 const meta = computed(() => agentStatusMeta(props.agent.status));
 // Identity tile's category, undefined for an unreadable title; read here too since the tooltip is this card's.
-const category = computed(() => sessionCategory(props.agent.title));
+const category = computed(() => sessionCategory(props.agent.title, props.agent.titleAction));
 const lane = computed(() => laneOf(props.agent));
 // Sandbox chip contents, or nothing when this is the box the app is already pointed at.
 // Read live from the roster rather than passed in, since the owner can rename or re-image a sandbox at any time.
@@ -445,7 +445,7 @@ const grab = (event: PointerEvent): void => {
                     class="absolute inset-0"
                     :class="rim.tone"
                 />
-                <IdentityTile :title="agent.title" :provider="agent.provider" class="h-5.5 w-5.5 text-xs" />
+                <IdentityTile :title="agent.title" :action="agent.titleAction" :provider="agent.provider" class="h-5.5 w-5.5 text-xs" />
             </span>
             <input
                 v-if="edit.editing"

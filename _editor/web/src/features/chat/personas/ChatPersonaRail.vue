@@ -244,6 +244,7 @@ const sessionsOf = (row: PersonaRow) =>
                         v-for="entry in sessionsOf(row)"
                         :key="entry.conversation.conversationId"
                         :title="tabLabel(entry.conversation)"
+                        :title-action="entry.agent?.titleAction"
                         :provider="entry.agent?.provider ?? entry.conversation.provider.value"
                         :status="statusOf(entry)"
                         :live="liveOf(entry)"

@@ -5,12 +5,13 @@ import { computed } from "vue";
 import ProviderLogo from "../../chat/accounts/ProviderLogo.vue";
 import { sessionCategory } from "../../../app/sessionCategory";
 
-const props = defineProps<{ title: string | undefined; provider: AgentProvider }>();
-const category = computed(() => sessionCategory(props.title));
+// `action` is the session's stored work word (AgentSummary.titleAction); rows that have none read the title instead.
+const props = defineProps<{ title: string | undefined; provider: AgentProvider; action?: string }>();
+const category = computed(() => sessionCategory(props.title, props.action));
 </script>
 
 <template>
-<!-- ROUND, because this mark is worn inside a ring. -->
+    <!-- ROUND, because this mark is worn inside a ring. -->
     <span
         class="flex shrink-0 items-center justify-center rounded-full"
         :class="category === undefined ? `border border-line bg-content/5 text-muted` : `category-tile`"

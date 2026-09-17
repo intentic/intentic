@@ -15,6 +15,9 @@ const props = defineProps<{
     needle?: string;
     matchCase?: boolean;
     provider?: AgentProvider;
+    // The session's stored work word (AgentSummary.titleAction), which tints the identity tile; rows without one
+    // (subagents, personas) let the tile read the title.
+    titleAction?: string;
     // Icon for a row that isn't a session and so has no identity tile.
     icon?: IconName;
     // Spread onto the Icon via v-bind; the host derives it once (agentStatusMeta) rather than field by field.
@@ -84,7 +87,7 @@ const titleRuns = computed(() => markSegments(props.title, props.needle ?? ``, p
                         class="absolute inset-0"
                         :class="rim.tone"
                     />
-                    <IdentityTile v-if="provider !== undefined" :title="title" :provider="provider" class="h-4.5 w-4.5 text-2xs" />
+                    <IdentityTile v-if="provider !== undefined" :title="title" :action="titleAction" :provider="provider" class="h-4.5 w-4.5 text-2xs" />
                     <!-- A row that is not a session (a workflow run, a search hit) wears its glyph on the same disc. -->
                     <span v-else class="flex h-4.5 w-4.5 shrink-0 items-center justify-center rounded-full bg-primary-600/15">
                         <Icon :name="icon!" class="text-2xs" :class="quiet ? 'text-subtle' : 'text-link'" />

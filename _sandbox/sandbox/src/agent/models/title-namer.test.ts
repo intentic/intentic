@@ -1,7 +1,7 @@
 import { beforeEach, expect, type Mock, test, vi } from "vitest";
 import type { Services } from "../../composition.js";
 import { unstubbed } from "@intentic/testing";
-import { cleanSessionTitle, nameAgentTitle } from "./title-namer.js";
+import { cleanSessionTitle, nameAgentTitle, splitTitleAction } from "./title-namer.js";
 
 const ask = vi.fn<() => Promise<{ value: string }>>();
 // Whether a model is set for session titles; false means this pass must ask before spending anything.
@@ -31,8 +31,7 @@ test("keeps quotes that are part of the name", () => {
     expect(cleanSessionTitle(`"Resume with Claude" prompt · remove`)).toBe(`"Resume with Claude" prompt · remove`);
 });
 
-// The separator feeds the browser's action tag (sessionCategory.ts), so it is normalised even when the model already
-// got the name right.
+// The separator is what splitTitleAction cuts on, so it is normalised even when the model already got the name right.
 
 test("normalises whatever separator the model reached for", () => {
     expect(cleanSessionTitle("Sandbox freezes - fix")).toBe("Sandbox freezes · fix");
@@ -45,6 +44,18 @@ test("leaves a hyphenated noun alone", () => {
     // A bare hyphen inside a compound noun must survive; splitting it here would misname the session.
     expect(cleanSessionTitle("Resume-with-Claude prompt · remove")).toBe("Resume-with-Claude prompt · remove");
     expect(cleanSessionTitle("Auth refresh-loop")).toBe("Auth refresh-loop");
+});
+
+// What the session is actually called: the action word is stored beside the title, never displayed in it.
+
+test("splits the action word off the displayed name", () => {
+    expect(splitTitleAction("Sandbox freezes · fix")).toEqual({ title: "Sandbox freezes", action: "fix" });
+    expect(splitTitleAction("Deployments Komodo · Audit")).toEqual({ title: "Deployments Komodo", action: "audit" });
+    // Nothing to split: a name the model wrote without a tag stands whole, and so does a tag with no subject.
+    expect(splitTitleAction("Auth refresh-loop")).toEqual({ title: "Auth refresh-loop" });
+    expect(splitTitleAction("· fix")).toEqual({ title: "· fix" });
+    // Only the last segment is the action; a name with its own separators keeps everything before it.
+    expect(splitTitleAction("Auth · session · refresh")).toEqual({ title: "Auth · session", action: "refresh" });
 });
 
 test("returns empty for a reply with nothing in it", () => {
@@ -96,7 +107,7 @@ test("names a still-derived conversation from the prompt that just opened its tu
         "c1",
         "we should look at the fleet board and figure out why it stops updating",
     );
-    expect(setTitle).toHaveBeenCalledWith("c1", "Fleet board broadcast · wire", "model");
+    expect(setTitle).toHaveBeenCalledWith("c1", "Fleet board broadcast", "model", "wire");
 });
 
 test("leaves a conversation that already answers to a better name alone", async () => {
@@ -122,5 +133,5 @@ test.each(STOLEN_TITLES)("a stored title reading %s counts as no name: the pass 
     const setTitle = vi.fn<Services["agents"]["setTitle"]>();
     ask.mockResolvedValue({ value: "Auth test flakiness · fix" });
     await nameAgentTitle(servicesWith({ title: stolen, titleSource: "model" }, setTitle), "c1", "fix the auth tests");
-    expect(setTitle).toHaveBeenCalledWith("c1", "Auth test flakiness · fix", "model");
+    expect(setTitle).toHaveBeenCalledWith("c1", "Auth test flakiness", "model", "fix");
 });
