@@ -10,7 +10,6 @@ import {
     type DeviceSandboxGroup,
     Icon,
     mirroringOff,
-    Notice,
     type ResourcesAsk,
     Row,
     RowGroup,
@@ -23,6 +22,7 @@ import {
 import { computed, ref } from "vue";
 import { type RouteLocationRaw, RouterLink } from "vue-router";
 import DeviceConcern from "./DeviceConcern.vue";
+import DeviceOpFailure from "./DeviceOpFailure.vue";
 import DeviceRunners from "./DeviceRunners.vue";
 import { boardRoute } from "./deviceLinks";
 import { deviceAgentPanel } from "./deviceAgent";
@@ -245,7 +245,12 @@ const applyReshape = (ask: ResourcesAsk): void => ops.applyReshape(ask);
                     empty="Starting on that device…"
                     note="Runs on that device, and keeps going if you leave this page or the connection drops."
                 />
-                <Notice v-if="ops.failure.value?.key === ops.agentKey(lone)" :of="ops.failure.value.notice" />
+                <DeviceOpFailure
+                    v-if="ops.failure.value?.key === ops.agentKey(lone)"
+                    :of="ops.failure.value.notice"
+                    :command="ops.failure.value.command"
+                    :machine="lone.device.label"
+                />
                 <p v-else-if="ops.outcome.value?.key === ops.agentKey(lone)" class="text-xs text-muted">{{ ops.outcome.value.message }}</p>
             </template>
         </DeviceAgentGroup>
@@ -315,7 +320,12 @@ const applyReshape = (ask: ResourcesAsk): void => ops.applyReshape(ask);
                                 empty="Starting on that device…"
                                 note="Runs on that device, and keeps going if you leave this page or the connection drops."
                             />
-                            <Notice v-if="ops.failure.value?.key === ops.agentKey(environment)" :of="ops.failure.value.notice" />
+                            <DeviceOpFailure
+                                v-if="ops.failure.value?.key === ops.agentKey(environment)"
+                                :of="ops.failure.value.notice"
+                                :command="ops.failure.value.command"
+                                :machine="environment.device.label"
+                            />
                             <p v-else-if="ops.outcome.value?.key === ops.agentKey(environment)" class="text-xs text-muted">{{ ops.outcome.value.message }}</p>
                         </template>
                     </div>
@@ -382,7 +392,12 @@ const applyReshape = (ask: ResourcesAsk): void => ops.applyReshape(ask);
                             </div>
                         </div>
                         <!-- The machine's own answer to a machine-wide click, shown where the click was. -->
-                        <Notice v-if="ops.failure.value?.key === ops.switchKey(environment)" :of="ops.failure.value.notice" />
+                        <DeviceOpFailure
+                            v-if="ops.failure.value?.key === ops.switchKey(environment)"
+                            :of="ops.failure.value.notice"
+                            :command="ops.failure.value.command"
+                            :machine="environment.device.label"
+                        />
                         <p v-else-if="ops.outcome.value?.key === ops.switchKey(environment)" class="text-xs text-muted">{{ ops.outcome.value.message }}</p>
                     </div>
                 </RowNote>
@@ -513,7 +528,12 @@ const applyReshape = (ask: ResourcesAsk): void => ops.applyReshape(ask);
                             empty="Starting on that device…"
                             note="Running on that device. It keeps going even if you leave this page."
                         />
-                        <Notice v-if="ops.failure.value?.key === ops.rowKey(group)" :of="ops.failure.value.notice" />
+                        <DeviceOpFailure
+                            v-if="ops.failure.value?.key === ops.rowKey(group)"
+                            :of="ops.failure.value.notice"
+                            :command="ops.failure.value.command"
+                            :machine="machine.label"
+                        />
                         <p v-else-if="ops.outcome.value?.key === ops.rowKey(group)" class="text-xs text-muted">{{ ops.outcome.value.message }}</p>
                     </template>
                 </DeviceDetail>
@@ -545,7 +565,7 @@ const applyReshape = (ask: ResourcesAsk): void => ops.applyReshape(ask);
                     </template>
                 </Row>
                 <RowNote v-if="ops.failure.value?.key === ops.accessKey(environment)" variant="block">
-                    <Notice :of="ops.failure.value.notice" />
+                    <DeviceOpFailure :of="ops.failure.value.notice" :command="ops.failure.value.command" :machine="environment.device.label" />
                 </RowNote>
                 <RowNote v-else-if="ops.outcome.value?.key === ops.accessKey(environment)">{{ ops.outcome.value.message }}</RowNote>
             </RowGroup>

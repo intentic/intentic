@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
 import type { Device } from "@intentic/sandbox-contract";
-import { Button, ConfirmDialog, DeviceRunLog, Notice, type NoticeModel, RowGroup, RowNote, StatusBadge, ui } from "@intentic/ui";
+import { Button, ConfirmDialog, DeviceRunLog, type NoticeModel, RowGroup, RowNote, StatusBadge, ui } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
+import DeviceOpFailure from "./DeviceOpFailure.vue";
+import { runnerFallback } from "./deviceFallback";
 import { createRunner, removeRunner, syncRunnerSettings, updateRunner, useRunners } from "./useRunners";
 import { useHubWork } from "../../../shell/hub/hubWork";
 
@@ -23,7 +25,8 @@ const WORKING: Record<"create" | "remove" | "update", string> = { create: `Addin
 // One flow at a time on one machine, same rule the sandbox rows above follow.
 const busy = ref<string | undefined>();
 const lines = ref<string[]>([]);
-const failure = ref<NoticeModel | undefined>();
+// The notice, and the line that does the same thing on the machine itself when this route to it is shut.
+const failure = ref<{ notice: NoticeModel; command?: string } | undefined>();
 const done = ref<string | undefined>();
 
 const facts = (runner: { online: boolean; facts?: { cpus: number; memoryMb: number; load: number } }): string => {
@@ -58,7 +61,8 @@ const sync = async (id: string): Promise<void> => {
     try {
         await syncRunnerSettings(id);
     } catch (error) {
-        failure.value = noticeFrom(error, `The settings didn't reach that runner.`);
+        // No line of its own: a runner's settings are pushed over this door and have no CLI verb behind them.
+        failure.value = { notice: noticeFrom(error, `The settings didn't reach that runner.`) };
     } finally {
         syncing.value = undefined;
         refetch();
@@ -104,7 +108,7 @@ const execute = async (op: "create" | "remove" | "update", name: string): Promis
         const flow = { create: createRunner, remove: removeRunner, update: updateRunner }[op];
         done.value = await flow(device.hostId, name, onLine);
     } catch (error) {
-        failure.value = noticeFrom(error, `That didn't work on this device.`);
+        failure.value = { notice: noticeFrom(error, `That didn't work on this device.`), command: runnerFallback(op, name) };
     } finally {
         busy.value = undefined;
         endMark();
@@ -220,7 +224,7 @@ const add = async (): Promise<void> => {
                 empty="Starting on that device…"
                 note="Running on that device. It keeps going even if you leave this page."
             />
-            <Notice v-if="failure" :of="failure" />
+            <DeviceOpFailure v-if="failure" :of="failure.notice" :command="failure.command" :machine="device.label" />
             <p v-else-if="done" class="text-xs text-muted">{{ done }}</p>
         </RowNote>
 

@@ -3,6 +3,7 @@ import type { DeviceSandboxGroup, NoticeModel, ResourcesAsk, SandboxVerb } from 
 import { sandboxVerbPrompt, VERB_LABEL } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
 import { computed, type ComputedRef, type Ref, ref, watch } from "vue";
+import { agentFallback, sandboxFallback, syncFallback } from "./deviceFallback";
 import { type DeviceRow, isSelfMachine, type MachineRow, managerOf } from "./deviceRows";
 import { manageDeviceSandbox, revokeSyncDevice, runDeviceAgentFlow, runDeviceCommand } from "./useDevices";
 import { useSandbox } from "../client/useSandbox";
@@ -34,7 +35,7 @@ const SEVERING = new Set<DeviceSandboxOp>([`stop`, `restart`, `update`, `rebuild
 // Everything this page can do to one machine's file sync: the switches over a pairing that exists, and the one that
 // starts one. Enrolling belongs with them rather than in the add-a-device dialog — a folder on a machine already
 // connected is a toggle on its row, not a one-liner to paste.
-type SyncCommand = DeviceSyncSwitch | "sync-install" | "sync-clean";
+export type SyncCommand = DeviceSyncSwitch | "sync-install" | "sync-clean";
 
 // Pause/resume and mirror on/off are one button wearing two labels; the label flips on the next report, not
 // the click, so a spinner must answer to either direction.
@@ -117,6 +118,17 @@ export interface ActPrompt {
     readonly destructive: boolean;
 }
 
+/**
+ * One press that didn't work, filed under the key of the control that was pressed. `command` is the same act as a
+ * line to type on the machine itself, offered because the reason a device press fails is usually that this route to
+ * it is shut — a switch it won't grant, an agent too old for the verb — and pressing again can't open it.
+ */
+export interface OpFailure {
+    readonly key: string;
+    readonly notice: NoticeModel;
+    readonly command?: string;
+}
+
 export interface DeviceOps {
     /** True while anything at all is running on this machine; every button reads it as `disabled`. */
     readonly working: ComputedRef<boolean>;
@@ -126,7 +138,7 @@ export interface DeviceOps {
     readonly switchKey: (environment: DeviceRow) => string;
     readonly agentKey: (environment: DeviceRow) => string;
     readonly accessKey: (environment: DeviceRow) => string;
-    readonly failure: Ref<{ key: string; notice: NoticeModel } | undefined>;
+    readonly failure: Ref<OpFailure | undefined>;
     readonly outcome: Ref<{ key: string; message: string } | undefined>;
 
     // Container verbs, through whichever door is open.
@@ -198,7 +210,7 @@ export function useDeviceOps(machine: () => MachineRow, refetch: () => void): De
     const revoking = ref(false);
     const working = computed(() => busy.value !== undefined || syncBusy.value !== undefined || agentOp.value !== undefined || revoking.value);
 
-    const failure = ref<{ key: string; notice: NoticeModel } | undefined>();
+    const failure = ref<OpFailure | undefined>();
     const outcome = ref<{ key: string; message: string } | undefined>();
     // Keyed by row, so leaving one row's log on screen while reading another's is fine.
     const runLines = ref<Record<string, string[]>>({});
@@ -268,7 +280,7 @@ export function useDeviceOps(machine: () => MachineRow, refetch: () => void): De
             // A log tail's result line would only restate the pane above it, so it's left to be the answer.
             outcome.value = verb === `logs` ? undefined : { key, message };
         } catch (error) {
-            failure.value = { key, notice: noticeFrom(error, `That didn't work on this device.`) };
+            failure.value = { key, notice: noticeFrom(error, `That didn't work on this device.`), command: sandboxFallback(verb, slug, resources) };
             if (verb === `logs`) {
                 openLog.value = undefined;
             }
@@ -361,9 +373,15 @@ export function useDeviceOps(machine: () => MachineRow, refetch: () => void): De
             const result = await runDeviceCommand(hostId, command, { sandboxId, ...folder });
             // The machine's own sentence either way: a refusal names the switch to flip rather than throwing.
             outcome.value = result.ok ? { key, message: result.message } : undefined;
-            failure.value = result.ok ? undefined : { key, notice: { tone: `warning`, title: COMMAND_REFUSAL[command], detail: result.message } };
+            failure.value = result.ok
+                ? undefined
+                : {
+                      key,
+                      notice: { tone: `warning`, title: COMMAND_REFUSAL[command], detail: result.message },
+                      command: syncFallback(command, sandboxId),
+                  };
         } catch (error) {
-            failure.value = { key, notice: noticeFrom(error, COMMAND_UNREACHED[command]) };
+            failure.value = { key, notice: noticeFrom(error, COMMAND_UNREACHED[command]), command: syncFallback(command, sandboxId) };
         } finally {
             syncBusy.value = undefined;
             endMark();
@@ -412,7 +430,7 @@ export function useDeviceOps(machine: () => MachineRow, refetch: () => void): De
         } catch (error) {
             // A refusal, not a lost connection: the client only throws for a frame the device actually sent.
             // The waiting note is dropped, since nothing is on its way back.
-            failure.value = { key, notice: noticeFrom(error, `That device wouldn't update its agent.`) };
+            failure.value = { key, notice: noticeFrom(error, `That device wouldn't update its agent.`), command: agentFallback(op) };
             waiting.value = undefined;
         } finally {
             agentOp.value = undefined;
