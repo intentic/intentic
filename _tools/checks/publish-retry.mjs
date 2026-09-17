@@ -37,6 +37,14 @@ const SUBJECTS = [
                 'docker: Error response from daemon: failed to resolve reference "ghcr.io/intentic/sandbox:1.254.1-amd64": failed to do request: Head "https://ghcr.io/v2/intentic/sandbox/manifests/1.254.1-amd64": dialing ghcr.io:443 container via direct connection because Docker Desktop has no HTTPS proxy: connecting to ghcr.io:443: dial tcp 140.82.121.33:443: connectex: A connection attempt failed because the connected party did not properly respond after a period of time.',
             ],
             ["the same dial failure spelled the POSIX way", "failed to resolve reference: dial tcp 140.82.121.33:443: connect: connection timed out"],
+            [
+                "a blob commit the registry never answered (killed images-platform on 213a4477)",
+                'failed commit on ref "layer-sha256:e7dd12f8e8a7c17dbb7d2f4da15c9d6c14a110addab135148bd6992972ef54df": failed to do request: Put "https://ghcr.io/v2/intentic/ingress/blobs/upload/4.c1d01de0-4ff9-4e47-aa8b-3326289e31d3?digest=sha256%3Ae7dd12f8e8a7c17dbb7d2f4da15c9d6c14a110addab135148bd6992972ef54df": net/http: timeout awaiting response headers',
+            ],
+            [
+                "the same unanswered request on the client's own deadline",
+                'failed to do request: Put "https://ghcr.io/v2/intentic/api/manifests/latest": net/http: request canceled (Client.Timeout exceeded while awaiting headers)',
+            ],
         ],
         // A real permission_denied opens with the same words as a throttled one; only the body tells them apart.
         failAtOnce: [
@@ -53,6 +61,9 @@ const SUBJECTS = [
                 "a tag that is not there",
                 'Error response from daemon: failed to resolve reference "ghcr.io/intentic/sandbox:no-such-tag": ghcr.io/intentic/sandbox:no-such-tag: not found',
             ],
+            // Turbo tears down the sibling tasks of one that failed, and their cancellation reads like a timeout at a
+            // glance. Retrying one waits out a clock that has already stopped, three times, for a build nobody wants.
+            ["a sibling task torn down", "ERROR: failed to build: failed to solve: Canceled: context canceled"],
         ],
         // A push GHCR drops once and accepts on retry is a green release; a broken build fails on the first attempt.
         // Attempts are counted on disk, since `tee` puts the counted command in a subshell.

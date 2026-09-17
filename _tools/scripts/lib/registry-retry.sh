@@ -48,6 +48,20 @@
 # never on the `failed to resolve reference` around it: a tag that genuinely is not there says the same words
 # and must fail on the first attempt.
 #
+# AND SOMETIMES IT TAKES THE REQUEST AND NEVER ANSWERS IT. A connect that completes is not a reply: the blob
+# goes up, the PUT that commits it is sent, and ghcr.io returns no response headers at all until the client's
+# own deadline fires:
+#
+#   failed commit on ref "layer-sha256:e7dd12f8e8a7...": failed to do request:
+#   Put "https://ghcr.io/v2/intentic/ingress/blobs/upload/4.c1d01de0-...?digest=sha256%3Ae7dd12f8e8a7...":
+#   net/http: timeout awaiting response headers
+#
+# That is what killed images-platform on 213a4477, on the ingress push, with every other layer of it already
+# "Layer already exists" and the web image pushed clean seconds before. A deadline is not a verdict — the
+# registry never said anything that could be wrong — so it retries like the dropped session above, and the
+# blobs that landed are skipped on the way back through. Matched on the timeout wording only, never on the
+# `failed commit on ref` or `failed to do request` wrapper, which a real refusal arrives in too.
+#
 # ONLY THAT CLASS OF FAILURE RETRIES. A broken Dockerfile, a missing build context or a token that genuinely
 # lacks `packages: write` must fail on the FIRST attempt — three silent backoffs before the same error is how
 # a five-minute red pipeline becomes a twenty-minute one that reads like an infrastructure flake. So the
@@ -87,6 +101,8 @@ registry_retry_transient() {
         -e 'connection reset by peer' \
         -e 'unexpected eof' \
         -e '(tls handshake|i/o) timeout' \
+        -e 'timeout awaiting response headers' \
+        -e 'client\.timeout exceeded' \
         -e 'connectex: a connection attempt failed' \
         -e 'dial tcp.*(connection refused|connection timed out|no route to host)' \
         -- "$1"
