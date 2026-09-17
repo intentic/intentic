@@ -27,8 +27,15 @@ environment's key IS the card id (`rog`), by definition rather than as a fallbac
 install is therefore addressed exactly as it always was, and `HostSummary.environments` — native first, each with its
 own liveness, version and facts — is what a page draws a row per and what a command picks from.
 
-The old fold (`machinesOf` over device rows, joined on hostname plus WSL) remains only for a machine that reaches this
-sandbox WITHOUT a card, which after stage 3 of this work is nothing at all.
+The device list is built per CONNECTION rather than per card: `hostConnections` expands each summary's environments
+into one entry each, so a distro is read through its own socket and its row carries its own `hostId`, version,
+platform and facts. Anything else leaves the side named after the card as the machine's only door — which is what left
+a distro's agent with no way to be updated from here while the Windows side beside it had a button, and the two drifted
+versions apart. The fold (`machinesOf`, hostname plus WSL) is what puts those rows back together on screen, and it
+still covers a machine that reaches this sandbox WITHOUT a card at all.
+
+Environments are listed from the enrollments as well as from the hub: hub liveness resets when the daemon restarts, so
+a distro that has not dialled in since must still read as a sleeping side of its computer rather than vanish from it.
 
 ## 2. Why hostname plus WSL is the join, and not hostname alone
 
@@ -67,7 +74,16 @@ sandbox list because one engine serves every door: container verbs go through th
 through the environment whose report carries the pairing, and a command written for a path — the dev rebuild and the
 dev reload, `sh` lines that `cd` into the checkout — through the environment that holds that path (`hostHoldingPath`),
 reached directly where its own card is connected and by crossing from the Windows side where it is not. The first
-open door is as often the Windows one, which answers a `sh` line with a parse error. The Windows side's distro listing is what makes the second
+open door is as often the Windows one, which answers a `sh` line with a parse error.
+
+Each environment's row carries its own agent's two verbs, because each side is a separate install of the binary: a
+distro can sit several releases behind the Windows install hosting it and nothing else on the machine says so. Above
+them the group carries one **Update all agents**, which runs the upgrade on every reachable side in turn — one press,
+since the owner connected a computer; in turn rather than at once, since each flow ends by taking down the socket
+carrying it and the read behind it is what the next side's state comes from. A side that refuses is left saying so
+under its own row and the rest still run.
+
+The Windows side's distro listing is what makes the second
 environment discoverable from the first: a distro not yet connected is a Connect link into the Linux card's add form,
 named `<pc>-wsl-<distro>` so the two ids read as one PC everywhere, and that name is what flips the Linux connect
 dialog to its PowerShell form.

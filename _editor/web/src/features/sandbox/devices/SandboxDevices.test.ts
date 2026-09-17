@@ -34,6 +34,12 @@ vi.mock(`../../agents/fleet/agentActions`, () => ({ startAgent: (prompt?: string
 // Container verbs, recorded the same way: which op left for which machine, and for `reshape`, what the form
 // asked for.
 const verbCalls: { hostId: string; slug: string; op: string; resources?: unknown }[] = [];
+// The agent's own flow, recorded rather than streamed: which connection was asked to update, and in what order, which
+// is the whole of what a machine-wide press decides.
+const agentCalls: { hostId: string; op: string }[] = [];
+// What each side answers the flow with; the default is an ordinary update, and a test that wants a refusal replaces it.
+const AGENT_UPDATED = { message: `Upgraded the agent: 1.183.0 → 1.186.0.`, settled: true };
+let agentAnswer: (hostId: string) => Promise<{ message: string | undefined; settled: boolean }> = () => Promise.resolve(AGENT_UPDATED);
 vi.mock(`./useDevices`, async () => {
     // deviceQuiet is real, so a row's freshness reads the same rule the app uses.
     const real = await import(`./useDevices`);
@@ -51,6 +57,11 @@ vi.mock(`./useDevices`, async () => {
         revokeSyncDevice: (machine: string) => {
             revokeCalls.push(machine);
             return Promise.resolve();
+        },
+        runDeviceAgentFlow: (hostId: string, op: string, payload?: { onLine?: (line: string) => void }) => {
+            agentCalls.push({ hostId, op });
+            payload?.onLine?.(`Downloading the current agent…`);
+            return agentAnswer(hostId);
         },
     };
 });
@@ -191,6 +202,8 @@ afterEach(() => {
     owner.value = true;
     mirrorCalls.length = 0;
     verbCalls.length = 0;
+    agentCalls.length = 0;
+    agentAnswer = () => Promise.resolve(AGENT_UPDATED);
     revokeCalls.length = 0;
     pairingsAsked.length = 0;
     startedTurns.length = 0;
@@ -1339,10 +1352,12 @@ const windowsSide = (): Device => ({
     report: { hostname: `rog`, os: `win32`, pairings: [], ports: [], agent: { running: true, installed: `1.183.0` }, capturedAt: Date.now() },
 });
 
+// The distro's own connection of the PC's card (`<card>::wsl:<distro>`, hosts.ts): its own agent, its own socket, its
+// own version, admitted on the card's switches.
 const distroSide = (): Device => ({
-    key: `rog-wsl-arch`,
-    label: `rog-wsl-arch`,
-    hostId: `rog-wsl-arch`,
+    key: `rog:wsl`,
+    label: `rog::wsl:Arch`,
+    hostId: `rog::wsl:Arch`,
     online: true,
     platform: `linux`,
     sync: paired(`sync`, `rog`),
@@ -1359,11 +1374,10 @@ const distroSide = (): Device => ({
     },
 });
 
+// ONE CARD, not two: the owner connected a computer, and each OS install on it is a connection of that card. Both
+// rows read their switches through it.
 const bothDoors = (): void => {
-    capabilities.value = [
-        { id: `rog`, kind: `host`, config: { platform: `windows`, shell: `on`, sandboxes: `on` } },
-        { id: `rog-wsl-arch`, kind: `host`, config: { platform: `linux`, shell: `on`, sandboxes: `on` } },
-    ];
+    capabilities.value = [{ id: `rog`, kind: `host`, config: { platform: `windows`, shell: `on`, sandboxes: `on` } }];
 };
 
 it(`draws a Windows PC and its distro as one card, with the container once and each side's own state`, async () => {
@@ -1401,8 +1415,8 @@ it(`opens the PC as one page: an environment row per side, the sandbox once, and
     expect(text).toContain(`Environments on this device`);
     expect(text).toContain(`Microsoft Windows 11 Home`);
     expect(text).toContain(`Arch Linux on WSL`);
-    // Each side's door, shell and home, so the ids the tools are named after are on the page.
-    expect(text).toContain(`rog-wsl-arch`);
+    // Each side's door, shell and home, so the id every command is addressed to is on the page.
+    expect(text).toContain(`rog::wsl:Arch`);
     expect(text).toContain(`PowerShell 7`);
     expect(text).toContain(`/usr/bin/zsh`);
     // The sandbox list is the machine's, drawn once, with the distro's folder under it.
@@ -1410,7 +1424,7 @@ it(`opens the PC as one page: an environment row per side, the sandbox once, and
     expect(disclosures(el)).toHaveLength(1);
     // The Windows side's distros: one already connected as a door, one offered.
     expect(text).toContain(`WSL distros on this PC`);
-    expect(text).toContain(`connected as rog-wsl-arch`);
+    expect(text).toContain(`connected as rog::wsl:Arch`);
     expect(text).toContain(`Ubuntu`);
     expect(labels(el)).toContain(`Connect it`);
     // Two agents, two Update buttons: each side runs its own process.
@@ -1428,5 +1442,52 @@ it(`sends a container verb through the Windows door and a folder verb through th
     await openRow(el, `work`);
     [...el.querySelectorAll(`button`)].find((button) => button.textContent?.trim() === `Pause syncing`)?.click();
     await nextTick();
-    expect(mirrorCalls).toEqual([{ hostId: `rog-wsl-arch`, command: `sync-pause`, sandboxId: `work` }]);
+    expect(mirrorCalls).toEqual([{ hostId: `rog::wsl:Arch`, command: `sync-pause`, sandboxId: `work` }]);
+});
+
+// THE ERRAND THIS GROUP EXISTS FOR. Windows and the distro on it hold separate agent binaries, so a computer whose
+// Windows side was updated and whose distro was not is the ordinary outcome of a per-row press. One press updates every
+// side, in turn — each flow ends by taking its own socket down, so they cannot overlap.
+it(`updates every environment of one computer from a single press, native side first`, async () => {
+    bothDoors();
+    const el = mount([distroSide(), windowsSide()]);
+    await nextTick();
+    [...el.querySelectorAll(`button`)].find((button) => button.textContent?.trim() === `Update all agents`)?.click();
+    await vi.waitFor(() => expect(agentCalls).toHaveLength(2));
+    expect(agentCalls).toEqual([
+        { hostId: `rog`, op: `upgrade` },
+        { hostId: `rog::wsl:Arch`, op: `upgrade` },
+    ]);
+    await nextTick();
+    // Each side's own log, under its own row: a machine-wide press is several updates, and what each answered is
+    // the thing the reader came for.
+    expect((el.textContent ?? ``).match(/Downloading the current agent…/g)).toHaveLength(2);
+});
+
+// ONE PRESS, TWO ANSWERS. The page keeps one slot for what a control answered, and a machine-wide update fills it once
+// per side: without an answer per row, the side asked first goes quiet and the reader is told about half of what they
+// pressed.
+it(`states each side's own refusal when a machine-wide update is turned down twice`, async () => {
+    bothDoors();
+    agentAnswer = (hostId) => Promise.reject(new Error(`"Run commands" is off for ${hostId}.`));
+    const el = mount([distroSide(), windowsSide()]);
+    await nextTick();
+    [...el.querySelectorAll(`button`)].find((button) => button.textContent?.trim() === `Update all agents`)?.click();
+    await vi.waitFor(() => expect(agentCalls).toHaveLength(2));
+    await vi.waitFor(() => expect(el.textContent ?? ``).toContain(`"Run commands" is off for rog::wsl:Arch.`));
+    expect(el.textContent ?? ``).toContain(`"Run commands" is off for rog.`);
+});
+
+// A side that cannot be asked has no button of its own, and a computer with one reachable side has nothing wider to
+// say than that row's own Update.
+it(`offers no machine-wide update when only one side can be asked`, async () => {
+    bothDoors();
+    const sleepingDistro = { ...distroSide(), online: false, gap: `offline` as const };
+    const el = mount([sleepingDistro, windowsSide()]);
+    await nextTick();
+    // The group itself is on screen, so the absence below is a control that was not offered rather than a page that
+    // did not draw.
+    expect(el.textContent ?? ``).toContain(`Environments on this device`);
+    expect(labels(el).filter((label) => label === `Update agent`)).toHaveLength(1);
+    expect(labels(el)).not.toContain(`Update all agents`);
 });

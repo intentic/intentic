@@ -3,6 +3,7 @@ import {
     HOST_HEARTBEAT_MS,
     HOST_NATIVE_ENVIRONMENT,
     hostCardOf,
+    hostConnectionKey,
     type hostContract,
     hostEnvironmentOf,
     type HostEnvironment,
@@ -66,11 +67,13 @@ export const HOST_PEER: PeerDoor<HostHello, HostAnnounced, Record<never, never>>
 const byEnvironment = (a: HostEnvironment, b: HostEnvironment): number =>
     Number(a.key !== HOST_NATIVE_ENVIRONMENT) - Number(b.key !== HOST_NATIVE_ENVIRONMENT) || a.key.localeCompare(b.key);
 
-// Every environment of one machine, from what the hub knows: its native connection (always listed, offline until it
-// connects once) plus every sibling that has held a socket. A card is a computer, so a card with nothing connected is
-// still a computer with one environment nobody has reached.
-const environmentsOf = (services: Services, card: string): HostEnvironment[] => {
-    const keys = new Set([card, ...services.hostHub.known().filter((key) => hostCardOf(key) === card)]);
+// Every environment of one machine: its native connection (always listed, offline until it connects once), every
+// sibling that has held a socket, and every sibling this sandbox has an enrollment for. Enrollments are read because
+// hub liveness resets on a daemon restart — without them a distro that has not dialled in yet would vanish from its own
+// computer rather than reading as asleep. A card is a computer, so a card with nothing connected is still a computer
+// with one environment nobody has reached.
+const environmentsOf = (services: Services, card: string, enrolled: readonly string[]): HostEnvironment[] => {
+    const keys = new Set([card, ...[...services.hostHub.known(), ...enrolled].filter((key) => hostCardOf(key) === card)]);
     return [...keys]
         .map((key) => {
             const state = services.hostHub.state(key);
@@ -87,12 +90,19 @@ const environmentsOf = (services: Services, card: string): HostEnvironment[] => 
 
 // The owner's view of their machines: each host capability plus whatever the hub currently knows. Enrollment state must
 // distinguish "added but never connected" from "connected but asleep".
-export const hostSummaries = async (services: Services): Promise<HostSummary[]> =>
-    (await services.capabilities.list()).flatMap((capability): HostSummary[] => {
+export const hostSummaries = async (services: Services): Promise<HostSummary[]> => {
+    const cards = await services.capabilities.list();
+    // A card is what makes a machine a machine, so with none there is nothing for an enrollment to be an environment
+    // OF, and the store is not read at all — the ordinary state of a sandbox nobody has connected a computer to.
+    if (!cards.some((capability) => capability.kind === "host")) {
+        return [];
+    }
+    const enrolled = (await services.hosts.list()).map((pairing) => pairing.id);
+    return cards.flatMap((capability): HostSummary[] => {
         if (capability.kind !== "host") {
             return [];
         }
-        const environments = environmentsOf(services, capability.id);
+        const environments = environmentsOf(services, capability.id, enrolled);
         // The native environment leads the list, and its state is the machine's own: every reader that asks whether
         // "this device" is online means the side named after the card.
         const native = environments[0];
@@ -108,6 +118,28 @@ export const hostSummaries = async (services: Services): Promise<HostSummary[]> 
             },
         ];
     });
+};
+
+// A distro is a Linux install that happens to sit on a Windows PC: its own platform, not its card's, so every rule
+// reading a row's platform (which installer re-connects it, whether two doors can be one environment) is answered
+// about the environment rather than about the machine hosting it.
+const environmentPlatform = (card: string, environment: string): string => (environment.startsWith("wsl:") ? "linux" : card);
+
+// The machines as the device list addresses them: one entry per ENVIRONMENT, keyed by its own connection. Each holds
+// its own agent binary, its own socket and its own version, so each is asked for its own reading and offered its own
+// verbs; folding them into the card's native side is what left a distro's agent with no door to update through.
+export const hostConnections = (summaries: readonly HostSummary[]): HostSummary[] =>
+    summaries.flatMap((summary) =>
+        summary.environments.map((environment) => ({
+            id: hostConnectionKey(summary.id, environment.key),
+            platform: environmentPlatform(summary.platform, environment.key),
+            environments: [environment],
+            online: environment.online,
+            ...(environment.version === undefined ? {} : { version: environment.version }),
+            ...(environment.facts === undefined ? {} : { facts: environment.facts }),
+            ...(environment.lastSeen === undefined ? {} : { lastSeen: environment.lastSeen }),
+        })),
+    );
 
 // A card is the whole of a device's grant, so an enrollment outliving one is a credential nothing lists and nothing can
 // withdraw: dropped with the rest of that machine's access. A carded device is left alone, since its card owns it.

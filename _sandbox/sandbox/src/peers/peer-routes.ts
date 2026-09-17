@@ -270,7 +270,9 @@ export const createPeerRoutes = <
             }
             const id = c.req.query("id") ?? "";
             if (door.scopesKind !== undefined) {
-                if ((await scopesOf(services, door.scopesKind, id)) === undefined) {
+                // Through the card, as admission is: one environment of a machine is a connection of the machine's own
+                // card, so re-pairing a distro is the same grant as re-pairing the PC it runs on.
+                if ((await scopesOf(services, door.scopesKind, door.cardOf?.(id) ?? id)) === undefined) {
                     return c.json({ error: `no connected-${door.noun} capability with that id` }, 404);
                 }
             } else if (id === "") {

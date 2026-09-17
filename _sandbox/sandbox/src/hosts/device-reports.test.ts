@@ -4,6 +4,7 @@ import {
     type DeviceReport,
     type DeviceSandboxFlow,
     HOST_NATIVE_ENVIRONMENT,
+    hostConnectionKey,
     hostRunningSandbox,
 } from "@intentic/sandbox-contract";
 import { sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
@@ -300,6 +301,8 @@ const fakeServices = (id: string, mcp: (call: FakeCall) => Promise<unknown>): { 
         syncFleet: () => enrolledFleet(NO_HISTORY),
         perf: { track: async <T>(_op: string, _fields: unknown, run: () => Promise<T>): Promise<T> => await run() },
         capabilities: { list: async () => [{ kind: "host", id, config: { platform: "linux" } }] },
+        // One enrollment per card here, named after it: these machines have a single OS install.
+        hosts: { list: async () => [{ id }] },
         hostHub: {
             state: () => ({ online: true, version: "0.1.0" }),
             // One connection per card here, named after it: these machines have a single OS install.
@@ -407,6 +410,47 @@ test("asks for the status and the fleet in one go, and bounds the pair with one 
     expect(calls.map((call) => call.tool).toSorted()).toEqual(["list_sandboxes", "run_command"]);
     expect(calls[0]?.signal).toBeInstanceOf(AbortSignal);
     expect(calls[0]?.signal).toBe(calls[1]?.signal);
+});
+
+// THE GAP THIS CLOSES. A PC's Windows side and the distro on it hold separate agent binaries behind separate sockets,
+// and only the side named after the card was ever read or addressed — so a distro's agent had no door to be updated
+// through, and drifted versions behind the machine it runs on with nothing on screen able to move it.
+test("gives every environment of one machine its own door, read through its own connection", async () => {
+    const distro = hostConnectionKey("pc-rog", "wsl:Arch");
+    const asked: string[] = [];
+    const windowsFacts = { os: "Microsoft Windows 11 Home", arch: "x64", shell: "PowerShell 7", home: "C:\\Users\\radar", roots: [], hostname: "pc-rog" };
+    const archFacts = { os: "Arch Linux", arch: "x64", shell: "/usr/bin/zsh", home: "/home/radarsu", roots: [], hostname: "pc-rog", wsl: { distro: "Arch" } };
+    const services = {
+        config: { historyRoot: NO_HISTORY },
+        syncFleet: () => enrolledFleet(NO_HISTORY),
+        perf: { track: async <T>(_op: string, _fields: unknown, run: () => Promise<T>): Promise<T> => await run() },
+        capabilities: { list: async () => [{ kind: "host", id: "pc-rog", config: { platform: "windows" } }] },
+        hosts: { list: async () => [{ id: "pc-rog" }, { id: distro }] },
+        hostHub: {
+            state: (key: string) => ({
+                online: true,
+                announced: { version: key === distro ? "1.278.0" : "1.286.0" },
+                facts: key === distro ? archFacts : windowsFacts,
+            }),
+            known: () => ["pc-rog", distro],
+            mcp: async (id: string, payload: unknown) => {
+                asked.push(id);
+                const tool = (payload as { params?: { name?: string } }).params?.name ?? "";
+                if (tool !== "run_command") {
+                    return answer("[]");
+                }
+                return answer(statusEnvelope(report("pc-rog", id === distro ? { wsl: { distro: "Arch" } } : {})));
+            },
+        },
+    } as unknown as Services;
+
+    const rows = await devices(services);
+    // Each side answers for itself: its own version, its own platform, its own connection key to send a verb to.
+    expect(rows.map((row) => [row.hostId, row.platform, row.agentVersion])).toEqual([
+        ["pc-rog", "windows", "1.286.0"],
+        [distro, "linux", "1.278.0"],
+    ]);
+    expect(new Set(asked)).toEqual(new Set(["pc-rog", distro]));
 });
 
 test("a machine that refuses to answer at all reads as offline", async () => {

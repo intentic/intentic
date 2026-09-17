@@ -236,6 +236,13 @@ test(`opens the card the connection actually came from`, () => {
     expect(manageBlock(row, { platform: `windows` })).toEqual({ kind: `sandboxes-off`, connection: `my-pc`, card: `windows` });
 });
 
+// An environment of a machine is a connection of that machine's card, and the switches it is admitted on are the
+// card's: sending the reader to `rog::wsl:Arch` would open a form for something that has none.
+test(`sends a distro's row to its computer's own form`, () => {
+    const distro = device({ hostId: `rog::wsl:Arch`, online: true, platform: `linux` });
+    expect(manageBlock(distro, { platform: `windows`, shell: `on` })).toEqual({ kind: `sandboxes-off`, connection: `rog`, card: `windows` });
+});
+
 test(`stays quiet about permissions on a device that cannot be reached`, () => {
     expect(manageBlock(device({ hostId: `my-pc`, online: false, gap: `offline` }), undefined)).toBeUndefined();
     expect(manageBlock(device({ hostId: `my-pc`, online: true, gap: `scope-off` }), undefined)).toBeUndefined();

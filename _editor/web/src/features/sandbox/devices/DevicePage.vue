@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { hostCardOf } from "@intentic/sandbox-contract";
 import {
     agentLines,
     Button,
@@ -77,10 +78,14 @@ const many = computed(() => manySided(machine));
 const lone = computed<DeviceRow | undefined>(() => (many.value ? undefined : environments.value[0]));
 const ops = useDeviceOps(() => machine, refetch);
 
-// Why a row has no buttons, read from the capability rather than discovered by a click.
+// Why a row has no buttons, read from the capability rather than discovered by a click. Looked up by CARD: an
+// environment of a machine is a connection of that machine's card (`<card>::wsl:<distro>`), and the switches it is
+// admitted on are the card's.
 const { capabilities } = useCapabilities();
-const capabilityOf = (row: DeviceRow) =>
-    row.device.hostId === undefined ? undefined : capabilities.value.find((entry) => entry.id === row.device.hostId);
+const capabilityOf = (row: DeviceRow) => {
+    const hostId = row.device.hostId;
+    return hostId === undefined ? undefined : capabilities.value.find((entry) => entry.id === hostCardOf(hostId));
+};
 const scopesOf = (row: DeviceRow): DeviceScopes | undefined => capabilityOf(row)?.config;
 
 // Owner-only, per machine, no fleet-wide equivalent: the only path that works for a laptop that is lost,
@@ -103,6 +108,10 @@ const concernsOf = (row: DeviceRow) =>
 // and the two verbs that change either. Undefined only on a machine with no version and no command door.
 const agentOf = (row: DeviceRow) => deviceAgentPanel(row, latest, readAt);
 
+// The environments an agent op can actually be sent to — the same rule the row buttons are drawn from, so the
+// machine-wide control offers exactly what those buttons would.
+const updatable = computed(() => environments.value.filter((environment) => (agentOf(environment)?.actions.length ?? 0) > 0));
+
 // A many-sided machine draws its environments' notes itself, outside any group of their own.
 const agentLinesOf = (row: DeviceRow) => {
     const panel = agentOf(row);
@@ -114,8 +123,8 @@ const agentActivity = (row: DeviceRow): boolean =>
     ops.agentWaiting(row) !== undefined ||
     ops.agentBusy(row) ||
     ops.agentLines(row).length > 0 ||
-    ops.failure.value?.key === ops.agentKey(row) ||
-    ops.outcome.value?.key === ops.agentKey(row);
+    ops.agentFailure(row) !== undefined ||
+    ops.agentOutcome(row) !== undefined;
 
 const cardRoute = (fix: DeviceCardFix): RouteLocationRaw => {
     const card = { name: `capabilities`, params: { card: fix.card } };
@@ -146,9 +155,10 @@ const described = computed(() => environments.value.some((environment) => enviro
 // the sentence that explains the silence, instead of sending anyone off to find the machine's capability card.
 // Held by environment key, since each environment pairs on its own.
 const reconnecting = ref<string | undefined>();
-// Which installer the command is built for: the card's own platform first, the row's fallback second, the same
-// order manageBlock reads them in.
-const connectPlatform = (row: DeviceRow): string => String(scopesOf(row)?.[`platform`] ?? row.device.platform ?? `linux`);
+// Which installer the command is built for: the ENVIRONMENT's own platform first, since a distro on a Windows PC takes
+// the sh installer while its card says windows. The card's pinned platform answers for a row that never described
+// itself.
+const connectPlatform = (row: DeviceRow): string => String(row.device.platform ?? scopesOf(row)?.[`platform`] ?? `linux`);
 
 const conflictTurn = (row: DeviceRow, group: DeviceSandboxGroup): ConflictAsk =>
     conflictAsk({
@@ -246,12 +256,12 @@ const applyReshape = (ask: ResourcesAsk): void => ops.applyReshape(ask);
                     note="Runs on that device, and keeps going if you leave this page or the connection drops."
                 />
                 <DeviceOpFailure
-                    v-if="ops.failure.value?.key === ops.agentKey(lone)"
-                    :of="ops.failure.value.notice"
-                    :command="ops.failure.value.command"
+                    v-if="ops.agentFailure(lone)"
+                    :of="ops.agentFailure(lone)!.notice"
+                    :command="ops.agentFailure(lone)!.command"
                     :machine="lone.device.label"
                 />
-                <p v-else-if="ops.outcome.value?.key === ops.agentKey(lone)" class="text-xs text-muted">{{ ops.outcome.value.message }}</p>
+                <p v-else-if="ops.agentOutcome(lone)" class="text-xs text-muted">{{ ops.agentOutcome(lone) }}</p>
             </template>
         </DeviceAgentGroup>
 
@@ -260,6 +270,21 @@ const applyReshape = (ask: ResourcesAsk): void => ops.applyReshape(ask);
             concerns, since Windows and a distro on it are separate installs that happen to share the hardware.
         -->
         <RowGroup v-if="many" label="Environments on this device" :count="environments.length">
+            <!-- One press for the computer, because one card is one computer: each side holds its own agent binary and
+                 is updated in turn, its own log under its own row. Offered only where there is more than one side to
+                 bring level; a single reachable environment has its row's own button and needs no wider word. -->
+            <template v-if="updatable.length > 1" #actions>
+                <Button
+                    size="small"
+                    severity="secondary"
+                    label="Update all agents"
+                    :loading="ops.agentEveryOp.value === `upgrade`"
+                    :disabled="ops.working.value"
+                    v-tooltip.top="`Fetches the newest agent onto every environment of this computer in turn — Windows and each distro run their own install, and this is what brings them to the same version. Safe on a side that is already current.`"
+                    @click="void ops.runAgentEvery(updatable, `upgrade`)"
+                />
+            </template>
+
             <template v-for="environment in environments" :key="environment.device.key">
                 <Row icon="desktop" :title="environmentTitle(environment)">
                     <template #description>
@@ -321,12 +346,12 @@ const applyReshape = (ask: ResourcesAsk): void => ops.applyReshape(ask);
                                 note="Runs on that device, and keeps going if you leave this page or the connection drops."
                             />
                             <DeviceOpFailure
-                                v-if="ops.failure.value?.key === ops.agentKey(environment)"
-                                :of="ops.failure.value.notice"
-                                :command="ops.failure.value.command"
+                                v-if="ops.agentFailure(environment)"
+                                :of="ops.agentFailure(environment)!.notice"
+                                :command="ops.agentFailure(environment)!.command"
                                 :machine="environment.device.label"
                             />
-                            <p v-else-if="ops.outcome.value?.key === ops.agentKey(environment)" class="text-xs text-muted">{{ ops.outcome.value.message }}</p>
+                            <p v-else-if="ops.agentOutcome(environment)" class="text-xs text-muted">{{ ops.agentOutcome(environment) }}</p>
                         </template>
                     </div>
                 </RowNote>

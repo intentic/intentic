@@ -1,5 +1,6 @@
 import { installScriptUrl } from "@intentic/constants";
-import type { DeviceCommand, DeviceCommandInput, DeviceCommandResult, HostFacts } from "@intentic/sandbox-contract";
+import type { Capability, Device, DeviceCommand, DeviceCommandInput, DeviceCommandResult, HostFacts } from "@intentic/sandbox-contract";
+
 import {
     DEV_REBUILD_EXIT_MARK,
     DEV_REBUILD_QUIET_MARK,
@@ -242,11 +243,18 @@ export const DEVICE_COMMANDS: Readonly<Record<DeviceCommand, DeviceCommandSpec>>
     },
 };
 
+// The environment's own platform leads: a distro on a Windows PC runs sh and holds Linux paths, so reading its card's
+// platform here would write PowerShell for it and send every path through a crossing it doesn't need. The card answers
+// for a door this daemon has no reading of.
+const doorPlatform = (door: Device | undefined, card: Capability | undefined): string | undefined =>
+    door?.platform ?? (card?.kind === "host" ? card.config.platform : undefined);
+
 // Everything a line is built from, gathered once per call. A pairing is minted only for the command that asks for one,
 // so no other action mints a credential as a side effect of being run.
 const commandFacts = async (services: Services, input: DeviceCommandInput): Promise<DeviceCommandFacts> => {
     const spec = DEVICE_COMMANDS[input.command];
-    const card = (await services.capabilities.list()).find((capability) => capability.id === input.id);
+    // By card, since an environment of a machine is a connection of that card rather than a card of its own.
+    const card = (await services.capabilities.list()).find((capability) => capability.id === hostCardOf(input.id));
     // Held readings only, never a fresh pull: the facts arrive at connect and a command must not wait on a laptop to
     // describe itself again before it can be sent.
     const door = (await heldHostDevices(services)).find((device) => device.hostId === input.id);
@@ -255,7 +263,7 @@ const commandFacts = async (services: Services, input: DeviceCommandInput): Prom
         ownSlug: ownSlug(services),
         devRoot: services.config.sandbox.devRoot,
         publicUrl: services.config.sandbox.publicUrl,
-        platform: card?.kind === "host" ? card.config.platform : undefined,
+        platform: doorPlatform(door, card),
         hostFacts: door?.facts,
         mode: input.mode,
         localDir: input.localDir,

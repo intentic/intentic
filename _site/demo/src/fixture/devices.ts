@@ -38,7 +38,17 @@ export const demoDevices = (now: number): Device[] => [
         platform: `windows`,
         agentVersion: `1.275.0`,
         lastSeen: now - 4_000,
-        facts: { hostname: `ada-pc`, os: `windows`, arch: `x64`, shell: `pwsh`, home: `C:\\Users\\ada`, roots: [`C:\\Users\\ada`], wslDistros: [`archlinux`] },
+        // `facts.os` is the OS's own name for itself, which is what a row's title is drawn from; the platform slug
+        // lives in `platform` beside it.
+        facts: {
+            hostname: `ada-pc`,
+            os: `Microsoft Windows 11 Home`,
+            arch: `x64`,
+            shell: `pwsh`,
+            home: `C:\\Users\\ada`,
+            roots: [`C:\\Users\\ada`],
+            wslDistros: [`archlinux`],
+        },
         report: {
             hostname: `ada-pc`,
             os: `win32`,
@@ -50,15 +60,16 @@ export const demoDevices = (now: number): Device[] => [
     },
     {
         // The distro of that same PC: same hostname, so the two fold into one machine, and this is the side
-        // holding the folder — which is what decides where a sync button is sent.
-        key: `ada-pc`,
+        // holding the folder — which is what decides where a sync button is sent. Its door is a connection of the
+        // PC's card (`<card>::wsl:<distro>`), the shape the daemon addresses an environment by.
+        key: `ada-pc:wsl`,
         label: `Arch Linux`,
-        hostId: `ada-pc-arch`,
+        hostId: `ada-pc::wsl:archlinux`,
         online: true,
         platform: `linux`,
         agentVersion: `1.275.0`,
         lastSeen: now - 3_000,
-        facts: { hostname: `ada-pc`, os: `linux`, arch: `x64`, shell: `/usr/bin/zsh`, home: `/home/ada`, roots: [`/home/ada`], wsl: { distro: `archlinux` } },
+        facts: { hostname: `ada-pc`, os: `Arch Linux`, arch: `x64`, shell: `/usr/bin/zsh`, home: `/home/ada`, roots: [`/home/ada`], wsl: { distro: `archlinux` } },
         report: {
             hostname: `ada-pc`,
             os: `linux`,

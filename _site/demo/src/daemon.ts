@@ -189,6 +189,32 @@ const attach = async (request: Request): Promise<Response> => {
     });
 };
 
+// One device agent's update or restart, in the frames the real flow sends: `line` for progress, `result` for what the
+// machine says at the end. Paced so a press is watchable rather than over before the row has drawn its log.
+const AGENT_STEP_MS = 450;
+const agentFlow = (request: Request, id: string, op: string): Response => {
+    const said =
+        op === `restart`
+            ? { lines: [`Stopping the agent loop on ${id}.`], result: `The agent loop was restarted on this device.` }
+            : {
+                  lines: [`Downloading the current agent (1.275.0)…`, `  100% of 87 MB`, `Swapping the binary and restarting the loop.`],
+                  result: `Already on the current agent (1.275.0). Nothing to do.`,
+              };
+    return eventStream(request, (sink) => {
+        let step = 0;
+        const timer = setInterval(() => {
+            if (step < said.lines.length) {
+                sink.emit({ kind: `line`, text: said.lines[step] });
+                step += 1;
+                return;
+            }
+            sink.emit({ kind: `result`, message: said.result });
+            sink.close();
+        }, AGENT_STEP_MS);
+        return () => clearInterval(timer);
+    });
+};
+
 // Prefixes for the rail's isolated extension runs (xt-/dg-/mt-), refused here; a prefixless run still works.
 const EXTENSION_RUN_PREFIXES = [`xt-`, `dg-`, `mt-`];
 
@@ -283,6 +309,10 @@ const ROUTES: readonly (readonly [string, string, Handler])[] = [
     // The owner's own computers. Without this the Devices tab could only say it had nothing to show, so nothing
     // under a paired folder — the sync switches, and the two answers to a conflict — was ever drawn.
     [`GET`, `/system/devices`, () => json({ devices: demoDevices(Date.now()) } satisfies DevicesList)],
+    // The agent's own two verbs, streamed as the daemon streams them: progress lines, then the machine's sentence.
+    // Each environment of a PC answers for itself, which is what a machine-wide update walks through — without this
+    // the only state that page could show was the refusal of a route nobody serves.
+    [`POST`, `/system/devices/{id}/agent/{op}`, ({ request, param }) => agentFlow(request, decodeURIComponent(param(`id`)), param(`op`))],
     [
         `DELETE`,
         `/system/browsers/{name}`,

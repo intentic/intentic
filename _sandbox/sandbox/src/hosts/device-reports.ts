@@ -22,7 +22,7 @@ import { approvedPath } from "../environment/environment.js";
 import type { SyncEnrollmentRow } from "../platform/sync.js";
 import { emitDefinitionToml, settingsDefinition } from "../portability/definition.js";
 import { publishRuntimeChange } from "../system/runtime-watch.js";
-import { hostSummaries } from "./host-peer.js";
+import { hostConnections, hostSummaries } from "./host-peer.js";
 
 // Every machine reachable from this sandbox, via two doors: the desktop-sync agent's volunteered report (free, no
 // capability needed) and a `host` capability's pull (adds containers and agent-less machines, never a mounted docker
@@ -338,7 +338,9 @@ export const mergeDevices = (
 // devices.pull) so a slow tab is attributable to the daemon or to a machine.
 export const devices = async (services: Services): Promise<Device[]> =>
     services.perf.track("devices.read", {}, async () => {
-        const hosts = await hostSummaries(services);
+        // Per environment, not per card: Windows and each distro on it run their own agent, so each is read through its
+        // own connection and lands as its own row with its own door.
+        const hosts = hostConnections(await hostSummaries(services));
         const answered = await Promise.all(
             hosts.map(async (host) => ({
                 host,
@@ -359,7 +361,7 @@ export const heldHostDevices = async (services: Services): Promise<Device[]> =>
     mergeDevices(
         [],
         [],
-        (await hostSummaries(services)).map((host) => ({
+        hostConnections(await hostSummaries(services)).map((host) => ({
             host,
             result: pulled.get(host.id)?.result ?? ({ gap: host.online ? "unreported" : "offline" } as const),
         })),

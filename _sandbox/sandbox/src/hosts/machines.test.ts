@@ -1,6 +1,6 @@
 import type { Services } from "../composition.js";
 import { createPeerHub } from "../peers/peer-hub.js";
-import { HOST_PEER, type HostClient, hostSummaries } from "./host-peer.js";
+import { HOST_PEER, type HostClient, hostConnections, hostSummaries } from "./host-peer.js";
 import {
     type Device,
     environmentKeyOf,
@@ -111,6 +111,7 @@ test("gives one card a row per environment, native first, each with its own live
 
     const services = {
         capabilities: { list: async () => [{ kind: "host", id: "rog", config: { platform: "windows" } }] },
+        hosts: { list: async () => [{ id: "rog" }, { id: distroKey }] },
         hostHub: hub,
     } as unknown as Services;
     const [machine, ...rest] = await hostSummaries(services);
@@ -135,9 +136,50 @@ test("gives a card that has never connected its native environment anyway", asyn
     const hub = createPeerHub<HostClient, { version: string }, HostFacts, HostScopes>(HOST_PEER.hub, { warn: () => {} });
     const services = {
         capabilities: { list: async () => [{ kind: "host", id: "omen", config: { platform: "windows" } }] },
+        hosts: { list: async () => [] },
         hostHub: hub,
     } as unknown as Services;
     const [machine] = await hostSummaries(services);
     expect(machine?.environments).toEqual([{ key: HOST_NATIVE_ENVIRONMENT, online: false }]);
     expect(machine?.online).toBe(false);
+});
+
+// Hub liveness resets when the daemon restarts, so an environment that has not dialled in since must come from the
+// enrollments: without this a distro drops off its own computer's page until it happens to reconnect.
+test("lists an enrolled environment that has not connected since this daemon booted", async () => {
+    const hub = createPeerHub<HostClient, { version: string }, HostFacts, HostScopes>(HOST_PEER.hub, { warn: () => {} });
+    const services = {
+        capabilities: { list: async () => [{ kind: "host", id: "rog", config: { platform: "windows" } }] },
+        hosts: { list: async () => [{ id: "rog" }, { id: hostConnectionKey("rog", "wsl:archlinux") }, { id: "omen" }] },
+        hostHub: hub,
+    } as unknown as Services;
+    const [machine] = await hostSummaries(services);
+    // "omen" is another card's enrollment; an environment belongs to the card its key names, never to whichever card
+    // was read first.
+    expect(machine?.environments).toEqual([
+        { key: HOST_NATIVE_ENVIRONMENT, online: false },
+        { key: "wsl:archlinux", online: false },
+    ]);
+});
+
+// What the device list addresses: one entry per environment, under its own connection key and its own platform, since
+// each side runs its own agent binary and answers its own verbs.
+test("turns a card's environments into one connection each", () => {
+    const [native, distro, ...rest] = hostConnections([
+        {
+            id: "rog",
+            platform: "windows",
+            online: true,
+            version: "1.286.0",
+            environments: [
+                { key: HOST_NATIVE_ENVIRONMENT, online: true, version: "1.286.0", facts: { ...WINDOWS, hostname: "rog" } },
+                { key: "wsl:archlinux", online: false, version: "1.278.0", facts: { ...ARCH, hostname: "rog", wsl: { distro: "archlinux" } } },
+            ],
+        },
+    ]);
+    expect(rest).toEqual([]);
+    expect(native).toMatchObject({ id: "rog", platform: "windows", online: true, version: "1.286.0" });
+    // A distro is a Linux install sitting on a Windows PC: its own platform decides which shell a line is written for.
+    expect(distro).toMatchObject({ id: "rog::wsl:archlinux", platform: "linux", online: false, version: "1.278.0" });
+    expect(distro?.facts?.shell).toBe(ARCH.shell);
 });

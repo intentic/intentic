@@ -1,4 +1,4 @@
-import { clearableOnDevice, type DeviceConflict } from "@intentic/sandbox-contract";
+import { clearableOnDevice, type DeviceConflict, HOST_NATIVE_ENVIRONMENT, hostCardOf, hostEnvironmentOf } from "@intentic/sandbox-contract";
 import { composeAsk } from "@intentic/sandbox-contract/chores";
 
 // Builds the turn prompt for resolving a stuck file-sync conflict: per-file judgement a switch cannot make,
@@ -52,7 +52,8 @@ export interface ConflictAsk {
 export interface ConflictSubject {
     /** What the machine is called on screen and to its owner. */
     readonly machine: string;
-    /** Host capability id: the namespace of that machine's own tools (`mcp__<hostId>__…`). */
+    // The door's connection key. The tools are the CARD's (`mcp__<card>__…`) and an environment of that machine is
+    // reached through them with a crossing, so both are read off this rather than named separately.
     readonly hostId: string;
     /** The folder on that machine this sandbox is synced with. */
     readonly localDir: string | undefined;
@@ -63,6 +64,17 @@ export interface ConflictSubject {
 
 export const conflictAsk = ({ machine, hostId, localDir, conflicts, conflictedPaths }: ConflictSubject): ConflictAsk => {
     const folder = localDir ?? `the folder it syncs`;
+    // The tools are named after the card, never after the connection: a PC's distro is reached through the PC's own
+    // tools, with the crossing as an argument.
+    const card = hostCardOf(hostId);
+    const environment = hostEnvironmentOf(hostId);
+    // Said because the folder is inside the distro's filesystem: without the crossing, every read lands in the shell on
+    // the other side of it and the paths below do not exist there.
+    const crossing =
+        environment === HOST_NATIVE_ENVIRONMENT
+            ? ``
+            : ` That folder is inside the \`${environment.slice(`wsl:`.length)}\` WSL distro on ${machine}, so every call about it takes ` +
+              `\`in: "${environment}"\` — the same PC, the other environment.`;
     // The derived ones are somebody else's job — a button on this very card, and the machine's own agent — and naming
     // them here would send a turn to read two copies of a build artefact.
     const disputed = conflictedPaths.filter((conflict) => !clearableOnDevice(conflict));
@@ -103,9 +115,9 @@ export const conflictAsk = ({ machine, hostId, localDir, conflicts, conflictedPa
                 `picking a side, so one of the two copies has to be chosen, per path, by someone who has read both.`,
             goal:
                 `${inventory}\n\n` +
-                `For each path: read the copy on ${machine} (its tools are deferred — \`ToolSearch\` with \`+mcp__${hostId}__\`, then ` +
-                `\`mcp__${hostId}__describe\` once before anything else) and the copy in the sandbox, then make the two agree — the ` +
-                `same bytes on both ends, or gone from both if that is the answer. The sandbox's end is the OWNER'S workspace root, ` +
+                `For each path: read the copy on ${machine} (its tools are deferred — \`ToolSearch\` with \`+mcp__${card}__\`, then ` +
+                `\`mcp__${card}__describe\` once before anything else) and the copy in the sandbox, then make the two agree — the ` +
+                `same bytes on both ends, or gone from both if that is the answer.${crossing} The sandbox's end is the OWNER'S workspace root, ` +
                 `not yours: an isolated turn's /work is its own worktree, and the tree this folder is synced with is mounted at ` +
                 `/mnt/intentic-main. Check which one you are in before you edit anything.`,
             invariants: CONFLICT_INVARIANTS,
