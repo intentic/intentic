@@ -28,7 +28,9 @@ import ChatTabsMobile from "../tabs/ChatTabsMobile.vue";
 // `tabs: false` draws no header of its own, for the one caller (mobile agent route) whose surface already has
 // one — everything that bar offered is a tap away on the same form factor. A prop, not a `mobile` check, since
 // docked/floating panels need their own strip regardless of device.
-const { tabs = true } = defineProps<{ tabs?: boolean }>();
+// `bar` is the quick strip's presentation (ChatQuickBar): the focused chat's composer and nothing else, in a row the
+// shell sizes to its content. It implies no header, since the strip draws its own.
+const { tabs = true, bar = false } = defineProps<{ tabs?: boolean; bar?: boolean }>();
 
 const { active, activeId, conversations, panes, setActive, closePane, closeTabs, openConversation, tabReveal } = useChat();
 const layout = useLayout();
@@ -50,7 +52,8 @@ const RAIL_PX = DEFAULT_RAIL_WIDTH;
 // the split.
 const dockedRoom = (count: number): number => count * MIN_PANE_PX;
 const paneIds = computed(() => {
-    if (mobile.value) {
+    // A strip is one row of composer; a split there would be two boxes with no transcripts to tell them apart.
+    if (mobile.value || bar) {
         return [activeId.value];
     }
     return chatWide.value || layout.chatWidth.value >= dockedRoom(panes.value.length) ? panes.value : [activeId.value];
@@ -224,13 +227,13 @@ const seamWidth = computed<number>({
 <!-- `--capacity-rail` reserves the out-of-flow rail width without widening the transcript. -->
     <div
         ref="root"
-        class="chat-panel ground-card relative flex h-full min-h-0 overflow-hidden bg-card"
-        :class="chatWide ? 'flex-row' : 'flex-col'"
+        class="chat-panel ground-card relative flex min-h-0 overflow-hidden bg-card"
+        :class="[chatWide ? 'flex-row' : 'flex-col', bar ? '' : 'h-full']"
         :style="{ '--capacity-rail': showsRail ? uiLength(CAPACITY_RAIL_PX) : `0px` }"
     >
 <!-- An overlay seam (`place="edge"`), not in-flow, since docked the panel's own axis is the bar-then-panes column, not this border. -->
         <ResizeSeam
-            v-if="!chatWide && !mobile"
+            v-if="!chatWide && !mobile && !bar"
             v-model="seamWidth"
             place="edge"
             pane="after"
@@ -240,14 +243,14 @@ const seamWidth = computed<number>({
             title="Drag to resize · double-click to reset"
         />
 
-        <template v-if="tabs">
+        <template v-if="tabs && !bar">
             <ChatTabsMobile v-if="mobile" @select="setActive" @close="closeTabs" @open="openConversation" />
             <ChatTabs v-else @select="setActive" @close="closeTabs" @open="openConversation" />
         </template>
 
         <div class="flex min-h-0 min-w-0 flex-1 flex-col">
 <!-- The run bar: drawn wherever a run drives the panes (barRun), not only where its diagram can show. -->
-            <div v-if="barRun" class="flex shrink-0 items-center gap-2 border-b border-line px-2 py-1">
+            <div v-if="barRun && !bar" class="flex shrink-0 items-center gap-2 border-b border-line px-2 py-1">
                 <Button
                     v-if="shownRun && !showingGraph"
                     size="small"
@@ -288,6 +291,7 @@ const seamWidth = computed<number>({
                     :conversation="conversation"
                     :focused="conversation.conversationId === activeId"
                     :closable="split"
+                    :bare="bar"
                     @focus="setActive(conversation.conversationId)"
                     @close="closePane(conversation.conversationId)"
                 />

@@ -8,6 +8,9 @@ import { shallowRef } from "vue";
 export const chatDock = shallowRef<HTMLElement | null>(null);
 // Chat's full-window home, published by the /chat area; preferred over the column, but outranked by a pop-out.
 export const chatFullDock = shallowRef<HTMLElement | null>(null);
+// The bottom strip's slot (ChatQuickBar), published only while the chat is parked: it takes the parking stage's place
+// so the composer of a chat with nowhere to be is still on screen.
+export const chatBarDock = shallowRef<HTMLElement | null>(null);
 // Preview's only in-shell home; no side-column slot, so it fills this area, floats, or waits parked.
 export const previewDock = shallowRef<HTMLElement | null>(null);
 export const terminalDock = shallowRef<HTMLElement | null>(null);

@@ -50,6 +50,7 @@ import { useSandbox } from "../features/sandbox/client/useSandbox";
 import { useVpn } from "../features/sandbox/devices/useVpn";
 import { extensionsLoaded } from "../extension-host/loader";
 import AccountPanel from "./AccountPanel.vue";
+import ChatQuickBar from "../features/chat/panel/ChatQuickBar.vue";
 import { chatDock, terminalDock } from "./window/dockSlots";
 import { type RailSeat, useRailMemory } from "./rail/railMemory";
 import { useRailPins } from "./rail/railPins";
@@ -686,6 +687,10 @@ useKeybindings();
             </SandboxGate>
         </main>
 
+        <!-- The parked chat's composer, under the area rather than over it, so growing it shortens the page instead of
+             covering it. Outside the gate, like the chat column: a stalled sandbox is one of the things to ask about. -->
+        <ChatQuickBar />
+
         <!-- Portals to body, so it overlays the whole shell regardless of where it sits in the grid. -->
         <QuickOpen />
 
@@ -698,9 +703,12 @@ useKeybindings();
 .shell {
     /* Floor is 0, not the stored width, which was clamped at drag time and could push past a shrunk window. */
     grid-template-columns: var(--icon-rail-width) minmax(0, 1fr) minmax(0, var(--chat-width, 22rem));
-    /* One explicit row, so a stray element landing in an implicit row can't starve 1fr to zero height. */
-    grid-template-rows: minmax(0, 1fr);
-    grid-template-areas: "rail workspace chat";
+    /* Two explicit rows, so a stray element landing in an implicit row can't starve 1fr to zero height. The second is
+       the parked chat's strip, `auto` so it measures zero on every surface that doesn't draw one. */
+    grid-template-rows: minmax(0, 1fr) auto;
+    grid-template-areas:
+        "rail workspace chat"
+        "rail composer chat";
 }
 
 .icon-rail {

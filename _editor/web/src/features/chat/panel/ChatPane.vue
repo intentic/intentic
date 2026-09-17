@@ -99,6 +99,10 @@ const props = defineProps<{
     focused: boolean;
     // Whether this pane's column can be closed back into a single view; decided by the panel, not this chat.
     closable: boolean;
+    // Composer and its notices alone, no transcript: what the quick bar hosts, so writing from another area is this
+    // chat's own composer rather than a second one. The turns are withheld, never the chat — the stream, the draft and
+    // every pick are the same conversation the full surface shows.
+    bare?: boolean;
 }>();
 
 // The typewriter is this pane's; only the focused pane runs one (TranscriptClock.watched). Written as an effect,
@@ -1182,7 +1186,8 @@ watch(
             :class="{ 'chat-realize': realizing }"
         >
             <div ref="content" class="flex min-w-0 flex-1 flex-col">
-                <div class="chat-turns flex flex-1 flex-col pt-4">
+<!-- Bare: the turns are the one part withheld, so no message component mounts and the scroller shrinks to the composer. -->
+                <div v-if="!bare" class="chat-turns flex flex-1 flex-col pt-4">
 <!-- The rest of the conversation, above the window it opened on (a long chat starts mid-history); drawn only where more exists. -->
                     <div v-if="conversation.historyMore.value" class="flex justify-center py-2">
 <!-- The press is the words, not the row — a full-width button would light up on any pointer crossing the top with no visible edges. -->

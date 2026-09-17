@@ -8,12 +8,19 @@ import { useLayout } from "../../../shell/window/useLayout";
 // stored mode.
 // - chatWide: on a wide surface (own window, or the full-window area); turns onto its side.
 // - chatOnRail: home is the rail, wherever the panel currently sits; the side column never opens.
+// - chatParked: this window draws the chat but no surface on it is showing the panel.
 
 const floating = useChatFloating();
 const layout = useLayout();
 
 export const chatWide = computed(() => floating.floats.value || chatFullDock.value !== null);
 export const chatOnRail = computed(() => layout.chatHome.value === `rail`);
+
+// The rail's home has no column, so off /chat the panel has nowhere to go. This says so, and is what decides whether
+// the bottom strip draws — which is how "which views show the strip" is answered by shape rather than by a list of
+// routes: every surface where no composer is already on screen. The same three facts pick the teleport target in
+// PoppablePanels, so the strip cannot draw over a panel that went somewhere else.
+export const chatParked = computed(() => floating.shows.value && chatOnRail.value && chatFullDock.value === null);
 
 // Last in-shell route before the chat, to return to; not router.back(), since history can start on /chat.
 export const lastAreaPath = ref(`/agents`);
