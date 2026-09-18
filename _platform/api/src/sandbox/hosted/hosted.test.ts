@@ -5,7 +5,7 @@ import type { OrpcContext } from "../../context.js";
 import type { Config } from "../../config.js";
 import { sandboxRoutes } from "../sandbox.routes.js";
 import { sandboxIdFromToken, sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
-import { hostedEnabled, hostedInstanceId, provisionHosted, reapHostedOrphans, wakeHosted } from "./hosted.js";
+import { hostedEnabled, hostedInstanceId, provisionHosted, reapHostedOrphans, startAfterUpdate, wakeHosted } from "./hosted.js";
 import { HostedAlreadyProvisioned } from "./hosted-cleanup.js";
 import { AT_CAPACITY_MESSAGE, forgetProviderCapacity, HostedAtCapacity } from "./hosted-capacity.js";
 import { forgetHostedImage } from "./build/hosted-image.js";
@@ -127,16 +127,24 @@ const stubFetch = (routes: { match: (method: string, url: string) => boolean; re
 
 const json = (payload: unknown, status = 200) => new Response(JSON.stringify(payload), { status });
 
-// Fake Fly machine mirroring two real behaviours: while replacing, reads return `replacing` and starts get 412; an
-// update leaves a stopped machine stopped until started. `replacingFor` sets how many reads report `replacing` first.
-const settlingMachine = (id: string, options: { replacingFor?: number } = {}) => {
+// Fake Fly machine mirroring three real behaviours, each read off a live fleet's machine events: while replacing,
+// reads return `replacing` and starts get 412; the replacement then leaves a NEW VM record that reads `created` before
+// it settles; and an update leaves a stopped machine stopped until something starts it. `replacingFor` and `createdFor`
+// set how many reads report each. The `created` window is the one this fake used to skip, which is exactly the window
+// production kept losing machines in.
+const settlingMachine = (id: string, options: { replacingFor?: number; createdFor?: number } = {}) => {
     let replacing = options.replacingFor ?? 0;
+    let created = options.createdFor ?? 1;
     let started = false;
     return {
         read: () => {
             if (replacing > 0) {
                 replacing -= 1;
                 return json({ id, state: `replacing` });
+            }
+            if (!started && created > 0) {
+                created -= 1;
+                return json({ id, state: `created` });
             }
             return json({ id, state: started ? `started` : `stopped` });
         },
@@ -623,6 +631,32 @@ describe(`provisionHosted`, () => {
         });
         await expect(provisionHosted(prisma as never, config(), logger, args)).rejects.toBeInstanceOf(HostedAlreadyProvisioned);
         expect(calls.some((entry) => entry.method === `DELETE` && entry.url.includes(`/apps/intentic-sbx-`))).toBe(true);
+    });
+});
+
+/* THE SECOND WHERE A CLAIMED MACHINE LOOKS LIKE IT IS RUNNING AND IS NOT. */
+describe(`startAfterUpdate`, () => {
+    // Replacing a stopped machine's config gives it a new VM record reading `created`, which settles back to
+    // `stopped`; the machine has not been asked to run. Taking that for a running one returned this loop with no
+    // start ever issued, and every reader downstream — the claim, the row, the wait card — believed it.
+    it(`starts a machine that reads created after the replacement, rather than taking the word for a running one`, async () => {
+        const machine = settlingMachine(`m1`);
+        const calls = stubFetch([
+            { match: (method, url) => method === `POST` && url.endsWith(`/start`), respond: () => machine.start() },
+            { match: (method, url) => method === `GET` && url.includes(`/machines/`), respond: () => machine.read() },
+        ]);
+        await expect(startAfterUpdate(config(), { appName: `intentic-sbx-a`, machineId: `m1` })).resolves.toBeUndefined();
+        expect(calls.filter((entry) => entry.url.endsWith(`/start`))).toHaveLength(1);
+        expect(machine.started).toBe(true);
+    });
+
+    // The whole point of confirming: a machine that never runs must fail the claim rather than be handed over.
+    it(`gives up on a machine that never runs, instead of handing over one that is merely created`, async () => {
+        stubFetch([
+            { match: (method, url) => method === `POST` && url.endsWith(`/start`), respond: () => json({ ok: true }) },
+            { match: (method, url) => method === `GET` && url.includes(`/machines/`), respond: () => json({ id: `m1`, state: `created` }) },
+        ]);
+        await expect(startAfterUpdate(config(), { appName: `intentic-sbx-a`, machineId: `m1` })).rejects.toThrow(/did not start/);
     });
 });
 

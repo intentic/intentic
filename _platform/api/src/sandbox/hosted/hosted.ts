@@ -189,7 +189,16 @@ export const wakeHosted = async (config: Config, hosted: { appName: string; mach
 // stopped. Wait for it to settle, then start, then confirm it ran.
 const SETTLE_ATTEMPTS = 60;
 const SETTLE_MS = 500;
-const RUNNING_STATES = new Set([`created`, `starting`, `started`]);
+/* WHAT COUNTS AS RUNNING HERE, and why `created` does not.
+ *
+ * Replacing a stopped machine's config builds it a new VM record, and that record reads `created` for about a second
+ * before settling back to `stopped` — the machine has not been asked to run, and nothing is going to ask it. Counting
+ * `created` as running made this loop return the moment it caught that second, so the claim committed the row, the
+ * hand-off succeeded, and the owner was given a machine that had never been started. It is a race, so it only bit
+ * whichever claims read fast: in the live fleet it was half of one day's claims, plus the platform's own canary, plus
+ * one sandbox that sat un-started for seventeen days. A machine is running here when Fly says it is starting or
+ * started, and a start is issued for every other reading that will accept one. */
+const RUNNING_STATES = new Set([`starting`, `started`]);
 export const startAfterUpdate = async (
     config: Config,
     hosted: { appName: string; machineId: string },
