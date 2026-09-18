@@ -628,10 +628,10 @@ const changesOn = (repo: RepoChanges, side: GitDiffSide): readonly GitChange[] =
 
 // What the inward/outward index move is called, per side: a conflict says "resolve", not "stage" — `git add`
 // on an unmerged path settles a merge, it doesn't put a change in the index.
-const INDEX_VERB: Record<GitDiffSide, { readonly one: string; readonly all: string; readonly icon: "plus" | "undo" | "check" }> = {
+const INDEX_VERB: Record<GitDiffSide, { readonly one: string; readonly all: string; readonly icon: "plus" | "minus" | "check" }> = {
     conflicted: { one: `Mark resolved`, all: `Mark all resolved`, icon: `check` },
     unstaged: { one: `Stage`, all: `Stage all`, icon: `plus` },
-    staged: { one: `Unstage`, all: `Unstage all`, icon: `undo` },
+    staged: { one: `Unstage`, all: `Unstage all`, icon: `minus` },
 };
 
 // Names whose files it moves, under a filter — the button no longer means "this whole side". Drops the
