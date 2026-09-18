@@ -1,4 +1,4 @@
-// The 38 groups of the daemon's surface, hand-written since the contract can't state reading order or audience. Order
+// The 39 groups of the daemon's surface, hand-written since the contract can't state reading order or audience. Order
 // is editorial, not alphabetical; shelves are consecutive runs of it, enforced by spec.test.ts, which also fails a
 // contract group missing here or an entry with no routes.
 
@@ -129,6 +129,14 @@ export const SPEC_GROUPS: readonly SpecGroup[] = [
         summary: "Version control, one repository at a time",
         description:
             "The largest group here, and the shape is consistent: the repo rides in the address and the verb is the route. Reading is history, differences and status; writing is staging, committing, branching, tagging, stashing, cherry-picking, reverting and pushing. Two routes cover a repo caught mid-merge or mid-rebase, and one answers what undoing would actually do before you undo it.",
+    },
+    {
+        name: "diff",
+        shelf: "workspace",
+        label: "Diffs",
+        summary: "Both sides of a changed document as text, for the files a line diff cannot show",
+        description:
+            "What a diff's two sides are when they are not lines of text. A document, spreadsheet, presentation or notebook that changed is rendered to markdown on both sides — the same reading an agent gets instead of the bytes — so the change shows as tracked changes rather than two downloads. The side on disk reuses the shadow the sandbox already keeps; a past version is rendered from its bytes and kept by content hash, so the same version is never rendered twice. A side nothing can read answers with the reason instead. The bytes themselves are not here: that route streams a body and so sits outside this contract.",
     },
     {
         name: "history",
