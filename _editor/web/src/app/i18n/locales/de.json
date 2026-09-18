@@ -75,6 +75,15 @@
             "switchesWindowToWhere": "Schaltet dieses Fenster auf {remoteName} um, wo seine Unterhaltung lebt",
             "workAlreadyLandedStays": "Arbeit, die bereits gelandet ist, bleibt in Ihrem Workspace: nur was noch auf dem Branch liegt, geht verloren."
         },
+        "agentReactions": {
+            "anotherMark": "Weitere Reaktion",
+            "anyEmoji": "Beliebiges Emoji",
+            "couldNotReact": "Diese Reaktion konnte nicht hinterlassen werden.",
+            "markWith": "Mit {emoji} reagieren",
+            "markedBy": "{emoji} von {who}",
+            "pickAMark": "Reaktion auswählen",
+            "you": "Sie"
+        },
         "agentReviewPanel": {
             "agentHasntChangedAny": "Dieser Agent hat keine Dateien geändert. Seine Unterhaltung ist in {remoteName}: öffnen Sie sie dort, um etwas zu erbitten, und was immer er schreibt, taucht hier auf.",
             "agentHasntChangedAny2": "Dieser Agent hat keine Dateien geändert. Bitten Sie ihn im Chat um etwas: seine Arbeit taucht hier auf, Datei für Datei, zur Durchsicht, bevor sie landet.",

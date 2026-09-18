@@ -1693,4 +1693,94 @@ describe("agents registry", () => {
         registry.observe("c1", { kind: "context_usage", tokens: 30, contextWindow: 200_000 });
         expect(registry.list()[0]?.promptCache).toEqual({ at: 1_500, ttlMs: 300_000 });
     });
+
+    // A chip is worth nothing without the names behind it, which is the whole reason the wire carries people rather
+    // than a count.
+    it("groups reactions per emoji, naming everyone who left one, in the order they were left", async () => {
+        const registry = createAgentsRegistry(memoryStore(), standings(), presences());
+        await registry.init();
+        await registry.begin(turn(), 1_000);
+        await registry.react("c1", "👍", { email: "ada@example.com", name: "Ada" }, true, 2_000);
+        await registry.react("c1", "🎉", { email: "ada@example.com", name: "Ada" }, true, 2_100);
+        await registry.react("c1", "👍", { email: "bob@example.com" }, true, 2_200);
+        expect(registry.get("c1")?.reactions).toEqual([
+            {
+                emoji: "👍",
+                by: [
+                    { email: "ada@example.com", name: "Ada", at: 2_000 },
+                    // No name: the sign-in carried none, and the address stands for them.
+                    { email: "bob@example.com", at: 2_200 },
+                ],
+            },
+            { emoji: "🎉", by: [{ email: "ada@example.com", name: "Ada", at: 2_100 }] },
+        ]);
+    });
+
+    // `on` is the intent, not a flip: a retried request, a double press and two windows racing must all settle where
+    // one press did, and none of them may restamp the instant the first press recorded.
+    it("a second press of the same mark changes nothing at all", async () => {
+        const store = memoryStore();
+        const registry = createAgentsRegistry(store, standings(), presences());
+        await registry.init();
+        await registry.begin(turn(), 1_000);
+        await registry.finish("c1", 1_500);
+        await registry.react("c1", "👍", { email: "ada@example.com", name: "Ada" }, true, 2_000);
+        const frames: number[] = [];
+        const unsubscribe = registry.subscribe((agents) => frames.push(agents.length));
+
+        await registry.react("c1", "👍", { email: "ada@example.com", name: "Ada" }, true, 9_000);
+        expect(registry.get("c1")?.reactions).toEqual([{ emoji: "👍", by: [{ email: "ada@example.com", name: "Ada", at: 2_000 }] }]);
+        // Only the subscribe's own opening frame; nothing was published, because nothing changed.
+        expect(frames).toHaveLength(1);
+        unsubscribe();
+    });
+
+    // Reacting is not the conversation doing something, so the card must not move to the top of a board sorted by
+    // when work last happened.
+    it("leaves updatedAt where the last turn left it", async () => {
+        const registry = createAgentsRegistry(memoryStore(), standings(), presences());
+        await registry.init();
+        await registry.begin(turn(), 1_000);
+        await registry.finish("c1", 1_500);
+        const before = registry.get("c1")?.updatedAt;
+        await registry.react("c1", "👀", { email: "ada@example.com" }, true, 8_000);
+        expect(registry.get("c1")?.updatedAt).toBe(before);
+    });
+
+    // Taking a mark back has to survive a restart the same way leaving one does, and the last person to leave takes
+    // the chip with them rather than leaving an empty one behind.
+    it("takes a mark back, and the last one takes the chip with it", async () => {
+        const store = memoryStore();
+        const registry = createAgentsRegistry(store, standings(), presences());
+        await registry.init();
+        await registry.begin(turn(), 1_000);
+        await registry.react("c1", "👍", { email: "ada@example.com", name: "Ada" }, true, 2_000);
+        await registry.react("c1", "👍", { email: "bob@example.com" }, true, 2_100);
+
+        await registry.react("c1", "👍", { email: "ada@example.com", name: "Ada" }, false, 3_000);
+        expect(registry.get("c1")?.reactions).toEqual([{ emoji: "👍", by: [{ email: "bob@example.com", at: 2_100 }] }]);
+
+        await registry.react("c1", "👍", { email: "bob@example.com" }, false, 3_100);
+        expect(registry.get("c1")?.reactions).toBeUndefined();
+        // Absent rather than an empty list on disk too: a card nobody marks must read like one nobody ever did.
+        expect(store.saved()[0]?.reactions).toBeUndefined();
+
+        const restarted = createAgentsRegistry(store, standings(), presences());
+        await restarted.init();
+        expect(restarted.get("c1")?.reactions).toBeUndefined();
+    });
+
+    it("takes back a mark nobody left without touching the card", async () => {
+        const registry = createAgentsRegistry(memoryStore(), standings(), presences());
+        await registry.init();
+        await registry.begin(turn(), 1_000);
+        await registry.react("c1", "👍", { email: "ada@example.com" }, false, 2_000);
+        expect(registry.get("c1")?.reactions).toBeUndefined();
+    });
+
+    it("answers an unknown conversation with nothing rather than minting one", async () => {
+        const registry = createAgentsRegistry(memoryStore(), standings(), presences());
+        await registry.init();
+        expect(await registry.react("nope", "👍", { email: "ada@example.com" }, true, 2_000)).toBeUndefined();
+    });
 });

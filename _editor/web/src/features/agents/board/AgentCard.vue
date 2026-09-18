@@ -10,6 +10,7 @@ import { useRole } from "../../sandbox/secrets/useRole";
 import { useAudience } from "../../../app/useAudience";
 import { useVocabulary } from "../../../core-views/vocabulary";
 import OriginMark from "../../../components/OriginMark.vue";
+import AgentReactions from "./AgentReactions.vue";
 import StartedByMark from "./StartedByMark.vue";
 import UnsentMark from "../../../components/UnsentMark.vue";
 import WorkflowMark from "../../../components/WorkflowMark.vue";
@@ -708,6 +709,16 @@ const grab = (event: PointerEvent): void => {
                     <span class="text-2xs leading-snug text-subtle">{{ words.requestLandHint }}.</span>
                 </template>
             </div>
+
+            <!-- What people have made of this card, above the line of what it cost: the chips are content and always show, the presses that add one wait for the pointer (`tuck`). -->
+            <!-- Only a card the daemon has an entry for: a draft, a refused start or a chat reopened from history has nothing to address a mark to. -->
+            <AgentReactions
+                v-if="!unregistered(agent.status)"
+                :agent-id="agent.id"
+                :reactions="agent.reactions"
+                :sandbox-id="agent.sandboxId"
+                :tuck="true"
+            />
 
             <!-- The closing summary line: counted stats, then the drill-in and time held to the line's right (see `summary`). -->
             <div

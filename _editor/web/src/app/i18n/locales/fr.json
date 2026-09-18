@@ -75,6 +75,15 @@
             "switchesWindowToWhere": "Bascule cette fenêtre vers {remoteName}, où vit sa conversation",
             "workAlreadyLandedStays": "Le travail déjà intégré reste dans votre espace de travail : seul ce qui est encore sur la branche est perdu."
         },
+        "agentReactions": {
+            "anotherMark": "Autre réaction",
+            "anyEmoji": "N'importe quel émoji",
+            "couldNotReact": "Impossible de laisser cette réaction.",
+            "markWith": "Réagir avec {emoji}",
+            "markedBy": "{emoji} de {who}",
+            "pickAMark": "Choisir une réaction",
+            "you": "vous"
+        },
         "agentReviewPanel": {
             "agentHasntChangedAny": "Cet agent n'a modifié aucun fichier. Sa conversation est dans {remoteName} : ouvrez-la là-bas pour lui demander quelque chose, et tout ce qu'il écrit apparaît ici.",
             "agentHasntChangedAny2": "Cet agent n'a modifié aucun fichier. Demandez-lui quelque chose dans le chat : son travail apparaît ici, fichier par fichier, à relire avant qu'il ne s'intègre.",

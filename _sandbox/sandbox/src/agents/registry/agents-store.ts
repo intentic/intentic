@@ -121,6 +121,9 @@ export const PersistedAgentSchema = z.object({
     moveAfterLimit: z.boolean().optional(),
     // A collaborator's standing ask to land; persisted so it survives a restart.
     landRequested: z.object({ email: z.string(), name: z.string().optional(), at: z.number() }).optional(),
+    // Every mark anyone left, flat and in press order; summaryOf groups them per emoji for the card. Flat here because
+    // one press adds or removes exactly one row, and a grouped store would have to be re-keyed on every press.
+    reactions: z.array(z.object({ emoji: z.string(), email: z.string(), name: z.string().optional(), at: z.number() })).optional(),
     // Why the last land refused; evidence, not state, standing.ts reads it to explain a delta and never to invent one.
     // A land-time snapshot: surfaces re-derive from it rather than replay its per-path content.
     conflicts: z.array(LandConflictSchema).optional(),

@@ -59,6 +59,9 @@ const NAME_FLOORS: Readonly<Record<string, MemberRole>> = {
     "agents.archive": "collaborator",
     "agents.unarchive": "collaborator",
     "agents.requestLand": "collaborator",
+    // The one write on the board below the driving tier: a mark carries the reader's own name and changes nothing
+    // about the work, so it sits with presence rather than with rename and archive.
+    "agents.react": "viewer",
     // A member's own device notifications.
     "push.subscribe": "collaborator",
     "push.unsubscribe": "collaborator",

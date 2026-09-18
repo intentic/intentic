@@ -75,6 +75,15 @@
             "switchesWindowToWhere": "Przełącza to okno na {remoteName}, gdzie żyje jego rozmowa",
             "workAlreadyLandedStays": "Praca, która już została scalona, zostaje w Twojej przestrzeni roboczej: przepada tylko to, co wciąż jest na gałęzi."
         },
+        "agentReactions": {
+            "anotherMark": "Inna reakcja",
+            "anyEmoji": "Dowolne emoji",
+            "couldNotReact": "Nie udało się dodać tej reakcji.",
+            "markWith": "Zareaguj: {emoji}",
+            "markedBy": "{emoji} od: {who}",
+            "pickAMark": "Wybierz reakcję",
+            "you": "Ty"
+        },
         "agentReviewPanel": {
             "agentHasntChangedAny": "Ten agent nie zmienił żadnych plików. Jego rozmowa jest w {remoteName}: otwórz ją tam, żeby o coś poprosić, a wszystko, co napisze, pokaże się tutaj.",
             "agentHasntChangedAny2": "Ten agent nie zmienił żadnych plików. Poproś go o coś na czacie: jego praca pojawi się tutaj, plik po pliku, do przejrzenia, zanim zostanie scalona.",

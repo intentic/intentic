@@ -108,6 +108,11 @@ export const landAgent = (
 export const requestLandAgent = (id: string, at: AgentReach = undefined): Promise<AgentSummary> =>
     agentJson<AgentSummary>(at, `/agents/${encodeURIComponent(id)}/request-land`, jsonBody(`POST`, {}));
 
+// Puts the caller's mark on a card, or takes it off; the daemon attributes it to the verified identity, so nothing here
+// says who. `on` states which, rather than flipping what's stored, so a double press lands where one did.
+export const reactToAgent = (id: string, emoji: string, on: boolean, at: AgentReach = undefined): Promise<AgentSummary> =>
+    agentJson<AgentSummary>(at, `/agents/${encodeURIComponent(id)}/react`, jsonBody(`POST`, { emoji, on }));
+
 // Hands a land conflict back to the agent to resolve in its own worktree, rather than making the user merge by hand or
 // discarding the work. An ordinary turn: it lands in the transcript, a running turn takes it as steering, and Stop
 // works on it like any other.

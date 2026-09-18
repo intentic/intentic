@@ -16,8 +16,16 @@ import type { AppEnv, OrpcContext } from "../app-env.js";
 
 // Typed client over the in-process app via the browser's own OpenAPILink, so SSE streams round-trip for real. JSON
 // routes resolve to their output; thrown ORPCErrors carry `.code`.
-export const clientFor = (app: Hono<AppEnv>): ContractRouterClient<typeof sandboxContract> =>
-    createORPCClient(new OpenAPILink(sandboxContract, { url: "http://sandbox", fetch: async (request) => app.request(request) }));
+// `bearer` is for a suite that gave `services` an `auth`: without it every call arrives unauthenticated, which for a
+// route that reads `context.identity` is a different test than the one being written.
+export const clientFor = (app: Hono<AppEnv>, options?: { readonly bearer?: string }): ContractRouterClient<typeof sandboxContract> =>
+    createORPCClient(
+        new OpenAPILink(sandboxContract, {
+            url: "http://sandbox",
+            fetch: async (request) =>
+                app.request(options?.bearer === undefined ? request : new Request(request, { headers: { ...Object.fromEntries(request.headers), authorization: `Bearer ${options.bearer}` } })),
+        }),
+    );
 
 // Without a vitest config there is no unstubEnvs, so a stubbed var would outlive the test that set it.
 afterEach(() => vi.unstubAllEnvs());

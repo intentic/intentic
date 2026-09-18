@@ -17,6 +17,11 @@ const minutes = (count: number): number => count * 60_000;
 
 const NO_ATTENTION = { plan: false, question: false, permission: false, capability: false, credential: false, conflict: false } as const;
 
+// The two people on this demo sandbox, the same pair the presence roster draws (daemon.ts): the reader is Ada, so a
+// chip carrying her reads as one of her own and a chip carrying only Grace is one to press.
+const ADA = { email: `ada@acme.dev`, name: `Ada Lovelace` };
+const GRACE = { email: `grace@acme.dev`, name: `Grace Hopper` };
+
 export const fleetRoster = (now: number): AgentSummary[] => [
     {
         id: FEATURED_AGENT_ID,
@@ -46,6 +51,17 @@ export const fleetRoster = (now: number): AgentSummary[] => [
         toolUses: 74,
         subagents: { running: 2, total: 3 },
         diff: { files: 3, insertions: 64, deletions: 12 },
+        // Both people, one of them the reader: the chip is lit and its hover reads "Grace Hopper, you".
+        reactions: [
+            {
+                emoji: `👍`,
+                by: [
+                    { ...GRACE, at: now - minutes(3) },
+                    { ...ADA, at: now - minutes(2) },
+                ],
+            },
+            { emoji: `🚀`, by: [{ ...GRACE, at: now - minutes(3) }] },
+        ],
     },
     {
         id: AWAITING_AGENT_ID,
@@ -206,6 +222,8 @@ export const fleetRoster = (now: number): AgentSummary[] => [
         turns: 12,
         toolUses: 164,
         diff: { files: 4, insertions: 68, deletions: 14 },
+        // Somebody else's mark, waiting: work held on a branch is exactly what a teammate says 👀 about.
+        reactions: [{ emoji: `👀`, by: [{ ...GRACE, at: now - minutes(16) }] }],
     },
     {
         id: `cnv_release_notes`,

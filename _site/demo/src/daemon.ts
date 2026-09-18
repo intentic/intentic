@@ -333,6 +333,7 @@ const ROUTES: readonly (readonly [string, string, Handler])[] = [
     [`GET`, `/agents/{id}/{repo}/file-diff`, ({ url, param }) => json(fileDiff(param(`repo`), url.searchParams.get(`path`) ?? ``))],
     [`POST`, `/agents/{id}/rename`, renameAgent],
     [`POST`, `/agents/{id}/seen`, ({ param }) => agentResponse(patchAgent(param(`id`), { seenAt: Date.now() }))],
+    [`POST`, `/agents/{id}/react`, reactToAgent],
     [`POST`, `/agents/{id}/auto-land`, ({ param }) => agentResponse(patchAgent(param(`id`), {}))],
     [`POST`, `/agents/{id}/land`, ({ param }) => land(param(`id`))],
     [`POST`, `/agents/{id}/discard`, () => refuse(`This is the demo workspace: there is no worktree to discard.`)],
@@ -748,6 +749,31 @@ const DEMO_SAVINGS: SavingsReport = {
 };
 
 const agentResponse = (agent: AgentSummary | undefined): Response => (agent === undefined ? refuse(`No such agent.`, 404) : json(agent));
+
+// The demo's own reader is Ada (the session this daemon mints), so a press here joins or leaves her from the chip,
+// exactly as the real one attributes a mark to the verified caller rather than to anything the browser sent.
+function reactToAgent({ request, param }: RouteContext): Promise<Response> {
+    return request.json().then((body) => {
+        const { emoji, on } = body as { emoji?: string; on?: boolean };
+        const agent = roster.agents.find((candidate) => candidate.id === param(`id`));
+        if (agent === undefined || emoji === undefined) {
+            return agentResponse(undefined);
+        }
+        const me = { email: OWNER.email, ...(OWNER.name === undefined ? {} : { name: OWNER.name }), at: Date.now() };
+        // Only the pressed emoji is rewritten: her marks on the other chips are not what this press was about.
+        const held = agent.reactions ?? [];
+        const opened = on === true && !held.some((chip) => chip.emoji === emoji) ? [...held, { emoji, by: [] }] : held;
+        const marked = opened.map((chip) => {
+            if (chip.emoji !== emoji) {
+                return chip;
+            }
+            const without = chip.by.filter((who) => who.email !== OWNER.email);
+            return { ...chip, by: on === true ? [...without, me] : without };
+        });
+        const reactions = marked.filter((chip) => chip.by.length > 0);
+        return agentResponse(patchAgent(param(`id`), reactions.length > 0 ? { reactions } : { reactions: undefined }));
+    });
+}
 
 function renameAgent({ request, param }: RouteContext): Promise<Response> {
     return request.json().then((body) => {

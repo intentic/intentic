@@ -18,6 +18,7 @@ import { useVocabulary } from "../../../core-views/vocabulary";
 import { useChat } from "../../chat/run/useChat";
 import AgentReviewPanel from "./AgentReviewPanel.vue";
 import AgentReviewOutline from "./AgentReviewOutline.vue";
+import AgentReactions from "../board/AgentReactions.vue";
 import AgentSessionMenu from "../board/AgentSessionMenu.vue";
 import SessionChip from "../board/SessionChip.vue";
 import SessionIdentity from "../board/SessionIdentity.vue";
@@ -453,6 +454,10 @@ const confirmDiscard = async (): Promise<void> => {
             </Button>
         </div>
         <p v-if="edit.error !== undefined" class="border-b border-line px-3 py-1 text-2xs text-danger">{{ edit.error }}</p>
+        <!-- What people have made of this session, under the header that names it. The same chips the board card wears, but with room to keep the presses that add one in plain sight rather than behind a hover. -->
+        <div v-if="fleetAgent !== undefined" class="shrink-0 border-b border-line px-3 py-1.5">
+            <AgentReactions :agent-id="fleetAgent.id" :reactions="fleetAgent.reactions" :sandbox-id="remoteBox" />
+        </div>
         <!-- Chat|Changes gets its own row on a phone: crowding the header left too little width for the title. -->
         <!-- Local-only like the chat below; a remote conversation lives elsewhere, so mobile gets the full review. -->
         <div v-if="mobile && reviewable && localOnly" class="shrink-0 border-b border-line px-2 py-1.5">

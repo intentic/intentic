@@ -75,6 +75,15 @@
             "switchesWindowToWhere": "Switches this window to {remoteName}, where its conversation lives",
             "workAlreadyLandedStays": "Work that already landed stays in your workspace: only what is still on the branch is lost."
         },
+        "agentReactions": {
+            "anotherMark": "Another reaction",
+            "anyEmoji": "Any emoji",
+            "couldNotReact": "Couldn't leave that reaction.",
+            "markWith": "React with {emoji}",
+            "markedBy": "{emoji} from {who}",
+            "pickAMark": "Pick a reaction",
+            "you": "you"
+        },
         "agentReviewPanel": {
             "agentHasntChangedAny": "This agent hasn't changed any files. Its conversation is in {remoteName}: open it there to ask for something, and whatever it writes shows up here.",
             "agentHasntChangedAny2": "This agent hasn't changed any files. Ask it for something in the chat: its work shows up here, file by file, to review before it lands.",

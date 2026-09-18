@@ -229,6 +229,13 @@ it(`withholds the close from a registered agent, which archives instead`, () => 
     expect(buttonLabelled(landed, `Archive agent`)).not.toBeUndefined();
 });
 
+// Same rule as the archive above, for the same reason: a mark is addressed by id, and this card has no id the
+// daemon knows. A registered one wears the strip.
+it(`withholds reactions from a card with no entry to attach one to`, () => {
+    expect(buttonLabelled(mount(refused()), `React with 👍`)).toBeUndefined();
+    expect(buttonLabelled(mount(ready(`landed`)), `React with 👍`)).not.toBeUndefined();
+});
+
 // A `resuming` agent (its turn restarting after e.g. a credential rotation) must render as work in flight, not as
 // idle/finished.
 // Archive is withheld too: the worktree belongs to a turn about to run in it again.

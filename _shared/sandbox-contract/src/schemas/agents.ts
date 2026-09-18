@@ -2,6 +2,7 @@
 import { z } from "zod";
 import { AgentHarnessSchema, AgentOriginSchema, AgentProviderSchema, ForkedFromSchema } from "./agent.js";
 import { LoopStateSchema } from "./loops.js";
+import { EMOJI_MAX_LENGTH, isSingleEmoji } from "../text/emoji.js";
 // A fleet agent is any conversation with a registry entry, keyed by conversationId. Isolated ones own a git worktree
 // (branch agent/<id>); workspace conversations have none, but both share one status/activity/cost lifecycle.
 
@@ -153,6 +154,26 @@ export type LandedMessageDraft = z.infer<typeof LandedMessageDraftSchema>;
 // offer the press that clears a refusal without knowing whose refusal it is.
 export const LandConflictReasonSchema = z.enum(["workspace", "diverged", "binary"]);
 export type LandConflictReason = z.infer<typeof LandConflictReasonSchema>;
+// One person behind one mark. The instant rides along so the group can be ordered by who was first, which is also the
+// order the names read in.
+export const ReactorSchema = z.object({
+    email: z.string().describe("Who it was, as the sandbox verified them."),
+    name: z.string().optional().describe("What to call them, when their sign-in carried a name. Absent leaves the address to stand for them."),
+    at: z.number().describe("When they marked it, in milliseconds."),
+});
+export type Reactor = z.infer<typeof ReactorSchema>;
+// Grouped by emoji on the wire, not as a flat list of presses: every surface draws one chip per emoji, and grouping
+// here is what stops three of them each grouping it differently.
+export const AgentReactionSchema = z.object({
+    emoji: z.string().describe("The mark itself, one emoji, carried as the character rather than as a name that would need a table on both sides."),
+    by: z
+        .array(ReactorSchema)
+        .min(1)
+        .describe(
+            "Everyone wearing this mark, oldest first, each by name. Carried whole rather than as a count, because a chip reading 3 that cannot say whose is a number nobody can answer. Never empty: the last person taking theirs back takes the whole chip with it.",
+        ),
+});
+export type AgentReaction = z.infer<typeof AgentReactionSchema>;
 export const AgentSummarySchema = z.object({
     id: z.string().describe("The conversation id, which is how every other call addresses it."),
     sessionId: z.string().optional().describe("The provider session behind the last turn. It is retired whenever the model or account changes."),
@@ -251,6 +272,15 @@ export const AgentSummarySchema = z.object({
         .optional()
         .describe(
             "A collaborator has asked a maintainer to merge this work. Cleared by whichever merge or discard answers it. Absent means nobody is waiting.",
+        ),
+    // Beside `landRequested` because both are marks people left on the card rather than anything the agent did. Ordered
+    // by when each emoji was first used, so a chip never jumps out from under the cursor when a second person presses
+    // the same one.
+    reactions: z
+        .array(AgentReactionSchema)
+        .optional()
+        .describe(
+            "What people have marked this conversation with, one entry per emoji, in the order the emoji were first used. Absent means nobody has marked it, which is most conversations.",
         ),
     // The card's provenance line when an outside message opened the conversation; absent means a person started it.
     origin: AgentOriginSchema.optional().describe(
@@ -533,6 +563,18 @@ export type AgentSearchResult = z.infer<typeof AgentSearchResultSchema>;
 export const AgentRenameSchema = z.object({
     id: z.string().min(1).describe("Which conversation."),
     title: z.string().trim().min(1).max(80).describe("What to call it from now on."),
+});
+// `on` states the intent rather than flipping whatever is stored: a double press, a retried request and two windows
+// racing must all settle the same way, which a toggle cannot promise.
+export const AgentReactSchema = z.object({
+    id: z.string().min(1).describe("Which conversation."),
+    emoji: z
+        .string()
+        .trim()
+        .max(EMOJI_MAX_LENGTH)
+        .refine(isSingleEmoji, { message: "not a single emoji" })
+        .describe("The mark to leave, as the emoji character itself. Exactly one: a chip has room for one mark, and a press is one press."),
+    on: z.boolean().describe("Whether to add your mark or take it back. Saying what you want rather than flipping what is there, so pressing twice lands where pressing once did."),
 });
 // Bounded just above the handoff's per-message render cap, so a line too long to carry whole doesn't reach the agent
 // truncated.

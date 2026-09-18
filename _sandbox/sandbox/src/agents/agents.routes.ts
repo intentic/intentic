@@ -24,6 +24,7 @@ import { headSha } from "../git/changes/changes.js";
 import { agentRepoReview, agentRepoModules, anchorOf, presentInMain } from "./land/agent-changes.js";
 import { commitsCarrying, historySpanStart } from "./land/landed-history.js";
 import { type IsolatedAgent, isIsolated, type PersistedAgent } from "./registry/agents-store.js";
+import { MAX_REACTION_KINDS } from "./registry/agents-registry.js";
 import { archivable, archiveAgents, purgeArchived } from "./registry/archive.js";
 import { landAgent, outstandingConflicts } from "./land/land.js";
 import { syncBeforeLand } from "./land/sync.js";
@@ -303,6 +304,30 @@ export const createAgentsRoutes = (services: Services) => {
             const summary = await services.agents.requestLand(
                 input.id,
                 { email: context.identity.email, ...(context.identity.name !== undefined ? { name: context.identity.name } : {}) },
+                Date.now(),
+            );
+            if (summary === undefined) {
+                throw new ORPCError("NOT_FOUND", { message: "unknown agent" });
+            }
+            return summary;
+        }),
+        // The one write in this family a viewer may make (auth/role-floor.ts): a mark says something about the people
+        // reading the board, not about the work. Legal in every state — mid-turn, archived, conflicted — since it
+        // touches none of it.
+        react: i.react.handler(async ({ input, context }) => {
+            const entry = entryOf(input.id);
+            if (context.identity === undefined) {
+                throw new ORPCError("UNAUTHORIZED", { message: "no verified identity to attribute the reaction to" });
+            }
+            const kinds = new Set((entry.reactions ?? []).map((mark) => mark.emoji));
+            if (input.on && !kinds.has(input.emoji) && kinds.size >= MAX_REACTION_KINDS) {
+                throw new ORPCError("BAD_REQUEST", { message: `this conversation already carries ${MAX_REACTION_KINDS} different reactions` });
+            }
+            const summary = await services.agents.react(
+                input.id,
+                input.emoji,
+                { email: context.identity.email, ...(context.identity.name !== undefined ? { name: context.identity.name } : {}) },
+                input.on,
                 Date.now(),
             );
             if (summary === undefined) {

@@ -1,6 +1,7 @@
 import {
     type AgentChecklist,
     type AgentEvent,
+    type AgentReaction,
     type AgentStatus,
     type AgentSummary,
     type AgentTurn,
@@ -291,6 +292,29 @@ const postures = (entry: PersistedAgent): Partial<Pick<AgentSummary, "autoLand" 
     ...(entry.moveAfterLimit !== undefined ? { moveAfterLimit: entry.moveAfterLimit } : {}),
 });
 
+// How many different emoji one conversation may carry. Bounded by kinds, not by presses: a hundred people agreeing is
+// still one chip, while a hundred different emoji is a row no card can draw.
+export const MAX_REACTION_KINDS = 24;
+
+// Flat presses grouped into the card's chips. Both orders come straight off press order — the emoji by whoever used it
+// first, the names within one by who marked it first — so a second person pressing an existing chip never moves it.
+export const groupedReactions = (reactions: PersistedAgent["reactions"]): AgentReaction[] | undefined => {
+    if (reactions === undefined || reactions.length === 0) {
+        return undefined;
+    }
+    const chips = new Map<string, AgentReaction>();
+    for (const { emoji, email, name, at } of reactions) {
+        const who = { email, ...(name !== undefined ? { name } : {}), at };
+        const chip = chips.get(emoji);
+        if (chip === undefined) {
+            chips.set(emoji, { emoji, by: [who] });
+        } else {
+            chip.by.push(who);
+        }
+    }
+    return [...chips.values()];
+};
+
 // What the entry says the last turn left open, except while a turn is running, where it would be noise on a card
 // already working through that very list.
 const reportedUnfinished = (entry: PersistedAgent, state: RuntimeState | undefined): Partial<Pick<AgentSummary, "unfinished">> =>
@@ -447,6 +471,9 @@ export interface AgentsRegistry {
     // Stamps a collaborator's ask to land; leaves `updatedAt` alone. Re-asking re-stamps rather than queuing; the land
     // or discard that answers it clears the ask.
     readonly requestLand: (id: string, by: { email: string; name?: string }, at: number) => Promise<AgentSummary | undefined>;
+    // Adds or takes back one person's mark. `on` is the intent, not a flip, so a retried request settles where the
+    // first one did. Leaves `updatedAt` alone: somebody reacting is not the conversation doing something.
+    readonly react: (id: string, emoji: string, by: { email: string; name?: string }, on: boolean, at: number) => Promise<AgentSummary | undefined>;
     // Drops the resumed-session pointer after a rewind restores files, so the next turn opens a fresh thread instead of
     // one describing edits no longer on disk. Only the pointer goes.
     readonly clearSession: (id: string) => Promise<void>;
@@ -590,6 +617,7 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
             ...(entry.account !== undefined ? { account: entry.account } : {}),
             ...postures(entry),
             ...(entry.landRequested !== undefined ? { landRequested: entry.landRequested } : {}),
+            ...opt("reactions", groupedReactions(entry.reactions)),
             ...(base !== undefined ? { base } : {}),
             ...(costUsd > 0 ? { costUsd } : {}),
             ...(inputTokens > 0 ? { inputTokens } : {}),
@@ -1057,6 +1085,26 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
                 return undefined;
             }
             const next = { ...entry, landRequested: { email: by.email, ...(by.name !== undefined ? { name: by.name } : {}), at } };
+            replace(next);
+            await persist();
+            broadcast();
+            return summaryOf(next);
+        },
+        react: async (id, emoji, by, on, at) => {
+            const entry = entryOf(id);
+            if (entry === undefined) {
+                return undefined;
+            }
+            const held = entry.reactions ?? [];
+            const mine = (mark: { emoji: string; email: string }): boolean => mark.emoji === emoji && mark.email === by.email;
+            // Already where the caller is asking for: no write, no broadcast, and the same answer the first press gave.
+            if (held.some(mine) === on) {
+                return summaryOf(entry);
+            }
+            const reactions = on ? [...held, { emoji, email: by.email, ...(by.name !== undefined ? { name: by.name } : {}), at }] : held.filter((mark) => !mine(mark));
+            // Emptied back to absent rather than to `[]`, so a card nobody marks reads the same as one nobody ever did.
+            const { reactions: _cleared, ...carried } = entry;
+            const next = { ...carried, ...(reactions.length > 0 ? { reactions } : {}) };
             replace(next);
             await persist();
             broadcast();

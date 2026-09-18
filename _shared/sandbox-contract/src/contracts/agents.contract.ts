@@ -9,6 +9,7 @@ import {
     AgentIdsSchema,
     AgentLandSchema,
     AgentPlaceSchema,
+    AgentReactSchema,
     AgentRenameSchema,
     AgentResumeAfterLimitSchema,
     AgentStopWatchingSchema,
@@ -224,6 +225,18 @@ export const agentsContract = {
                 "For a collaborator who is not allowed to merge: marks the conversation as waiting for review, with who asked. The request shows on every maintainer's board and clears when somebody merges or discards it.",
         })
         .input(AgentIdSchema)
+        .output(AgentSummarySchema),
+    // Floored at viewer (auth/role-floor.ts), unlike every other write here: marking a conversation is expression, not
+    // operating authority.
+    react: oc
+        .route({
+            method: "POST",
+            path: "/agents/{id}/react",
+            summary: "Mark a conversation with an emoji",
+            description:
+                "Puts your mark on a conversation, or takes it back. Everyone sharing the sandbox sees it, with who left it, which is what makes it worth more than a private bookmark. One mark per person per emoji; nothing about the conversation's own work changes.",
+        })
+        .input(AgentReactSchema)
         .output(AgentSummarySchema),
     discard: oc
         .route({
