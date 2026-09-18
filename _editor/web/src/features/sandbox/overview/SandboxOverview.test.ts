@@ -16,7 +16,8 @@ vi.mock(`./useSandboxVersion`, () => ({
     useSandboxVersion: () => ({ info: ref(undefined), installed: ref(undefined), latest: ref(undefined), updateAvailable: ref(false) }),
 }));
 vi.mock(`../../workspace/explorer/useWorkspaceTree`, () => ({ useWorkspaceTree: () => ({ hasSnapshot: ref(true) }) }));
-vi.mock(`./useSandboxAvailability`, () => ({ useSandboxAvailability: () => ref(`live`) }));
+const availability = ref<`live` | `warming` | `busy`>(`live`);
+vi.mock(`./useSandboxAvailability`, () => ({ useSandboxAvailability: () => availability }));
 // Hosted plan standing is a plain ref here, not a query; the sentence itself lives in hostedHours.ts.
 const machineStanding = ref<string | undefined>(undefined);
 const planOffered = ref(false);
@@ -84,6 +85,7 @@ const pickFile = async (el: HTMLElement): Promise<void> => {
 };
 
 beforeEach(() => {
+    availability.value = `live`;
     update.mockClear();
     fileToSquareDataUrl.mockClear();
 });
@@ -92,6 +94,17 @@ afterEach(() => {
     app?.unmount();
     app = undefined;
     document.body.innerHTML = ``;
+});
+
+it(`does not badge the happy path as online`, () => {
+    expect(mount(sandboxRow()).textContent).not.toContain(`Online`);
+});
+
+it(`badges a sandbox that is still warming`, async () => {
+    availability.value = `warming`;
+    const root = mount(sandboxRow());
+    await nextTick();
+    expect(root.textContent).toMatch(/starting/i);
 });
 
 it(`offers the logo to an owner at rest, with no edit mode to enter first`, () => {

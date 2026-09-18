@@ -15,9 +15,9 @@ import SandboxManifestCard from "./manifest/SandboxManifestCard.vue";
 import SandboxUpdateCard from "./SandboxUpdateCard.vue";
 import { useT } from "@intentic/ui/i18n";
 
-// Overview tab: sandbox identity (name, logo), self-reported image/version/URL relayed live via /info, online
-// status, and the non-blocking update prompt. Excludes per-tab status links or a running list: those duplicate
-// badges and panels that already live elsewhere (rail, tab badges, Preview/Ports).
+// Overview tab: sandbox identity (name, logo), self-reported image/version/URL relayed live via /info, and the
+// non-blocking update prompt. Excludes per-tab status links or a running list: those duplicate badges and panels
+// that already live elsewhere (rail, tab badges, Preview/Ports).
 
 const t = useT();
 
@@ -25,6 +25,8 @@ const sandbox = useSandbox();
 const { hasSnapshot } = useWorkspaceTree();
 const availability = useSandboxAvailability(hasSnapshot);
 const availabilityBadge = computed(() => sandboxAvailabilityVisual(availability.value));
+// The happy path needs no badge: reaching this tab already means the sandbox is up.
+const showAvailabilityBadge = computed(() => availability.value !== `live` && availability.value !== `stale`);
 const { info, installed, latest, updateAvailable, isLoading: infoLoading } = useSandboxVersion();
 const outline = useSandboxOutline(infoLoading);
 
@@ -134,7 +136,7 @@ const removeLogo = async (): Promise<void> => {
 
 <template>
     <div class="@container flex flex-col gap-6">
-        <!-- Identity: name + logo (owner-editable), self-reported image/version/URL, online status. -->
+        <!-- Identity: name + logo (owner-editable), self-reported image/version/URL. -->
         <Card class="flex flex-col gap-4">
             <div class="flex flex-col gap-3 @2xl:flex-row @2xl:items-center @2xl:justify-between">
                 <div class="flex min-w-0 flex-1 items-center gap-3">
@@ -202,7 +204,13 @@ const removeLogo = async (): Promise<void> => {
                                     failure="Couldn't save the sandbox's name."
                                 />
                             </h2>
-                            <StatusBadge class="shrink-0" :variant="availabilityBadge.variant" :label="availabilityBadge.label" dot />
+                            <StatusBadge
+                                v-if="showAvailabilityBadge"
+                                class="shrink-0"
+                                :variant="availabilityBadge.variant"
+                                :label="availabilityBadge.label"
+                                dot
+                            />
                         </div>
                         <p v-if="subline.text" class="h-4 truncate px-1 text-xs leading-4" :class="subline.tone">{{ subline.text }}</p>
                     </div>
