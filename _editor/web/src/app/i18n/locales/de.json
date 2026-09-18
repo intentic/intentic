@@ -76,8 +76,7 @@
             "workAlreadyLandedStays": "Arbeit, die bereits gelandet ist, bleibt in Ihrem Workspace: nur was noch auf dem Branch liegt, geht verloren."
         },
         "agentReactions": {
-            "anotherMark": "Weitere Reaktion",
-            "anyEmoji": "Beliebiges Emoji",
+            "addReaction": "Reaktion hinzufügen",
             "couldNotReact": "Diese Reaktion konnte nicht hinterlassen werden.",
             "markWith": "Mit {emoji} reagieren",
             "markedBy": "{emoji} von {who}",

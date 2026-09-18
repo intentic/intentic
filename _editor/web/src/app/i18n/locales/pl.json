@@ -76,8 +76,7 @@
             "workAlreadyLandedStays": "Praca, która już została scalona, zostaje w Twojej przestrzeni roboczej: przepada tylko to, co wciąż jest na gałęzi."
         },
         "agentReactions": {
-            "anotherMark": "Inna reakcja",
-            "anyEmoji": "Dowolne emoji",
+            "addReaction": "Dodaj reakcję",
             "couldNotReact": "Nie udało się dodać tej reakcji.",
             "markWith": "Zareaguj: {emoji}",
             "markedBy": "{emoji} od: {who}",

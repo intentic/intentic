@@ -76,8 +76,7 @@
             "workAlreadyLandedStays": "El trabajo ya integrado se queda en tu espacio de trabajo: solo se pierde lo que siga en la rama."
         },
         "agentReactions": {
-            "anotherMark": "Otra reacción",
-            "anyEmoji": "Cualquier emoji",
+            "addReaction": "Añadir una reacción",
             "couldNotReact": "No se pudo dejar esa reacción.",
             "markWith": "Reaccionar con {emoji}",
             "markedBy": "{emoji} de {who}",

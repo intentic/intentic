@@ -230,10 +230,20 @@ it(`withholds the close from a registered agent, which archives instead`, () => 
 });
 
 // Same rule as the archive above, for the same reason: a mark is addressed by id, and this card has no id the
-// daemon knows. A registered one wears the strip.
-it(`withholds reactions from a card with no entry to attach one to`, () => {
-    expect(buttonLabelled(mount(refused()), `React with 👍`)).toBeUndefined();
-    expect(buttonLabelled(mount(ready(`landed`)), `React with 👍`)).not.toBeUndefined();
+// daemon knows. A registered one is offered the press.
+it(`withholds the reaction press from a card with no entry to attach one to`, () => {
+    expect(buttonLabelled(mount(refused()), `Add a reaction`)).toBeUndefined();
+    expect(buttonLabelled(mount(ready(`landed`)), `Add a reaction`)).not.toBeUndefined();
+});
+
+// It rides in the header's affordance row, where the seats are reserved and the title takes what is left, rather than
+// among the marks themselves: revealing a control in the stats row moved the line below it for good.
+it(`reveals that press with the card's other actions, by fading rather than by appearing`, () => {
+    const press = buttonLabelled(mount(ready(`landed`)), `Add a reaction`)!;
+    expect(press.className).toContain(`opacity-0`);
+    expect(press.className).toContain(`group-hover:opacity-100`);
+    expect(press.className).toContain(`transition-opacity`);
+    expect(press.className).not.toContain(`hidden`);
 });
 
 // A `resuming` agent (its turn restarting after e.g. a credential rotation) must render as work in flight, not as

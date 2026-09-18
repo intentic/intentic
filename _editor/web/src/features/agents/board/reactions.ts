@@ -7,8 +7,9 @@ import type { AgentReaction } from "@intentic/sandbox-contract";
 // one press further in, which is the right price for the difference in how often they are wanted.
 export const QUICK_EMOJI = [`👍`, `👎`] as const;
 
-// The picker's grid: what people reach for about work in flight, not a general keyboard — the field beside it takes
-// anything at all, so this list only has to be the shortcut, never the whole vocabulary.
+// The picker's grid, in eights: this IS the vocabulary, since nothing here takes a typed emoji, so it has to hold both
+// the verdicts a board gets marked with and enough of the ordinary ones that a person is not made to settle.
+// Rows read as groups — verdicts, warnings and the work itself, counts and thanks, faces, then tools and states.
 export const PICKER_EMOJI = [
     `👍`,
     `👎`,
@@ -18,30 +19,69 @@ export const PICKER_EMOJI = [
     `👀`,
     `🔥`,
     `✅`,
+
     `❌`,
     `⚠️`,
+    `🛑`,
+    `🚧`,
     `🤔`,
     `💡`,
     `🐛`,
     `🧪`,
+
     `🧹`,
     `🔒`,
     `📦`,
     `📈`,
     `📉`,
     `⏳`,
+    `⏱️`,
+    `💸`,
+
     `💯`,
     `🙏`,
     `🙌`,
     `👏`,
+    `🤝`,
+    `💪`,
+    `👌`,
+    `🤞`,
+
     `😄`,
     `😂`,
-    `🤯`,
+    `🥳`,
+    `😅`,
     `😬`,
+    `😭`,
+    `🤯`,
+    `🫠`,
+
     `🫡`,
     `🤖`,
+    `🧠`,
     `🎯`,
     `⚡`,
+    `✨`,
+    `🪄`,
+    `⭐`,
+
+    `🔧`,
+    `🔨`,
+    `🧩`,
+    `📌`,
+    `📝`,
+    `🔍`,
+    `🗑️`,
+    `♻️`,
+
+    `🍀`,
+    `☕`,
+    `🌙`,
+    `🏁`,
+    `🥇`,
+    `📊`,
+    `🔗`,
+    `🫶`,
 ] as const;
 
 // Where a hover stops being a list of people and starts being a wall of text. The count on the chip is still exact;

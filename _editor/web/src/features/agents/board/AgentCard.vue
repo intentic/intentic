@@ -2,7 +2,7 @@
 import { Button, ProgressRing, SegmentRing, ui, useDevice } from "@intentic/ui";
 import { createInlineRename } from "@intentic/ui/inline-rename";
 import { errorMessage, useNow } from "@intentic/ui/async";
-import { computed, ref } from "vue";
+import { computed, ref, useTemplateRef } from "vue";
 import { RouterLink } from "vue-router";
 import { requestLandAgent } from "../fleet/agentActions";
 import { refreshAcross } from "../../sandbox/live/fleetAcross";
@@ -273,10 +273,15 @@ const working = computed(() => turnWorking(props.agent));
 // Whether the card can show a date at all: an untouched draft can't, and neither can a running turn, whose own elapsed
 // readout takes the same slot.
 const dated = computed(() => props.agent.archivedAt !== undefined || (!working.value && props.agent.updatedAt > 0));
+// Whether a mark can be addressed to this card at all: a draft, a refused start or a chat reopened from history has no
+// registry entry, so the daemon would answer a press with 404.
+const reactable = computed(() => !unregistered(props.agent.status));
+// The strip lives in the summary row and the press that opens its picker in the header, so the header reaches it here.
+const reactionsStrip = useTemplateRef<{ open: (from: HTMLElement) => void }>(`reactionsStrip`);
 // Whether the closing line has anything to show: gated on everything it draws, so a card with nothing here opens no
 // empty strip.
 // One wrapping line (stats left, standing/time right) rather than two rows, so a lane fits more cards.
-const summary = computed(() => stats.value || review.value !== undefined || completed.value || dated.value || working.value);
+const summary = computed(() => stats.value || review.value !== undefined || completed.value || dated.value || working.value || reactable.value);
 const loopLine = computed(() => (props.agent.loop === undefined ? undefined : loopMeta(props.agent.loop)));
 // Recomputed against the ticking `now`, like the elapsed beside it, so the countdown moves without its own timer.
 // Suppressed while a turn is in flight: the running corner already answers "doing what, for how long", and reclaims it
@@ -535,6 +540,17 @@ const grab = (event: PointerEvent): void => {
                 >
                     <Icon name="undo" class="text-sm" />
                 </button>
+                <!-- The press that leaves a mark rides with the card's other actions, not with the marks themselves: this row reserves its seats and lets the title take what is left, so revealing it resizes nothing, while the stats row below has no seat to spare. -->
+                <button
+                    v-if="reactable"
+                    type="button"
+                    :aria-label="t(`agents.agentReactions.addReaction`)"
+                    v-tooltip.top="t(`agents.agentReactions.addReaction`)"
+                    :class="[HOVER_ACTION, mobile ? 'opacity-60' : 'opacity-0 focus-visible:opacity-100 group-hover:opacity-100']"
+                    @click.stop="reactionsStrip?.open($event.currentTarget as HTMLElement)"
+                >
+                    <Icon name="plus" class="text-sm" />
+                </button>
                 <!-- An icon, not a spelled-out link, so it costs no space at rest; the words move to the tooltip. -->
                 <button
                     v-if="review !== undefined && lane !== 'attention'"
@@ -710,16 +726,6 @@ const grab = (event: PointerEvent): void => {
                 </template>
             </div>
 
-            <!-- What people have made of this card, above the line of what it cost: the chips are content and always show, the presses that add one wait for the pointer (`tuck`). -->
-            <!-- Only a card the daemon has an entry for: a draft, a refused start or a chat reopened from history has nothing to address a mark to. -->
-            <AgentReactions
-                v-if="!unregistered(agent.status)"
-                :agent-id="agent.id"
-                :reactions="agent.reactions"
-                :sandbox-id="agent.sandboxId"
-                :tuck="true"
-            />
-
             <!-- The closing summary line: counted stats, then the drill-in and time held to the line's right (see `summary`). -->
             <div
                 v-if="summary"
@@ -753,6 +759,16 @@ const grab = (event: PointerEvent): void => {
                         agent.subagents.running > 0 ? `${agent.subagents.running} / ${agent.subagents.total}` : agent.subagents.total
                     }}
                 </RouterLink>
+
+                <!-- Marks people left, at the end of the counted stats rather than in a row of their own, and drawn only when there are some: a strip that came and went with the pointer would resize every card it is on and flicker the lane around it. The press that adds one is in the header, with the card's other actions. -->
+                <AgentReactions
+                    v-if="reactable"
+                    ref="reactionsStrip"
+                    :agent-id="agent.id"
+                    :reactions="agent.reactions"
+                    :sandbox-id="agent.sandboxId"
+                    :dense="true"
+                />
 
                 <!-- Standing and clock pinned right by margin, not a spacer, so wrapping doesn't strand them on an empty line. -->
                 <span class="ml-auto inline-flex min-w-0 items-center gap-2 text-subtle">

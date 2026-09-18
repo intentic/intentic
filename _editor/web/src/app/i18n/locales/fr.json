@@ -76,8 +76,7 @@
             "workAlreadyLandedStays": "Le travail déjà intégré reste dans votre espace de travail : seul ce qui est encore sur la branche est perdu."
         },
         "agentReactions": {
-            "anotherMark": "Autre réaction",
-            "anyEmoji": "N'importe quel émoji",
+            "addReaction": "Ajouter une réaction",
             "couldNotReact": "Impossible de laisser cette réaction.",
             "markWith": "Réagir avec {emoji}",
             "markedBy": "{emoji} de {who}",
