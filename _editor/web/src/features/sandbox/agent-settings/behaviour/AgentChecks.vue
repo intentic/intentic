@@ -144,11 +144,6 @@ const savePrepush = (): void => {
             <template #control>
                 <ToggleSwitch :model-value="tests()?.enabled ?? false" :disabled="settings === undefined" @update:model-value="setTests" />
             </template>
-            <template #below>
-                <p v-if="tests()?.enabled === true" class="text-2xs text-muted">
-                    {{ t(`sandbox.agentChecks.reRunAgainstOld`) }}
-                </p>
-            </template>
         </Row>
 
         <!-- Runs the same check CI would, before the push leaves the machine. -->

@@ -1520,7 +1520,6 @@
             "prePushCheckCommand": "Pre-push check command",
             "promptAssistantToOpen": "Prompt the assistant to open the view after changes to the interface.",
             "promptAssistantToRun": "Prompt the assistant to run a check after code changes.",
-            "reRunAgainstOld": "The re-run against the old code covers up to three test files per turn and only reverts source changed in the same package: a sibling package is imported as its built output, where there is nothing to swap.",
             "runOneCheckBefore": "Run one check before any push, whichever repository is going out. A repository's own build belongs in the repository, below.",
             "verifyBeforeFinishing": "Verify before finishing"
         },
