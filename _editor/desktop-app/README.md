@@ -395,6 +395,7 @@ needs, and say what it is doing to a window instead of a terminal
 | Resources | `recreate.sh <slug> --reshape <ic flags>` / `recreate.ps1 -Slug … -Reshape <ic flags>`: the same shim, forwarding `ic sandbox reshape`'s own `--memory`/`--cpus`/`--privileged`/`--gpus`, spelled in Rust from the form's ask (`commands.rs`) |
 | Remove | `cleanup.sh <slug> -y` / `cleanup.ps1 -Slug … -Yes` |
 | Start · Stop · Restart · Logs · the list itself | `docker` directly: there is no script that lists, inspects, cycles or tails. The list reads each container's share off one `docker inspect`, and the form's rails off `docker info` |
+| Starting Docker's own engine | Docker Desktop's launcher directly, then `docker info` until it answers. No script: the moment it is needed is a launch, with no terminal anywhere near it — see *The morning after a restart* below |
 | The machine-agent panel | `intentic-machine status --json` (its own install under `~/.intentic/machine/bin` first, then PATH) |
 | Restart agent | `intentic-machine run --stop` then `intentic-machine run`, same resolution order. The panel used to print those two for someone to type into a terminal on the computer this window is running on; `--stop` failing is the state being fixed, so only the start's exit decides |
 
@@ -608,6 +609,48 @@ all. Seven things changed, and each is the smallest fix for what was actually ob
 - **The Windows installer itself is unchanged** — it is stock NSIS and cannot be built or looked at from this
   workspace (see *What the installer looks like* above). It is the one screen of this walk still wearing a
   toolkit's defaults.
+
+## The morning after a restart: this window starts Docker
+
+**Docker Desktop does not start itself.** "Start Docker Desktop when you sign in to your computer" is
+**off by default on every platform** — Docker's own settings reference says so, and a machine here reads
+`"AutoStart": false` in `%APPDATA%\Docker\settings-store.json`. Neither the winget install nor the silent
+`Docker Desktop Installer.exe install` our setup runs changes it, and nothing in `connect.ps1` ever did.
+
+So the day after a restart, a computer that hosts a sandbox has no engine. The container's
+`--restart unless-stopped` has nothing to be restarted *by*; the workspace this app opens loads onto a daemon
+that isn't there; and the manager screen said "Docker isn't reachable, so there is nothing to show yet" in
+grey, with nothing to press. For the person who bought this to avoid a terminal, that was the end of the road.
+
+**The app starts it.** Not a login item and not a background service — the one place the wait belongs is an
+action somebody took, and opening this app is that action:
+
+1. **The launch decides which face opens** (`lib.rs` `opening`, pure and tested): a parked setup outranks
+   everything, because its own run starts Docker as one of its steps (`ic docker prepare`); otherwise a
+   machine that **has hosted a sandbox** (`state.rs`, written when a setup finishes and whenever a listing
+   shows one) with **nothing listening** on the engine's socket opens the app's own face instead of the
+   workspace.
+2. **The probe is the socket, never `docker info`** (`scripts.rs` `engine_listening`): opening
+   `\\.\pipe\docker_engine`, or connecting to `~/.docker/run/docker.sock` then `/var/run/docker.sock`, answers
+   in microseconds. `docker info` against a stopped daemon spends tens of seconds getting to the same answer,
+   and this question is asked before any window exists. A `DOCKER_HOST` naming `tcp://` or `ssh://` is somebody
+   else's daemon: nothing is probed and nothing is started.
+3. **The start narrates** (`docker_start`, streamed under the run id `docker`): Docker Desktop's launcher from
+   wherever it was installed, then the socket polled until the engine answers, for five minutes — a first start
+   unpacks an engine and boots a VM. At 75 seconds it says the thing that is usually true: Docker's own window
+   may be asking for a licence acceptance or a sign-in, which is the one part of this no app can answer.
+4. **Every ending has a sentence and a button** (`DockerCard.vue`): `ready` (the card goes, the list comes
+   back, and the launch that opened this face hands over to the workspace), `notInstalled`, `wouldNotStart`,
+   `notAllowed` — the engine is up and refused this account, which on Windows is the `docker-users` group and
+   a sign-out, never a longer wait — and `tookTooLong`. Check again, Open Docker Desktop, Get Docker Desktop.
+
+**What it deliberately is not.** Turning Docker's own autostart on was the other way to guarantee this, and it
+was rejected: it puts a ~2 GB VM and a slower sign-in on every boot of a machine whose owner may not open
+Intentic that day, and a failure at login is silent until somebody opens this app anyway. The cost of the
+choice made instead is honest and worth stating: a sandbox reached **from another device** (the browser on a
+phone, a hosted agent session) stays unreachable after a restart until somebody opens this app on the machine
+that hosts it. If that becomes the complaint, the answer is an explicit opt-in — "keep my sandbox reachable
+while I'm away" — and not a default.
 
 ## Sign-in never happens in the webview
 

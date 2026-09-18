@@ -149,6 +149,29 @@ export const desktopInfo = (): Promise<DesktopInfo> => invoke(`desktop_info`);
 // Whether a Docker daemon answers right now; false covers both not-installed and not-started, which the scripts
 // tell apart on their own. `docker info` on a stopped daemon can take tens of seconds, so this is its own call.
 export const dockerReady = (): Promise<boolean> => invoke(`docker_ready`);
+
+/* THE ENGINE, AND THIS WINDOW'S JOB OF STARTING IT — scripts.rs states why nothing else on the machine will. */
+
+// Is anything listening where the engine listens? Microseconds, unlike `dockerReady` — this is the question a
+// screen asks before it can afford to wait, and the one the launch itself is decided on.
+export const dockerListening = (): Promise<boolean> => invoke(`docker_listening`);
+/** How far starting the engine got. Mirrors commands.rs `DockerStart`, same strings, same meanings. */
+export type DockerOutcome = `ready` | `notInstalled` | `wouldNotStart` | `notAllowed` | `tookTooLong`;
+export interface DockerStart {
+    readonly outcome: DockerOutcome;
+    /** Docker's own last words, shown under the card's sentence. Empty when there are none. */
+    readonly detail: string;
+}
+// Minutes long, and every ending is an answer rather than a throw: the card has a sentence for each of them.
+// Streams its narration under the run id `docker`.
+export const dockerStart = (): Promise<DockerStart> => invoke(`docker_start`);
+/** Docker Desktop's own window, in front — its welcome screen is the one thing this app cannot answer. */
+export const dockerOpen = (): Promise<void> => invoke(`docker_open`);
+/** Whether a sandbox has ever run on this machine: the licence to start its Docker at all. */
+export const hostsSandboxes = (): Promise<boolean> => invoke(`hosts_sandboxes`);
+// Taken, not read: only the launch that opened this face BECAUSE the engine was asleep hands over to the
+// workspace by itself. A window opened from the tray was asked for, and stays where it was put.
+export const takePendingDocker = (): Promise<boolean> => invoke(`take_pending_docker`);
 // Taken, not read: two callers race for a parked setup (the arrival event, and this window's read on mount), and
 // only one may have it.
 export const takePendingSetup = (): Promise<SetupArgs | null> => invoke(`take_pending_setup`);

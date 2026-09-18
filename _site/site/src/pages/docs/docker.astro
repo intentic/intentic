@@ -72,6 +72,20 @@ tr '\\n' '\\0' < sandbox.env | docker run -i --rm --entrypoint intentic \\
         <a href="/docs/troubleshooting/#windows-docker">Troubleshooting</a> for what each outcome means.
     </p>
 
+    <h3>After a restart, the desktop app starts Docker</h3>
+    <p>
+        Docker Desktop does not start when you sign in unless you tell it to — that setting is off by default on every platform — so the
+        morning after a restart there is no engine for your sandbox to come back into. On a computer that hosts a sandbox, the desktop app
+        starts Docker itself when you open it, says how long the engine usually takes, and tells you what is left to do by hand if it cannot:
+        Docker's own welcome screen, a sign-in, or a Windows account that is not in the <code>docker-users</code> group yet. Your sandbox
+        container restarts on its own once the engine is up.
+    </p>
+    <p>
+        Nothing is left running in the background for it. If you would rather the engine came up at sign-in — which is what keeps a sandbox
+        reachable from your phone or another computer after a restart — turn on <em>Start Docker Desktop when you sign in to your computer</em>
+        in Docker Desktop's own settings.
+    </p>
+
     <h2>What gets created</h2>
     <p>
         Two containers, three named volumes, one network: all derived from your sandbox's <strong>slug</strong>, which is the first label of

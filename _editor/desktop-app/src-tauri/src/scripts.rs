@@ -46,6 +46,42 @@ pub enum RunEvent {
 
 pub const RUN_EVENT: &str = "desktop://run";
 
+/* A RUN THIS PROCESS DOES ITSELF — the engine wait, which has no child to stream. It reports on the same
+ * three events a spawned script does, so the screen renders it with the parts it already has. No transcript:
+ * there is no pipe to tee, and what it would hold is the same handful of lines the card is showing. */
+
+pub fn started(app: &AppHandle, id: &str) {
+    let _ = app.emit(
+        RUN_EVENT,
+        RunEvent::Started {
+            run: id.to_string(),
+            log: None,
+        },
+    );
+}
+
+pub fn line(app: &AppHandle, id: &str, text: &str) {
+    let _ = app.emit(
+        RUN_EVENT,
+        RunEvent::Line {
+            run: id.to_string(),
+            stream: Stream::Stdout,
+            text: text.to_string(),
+        },
+    );
+}
+
+pub fn ended(app: &AppHandle, id: &str, ok: bool) {
+    let _ = app.emit(
+        RUN_EVENT,
+        RunEvent::Exit {
+            run: id.to_string(),
+            code: Some(i32::from(!ok)),
+            ok,
+        },
+    );
+}
+
 /* Until now a run existed only as events in one webview: the lines a user could see were the lines that window happened to still be holding. */
 fn log_path(id: &str) -> Option<PathBuf> {
     let home = std::env::var("USERPROFILE")
@@ -211,6 +247,336 @@ pub fn docker_ready() -> bool {
         .status()
         .map(|status| status.success())
         .unwrap_or(false)
+}
+
+/* THE ENGINE NOBODY ELSE STARTS.
+ *
+ * Docker Desktop's "Start Docker Desktop when you sign in to your computer" is OFF by default on every
+ * platform — Docker's own settings reference says so, and a machine here reads `"AutoStart": false` in
+ * settings-store.json. So the morning after a restart, a computer that hosts a sandbox has no engine, the
+ * container's `--restart unless-stopped` has nothing to be restarted by, and the person who bought this to
+ * avoid a terminal is looking at a workspace that will not load.
+ *
+ * This app is the thing that opens on that machine. So this app starts the engine: on launch when the window
+ * is opening anyway (lib.rs), and from the card when a start did not work out. It is never a background
+ * daemon and never a login item — the wait belongs to an action somebody took.
+ */
+
+/// The engine's named pipe, as Windows spells it.
+const ENGINE_PIPE: &str = r"\\.\pipe\docker_engine";
+
+/// How long Docker Desktop gets. A FIRST start unpacks the engine and boots a VM, and three minutes is normal
+/// on a laptop; ic's `prepare::fix` allows the same five and it was the right call there for the same reason.
+pub const ENGINE_LIMIT: Duration = Duration::from_secs(300);
+
+/// How long before the wait mentions the thing that is usually happening. A first start genuinely takes a
+/// couple of minutes, so saying it at ten seconds would cry wolf on every launch; saying it only at the limit
+/// is telling somebody what to do after they have given up.
+const ENGINE_HINT_AFTER: Duration = Duration::from_secs(75);
+
+/// Where the engine listens on this machine, in the order worth trying. `DOCKER_HOST` wins when it names a
+/// path, because somebody who set it meant it; otherwise the sockets Docker Desktop actually creates — the
+/// per-user one a default macOS install leaves the `desktop-linux` context pointing at, and the shared one.
+///
+/// A VALUE rather than a `cfg!` read, for [`sync_agent_candidates`]'s reason: the Windows spelling is
+/// cross-built on a Linux runner and first executes on somebody's PC, so one `cargo test` covers both halves.
+pub fn engine_endpoints(host: Host, docker_host: Option<&str>, home: Option<&str>) -> Vec<String> {
+    // A `tcp://` or `ssh://` DOCKER_HOST is somebody else's daemon: there is no socket here to look at and
+    // nothing this app could start would help, so the list is empty and the probe answers "not listening".
+    if let Some(explicit) = docker_host.filter(|value| !value.is_empty()) {
+        return endpoint_path(host, explicit).into_iter().collect();
+    }
+    if host == Host::Windows {
+        return vec![ENGINE_PIPE.to_string()];
+    }
+    let mut found = Vec::new();
+    if let Some(home) = home.filter(|home| !home.is_empty()) {
+        found.push(format!("{home}/.docker/run/docker.sock"));
+    }
+    found.push("/var/run/docker.sock".to_string());
+    found
+}
+
+/// The path inside a `DOCKER_HOST`, or None when it names something no local socket answers for.
+fn endpoint_path(host: Host, docker_host: &str) -> Option<String> {
+    if let Some(path) = docker_host.strip_prefix("unix://") {
+        return (host == Host::Unix).then(|| path.to_string());
+    }
+    // `npipe:////./pipe/docker_engine` is the same pipe written the way a URL has to be written.
+    if let Some(path) = docker_host.strip_prefix("npipe://") {
+        return (host == Host::Windows).then(|| path.replace('/', "\\"));
+    }
+    None
+}
+
+/// Is the engine LISTENING, right now? Microseconds, because the launch path asks this before any window
+/// exists: [`docker_ready`] against a stopped daemon spends tens of seconds reaching the same answer, and a
+/// window that waits for it is a window that opens late on precisely the machines this is about.
+pub fn engine_listening() -> bool {
+    let docker_host = std::env::var("DOCKER_HOST").ok();
+    let home = std::env::var("USERPROFILE")
+        .or_else(|_| std::env::var("HOME"))
+        .ok();
+    engine_endpoints(Host::current(), docker_host.as_deref(), home.as_deref())
+        .iter()
+        .any(|endpoint| listening_at(endpoint))
+}
+
+/// Three answers, all of them instant: the pipe opened (an engine), every instance is busy or this account is
+/// refused (still an engine), or there is no such pipe. Only the last one is a no.
+#[cfg(windows)]
+fn listening_at(endpoint: &str) -> bool {
+    match std::fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .open(endpoint)
+    {
+        Ok(_) => true,
+        Err(error) => error.kind() != std::io::ErrorKind::NotFound,
+    }
+}
+
+#[cfg(unix)]
+fn listening_at(endpoint: &str) -> bool {
+    match std::os::unix::net::UnixStream::connect(endpoint) {
+        Ok(_) => true,
+        // A socket that refuses THIS USER has a daemon behind it, exactly as a pipe that does on Windows: the
+        // answer to that is a group membership (see `engine_denied`), and never a longer wait or a restart.
+        Err(error) => error.kind() == std::io::ErrorKind::PermissionDenied,
+    }
+}
+
+/// Where Docker Desktop's own launcher lives on Windows, in the order worth trying: the default install, the
+/// per-user one newer builds make, and its Programs sibling.
+///
+/// Only CALLED on Windows, and asserted everywhere: this spelling is cross-built on a Linux runner and first
+/// executes on somebody's PC, which is [`Host`]'s whole argument.
+#[cfg_attr(not(windows), allow(dead_code))]
+pub fn docker_app_candidates(
+    program_files: Option<&str>,
+    local_app_data: Option<&str>,
+) -> Vec<String> {
+    let mut found = Vec::new();
+    for base in [program_files, local_app_data] {
+        if let Some(base) = base.filter(|base| !base.is_empty()) {
+            found.push(format!("{base}\\Docker\\Docker\\Docker Desktop.exe"));
+        }
+    }
+    if let Some(base) = local_app_data.filter(|base| !base.is_empty()) {
+        found.push(format!(
+            "{base}\\Programs\\Docker\\Docker\\Docker Desktop.exe"
+        ));
+    }
+    found
+}
+
+/// Docker Desktop's launcher beside the CLI that shipped inside it — `<app>\resources\bin\docker.exe` — which
+/// is how an install in a folder nobody guessed still gets found. Cut by separator rather than by `Path`, so
+/// the Windows spelling is asserted on the Linux runner that cross-builds it.
+#[cfg_attr(not(windows), allow(dead_code))]
+pub fn docker_app_beside(cli: &str) -> Option<String> {
+    let (app, leaf) = cli.rsplit_once("\\resources\\bin\\")?;
+    leaf.eq_ignore_ascii_case("docker.exe")
+        .then(|| format!("{app}\\Docker Desktop.exe"))
+}
+
+/// Why Docker Desktop did not start. The two differ on screen: one is a missing install and the other is an
+/// install that would not run, and only the first of those is something to go and get.
+///
+/// `Failed` is only reachable where there is a launcher to fail — on the platforms whose start is one command
+/// that either exists or does not, every refusal is the first variant.
+#[cfg_attr(not(windows), allow(dead_code))]
+pub enum StartTrouble {
+    NotInstalled(String),
+    Failed(String),
+}
+
+/// Start Docker Desktop. `Ok` means a process was started — never that the engine is up, which is
+/// [`wait_for_engine`]'s question. `foreground` puts its own window in front, which is what "Open Docker
+/// Desktop" means on a card that has just told somebody to look at it.
+#[cfg(windows)]
+pub fn start_docker_desktop(foreground: bool) -> Result<(), StartTrouble> {
+    // Windows has one way to launch an app and it raises the window either way; the flag only means something
+    // where `open` has a switch for it.
+    let _ = foreground;
+    let program_files = std::env::var("ProgramFiles").ok();
+    let local_app_data = std::env::var("LOCALAPPDATA").ok();
+    let mut candidates = docker_app_candidates(program_files.as_deref(), local_app_data.as_deref());
+    candidates.extend(docker_cli_path().as_deref().and_then(docker_app_beside));
+    let exe = candidates
+        .into_iter()
+        .find(|path| Path::new(path).exists())
+        .ok_or_else(|| {
+            StartTrouble::NotInstalled(
+                "Docker Desktop is not installed where this app can find it.".to_string(),
+            )
+        })?;
+    quiet(Command::new(&exe))
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .map(|_| ())
+        .map_err(|error| StartTrouble::Failed(format!("{exe} would not start: {error}")))
+}
+
+/// The docker CLI on this PATH, which names its own installation (see [`docker_app_beside`]).
+#[cfg(windows)]
+fn docker_cli_path() -> Option<String> {
+    std::env::var("PATH").ok().and_then(|path| {
+        path.split(';')
+            .map(|dir| Path::new(dir).join("docker.exe"))
+            .find(|candidate| candidate.exists())
+            .map(|candidate| candidate.to_string_lossy().to_string())
+    })
+}
+
+#[cfg(target_os = "macos")]
+pub fn start_docker_desktop(foreground: bool) -> Result<(), StartTrouble> {
+    let mut command = Command::new("open");
+    // `-g` leaves the app in the background, which is what a launch that is only after the engine wants; the
+    // button that says "Open Docker Desktop" means the window, so it omits it.
+    if !foreground {
+        command.arg("-g");
+    }
+    match command.args(["-a", "Docker"]).status() {
+        Ok(status) if status.success() => Ok(()),
+        // `open -a` fails exactly one interesting way: there is no such application.
+        Ok(_) => Err(StartTrouble::NotInstalled(
+            "Docker Desktop is not installed in this machine's Applications.".to_string(),
+        )),
+        Err(error) => Err(StartTrouble::Failed(format!(
+            "Docker Desktop would not start: {error}"
+        ))),
+    }
+}
+
+/// Linux has no Docker Desktop to start on most machines: the engine is a system service, and starting one
+/// needs root this app does not have and must not ask for on a launch. Desktop's own unit is a USER service,
+/// so where it exists this works, and where it does not the message names the one command that does.
+#[cfg(all(unix, not(target_os = "macos")))]
+pub fn start_docker_desktop(foreground: bool) -> Result<(), StartTrouble> {
+    let _ = foreground;
+    match Command::new("systemctl")
+        .args(["--user", "start", "docker-desktop"])
+        .status()
+    {
+        Ok(status) if status.success() => Ok(()),
+        // Not "not installed": a machine running the plain engine has Docker and no user service to start, and
+        // the honest thing to hand back is the one command that does start it.
+        _ => Err(StartTrouble::Failed(
+            "starting Docker on this machine needs a terminal: sudo systemctl start docker"
+                .to_string(),
+        )),
+    }
+}
+
+/// How a refusal that is not the daemon's at all begins: there was no `docker` to ask. Matched rather than
+/// typed, so the one caller that must not wait on it ([`wait_for_engine`]) and the ones that only report it
+/// read the same value.
+const CLI_MISSING: &str = "the docker command would not run";
+
+/// The daemon's own answer: None when it answered, its last words when it did not. Only ever asked of a
+/// socket that is already listening — against a stopped daemon this same call spends tens of seconds.
+pub fn daemon_refusal() -> Option<String> {
+    match quiet(Command::new("docker"))
+        .args(["info", "--format", "{{.ServerVersion}}"])
+        .stdin(Stdio::null())
+        .output()
+    {
+        Ok(output) if output.status.success() => None,
+        Ok(output) => Some(String::from_utf8_lossy(&output.stderr).trim().to_string()),
+        Err(error) => Some(format!("{CLI_MISSING}: {error}")),
+    }
+}
+
+/// Whether a refusal is the engine turning THIS ACCOUNT away rather than not being there at all. Windows
+/// spells a permission failure on a named pipe exactly one way and Linux spells its socket's exactly one
+/// other; waiting longer fixes neither. Mirrors ic's `prepare::plan::engine_denied`, which decides the same
+/// thing for the setup flow.
+pub fn engine_denied(refusal: &str) -> bool {
+    let refusal = refusal.to_ascii_lowercase();
+    refusal.contains("access is denied") || refusal.contains("permission denied")
+}
+
+/// How far bringing the engine up got. A closed set, because "Docker did not start" with no reason is a dead
+/// end wearing an error message — each of these is a different sentence and a different button.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum EngineOutcome {
+    /// The engine answers. Nothing to say and nothing to press.
+    Ready,
+    /// There is no Docker Desktop on this machine to start.
+    NotInstalled(String),
+    /// There is, and it would not run.
+    WouldNotStart(String),
+    /// The engine is up and will not talk to this account: a group membership, never a longer wait.
+    NotAllowed(String),
+    /// Started, and its engine never came up — a welcome screen, a sign-in, or a first start still going.
+    TookTooLong(String),
+}
+
+/// Wait for the engine, saying where it has got to. The socket is polled rather than `docker info`, so a
+/// stopped daemon costs nothing per round; `docker info` is only asked once something is listening.
+fn wait_for_engine(limit: Duration, say: &dyn Fn(&str)) -> EngineOutcome {
+    let started = Instant::now();
+    let mut said = Instant::now();
+    let mut hinted = false;
+    let mut last = String::new();
+    while started.elapsed() < limit {
+        if engine_listening() {
+            match daemon_refusal() {
+                None => return EngineOutcome::Ready,
+                Some(refusal) if engine_denied(&refusal) => {
+                    return EngineOutcome::NotAllowed(refusal)
+                }
+                // Nothing to wait FOR: the engine may well be up, but the client that would talk to it is not
+                // on this machine, and five minutes of polling changes neither half of that.
+                Some(refusal) if refusal.starts_with(CLI_MISSING) => {
+                    return EngineOutcome::WouldNotStart(refusal)
+                }
+                Some(refusal) => last = refusal,
+            }
+        }
+        if !hinted && started.elapsed() >= ENGINE_HINT_AFTER {
+            hinted = true;
+            /* Docker Desktop's first run puts up a licence screen, and sometimes an offer to sign in, in its OWN window. */
+            say("Docker Desktop may be asking you something: look at its window for a welcome or sign-in screen. A first start also just takes a couple of minutes.");
+        }
+        if said.elapsed() >= Duration::from_secs(15) {
+            said = Instant::now();
+            say(&format!(
+                "still waiting for Docker's engine ({}s before giving up)",
+                limit.saturating_sub(started.elapsed()).as_secs()
+            ));
+        }
+        std::thread::sleep(Duration::from_secs(2));
+    }
+    EngineOutcome::TookTooLong(last)
+}
+
+/// Start the engine if it is not up, then wait for it. BLOCKING, for minutes by design — call it from
+/// `spawn_blocking`. Safe to run twice at once: Docker Desktop is single-instance, so the second start is a
+/// no-op and both waits reach the same answer.
+pub fn bring_engine_up(limit: Duration, say: &dyn Fn(&str)) -> EngineOutcome {
+    if engine_listening() {
+        match daemon_refusal() {
+            None => return EngineOutcome::Ready,
+            Some(refusal) if engine_denied(&refusal) => return EngineOutcome::NotAllowed(refusal),
+            // Listening and not answering yet: Docker Desktop is already on its way up, so there is nothing
+            // to start and everything to wait for.
+            Some(_) => {}
+        }
+    } else {
+        say("starting Docker Desktop...");
+        match start_docker_desktop(false) {
+            Ok(()) => {}
+            Err(StartTrouble::NotInstalled(problem)) => {
+                return EngineOutcome::NotInstalled(problem)
+            }
+            Err(StartTrouble::Failed(problem)) => return EngineOutcome::WouldNotStart(problem),
+        }
+    }
+    wait_for_engine(limit, say)
 }
 
 fn command_for(app: &AppHandle, run: &ScriptRun) -> Result<Command, String> {
@@ -616,6 +982,97 @@ mod tests {
             } else {
                 Host::Unix
             }
+        );
+    }
+
+    /* THE ENGINE PROBE, asserted on every runner because the Windows half of it is cross-built and first runs on a PC. */
+
+    #[test]
+    fn each_host_looks_where_its_own_engine_listens() {
+        assert_eq!(
+            engine_endpoints(Host::Windows, None, Some("C:\\Users\\radar")),
+            vec![ENGINE_PIPE.to_string()]
+        );
+        assert_eq!(
+            engine_endpoints(Host::Unix, None, Some("/Users/radar")),
+            vec![
+                // Docker Desktop for Mac's own socket comes first: a default install leaves the shared one
+                // to whoever asked for it, so the user's own is the one that is always there.
+                "/Users/radar/.docker/run/docker.sock".to_string(),
+                "/var/run/docker.sock".to_string(),
+            ]
+        );
+        assert_eq!(
+            engine_endpoints(Host::Unix, None, None),
+            vec!["/var/run/docker.sock".to_string()],
+            "a machine that will not say where home is still has the shared socket"
+        );
+    }
+
+    #[test]
+    fn a_docker_host_that_names_a_socket_is_the_only_one_looked_at() {
+        assert_eq!(
+            engine_endpoints(Host::Unix, Some("unix:///tmp/other.sock"), Some("/home/x")),
+            vec!["/tmp/other.sock".to_string()]
+        );
+        assert_eq!(
+            engine_endpoints(Host::Windows, Some("npipe:////./pipe/other_engine"), None),
+            vec!["\\\\.\\pipe\\other_engine".to_string()],
+            "the URL spelling of a pipe has to come back as the pipe"
+        );
+        // Somebody else's daemon: there is no local socket to probe and nothing this app starts would help,
+        // so the list is empty and the probe answers "not listening" rather than guessing.
+        assert!(
+            engine_endpoints(Host::Unix, Some("tcp://10.0.0.2:2375"), Some("/home/x")).is_empty()
+        );
+        assert!(engine_endpoints(Host::Windows, Some("ssh://box"), None).is_empty());
+    }
+
+    /* THE REPORTED SHAPE OF A WINDOWS INSTALL — Program Files, the per-user one, and a folder only the CLI knows about. */
+    #[test]
+    fn docker_desktop_is_looked_for_everywhere_an_install_puts_it() {
+        let found = docker_app_candidates(
+            Some("C:\\Program Files"),
+            Some("C:\\Users\\radar\\AppData\\Local"),
+        );
+        assert_eq!(
+            found,
+            vec![
+                "C:\\Program Files\\Docker\\Docker\\Docker Desktop.exe".to_string(),
+                "C:\\Users\\radar\\AppData\\Local\\Docker\\Docker\\Docker Desktop.exe".to_string(),
+                "C:\\Users\\radar\\AppData\\Local\\Programs\\Docker\\Docker\\Docker Desktop.exe"
+                    .to_string(),
+            ]
+        );
+        assert!(docker_app_candidates(None, None).is_empty());
+    }
+
+    #[test]
+    fn the_docker_cli_names_the_installation_it_came_from() {
+        assert_eq!(
+            docker_app_beside("D:\\Tools\\Docker\\Docker\\resources\\bin\\docker.exe").as_deref(),
+            Some("D:\\Tools\\Docker\\Docker\\Docker Desktop.exe")
+        );
+        // A docker.exe that is not the one inside Docker Desktop names no app at all.
+        assert_eq!(docker_app_beside("C:\\bin\\docker.exe"), None);
+        assert_eq!(
+            docker_app_beside("C:\\Docker\\resources\\bin\\compose.exe"),
+            None
+        );
+    }
+
+    /* The one refusal that a longer wait cannot fix, in both spellings a real machine produces. */
+    #[test]
+    fn an_engine_that_refuses_this_account_is_told_from_one_that_is_not_there() {
+        assert!(engine_denied(
+            "error during connect: ... open //./pipe/docker_engine: Access is denied."
+        ));
+        assert!(engine_denied(
+            "dial unix /var/run/docker.sock: connect: permission denied"
+        ));
+        assert!(
+            !engine_denied("error during connect: ... The system cannot find the file specified."),
+            "a daemon that is not there is a wait, not a group membership"
         );
     }
 

@@ -25,6 +25,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { confirm, open } from "@tauri-apps/plugin-dialog";
 import { computed, onMounted, onUnmounted, ref, watch, watchEffect } from "vue";
 import { initAnalytics, track, trackBeforeExit } from "./analytics";
+import DockerCard from "./components/DockerCard.vue";
 import Requirements from "./components/Requirements.vue";
 import { desktopAgentPanel } from "./deviceAgent";
 import SetupProgress from "./components/SetupProgress.vue";
@@ -36,9 +37,13 @@ import {
     // Aliased so the ref below can use the plain name `dockerReady`.
     dockerReady as dockerReadyProbe,
     dockerEngine,
+    dockerListening,
+    dockerOpen,
+    dockerStart,
     expectedStop,
     folderEntries,
     forgetResumableSetup,
+    hostsSandboxes,
     deviceAgentRestart,
     deviceStatus,
     onPendingRecreate,
@@ -65,6 +70,7 @@ import {
     setupRun,
     signOutForSetup,
     syncRun,
+    takePendingDocker,
     takePendingRecreate,
     takePendingSetup,
     takePendingSync,
@@ -74,6 +80,7 @@ import {
     type DesktopInfo,
     type DeviceStatus,
     type DockerEngine,
+    type DockerStart,
     type Requirement,
     type RequirementProgress,
     type RunEvent,
@@ -101,6 +108,20 @@ const dialogFloor = computed(() => (reshaping.value === undefined ? 0 : globalTh
 useFitToContent(content, dialogFloor);
 /* WHETHER DOCKER ANSWERS, AND `undefined` UNTIL IT HAS BEEN ASKED — a third state this screen genuinely has and used to pretend it did not. */
 const dockerReady = ref<boolean | undefined>(undefined);
+/* THE ENGINE, AND THIS WINDOW'S JOB OF STARTING IT — nothing else on the machine does (desktop.ts). */
+// Whether anything is listening where the engine listens. Cheap, unlike `dockerReady`, which is why the list
+// below is only asked for when this says yes.
+const engineListening = ref<boolean | undefined>(undefined);
+const dockerStarting = ref(false);
+const dockerReport = ref<DockerStart | undefined>(undefined);
+// Where the start has got to: its latest narrated line, and nothing older.
+const dockerLine = ref<string | undefined>(undefined);
+// This launch opened the app's own face BECAUSE the engine was asleep (lib.rs), so this launch is the one that
+// hands over to the workspace once it wakes. A window opened from the tray was asked for and stays put.
+const wokeForDocker = ref(false);
+// The card is up while a start is running and while one has ended in anything other than an engine: `ready` is
+// the list below coming back, which says it better than any card could.
+const dockerCardShown = computed(() => dockerStarting.value || (dockerReport.value !== undefined && dockerReport.value.outcome !== `ready`));
 const sandboxes = ref<SandboxStatus[]>([]);
 const listError = ref<string | undefined>(undefined);
 // Docker engine size for the Resources form's rails; undefined means no ceiling, not a wrong one.
@@ -251,17 +272,29 @@ watch(
 );
 
 const refresh = async (): Promise<void> => {
-    // Alongside the list, not blocking it: this answer only sizes a form nobody has opened, and it's slow.
-    void dockerEngine()
-        .then((facts) => (engine.value = facts ?? undefined))
-        .catch(() => (engine.value = undefined));
-    try {
-        sandboxes.value = await sandboxList();
-        listError.value = undefined;
-    } catch (error) {
-        // Docker not being up is ordinary on an unset-up machine, so this reads as empty-with-explanation.
+    // Asked first and answered in microseconds, because everything below it is a docker call: a `docker ps`
+    // against a daemon that is not there spends tens of seconds on the socket before it fails, and a screen
+    // that waits for that on every refresh is a screen that looks broken on the machines this is about.
+    engineListening.value = await dockerListening();
+    if (!engineListening.value) {
         sandboxes.value = [];
-        listError.value = String(error);
+        engine.value = undefined;
+        // Not an error: the card below says what is happening and what to press. `listError` is for a docker
+        // that answered and refused.
+        listError.value = undefined;
+    } else {
+        // Alongside the list, not blocking it: this answer only sizes a form nobody has opened, and it's slow.
+        void dockerEngine()
+            .then((facts) => (engine.value = facts ?? undefined))
+            .catch(() => (engine.value = undefined));
+        try {
+            sandboxes.value = await sandboxList();
+            listError.value = undefined;
+        } catch (error) {
+            // Docker not being up is ordinary on an unset-up machine, so this reads as empty-with-explanation.
+            sandboxes.value = [];
+            listError.value = String(error);
+        }
     }
     // Read separately from the sandbox list: the agent and docker can each be absent independently on a working
     // device.
@@ -272,6 +305,84 @@ const refresh = async (): Promise<void> => {
         status.value = undefined;
         reportError.value = String(error);
     }
+};
+
+/* STARTING THE ENGINE — the whole of what this window can do about a Docker that is not running, and it is a lot. */
+
+// Where somebody sent to install Docker should land: our own page, which says what it is for here and links
+// Docker's download, rather than dropping a non-technical reader on docker.com to choose an edition.
+const DOCKER_DOCS = `https://intentic.dev/docs/docker`;
+
+// Not guarded against a second caller: Docker Desktop is single-instance, so two starts are one start and both
+// waits reach the same answer. The card hides its buttons while one is in flight because a second press says
+// nothing, not because it would break.
+const startDocker = async (): Promise<void> => {
+    dockerStarting.value = true;
+    dockerReport.value = undefined;
+    dockerLine.value = undefined;
+    const startedAt = Date.now();
+    try {
+        const report = await dockerStart();
+        dockerReport.value = report;
+        // How often a machine was found asleep, and how often waking it worked: the one measurement that says
+        // whether this window is doing the job it opened to do.
+        track(`desktop_docker_start`, {
+            outcome: report.outcome,
+            seconds: Math.round((Date.now() - startedAt) / 1000),
+            atLaunch: wokeForDocker.value,
+        });
+        dockerReady.value = report.outcome === `ready`;
+        // A refused engine is a RUNNING engine, so the list stops being the thing to wait for and starts being
+        // the thing that reports its own refusal.
+        engineListening.value = report.outcome === `ready` || report.outcome === `notAllowed`;
+    } catch (error) {
+        // The command itself failing is not one of its five answers, so it becomes the one that means "it did
+        // not run" — the card keeps a sentence and a button either way.
+        dockerReport.value = { outcome: `wouldNotStart`, detail: String(error) };
+    } finally {
+        dockerStarting.value = false;
+    }
+    if (dockerReport.value?.outcome !== `ready`) {
+        return;
+    }
+    await refresh();
+    // The launch that opened this face for the engine hands the window back to the workspace it was going to
+    // open — once, and only that launch (desktop.ts `takePendingDocker`).
+    if (wokeForDocker.value) {
+        wokeForDocker.value = false;
+        openWorkspace();
+    }
+};
+
+// Docker Desktop's own window, for the two things this app cannot answer for anybody: its welcome screen and
+// its sign-in.
+const openDocker = async (): Promise<void> => {
+    try {
+        await dockerOpen();
+    } catch (error) {
+        dockerReport.value = { outcome: `wouldNotStart`, detail: String(error) };
+    }
+};
+
+// The launch decision, asked again here because a window is not the only way to reach this screen: the tray's
+// "This device" lands on the same face, and a machine whose engine is asleep should be woken from there too.
+const wakeDockerIfNeeded = async (): Promise<void> => {
+    // Taken whatever happens next: it is a one-shot fact about THIS launch (lib.rs).
+    wokeForDocker.value = await takePendingDocker();
+    // A setup owns the machine while it runs — `ic docker prepare` starts Docker as one of its own steps, and
+    // two things starting it would draw two cards about one wait.
+    if (pending.value !== undefined || dockerStarting.value) {
+        return;
+    }
+    if (await dockerListening()) {
+        return;
+    }
+    // A machine no sandbox has ever run on is nobody's to wake: somebody using this app as a window onto a
+    // sandbox we host has a perfectly good reason for their Docker to be off (state.rs).
+    if (!wokeForDocker.value && !(await hostsSandboxes())) {
+        return;
+    }
+    await startDocker();
 };
 
 // Maps to the shared row shape; docker's `null` becomes an absent key, since absent and false differ (no sidecar
@@ -858,6 +969,14 @@ onMounted(async () => {
     });
     // Registered before `loadPending` can start a run, or its first seconds would show an empty log.
     stop = await Promise.all([
+        // The engine wait narrates under its own run id and has no log pane: the card shows its latest line and
+        // nothing older, which is the whole of what there is to know while waiting. Its own listener rather
+        // than a branch in the one below, which has enough to do.
+        onRun((event) => {
+            if (event.run === `docker` && event.kind === `line`) {
+                dockerLine.value = event.text;
+            }
+        }),
         onRun((event) => {
             // Requirement markers are protocol for this window, not output; parsed here and dropped so raw JSON never
             // reaches
@@ -919,7 +1038,13 @@ onMounted(async () => {
         .catch(() => undefined);
     // A link that arrived while this screen was opening is parked, picked up once by whichever of the event or this
     // read finds it first. `loadPending` owns `faceKnown` so the title waits only for what matters.
-    await Promise.all([refresh(), loadPending(), drainRecreate(), drainSync()]);
+    //
+    // The engine is woken as soon as THAT question is answered rather than after everything else here: a setup
+    // handles Docker itself, and where there is no setup the wait has already started by the time the first
+    // listing comes back.
+    const handover = loadPending();
+    void handover.then(wakeDockerIfNeeded);
+    await Promise.all([refresh(), handover, drainRecreate(), drainSync()]);
     // Only when nothing was handed over: a fresh link outranks a setup resumed from an earlier restart.
     if (pending.value === undefined) {
         await loadResumable();
@@ -1099,7 +1224,21 @@ onUnmounted(() => {
                 </Notice>
                 <Notice v-if="updateError" tone="warning" class="items-center">{{ updateError }}</Notice>
 
-                <p v-if="listError" class="flex items-start gap-2 text-2xs text-muted">
+                <!-- THE ENGINE, while this window is starting it and after a start that did not work out. It leads
+                     the screen because a sandbox list drawn above a dead Docker is a list of things that are not there. -->
+                <DockerCard
+                    v-if="dockerCardShown"
+                    :starting="dockerStarting"
+                    :report="dockerReport"
+                    :line="dockerLine"
+                    :os="info?.os"
+                    @start="startDocker"
+                    @open="openDocker"
+                    @install="openUrl(DOCKER_DOCS)"
+                />
+                <!-- Docker is down and nothing here is going to start it: no sandbox has run on this machine, so
+                     there is nothing to wake and the sentence says what to do instead. -->
+                <p v-else-if="listError || engineListening === false" class="flex items-start gap-2 text-2xs text-muted">
                     <Icon name="box" class="mt-0.5 shrink-0" />
                     <span>{{ t(`desktop.app.dockerIsntReachableNothing`) }}</span>
                 </p>

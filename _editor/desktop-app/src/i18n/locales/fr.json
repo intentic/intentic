@@ -52,6 +52,24 @@
     "deviceAgent": {
         "whetherNewerAgentPublished": "Whether a newer agent has been published is a question for your workspace, which can reach the release registry; this window only knows what is on this computer."
     },
+    "docker": {
+        "accountNotAllowed": "This account isn't allowed to use Docker",
+        "accountNotAllowedWindows": "This Windows account isn't allowed to use Docker yet",
+        "addToDockerGroup": "Add your user to the docker group, then check again.",
+        "checkAgain": "Check again",
+        "dockerHasntFinishedStarting": "Docker Desktop is taking longer than usual",
+        "dockerIsntOnThisComputer": "Docker isn't installed on this computer",
+        "dockerIsntRunning": "Docker isn't running",
+        "dockerWouldntStart": "Docker wouldn't start",
+        "getDockerDesktop": "Get Docker",
+        "mayBeWaitingForYou": "It may be waiting for you to accept its terms or sign in. Open it, answer what it asks, then check again.",
+        "nothingToStartUntilInstalled": "Your sandbox runs in Docker, so there's nothing to start until it's installed again.",
+        "openDockerDesktop": "Open Docker Desktop",
+        "sandboxRunsInDockerStarting": "Your sandbox runs in Docker, and Docker isn't running yet. This usually takes about a minute.",
+        "signOutAndBackIn": "Windows only hands out Docker's permission at a new sign-in. Sign out of Windows and back in, then check again.",
+        "startingDockerDesktop": "Starting Docker Desktop",
+        "tryOpeningItYourself": "Try opening it yourself, then check again."
+    },
     "requirements": {
         "beforeSandboxRunHere": "Before your sandbox can run here:",
         "checkAgain": "Check again",

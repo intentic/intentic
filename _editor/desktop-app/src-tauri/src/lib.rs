@@ -24,6 +24,38 @@ fn sign_in(app: AppHandle) -> Result<(), String> {
     auth::start(&app)
 }
 
+/// What a launch opens onto. The app's own face is for the two things a workspace window cannot show: work
+/// parked across a restart, and a machine whose engine is not running under a sandbox that lives on it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Opening {
+    Workspace,
+    ParkedSetup,
+    SleepingEngine,
+}
+
+/// The launch decision, as a function of three facts — pure, because a launch is the one moment with no window
+/// for anything to go wrong in front of.
+///
+/// A PARKED SETUP OUTRANKS THE ENGINE: it is why this launch is happening at all (RunOnce, commands.rs
+/// `end_session`), and the card that resumes it is the app's own face — opening the workspace instead left
+/// the user on the setup page they had already been through, with the parked setup waiting behind a tray menu
+/// nobody had been shown. It also starts Docker as one of its own steps (`ic docker prepare`), so a second
+/// thing starting it would draw two cards about one wait.
+///
+/// A SLEEPING ENGINE is the morning after a restart, and the reason a non-technical owner meets this face far
+/// more often than the first one: Docker Desktop does not start itself (scripts.rs has the whole of why), so a
+/// machine that hosts a sandbox has no engine, and the workspace this window would otherwise open loads onto
+/// nothing at all.
+const fn opening(parked: bool, hosts_sandboxes: bool, engine_listening: bool) -> Opening {
+    if parked {
+        return Opening::ParkedSetup;
+    }
+    if hosts_sandboxes && !engine_listening {
+        return Opening::SleepingEngine;
+    }
+    Opening::Workspace
+}
+
 pub fn run() {
     let mut builder = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
@@ -51,6 +83,11 @@ pub fn run() {
             sign_in,
             commands::desktop_info,
             commands::docker_ready,
+            commands::docker_listening,
+            commands::docker_start,
+            commands::docker_open,
+            commands::hosts_sandboxes,
+            commands::take_pending_docker,
             commands::take_pending_setup,
             commands::take_pending_recreate,
             commands::take_pending_sync,
@@ -129,14 +166,21 @@ pub fn run() {
 
             /* BEFORE the link, nothing opens. */
             if app.webview_windows().is_empty() {
-                // A setup parked across a restart or a sign-out is why this launch is happening at all
-                // (RunOnce, commands.rs `end_session`), and the card that resumes it is the app's own face.
-                // Opening the workspace instead left the user on the setup page they had already been
-                // through, with the parked setup waiting behind a tray menu nobody had been shown.
-                if app.state::<state::AppState>().parked_setup().is_some() {
-                    windows::show_launcher(app.handle());
-                } else {
+                let state = app.state::<state::AppState>();
+                // The engine is asked for by its socket, never by `docker info`, which would hold the first
+                // window of the launch for tens of seconds on exactly the machines this is about (scripts.rs).
+                let opening = opening(
+                    state.parked_setup().is_some(),
+                    state.hosts_sandboxes(),
+                    scripts::engine_listening(),
+                );
+                if opening == Opening::SleepingEngine {
+                    *state.pending_docker.lock().unwrap() = true;
+                }
+                if opening == Opening::Workspace {
                     windows::show_workspace(app.handle());
+                } else {
+                    windows::show_launcher(app.handle());
                 }
             }
             Ok(())
@@ -198,4 +242,32 @@ fn create_tray(app: &AppHandle) -> tauri::Result<()> {
     app.manage(update::TrayUpdate(update));
     app.manage(agent_status::TrayAgent(agent));
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /* WHAT OPENS, for the three facts that decide it. */
+
+    #[test]
+    fn a_machine_whose_sandbox_has_no_engine_opens_on_that_and_not_on_a_dead_workspace() {
+        assert_eq!(opening(false, true, false), Opening::SleepingEngine);
+        // Engine up: there is nothing to say, and the workspace is what the app is for.
+        assert_eq!(opening(false, true, true), Opening::Workspace);
+    }
+
+    #[test]
+    fn a_parked_setup_outranks_a_sleeping_engine_because_its_own_run_starts_it() {
+        assert_eq!(opening(true, true, false), Opening::ParkedSetup);
+        assert_eq!(opening(true, false, true), Opening::ParkedSetup);
+    }
+
+    /// Somebody using this app as a window onto a sandbox we host has a perfectly good reason for their Docker
+    /// to be off, and starting it for them would be this app helping itself to their machine.
+    #[test]
+    fn a_machine_no_sandbox_has_run_on_opens_the_workspace_whatever_docker_is_doing() {
+        assert_eq!(opening(false, false, false), Opening::Workspace);
+        assert_eq!(opening(false, false, true), Opening::Workspace);
+    }
 }

@@ -91,6 +91,9 @@ pub struct AppState {
     /// A desktop-sync enrollment the SPA handed over (`intentic://sync`), waiting for the launcher face to
     /// ask for the folder and run it. Same taken-not-read contract as the two above.
     pub pending_sync: Mutex<Option<SyncArgs>>,
+    /// This launch opened the app's own face because the engine was asleep (lib.rs), so this launch is the one
+    /// that hands over to the workspace once it wakes. In-process only: a launch is not a thing to remember.
+    pub pending_docker: Mutex<bool>,
     /// slug → display name, ours to remember: docker knows only container names, and the name the user typed
     /// into the SPA never reaches the machine any other way.
     names: Mutex<BTreeMap<String, String>>,
@@ -100,6 +103,9 @@ pub struct AppState {
     /// card opened before the workspace (a resume after a restart, the tray's "This device") is drawn the
     /// way the workspace was last seen rather than the way this binary happens to default.
     ui_mode: Mutex<Option<Mode>>,
+    /// Whether a sandbox has ever run on THIS machine. Kept on disk because the question is asked at the one
+    /// moment nothing can be measured: a launch whose Docker is not running cannot be asked what it hosts.
+    hosts_sandboxes: Mutex<bool>,
 }
 
 impl AppState {
@@ -109,16 +115,37 @@ impl AppState {
         let settings = read_json(&config_dir.join("settings.json")).unwrap_or_default();
         let names = read_json(&config_dir.join("sandboxes.json")).unwrap_or_default();
         let ui_mode = read_json(&config_dir.join("ui-mode.json"));
+        let hosts_sandboxes = read_json(&config_dir.join("hosts-sandboxes.json")).unwrap_or(false);
         Ok(AppState {
             config_dir,
             settings: Mutex::new(settings),
             pending: Mutex::new(None),
             pending_recreate: Mutex::new(None),
             pending_sync: Mutex::new(None),
+            pending_docker: Mutex::new(false),
             names: Mutex::new(names),
             install_id: Mutex::new(None),
             ui_mode: Mutex::new(ui_mode),
+            hosts_sandboxes: Mutex::new(hosts_sandboxes),
         })
+    }
+
+    /* WHETHER THIS MACHINE IS A SANDBOX HOST, which is the whole of the licence to start its Docker. */
+
+    pub fn hosts_sandboxes(&self) -> bool {
+        *self.hosts_sandboxes.lock().unwrap()
+    }
+
+    /// Written the moment a sandbox is seen or made here, and never unwritten: a machine that hosted one and
+    /// currently shows none is a machine whose Docker is down, which is exactly the state this answer is for.
+    /// Only writes on the change, like [`AppState::remember_ui_mode`] — this is asked on every listing.
+    pub fn remember_hosts_sandboxes(&self) {
+        let mut held = self.hosts_sandboxes.lock().unwrap();
+        if *held {
+            return;
+        }
+        *held = true;
+        write_json(&self.config_dir.join("hosts-sandboxes.json"), &true);
     }
 
     pub fn ui_mode(&self) -> Option<Mode> {
@@ -260,10 +287,14 @@ mod tests {
             pending: Mutex::new(None),
             pending_recreate: Mutex::new(None),
             pending_sync: Mutex::new(None),
+            pending_docker: Mutex::new(false),
             names: Mutex::new(BTreeMap::new()),
             install_id: Mutex::new(None),
             // Read the way `load` reads it: the test below is about what survives a launch.
             ui_mode: Mutex::new(read_json(&config_dir.join("ui-mode.json"))),
+            hosts_sandboxes: Mutex::new(
+                read_json(&config_dir.join("hosts-sandboxes.json")).unwrap_or(false),
+            ),
         }
     }
 
@@ -309,6 +340,26 @@ mod tests {
         assert_eq!(state_in(&dir).ui_mode(), Some(Mode::Light));
         assert_eq!(Mode::parse("dark"), Some(Mode::Dark));
         assert_eq!(Mode::parse("sepia"), None);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /* A LAUNCH CANNOT MEASURE THIS: a machine whose Docker is down cannot be asked what it hosts, which is precisely when the answer decides what opens. */
+    #[test]
+    fn hosting_a_sandbox_is_remembered_across_launches() {
+        let dir = std::env::temp_dir().join(format!("intentic-hosts-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).expect("temp config dir");
+
+        assert!(
+            !state_in(&dir).hosts_sandboxes(),
+            "a machine nothing has run on yet is nobody's to wake"
+        );
+        let state = state_in(&dir);
+        state.remember_hosts_sandboxes();
+        assert!(state.hosts_sandboxes());
+        // A second AppState over the same config dir is what the next launch of the app is — the one that
+        // opens with Docker stopped and cannot ask docker anything.
+        assert!(state_in(&dir).hosts_sandboxes());
+
         let _ = std::fs::remove_dir_all(&dir);
     }
 

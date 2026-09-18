@@ -76,6 +76,92 @@ pub async fn docker_ready() -> bool {
     scripts::docker_ready()
 }
 
+/* STARTING THE ENGINE THIS MACHINE'S SANDBOX NEEDS — see scripts.rs for why nothing else does it. */
+
+/// Is a socket listening at all? The cheap question, for a screen that has to decide whether to offer
+/// anything before it can afford to wait on `docker info`.
+#[tauri::command]
+pub async fn docker_listening() -> bool {
+    tauri::async_runtime::spawn_blocking(scripts::engine_listening)
+        .await
+        .unwrap_or(false)
+}
+
+/// How far a start got, for the card to switch on: the wire spelling of [`scripts::EngineOutcome`], with the
+/// reason carried beside it rather than inside it so one shape covers all five.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DockerStart {
+    /// `ready` | `notInstalled` | `wouldNotStart` | `notAllowed` | `tookTooLong`.
+    pub outcome: &'static str,
+    /// Docker's own last words. The card shows them under its sentence; empty when there are none.
+    pub detail: String,
+}
+
+impl From<scripts::EngineOutcome> for DockerStart {
+    fn from(outcome: scripts::EngineOutcome) -> DockerStart {
+        use scripts::EngineOutcome::{NotAllowed, NotInstalled, Ready, TookTooLong, WouldNotStart};
+        let (outcome, detail) = match outcome {
+            Ready => ("ready", String::new()),
+            NotInstalled(detail) => ("notInstalled", detail),
+            WouldNotStart(detail) => ("wouldNotStart", detail),
+            NotAllowed(detail) => ("notAllowed", detail),
+            TookTooLong(detail) => ("tookTooLong", detail),
+        };
+        DockerStart { outcome, detail }
+    }
+}
+
+/// Start Docker Desktop and wait for its engine, narrating through the same run stream every other long
+/// operation in this window reports on — so the card can say where it has got to instead of spinning.
+///
+/// Minutes long by design and deliberately NOT a `CommandResult`: every way this ends is an answer the screen
+/// has a sentence for, and an `Err` would collapse five of them into a red string.
+#[tauri::command]
+pub async fn docker_start(app: AppHandle) -> DockerStart {
+    const RUN: &str = "docker";
+    tauri::async_runtime::spawn_blocking(move || {
+        scripts::started(&app, RUN);
+        let say = |text: &str| scripts::line(&app, RUN, text);
+        let outcome = scripts::bring_engine_up(scripts::ENGINE_LIMIT, &say);
+        scripts::ended(&app, RUN, outcome == scripts::EngineOutcome::Ready);
+        DockerStart::from(outcome)
+    })
+    .await
+    .unwrap_or_else(|error| DockerStart {
+        outcome: "wouldNotStart",
+        detail: error.to_string(),
+    })
+}
+
+/// Bring Docker Desktop's own window up — the button beside a card that has just said to look at it, because
+/// its welcome screen and its sign-in are the two things this app cannot answer for anybody.
+#[tauri::command]
+pub async fn docker_open() -> CommandResult<()> {
+    tauri::async_runtime::spawn_blocking(|| match scripts::start_docker_desktop(true) {
+        Ok(()) => Ok(()),
+        Err(scripts::StartTrouble::NotInstalled(problem))
+        | Err(scripts::StartTrouble::Failed(problem)) => Err(problem),
+    })
+    .await
+    .map_err(|error| error.to_string())?
+}
+
+/// Whether a sandbox has ever run on THIS machine — what makes a stopped Docker this app's problem rather
+/// than somebody else's preference (state.rs).
+#[tauri::command]
+pub fn hosts_sandboxes(state: State<'_, AppState>) -> bool {
+    state.hosts_sandboxes()
+}
+
+/// Taken, not read: the launch that opened this face because the engine was asleep is the one launch that
+/// should hand over to the workspace on its own once the engine answers. A window opened from the tray was
+/// asked for, and must stay where the user put it.
+#[tauri::command]
+pub fn take_pending_docker(state: State<'_, AppState>) -> bool {
+    std::mem::take(&mut *state.pending_docker.lock().unwrap())
+}
+
 /* TAKEN, NOT READ — the same rule [`take_pending_recreate`] has always had, and for a sharper reason here. */
 #[tauri::command]
 pub fn take_pending_setup(state: State<'_, AppState>) -> Option<SetupArgs> {
@@ -233,6 +319,10 @@ pub async fn setup_run(app: AppHandle, args: SetupArgs, install: bool) -> Comman
     tauri::async_runtime::spawn_blocking(move || scripts::run(&handle, "setup", run))
         .await
         .map_err(|error| error.to_string())??;
+
+    // A setup that finished is a sandbox running here, whatever it ended up being called: from now on this
+    // machine's stopped Docker is this app's to start (scripts.rs).
+    app.state::<AppState>().remember_hosts_sandboxes();
 
     // The script names the container after the slug it derived, so the row it just created is the one slug we
     // did not have a moment ago. Remembering the display name here is why the manager can show "work" instead
@@ -577,6 +667,11 @@ pub async fn sandbox_list(app: AppHandle) -> CommandResult<Vec<SandboxStatus>> {
         .collect();
 
     let state = app.state::<AppState>();
+    // A listing with a sandbox in it is the proof that this machine hosts one — and the only cheap proof
+    // there is, since the next launch may find Docker stopped and be unable to ask anything at all.
+    if !workspace_names.is_empty() {
+        state.remember_hosts_sandboxes();
+    }
     Ok(workspace_names
         .iter()
         .filter_map(|name| {
