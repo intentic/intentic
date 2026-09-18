@@ -72,11 +72,11 @@ const isInline = (group: PlanLimitGroup): boolean => group.rows.length <= INLINE
 // A single-account provider has no list to head; the group row is that account's row.
 const single = (group: PlanLimitGroup): PlanLimitRow | undefined => (group.rows.length === 1 ? group.rows[0] : undefined);
 
-// Names the lone account (with identity if needed), or the count; "1 account" tells nobody anything.
-const groupNote = (group: PlanLimitGroup): string => {
+// Names the lone account (with identity if needed); multi-account groups rely on stripes or inline meters instead.
+const groupNote = (group: PlanLimitGroup): string | undefined => {
     const account = single(group);
     if (account === undefined) {
-        return `${group.rows.length} accounts`;
+        return undefined;
     }
     return account.identity === undefined ? account.label : `${account.label} · ${account.identity}`;
 };
@@ -94,7 +94,10 @@ const groupState = (group: PlanLimitGroup): string => {
     if (group.counts.none === group.rows.length) {
         return `publishes no limits`;
     }
-    return `${group.counts.unread} of ${group.rows.length} unread`;
+    if (group.counts.unread > 0) {
+        return `unread`;
+    }
+    return ``;
 };
 
 const barTooltip = (row: PlanLimitRow): string =>
@@ -206,24 +209,20 @@ const roster = computed(() => {
                         <div class="flex min-h-5 flex-wrap items-baseline gap-x-2 gap-y-1">
                             <span class="text-sm font-semibold text-content">{{ providerLabel(group.provider) }}</span>
                             <!-- One account ⇒ its own name, because "1 account" says nothing a reader wanted. -->
-                            <span class="min-w-0 truncate text-2xs text-subtle">{{ groupNote(group) }}</span>
+                            <span v-if="groupNote(group) !== undefined" class="min-w-0 truncate text-2xs text-subtle">{{ groupNote(group) }}</span>
                             <span v-if="single(group)?.measuredAt !== undefined" class="ml-auto shrink-0 text-2xs text-subtle"
                                 >{{ t(`sandbox.planLimitsPanel.read`, { measuredAt: formatAge(single(group)!.measuredAt!) }) }}
                             </span>
-                            <span v-else-if="!isInline(group)" class="ml-auto shrink-0 text-2xs text-muted">{{ groupState(group) }}</span>
+                            <span v-else-if="!isInline(group) && groupState(group) !== ``" class="ml-auto shrink-0 text-2xs text-muted">{{
+                                groupState(group)
+                            }}</span>
                         </div>
 
                         <!-- Indented one step from the provider's name; smaller, lighter, and markless, so an account heading can't read as another provider. -->
                         <div class="flex flex-col gap-3 pb-1 pl-3">
                             <!-- Small provider: the meters themselves. Nothing that fits is folded away. -->
                             <template v-if="isInline(group)">
-                                <!-- Separate account groups with a hairline, except before the first. -->
-                                <div
-                                    v-for="(row, index) in group.rows"
-                                    :key="row.id"
-                                    class="flex flex-col gap-1.5"
-                                    :class="single(group) === undefined && index > 0 ? `border-t border-line-subtle pt-3` : ``"
-                                >
+                                <div v-for="row in group.rows" :key="row.id" class="flex flex-col gap-1.5">
                                     <!-- Account labels sit between the provider and its pools. -->
                                     <div v-if="single(group) === undefined" class="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
                                         <span class="min-w-0 truncate text-xs font-medium text-content">{{ row.label }}</span>
@@ -349,7 +348,6 @@ const roster = computed(() => {
                     <button type="button" class="flex cursor-pointer items-center gap-1.5 text-2xs text-content" @click="rosterOpen = !rosterOpen">
                         <Icon :name="rosterOpen ? `chevron-down` : `chevron-right`" class="text-muted" />
                         {{ t(`sandbox.planLimitsPanel.allAccounts`) }}
-                        <span class="text-subtle">{{ rows.length }}</span>
                     </button>
                     <button v-if="rosterProvider !== undefined" type="button" class="ui-chip gap-1" @click="rosterProvider = undefined">
                         {{ providerLabel(rosterProvider) }}<Icon name="times" />
