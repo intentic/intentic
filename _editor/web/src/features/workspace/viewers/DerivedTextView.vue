@@ -6,6 +6,7 @@ import { formatElapsed } from "../../agents/fleet/agentStatus";
 import { changeEpochOf, derivedEpochOf, sidecarQueue } from "../changes/live/useWorkspaceLive";
 import { firstDeriveAttempt, rememberedDerivedText } from "../files/derivedCache";
 import { deriveText, readDerivedText, type WorkspaceDerived } from "../files/derivedText";
+import ConversionNotes from "./ConversionNotes.vue";
 import { useT } from "@intentic/ui/i18n";
 
 const t = useT();
@@ -241,12 +242,7 @@ const emptyMessage = computed(() => {
                 </span>
             </div>
             <!-- Every cap and degradation the derivation hit, shown rather than stored. -->
-            <ul v-if="shadow.notes.length > 0" class="shrink-0 space-y-0.5 border-b border-line bg-overlay px-3 py-1.5 text-2xs text-muted">
-                <li v-for="note of shadow.notes" :key="note" class="flex items-start gap-2">
-                    <Icon name="info-circle" class="mt-px shrink-0 text-[0.7rem]" />
-                    <span>{{ note }}</span>
-                </li>
-            </ul>
+            <ConversionNotes :notes="shadow.notes.map((text) => ({ text }))" />
             <div class="ui-softscroll min-h-0 flex-1 overflow-auto bg-canvas px-6 py-5">
                 <Markdown v-if="shadow.content !== ''" :source="shadow.content" class="mx-auto max-w-3xl" />
                 <p v-else class="mx-auto max-w-3xl text-sm text-muted">

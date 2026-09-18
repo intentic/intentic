@@ -88,6 +88,9 @@ export interface ViewRegistration {
 export interface ViewerRegistration {
     readonly id: string;
     readonly component: () => Promise<Component>;
+    // Draws two versions of the file as one, what changed marked in place; rendered with `before` and `after` blobs
+    // and `path`. Honoured only when the manifest entry declares `compare: true`.
+    readonly compare?: () => Promise<Component>;
 }
 
 // What a directory row offers when a provider has a document for it: the tree's icon, and the tab's

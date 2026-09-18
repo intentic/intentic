@@ -102,7 +102,7 @@ const uiDeclaration = (spec) => {
 // The narrowed entry points beside the barrel: each is the same host bridge holding one slice, for logic that wants
 // that slice without the component graph attached. A name here needs a `src/<name>.ts`, an `exports` entry in
 // package.json, and a re-export block in src/index.ts — the bridge below is generated off that block.
-const SUBPATHS = [`format`, `i18n`];
+const SUBPATHS = [`diff`, `format`, `i18n`];
 
 const exportedNames = (source, fromPattern) => {
     const names = new Set();

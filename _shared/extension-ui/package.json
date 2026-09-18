@@ -26,6 +26,11 @@
             "types": "./dist/types/extension-ui/src/index.d.ts",
             "default": "./dist/index.js"
         },
+        "./diff": {
+            "@intentic/src": "./src/diff.ts",
+            "types": "./dist/types/extension-ui/src/diff.d.ts",
+            "default": "./dist/diff.js"
+        },
         "./format": {
             "@intentic/src": "./src/format.ts",
             "types": "./dist/types/extension-ui/src/format.d.ts",

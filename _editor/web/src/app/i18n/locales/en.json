@@ -4307,7 +4307,10 @@
             "split": "Split",
             "table": "Table",
             "textWhatAddedUnderlined": "The text with what was added underlined and what was removed struck through",
-            "unified": "Unified"
+            "unified": "Unified",
+            "text": "Text",
+            "documentDrawnWordsMarked": "The document as drawn, the words that moved marked in place",
+            "textOfBothVersionsAgentReads": "The text of both versions, as an agent reads it, folded to the changes"
         },
         "diffView": {
             "nextChange": "Next change",
@@ -4738,6 +4741,15 @@
             "searchCtrlP": "Search with Ctrl+P",
             "technicalHidden": "{count} technical file hidden | {count} technical files hidden",
             "viewingFile": "viewing this file"
+        },
+        "conversionNotes": {
+            "after": "after",
+            "before": "before",
+            "fromConversion": "{count} note from the conversion | {count} notes from the conversion"
+        },
+        "compareDiffView": {
+            "couldNotLoadVersions": "Could not load both versions of this document.",
+            "showTextInstead": "Show the text instead"
         }
     }
 }

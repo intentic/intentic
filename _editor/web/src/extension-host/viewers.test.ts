@@ -39,7 +39,8 @@ describe(`ext-viewers`, () => {
         // SVG is fetched as TEXT: it is markup, and one read serves both the picture and the Source toggle.
         expect(declared.get(`svg`)).toEqual({ id: `svg`, extensions: [`svg`], fetch: `text` });
         expect(declared.get(`pdf`)).toEqual({ id: `pdf`, extensions: [`pdf`], fetch: `blob` });
-        expect(declared.get(`docx`)).toEqual({ id: `docx`, extensions: [`docx`], fetch: `blob` });
+        // The one format with a compare reading: its diff is drawn as one marked document, not two sides.
+        expect(declared.get(`docx`)).toEqual({ id: `docx`, extensions: [`docx`], fetch: `blob`, compare: true });
         // One viewer for both spreadsheet formats: its worker decides which it is from the bytes.
         expect(declared.get(`xlsx`)).toEqual({ id: `xlsx`, extensions: [`xlsx`, `ods`, `ots`], fetch: `blob` });
         expect(declared.get(`pptx`)).toEqual({ id: `pptx`, extensions: [`pptx`], fetch: `blob` });
@@ -71,6 +72,15 @@ describe(`ext-viewers`, () => {
         const media = (viewers.manifest.contributes?.viewers ?? []).find((viewer) => viewer.id === `media`);
         expect(media?.fetch).toBe(`url`);
         expect(media?.extensions).toEqual(expect.arrayContaining([`mp3`, `wav`, `flac`, `m4a`, `mp4`, `webm`, `mov`, `mkv`]));
+    });
+
+    it(`registers a compare component for the format whose manifest entry declares one, and for no other`, () => {
+        const registered = new Map(activateAndCaptureViewers().map((viewer) => [viewer.id, viewer]));
+        const declared = new Map((viewers.manifest.contributes?.viewers ?? []).map((viewer) => [viewer.id, viewer]));
+        for (const [id, viewer] of registered) {
+            expect(viewer.compare !== undefined).toBe(declared.get(id)?.compare === true);
+        }
+        expect(typeof registered.get(`docx`)?.compare).toBe(`function`);
     });
 
     it(`registers only viewer ids the manifest declares (the host gates the rest)`, () => {

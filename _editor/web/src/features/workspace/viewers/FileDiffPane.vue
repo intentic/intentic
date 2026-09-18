@@ -2,11 +2,13 @@
 import type { PartialFileDiff } from "@intentic/sandbox-contract";
 import { formatBytes } from "@intentic/ui";
 import { computed } from "vue";
-import type { LineStat } from "@intentic/code-read";
+import { type LineStat, nameExt } from "@intentic/code-read";
 import { isDelimitedPath, isDocumentPath, isProsePath, rendersAsBytes } from "../explorer/fileType";
 import { useLayout } from "../../../shell/window/useLayout";
+import { compareViewerForExtension } from "../../../core-views/viewerRegistry";
 import { derivedDiffSource } from "../changes/diffRaw";
 import BinaryDiffView from "./BinaryDiffView.vue";
+import CompareDiffView from "./CompareDiffView.vue";
 import DerivedDiffView from "./DerivedDiffView.vue";
 import { patchedSides } from "./diffPatch";
 import DiffView from "./DiffView.vue";
@@ -14,9 +16,11 @@ import ProseDiffView from "./ProseDiffView.vue";
 import { sheetOfDelimited } from "./tableDiff";
 import TableDiffView from "./TableDiffView.vue";
 
-// One file's diff, whichever of six shapes it arrives in; every review surface (Changes tab, phone, agent
-// review) renders this same fork. Loading state stays with the host; content does not. The six shapes, decided
+// One file's diff, whichever of seven shapes it arrives in; every review surface (Changes tab, phone, agent
+// review) renders this same fork. Loading state stays with the host; content does not. The seven shapes, decided
 // in this order:
+// redline → a document whose viewer draws its two versions as one, what changed marked in place (CompareDiffView),
+// when the toolbar's reading is Changes and both sides' bytes are named.
 // document → a .docx, .pdf, deck or notebook read as tracked changes over the text the daemon renders from each
 // version (DerivedDiffView), while the toolbar's reading says so and the surface named where the sides live.
 // table → a .csv/.tsv read as a grid of cells (TableDiffView), under the same reading; its lines are the other one.
@@ -46,12 +50,19 @@ const emit = defineEmits<{ stat: [LineStat | undefined] }>();
 const { diffProse, diffDocument, setDiffDocument } = useLayout();
 const prose = computed(() => diffProse.value && isProsePath(path));
 
+// The viewer drawing this document's two versions as one, with both sides' bytes to hand it; a one-sided diff (a
+// file added or deleted) has nothing to align and reads as text.
+const redline = computed(() => {
+    const compare = isDocumentPath(path) && diffDocument.value === `changes` ? compareViewerForExtension(nameExt(path).ext)?.compare : undefined;
+    return compare !== undefined && beforeRaw !== undefined && afterRaw !== undefined ? { compare, before: beforeRaw, after: afterRaw } : undefined;
+});
+
 // The derived-text reading of a document, when the side URLs name a diff the daemon can render both versions of.
 const source = computed(() => derivedDiffSource({ beforeRaw, afterRaw }));
-const derived = computed(() => diffDocument.value === `changes` && isDocumentPath(path) && source.value !== undefined);
+const derived = computed(() => redline.value === undefined && diffDocument.value !== `sides` && isDocumentPath(path) && source.value !== undefined);
 
 // Delimited text as a grid, when whole sides are here to parse; a partial (oversized) csv keeps the line diff.
-const table = computed(() => diffDocument.value === `changes` && isDelimitedPath(path) && partial === undefined);
+const table = computed(() => diffDocument.value !== `sides` && isDelimitedPath(path) && partial === undefined);
 const filename = computed(() => path.slice(path.lastIndexOf(`/`) + 1));
 const beforeSheets = computed(() => (before === undefined ? [] : [sheetOfDelimited(before, filename.value)]));
 const afterSheets = computed(() => (after === undefined ? [] : [sheetOfDelimited(after, filename.value)]));
@@ -87,7 +98,17 @@ const note = computed(() => {
 </script>
 
 <template>
-    <DerivedDiffView v-if="derived && source" :path="path" :source="source" :at="at" @sides="setDiffDocument(`sides`)" />
+    <CompareDiffView
+        v-if="redline"
+        :path="path"
+        :before="redline.before"
+        :after="redline.after"
+        :at="at"
+        :compare="redline.compare"
+        @text="setDiffDocument(`text`)"
+        @sides="setDiffDocument(`sides`)"
+    />
+    <DerivedDiffView v-else-if="derived && source" :path="path" :source="source" :at="at" @sides="setDiffDocument(`sides`)" />
     <BinaryDiffView v-else-if="rendersAsBytes(path, binary)" :path="path" :before="beforeRaw" :after="afterRaw" :at="at" />
     <TableDiffView v-else-if="table" :before="beforeSheets" :after="afterSheets" />
     <div v-else-if="partial !== undefined" class="flex h-full min-h-0 flex-col">

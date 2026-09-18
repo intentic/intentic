@@ -31,6 +31,14 @@ export const ViewerContributionSchema = z.object({
         .describe(
             "Whether this viewer writes the file back. An editing viewer is chosen over a render-only viewer claiming the same extension, whatever order the two activated in.",
         ),
+    // A second component, given both versions of a file, for a diff drawn as one marked document rather than as two
+    // sides; only a `blob` viewer can have one, since that is the only kind handed whole bytes.
+    compare: z
+        .boolean()
+        .optional()
+        .describe(
+            "Whether this viewer also draws two versions of a file as one, with what changed marked in place: its registration then carries a `compare` component the host renders with `before` and `after` blobs. Only for `fetch: \"blob\"`.",
+        ),
 });
 export type ViewerContribution = z.infer<typeof ViewerContributionSchema>;
 

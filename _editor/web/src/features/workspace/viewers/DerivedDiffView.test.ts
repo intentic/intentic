@@ -59,7 +59,7 @@ afterEach(() => {
 
 describe(`DerivedDiffView`, () => {
     it(`draws the two renderings as tracked changes and counts the paragraphs that moved`, async () => {
-        answers.set(`brief.docx`, { before: side(`# Brief\n\nWe open at nine.\n\nClosed Monday.`), after: side(`# Brief\n\nWe open at eight.\n\nClosed Monday.`, [`docx conversion: one style dropped`]) });
+        answers.set(`brief.docx`, { before: side(`# Brief\n\nWe open at nine.\n\nClosed Monday.`), after: side(`# Brief\n\nWe open at eight.\n\nClosed Monday.`) });
         const element = mount(`brief.docx`);
         await settle();
 
@@ -68,9 +68,30 @@ describe(`DerivedDiffView`, () => {
         expect(element.querySelector(`ins`)?.textContent).toBe(`eight`);
         expect(element.textContent).toContain(`1 paragraph changed`);
         expect(element.textContent).toContain(`docx v1`);
-        // The conversion's own caveat is shown, since a dropped style is a change this reading cannot see.
-        expect(element.textContent).toContain(`one style dropped`);
         expect(element.textContent).toContain(`formatting, pictures and layout not shown`);
+        expect(element.textContent).not.toContain(`from the conversion`);
+    });
+
+    it(`folds the conversions' caveats to a count, and opens them tagged with the side that hit each`, async () => {
+        answers.set(`styled.docx`, {
+            before: side(`Hello.`, [`docx conversion: a picture was left out`, `docx conversion: 3 Word styles without a markdown equivalent, read as plain text`]),
+            after: side(`Hello there.`, [`docx conversion: a picture was left out`, `docx conversion: 2 Word styles without a markdown equivalent, read as plain text`]),
+        });
+        const element = mount(`styled.docx`);
+        await settle();
+
+        // The text comes first: the caveats are one line until asked for, and a caveat both sides share is one line.
+        expect(element.textContent).toContain(`3 notes from the conversion`);
+        expect(element.textContent).not.toContain(`a picture was left out`);
+        const fold = [...element.querySelectorAll(`button`)].find((button) => button.textContent?.includes(`from the conversion`));
+        fold?.click();
+        await nextTick();
+        const items = [...element.querySelectorAll(`li`)].map((item) => [...item.querySelectorAll(`span`)].map((span) => span.textContent?.trim()));
+        expect(items).toEqual([
+            [`docx conversion: a picture was left out`],
+            [`before`, `docx conversion: 3 Word styles without a markdown equivalent, read as plain text`],
+            [`after`, `docx conversion: 2 Word styles without a markdown equivalent, read as plain text`],
+        ]);
     });
 
     it(`says outright when both versions read the same, instead of showing no marks`, async () => {

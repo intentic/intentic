@@ -1,12 +1,9 @@
 // A document's two versions as one text with tracked changes, the way a word processor shows them: paragraphs are
-// matched first, then the words inside a changed paragraph. Pure, so the view only draws.
+// matched first, then the words inside a changed paragraph. Pure, so the view only draws. The edit scripts
+// themselves are the kit's (`@intentic/ui/diff`), shared with the table diff and the viewers' redlines.
+import { diffSequence, pairEdits, type Segment as ProseSegment, type SegmentKind, similarity, wordDiff } from "@intentic/ui/diff";
 
-export type SegmentKind = "same" | "added" | "removed";
-
-export interface ProseSegment {
-    readonly kind: SegmentKind;
-    readonly text: string;
-}
+export type { ProseSegment };
 
 export type BlockKind = "same" | "changed" | "added" | "removed";
 
@@ -16,76 +13,6 @@ export interface ProseBlock {
     readonly heading?: number;
     readonly segments: readonly ProseSegment[];
 }
-
-// One step of an edit script over any items; the table diff (tableDiff.ts) walks the same script over rows.
-export type Op<T> = { readonly kind: SegmentKind; readonly item: T };
-
-// Past this many cells the paragraph table is not worth building; the block reads as replaced whole.
-const MAX_CELLS = 4_000_000;
-
-// The longest-common-subsequence lengths from every (i, j) to the ends, one row per `before` item plus a sentinel.
-const lcsTable = <T>(before: readonly T[], after: readonly T[], equal: (left: T, right: T) => boolean): Uint32Array => {
-    const cols = after.length + 1;
-    const table = new Uint32Array((before.length + 1) * cols);
-    for (let i = before.length - 1; i >= 0; i--) {
-        for (let j = after.length - 1; j >= 0; j--) {
-            table[i * cols + j] = equal(before[i]!, after[j]!) ? table[(i + 1) * cols + j + 1]! + 1 : Math.max(table[(i + 1) * cols + j]!, table[i * cols + j + 1]!);
-        }
-    }
-    return table;
-};
-
-// Walks the table from the start, taking a match when there is one and otherwise the side with more subsequence
-// left; whatever remains on either side at the end is removed or added whole.
-const walkTable = <T>(table: Uint32Array, before: readonly T[], after: readonly T[], equal: (left: T, right: T) => boolean): Op<T>[] => {
-    const cols = after.length + 1;
-    const ops: Op<T>[] = [];
-    let i = 0;
-    let j = 0;
-    while (i < before.length && j < after.length) {
-        if (equal(before[i]!, after[j]!)) {
-            ops.push({ kind: `same`, item: before[i++]! });
-            j++;
-        } else if (table[(i + 1) * cols + j]! >= table[i * cols + j + 1]!) {
-            ops.push({ kind: `removed`, item: before[i++]! });
-        } else {
-            ops.push({ kind: `added`, item: after[j++]! });
-        }
-    }
-    ops.push(...before.slice(i).map((item): Op<T> => ({ kind: `removed`, item })), ...after.slice(j).map((item): Op<T> => ({ kind: `added`, item })));
-    return ops;
-};
-
-// A longest-common-subsequence edit script, by table. Fine at paragraph and word counts; a block too large for the
-// table is reported as removed then added, which is honest rather than slow.
-export const diffSequence = <T>(before: readonly T[], after: readonly T[], equal: (left: T, right: T) => boolean): Op<T>[] | undefined =>
-    before.length * after.length > MAX_CELLS ? undefined : walkTable(lcsTable(before, after, equal), before, after, equal);
-
-// Words, runs of whitespace, and runs of punctuation are the units; a changed comma then marks the comma, not the word.
-const tokens = (text: string): string[] => text.match(/\s+|[\p{L}\p{N}_]+|[^\s\p{L}\p{N}_]+/gu) ?? [];
-
-// Adjacent tokens of one kind become one segment, so the view draws a phrase as one mark rather than word by word.
-const merge = (ops: readonly Op<string>[]): ProseSegment[] => {
-    const segments: ProseSegment[] = [];
-    for (const op of ops) {
-        const last = segments.at(-1);
-        if (last !== undefined && last.kind === op.kind) {
-            segments[segments.length - 1] = { kind: op.kind, text: last.text + op.item };
-        } else {
-            segments.push({ kind: op.kind, text: op.item });
-        }
-    }
-    return segments;
-};
-
-// Word-level marks inside one paragraph that exists on both sides.
-export const wordDiff = (before: string, after: string): ProseSegment[] => {
-    const ops = diffSequence(tokens(before), tokens(after), (left, right) => left === right);
-    if (ops === undefined) {
-        return [{ kind: `removed`, text: before }, { kind: `added`, text: after }];
-    }
-    return merge(ops);
-};
 
 const HEADING = /^(#{1,6})\s+/;
 
@@ -109,53 +36,25 @@ const whole = (kind: BlockKind, block: string): ProseBlock => {
     return { kind, ...(heading === undefined ? {} : { heading }), segments: [{ kind: segmentKind, text }] };
 };
 
-// A removed paragraph followed by an added one is, far more often than not, the same paragraph edited: paired in
-// order and diffed word by word. What is left over on either side stands as removed or added whole.
-const pairRun = (removed: readonly string[], added: readonly string[]): ProseBlock[] => {
-    const blocks: ProseBlock[] = [];
-    const pairs = Math.min(removed.length, added.length);
-    for (let index = 0; index < pairs; index++) {
-        const from = shape(removed[index]!);
-        const to = shape(added[index]!);
-        const heading = to.heading ?? from.heading;
-        blocks.push({ kind: `changed`, ...(heading === undefined ? {} : { heading }), segments: wordDiff(from.text, to.text) });
-    }
-    for (const block of removed.slice(pairs)) {
-        blocks.push(whole(`removed`, block));
-    }
-    for (const block of added.slice(pairs)) {
-        blocks.push(whole(`added`, block));
-    }
-    return blocks;
+// A paragraph paired with its edited self is diffed word by word; the heading level is the new one's.
+const changed = (removed: string, added: string): ProseBlock => {
+    const from = shape(removed);
+    const to = shape(added);
+    const heading = to.heading ?? from.heading;
+    return { kind: `changed`, ...(heading === undefined ? {} : { heading }), segments: wordDiff(from.text, to.text) };
 };
 
-// Paragraph ops into blocks: every run of removals and additions between two kept paragraphs is one edit, paired up.
-const assemble = (ops: readonly Op<string>[]): ProseBlock[] => {
-    const blocks: ProseBlock[] = [];
-    let removed: string[] = [];
-    let added: string[] = [];
-    const flush = (): void => {
-        blocks.push(...pairRun(removed, added));
-        removed = [];
-        added = [];
-    };
-    for (const op of ops) {
-        if (op.kind === `same`) {
-            flush();
-            blocks.push(whole(`same`, op.item));
-        } else {
-            (op.kind === `removed` ? removed : added).push(op.item);
-        }
-    }
-    flush();
-    return blocks;
-};
+// Below this share of common words, a removed paragraph and the added one after it are two paragraphs, not one
+// edited: worded, they would read as a soup of marks over neither.
+export const ALIKE = 0.4;
+const alike = (before: string, after: string): boolean => similarity(shape(before).text, shape(after).text) >= ALIKE;
 
 export const proseDiff = (before: string, after: string): ProseBlock[] => {
     const ops = diffSequence(blocksOf(before), blocksOf(after), (left, right) => left === right);
-    return ops === undefined
-        ? [...blocksOf(before).map((block) => whole(`removed`, block)), ...blocksOf(after).map((block) => whole(`added`, block))]
-        : assemble(ops);
+    if (ops === undefined) {
+        return [...blocksOf(before).map((block) => whole(`removed`, block)), ...blocksOf(after).map((block) => whole(`added`, block))];
+    }
+    return pairEdits(ops, alike).map((edit) => (edit.kind === `pair` ? changed(edit.before, edit.after) : edit.kind === `same` ? whole(`same`, edit.after) : whole(edit.kind, edit.item)));
 };
 
 // What the view draws: every changed block, with a little unchanged context on each side, and the long unchanged runs

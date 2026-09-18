@@ -154,6 +154,11 @@ describe(`DerivedTextView`, () => {
         answers.read = shadow({ notes: [`sheet "Orders": showing 200 of 4,000 rows`] });
         const element = mount({ path: `books/orders.xlsx` });
         await settle();
+        // Folded to its count above the text, opened on a press.
+        expect(element.textContent).toContain(`1 note from the conversion`);
+        expect(element.textContent).not.toContain(`showing 200 of 4,000 rows`);
+        [...element.querySelectorAll(`button`)].find((button) => button.textContent?.includes(`from the conversion`))?.click();
+        await settle();
         expect(element.textContent).toContain(`showing 200 of 4,000 rows`);
     });
 

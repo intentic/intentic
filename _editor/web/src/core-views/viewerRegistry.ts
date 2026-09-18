@@ -17,6 +17,8 @@ export interface RegisteredViewer {
     // Writes the file back; outranks a render-only viewer claiming the same extension.
     readonly edit: boolean;
     readonly component: () => Promise<Component>;
+    // Two versions drawn as one, what changed marked in place; only a `blob` viewer that declared it has one.
+    readonly compare?: () => Promise<Component>;
 }
 
 const viewers = shallowRef<readonly RegisteredViewer[]>([]);
@@ -51,3 +53,6 @@ export const viewerForExtension = (ext: string): RegisteredViewer | undefined =>
 // of a diff): a `path` viewer reads through its own backend and cannot be given a blob, so it is passed over even
 // when it edits.
 export const renderViewerForExtension = (ext: string): RegisteredViewer | undefined => claimants(ext).find((entry) => entry.fetch !== `path`);
+
+// The viewer that can draw two versions of this format as one marked document, for a diff's Changes reading.
+export const compareViewerForExtension = (ext: string): RegisteredViewer | undefined => claimants(ext).find((entry) => entry.compare !== undefined);

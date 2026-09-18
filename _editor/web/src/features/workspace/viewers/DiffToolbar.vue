@@ -7,7 +7,9 @@ import type { ChangeStatus } from "@intentic/extension-api";
 import { basename, parentDir } from "@intentic/ui/path";
 import ReviewStat from "../../../components/ReviewStat.vue";
 import type { LineStat } from "@intentic/code-read";
+import { nameExt } from "@intentic/code-read";
 import { isDelimitedPath, isDocumentPath, isProsePath, rendersAsBytes } from "../explorer/fileType";
+import { compareViewerForExtension } from "../../../core-views/viewerRegistry";
 import { useT } from "@intentic/ui/i18n";
 
 // Bar above a diff: which file, and how it's read. Shared by every diff surface (workspace tab, agent review,
@@ -47,13 +49,24 @@ const READING_OPTIONS = computed(() => [
 // A binary document (a .docx, a .pdf, a deck) reads either as tracked changes over the text rendered from it or as its
 // two versions drawn whole; a notebook's other reading is its JSON, and a csv reads as a grid or as its lines. All
 // share one preference, since each pair is "the structure" against "the raw file". Comments never apply to either.
+// A format whose viewer can draw the two versions as one marked document (a .docx) has three: that redline, the text,
+// and the two versions; elsewhere a stored `text` reads as the Changes it is.
 const document = computed(() => isDocumentPath(path) || isDelimitedPath(path));
-const documentChanges = computed(() => document.value && diffDocument.value === `changes`);
+const documentChanges = computed(() => document.value && diffDocument.value !== `sides`);
+const redline = computed(() => isDocumentPath(path) && compareViewerForExtension(nameExt(path).ext) !== undefined);
+const documentReading = computed(() => (diffDocument.value === `text` && !redline.value ? `changes` : diffDocument.value));
 const DOCUMENT_OPTIONS = computed(() => {
     if (isDelimitedPath(path)) {
         return [
             { label: t(`workspace.diffToolbar.table`), value: `changes`, title: t(`workspace.diffToolbar.rowsAndCellsChangedMarked`) },
             { label: t(`workspace.diffToolbar.code`), value: `sides`, title: t(`workspace.diffToolbar.filesLinesSideBy`) },
+        ];
+    }
+    if (redline.value) {
+        return [
+            { label: t(`workspace.diffToolbar.changes`), value: `changes`, title: t(`workspace.diffToolbar.documentDrawnWordsMarked`) },
+            { label: t(`workspace.diffToolbar.text`), value: `text`, title: t(`workspace.diffToolbar.textOfBothVersionsAgentReads`) },
+            { label: t(`workspace.diffToolbar.beforeAfter`), value: `sides`, title: t(`workspace.diffToolbar.bothVersionsDrawnWhole`) },
         ];
     }
     return [
@@ -100,10 +113,10 @@ const LAYOUT_OPTIONS = computed((): { label: string; value: DiffLayout }[] => [
         />
         <SegmentedControl
             v-if="document"
-            :model-value="diffDocument"
+            :model-value="documentReading"
             :options="DOCUMENT_OPTIONS"
             size="xs"
-            @update:model-value="(value: string) => setDiffDocument(value === `changes` ? `changes` : `sides`)"
+            @update:model-value="(value: string) => setDiffDocument(value === `changes` ? `changes` : value === `text` ? `text` : `sides`)"
         />
         <SegmentedControl
             v-if="!mobile && !proseOn && !documentChanges"

@@ -4215,6 +4215,15 @@
             "toStartAgentRefactoring": "to start an agent refactoring it.",
             "top": "· top {count} of {hotspots}"
         },
+        "compareDiffView": {
+            "couldNotLoadVersions": "Nie udało się wczytać obu wersji tego dokumentu.",
+            "showTextInstead": "Pokaż zamiast tego tekst"
+        },
+        "conversionNotes": {
+            "after": "po",
+            "before": "przed",
+            "fromConversion": "{count} uwaga z konwersji | {count} uwagi z konwersji | {count} uwag z konwersji"
+        },
         "derivedDiffView": {
             "couldNotRenderVersions": "Nie udało się odczytać wersji tego dokumentu jako tekstu.",
             "formattingNotShown": "formatowanie, obrazy i układ nie są pokazane",
@@ -4300,12 +4309,15 @@
             "comments": "Comments",
             "commentsHiddenClickTo": "Comments hidden, click to show them",
             "commentsShownClickTo": "Comments shown, click to diff the code alone",
+            "documentDrawnWordsMarked": "Dokument w swoim układzie, ze zmienionymi słowami zaznaczonymi w miejscu",
             "documentTextWhatAdded": "Tekst dokumentu z podkreślonymi dodanymi i przekreślonymi usuniętymi fragmentami",
             "filesLinesSideBy": "The file's lines, side by side or inline",
             "prose": "Prose",
             "rowsAndCellsChangedMarked": "Wiersze i komórki, ze zmienionymi komórkami oznaczonymi",
             "split": "Split",
             "table": "Tabela",
+            "text": "Tekst",
+            "textOfBothVersionsAgentReads": "Tekst obu wersji, tak jak czyta go agent, zwinięty do zmian",
             "textWhatAddedUnderlined": "The text with what was added underlined and what was removed struck through",
             "unified": "Unified"
         },

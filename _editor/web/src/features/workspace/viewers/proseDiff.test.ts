@@ -1,30 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { blocksOf, foldUnchanged, proseDiff, wordDiff } from "./proseDiff";
+import { blocksOf, foldUnchanged, proseDiff } from "./proseDiff";
 
 const text = (segments: readonly { kind: string; text: string }[], kind: string): string =>
     segments
         .filter((segment) => segment.kind === kind)
         .map((segment) => segment.text)
         .join(``);
-
-describe(`words inside a changed paragraph`, () => {
-    it(`marks the words that moved and leaves the rest plain`, () => {
-        const segments = wordDiff(`We open at nine every day.`, `We open at eight every weekday.`);
-        expect(text(segments, `removed`)).toBe(`nineday`);
-        expect(text(segments, `added`)).toBe(`eightweekday`);
-        expect(text(segments, `same`)).toBe(`We open at  every .`);
-    });
-
-    it(`marks a changed comma as the comma, not the word beside it`, () => {
-        const segments = wordDiff(`Bread, cakes and pies`, `Bread, cakes, and pies`);
-        expect(segments.filter((segment) => segment.kind === `added`)).toEqual([{ kind: `added`, text: `,` }]);
-    });
-
-    it(`draws a phrase as one mark rather than word by word`, () => {
-        const segments = wordDiff(`Hello`, `Hello, and welcome to the bakery`);
-        expect(segments.filter((segment) => segment.kind === `added`)).toHaveLength(1);
-    });
-});
 
 describe(`paragraphs`, () => {
     it(`splits on blank lines, trims, and accepts Windows line endings`, () => {

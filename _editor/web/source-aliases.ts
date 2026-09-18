@@ -75,6 +75,9 @@ export const sourceAliases = (): Record<string, string> => ({
     // Date/byte/token formatting used by pure projections (history day labels, usage window resets) whose unit tests
     // run without a DOM.
     "@intentic/ui/format": fromRoot("_editor/ui/src/lib/format.ts"),
+    // Edit scripts and word segments, pure, under the prose and table diffs and the viewers' redline; their unit tests
+    // run without a DOM.
+    "@intentic/ui/diff": fromRoot("_editor/ui/src/lib/textDiff.ts"),
     // Busy-flag and wall-clock composables, plain state over Vue reactivity, reached by node-tested composables that
     // must not boot the component graph (its theme reader touches `document` at module scope).
     "@intentic/ui/async": fromRoot("_editor/ui/src/lib/async.ts"),
@@ -138,6 +141,7 @@ export const sourceAliases = (): Record<string, string> => ({
     "@intentic/extension-ui/names": fromRoot("_shared/extension-ui/names.mjs"),
     "@intentic/extension-ui/format": fromRoot("_shared/extension-ui/src/format.ts"),
     "@intentic/extension-ui/i18n": fromRoot("_shared/extension-ui/src/i18n.ts"),
+    "@intentic/extension-ui/diff": fromRoot("_shared/extension-ui/src/diff.ts"),
     "@intentic/extension-ui": fromRoot("_shared/extension-ui/src/index.ts"),
     "@intentic/api-contract": fromRoot("_shared/api-contract/src/index.ts"),
     // The "+" grid's card/category data; omitted from this map, the app would silently resolve a stale `dist` instead

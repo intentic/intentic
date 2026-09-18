@@ -1,4 +1,4 @@
-import { diffSequence, type Op } from "./proseDiff";
+import { diffSequence, type Op } from "@intentic/ui/diff";
 
 // Two versions of tabular data as one grid with the cells that moved marked: sheets matched by name, rows by a
 // longest-common-subsequence over their cells, an edited row paired with what it became and compared cell by cell.
@@ -295,7 +295,7 @@ const diffRows = (beforeRows: readonly (readonly string[])[], afterRows: readonl
         if (op.kind === `same`) {
             flush();
             afterLine++;
-            middle.push(whole(`same`, op.item.row, op.item.line, afterLine));
+            middle.push(whole(`same`, op.before.row, op.before.line, afterLine));
         } else if (op.kind === `removed`) {
             removed.push(op.item);
         } else {

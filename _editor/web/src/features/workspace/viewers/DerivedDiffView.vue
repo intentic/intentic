@@ -6,6 +6,7 @@ import { useT } from "@intentic/ui/i18n";
 import { computed, onUnmounted, ref, watch } from "vue";
 import { formatElapsed } from "../../agents/fleet/agentStatus";
 import { isSpreadsheetPath } from "../explorer/fileType";
+import ConversionNotes, { type ConversionNote } from "./ConversionNotes.vue";
 import { readDerivedDiff } from "./derivedDiff";
 import ProseDiffView from "./ProseDiffView.vue";
 import { sheetsOfMarkdown } from "./tableDiff";
@@ -99,8 +100,17 @@ const deriver = computed(() => {
     const side = result.value?.after?.present === true ? result.value.after : result.value?.before?.present === true ? result.value.before : undefined;
     return side?.deriver;
 });
-// Every cap and degradation either conversion hit, once each.
-const notes = computed(() => [...new Set([result.value?.before, result.value?.after].flatMap((side) => (side?.present === true ? side.notes : [])))]);
+// Every cap and degradation either conversion hit, once each; with two versions rendered, a note only one of them
+// hit is tagged with its side.
+const notes = computed((): ConversionNote[] => {
+    const of = (side: DerivedSide | undefined): readonly string[] => (side?.present === true ? side.notes : []);
+    const fromBefore = of(result.value?.before);
+    const fromAfter = of(result.value?.after);
+    const tagged = result.value?.before?.present === true && result.value.after?.present === true;
+    const only = (own: readonly string[], other: readonly string[], side: "before" | "after"): ConversionNote[] =>
+        own.filter((note) => !other.includes(note)).map((note) => (tagged ? { text: note, side } : { text: note }));
+    return [...fromBefore.filter((note) => fromAfter.includes(note)).map((note): ConversionNote => ({ text: note })), ...only(fromBefore, fromAfter, `before`), ...only(fromAfter, fromBefore, `after`)];
+});
 const truncated = computed(() => [result.value?.before, result.value?.after].some((side) => side?.present === true && side.truncated));
 
 // A spreadsheet's rendering is one table per sheet, compared as a grid of cells rather than as paragraphs.
@@ -147,13 +157,8 @@ const filename = computed(() => path.slice(path.lastIndexOf(`/`) + 1));
                 <Icon name="exclamation-triangle" class="shrink-0 text-[0.7rem]" />
                 <span>{{ t(`workspace.derivedDiffView.longDocumentOnlyStart`) }}</span>
             </div>
-<!-- Every cap and degradation the conversions hit, shown rather than stored: a dropped style is a change this cannot see. -->
-            <ul v-if="notes.length > 0" class="shrink-0 space-y-0.5 border-b border-line bg-overlay px-3 py-1.5 text-2xs text-muted">
-                <li v-for="note of notes" :key="note" class="flex items-start gap-2">
-                    <Icon name="info-circle" class="mt-px shrink-0 text-[0.7rem]" />
-                    <span>{{ note }}</span>
-                </li>
-            </ul>
+            <!-- Every cap and degradation the conversions hit, shown rather than stored: a dropped style is a change this cannot see. -->
+            <ConversionNotes :notes="notes" />
 
             <!-- A side nothing could read: said against that side, with the other reading one press away. -->
             <div v-if="unreadable.length > 0" class="flex min-h-0 flex-1 flex-col items-center justify-center gap-3 px-6 text-center">

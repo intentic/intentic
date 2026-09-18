@@ -5,6 +5,21 @@
     "documentPaper": {
         "documentNoTextIn": "This document has no text in it."
     },
+    "docxCompare": {
+        "added": "{count} added",
+        "changed": "{count} changed",
+        "changes": "{count} change | {count} changes",
+        "couldNotCompare": "Could not draw these two versions as one document.",
+        "legendAdded": "added",
+        "legendRemoved": "removed",
+        "nextChange": "Next change",
+        "nothingMoved": "No words moved: what changed is formatting, pictures or file metadata.",
+        "position": "{current} of {count}",
+        "previousChange": "Previous change",
+        "removed": "{count} removed",
+        "removedPicture": "[picture]",
+        "tooDifferent": "Too different to align: the old text is struck through whole and the new underlined."
+    },
     "epubViewer": {
         "bookNoChaptersIn": "This book has no chapters in it.",
         "chapter": "Chapter",

@@ -45,8 +45,12 @@ const CALL = /(?<![.\w])t\(\s*(?:`([^`$]*)`|"([^"]*)"|'([^']*)')/g;
 const KEYPATH = /keypath="([^"]*)"/g;
 const DYNAMIC = /(?<![.\w])t\(\s*`([^`]*?)\$\{/g;
 
+// Call sites not yet committed count too, for the reason the catalogs above do: the component that asks for a new
+// key lands in the same change as the key, and without it every new key would read as dead until the commit.
+const scope = subjectScope();
+const untrackedSources = untrackedFiles().filter((path) => /\.(?:ts|vue)$/.test(path) && (scope === undefined || scope.has(path)));
 // A test may register a fixture catalog of its own, so a key it asks for says nothing about the shipped ones.
-const files = subjectFiles("*.ts", "*.vue").filter((path) => reachableFrom(path).length > 0 && !path.endsWith(".d.ts") && !path.endsWith(".test.ts"));
+const files = [...subjectFiles("*.ts", "*.vue"), ...untrackedSources].filter((path) => reachableFrom(path).length > 0 && !path.endsWith(".d.ts") && !path.endsWith(".test.ts"));
 const missing = [];
 const asked = new Set();
 const askedPrefixes = [];

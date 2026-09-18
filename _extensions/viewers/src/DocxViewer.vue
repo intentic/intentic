@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { Icon } from "@intentic/extension-ui";
-import { onMounted, ref, watch } from "vue";
+import { onMounted, onUnmounted, ref, watch } from "vue";
+import { fitPages, keepFitted } from "./docxFit.js";
 
 /* DOCX preview: renders a Word document into HTML via docx-preview (lazy-imported so its ~jszip payload stays out of the initial bundle). */
 
@@ -30,6 +31,7 @@ const render = async (source: Blob): Promise<void> => {
         if (id !== seq) {
             return;
         }
+        fitPages(host);
     } catch (err) {
         if (id !== seq) {
             return;
@@ -44,7 +46,14 @@ const render = async (source: Blob): Promise<void> => {
 
 // Parses on the main thread; bounded by the viewer's 25 MiB raw cap. If a huge .docx janks the UI, move the
 // parse into a ?worker module (Vite supports it out of the box).
-onMounted(() => void render(blob));
+let unfit: (() => void) | undefined;
+onMounted(() => {
+    if (container.value !== undefined) {
+        unfit = keepFitted(container.value);
+    }
+    void render(blob);
+});
+onUnmounted(() => unfit?.());
 watch(
     () => blob,
     (next) => void render(next),
@@ -65,9 +74,11 @@ watch(
 </template>
 
 <style scoped>
-/* docx-preview centers its own white "pages" in a wrapper; give the gutter a little breathing room. */
+/* docx-preview centers its own white "pages" in a wrapper; give the gutter a little breathing room. A page wider than
+   the pane (fit stops at half size) starts at the left edge, where a scroll can reach it, rather than centred and cut. */
 .docx-host :deep(.docx-wrapper) {
     padding: 1.5rem 0;
     background: transparent;
+    align-items: safe center;
 }
 </style>

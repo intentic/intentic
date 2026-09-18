@@ -8,7 +8,12 @@ export const activate = (api: IntenticApi, context: ExtensionContext): void => {
         api.viewers.register({ id: `svg`, component: async () => (await import(`./SvgViewer.vue`)).default }),
         api.viewers.register({ id: `pdf`, component: async () => (await import(`./PdfViewer.vue`)).default }),
         api.viewers.register({ id: `media`, component: async () => (await import(`./MediaViewer.vue`)).default }),
-        api.viewers.register({ id: `docx`, component: async () => (await import(`./DocxViewer.vue`)).default }),
+        // A Word document also compares: both versions as one, the words that moved marked in place.
+        api.viewers.register({
+            id: `docx`,
+            component: async () => (await import(`./DocxViewer.vue`)).default,
+            compare: async () => (await import(`./DocxCompareViewer.vue`)).default,
+        }),
         // One spreadsheet viewer for both formats: its worker reads the container from the bytes, not the name.
         api.viewers.register({ id: `xlsx`, component: async () => (await import(`./SheetViewer.vue`)).default }),
         api.viewers.register({ id: `pptx`, component: async () => (await import(`./PptxViewer.vue`)).default }),

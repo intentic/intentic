@@ -11,6 +11,7 @@ const resolve = {
     alias: {
         "@intentic/extension-ui/i18n": here(`../../_shared/extension-ui/src/i18n.ts`),
         "@intentic/extension-ui/format": here(`../../_shared/extension-ui/src/format.ts`),
+        "@intentic/extension-ui/diff": here(`../../_shared/extension-ui/src/diff.ts`),
     },
 };
 

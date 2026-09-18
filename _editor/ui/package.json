@@ -46,6 +46,10 @@
             "types": "./src/lib/format.ts",
             "default": "./src/lib/format.ts"
         },
+        "./diff": {
+            "types": "./src/lib/textDiff.ts",
+            "default": "./src/lib/textDiff.ts"
+        },
         "./icons": {
             "types": "./src/icons/iconSets.ts",
             "default": "./src/icons/iconSets.ts"

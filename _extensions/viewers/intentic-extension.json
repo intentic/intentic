@@ -35,7 +35,7 @@
                 ],
                 "fetch": "url"
             },
-            { "id": "docx", "extensions": ["docx"], "fetch": "blob" },
+            { "id": "docx", "extensions": ["docx"], "fetch": "blob", "compare": true },
             { "id": "xlsx", "extensions": ["xlsx", "ods", "ots"], "fetch": "blob" },
             { "id": "pptx", "extensions": ["pptx"], "fetch": "blob" },
             { "id": "odf-text", "extensions": ["odt", "ott"], "fetch": "blob" },

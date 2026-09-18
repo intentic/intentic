@@ -12,8 +12,8 @@ export interface PowersDiff {
     readonly unchanged: string[];
 }
 
-const viewerPower = (viewer: { edit?: boolean | undefined; extensions: readonly string[]; fetch: string }): string =>
-    `${viewer.edit === true ? "opens and edits" : "opens"} .${viewer.extensions.join(", .")} files (${viewer.fetch})`;
+const viewerPower = (viewer: { edit?: boolean | undefined; compare?: boolean | undefined; extensions: readonly string[]; fetch: string }): string =>
+    `${viewer.edit === true ? "opens and edits" : "opens"}${viewer.compare === true ? " and compares" : ""} .${viewer.extensions.join(", .")} files (${viewer.fetch})`;
 
 const powersOf = (manifest: ExtensionManifest): Map<string, string> => {
     const powers = new Map<string, string>();

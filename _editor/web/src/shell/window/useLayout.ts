@@ -18,7 +18,9 @@ export type DiffLayout = "split" | "unified";
 // turned into a hunk by codeLanding.ts.
 export type DiffOpen = "top" | "imports" | "biggest";
 // How a document's diff reads: tracked changes over its text, or both versions drawn whole.
-export type DiffDocument = "changes" | "sides";
+// A document's diff readings: the change drawn (a redline where a viewer can draw one, tracked changes over the
+// text otherwise), the text reading on its own, or both versions whole.
+export type DiffDocument = "changes" | "text" | "sides";
 
 const STORAGE_KEY = `ui-chat-position`;
 const WIDTH_KEY = `ui-chat-width`;
@@ -199,7 +201,7 @@ const hideFileComments = boolPref(HIDE_FILE_COMMENTS_KEY);
 const diffLayout = enumPref(DIFF_LAYOUT_KEY, [`split`, `unified`] as const, `split`);
 const diffProseChoice = enumPref(DIFF_PROSE_KEY, [`auto`, `on`, `off`] as const, `auto`);
 const diffProse = computed<boolean>(() => (diffProseChoice.value === `auto` ? useAudience().maker.value : diffProseChoice.value === `on`));
-const diffDocument = enumPref(DIFF_DOCUMENT_KEY, [`changes`, `sides`] as const, `changes`);
+const diffDocument = enumPref(DIFF_DOCUMENT_KEY, [`changes`, `text`, `sides`] as const, `changes`);
 const diffOpen = enumPref(DIFF_OPEN_KEY, [`top`, `imports`, `biggest`] as const, `imports`);
 const markdownOutline = boolPref(MARKDOWN_OUTLINE_KEY, true);
 

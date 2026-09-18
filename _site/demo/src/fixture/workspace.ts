@@ -18,7 +18,7 @@ import { includeGlobs } from "@intentic/sandbox-contract";
 import { acceptanceFiles } from "./acceptance";
 import { SUPPORT_SWEEP_PATH, SUPPORT_SWEEP_SHOT } from "./browserShots";
 import { choreFiles } from "./chores";
-import { HANDOVER_DOCX, HANDOVER_PATH } from "./document";
+import { HANDOVER_CHANGE, HANDOVER_CHANGE_PATH, HANDOVER_DOCX, HANDOVER_PATH } from "./document";
 import { documentationFiles } from "./docs";
 import { CONFLICT_AGENT_ID, REVIEW_AGENT_ID } from "./fleet";
 
@@ -56,6 +56,8 @@ const BASE_CHANGES: RepoChanges[] = [
             { path: `src/lib/checkout.ts`, status: `modified`, additions: 6, deletions: 3, code: { additions: 5, deletions: 3 } },
             { path: `src/pricing/CheckoutPanel.tsx`, status: `modified`, additions: 28, deletions: 4, code: { additions: 24, deletions: 4 } },
             { path: `tests/checkout.spec.ts`, status: `added`, additions: 44, deletions: 0, code: { additions: 40, deletions: 0 } },
+            // A Word document, the one row git counts nothing for: its diff is the two versions drawn as one.
+            { path: HANDOVER_CHANGE.path, status: `modified`, additions: 0, deletions: 0 },
         ],
     },
     {
@@ -351,6 +353,7 @@ const DIFFS: Record<string, FileDiff> = {
     "web/src/lib/checkout.ts": { before: CHECKOUT_LIB_BEFORE, after: CHECKOUT_LIB_AFTER },
     "web/src/pricing/CheckoutPanel.tsx": { before: CHECKOUT_PANEL_BEFORE, after: CHECKOUT_PANEL_AFTER },
     "web/tests/checkout.spec.ts": { after: CHECKOUT_SPEC },
+    [HANDOVER_CHANGE_PATH]: { binary: true },
 };
 
 // Prose, added-only: same text both sides shows no diff; a comment would get stripped by hide-comments.
@@ -414,6 +417,7 @@ const SOURCES: [string, string | number][] = [
     [`drop/brand-kit.zip`, 48_200],
     // Its real length, since /workspace/raw serves this one's real bytes (fixture/document.ts).
     [HANDOVER_PATH, HANDOVER_DOCX.length],
+    [HANDOVER_CHANGE_PATH, HANDOVER_DOCX.length],
 ];
 
 // What an archive holds, which the daemon answers by unpacking it out of sight. Keyed by the archive's own path and

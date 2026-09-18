@@ -53,7 +53,7 @@ import {
     setExtensionEnabled,
     vendoredBundle,
 } from "./fixture/sandbox";
-import { HANDOVER_DOCX, HANDOVER_PATH } from "./fixture/document";
+import { HANDOVER_CHANGE_PATH, HANDOVER_DOCX, HANDOVER_DOCX_BEFORE, HANDOVER_PATH, HANDOVER_TEXT, HANDOVER_TEXT_BEFORE } from "./fixture/document";
 import { transcriptFor } from "./fixture/transcripts";
 import {
     agentChanges,
@@ -383,6 +383,9 @@ const ROUTES: readonly (readonly [string, string, Handler])[] = [
     [`GET`, `/git/repos`, () => json({ repos: [...REPOS] })],
     [`GET`, `/git/changes`, () => json(gitChanges())],
     [`GET`, `/git/{repo}/file-diff`, ({ url, param }) => json(fileDiff(param(`repo`), url.searchParams.get(`path`) ?? ``))],
+    // The one binary diff the demo carries whole: the handover document, both versions built in code.
+    [`GET`, `/diff/raw`, ({ url }) => documentBytes(url.searchParams.get(`which`) === `before` ? HANDOVER_DOCX_BEFORE : HANDOVER_DOCX)],
+    [`GET`, `/diff/derived`, () => json({ before: derivedSide(HANDOVER_TEXT_BEFORE), after: derivedSide(HANDOVER_TEXT) })],
     [`GET`, `/git/{repo}/branches`, ({ param }) => json({ branches: [{ name: `main`, current: true }], repo: param(`repo`) })],
     [`POST`, `/git/{repo}/commit`, () => refuse(`This is the demo workspace: commits need a real repository.`)],
     [`POST`, `/git/{repo}/push`, () => refuse(`This is the demo workspace: there is no remote to push to.`)],
@@ -811,14 +814,17 @@ function savePersonaRoute({ request }: RouteContext): Promise<Response> {
 // check existence.
 const workspaceRead = (path: string): Response => json(readFile(path));
 
+const documentBytes = (bytes: Uint8Array<ArrayBuffer>): Response =>
+    new Response(bytes, { status: 200, headers: { "content-type": `application/vnd.openxmlformats-officedocument.wordprocessingml.document` } });
+
+// One version of the document as the text a daemon's fileq would render from it (the diff's Text reading).
+const derivedSide = (content: string): object => ({ present: true, content, deriver: `docx v2`, notes: [], truncated: false });
+
 // Report screenshots (svg keeps them a few kilobytes and sharp at any size) and the one document, which is the only
 // path here whose bytes are bytes: a viewer parses it, so text would not do.
 const workspaceRaw = (path: string): Response => {
-    if (path === HANDOVER_PATH) {
-        return new Response(HANDOVER_DOCX, {
-            status: 200,
-            headers: { "content-type": `application/vnd.openxmlformats-officedocument.wordprocessingml.document` },
-        });
+    if (path === HANDOVER_PATH || path === HANDOVER_CHANGE_PATH) {
+        return documentBytes(HANDOVER_DOCX);
     }
     const body = fileBody(path);
     if (body === undefined) {

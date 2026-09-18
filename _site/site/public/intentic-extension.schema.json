@@ -181,6 +181,10 @@
                             "edit": {
                                 "description": "Whether this viewer writes the file back. An editing viewer is chosen over a render-only viewer claiming the same extension, whatever order the two activated in.",
                                 "type": "boolean"
+                            },
+                            "compare": {
+                                "description": "Whether this viewer also draws two versions of a file as one, with what changed marked in place: its registration then carries a `compare` component the host renders with `before` and `after` blobs. Only for `fetch: \"blob\"`.",
+                                "type": "boolean"
                             }
                         },
                         "required": [
