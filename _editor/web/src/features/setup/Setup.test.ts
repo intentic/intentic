@@ -75,14 +75,19 @@ const addressOffer = vi.fn().mockResolvedValue({ enabled: true });
 // Power poll and restart default harmlessly; a wait that can't ask falls back to its plain step list.
 const hostedStatus = vi.fn().mockResolvedValue({ machine: `unknown` });
 const hostedRestart = vi.fn().mockResolvedValue({ ok: true });
-vi.mock(`../../lib/useApi`, () => ({ apiClient: { sandbox: { setupCode, hostedOffer, addressOffer, hostedStatus, hostedRestart } } }));
+// The wait's own recovery: the platform is asked to start a machine the provider reports down.
+const wake = vi.fn().mockResolvedValue({ ok: true });
+vi.mock(`../../lib/useApi`, () => ({ apiClient: { sandbox: { setupCode, hostedOffer, addressOffer, hostedStatus, hostedRestart, wake } } }));
 vi.mock(`../sandbox/client/sandboxIdFromToken`, () => ({ sandboxIdFromToken: vi.fn().mockResolvedValue(`0f310c3c4db4`) }));
 vi.mock(`../../app/analytics`, () => ({ track: vi.fn() }));
 vi.mock(`../auth/useAuth`, () => ({ useAuth: () => ({ user: ref({ email: `owner@example.com` }) }) }));
 vi.mock(`../auth/useGoogleIdentity`, () => ({
     useGoogleIdentity: () => ({ getIdToken: vi.fn().mockResolvedValue(`id-token`), warmIdToken: vi.fn() }),
 }));
-vi.mock(`../../../../ui/src/composables/useNow`, () => ({ useNow: () => ref(0) }));
+// The page's wall clock as a knob: every verdict the wait card reaches by elapsed time reads this, so a test
+// about one has to be able to move it. Frozen at 0 unless a test says otherwise, which is how it behaved before.
+const nowAt = ref(0);
+vi.mock(`../../../../ui/src/composables/useNow`, () => ({ useNow: () => nowAt }));
 vi.mock(`../extensions/useCloudflareZones`, () => ({
     useCloudflareZones: () => ({
         cfToken: ref(``),
@@ -175,6 +180,8 @@ const MINTED = { code: `vphf-3wk`, hostname: `sandbox-fa0b431303b8.sbx.intentic.
 
 beforeEach(() => {
     query.value = {};
+    nowAt.value = 0;
+    wake.mockReset().mockResolvedValue({ ok: true });
     mobileDevice.value = false;
     desktopApp.value = undefined;
     desktopInstaller.mockReset().mockReturnValue(undefined);
@@ -198,6 +205,13 @@ beforeEach(() => {
     push.mockReset();
     replace.mockReset();
 });
+
+// Moves the faked clock and the page's own reading of it together; `useNow` is mocked, so nothing else moves it.
+// Only meaningful under fake timers that include `Date`, which is what the page dates its own waits by.
+const tick = async (ms: number): Promise<void> => {
+    await vi.advanceTimersByTimeAsync(ms);
+    nowAt.value = Date.now();
+};
 
 // Every exit path: the discard rule hangs off unmount, so tests must actually unmount to trigger it.
 const leave = (): void => {
@@ -578,6 +592,70 @@ it(`names a refused check-in on the wait card, with a way out`, async () => {
     await vi.waitFor(() => expect(hostedRelease).toHaveBeenCalledWith(`h1`));
     expect(hostedProvision).toHaveBeenCalledWith(`h1`, `tok`);
     expect(hostedRestart).not.toHaveBeenCalled();
+});
+
+/* THE BUTTON THIS PAGE USED TO HAND PEOPLE INSTEAD OF PRESSING IT ITSELF. A hosted machine stops for ordinary
+ * reasons while nobody is in it — the daemon's idle-stop, a first boot the provider gave up restarting, a machine
+ * still stopped from the last visit — and every one of them ended this wait with "the machine we started for you
+ * isn't running" over a button whose only reader was the person least able to know that. */
+const hostedWaiting = (): SandboxSummary => {
+    const hosted = sandboxRow({ id: `h1`, name: `mine`, hosted: { region: `iad`, warm: true } });
+    sandboxes.value = [hosted];
+    list.mockResolvedValue([hosted]);
+    refresh.mockResolvedValue([hosted]);
+    return hosted;
+};
+
+it(`starts a machine the provider says is down, instead of asking the reader to`, async () => {
+    hostedWaiting();
+    hostedStatus.mockResolvedValue({ machine: `stopped` });
+    vi.useFakeTimers({ toFake: [`setInterval`, `clearInterval`] });
+    const el = await mount();
+    await vi.advanceTimersByTimeAsync(3_000);
+    await vi.waitFor(() => expect(wake).toHaveBeenCalledWith({ sandboxId: `h1` }));
+    // And keeps narrating a boot, because a boot is exactly what that just started.
+    expect(el.textContent).toContain(`Starting the machine`);
+    expect(el.textContent).not.toContain(`isn't running`);
+    expect(buttonLabelled(`Start it over`)).toBeUndefined();
+});
+
+// Bounded, and honest once the bound is spent: a machine that will not stay up must not be restarted forever on
+// hours its owner is charged for, and a page that has stopped trying owes the reader the button and the truth.
+it(`stops starting a machine that will not stay up, and then says so`, async () => {
+    hostedWaiting();
+    hostedStatus.mockResolvedValue({ machine: `stopped` });
+    // Date rides the fake clock here: the reflex throttles itself by wall time, and the card's verdict is a
+    // reading of it, so a test about either has to own it.
+    vi.useFakeTimers({ toFake: [`setInterval`, `clearInterval`, `Date`] });
+    const el = await mount();
+    // Machine state is read every fourth 3s poll, and starts are 30s apart: three of them fit in a minute and a
+    // half, and nothing buys a fourth.
+    await tick(90_000);
+    expect(wake).toHaveBeenCalledTimes(3);
+    await tick(90_000);
+    expect(wake).toHaveBeenCalledTimes(3);
+    await vi.waitFor(() => expect(el.textContent).toContain(`isn't running`));
+    // And the button is the reader's now: the heavier recovery this page never attempts on anyone's behalf.
+    buttonLabelled(`Start it over`)!.click();
+    await vi.waitFor(() => expect(hostedRestart).toHaveBeenCalledWith({ sandboxId: `h1` }));
+});
+
+// The one wording a reader can prove wrong: "that's ours to fix, nothing on your side causes this", said over a
+// machine the platform is deliberately keeping down, with a button under it that earns a second refusal.
+it(`says what a refused start actually was, and offers the way out that works`, async () => {
+    hostedWaiting();
+    hostedStatus.mockResolvedValue({ machine: `stopped` });
+    wake.mockRejectedValue(Object.assign(new Error(`free hours are used up this month`), { code: `PAYMENT_REQUIRED`, status: 402 }));
+    vi.useFakeTimers({ toFake: [`setInterval`, `clearInterval`] });
+    const el = await mount();
+    await vi.advanceTimersByTimeAsync(3_000);
+    // No clock is waited out for this: somebody decided it, so it is true the moment it is known.
+    await vi.waitFor(() => expect(el.textContent).toContain(`free hours`));
+    expect(el.textContent).not.toContain(`isn't running`);
+    expect(buttonLabelled(`Start it over`)).toBeUndefined();
+    // The offered way out is the one that works right now, and taking it hands the stopped machine back.
+    buttonLabelled(`Set it up on my own computer`)!.click();
+    await vi.waitFor(() => expect(hostedRelease).toHaveBeenCalledWith(`h1`));
 });
 
 // A switch moves the machine, never the sandbox: same id, same name, no delete-and-recreate.

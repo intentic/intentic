@@ -1,6 +1,6 @@
 import type { BootReport } from "@intentic/api-contract";
 import { describe, expect, it } from "vitest";
-import { hostedWaitView, type HostedWaitInput } from "./hostedWait";
+import { hostedWaitView, machineStartable, type HostedWaitInput } from "./hostedWait";
 
 // A wait with nothing known yet: every case below is this plus the one fact it is about.
 const wait = (over: Partial<HostedWaitInput> = {}): HostedWaitInput => ({
@@ -13,6 +13,8 @@ const wait = (over: Partial<HostedWaitInput> = {}): HostedWaitInput => ({
     // Settled by default, so the cases below stay about the reading rather than about the clock; the ones that
     // are about the clock say so.
     downForMs: 60_000,
+    waking: false,
+    wakeRefusal: undefined,
     ...over,
 });
 
@@ -116,6 +118,35 @@ describe(`hostedWaitView`, () => {
         expect(hostedWaitView({ ...stopping, downForMs: 46_000 }).failure?.problem).toContain(`isn't running`);
     });
 
+    /* THE VERDICT THIS CARD NOW HAS TO EARN. The page starts a stopped machine itself (Setup.vue), so the only
+     * thing a stop means while that start is running is that a boot is about to begin. */
+    it(`says nothing about a machine somebody is already starting`, () => {
+        const starting = wait({ machine: `stopped`, downForMs: 60_000, waking: true });
+        expect(hostedWaitView(starting).failure).toBeUndefined();
+        expect(active(starting)).toBe(`machine`);
+        // The clock's verdicts are a boot's too, and none of them may speak over the start of a new one.
+        expect(hostedWaitView({ ...starting, machine: `created`, waitedMs: 11 * 60_000 }).failure).toBeUndefined();
+    });
+
+    // "That's ours to fix, nothing on your side causes this" is the one sentence a reader whose hours ran out can
+    // prove wrong, and the button under it only earns a second refusal.
+    it(`gives a refused start its own words, and no button that would only be refused again`, () => {
+        const spent = hostedWaitView(wait({ machine: `stopped`, wakeRefusal: `hours` }));
+        expect(spent.failure?.problem).toContain(`free hours`);
+        expect(spent.failure?.problem).not.toContain(`isn't running`);
+        expect(spent.failure?.action).toBe(`none`);
+        const off = hostedWaitView(wait({ machine: `stopped`, wakeRefusal: `suspended` }));
+        expect(off.failure?.problem).toContain(`switched off`);
+        expect(off.failure?.action).toBe(`none`);
+    });
+
+    it(`keeps the refusal on screen while it tries again, and still lets a refused check-in outrank it`, () => {
+        const refused = wait({ machine: `stopped`, wakeRefusal: `hours` });
+        expect(hostedWaitView({ ...refused, waking: true }).failure?.problem).toContain(`free hours`);
+        const announced = hostedWaitView({ ...refused, refusal: { announced: `old.example.dev`, expected: `sandbox-abc.sbx.test` } });
+        expect(announced.failure?.problem).toContain(`old.example.dev`);
+    });
+
     // A rebuild destroys the machine and makes another, so `gone` is a transition too, and the sentence it
     // would otherwise print tells somebody their files are lost while they are being restored.
     it(`waits out a machine reported gone, and only then admits what starting over costs`, () => {
@@ -215,5 +246,17 @@ describe(`the boot chain on the card`, () => {
     it(`reads a report with no chain as the hand-over-on-announce it always was`, () => {
         expect(hostedWaitView(wait({ machine: `started`, announced: true, boot: boot(`reachable`) })).booting).toBe(false);
         expect(hostedWaitView(wait()).booting).toBe(false);
+    });
+
+    // What the page's own reflex reads before starting anything: a machine being torn down is not one a start
+    // fixes, and starting one back into a teardown is worse than the sentence it would have printed.
+    it(`names the down states a start still fixes, and leaves a teardown to the button`, () => {
+        expect(machineStartable(`stopped`)).toBe(true);
+        expect(machineStartable(`suspended`)).toBe(true);
+        expect(machineStartable(`failed`)).toBe(true);
+        expect(machineStartable(`gone`)).toBe(false);
+        expect(machineStartable(`destroying`)).toBe(false);
+        expect(machineStartable(`destroyed`)).toBe(false);
+        expect(machineStartable(undefined)).toBe(false);
     });
 });

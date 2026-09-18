@@ -51,7 +51,7 @@ import type { ComposeArgs } from "./setupCompose";
 import { addressZone, type AttachOutcome, daemonUrlProblem, normalizeDaemonUrl, ownAddressProblem, probeDaemon } from "./setupAttach";
 import { autoSandboxName } from "./setupName";
 import { setupReportView } from "./setupReport";
-import { hostedWaitView, machineIsDown } from "./hostedWait";
+import { hostedWaitView, machineIsDown, machineStartable, type WakeRefusal } from "./hostedWait";
 import { useT } from "@intentic/ui/i18n";
 
 // No identity or machine decision here: the surface (setupArrival.ts) decides those; this page is what's left
@@ -265,6 +265,86 @@ const noteMachine = (reading: HostedStatus[`machine`] | undefined): void => {
     machineDownSince.value = machineIsDown(reading) ? (machineDownSince.value ?? Date.now()) : undefined;
 };
 
+/* THE BUTTON THIS PAGE USED TO HAND PEOPLE INSTEAD OF PRESSING IT ITSELF.
+ *
+ * A hosted machine stops for ordinary reasons while nobody is in it yet: the daemon's own idle-stop (20 quiet
+ * minutes, and a setup that never finished never resets it), a first boot the provider gave up restarting, a
+ * machine still stopped since the last visit. Each of them ended this wait at "the machine we started for you
+ * isn't running" over a button, held out to the one reader who can do least about it. The workspace has woken a
+ * sleeping machine by reflex for as long as it has had one (useSandbox.ts); the setup wait had no reflex at all.
+ *
+ * So: a machine that is down under a browser waiting for it is started here, on the first reading that says so,
+ * and the card keeps narrating a boot, because a boot is what that just started. */
+// Starts spent on one down episode. Bounded: a machine that will not stay up must reach a verdict rather than be
+// restarted forever on hours its owner is charged for.
+const MAX_WAKES = 3;
+// Gap between two of them, so a reading that lands mid-start never buys a second one.
+const WAKE_THROTTLE_MS = 30_000;
+// A start this page asked for, still in flight; the wait card says nothing about a machine while one is running.
+const waking = ref(false);
+// The platform's own refusal of that start, kept because it is the true account of why the machine is down.
+const wakeRefusal = ref<WakeRefusal | undefined>(undefined);
+let wakes = 0;
+let lastWakeAt = 0;
+
+// Platform refusing to start a machine at all, in the two shapes it does (api sandbox.wake): spent free hours,
+// and an account whose hosted lane is switched off. Anything else is a bad minute, not a decision.
+const wakeRefusalOf = (err: unknown): WakeRefusal | undefined => {
+    if (!err || typeof err !== `object`) {
+        return undefined;
+    }
+    const { code, status } = err as { code?: unknown; status?: unknown };
+    if (code === `PAYMENT_REQUIRED` || status === 402) {
+        return `hours`;
+    }
+    return code === `FORBIDDEN` || status === 403 ? `suspended` : undefined;
+};
+
+// One start for a machine the provider says is down. `action` guards it like every other hosted call: an answer
+// that lands after the reader moved on describes a machine this page no longer waits for.
+const wakeMachine = async (sandboxId: string, action: number): Promise<void> => {
+    if (waking.value || wakes >= MAX_WAKES || Date.now() - lastWakeAt < WAKE_THROTTLE_MS) {
+        return;
+    }
+    wakes += 1;
+    lastWakeAt = Date.now();
+    waking.value = true;
+    try {
+        await apiClient.sandbox.wake({ sandboxId });
+        if (action !== hostedAction || releasingHosted.value) {
+            return;
+        }
+        // Starting because this call started it, and a new boot deserves the clock of one: every estimate and
+        // every fuse under the step list measures a boot, not how long this tab has been open.
+        noteMachine(`starting`);
+        hostedSince.value = Date.now();
+    } catch (err) {
+        const refusal = wakeRefusalOf(err);
+        // A bad minute is not a decision, and must not erase the decision an earlier start already met.
+        if (action === hostedAction && refusal !== undefined) {
+            wakeRefusal.value = refusal;
+        }
+    } finally {
+        waking.value = false;
+    }
+};
+
+// What one reading from the provider does to the down episode: ends it, earns a start, or neither.
+const answerMachine = async (sandboxId: string, action: number, reading: HostedStatus[`machine`]): Promise<void> => {
+    if (!machineIsDown(reading)) {
+        // Up, from the provider itself: the episode is over, so the next stop gets its own allowance and no
+        // refusal from the last one clings to it.
+        wakes = 0;
+        wakeRefusal.value = undefined;
+        return;
+    }
+    // Only for the reader actually waiting on this rung: a machine still attached to a row whose owner has
+    // stepped over to their own computer is one nobody is watching, and starting it would bill them for it.
+    if (machineStartable(reading) && machine.value === `hosted` && !hostedBusy.value) {
+        await wakeMachine(sandboxId, action);
+    }
+};
+
 // One throttled machine-state read, riding the registry poll. `action` is the hosted action it was asked
 // under: a reading that lands after a restart was issued describes the machine that restart replaced, and
 // keeping it would restart the down clock the restart just cleared.
@@ -273,8 +353,13 @@ const readMachine = async (sandboxId: string, action: number): Promise<void> => 
         return;
     }
     const reading = (await apiClient.sandbox.hostedStatus({ sandboxId }).catch(() => undefined))?.machine;
-    if (action === hostedAction && !releasingHosted.value) {
-        noteMachine(reading ?? hostedMachine.value);
+    if (action !== hostedAction || releasingHosted.value) {
+        return;
+    }
+    noteMachine(reading ?? hostedMachine.value);
+    // A read that failed establishes nothing: it neither ends the episode nor earns a start.
+    if (reading !== undefined) {
+        await answerMachine(sandboxId, action, reading);
     }
 };
 
@@ -466,6 +551,8 @@ const hostedWait = computed(() =>
         warm: hostedRow.value?.warm,
         waitedMs: hostedSince.value === undefined ? 0 : now.value - hostedSince.value,
         downForMs: machineDownSince.value === undefined ? 0 : now.value - machineDownSince.value,
+        waking: waking.value,
+        wakeRefusal: wakeRefusal.value,
     }),
 );
 
@@ -768,6 +855,10 @@ const restartHosted = async (): Promise<void> => {
     announceRefusal.value = null;
     announced.value = false;
     noteMachine(undefined);
+    // The machine this page gives up on and the one it starts itself are the same machine: a reader who asks for
+    // a restart is starting a new episode, and the reflex above owes that episode its own allowance.
+    wakes = 0;
+    wakeRefusal.value = undefined;
     hostedSince.value = Date.now();
     try {
         if (remake) {
@@ -1814,13 +1905,24 @@ const warmSandboxCredential = async (): Promise<void> => {
                                         <span>{{ hostedWait.failure.problem }}</span>
                                     </p>
                                     <p class="text-xs text-muted">{{ hostedWait.failure.remedy }}</p>
+                                    <!-- Starting it over is offered only where it can work: after a refused start, the one button
+                                         that cannot help is the one asking for another. -->
                                     <Button
+                                        v-if="hostedWait.failure.action !== `none`"
                                         :label="t(`setup.setup.startOver`)"
                                         class="w-full justify-center md:w-fit"
                                         :disabled="hostedBusy"
                                         @click="restartHosted"
                                     >
                                         <template #icon><Icon name="refresh" /></template>
+                                    </Button>
+                                    <Button
+                                        v-else
+                                        :label="t(`setup.setup.setUpOnMy`)"
+                                        class="w-full justify-center md:w-fit"
+                                        @click="chooseMachine(`mine`)"
+                                    >
+                                        <template #icon><Icon name="desktop" /></template>
                                     </Button>
                                 </template>
                                 <!-- Healthy waits show one row per step and spin the current row. -->

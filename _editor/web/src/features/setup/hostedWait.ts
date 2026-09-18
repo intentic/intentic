@@ -30,12 +30,30 @@ const coldSteps = (steps: readonly { key: WaitStep; label: string }[]): readonly
     steps.map((step) => (step.key === `machine` ? { ...step, label: t(`setup.hostedWait.startingMachineDownloadingSandbox`) } : step));
 
 // `remedy` is always present, never a diagnosis with no next move. `action` is `remake` for a sandbox that never
-// checked in (bad address baked in), `reboot` for one that has files and only needs restarting.
+// checked in (bad address baked in), `reboot` for one that has files and only needs restarting, `none` where
+// starting it again is the one thing that cannot help, since the platform has already refused to.
 export interface WaitFailure {
     readonly problem: string;
     readonly remedy: string;
-    readonly action: "remake" | "reboot";
+    readonly action: "remake" | "reboot" | "none";
 }
+
+// The two shapes the platform refuses to start a machine in (sandbox.wake: PAYMENT_REQUIRED, FORBIDDEN). Each is a
+// decision, not a fault, so neither may be narrated as a machine that won't come up.
+export type WakeRefusal = "hours" | "suspended";
+
+const REFUSED: Record<WakeRefusal, WaitFailure> = {
+    hours: {
+        problem: `This sandbox's free hours for the month are used up, so we've left its machine stopped.`,
+        remedy: `They reset at the start of next month, and the membership lifts the ceiling for good. Running it on a computer of your own has no ceiling at all, and either way nothing on the machine is lost.`,
+        action: `none`,
+    },
+    suspended: {
+        problem: `Hosted machines are switched off for this account.`,
+        remedy: `The email we sent says why and where to write. Your sandbox, its name and its address all stay; running it on a computer of your own is unaffected and works right now.`,
+        action: `none`,
+    },
+};
 
 export interface HostedWaitView {
     readonly steps: readonly WaitStepView[];
@@ -65,6 +83,12 @@ export interface HostedWaitInput {
     // How long the CURRENT down reading has held, 0 whenever the machine last read as anything else. The page
     // keeps this clock (Setup.vue), since a pure view of one poll cannot tell a stop from a transition.
     readonly downForMs: number;
+    // Whether a start this page asked for is in flight. A machine somebody is already starting is not a machine
+    // that won't come up, so no verdict is passed over one.
+    readonly waking: boolean;
+    // Why the platform refused to start it, when it did. A decision somebody made, so it ends the wait at once
+    // rather than waiting out a clock that could only mislabel it.
+    readonly wakeRefusal: WakeRefusal | undefined;
 }
 
 const MINUTE_MS = 60_000;
@@ -116,6 +140,13 @@ const DEAD_MACHINE = new Set([`stopped`, `suspended`, `destroying`, `destroyed`,
 export const machineIsDown = (machine: HostedStatus[`machine`] | undefined): boolean =>
     machine === `gone` || (machine !== undefined && DEAD_MACHINE.has(machine));
 
+// The down states a plain start still fixes: the machine and its disk are there, nobody is tearing them down. A
+// machine mid-teardown, or gone from the provider, needs a replacement instead, which is the button's job.
+const STARTABLE = new Set([`stopped`, `suspended`, `failed`]);
+
+/* Whether a stopped machine is one the page may simply start again, instead of telling its reader it stopped. */
+export const machineStartable = (machine: HostedStatus[`machine`] | undefined): boolean => machine !== undefined && STARTABLE.has(machine);
+
 // How long a down reading must hold to be a verdict. The page reads the provider every 12s, so this is three
 // or four consecutive answers — long enough that no transition survives it, short enough that a machine that
 // really is off is named inside a minute.
@@ -147,8 +178,14 @@ const finalFailure = (input: HostedWaitInput): Stall | undefined => {
             },
         };
     }
-    // Both readings below are the provider's, and neither is final until it has settled: see machineIsDown.
-    if (!machineIsDown(input.machine) || input.downForMs < DOWN_SETTLED_MS) {
+    // A start the platform has refused is the one account of a stopped machine that outranks the provider's own
+    // reading: the machine is down because somebody decided it stays down, and the reader can act on that.
+    if (input.wakeRefusal !== undefined) {
+        return { step: `machine`, failure: REFUSED[input.wakeRefusal] };
+    }
+    // Both readings below are the provider's, and neither is final until it has settled: see machineIsDown. A
+    // start already in flight answers a down machine, so nothing is said about one while that start is running.
+    if (input.waking || !machineIsDown(input.machine) || input.downForMs < DOWN_SETTLED_MS) {
         return undefined;
     }
     // Machine gone entirely, as final as a refusal; starting over means a new, empty machine.
@@ -264,7 +301,9 @@ export const hostedWaitView = (input: HostedWaitInput): HostedWaitView => {
                   step.key === `booting` ? { ...step, label: t(`setup.hostedWait.startingSandbox2`, { step: chain.step }) } : step,
               );
     const note = noteFor(input);
-    const stall = finalFailure(input) ?? stalledFailure(input);
+    // Every clock below times a boot, and a start in flight is a boot about to begin: only what somebody
+    // established (a refused check-in, a refused start) may speak over one.
+    const stall = finalFailure(input) ?? (input.waking ? undefined : stalledFailure(input));
     const booting = chain !== undefined;
     return stall === undefined
         ? { steps: at(steps, healthyStep(input, reachable)), note, failure: undefined, reachable, booting }
