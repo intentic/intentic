@@ -1,4 +1,4 @@
-import { mkdtempSync } from "node:fs";
+import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { repoRoot } from "@intentic/constants/node";
@@ -112,6 +112,27 @@ test("the staples every sandbox ships with are listed, and only where the comman
     const base = items.filter((item) => item.origin === "base");
     expect(base.map((item) => item.name)).toContain("Node.js");
     expect(base.every((item) => item.tools.length === 1 && item.state === "active")).toBe(true);
+});
+
+test("a prefix-installed npm module is active when its manifest is on disk", async () => {
+    clearVersionCache();
+    const prefix = mkdtempSync(join(tmpdir(), "cursor-sdk-"));
+    const manifestDir = join(prefix, "node_modules", "@cursor", "sdk");
+    mkdirSync(manifestDir, { recursive: true });
+    writeFileSync(join(manifestDir, "package.json"), JSON.stringify({ version: "1.0.31" }));
+    const services = stubServices();
+    await writeWorkspaceFile(
+        customPath(services),
+        `# ---- cursor ----
+# Cursor's agent runtime, loaded in process.
+RUN npm install --prefix ${prefix} --no-save @cursor/sdk@1.0.31 && node -e "require('${manifestDir}/package.json')"
+`,
+    );
+
+    const { items } = await readEnvironmentContents(services);
+    const cursor = items.find((item) => item.name === "Cursor");
+    expect(cursor?.state).toBe("active");
+    expect(cursor?.tools).toEqual([{ name: "@cursor/sdk", version: "1.0.31" }]);
 });
 
 test("a staple the recipe already explains is not listed twice", async () => {

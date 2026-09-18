@@ -6,7 +6,7 @@ import { capabilityFragments, workspaceExtensionFragments } from "./fragment-sou
 import { blockCommands, blockProse, blockTools, detailOf, type OverlayBlock, purposeOf, splitBlocks } from "./overlay-blocks.js";
 import { listPacks } from "./packs.js";
 import { providerPackFragments } from "./provider-packs.js";
-import { probeAll } from "./version-probe.js";
+import { probeAll, probeModules } from "./version-probe.js";
 
 // What this sandbox has: composed from the same fragment sources composeEnvironment uses, for attribution, plus the
 // container's own answers. Three groups: what an agent asked for and the owner approved, what a capability costs, and
@@ -102,23 +102,30 @@ const toolOf = (name: string, probe: { version: string | undefined; found: boole
 export const readEnvironmentContents = async (services: Services): Promise<EnvironmentContents> => {
     const candidates = [...(await customCandidates(services)), ...(await capabilityCandidates(services))];
     const tooling = candidates.map((candidate) => blockTools(candidate.block));
-    // One probe per distinct command across the whole view, staples included.
-    const probes = await probeAll([...tooling.flatMap((tools) => tools.candidates), ...STAPLES.map((staple) => staple.bin)]);
+    // One probe per distinct command across the whole view, staples included; prefix modules read their manifest.
+    const [probes, moduleProbes] = await Promise.all([
+        probeAll([...tooling.flatMap((tools) => tools.candidates), ...STAPLES.map((staple) => staple.bin)]),
+        probeModules(tooling.flatMap((tools) => tools.modules.map((module) => ({ name: module.name, manifest: module.manifest })))),
+    ]);
 
     // Fallback state for a block with nothing probeable to check (a runtime directive, ENV-only fragment).
     const built = services.config.sandbox.environmentHash !== "";
 
     const items: EnvironmentItem[] = [];
     for (const [index, candidate] of candidates.entries()) {
-        const { candidates: bins, packages } = tooling[index] ?? { candidates: [], packages: [] };
-        const tools = bins.map((bin) => toolOf(bin, probes.get(bin))).filter((tool) => tool !== undefined);
+        const { candidates: bins, packages, modules } = tooling[index] ?? { candidates: [], packages: [], modules: [] };
+        const tools = [
+            ...bins.map((bin) => toolOf(bin, probes.get(bin))),
+            ...modules.map((module) => toolOf(module.name, moduleProbes.get(module.name))),
+        ].filter((tool) => tool !== undefined);
         const plumbing = packages.filter((name) => !tools.some((tool) => tool.name === name)).length;
         const prose = blockProse(candidate.block.body, candidate.originLabel);
         const purpose = purposeOf(prose);
         const detail = detailOf(prose, purpose);
         const commands = blockCommands(candidate.block.body);
         // Observed beats inferred: a block whose commands answer is active regardless of hashes.
-        const state = candidate.state ?? (tools.length > 0 ? "active" : bins.length > 0 ? "after-rebuild" : built ? "active" : "after-rebuild");
+        const pending = bins.length > 0 || modules.length > 0;
+        const state = candidate.state ?? (tools.length > 0 ? "active" : pending ? "after-rebuild" : built ? "active" : "after-rebuild");
         items.push({
             id: `${candidate.origin}:${candidate.block.name}`,
             name: displayName(candidate.block.name, tools),

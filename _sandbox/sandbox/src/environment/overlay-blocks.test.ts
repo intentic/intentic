@@ -1,6 +1,11 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { repoRoot } from "@intentic/constants/node";
 import { expect, test } from "vitest";
 import { blockCommands, blockProse, blockTools, detailOf, purposeOf, splitBlocks } from "./overlay-blocks.js";
 import { parseVersion } from "./version-probe.js";
+
+const CURSOR = readFileSync(join(repoRoot(import.meta.url), "_sandbox/sandbox/image-packs/cursor.Dockerfile"), "utf8");
 
 // The real shape of a custom-section block, wrapped and continued exactly as the daemon writes one.
 const FFMPEG = `# ---- ffmpeg ----
@@ -137,6 +142,17 @@ test("finds a binary installed straight into a bin directory, and a global npm p
         `whisper-cli`,
     );
     expect(blockTools({ name: `codex`, body: `RUN npm install -g @openai/codex@0.147.0` }).candidates).toContain(`codex`);
+});
+
+test("a prefix-installed npm module is probed by manifest, not a phantom binary named after the pack", () => {
+    const { candidates, modules } = blockTools({ name: `cursor`, body: CURSOR });
+    expect(candidates).toEqual([]);
+    expect(modules).toEqual([
+        {
+            name: `@cursor/sdk`,
+            manifest: `/opt/cursor-sdk/node_modules/@cursor/sdk/package.json`,
+        },
+    ]);
 });
 
 test("reads the version out of whatever shape a tool prints it in", () => {

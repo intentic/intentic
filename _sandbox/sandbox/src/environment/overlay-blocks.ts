@@ -163,12 +163,21 @@ const isCommandWord = (word: string): boolean => /^[a-z][a-z0-9+._-]*$/.test(wor
 // unrelated words.
 const unfold = (body: string): string => body.replace(/\\\n\s*/g, " ");
 
+export interface BlockModule {
+    readonly name: string;
+    readonly manifest: string;
+}
+
 export interface BlockTools {
     // Commands worth asking for a version, best evidence first.
     readonly candidates: string[];
     // Every package installed; whatever isn't a named command is plumbing, counted rather than listed.
     readonly packages: string[];
+    // npm modules installed under a prefix, not on PATH; probed by reading their manifest.
+    readonly modules: BlockModule[];
 }
+
+const moduleManifest = (prefix: string, pkg: string): string => `${prefix}/node_modules/${pkg.split("/").join("/")}/package.json`;
 
 // Which commands a block puts on PATH, from four kinds of evidence, strongest first: an explicit `--version` check, a
 // file installed into a bin dir, an npm global's own name, and (weakest) the apt package list.
@@ -176,6 +185,12 @@ export const blockTools = (block: OverlayBlock): BlockTools => {
     const body = unfold(block.body);
     const candidates: string[] = [];
     const packages: string[] = [];
+    const modules: BlockModule[] = [];
+    const addModule = (name: string, manifest: string): void => {
+        if (!modules.some((module) => module.manifest === manifest)) {
+            modules.push({ name, manifest });
+        }
+    };
     const add = (word: string | undefined): void => {
         if (word !== undefined && isCommandWord(word) && !candidates.includes(word)) {
             candidates.push(word);
@@ -194,6 +209,13 @@ export const blockTools = (block: OverlayBlock): BlockTools => {
     for (const match of body.matchAll(/npm\s+(?:install|i)\s+-g\s+((?:@[^\s@]+\/)?[^\s@]+)/g)) {
         add(match[1]?.split("/").at(-1));
     }
+    // 3b. A prefix-installed npm module (Cursor's @cursor/sdk): the block's own verification names the manifest.
+    for (const match of body.matchAll(/require\('([^']+\/node_modules\/((?:@[^/]+\/[^/]+)|[^/]+))\/package\.json'\)/g)) {
+        addModule(match[2] ?? "", `${match[1]}/package.json`);
+    }
+    for (const match of body.matchAll(/npm\s+(?:install|i)\s+--prefix\s+(\S+)[\s\S]*?\s((?:@[^\s@]+\/)?[^\s@]+)@\d[\d.]*/g)) {
+        addModule(match[2] ?? "", moduleManifest(match[1] ?? "", match[2] ?? ""));
+    }
     // 4. The apt package list: weak alone, but catches the common single-package block; stops at the next &&.
     for (const match of body.matchAll(/apt-get\s+install\s+([^&\n]*)/g)) {
         for (const word of (match[1] ?? "").split(/\s+/)) {
@@ -203,7 +225,9 @@ export const blockTools = (block: OverlayBlock): BlockTools => {
             }
         }
     }
-    // The name is a candidate too, and a good one: the agent named the draft file after what it wanted.
-    add(block.name.toLowerCase());
-    return { candidates, packages };
+    // The name is a candidate too, unless the block installs a module: the pack name is not a binary on PATH.
+    if (modules.length === 0) {
+        add(block.name.toLowerCase());
+    }
+    return { candidates, packages, modules };
 };

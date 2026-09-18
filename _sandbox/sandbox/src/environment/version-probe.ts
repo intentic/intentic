@@ -1,4 +1,5 @@
 import { execFile } from "node:child_process";
+import { readFile } from "node:fs/promises";
 import { promisify } from "node:util";
 
 // Versions are read from the binaries themselves, not recipe pins: a pin describes what the next rebuild installs, not
@@ -23,9 +24,18 @@ interface Probe {
 }
 
 const cache = new Map<string, Probe>();
+const moduleCache = new Map<string, Probe>();
+
+export interface ModuleProbeTarget {
+    readonly name: string;
+    readonly manifest: string;
+}
 
 // Cleared by the card's refresh button, so a fresh install doesn't need a restart to show up.
-export const clearVersionCache = (): void => cache.clear();
+export const clearVersionCache = (): void => {
+    cache.clear();
+    moduleCache.clear();
+};
 
 // First dotted number in the tool's output (`rustc 1.90.0`, `ffmpeg version 6.1.1-3`, a bare `1.2.4` from bun); build
 // metadata after it is dropped.
@@ -80,5 +90,39 @@ const probeVersion = async (bin: string): Promise<Probe> => {
 export const probeAll = async (bins: Iterable<string>): Promise<Map<string, Probe>> => {
     const unique = [...new Set(bins)];
     const probes = await Promise.all(unique.map(async (bin) => [bin, await probeVersion(bin)] as const));
+    return new Map(probes);
+};
+
+const probeModuleOnce = async (manifest: string): Promise<Probe> => {
+    try {
+        const version = (JSON.parse(await readFile(manifest, "utf8")) as { version?: unknown }).version;
+        return typeof version === "string" && version !== ""
+            ? { version, found: true, at: Date.now() }
+            : { version: undefined, found: true, at: Date.now() };
+    } catch (error) {
+        if ((error as { code?: unknown }).code === "ENOENT") {
+            return { version: undefined, found: false, at: Date.now() };
+        }
+        throw error;
+    }
+};
+
+const probeModule = async (target: ModuleProbeTarget): Promise<Probe> => {
+    const cached = moduleCache.get(target.manifest);
+    if (cached !== undefined && Date.now() - cached.at < CACHE_TTL_MS) {
+        return cached;
+    }
+    const probe = await probeModuleOnce(target.manifest);
+    moduleCache.set(target.manifest, probe);
+    return probe;
+};
+
+// Prefix-installed npm modules have no binary on PATH; their manifest is the probe target.
+export const probeModules = async (targets: Iterable<ModuleProbeTarget>): Promise<Map<string, Probe>> => {
+    const unique = new Map<string, ModuleProbeTarget>();
+    for (const target of targets) {
+        unique.set(target.name, target);
+    }
+    const probes = await Promise.all([...unique.values()].map(async (target) => [target.name, await probeModule(target)] as const));
     return new Map(probes);
 };
