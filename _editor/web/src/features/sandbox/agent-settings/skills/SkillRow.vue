@@ -1,12 +1,12 @@
 <script setup lang="ts">
 import type { SkillDraft, SkillSummary } from "@intentic/api-contract";
-import { BrandMark, Button, CopyButton, DisclosureRow, Icon, MarkdownDocument } from "@intentic/ui";
+import { BrandMark, Button, CopyButton, DisclosureRow, Icon, MarkdownDocument, StatusBadge } from "@intentic/ui";
 import ToggleSwitch from "primevue/toggleswitch";
 import { computed, ref, watch } from "vue";
 import SkillForm from "./SkillForm.vue";
 import type { SkillSources } from "./skillVisual";
 import { skillVisual } from "./skillVisual";
-import { provenanceOf } from "./skillWords";
+import { provenanceOf, provenanceVariant } from "./skillWords";
 import { useT } from "@intentic/ui/i18n";
 
 // A skill's row expands in place on click, no menu, using <DisclosureRow> for the chevron, ARIA and open wash.
@@ -58,9 +58,9 @@ watch(
         </template>
 
         <template #title>
-            <span class="flex min-w-0 items-center gap-2">
+            <span class="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5">
                 <span class="shrink-0" :class="skill.enabled ? `text-content` : `text-muted`">{{ skill.name }}</span>
-                <span class="shrink-0 rounded bg-overlay px-1.5 py-0.5 text-2xs font-normal text-muted">{{ provenanceOf(skill) }}</span>
+                <StatusBadge :variant="provenanceVariant(skill)" size="xs" :label="provenanceOf(skill)" />
             </span>
         </template>
 

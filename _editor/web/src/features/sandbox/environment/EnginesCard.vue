@@ -102,21 +102,22 @@ const CHANNELS = computed((): readonly PickerOption<`blessed` | `latest` | `pinn
             <template #lead="{ mark }">
                 <BrandMark :size="mark" :name="engine.label" :logo="engineVisual(engine.id).logo" :icon="engineVisual(engine.id).icon" />
             </template>
-            <template #title
-                ><span class="text-xs">{{ engine.label }}</span></template
-            >
+            <template #title>
+                <span class="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                    <span class="text-xs">{{ engine.label }}</span>
+                    <StatusBadge v-if="engine.running.source === `store`" variant="info" size="xs" :label="t(`sandbox.enginesCard.installed`)" />
+                    <StatusBadge v-else-if="engine.running.version" variant="neutral" size="xs" :label="t(`sandbox.enginesCard.image`)" />
+                    <StatusBadge
+                        v-if="engine.running.version && engine.blessed && engine.running.version !== engine.blessed"
+                        variant="warning"
+                        size="xs"
+                        :label="t(`sandbox.enginesCard.notRecommended`)"
+                    />
+                </span>
+            </template>
             <template #description>
                 <span v-if="engine.running.version" class="font-mono">{{ engine.running.version }}</span>
                 <span v-else>{{ t(`sandbox.enginesCard.notInstalledHere`) }}</span>
-            </template>
-            <template #meta>
-                <StatusBadge v-if="engine.running.source === `store`" variant="info" :label="t(`sandbox.enginesCard.installed`)" />
-                <StatusBadge v-else-if="engine.running.version" variant="neutral" :label="t(`sandbox.enginesCard.image`)" />
-                <StatusBadge
-                    v-if="engine.running.version && engine.blessed && engine.running.version !== engine.blessed"
-                    variant="warning"
-                    :label="t(`sandbox.enginesCard.notRecommended`)"
-                />
             </template>
             <template #control>
                 <Picker
