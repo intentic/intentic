@@ -747,6 +747,73 @@ describe("draft cards", () => {
         ).toEqual([{ id: `sent`, status: `starting`, model: `claude-opus-5`, startedAt: 4_000 }]);
     });
 
+    // The registered sibling of the case above: the roster is authoritative about a filed agent, but it cannot be
+    // first. The send is known here a whole round trip before the frame that would move the card, and a card that
+    // stays in Finished after the press reads as a press that missed.
+    it("moves a finished agent to Active on the send, before any roster frame says so", () => {
+        setAgents([registered(`a1`)], 0);
+        const conversation = new Conversation(`a1`);
+        conversation.registered.value = true;
+        conversation.streaming.value = true;
+        conversation.turnStartedAt.value = 4_000;
+        useChat().conversations.value = [...useChat().conversations.value, conversation];
+
+        expect(useAgents().lanes.value.finished).toEqual([]);
+        // `running`, not `starting`: the agent IS registered, and the turn's own start rides with it so the card's
+        // elapsed clock doesn't count from the previous turn.
+        expect(
+            useAgents().lanes.value.active.map((card) => ({ id: card.id, status: card.status, startedAt: card.startedAt, unread: card.unread })),
+        ).toEqual([{ id: `a1`, status: `running`, startedAt: 4_000, unread: false }]);
+    });
+
+    // The rollback, and it needs no rollback code: a refused send ends the local turn, and the roster's own status is
+    // what the card was always falling back to.
+    it("drops the card back to the roster's own lane the moment the local turn ends", () => {
+        setAgents([registered(`a1`)], 0);
+        const conversation = new Conversation(`a1`);
+        conversation.registered.value = true;
+        conversation.streaming.value = true;
+        conversation.turnStartedAt.value = 4_000;
+        useChat().conversations.value = [...useChat().conversations.value, conversation];
+        expect(activeIds()).toEqual([`a1`]);
+
+        conversation.streaming.value = false;
+        conversation.turnStartedAt.value = undefined;
+
+        expect(activeIds()).toEqual([]);
+        expect(useAgents().lanes.value.finished.map((card) => ({ id: card.id, status: card.status }))).toEqual([{ id: `a1`, status: `landed` }]);
+    });
+
+    // The bound on the whole claim: a strip left behind by a window that died mid-turn is older than the last word the
+    // daemon wrote about the agent, so it can never hold a settled card in Active.
+    it("ignores a turn older than the roster's own last word about the agent", () => {
+        setAgents([registered(`a1`)], 0);
+        const conversation = new Conversation(`a1`);
+        conversation.registered.value = true;
+        conversation.streaming.value = true;
+        // `registered()` stamps updatedAt at 1_000: the daemon has already spoken about this agent since.
+        conversation.turnStartedAt.value = 500;
+        useChat().conversations.value = [...useChat().conversations.value, conversation];
+
+        expect(activeIds()).toEqual([]);
+        expect(useAgents().lanes.value.finished.map((card) => card.id)).toEqual([`a1`]);
+    });
+
+    // A parked turn is streaming too (the card waits inside the turn), so this claim must not drag one out of the lane
+    // where its question is answered.
+    it("leaves a card parked on the user in Attention, whatever this window is streaming", () => {
+        const parked = registered(`a1`);
+        setAgents([{ ...parked, status: `awaiting`, attention: { ...parked.attention, question: true } }], 0);
+        const conversation = new Conversation(`a1`);
+        conversation.registered.value = true;
+        conversation.streaming.value = true;
+        conversation.turnStartedAt.value = 4_000;
+        useChat().conversations.value = [...useChat().conversations.value, conversation];
+
+        expect(activeIds()).toEqual([]);
+        expect(useAgents().lanes.value.attention.map((card) => ({ id: card.id, status: card.status }))).toEqual([{ id: `a1`, status: `awaiting` }]);
+    });
+
     // Opening a `starting` card latches it as registered, which used to make the drafts half skip it while the
     // registry had no entry yet, vanishing the agent from every lane.
     it("keeps a starting card on the board when it is opened, and leaves its placement alone", () => {
@@ -948,8 +1015,8 @@ describe("the finished fold", () => {
                 landed(`receipt-22h-a`, now - 22 * hour),
                 landed(`receipt-22h-b`, now - 22 * hour),
                 landed(`receipt-22h-c`, now - 22 * hour),
-                { ...landed(`ready-now`, now - 1_000), status: `ready`, unread: true },
-                { ...landed(`ready-1m`, now - 60_000), status: `ready`, unread: true },
+                { ...landed(`ready-now`, now - 1_000), status: `ready` },
+                { ...landed(`ready-1m`, now - 60_000), status: `ready` },
             ],
             1,
         );

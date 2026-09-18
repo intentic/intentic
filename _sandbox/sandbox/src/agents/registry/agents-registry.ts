@@ -894,8 +894,11 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
             }
             runtime.set(turn.conversationId, state);
             recordConversationPrompt(turn.conversationId, turn.prompt);
-            await persist();
+            // Published before the write: `broadcast` reads the in-memory entries `replace` already holds, and this is
+            // the frame that moves every board's card into Active. Behind the persist it waits on a /history write
+            // chained after whatever else is saving, which is a second of a card sitting in the lane it was sent from.
             broadcast();
+            await persist();
             return true;
         },
         recordWorktree: async (id, repos, composition) => {

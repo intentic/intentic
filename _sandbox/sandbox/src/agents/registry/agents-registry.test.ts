@@ -74,6 +74,45 @@ describe("agents registry", () => {
         expect(summary?.startedAt).toBe(1_000);
     });
 
+    // The frame `begin` publishes is what moves every board's card out of the lane it was sent from, and it is read
+    // off in-memory entries, so it must not wait on the write: this store's save is held open, and the card is
+    // published anyway. Synchronously, even — `begin` reaches its broadcast before it returns the promise the write
+    // is behind.
+    it("publishes the running card before the roster write lands", async () => {
+        const store = memoryStore();
+        let release = (): void => undefined;
+        let entered = (): void => undefined;
+        // The write is a chained microtask, not a synchronous call, so the release waits to be told the save is in.
+        const entering = new Promise<void>((resolve) => {
+            entered = resolve;
+        });
+        const held: AgentsStore & { saved: () => PersistedAgent[] } = {
+            ...store,
+            save: async (agents) => {
+                entered();
+                await new Promise<void>((resolve) => {
+                    release = resolve;
+                });
+                await store.save(agents);
+            },
+        };
+        const registry = createAgentsRegistry(held, standings(), presences());
+        await registry.init();
+        const frames: string[][] = [];
+        const unsubscribe = registry.subscribe((agents) => frames.push(agents.map((agent) => agent.status)));
+
+        const settling = registry.begin(turn(), 1_000);
+
+        // Asserted before anything is awaited: the frame is already out.
+        expect(frames.at(-1)).toEqual(["running"]);
+        expect(held.saved()).toEqual([]);
+        await entering;
+        release();
+        expect(await settling).toBe(true);
+        expect(held.saved().map((agent) => agent.id)).toEqual(["c1"]);
+        unsubscribe();
+    });
+
     // Naming a runner forces a branch even if the request omits `isolated`: a remote conversation is isolated by
     // construction.
     it("a runner latches on the first turn, survives turns that name none, and cannot be moved", async () => {

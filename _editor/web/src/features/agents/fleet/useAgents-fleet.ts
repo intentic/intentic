@@ -61,7 +61,7 @@ export const windowFinished = <T>(
     const room = Math.max(FINISHED_WINDOW, acting.length);
     const shown = [...acting, ...receipts.slice(0, Math.max(0, room - acting.length))];
     const shownIds = new Set(shown.map(idOf));
-    let hidden = finished.length - shown.length;
+    const hidden = finished.length - shown.length;
     if (selectedId === undefined || shownIds.has(selectedId)) {
         return { shown, hidden };
     }
@@ -126,6 +126,22 @@ const draftCard = (tab: TabFacts, held: UnsentTab | undefined): FleetAgent => ({
     ...(tab.standing === `draft` && held !== undefined ? { model: tab.model } : {}),
 });
 
+// A turn this browser sent that the roster cannot have answered for yet, returning the instant it went. The board's
+// one client-side reading of a registered agent's status: a send is known here a whole round trip (POST → begin →
+// persist → /events) before the frame that would move the card, and a card that stays in Finished after the press
+// reads as a press that missed. Refusal needs no rollback — `standingOf` stops saying `starting` the moment the local
+// turn ends, and the roster's own status is what the card falls back to.
+// Bounded two ways: the daemon must believe the conversation settled (a parked card keeps its lane, whatever this
+// window is streaming), and the turn must be newer than the roster's last word about it, so a strip left behind by a
+// dead window can never hold a card in Active.
+const sendingNow = (agent: AgentSummary, tab: TabFacts | undefined): number | undefined => {
+    if (tab?.standing !== `starting` || turnInFlight(agent) || awaitingUser(agent)) {
+        return undefined;
+    }
+    const startedAt = tab.turn?.startedAt;
+    return startedAt !== undefined && startedAt > agent.updatedAt ? startedAt : undefined;
+};
+
 // Sort weight: attention first, then in-flight turns and fresh drafts, then most recent activity.
 const weight = (entry: FleetAgent): number =>
     blocked(entry) ? 0 : turnInFlight(entry) || entry.status === `awaiting` || entry.status === `draft` ? 1 : 2;
@@ -160,6 +176,9 @@ export const fleet = computed<FleetAgent[]>(() => {
         ...closedDrafts.value.map((tab): [string, UnsentTab] => [tab.conversationId, { preview: draftPreview(tab.draft), at: tab.draftAt }]),
         ...strip.tabs.filter((tab) => tab.unsent).map((tab): [string, UnsentTab] => [tab.id, { preview: tab.preview, at: tab.draftAt }]),
     ]);
+    // Every open tab by conversation, for what only this browser knows about a registered agent: that a turn just went
+    // (`sendingNow`).
+    const live: ReadonlyMap<string, TabFacts> = new Map(strip.tabs.map((tab) => [tab.id, tab]));
     // Draft = unregistered tab; `carded` stops an id the registry already rendered from rendering twice.
     // Excludes an empty placeholder tab (`unasked`); it joins the board itself once anything happens in it.
     const drafts = strip.tabs
@@ -185,10 +204,15 @@ export const fleet = computed<FleetAgent[]>(() => {
     const built = [
         ...registry.value.map((agent): FleetAgent => {
             const tab = unsent.get(agent.id);
+            // `running`, not the client-only `starting`: this agent IS registered, and `starting` would seed its next
+            // tab as unregistered. The turn's own start rides with it, or the card's elapsed clock would count from
+            // the previous turn.
+            const startedAt = sendingNow(agent, live.get(agent.id));
             return {
                 ...agent,
+                ...(startedAt === undefined ? {} : { status: `running` as const, startedAt }),
                 open: openIds.has(agent.id),
-                unread: !turnInFlight(agent) && agent.updatedAt > (agent.seenAt ?? 0),
+                unread: startedAt === undefined && !turnInFlight(agent) && agent.updatedAt > (agent.seenAt ?? 0),
                 unsent: tab !== undefined,
                 preview: tab?.preview,
                 draftAt: tab?.at,
