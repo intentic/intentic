@@ -1,10 +1,8 @@
 <script setup lang="ts">
 import { MEMORY_FILE } from "@intentic/constants";
-import { Button, CopyButton, MarkdownDocument, Notice, type NoticeModel, RowGroup, RowNote, ui } from "@intentic/ui";
-import { noticeFrom } from "@intentic/ui/async";
-import { onMounted, ref } from "vue";
-import { IMPORT_PROMPT, mergeMemory } from "../../../extensions/memoryImport";
-import { useWorkspaceTree } from "../../../workspace/explorer/useWorkspaceTree";
+import { MarkdownDocument, Notice, RowGroup, RowNote } from "@intentic/ui";
+import { onMounted } from "vue";
+import { useAgentMemory } from "./useAgentMemory";
 import { useT } from "@intentic/ui/i18n";
 
 // One file, read at the top of every turn on every runtime; this group can read, edit and delete it, not just append
@@ -12,72 +10,15 @@ import { useT } from "@intentic/ui/i18n";
 
 const t = useT();
 
-const { readFile, saveText } = useWorkspaceTree();
-
-const draft = ref(``);
-// The file's last-read/written content; draft is compared against it for unsaved state.
-const onDisk = ref<string | undefined>(undefined);
-const saving = ref(false);
-const error = ref<NoticeModel | undefined>(undefined);
-
-// A missing file reads as empty, not a failure; it is created on first save.
-const load = async (): Promise<void> => {
-    error.value = undefined;
-    onDisk.value = undefined;
-    try {
-        const text = (await readFile(MEMORY_FILE)) ?? ``;
-        onDisk.value = text;
-        draft.value = text;
-    } catch (caught) {
-        error.value = noticeFrom(caught, `Couldn't read ${MEMORY_FILE}.`);
-    }
-};
-
-const commit = async (text: string): Promise<void> => {
-    saving.value = true;
-    error.value = undefined;
-    try {
-        await saveText(MEMORY_FILE, text);
-        onDisk.value = text;
-    } catch (caught) {
-        error.value = noticeFrom(caught, `Couldn't save ${MEMORY_FILE}.`);
-    } finally {
-        saving.value = false;
-    }
-};
+const { draft, onDisk, saving, editorError, load, commit } = useAgentMemory();
 
 onMounted(() => void load());
-
-// Merges rather than overwrites; memoryImport.ts holds the fence markers.
-const importText = ref(``);
-const importing = ref(false);
-
-const importMemory = async (): Promise<void> => {
-    const text = importText.value.trim();
-    if (text === `` || importing.value) {
-        return;
-    }
-    importing.value = true;
-    error.value = undefined;
-    try {
-        // Missing file starts as empty rather than failing (first import).
-        const current = (await readFile(MEMORY_FILE)) ?? ``;
-        await saveText(MEMORY_FILE, mergeMemory(current, text));
-        importText.value = ``;
-        // Reloads: the visible document is the file just written.
-        await load();
-    } catch (caught) {
-        error.value = noticeFrom(caught, `Couldn't save memory.`);
-    } finally {
-        importing.value = false;
-    }
-};
 </script>
 
 <template>
     <RowGroup :label="t(`sandbox.agentMemory.memory`)">
         <RowNote variant="block">
-            <Notice v-if="error" :of="error" />
+            <Notice v-if="editorError" :of="editorError" />
 
             <div class="ui-field-shell mt-3 max-h-[60dvh] overflow-auto p-3" style="--prose-measure: 72ch">
                 <MarkdownDocument
@@ -100,42 +41,6 @@ const importMemory = async (): Promise<void> => {
                         >{{ t(`sandbox.agentMemory.atWorkspaceRoot`) }}</template
                     >
                 </MarkdownDocument>
-            </div>
-
-            <!-- Import sits under the document; editing is the primary path, this is the narrow one. -->
-            <div class="mt-3 flex flex-col gap-3 border-t border-line/60 pt-3">
-                <span class="text-sm font-medium text-content">{{ t(`sandbox.agentMemory.bringMemoryOverAnother`) }}</span>
-
-                <label class="flex flex-col gap-1.5">
-                    <span class="flex items-center gap-2 text-xs text-subtle">
-                        <span class="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-content/10 text-2xs font-semibold">1</span>
-                        {{ t(`sandbox.agentMemory.copyPromptIntoChat`) }}
-                    </span>
-                    <textarea :value="IMPORT_PROMPT" readonly rows="6" :class="ui.input('w-full font-mono resize-y text-subtle')"></textarea>
-                    <CopyButton class="self-end" :text="IMPORT_PROMPT" :label="t(`sandbox.agentMemory.copyPrompt`)" />
-                </label>
-
-                <label class="flex flex-col gap-1.5">
-                    <span class="flex items-center gap-2 text-xs text-subtle">
-                        <span class="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-content/10 text-2xs font-semibold">2</span>
-                        {{ t(`sandbox.agentMemory.pasteResultBelowTo`) }}
-                    </span>
-                    <textarea
-                        v-model="importText"
-                        rows="8"
-                        :placeholder="t(`sandbox.agentMemory.pasteMemoryDetailsHere`)"
-                        :class="ui.input('w-full font-mono resize-y')"
-                    ></textarea>
-                    <Button
-                        class="self-end"
-                        :label="t(`sandbox.agentMemory.addToMemory`)"
-                        :loading="importing"
-                        :disabled="importText.trim().length === 0"
-                        @click="importMemory"
-                    >
-                        <template #icon><Icon name="sparkles" /></template>
-                    </Button>
-                </label>
             </div>
         </RowNote>
     </RowGroup>

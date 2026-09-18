@@ -20,6 +20,7 @@ vi.mock(`../agent-settings/skills/AgentInstructions.vue`, () => stub(`Instructio
 vi.mock(`../agent-settings/skills/AgentSkills.vue`, () => stub(`Skills`));
 vi.mock(`../agent-settings/safety/AgentRules.vue`, () => stub(`Rules`));
 vi.mock(`../agent-settings/skills/AgentMemory.vue`, () => stub(`Memory`));
+vi.mock(`../agent-settings/skills/AgentMemoryImport.vue`, () => stub(`Memory import`));
 vi.mock(`../agent-settings/behaviour/AgentCodeSearch.vue`, () => stub(`Code search`));
 vi.mock(`../agent-settings/behaviour/AgentDependencies.vue`, () => stub(`Dependencies`));
 vi.mock(`../agent-settings/behaviour/AgentCommandOutput.vue`, () => stub(`Command output`));
@@ -43,6 +44,7 @@ const EVERY_GROUP = [
     `Skills`,
     `Rules`,
     `Memory`,
+    `Memory import`,
     `Code search`,
     `Dependencies`,
     `Command output`,
@@ -159,5 +161,5 @@ it(`lets a pill escape a sign-in link`, async () => {
     const { el, router } = await mount({ connect: `anthropic` });
     pill(el, `Instructions`).click();
     await vi.waitFor(() => expect(router.currentRoute.value.query[`connect`]).toBeUndefined());
-    expect(shown(el)).toEqual([`Instructions`, `Skills`, `Rules`, `Memory`]);
+    expect(shown(el)).toEqual([`Instructions`, `Skills`, `Rules`, `Memory`, `Memory import`]);
 });

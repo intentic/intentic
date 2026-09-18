@@ -13,6 +13,7 @@ import AgentDependencies from "../agent-settings/behaviour/AgentDependencies.vue
 import AgentFinishedWork from "../agent-settings/behaviour/AgentFinishedWork.vue";
 import AgentInstructions from "../agent-settings/skills/AgentInstructions.vue";
 import AgentMemory from "../agent-settings/skills/AgentMemory.vue";
+import AgentMemoryImport from "../agent-settings/skills/AgentMemoryImport.vue";
 import AgentModels from "../agent-settings/models/AgentModels.vue";
 import AgentRecovery from "../agent-settings/behaviour/AgentRecovery.vue";
 import AgentRepoChecks from "../agent-settings/behaviour/AgentRepoChecks.vue";
@@ -95,12 +96,13 @@ const settingsBlocked = computed<NoticeModel | undefined>(() => {
             <AgentModels />
         </template>
 
-        <!-- Ordered by widening scope: told every turn, told per job match, standing rules, then memory across turns. -->
+        <!-- Ordered by widening scope: told every turn, told per job match, standing rules, memory, then import from elsewhere. -->
         <template v-else-if="section === `instructions`">
             <AgentInstructions />
             <AgentSkills />
             <AgentRules />
             <AgentMemory />
+            <AgentMemoryImport />
         </template>
 
         <!-- What it may reach for and how much comes back, ending with how much of the job it may delegate. -->
