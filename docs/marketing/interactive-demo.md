@@ -115,7 +115,7 @@ recording otherwise cannot: *is this what it looks like, or is this what you fil
 | Mode | The board | The rail | What it is for |
 | --- | --- | --- | --- |
 | Minimal | the featured agent alone, mid-turn | nothing, three core tiles | the workspace as it arrives: one agent, and the app around it |
-| **Default** | three agents: one running with subagents, one parked on a question, one holding a finished delta | Acceptance, Documentation, Pipelines | the three moments the landing page claims, and nothing else |
+| **Curated** | three agents: one running with subagents, one parked on a question, one holding a finished delta | Acceptance, Documentation, Pipelines | the three moments the landing page claims, and nothing else |
 | Everything | the whole roster, every lane occupied | every extension on, eight tiles in this workspace | a team's Tuesday: what the product looks like in use |
 
 Two knobs decide almost all of it, because they are what the shell builds itself out of: **which agents the
@@ -142,7 +142,7 @@ load (`useExtensionHost.ts`), so which tiles the rail carries is decided on the 
 without a reload would change half the picture and leave the other half stale. The board rather than the current
 address, because the route the visitor is standing on may belong to an extension the next mode switches off. The
 choice lives in `sessionStorage`: it must survive the reload it causes, and it must not still be in force next
-week, when the curated opening frame is what a new visitor should meet. `?mode=minimal` on the address seeds it
+week, when the minimal opening frame is what a new visitor should meet. `?mode=minimal` on the address seeds it
 once and is then stripped from the URL: a `mode` left in the address outranks the switcher, so the next press
 would reload into the state the visitor just left.
 

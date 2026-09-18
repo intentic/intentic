@@ -48,9 +48,11 @@
                 }
             }
         </script>
-        <link rel="icon" type="image/png" href="/assets/intentic-logo-sized.png" />
+<!-- The .ico is first and unqualified because that is the one every crawler, feed reader and pinned-tab list asks for by convention. -->
+        <link rel="icon" href="/favicon.ico" sizes="any" />
+        <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
 <!-- The demo boots the app's own main.ts, so it inherits the app's faces.css and the files under the app's
-             public/ — which this build shares. Preloaded under the demo's base, as the icon above is. -->
+             public/ — which this build shares. Preloaded under the demo's base. -->
         <link rel="preload" as="font" type="font/woff2" href="/fonts/public-sans-100-900-latin.woff2" crossorigin />
     </head>
     <body class="bg-canvas text-content">

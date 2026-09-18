@@ -7,15 +7,13 @@ import { DEMO_MODES, demoMode, setDemoMode } from "./mode";
 const STYLE = `
 #demo-switcher {
     position: fixed;
+    right: 0.75rem;
     bottom: 0.75rem;
-    left: 50%;
-    transform: translateX(-50%);
     z-index: 1300;
     display: flex;
     align-items: center;
-    gap: 0.625rem;
     max-width: calc(100vw - 1.5rem);
-    padding: 0.3125rem 0.3125rem 0.3125rem 0.75rem;
+    padding: 0.3125rem;
     border: 1px solid var(--color-line, #322c26);
     border-radius: 999px;
     background: color-mix(in srgb, var(--color-card, #1c1917) 88%, transparent);
@@ -25,13 +23,6 @@ const STYLE = `
     font-size: 0.75rem;
     line-height: 1;
     color: var(--color-muted, #a8a29e);
-}
-#demo-switcher .demo-switcher-label {
-    white-space: nowrap;
-    letter-spacing: 0.04em;
-    text-transform: uppercase;
-    font-size: 0.625rem;
-    color: var(--color-subtle, #78716c);
 }
 #demo-switcher .demo-switcher-modes {
     display: flex;
@@ -62,21 +53,10 @@ const STYLE = `
     color: var(--color-fill-content, #fafaf9);
     cursor: default;
 }
-#demo-switcher .demo-switcher-note {
-    padding-right: 0.5rem;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
 /* Keep the phone shell breakpoint aligned with useDevice's md breakpoint. */
 @media (max-width: 767.98px) {
     #demo-switcher {
         bottom: calc(3.5rem + env(safe-area-inset-bottom) + 0.5rem);
-        padding-left: 0.3125rem;
-    }
-    #demo-switcher .demo-switcher-label,
-    #demo-switcher .demo-switcher-note {
-        display: none;
     }
 }
 `;
@@ -90,10 +70,6 @@ export const installSwitcher = (): void => {
     bar.id = `demo-switcher`;
     bar.role = `group`;
     bar.ariaLabel = `How full this demo workspace is`;
-
-    const label = document.createElement(`span`);
-    label.className = `demo-switcher-label`;
-    label.textContent = `Show me`;
 
     const modes = document.createElement(`div`);
     modes.className = `demo-switcher-modes`;
@@ -112,10 +88,6 @@ export const installSwitcher = (): void => {
         modes.append(button);
     }
 
-    const note = document.createElement(`span`);
-    note.className = `demo-switcher-note`;
-    note.textContent = demoMode.note;
-
-    bar.append(label, modes, note);
+    bar.append(modes);
     document.body.append(bar);
 };

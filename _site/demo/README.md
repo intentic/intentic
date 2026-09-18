@@ -76,12 +76,12 @@ is the tool: it is how the served routes were found, and how the next one will b
 
 The fixture is written to prove every surface exists, which made the opening frame a workspace at full tilt:
 nine agents, a question, a land conflict, fourteen extensions in the rail. Fullness is a **control** now
-(`src/mode.ts`), and the site's demo link opens the middle one.
+(`src/mode.ts`), and the site's demo link opens `minimal` unless a visitor picks another.
 
 | Mode | The board | The rail | The chat strip |
 | --- | --- | --- | --- |
 | `minimal` | the featured agent alone | no extensions at all | empty: a fresh draft |
-| `default` | three agents: one running, one asking, one ready to land | Acceptance, Documentation, Pipelines (+ `viewers`, which has no tile) | the featured run + one chat per persona |
+| `default` (Curated) | three agents: one running, one asking, one ready to land | Acceptance, Documentation, Pipelines (+ `viewers`, which has no tile) | the featured run + one chat per persona |
 | `full` | the whole roster, every lane occupied | every extension | the featured run + one chat per persona |
 
 Two knobs decide almost all of it, because they are what the shell builds itself out of: which agents the
@@ -101,7 +101,7 @@ visitor in `minimal` can turn the rail back on one tile at a time.
 Switching **reloads** and lands on the fleet board. The extension host activates the daemon's list once per app
 load, so which tiles the rail carries is decided on the way in; and the route a visitor is standing on may
 belong to an extension the next mode switches off. The choice lives in `sessionStorage` (per tab, so a later
-visit still meets the curated opening frame) and `?mode=minimal` on the address seeds it once, then is stripped
+visit still meets the minimal opening frame) and `?mode=minimal` on the address seeds it once, then is stripped
 from the URL so it cannot outrank the switcher.
 
 One thing this package owns that the app resolves against its BASE rather than the origin root, because here

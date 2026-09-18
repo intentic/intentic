@@ -104,7 +104,7 @@ paper, and the dark app reads there as a hole rather than a product. Owner's cal
 
 To recapture: `pnpm -C _site/demo dev --port 47148`, then in the browser set `ui-color-scheme=light` and
 `ui-skin=none` in `localStorage` and reload (see the `seeing-the-app` skill). Two things have to be out of any
-shot: the demo's own `SHOW ME` switcher (`.demo-switcher-label`'s parent) and the rail tooltip, which is
+shot: the demo's own mode switcher (`#demo-switcher`) and the rail tooltip, which is
 `.ui-tooltip-body` and survives moving the pointer, so hide it with a stylesheet rule rather than chasing it.
 The dark originals are still in `_site/site/src/assets/product/` at 2604px, for the site's own dark pages.
 

@@ -36,7 +36,7 @@ const MINIMAL: DemoMode = {
 // Three agents matching the landing page's three claims; three extensions plus viewers for file previews.
 const DEFAULT: DemoMode = {
     id: `default`,
-    label: `Default`,
+    label: `Curated`,
     note: `Three agents, three extensions.`,
     agents: [FEATURED_AGENT_ID, AWAITING_AGENT_ID, REVIEW_AGENT_ID],
     extensions: [`intentic.acceptance`, `intentic.documentation`, `intentic.pipelines`, `intentic.viewers`],
@@ -70,7 +70,7 @@ const resolve = (): DemoMode => {
     if (mode !== undefined) {
         window.sessionStorage.setItem(STORAGE_KEY, mode.id);
     }
-    return mode ?? DEFAULT;
+    return mode ?? MINIMAL;
 };
 
 /** State this page load serves, resolved once before boot; every fixture reads it. */
