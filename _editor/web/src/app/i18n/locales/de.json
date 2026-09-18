@@ -4335,6 +4335,7 @@
             "moreFilesPendingHere": "More files are pending here than the panel is listing, and this covers all of them. The figures below count only the listed ones.",
             "moreShowingFirstStage": "…and {group} more: showing the first {group2}. Stage all, commit and discard cover every file here, listed or not.",
             "noUncommittedChanges": "No uncommitted changes.",
+            "noUpstreamYet": "no upstream yet",
             "nothingLeftInTree": "Nothing from {filterLabel} is left in the tree.",
             "nothingStaged": "nothing staged",
             "oneCommitPerRepo": "One commit per repo",

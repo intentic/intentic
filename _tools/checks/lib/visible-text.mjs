@@ -163,6 +163,10 @@ const boundTarget = (prop) => {
     return VISIBLE_DIRECTIVES.has(prop.name) ? `v-${prop.name}` : undefined;
 };
 
+// `t`, `$t`, and the same under a receiver (`i18n.t`): the callee shapes a catalog lookup wears.
+const isCatalogLookup = (ts, callee) =>
+    (ts.isIdentifier(callee) && /^\$?t$/.test(callee.text)) || (ts.isPropertyAccessExpression(callee) && /^\$?t$/.test(callee.name.text));
+
 /**
  * Every string and template literal in one bound expression, read with the TypeScript parser rather than a quote
  * scanner: `busy ? \`Stop ${n}\` : "Start"` carries three of them, two of them nested inside a third's braces, and a
@@ -173,7 +177,16 @@ const expressionLiterals = (ts, expression) => {
     const file = ts.createSourceFile("expression.ts", wrapped, ts.ScriptTarget.Latest, false, ts.ScriptKind.TS);
     const found = [];
     const span = (node) => ({ start: node.getStart(file) - 1, end: node.getEnd() - 1 });
+    // A lookup's first argument is the catalog key — the way the translation arrives, never a word on screen. Whole
+    // keys are already turned away as dotted paths, but one built around a `${}` joins to a trailing-dot stem
+    // (`docxCompare.`) that no longer looks like one; the arguments after it still carry values a reader sees.
     const visit = (node) => {
+        if (ts.isCallExpression(node) && isCatalogLookup(ts, node.expression)) {
+            for (const argument of node.arguments.slice(1)) {
+                visit(argument);
+            }
+            return;
+        }
         if (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) {
             found.push({ parts: [{ text: node.text }], ...span(node) });
             return;

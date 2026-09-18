@@ -1174,7 +1174,7 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                         <span v-if="syncRepoSpread !== undefined" class="truncate text-2xs text-subtle">{{ syncRepoSpread }}</span>
                     </template>
                     <template v-else>
-                        <span class="truncate text-2xs text-subtle">no upstream yet</span>
+                        <span class="truncate text-2xs text-subtle">{{ t(`workspace.reviewPanel.noUpstreamYet`) }}</span>
                         <span v-if="syncRepoSpread !== undefined" class="truncate text-2xs text-subtle">{{ syncRepoSpread }}</span>
                     </template>
                 </div>

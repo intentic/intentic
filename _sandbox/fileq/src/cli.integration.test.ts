@@ -8,6 +8,8 @@ import { join } from "node:path";
 import { run, type StricliProcess } from "@stricli/core";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { app } from "./app.js";
+import { deriverStamp } from "./lib/derivers/deriver.js";
+import { docxDeriver } from "./lib/derivers/docx.js";
 import { docxBytes, pngBytes } from "./testing.js";
 
 let root: string;
@@ -49,7 +51,7 @@ describe("derive", () => {
         expect(first.exit).toBe(0);
         const sidecar = readFileSync(sidecarOf("plan.docx"), "utf8");
         expect(sidecar).toContain("source: plan.docx");
-        expect(sidecar).toContain("deriver: docx v1");
+        expect(sidecar).toContain(`deriver: ${deriverStamp(docxDeriver)}`);
         expect(sidecar).toContain("# Plan");
         const second = await fileq("derive", "plan.docx");
         expect(second.out).toContain("fresh plan.docx");
