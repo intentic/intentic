@@ -45,6 +45,8 @@
         "every": "Every",
         "everyRepoChangeTouched": "every repo the change touched",
         "everyoneElse": "Everyone else",
+        "fires": "Fires",
+        "firesIn": "Fires {when}.",
         "fri": "Fri",
         "frontDesk": "Front desk",
         "fullToolboxNoAccounts": "full toolbox, no accounts",
@@ -85,6 +87,7 @@
         "nobody": "Nobody",
         "off": "Off",
         "onDay": "On day",
+        "once": "Once",
         "onePerLineScheme": "One per line, scheme and host only. www and the bare domain count separately.",
         "onlyAgentsWorkActually": "Only when an agent's work actually reaches your workspace.",
         "onlyAllowedSitesDaily": "Only the allowed sites and the daily limit are left.",
@@ -145,6 +148,7 @@
         "workspace": "Workspace"
     },
     "automationRow": {
+        "alreadyFired": "Already fired; edit it to a new moment to arm it again",
         "answers": "Answers",
         "approval": "Approval",
         "cancel": "Cancel",

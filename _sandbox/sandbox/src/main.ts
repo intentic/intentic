@@ -17,7 +17,7 @@ import { createTurnResumeScheduler, resumeInterruptedTurns } from "./agent/run/t
 import { startVerifyNudges } from "./agent/verification/verify-nudge.js";
 import { restoreWatchers, startWatchers } from "./agent/verification/watchers.js";
 import { resumeWorkflowExecution } from "./workflows/workflow-runner.js";
-import { createAutomationsScheduler } from "./automations/scheduler.js";
+import { createAutomationsScheduler, nextOneTimeWakeAt } from "./automations/scheduler.js";
 import { emitWorkspaceEvent } from "./automations/workspace-events.js";
 import { sweepAgedState, sweepStateAtBoot } from "./workspace/watch/state-janitor.js";
 import { stateRelPath } from "./workspace/layout/state-paths.js";
@@ -70,7 +70,7 @@ import { claimContainer } from "./platform/boot/container-owner.js";
 import { checks as containerChecks, owner as containerOwner } from "./platform/invariant.js";
 import { listenHost, profileTraits, requireLocalContract } from "./platform/boot/profile.js";
 import { startLoopWatchdog } from "./platform/resources/loop-watchdog.js";
-import { startIdleStop } from "./system/idle-stop.js";
+import { DEFAULT_PROBES, startIdleStop } from "./system/idle-stop.js";
 import { startResourceMetrics } from "./platform/resources/resource-metrics.js";
 import { startWorkloadPriorityGovernor } from "./platform/resources/workload-priority.js";
 import { onTurnSettled, turnRunMetrics } from "./agent/run/turn/turn-runs.js";
@@ -395,8 +395,10 @@ const main = async (): Promise<void> => {
 
     // Hosted idle-stop: after a quiet window (nobody connected, no turn, no terminal activity) the daemon exits
     // gracefully so its machine can stop; the platform restarts it on the next visit. 0 means always-on.
+    // The automations manifest is read here rather than inside the watchdog, which knows nothing of the workspace: a
+    // wake due before a stopped machine could be back keeps it up, since only a visit would restart it.
     if (config.idleStopMinutes > 0 && role.container) {
-        shutdown.push(startIdleStop({ minutes: config.idleStopMinutes, logger }));
+        shutdown.push(startIdleStop({ minutes: config.idleStopMinutes, logger }, { ...DEFAULT_PROBES, nextOneTimeWakeAt: () => nextOneTimeWakeAt(services) }));
     }
 
     // Asks the platform for this sandbox's trial allowance so it's ready before the user's first chat, not a sweep

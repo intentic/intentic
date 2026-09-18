@@ -8,7 +8,8 @@ import { connectedCount } from "./presence.js";
 
 // Stops the daemon (SIGTERM to self) when nobody is connected and nothing is running for a full window, since a hosted
 // machine bills for as long as this process lives.
-// - checked once a minute: presence, in-flight turns, subagents, armed watches, tmux terminal activity
+// - checked once a minute: presence, in-flight turns, subagents, armed watches, tmux terminal activity, and whether a
+//   one-time wake is due before this machine could plausibly be back
 // - quiet is a streak, not a snapshot: any busy answer resets the clock
 
 const exec = promisify(execFile);
@@ -35,14 +36,21 @@ export interface IdleStopProbes {
     // An armed condition watch; only the daemon can check and wake it, so stopping mid-watch means it never fires.
     readonly watchers: () => number;
     readonly terminalActivityAt: () => Promise<number>;
+    // The soonest one-time wake, or 0 for none. Same problem as an armed watch: nothing outside restarts this machine
+    // for a clock, so a moment somebody was promised passes unnoticed while it sleeps. Recurring schedules are left
+    // out on purpose — see the scheduler's own note on why a cron is not worth a night of billing.
+    readonly nextOneTimeWakeAt: () => Promise<number>;
 }
 
-const DEFAULT_PROBES: IdleStopProbes = {
+// Everything the daemon can answer about itself. `nextOneTimeWakeAt` is not among them: it reads the workspace's own
+// automations manifest, which this module has no business reaching into, so the composition root supplies it.
+export const DEFAULT_PROBES: IdleStopProbes = {
     connected: connectedCount,
     turns: activeTurnCount,
     delegates: () => listSubagentSessions().filter((session) => subagentRunning(session)).length,
     watchers: armedWatcherCount,
     terminalActivityAt: lastTerminalActivity,
+    nextOneTimeWakeAt: () => Promise.resolve(0),
 };
 
 const CHECK_INTERVAL_MS = 60 * 1000;
@@ -64,11 +72,19 @@ export const startIdleStop = (
             quietSince = Date.now();
             return;
         }
-        const activityAt = await probes.terminalActivityAt();
+        const [activityAt, wakeAt] = await Promise.all([probes.terminalActivityAt(), probes.nextOneTimeWakeAt()]);
         // Re-checked after the tmux subprocess await, since something could have become busy while it ran; the clock is
         // re-read too, since the window is measured against now, not when the pass started.
         const now = Date.now();
         if (busy()) {
+            quietSince = now;
+            return;
+        }
+        // A wake landing within one window holds the machine up, because stopping now would miss it: only a visit
+        // restarts this daemon, and nothing outside pays attention to a clock in here. One due further out is left to
+        // sleep through — an always-awake machine to keep a nightly chore punctual costs more than the chore is worth —
+        // and the scheduler fires it late, saying so, when somebody next comes back.
+        if (wakeAt > 0 && wakeAt - now <= windowMs) {
             quietSince = now;
             return;
         }

@@ -9,6 +9,9 @@ import { IssuesConfigSchema } from "./issues.js";
 // daemon-recorded.
 
 // schedule: fires on its cron
+// once: fires a single time at `at`, then retires itself (the daemon switches it off as it fires). Unlike a cron, a
+// fire missed while the sandbox was down still lands, late, on the next poll: a recurring wake that skips a beat has
+// another one coming, a one-time wake has nothing behind it
 // event: fires when an external system POSTs /automations/{id}/fire; its auth token lives outside the manifest
 // (.intentic/secrets/doors.json), never in this versioned, widely-readable file
 // listener: fires from a realtime source's own connection (an extension's gateway), no cron, no token, never reachable
@@ -65,6 +68,16 @@ export const TriggerSchema = z.discriminatedUnion("kind", [
             .positive()
             .optional()
             .describe("Fire only once at least this many new sessions have been run since the last wake. A due run short of that is skipped, and says how far off it is."),
+    }),
+    z.object({
+        kind: z.literal("once").describe("At one moment, and then never again."),
+        // An absolute instant, not a wall-clock time plus a zone: the composer resolves the reader's own clock at save,
+        // so a reminder set for 3pm in Warsaw fires at that instant whatever the sandbox's own zone is.
+        at: z
+            .number()
+            .int()
+            .positive()
+            .describe("The moment it fires, in milliseconds. An absolute instant, so it means the same thing wherever the sandbox runs."),
     }),
     z.object({
         kind: z.literal("event").describe("When something calls its webhook."),

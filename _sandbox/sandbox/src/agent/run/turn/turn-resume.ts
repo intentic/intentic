@@ -10,7 +10,7 @@ import {
     withoutResumeNote,
     withResumeNote,
 } from "@intentic/sandbox-contract";
-import { fireAutomation, type WakeFn } from "../../../automations/scheduler.js";
+import { fireAutomation, resumable, type WakeFn } from "../../../automations/scheduler.js";
 import { replaceRejectedToken } from "../../../runtimes/claude/claude-credentials.js";
 import type { Services } from "../../../composition.js";
 import { turnAwaiting, turnFinished } from "../../../push/notifications.js";
@@ -708,7 +708,7 @@ export const resumeInterruptedTurns = async (services: Services, wake: WakeFn, n
         // Re-fires through fireAutomation, the same road an approved wake takes, re-reading the prompt in case it
         // changed. `cleared: "approval"` skips only that gate; the trigger guard still runs.
         const automation = await services.automations.get(entry.automationId);
-        if (automation === undefined || !automation.enabled) {
+        if (automation === undefined || !resumable(automation)) {
             // Consumed rather than kept: it can never fire, and keeping it would fabricate a second run next boot.
             await clearJournalled(services, entry);
             services.logger.info({ automation: entry.automationId }, "interrupted fire not resumed, the automation is gone or disabled");

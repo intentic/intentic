@@ -11,19 +11,14 @@ import { ISSUES_PROVIDER } from "../issues/provider.js";
 import { ensureFrontDeskPersona } from "../personas/front-desk.js";
 import type { AutomationRecord } from "./automations-store.js";
 import { automationCatalog, triggerSourceEvents } from "./catalog.js";
-import { fireAutomation, runHeldWake } from "./scheduler.js";
+import { fireAutomation, nextRunOf, runHeldWake } from "./scheduler.js";
 
-// An invalid cron can only come from a hand-edited manifest (upsert rejects it); surfaced as "no next run" rather than
-// failing the whole list.
-// Event automations have no next run; they fire on their webhook.
-const nextRunOf = (automation: AutomationRecord): number | undefined => {
-    if (!automation.enabled || automation.trigger.kind !== "schedule") {
-        return undefined;
-    }
-    try {
-        return new Cron(automation.trigger.cron).nextRun()?.getTime();
-    } catch {
-        return undefined;
+// A moment already gone cannot be waited for. Refused at both doors that could arm one — saving a new automation, and
+// flipping a spent one back on — since the tick fires an overdue `once` on its next pass, so arming one dated
+// yesterday would not "schedule" anything, it would fire on the spot.
+const refusePastMoment = (trigger: Automation["trigger"], now: number): void => {
+    if (trigger.kind === "once" && trigger.at <= now) {
+        throw new ORPCError("BAD_REQUEST", { message: "that moment has already passed; pick a new one to arm this again" });
     }
 };
 
@@ -84,11 +79,19 @@ export const createAutomationsRoutes = (services: Services) => {
         // Who has written to a source, admitted or not; the picker offers these by name and stores the id.
         senders: i.senders.handler(async ({ input }) => ({ senders: await services.senders.list(input.provider) })),
         upsert: i.upsert.handler(async ({ input }) => {
+            refusePastMoment(input.trigger, Date.now());
             if (input.trigger.kind === "schedule") {
+                // Both halves matter: a pattern that won't parse, and one that parses into a moment that can never
+                // come (a fixed date in the past, the 30th of February). The second used to be accepted and then sit
+                // there reading as armed, since "no next run" is also what a switched-off row shows.
+                let next: Date | null;
                 try {
-                    new Cron(input.trigger.cron).nextRun();
+                    next = new Cron(input.trigger.cron).nextRun();
                 } catch {
                     throw new ORPCError("BAD_REQUEST", { message: "invalid cron expression" });
+                }
+                if (next === null) {
+                    throw new ORPCError("BAD_REQUEST", { message: "that schedule has no next run, so it would never fire" });
                 }
             }
             // A listener trigger's provider/eventType are open strings in the schema, validated here against the same
@@ -136,6 +139,10 @@ export const createAutomationsRoutes = (services: Services) => {
             return { ok: true } as const;
         }),
         setEnabled: i.setEnabled.handler(async ({ input }) => {
+            const existing = await services.automations.get(input.id);
+            if (existing !== undefined && input.enabled) {
+                refusePastMoment(existing.trigger, Date.now());
+            }
             if (!(await services.automations.setEnabled(input.id, input.enabled))) {
                 throw new ORPCError("NOT_FOUND", { message: "no automation with that id" });
             }
@@ -173,6 +180,11 @@ export const createAutomationsRoutes = (services: Services) => {
                 throw new ORPCError("BAD_REQUEST", {
                     message: `A ${automation.trigger.provider} automation can only be fired by a real message, send one to test it.`,
                 });
+            }
+            // Retired by hand exactly as the tick would retire it. "Fires once" has to hold however it was set off, or
+            // pressing play on a reminder gives you the reminder now AND again at its moment.
+            if (automation.trigger.kind === "once") {
+                await services.automations.setEnabled(automation.id, false);
             }
             void fireAutomation(services, automation, streamAgent, { cleared: "approval" }).catch((error: unknown) =>
                 services.logger.error({ err: error, automation: automation.id }, "by-hand automation run failed"),

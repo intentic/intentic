@@ -1,6 +1,7 @@
 # @intentic/ext-automations
 
-Standing instructions that start an agent turn on their own: on a schedule, or when something outside happens.
+Standing instructions that start an agent turn on their own: on a schedule, at one named moment, or when something
+outside happens.
 
 An automation is the difference between an agent you talk to and an employee that shows up. It pairs a trigger (a
 cron expression, or a listener a connector provides) with the prompt to run when it fires.
@@ -94,6 +95,24 @@ disagreement waiting for whichever was edited second.
   and a job that skips for three weeks would otherwise forget it had ever run
   (`sandbox/src/automations/scheduler.ts`, the sessions gate). The bar is a field of any schedule, beside the
   clock in the form and on the row's trigger phrase.
+- A one-time wake (`once`) is the trigger that cannot afford the poll window. A cron is read forward from the last
+  poll, so an occurrence that came due while the sandbox was down is simply never fired: it has another one coming.
+  A one-time wake has nothing behind it, so the tick fires an overdue one at the first opportunity and tells the turn
+  how late it is, in a note under the prompt, so a reminder passed on to a person says which of the two times it
+  means. The rest of it follows from firing exactly once: the daemon switches the automation off AS it fires (before,
+  not after, so a daemon that dies mid-wake cannot repeat it), the switch cannot re-arm one whose moment has passed,
+  and an interrupted fire still resumes at boot because that switch was thrown by the fire rather than by the owner
+  (`scheduler.ts`, `resumable`). It is also the one trigger that pushes a notification when it finishes: every other
+  kind is already answering somebody who is listening, or is a chore nobody asked to hear each run of.
+- The moment itself is stored as an instant, not a wall-clock time and a zone, and the composer resolves the
+  reader's own clock at save. That is the one place the timezone gap a cron lives with does not exist: a cron says
+  09:00 and means 09:00 on the sandbox's clock, which is not the one the person setting it is reading.
+- **A wake nothing is awake for still does not fire on time.** A hosted machine stops itself after a quiet window and
+  only a visit brings it back, so the watchdog now asks the manifest what is due (`system/idle-stop.ts`, and
+  `nextWakeAt` here): anything landing inside that window holds the machine up, the way an armed watch already does.
+  Anything further out is slept through and fires late, saying so, because keeping a machine awake all night for one
+  nightly chore costs more than the chore. Under a day, the `watch` tools an agent arms mid-turn are the better
+  instrument anyway: they wake the conversation that asked, rather than opening a new one.
 - A source outlives the pack that supplied it and a template does not, which reads like an inconsistency until
   you ask what each one is for. A source has to keep naming the trigger of an automation already standing on it,
   so a switched-off pack keeps its row and the picker simply declines to offer it. A template is something you

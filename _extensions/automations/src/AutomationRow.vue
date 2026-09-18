@@ -28,19 +28,10 @@ const trigger = computed<Trigger>(() => props.automation.trigger);
 const lastRun = computed<AutomationRun | undefined>(() => props.automation.runs[0]);
 
 // What fires this row, one glyph plus one phrase; a workspace trigger names the moment itself, not a sender.
-const TRIGGER_ICON: Record<Trigger[`kind`], IconName> = { schedule: `clock`, event: `bolt`, listener: `wifi`, workspace: `eye` };
-const triggerLabel = computed<string>(() => {
-    const fires = trigger.value;
-    if (fires.kind === `schedule`) {
-        return scheduleTriggerLabel(fires);
-    }
-    if (fires.kind === `event`) {
-        return `Webhook`;
-    }
-    if (fires.kind === `workspace`) {
-        const when = fires.event === `turn.settled` ? `Turn settles` : `Work lands`;
-        return fires.repo !== undefined ? `${when} · ${fires.repo}` : when;
-    }
+const TRIGGER_ICON: Record<Trigger[`kind`], IconName> = { schedule: `clock`, once: `pin`, event: `bolt`, listener: `wifi`, workspace: `eye` };
+// The source and every filter narrowing it, as one phrase; its own function so the row's label stays a short list of
+// kinds rather than one kind's detail plus four others.
+const listenerLabel = (fires: Extract<Trigger, { kind: `listener` }>): string => {
     // An unrecognised provider reads as its own id, not a blank.
     const source = listenerSourceOf(props.listenerSources, fires.provider, fires.eventType).label;
     return [
@@ -51,17 +42,45 @@ const triggerLabel = computed<string>(() => {
         ...(fires.branch !== undefined ? [fires.branch] : []),
         ...(fires.mentioned === true ? [`mentions`] : []),
     ].join(` · `);
+};
+const triggerLabel = computed<string>(() => {
+    const fires = trigger.value;
+    if (fires.kind === `schedule`) {
+        return scheduleTriggerLabel(fires);
+    }
+    // The moment itself, in the reader's own clock, since that is the clock they picked it on.
+    if (fires.kind === `once`) {
+        return `Once · ${formatDateTime(fires.at)}`;
+    }
+    if (fires.kind === `event`) {
+        return `Webhook`;
+    }
+    if (fires.kind === `workspace`) {
+        const when = fires.event === `turn.settled` ? `Turn settles` : `Work lands`;
+        return fires.repo !== undefined ? `${when} · ${fires.repo}` : when;
+    }
+    return listenerLabel(fires);
 });
 
-// Only three tones: `failed` is the one that carries hue, since a page normally all-fine would go green everywhere
+// A one-time wake that has already fired. The daemon switches it off AS it fires, so off-plus-a-moment-in-the-past is
+// the spent state; without this, a reminder delivered and a reminder cancelled are the same grey row.
+const spent = computed<boolean>(() => trigger.value.kind === `once` && !props.automation.enabled && trigger.value.at <= Date.now());
+
+// Only a few tones: `failed` is the one that carries hue, since a page normally all-fine would go green everywhere
 // otherwise. A skipped guard or an interrupted run is not a failure.
-type Health = `off` | `on` | `failed`;
+type Health = `off` | `on` | `done` | `failed`;
 const TILE: Record<Health, string> = {
     on: `bg-overlay text-muted`,
     failed: `bg-danger/15 text-danger`,
+    // Finished, not stopped: it keeps the live tile's weight rather than the dimmed one that means somebody switched
+    // this off.
+    done: `bg-overlay text-subtle`,
     off: `bg-content/5 text-subtle`,
 };
 const health = computed<Health>(() => {
+    if (spent.value) {
+        return lastRun.value?.outcome === `error` ? `failed` : `done`;
+    }
     if (!props.automation.enabled) {
         return `off`;
     }
@@ -239,6 +258,8 @@ const VERB = ui.iconButton(`md:opacity-0 md:group-hover/row:opacity-100 md:focus
                 />
                 <!-- Answers only the people its rules name. -->
                 <Icon v-if="automation.senders" name="users" v-tooltip.top="answers" class="shrink-0 text-2xs text-subtle" />
+                <!-- Done, rather than switched off by somebody. -->
+                <Icon v-if="spent" name="check" v-tooltip.top="t(`automationRow.alreadyFired`)" class="shrink-0 text-2xs text-subtle" />
             </span>
         </template>
 
@@ -336,9 +357,11 @@ const VERB = ui.iconButton(`md:opacity-0 md:group-hover/row:opacity-100 md:focus
                 <Icon name="trash" class="text-xs" />
             </button>
 
+            <!-- A spent one-time wake cannot be re-armed by the switch: its moment is in the past, so the daemon would
+                 fire it on the spot rather than schedule anything. Edit it to a new moment instead. -->
             <ToggleSwitch
                 :model-value="automation.enabled"
-                :disabled="busy"
+                :disabled="busy || spent"
                 :aria-label="t(`automationRow.enable`, { id: automation.id })"
                 @update:model-value="emit(`toggle`, $event)"
             />

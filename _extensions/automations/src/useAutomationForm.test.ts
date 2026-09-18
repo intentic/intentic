@@ -168,6 +168,46 @@ describe(`editing preserves fields outside the changed control`, () => {
         expect(build().trigger).toEqual({ kind: `schedule`, cron: `0 5 * * *` });
     });
 
+    it(`round-trips a one-time wake through the reader's own clock`, () => {
+        // Built from a local wall-clock reading, not a hardcoded epoch: the box speaks the reader's zone, and the
+        // stored trigger is the instant that resolves to, so the pair has to survive whatever zone the suite runs in.
+        const moment = new Date(Date.now() + 3 * 3_600_000);
+        moment.setSeconds(0, 0);
+        const reminder: Automation = {
+            id: `dentist`,
+            trigger: { kind: `once`, at: moment.getTime() },
+            prompt: `Remind me about the dentist.`,
+            models: LADDER,
+            enabled: true,
+        };
+        const { form, load, build, onceError, valid } = formState();
+        load(reminder);
+        expect(form.kind).toBe(`once`);
+        // The box holds what a person would read off a clock, and `T` separates the halves as the input requires.
+        expect(form.onceAt).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/);
+        expect(onceError.value).toBeUndefined();
+        expect(valid.value).toBe(true);
+        expect(build()).toEqual(reminder);
+    });
+
+    it(`refuses a moment already gone, and a box nobody has answered`, () => {
+        const { form, build, onceError, valid } = formState();
+        form.kind = `once`;
+        form.id = `too-late`;
+        form.prompt = `Tell me.`;
+        form.models = [...LADDER];
+        // Nothing picked yet: an error, but the one that says to pick, not the one that says it has passed.
+        expect(onceError.value).toMatch(/Pick the date and time/);
+        expect(valid.value).toBe(false);
+        const gone = new Date(Date.now() - 60_000);
+        gone.setSeconds(0, 0);
+        form.onceAt = `${gone.getFullYear()}-${String(gone.getMonth() + 1).padStart(2, `0`)}-${String(gone.getDate()).padStart(2, `0`)}T${String(gone.getHours()).padStart(2, `0`)}:${String(gone.getMinutes()).padStart(2, `0`)}`;
+        expect(onceError.value).toMatch(/already passed/);
+        expect(valid.value).toBe(false);
+        // The trigger it would build is still the honest reading of the box; `valid` is what stops the save.
+        expect(build().trigger).toEqual({ kind: `once`, at: gone.getTime() });
+    });
+
     it(`keeps a webhook's daily ceiling and disabled state`, () => {
         // Token lives at the door, not the record; only dailyMax and enabled must survive the edit untouched.
         const automation: Automation = {

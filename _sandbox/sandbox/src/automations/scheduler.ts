@@ -1,7 +1,7 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { Cron } from "croner";
-import type { AgentEvent, AgentOrigin, AgentTurn, AutomationApproval, ModelPin } from "@intentic/sandbox-contract";
+import type { AgentEvent, AgentOrigin, AgentTurn, Automation, AutomationApproval, ModelPin, Trigger } from "@intentic/sandbox-contract";
 import { WORKSPACE_ROOT_EXCLUDE_ENV } from "@intentic/sandbox-contract/chores";
 import { REFERENCE_DIR } from "@intentic/workspace-ignore";
 import { TranscriptFold } from "@intentic/sandbox-contract/transcript-fold";
@@ -12,7 +12,7 @@ import type { PersistedAgent } from "../agents/registry/agents-store.js";
 import { sessionStart, wakeSourceOf } from "../guard/actions.js";
 import { guard } from "../guard/guard.js";
 import { wrapOutsideContent } from "@intentic/base/outside-text";
-import { automationPending } from "../push/notifications.js";
+import { automationPending, turnFinished } from "../push/notifications.js";
 import { pinnedRunModel } from "../agent/models/run-role-model.js";
 import type { OutboxSink } from "../webchat/webchat-outbox.js";
 import { type AutomationRecord, consecutiveFailures } from "./automations-store.js";
@@ -40,6 +40,17 @@ export interface TurnStream {
     readonly failed: (reason: string) => void;
     readonly end: () => void;
 }
+
+// What the block under the prompt IS, per trigger, since a schedule's payload is its own sessions listing rather than
+// anything a sender wrote. A record, not a ternary, so a new trigger has to say what it hands the turn.
+const PAYLOAD_HEADING: Record<Trigger["kind"], string> = {
+    schedule: "Sessions since the last wake",
+    // Carried only by a wake that came due while nothing was running; on time, there is no payload at all.
+    once: "About this wake",
+    event: "Event payload",
+    listener: "Event payload",
+    workspace: "Event payload",
+};
 
 // Prepended to a streamed wake's prompt so the model doesn't also send the reply itself via a tool.
 const STREAM_NOTE =
@@ -286,6 +297,18 @@ const wakeModel = async (services: Services, automation: AutomationRecord, strea
     return undefined;
 };
 
+// Tells the owner a one-time wake is done, the one trigger whose whole purpose is to reach a person. Every other kind
+// is already answering somebody listening (a visitor, a channel, a webhook's caller) or is a chore nobody asked to hear
+// each run of, and a push per fire would make a five-minute poll unbearable. `notifyIfAway` still holds it if they're
+// here to see the card themselves.
+const notifyWakeSettled = (services: Services, automation: AutomationRecord, conversationId: string, failure: string | undefined): void => {
+    if (automation.trigger.kind !== "once") {
+        return;
+    }
+    const outcome = failure === undefined ? { ok: true } : { ok: false, error: failure };
+    void services.pushSender.notifyIfAway(turnFinished(conversationId, automation.prompt, outcome));
+};
+
 // What a held wake keeps of the fire that was stopped, so an approved run replays it: the payload and origin, the
 // conversation and thread to continue, the persona it resolved to. Every field absent rather than undefined, so the
 // snapshot only carries what the fire itself did.
@@ -423,8 +446,7 @@ const runFire = async (
             .catch((error: unknown) => services.logger.warn({ err: error, automation: automation.id }, "turn journal: fire not recorded"));
         // A listener payload is wrapped in the outside-content envelope here only; guard env and journal keep it raw.
         const sealed = automation.trigger.kind === "listener" ? wrapOutsideContent(capped ?? "", { source: automation.trigger.provider }) : capped;
-        // Nothing hands a schedule a payload but its own sessions gate, so the heading can say what the list is.
-        const heading = automation.trigger.kind === "schedule" ? "Sessions since the last wake" : "Event payload";
+        const heading = PAYLOAD_HEADING[automation.trigger.kind];
         const body = capped !== undefined && capped !== "" ? `${automation.prompt}\n\n--- ${heading} ---\n${sealed}` : automation.prompt;
         let failure: string | undefined;
         let runtimeSessionId: string | undefined;
@@ -493,6 +515,7 @@ const runFire = async (
         });
         // Read after recording so this fire's own outcome is part of the streak the guard weighs.
         const quarantined = failure === undefined ? undefined : await quarantineIfSpinning(services, automation.id);
+        notifyWakeSettled(services, automation, conversationId, failure);
         // Runtime session is the activity feed's join key between the trigger and the outbound calls the wake produced.
         void services.activity
             .append({
@@ -558,6 +581,120 @@ export const runHeldWake = async (services: Services, automation: AutomationReco
     await services.threadSessions.settle(held.thread, settled.sessionId, Date.now());
 };
 
+// When this automation is next due, or undefined for one no clock drives (a webhook, a listener, a workspace event)
+// and one switched off. An invalid cron can only come from a hand-edited manifest — upsert rejects it — and reads as
+// no next run rather than failing whatever asked.
+// A one-time wake answers its own moment even once that moment is past: the tick fires an overdue one rather than
+// dropping it, so "due" stays the truth right up until it fires.
+export const nextRunOf = (automation: AutomationRecord): number | undefined => {
+    if (!automation.enabled) {
+        return undefined;
+    }
+    if (automation.trigger.kind === "once") {
+        return automation.trigger.at;
+    }
+    if (automation.trigger.kind !== "schedule") {
+        return undefined;
+    }
+    try {
+        return new Cron(automation.trigger.cron).nextRun()?.getTime();
+    } catch {
+        return undefined;
+    }
+};
+
+// The soonest one-time wake, for the idle-stop watchdog; 0 when none is armed. Stopped, this daemon is the only thing
+// that could fire one and only a visit brings it back, so the watchdog holds the machine up rather than sleeping
+// through a moment somebody was promised (system/idle-stop.ts).
+// Only `once` counts, deliberately. A cron that misses a beat has another one coming, and a hosted machine held awake
+// all month so a nightly chore is punctual costs more than the chore; a one-time wake has nothing behind it, and holds
+// the machine for at most one window, since it retires as it fires.
+export const nextOneTimeWakeAt = async (services: Services): Promise<number> => {
+    const due = (await services.automations.list())
+        .filter((automation) => automation.trigger.kind === "once")
+        .map(nextRunOf)
+        .filter((at) => at !== undefined);
+    return due.length === 0 ? 0 : Math.min(...due);
+};
+
+// Past this, a one-time wake did not merely wait out a poll: nothing was running when its moment came, and the woken
+// turn is told so, because "your 3pm reminder" delivered at 9pm has to say which of the two times it means.
+const LATE_WAKE_MS = 2 * 60_000;
+
+const lateWakeNote = (at: number, now: number): string =>
+    [
+        `This wake was due at ${new Date(at).toISOString()}, and is running ${Math.round((now - at) / 60_000)} minutes late:`,
+        `the sandbox was not running when its moment came, and fired it at the first opportunity after.`,
+        `If you pass this on to somebody, say when it was meant to arrive rather than implying it is on time.`,
+    ].join(" ");
+
+// Whether an interrupted fire of this automation may be re-fired at boot (turn-resume.ts). A retired `once` was
+// switched off BY its own fire rather than by the owner, so one the daemon died under still resumes; every other
+// trigger reads `enabled` as the owner's own answer, and a switched-off automation stays off.
+export const resumable = (automation: Pick<Automation, "enabled" | "trigger">): boolean => automation.enabled || automation.trigger.kind === "once";
+
+// Fires a one-time wake whose moment has arrived, switching it off FIRST: `at` stays in the past forever, so every
+// later poll would match it again and the switch is the only thing standing between one reminder and one every 30
+// seconds. Retired before the fire rather than after, so a daemon that dies mid-wake still cannot repeat it — the
+// interrupted fire comes back through the turn journal instead (see `resumable`).
+// Deliberately not gated on the poll window the cron path uses: a schedule that misses a beat has another one coming,
+// a one-time wake has nothing behind it, so a moment that passed while the sandbox was down still fires, late and
+// saying so.
+const fireOnceWake = async (services: Services, automation: AutomationRecord, at: number, wake: WakeFn, now: number): Promise<void> => {
+    if (at > now) {
+        return;
+    }
+    await services.automations.setEnabled(automation.id, false);
+    const late = now - at >= LATE_WAKE_MS ? { payload: lateWakeNote(at, now) } : {};
+    void fireAutomation(services, automation, wake, late).catch((error: unknown) =>
+        services.logger.error({ err: error, automation: automation.id }, "one-time automation run failed"),
+    );
+};
+
+// One enabled automation's clock, per poll: a one-time wake fires the moment it is due or already overdue, a cron
+// fires when its next run measured from the last poll falls inside this one. Every other trigger has its own
+// dispatcher and nothing to do here.
+const fireIfDue = async (services: Services, automation: AutomationRecord, wake: WakeFn, windowStart: number, now: number): Promise<void> => {
+    if (automation.trigger.kind === "once") {
+        await fireOnceWake(services, automation, automation.trigger.at, wake, now);
+        return;
+    }
+    if (automation.trigger.kind !== "schedule") {
+        return;
+    }
+    // A cron hand-edited into invalidity only silences its own automation, never the tick.
+    let due: Date | null;
+    try {
+        due = new Cron(automation.trigger.cron).nextRun(new Date(windowStart));
+    } catch {
+        return;
+    }
+    if (due === null || due.getTime() > now) {
+        return;
+    }
+    void fireAutomation(services, automation, wake).catch((error: unknown) =>
+        services.logger.error({ err: error, automation: automation.id }, "automation run failed"),
+    );
+};
+
+// Releases countdown holds past deadline while no turn is live; removed before running so it can't re-fire. A retired
+// one-time wake still releases: it was switched off by the very fire now waiting in the queue.
+const releaseCountdownHolds = async (services: Services, wake: WakeFn, now: number): Promise<void> => {
+    for (const held of await services.heldWakes.list()) {
+        if (held.autoRunAt === undefined || held.autoRunAt > now || services.agents.liveSessionIds().length > 0) {
+            continue;
+        }
+        const automation = await services.automations.get(held.automationId);
+        await services.heldWakes.remove(held.id);
+        if (automation === undefined || !resumable(automation)) {
+            continue;
+        }
+        void runHeldWake(services, automation, held, wake).catch((error: unknown) =>
+            services.logger.error({ err: error, automation: automation.id }, "countdown-released automation run failed"),
+        );
+    }
+};
+
 // Polls the manifest and fires whatever came due since the last pass, with no resync bookkeeping; fires run detached,
 // since a turn can outlast many polls. Event automations fire from the fire route instead.
 export const createAutomationsScheduler = (services: Services, wake: WakeFn, intervalMs = 30_000): AutomationsScheduler => {
@@ -568,37 +705,11 @@ export const createAutomationsScheduler = (services: Services, wake: WakeFn, int
         const windowStart = since;
         since = now;
         for (const automation of await services.automations.list()) {
-            if (!automation.enabled || automation.trigger.kind !== "schedule") {
-                continue;
+            if (automation.enabled) {
+                await fireIfDue(services, automation, wake, windowStart, now);
             }
-            // A cron hand-edited into invalidity only silences its own automation, never the tick.
-            let due: Date | null;
-            try {
-                due = new Cron(automation.trigger.cron).nextRun(new Date(windowStart));
-            } catch {
-                continue;
-            }
-            if (due === null || due.getTime() > now) {
-                continue;
-            }
-            void fireAutomation(services, automation, wake).catch((error: unknown) =>
-                services.logger.error({ err: error, automation: automation.id }, "automation run failed"),
-            );
         }
-        // Releases countdown holds past deadline while no turn is live; removed before running so it can't re-fire.
-        for (const held of await services.heldWakes.list()) {
-            if (held.autoRunAt === undefined || held.autoRunAt > now || services.agents.liveSessionIds().length > 0) {
-                continue;
-            }
-            const automation = await services.automations.get(held.automationId);
-            await services.heldWakes.remove(held.id);
-            if (automation === undefined || !automation.enabled) {
-                continue;
-            }
-            void runHeldWake(services, automation, held, wake).catch((error: unknown) =>
-                services.logger.error({ err: error, automation: automation.id }, "countdown-released automation run failed"),
-            );
-        }
+        await releaseCountdownHolds(services, wake, now);
     };
 
     return {

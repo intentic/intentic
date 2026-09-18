@@ -16,6 +16,7 @@ import {
 import { useQuery } from "@tanstack/vue-query";
 import { computed, ref } from "vue";
 import { glyph } from "./catalog";
+import { nextIn } from "./cronSchedule";
 import { host } from "./host";
 import { useCiDelivery } from "./useCiDelivery";
 import { useSenders } from "./useAutomations";
@@ -56,6 +57,8 @@ const {
     addSenderRule,
     removeSenderRule,
     sendersError,
+    onceAt,
+    onceError,
 } = props.state;
 
 // Personas this sandbox can wear, for the picker below; read here since the list is the same for every automation.
@@ -162,6 +165,7 @@ defineExpose({ nameInput, promptInput });
 // question. Each keeps its glyph, the same one the list outside this form uses for the row.
 const TRIGGER_TABS = computed<readonly { value: TriggerKind; label: string; icon: IconName }[]>(() => [
     { value: `schedule`, label: t(`automationFields.schedule`), icon: `clock` },
+    { value: `once`, label: t(`automationFields.once`), icon: `pin` },
     { value: `event`, label: t(`automationFields.webhook`), icon: `bolt` },
     // Needs a connected gateway; an already-Live automation keeps it listed so its editor can't re-point it.
     ...(liveSources.value.length > 0 || form.kind === `listener`
@@ -173,6 +177,9 @@ const TRIGGER_TABS = computed<readonly { value: TriggerKind; label: string; icon
 // One caption sentence per trigger kind, shown under the picker instead of a label with its own gloss.
 const KIND_CAPTION: Record<TriggerKind, string> = {
     schedule: `On a clock, in this sandbox's own timezone.`,
+    // Says the two things a reminder's owner has to know and cannot see: which clock the time was read on, and that a
+    // sleeping sandbox delivers late rather than never.
+    once: `At one moment, on your own clock, and then it switches itself off. A sandbox that is asleep when the moment comes fires it as soon as it is back, saying how late it is.`,
     event: `When any outside system POSTs to its webhook URL, which is shown to you once it exists.`,
     listener: `The moment a connected service sends something. Nothing is polled: a gateway holds the connection open.`,
     workspace: `On a moment in this workspace's own work. No token and no URL: nothing outside the sandbox can fire it.`,
@@ -615,6 +622,18 @@ const setProvider = (provider: string): void => {
                             <p class="text-2xs text-subtle">{{ branchField.hint }}</p>
                         </label>
                     </div>
+                </template>
+
+                <!-- One box, since a moment is one answer. `datetime-local` reads the reader's own clock, which is how
+                     they mean it; what gets stored is the instant that resolves to. -->
+                <template v-if="form.kind === 'once'">
+                    <label class="ui-field">
+                        <span class="ui-field-label">{{ t(`automationFields.fires`) }}</span>
+                        <input v-model="form.onceAt" type="datetime-local" class="w-64" :class="ui.input()" @change="markTouched(`onceAt`)" />
+                    </label>
+                    <p v-if="onceError && touched.has(`onceAt`)" class="text-xs text-danger">{{ onceError }}</p>
+                    <!-- The same proof the cron preview gives: how far off the moment they picked actually is. -->
+                    <p v-else-if="!onceError" class="text-xs text-muted">{{ t(`automationFields.firesIn`, { when: nextIn(onceAt) }) }}</p>
                 </template>
 
                 <template v-if="form.kind === 'schedule'">

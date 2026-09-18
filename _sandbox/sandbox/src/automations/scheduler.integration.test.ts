@@ -14,7 +14,7 @@ import { automationConfig } from "../harness/route-stores.testing.js";
 import { outboxStreamFor } from "../webchat/webchat-outbox.js";
 import { fileHeldWakesStore } from "./held-wakes-store.js";
 import { type AutomationRecord, fileAutomationsStore } from "./automations-store.js";
-import { automationIdle, createAutomationsScheduler, fireAutomation, type WakeFn } from "./scheduler.js";
+import { automationIdle, createAutomationsScheduler, fireAutomation, nextOneTimeWakeAt, type WakeFn } from "./scheduler.js";
 
 // Touches automations/heldWakes/activity/turnJournal/workspace/logger/sandboxSettings, plus liveSessionIds and registry
 // entries (mutated in place); the journal is real, since its in-flight entry is asserted on.
@@ -122,6 +122,96 @@ test("guards receive the reserved workspace-root directory to prune", async () =
     await fireAutomation(services, (await services.automations.get("scoped")) as AutomationRecord, fakeWake(prompts));
     expect((await services.automations.get("scoped"))?.runs[0]?.outcome).toBe("completed");
     expect(prompts).toEqual(["wake:scoped"]);
+});
+
+// One-time wakes. The whole promise of one is that it lands, so what the poll window does to a cron — drop whatever
+// came due while nothing was running — must not happen here, and the switch-off is what keeps "lands" from becoming
+// "lands every thirty seconds for ever".
+
+const inMinutes = (minutes: number): number => Date.now() + minutes * 60_000;
+
+test("a one-time wake fires when its moment arrives and switches itself off, so no later poll repeats it", async () => {
+    const services = fakeServices(mkdtempSync(join(tmpdir(), "sched-")));
+    const at = inMinutes(1);
+    await services.automations.upsert(automationConfig("dentist", { trigger: { kind: "once", at } }));
+    const prompts: string[] = [];
+    const scheduler = createAutomationsScheduler(services, fakeWake(prompts));
+
+    // Before the moment: nothing happens, and it stays armed.
+    await scheduler.tick(at - 1_000);
+    expect(prompts).toEqual([]);
+    expect((await services.automations.get("dentist"))?.enabled).toBe(true);
+
+    await scheduler.tick(at);
+    await vi.waitFor(async () => expect((await services.automations.get("dentist"))?.runs).toHaveLength(1), SETTLES);
+    // On time, so nothing is appended under the prompt: the note below is only for a wake that ran late.
+    expect(prompts).toEqual(["wake:dentist"]);
+    expect((await services.automations.get("dentist"))?.enabled).toBe(false);
+
+    // Its moment stays in the past for ever; every later poll has to leave it alone.
+    await automationIdle("dentist");
+    await scheduler.tick(at + 3 * 60_000);
+    expect(prompts).toEqual(["wake:dentist"]);
+    expect((await services.automations.get("dentist"))?.runs).toHaveLength(1);
+});
+
+test("a moment that passed while the sandbox was down still fires, and the wake is told how late it is", async () => {
+    const services = fakeServices(mkdtempSync(join(tmpdir(), "sched-")));
+    // Six hours ago: no poll window covers it, which is the shape a cron loses outright.
+    const at = inMinutes(-360);
+    await services.automations.upsert(automationConfig("dentist", { trigger: { kind: "once", at } }));
+    const prompts: string[] = [];
+    // Constructed now, so its first window opens long after the moment: the daemon has just come back up.
+    const scheduler = createAutomationsScheduler(services, fakeWake(prompts));
+    await scheduler.tick();
+    await vi.waitFor(async () => expect((await services.automations.get("dentist"))?.runs).toHaveLength(1), SETTLES);
+    expect(prompts[0]).toContain("wake:dentist\n\n--- About this wake ---\n");
+    expect(prompts[0]).toContain(`due at ${new Date(at).toISOString()}`);
+    expect(prompts[0]).toContain("360 minutes late");
+    expect((await services.automations.get("dentist"))?.enabled).toBe(false);
+});
+
+test("a retired one-time wake still releases from the countdown queue: it was switched off by the fire waiting there", async () => {
+    const services = fakeServices(mkdtempSync(join(tmpdir(), "sched-")));
+    await services.automations.upsert(automationConfig("dentist", { trigger: { kind: "once", at: inMinutes(-1) }, holdForSeconds: 1 }));
+    const prompts: string[] = [];
+    const scheduler = createAutomationsScheduler(services, fakeWake(prompts));
+    await scheduler.tick();
+    await vi.waitFor(async () => expect(await services.heldWakes.list()).toHaveLength(1), SETTLES);
+    // Switched off as it fired, with the hold as the only thing left of that fire: reading the switch as the owner's
+    // answer here would drop the reminder on the floor.
+    expect((await services.automations.get("dentist"))?.enabled).toBe(false);
+    expect(prompts).toEqual([]);
+
+    await scheduler.tick(Date.now() + 2_000);
+    await vi.waitFor(async () => expect((await services.automations.get("dentist"))?.runs).toHaveLength(1), SETTLES);
+    expect(prompts).toHaveLength(1);
+    expect(await services.heldWakes.list()).toEqual([]);
+});
+
+test("the watchdog is told the soonest one-time wake and nothing else, since only that one cannot come round again", async () => {
+    const services = fakeServices(mkdtempSync(join(tmpdir(), "sched-")));
+    expect(await nextOneTimeWakeAt(services)).toBe(0);
+
+    const later = inMinutes(90);
+    const sooner = inMinutes(20);
+    await services.automations.upsert(automationConfig("dentist", { trigger: { kind: "once", at: later } }));
+    // A webhook waits on nobody's clock, so it can never be a reason to keep a machine awake.
+    await services.automations.upsert(automationConfig("hook", { trigger: { kind: "event" } }));
+    // Neither can a cron, however soon: the stock config's fires every minute, and a machine held awake for it would
+    // bill all month to keep a chore punctual. It misses a beat and catches the next one.
+    await services.automations.upsert(automationConfig("poll"));
+    expect(await nextOneTimeWakeAt(services)).toBe(later);
+
+    // Two one-time wakes: the soonest is the one worth staying up for.
+    await services.automations.upsert(automationConfig("standup", { trigger: { kind: "once", at: sooner } }));
+    expect(await nextOneTimeWakeAt(services)).toBe(sooner);
+
+    // Switched off is off, which is also how a spent one stops holding the machine awake.
+    await services.automations.setEnabled("standup", false);
+    expect(await nextOneTimeWakeAt(services)).toBe(later);
+    await services.automations.setEnabled("dentist", false);
+    expect(await nextOneTimeWakeAt(services)).toBe(0);
 });
 
 // Sessions gate (afterSessions): the one pre-wake check computed from the daemon's own registry, not a guard. Pins what

@@ -1,8 +1,8 @@
 import type { Automation, AutomationApproval, AutomationCatalog, AutomationSummary } from "@intentic/sandbox-contract";
 
-// Automations acme-shop runs unattended: one of each trigger kind (schedule, listener, workspace, event) so the page's
-// claim that they share one machine holds. `runs` give each row a real history; the approvals queue holds one held
-// wake.
+// Automations acme-shop runs unattended: one of each trigger kind (schedule, once, listener, workspace, event) so the
+// page's claim that they share one machine holds. `runs` give each row a real history; the approvals queue holds one
+// held wake.
 
 const minutes = (count: number): number => count * 60_000;
 const hours = (count: number): number => count * 3_600_000;
@@ -23,6 +23,17 @@ const seed = (now: number): AutomationSummary[] => [
             { at: now - hours(55), outcome: `completed`, detail: `1 advisory, patched`, conversationId: `cnv_dep_audit_prev` },
             { at: now - hours(79), outcome: `skipped`, detail: `guard exited 1, no high advisories` },
         ],
+    },
+    {
+        // Never run and still ahead of its moment, which is what almost every one-time wake looks like: they exist to
+        // be waited for, and then they are gone.
+        id: `aut_renewal_reminder`,
+        trigger: { kind: `once`, at: now + hours(20) },
+        prompt: `The TLS certificate for acme.example expires in a week. Check whether the renewal already went through, and if it did not, say exactly what is left to do.`,
+        models: [{ provider: `claude`, model: `claude-sonnet-5` }],
+        enabled: true,
+        nextRun: now + hours(20),
+        runs: [],
     },
     {
         id: `aut_discord_oncall`,

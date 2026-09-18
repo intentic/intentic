@@ -10,6 +10,7 @@ const probesOf = (over: Partial<IdleStopProbes>): IdleStopProbes => ({
     delegates: () => 0,
     watchers: () => 0,
     terminalActivityAt: () => Promise.resolve(0),
+    nextOneTimeWakeAt: () => Promise.resolve(0),
     ...over,
 });
 
@@ -72,6 +73,32 @@ describe("startIdleStop", () => {
         expect(stop).not.toHaveBeenCalled();
         watchers = 0;
         await minutes(2);
+        expect(stop).toHaveBeenCalledTimes(1);
+        dispose();
+    });
+
+    it("a wake due inside the window keeps the machine up, since only a visit would restart it", async () => {
+        const stop = vi.fn();
+        // Due in three minutes, inside a five-minute window: stopping now is how that wake arrives late.
+        const dueAt = Date.now() + 3 * 60 * 1000;
+        const dispose = startIdleStop({ minutes: 5, logger }, probesOf({ nextOneTimeWakeAt: () => Promise.resolve(dueAt) }), stop);
+        await minutes(6);
+        expect(stop).not.toHaveBeenCalled();
+        dispose();
+    });
+
+    it("a wake further out than the window is slept through: an always-awake machine costs more than the lateness", async () => {
+        const stop = vi.fn();
+        const dispose = startIdleStop({ minutes: 5, logger }, probesOf({ nextOneTimeWakeAt: () => Promise.resolve(Date.now() + 6 * 3_600_000) }), stop);
+        await minutes(5);
+        expect(stop).toHaveBeenCalledTimes(1);
+        dispose();
+    });
+
+    it("nothing on any clock reads as 0, not as a wake due at the epoch", async () => {
+        const stop = vi.fn();
+        const dispose = startIdleStop({ minutes: 5, logger }, probesOf({ nextOneTimeWakeAt: () => Promise.resolve(0) }), stop);
+        await minutes(5);
         expect(stop).toHaveBeenCalledTimes(1);
         dispose();
     });

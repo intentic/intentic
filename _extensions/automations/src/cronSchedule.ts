@@ -128,6 +128,20 @@ export const parseCron = (cron: string): ScheduleState => {
     return isIntIn(dayOfMonth, 1, 31) ? { ...defaultSchedule(), freq: `monthly`, time, dayOfMonth } : custom;
 };
 
+/**
+ * The two directions of a one-time wake's box. `datetime-local` speaks the reader's own wall clock with no zone
+ * attached, which is exactly how a person means "3pm"; the stored trigger is an absolute instant. Converting here, at
+ * the edge, is what makes a one-time wake immune to the timezone gap a cron lives with: the sandbox keeps its own
+ * clock, and this moment means the same thing on any of them.
+ */
+export const localInputOf = (at: number): string => {
+    const date = new Date(at);
+    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+};
+
+/** NaN for a cleared or half-typed box, which every caller reads as "not answered yet". */
+export const instantOf = (local: string): number => new Date(local).getTime();
+
 const DAY_NAMES = [`Sun`, `Mon`, `Tue`, `Wed`, `Thu`, `Fri`, `Sat`];
 
 const ordinal = (day: number): string => {

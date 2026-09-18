@@ -31,12 +31,20 @@ onMounted(() => {
     }
 });
 onUnmounted(() => clearInterval(ticker));
+// Each unit hands over before the number it would print stops being readable at a glance: a hold parked for three days
+// read "runs itself in 4320m", which is a number to do arithmetic on rather than a wait to feel.
 const autoRunLabel = computed(() => {
     if (entry.autoRunAt === undefined) {
         return undefined;
     }
     const seconds = Math.max(0, Math.round((entry.autoRunAt - now.value) / 1000));
-    return seconds >= 120 ? `runs itself in ${Math.round(seconds / 60)}m` : `runs itself in ${seconds}s`;
+    if (seconds < 120) {
+        return `runs itself in ${seconds}s`;
+    }
+    if (seconds < 2 * 3_600) {
+        return `runs itself in ${Math.round(seconds / 60)}m`;
+    }
+    return seconds < 2 * 86_400 ? `runs itself in ${Math.round(seconds / 3_600)}h` : `runs itself in ${Math.round(seconds / 86_400)}d`;
 });
 </script>
 

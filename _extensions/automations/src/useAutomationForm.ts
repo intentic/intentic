@@ -12,14 +12,14 @@ import { AutomationSchema, FRONT_DESK_PERSONA, WEBCHAT_DAILY_MAX_DEFAULT } from 
 import { Cron } from "croner";
 import { computed, type ComputedRef, reactive, watch } from "vue";
 import { type AvailableSource, listenerSourceOf } from "./catalog";
-import { cronOf, defaultSchedule, parseCron } from "./cronSchedule";
+import { cronOf, defaultSchedule, instantOf, localInputOf, parseCron } from "./cronSchedule";
 
 // One automation form for the create dialog and the edit dialog. `load` and `build` are inverse: `build` omits fields
 // at their default, `load` reconstructs the same form so an unchanged save round-trips to an identical automation.
 
 const NAME_RE = /^[a-zA-Z0-9][a-zA-Z0-9_-]*$/;
 
-export type TriggerKind = `schedule` | `event` | `listener` | `workspace`;
+export type TriggerKind = `schedule` | `once` | `event` | `listener` | `workspace`;
 
 // One row of who may talk to a listener, as typed: ids and groups as comma-separated text split only at save, like
 // `allowedTools`; a blank `actsAs` is no persona, the full toolbox reaching no account, exactly as the automation's own.
@@ -101,6 +101,9 @@ export function useAutomationForm(sources: ComputedRef<readonly AvailableSource[
         holdForSeconds: 0,
         // Schedule's session bar: 0 fires every occurrence; positive skips until that many new sessions have run.
         afterSessions: 0,
+        // A one-time wake's moment, as a `datetime-local` box reads it: the reader's own wall clock, no zone. Blank
+        // until they pick one, which is what `onceError` refuses to save.
+        onceAt: ``,
         provider: `discord`,
         channelId: ``,
         eventType: undefined as string | undefined,
@@ -185,6 +188,21 @@ export function useAutomationForm(sources: ComputedRef<readonly AvailableSource[
         } catch {
             return { error: `Invalid cron expression.` };
         }
+    });
+
+    // The moment the box currently names, or NaN for blank or half-typed. Read by both the error and the preview, so
+    // the two can't disagree about what was picked.
+    const onceAt = computed(() => instantOf(form.onceAt));
+    // Refused rather than accepted-and-dropped: the daemon fires an overdue one-time wake on its next poll, so saving
+    // one dated yesterday would not schedule anything, it would fire on the spot.
+    const onceError = computed<string | undefined>(() => {
+        if (form.kind !== `once`) {
+            return undefined;
+        }
+        if (Number.isNaN(onceAt.value)) {
+            return `Pick the date and time it should fire.`;
+        }
+        return onceAt.value <= Date.now() ? `That moment has already passed.` : undefined;
     });
 
     /* ---- the prompt follows the trigger ---- */
@@ -292,6 +310,7 @@ export function useAutomationForm(sources: ComputedRef<readonly AvailableSource[
             originsError.value === undefined &&
             modelsError.value === undefined &&
             sendersError.value === undefined &&
+            onceError.value === undefined &&
             (form.kind !== `schedule` || (cronPreview.value !== undefined && `runs` in cronPreview.value)),
     );
 
@@ -315,6 +334,7 @@ export function useAutomationForm(sources: ComputedRef<readonly AvailableSource[
             senderOthers: `ignore`,
             holdForSeconds: 0,
             afterSessions: 0,
+            onceAt: ``,
             provider: `discord`,
             channelId: ``,
             eventType: undefined,
@@ -350,6 +370,9 @@ export function useAutomationForm(sources: ComputedRef<readonly AvailableSource[
         if (template.trigger.kind === `schedule`) {
             loadSchedule(template.trigger);
         }
+        if (template.trigger.kind === `once`) {
+            form.onceAt = localInputOf(template.trigger.at);
+        }
         if (template.trigger.kind === `listener`) {
             form.provider = template.trigger.provider;
             form.eventType = template.trigger.eventType;
@@ -359,6 +382,30 @@ export function useAutomationForm(sources: ComputedRef<readonly AvailableSource[
         }
         // The template's prompt was written for the trigger it just set, so this isn't a trigger change.
         promptFor = triggerKey(form);
+    };
+
+    // The trigger half of `load`: each kind's own fields into the form, the inverse of `triggerOf`. Its own function
+    // rather than a run of ifs inside `load`, which has the whole record to read besides this.
+    const loadTrigger = (trigger: Automation[`trigger`]): void => {
+        if (trigger.kind === `schedule`) {
+            loadSchedule(trigger);
+        }
+        if (trigger.kind === `once`) {
+            form.onceAt = localInputOf(trigger.at);
+        }
+        if (trigger.kind === `workspace`) {
+            form.workspaceEvent = trigger.event;
+            form.repo = trigger.repo ?? ``;
+        }
+        if (trigger.kind === `listener`) {
+            form.provider = trigger.provider;
+            form.eventType = trigger.eventType;
+            form.mentioned = trigger.mentioned === true;
+            form.channelId = trigger.channelId ?? ``;
+            form.branch = trigger.branch ?? ``;
+            // One per line, matching how the textarea presents and how they were typed.
+            form.origins = (trigger.allowedOrigins ?? []).join(`\n`);
+        }
     };
 
     // Puts the user back in front of the form that produced this record, the inverse of `build`: a save that changes
@@ -380,22 +427,7 @@ export function useAutomationForm(sources: ComputedRef<readonly AvailableSource[
         loadSenders(automation.senders);
         form.holdForSeconds = automation.holdForSeconds ?? 0;
         form.chore = automation.chore === true;
-        if (trigger.kind === `schedule`) {
-            loadSchedule(trigger);
-        }
-        if (trigger.kind === `workspace`) {
-            form.workspaceEvent = trigger.event;
-            form.repo = trigger.repo ?? ``;
-        }
-        if (trigger.kind === `listener`) {
-            form.provider = trigger.provider;
-            form.eventType = trigger.eventType;
-            form.mentioned = trigger.mentioned === true;
-            form.channelId = trigger.channelId ?? ``;
-            form.branch = trigger.branch ?? ``;
-            // One per line, matching how the textarea presents and how they were typed.
-            form.origins = (trigger.allowedOrigins ?? []).join(`\n`);
-        }
+        loadTrigger(trigger);
         const webchat = automation.webchat;
         if (webchat !== undefined) {
             form.access = webchat.access ?? `public`;
@@ -472,6 +504,8 @@ export function useAutomationForm(sources: ComputedRef<readonly AvailableSource[
         switch (form.kind) {
             case `schedule`:
                 return scheduleTrigger();
+            case `once`:
+                return { kind: `once`, at: instantOf(form.onceAt) };
             case `event`:
                 return {
                     kind: `event`,
@@ -591,6 +625,8 @@ export function useAutomationForm(sources: ComputedRef<readonly AvailableSource[
         originsError,
         modelsError,
         sendersError,
+        onceAt,
+        onceError,
         valid,
         // directions
         reset,

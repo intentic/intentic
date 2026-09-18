@@ -18,6 +18,9 @@ import { ALLOW, DENY, defineGuardedAction, HOLD } from "./guard.js";
 export const wakeSourceOf = (trigger: Trigger): WakeSource => {
     switch (trigger.kind) {
         case "schedule":
+        // A clock set both of them off, so a one-time wake answers to the rule the owner wrote for schedules rather
+        // than to a floor of its own: "hold anything a clock starts" has to mean this too.
+        case "once":
             return "schedule";
         case "event":
             return "event";
