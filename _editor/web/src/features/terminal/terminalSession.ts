@@ -9,6 +9,7 @@ import { isApplePlatform } from "../../shell/commands/keybindings";
 import { toScreenPx } from "../../shell/window/uiScale";
 import { acquireStreamSlot } from "../sandbox/client/streamBudget";
 import { socketUrl as wsSocketUrl } from "../sandbox/client/wsTicket";
+import { editKeyBytes } from "./terminalEditKeys";
 import { registerFilePathLinks } from "./terminalFileLinks";
 import { registerUrlLinks } from "./terminalUrlLinks";
 import { terminalPaint } from "./terminalTheme";
@@ -335,9 +336,27 @@ export const createTerminalSession = (name: string, onExit: (name: string) => vo
         // skin change.
         ...terminalPaint(),
     });
-    // A bound shell command takes a chord before the pane; returning false stops xterm, not propagation.
+    // A bound shell command takes a chord before the pane; returning false stops xterm, not propagation. What's left
+    // is xterm's to encode, except the line edits it has no useful encoding for (terminalEditKeys).
     const isMac = isApplePlatform();
-    term.attachCustomKeyEventHandler((event) => event.type !== `keydown` || boundCommand(event, isMac) === undefined);
+    term.attachCustomKeyEventHandler((event) => {
+        if (event.type !== `keydown`) {
+            return true;
+        }
+        if (boundCommand(event, isMac) !== undefined) {
+            return false;
+        }
+        const typed = editKeyBytes(event, isMac);
+        if (typed === undefined) {
+            return true;
+        }
+        // Returning false leaves the event live, so Ctrl+Backspace would also edit xterm's own helper textarea.
+        event.preventDefault();
+        // wasUserInput, so the pane scrolls to the prompt and drops its selection as it would for any keystroke; a
+        // read-only pane drops it, since disableStdin gates the data event.
+        term.input(typed, true);
+        return false;
+    });
     const search = new SearchAddon();
     term.loadAddon(search);
     // Makes plain-text URLs Ctrl/Cmd-clickable, including ones a program hard-wrapped across rows.
