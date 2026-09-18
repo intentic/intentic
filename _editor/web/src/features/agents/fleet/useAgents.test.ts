@@ -24,7 +24,7 @@ import { useChat } from "../../chat/run/useChat";
 import { useNotifications } from "../../../shell/notifications/notifications";
 import { queryClient } from "../../../lib/queryPersistence";
 import { resetAgents, useAgents } from "./useAgents";
-import { canArchive, FINISHED_WINDOW, type FleetAgent, finishedNeedsAction, windowFinished } from "./useAgents-fleet";
+import { canArchive, doneWith, FINISHED_WINDOW, type FleetAgent, finishedNeedsAction, windowFinished } from "./useAgents-fleet";
 import { auditRoster, resetArchive, setAgents } from "./useAgents-registry";
 
 // The Finished lane's cap, and the one card it may never drop: the board's selection ring points at whatever the
@@ -97,6 +97,60 @@ describe("windowFinished", () => {
 
         expect(shown.map((entry) => entry.conversation.conversationId)).toEqual([`a0`, `a1`, `a2`, `a3`, `a4`, `a5`, `a8`]);
         expect(hidden).toBe(3);
+    });
+});
+
+// What lets a tab leave the rail with no press (useChat-tabs.releaseDone). Stricter than the Finished lane, which
+// also holds work still owing a Land and chats that finished while nobody was looking.
+describe("doneWith", () => {
+    const none = { plan: false, question: false, permission: false, capability: false, credential: false, conflict: false };
+    const settled = (over: Partial<FleetAgent> = {}): FleetAgent => ({
+        id: `a1`,
+        status: `landed`,
+        provider: `claude`,
+        harness: `native`,
+        updatedAt: 1_000,
+        attention: none,
+        open: true,
+        unread: false,
+        unsent: false,
+        ...over,
+    });
+
+    it("takes a landed chat the reader has already looked at", () => {
+        expect(doneWith(settled())).toBe(true);
+        expect(doneWith(settled({ status: `idle` }))).toBe(true);
+    });
+
+    it("keeps one that worked while the reader was away, which is what unread is for", () => {
+        expect(doneWith(settled({ unread: true }))).toBe(false);
+    });
+
+    // A step has no row of its own to be read in: the run's row is the record, so it never earns the unread grace.
+    it("waives that grace for a workflow step", () => {
+        expect(doneWith(settled({ unread: true, workflow: { runId: `run-1`, name: `Nightly`, step: `build`, index: 1, total: 3 } }))).toBe(true);
+    });
+
+    it("keeps one still owing a press", () => {
+        expect(doneWith(settled({ status: `ready` }))).toBe(false);
+        expect(doneWith(settled({ landedPresence: { landed: 4, present: 0 } }))).toBe(false);
+        expect(doneWith(settled({ unfinished: { at: 900, steps: { open: 2, total: 5 } } }))).toBe(false);
+    });
+
+    it("keeps one with words still unsent in its composer", () => {
+        expect(doneWith(settled({ unsent: true }))).toBe(false);
+    });
+
+    it("keeps everything the board has outside Finished", () => {
+        expect(doneWith(settled({ status: `error` }))).toBe(false);
+        expect(doneWith(settled({ status: `running` }))).toBe(false);
+        expect(doneWith(settled({ status: `idle`, attention: { ...none, question: true } }))).toBe(false);
+        expect(doneWith(settled({ watches: [{ id: `w1`, note: `CI`, intervalSeconds: 60, deadlineAt: 2_000 }] }))).toBe(false);
+    });
+
+    // No registry entry means no account of whether the work is over, only this browser's guess.
+    it("keeps a card the daemon never filed", () => {
+        expect(doneWith(settled({ status: `resumed` }))).toBe(false);
     });
 });
 
@@ -1015,6 +1069,7 @@ describe("the finished fold", () => {
                 landed(`receipt-22h-a`, now - 22 * hour),
                 landed(`receipt-22h-b`, now - 22 * hour),
                 landed(`receipt-22h-c`, now - 22 * hour),
+                // Unread is derived, not declared: no `seenAt` against a positive `updatedAt` is what makes it true.
                 { ...landed(`ready-now`, now - 1_000), status: `ready` },
                 { ...landed(`ready-1m`, now - 60_000), status: `ready` },
             ],

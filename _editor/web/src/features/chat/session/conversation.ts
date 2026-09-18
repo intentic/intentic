@@ -229,6 +229,13 @@ export class Conversation {
         this.peek.value = false;
     }
 
+    // Back to the peek slot: the roster says this chat is finished and read, so it leaves with the next focus move
+    // unless the reader pins it. The inverse of `keep()`, and driven only by the daemon (useChat-tabs.releaseDone);
+    // no verb of the user's demotes a chat.
+    release(): void {
+        this.peek.value = true;
+    }
+
     // Blank fallback a panel shows with no tabs, or after closing its last; says nothing about what the chat is.
     readonly standIn = ref(false);
 

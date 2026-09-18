@@ -1255,6 +1255,118 @@ describe(`chats opened for a look`, () => {
     });
 });
 
+// The other way into the peek slot: a chat the roster has finished with is released back into it, so the sweep the
+// suite above pins takes it with no press at all. The rail is a working set; the board keeps the card either way.
+describe(`chats the roster has finished with`, () => {
+    beforeEach(async () => {
+        storage.clear();
+        resetChat();
+        await nextTick();
+    });
+
+    // First tab, holding text so the focus-leave sweep has no claim on it.
+    const working = (): string => {
+        const chat = useChat();
+        chat.draft.value = `real work`;
+        return chat.active.value.conversationId;
+    };
+
+    const finishedChat = (id: string) => openAgentConversation({ id, provider: `claude`, harness: `native`, title: `Shipped it` });
+
+    it(`releases a kept chat, and the next focus move sweeps it`, () => {
+        const chat = useChat();
+        const first = working();
+        const done = finishedChat(`agent-a`);
+
+        chat.releaseDone(new Set([`agent-a`]));
+
+        expect(done.peek.value).toBe(true);
+        chat.setActive(first);
+        expect(chat.conversations.value.map((conversation) => conversation.conversationId)).toEqual([first]);
+    });
+
+    // The two-stage fade: the card goes italic under the reader rather than vanishing from under them.
+    it(`leaves it in place while it is the chat being read`, () => {
+        const chat = useChat();
+        working();
+        const done = finishedChat(`agent-a`);
+
+        chat.releaseDone(new Set([`agent-a`]));
+        chat.setActive(`agent-a`);
+
+        expect(chat.conversations.value.map((conversation) => conversation.conversationId)).toContain(`agent-a`);
+        expect(done.peek.value).toBe(true);
+    });
+
+    it(`never takes one with words still unsent`, async () => {
+        const chat = useChat();
+        const first = working();
+        const done = finishedChat(`agent-a`);
+        done.draft.value = `half an answer`;
+        await nextTick();
+
+        chat.releaseDone(new Set([`agent-a`]));
+
+        expect(done.peek.value).toBe(false);
+        chat.setActive(first);
+        expect(chat.conversations.value.map((conversation) => conversation.conversationId)).toEqual([first, `agent-a`]);
+    });
+
+    it(`stops leaving once the pin is pressed`, () => {
+        const chat = useChat();
+        const first = working();
+        finishedChat(`agent-a`);
+        chat.releaseDone(new Set([`agent-a`]));
+
+        chat.keepChat(`agent-a`);
+
+        chat.setActive(first);
+        expect(chat.conversations.value.map((conversation) => conversation.conversationId)).toEqual([first, `agent-a`]);
+    });
+
+    // The roster repeats its whole verdict every frame; only the first telling may act on a chat.
+    it(`does not undo that pin when the roster says the same thing again`, () => {
+        const chat = useChat();
+        const first = working();
+        const done = finishedChat(`agent-a`);
+        chat.releaseDone(new Set([`agent-a`]));
+        chat.keepChat(`agent-a`);
+
+        chat.releaseDone(new Set([`agent-a`]));
+
+        expect(done.peek.value).toBe(false);
+        chat.setActive(first);
+        expect(chat.conversations.value.map((conversation) => conversation.conversationId)).toEqual([first, `agent-a`]);
+    });
+
+    // A split is a deliberate "keep both of these up": releasing one would close it the moment the focus crossed.
+    it(`never releases one the reader has put in a column beside another`, () => {
+        const chat = useChat();
+        const first = working();
+        const done = finishedChat(`agent-a`);
+        chat.setPanes([first, `agent-a`]);
+
+        chat.releaseDone(new Set([`agent-a`]));
+
+        expect(done.peek.value).toBe(false);
+        chat.setActive(first);
+        expect(chat.conversations.value.map((conversation) => conversation.conversationId)).toEqual([first, `agent-a`]);
+    });
+
+    it(`lets it go with the column it was being read in`, () => {
+        const chat = useChat();
+        const first = working();
+        finishedChat(`agent-a`);
+        chat.setPanes([first, `agent-a`]);
+        chat.setActive(`agent-a`);
+        chat.releaseDone(new Set([`agent-a`]));
+
+        chat.closePane(`agent-a`);
+
+        expect(chat.conversations.value.map((conversation) => conversation.conversationId)).toEqual([first]);
+    });
+});
+
 // Conversation.standIn: the empty composer a panel always shows when nothing else is open.
 describe(`the blank left when the last chat closes`, () => {
     beforeEach(async () => {

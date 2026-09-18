@@ -45,6 +45,16 @@ export const finishedNeedsAction = (
 ): boolean =>
     agent.unsent || agent.unfinished !== undefined || agent.status === `ready` || agent.status === `landing` || finishedNeedsReland(agent);
 
+// Nothing left for the reader to do with this chat: settled in Finished, owing no press, and already looked at.
+// The rail is a working set, so this is what lets a tab leave it without a press (useChat-tabs.releaseDone); the
+// board is the record and keeps its card either way.
+// Unread is the grace, and it does most of the work: a chat that finished while the reader was elsewhere keeps its
+// row until they have read it. A workflow step waives it, since a step is read through its run's row and never had
+// a row of its own to be read in. An unregistered card is excluded outright: with no registry entry there is no
+// account of whether the work is over, only this browser's guess.
+export const doneWith = (agent: FleetAgent): boolean =>
+    !unregistered(agent.status) && laneOf(agent) === `finished` && !finishedNeedsAction(agent) && (!agent.unread || agent.workflow !== undefined);
+
 // When the turn ended, not the last observe frame; `updatedAt` on a settled card is finish/land time only.
 const finishedRecency = (agent: FleetAgent): number => agent.unfinished?.at ?? agent.updatedAt;
 
@@ -257,6 +267,14 @@ watch(
             markSeen(id);
         }
     },
+);
+
+// Chats the roster is done with, handed to the tab store so its own sweep can take them without a press
+// (useChat-tabs.releaseDone). The whole verdict each frame rather than what changed in it: the store is the only
+// side that knows which of them the reader has pinned, put in a column, or is about to give a column back.
+watch(
+    () => fleet.value.filter(doneWith).map((agent) => agent.id),
+    (ids) => useChat().releaseDone(new Set(ids)),
 );
 
 // Whether the board may archive this card; not the same as being Finished, which trapped an errored agent with

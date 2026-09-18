@@ -29,7 +29,8 @@ export const untouchedDraft = (conversation: Conversation): boolean => untouched
 
 // Tabs that exist only while focused: an untouched draft, or a peeked chat with nothing unsent. A sweep
 // destroys nothing (card and History survive, a running turn just detaches). Words in the composer spare a
-// peek regardless of its flag.
+// peek regardless of its flag. The peek flag arrives two ways: a card or History row opening a chat for a look,
+// and the roster releasing one it has finished with (`releaseDone`).
 const transient = (conversation: Conversation): boolean => untouchedDraft(conversation) || (conversation.peek.value && !conversation.unsent.value);
 
 // The blank a window shows with nothing open (Conversation.standIn), minted here so both call sites (no tabs
@@ -46,6 +47,20 @@ export const keepChat = (conversationId: string): void => {
     conversations.value.find((conversation) => conversation.conversationId === conversationId)?.keep();
 };
 
+// The demotion, by id, with the two reasons this window still has to hold a chat the roster is done with:
+// - words waiting to be sent, which the sweep would strand
+// - a column of its own beside another, since a split is a deliberate "keep both of these up" and the sweep would
+//   take the other column out from under the reader the moment the focus crossed. The focused chat's own column
+//   doesn't count — with one pane that column IS the panel — so the ordinary case, a finished chat read in the
+//   panel and left behind, still goes.
+const releaseChat = (conversationId: string): void => {
+    const conversation = conversations.value.find((entry) => entry.conversationId === conversationId);
+    if (conversation === undefined || conversation.unsent.value || (panes.value.length > 1 && panes.value.includes(conversationId))) {
+        return;
+    }
+    conversation.release();
+};
+
 // The one writer of the tab list and the focus, holding two invariants in one write:
 // - focus lands on a tab actually in the list, the last one if its own tab closed (VSCode's rule)
 // - at most one transient tab is open, and only as the focused one
@@ -53,6 +68,17 @@ export const keepChat = (conversationId: string): void => {
 
 // Focus history, most recent last: where focus goes when its tab closes, the one visited just before.
 let recent: readonly string[] = [];
+
+// The roster's last verdict on which chats are done with (releaseDone). Held rather than acted on and forgotten,
+// because the same fact answers a second question at a different moment: what giving a chat's column back means.
+// Outlives a tab rebuild on purpose, so popping the chat out and docking it back doesn't undo the reader's pins;
+// only a different daemon's roster invalidates it.
+let settled: ReadonlySet<string> = new Set();
+
+/** Drops the verdict with the daemon that gave it: another sandbox's roster says nothing about these chats. */
+export const forgetSettled = (): void => {
+    settled = new Set();
+};
 
 // Detaches a swept tab's turn (soft abort) on the way out, since a peek may be watching one; an untouched
 // draft has none. The cached transcript is kept, unlike a close's, since a look is often repeated.
@@ -348,6 +374,13 @@ export const closePane = (conversationId: string): void => {
     }
     const rest = panes.value.filter((id) => id !== conversationId);
     panes.value = rest;
+    // Giving a column back is the plainest "done with this one" the surface has, so a chat the roster had already
+    // finished with goes back to the peek slot rather than falling into the rail to be closed by hand later. Only
+    // this gesture, not collapsePanes: that one is a plain click asking to see something else, not a verdict on
+    // the columns it happens to fold.
+    if (settled.has(conversationId)) {
+        releaseChat(conversationId);
+    }
     if (activeId.value === conversationId) {
         // The neighbour that took its place on screen, where the eye already is.
         setActive(rest.at(-1)!);
@@ -436,6 +469,25 @@ export const closeRetired = (ids: ReadonlySet<string>): void => {
     if (retired.size > 0) {
         closeTabs(retired);
     }
+};
+
+/**
+ * The daemon's counterpart to `keepChat`: chats the roster is done with (useAgents-fleet.doneWith) go back to the
+ * peek slot, so the focus-leave sweep takes them with no press at all. Nothing is closed here — the card turns
+ * italic and wears its pin, the one press that stops it.
+ *
+ * Takes the whole verdict, not what changed in it, and releases only the newcomers: said twice, it would undo a
+ * pin the reader pressed in between. The focused chat is released like any other, since the sweep never takes the
+ * focused tab: it goes italic where the reader can see it happen rather than vanishing from under them.
+ */
+export const releaseDone = (ids: ReadonlySet<string>): void => {
+    for (const id of ids) {
+        if (!settled.has(id)) {
+            releaseChat(id);
+        }
+    }
+    // Replaced, not merged: a chat that goes back to work and finishes again is done a second time.
+    settled = ids;
 };
 
 // One store per window: a hot update re-running this module would mint a second one beside it.

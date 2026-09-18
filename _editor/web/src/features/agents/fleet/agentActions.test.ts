@@ -29,10 +29,11 @@ const tab = (id: string) => ({
 // else mocked here is what agentActions's other actions need for a browser (device, router, sandbox).
 vi.mock("@intentic/ui", () => ({ useDevice: () => ({ mobile: { value: false } }) }));
 vi.mock("../../chat/run/useChat", () => ({
-    // `active` is read by a module-scope watcher in useAgents the moment that module loads.
+    // `active` and `releaseDone` are both reached by module-scope watchers in useAgents the moment that module loads.
     useChat: () => ({
         conversations: chat.conversations,
         active: { value: { conversationId: undefined } },
+        releaseDone: () => {},
     }),
 }));
 // The strip the fleet reads at module load; empty so no draft card competes with the registry rows under test.

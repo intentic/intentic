@@ -23,9 +23,11 @@ import {
     collapsePanes,
     composerFocus,
     conversations,
+    forgetSettled,
     keepChat,
     openBeside,
     panes,
+    releaseDone,
     restoreTabs,
     setActive,
     setPanes,
@@ -120,6 +122,8 @@ export const resetChat = (): void => {
     // Cleared before restoreTabs, or it validates new picks against the old sandbox's accounts.
     providerAccounts.value = perProvider<readonly OauthAccount[]>(() => []);
     accountsLoaded.value = false;
+    // Which chats were done with was the outgoing daemon's reading; the incoming roster gives its own.
+    forgetSettled();
     // Rebuilds tabs and re-seeds the account pick from the incoming sandbox's own remembered one.
     restoreTabs();
     // Mirror is keyed by conversation, so new tabs paint from this sandbox's own cache, not the old one's.
@@ -209,6 +213,7 @@ export function useChat() {
         keepChat,
         closeTabs,
         closeRetired,
+        releaseDone,
         attachStarted,
         send,
         queued,
