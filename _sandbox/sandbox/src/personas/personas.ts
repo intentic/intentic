@@ -110,6 +110,11 @@ export const turnPersona = ({ personas, actsAs, unattended }: TurnPersonaInput):
     };
 };
 
+// Whether this card may start agents elsewhere: a child is a whole agent holding shell and write, so a narrowed card
+// must not reach them by proxy. One predicate, since every runtime's arm decides the spawn door the same way.
+export const mayDelegate = (persona: TurnPersona): boolean =>
+    persona.powers.delegate && persona.powers.shell && persona.powers.files === "write";
+
 // Capability manifest as this turn may see it: narrowed before anything is built, so a filtered account's browser never
 // launches, rather than present-and-discouraged. The credential-free `browser` shelf isn't a capability here.
 export const personaCapabilities = (capabilities: readonly Capability[], persona: TurnPersona): Capability[] =>

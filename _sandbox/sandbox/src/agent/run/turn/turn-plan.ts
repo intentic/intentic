@@ -36,6 +36,7 @@ import { browserServersOf } from "../../../browser/tools/browser-tools.js";
 import { personaKitPlugin, readPersonaPrompt } from "../../../personas/persona-kit.js";
 import {
     type TurnPersona,
+    mayDelegate,
     personaCapabilities,
     personaCliEnv,
     personaDisallowedTools,
@@ -48,9 +49,8 @@ import {
 import { personaScopeOf } from "../../../personas/persona-scope.js";
 import { jsExecutionPlanOf } from "../../../execution/js-runtime.js";
 import { resolveWithin } from "../../../workspace/files/workspace-files-paths.js";
-import { peerToolsOf } from "../../../peers/peer-tools.js";
-import { mcpToolsOf } from "../../../capabilities/mcp-tools.js";
 import { pluginDirsOf } from "../../../capabilities/plugin-dirs.js";
+import { turnToolsOf } from "../../tools/turn-tools.js";
 import type { Services } from "../../../composition.js";
 import { extensionAgentDirsOf } from "../../../extensions/installed-extensions.js";
 import { createHashlineServer } from "../../../hashline/hashline-tools.js";
@@ -348,12 +348,7 @@ export const planTurn = async (services: Services, input: AgentTurn, context: Tu
     // The spawn door, decided once for every runtime: a persona needs both the delegate shelf and full agency (shell +
     // write) to start agents elsewhere, since a child is a whole agent holding both; without them, spawning must not
     // come back by proxy.
-    const maySpawn =
-        context.children !== undefined &&
-        input.conversationId !== undefined &&
-        persona.powers.delegate &&
-        persona.powers.shell &&
-        persona.powers.files === "write";
+    const maySpawn = context.children !== undefined && input.conversationId !== undefined && mayDelegate(persona);
     if (maySpawn && context.children !== undefined && input.conversationId !== undefined) {
         armSupervisor(input.conversationId, context.children);
     }
@@ -679,14 +674,7 @@ export const planHarnessTurn = async (
         return { ok: false, ...(resolved.code !== undefined ? { code: resolved.code } : {}), message: resolved.message };
     }
     const { oauthToken, refreshOauthToken, endpoint, allowance, trial } = resolved.credentials;
-    // Internal tools first, then external mcp-kind capabilities; a same-named external tool overrides, matching
-    // mcpServersOf's last-wins merge.
-    const tools = [
-        ...services.tools,
-        ...mcpToolsOf(granted),
-        ...peerToolsOf("host", granted, services.config.sandbox.port, services.hostBridgeToken, input.conversationId),
-        ...peerToolsOf("webext", granted, services.config.sandbox.port, services.webextBridgeToken),
-    ];
+    const tools = turnToolsOf(services, granted, input.conversationId);
     // What this turn may reach out of the container: the same host cards peerToolsOf just mounted, plus the one running
     // this sandbox when the held readings already name it. Through Services, since the hosts subsystem reaches back
     // into this one (host-command-gate.ts) and two subsystems must not import each other's values.
@@ -805,9 +793,7 @@ export const planHarnessTurn = async (
         subagents: subagentWaitServer({
             conversationId: context.base.conversationId,
             signal: context.base.signal,
-            ...(context.children !== undefined && persona.powers.delegate && persona.powers.shell && persona.powers.files === "write"
-                ? { children: context.children }
-                : {}),
+            ...(context.children !== undefined && mayDelegate(persona) ? { children: context.children } : {}),
         }),
         // The condition watch: the agent names an outside check command the daemon polls, waking the conversation when
         // it exits 0 — a replacement for hand-rolled sleep loops and the CLI's own scheduling, which can't fire once

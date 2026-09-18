@@ -1,7 +1,7 @@
 import { join } from "node:path";
 import type { AgentTurn, Capability } from "@intentic/sandbox-contract";
 import type { Config } from "../../env.config.js";
-import { browserOutputDir } from "../../browser/cast/browser-artifacts.js";
+import { browserFields } from "../../browser/tools/browser-fields.js";
 import { browserServersOf } from "../../browser/tools/browser-tools.js";
 import { attemptProbe, type AgentAdapter, healthReady, healthUnavailable, healthUnknown } from "../../agent/providers/adapter.js";
 import { withAttachments } from "../../agent/prompt/attachment-note.js";
@@ -75,17 +75,7 @@ export const planCodexTurn = async (
     const withAuth = translatorReady
         ? { ...withModel, codexEndpoint: { baseUrl: services.config.translator.url, authToken: services.config.translator.token } }
         : withModel;
-    const withBrowser =
-        Object.keys(browser.servers).length === 0
-            ? withAuth
-            : {
-                  ...withAuth,
-                  sdkServers: browser.servers,
-                  browserOutputDir: browserOutputDir(services.workspace.root),
-                  browserPorts: browser.ports,
-                  browserPasskeys: browser.passkeys,
-                  browserAccounts: browser.accounts,
-              };
+    const withBrowser = { ...withAuth, ...browserFields(services.workspace.root, browser) };
     return {
         ok: true,
         run: services.codexAgent,

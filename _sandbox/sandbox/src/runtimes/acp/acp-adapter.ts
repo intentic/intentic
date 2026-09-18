@@ -2,8 +2,7 @@ import type { AgentTurn, Capability } from "@intentic/sandbox-contract";
 import { type AgentAdapter, attemptProbe, healthReady, healthUnavailable, healthUnknown } from "../../agent/providers/adapter.js";
 import { withAttachments } from "../../agent/prompt/attachment-note.js";
 import type { TurnContext, TurnArmPlan } from "../../agent/run/turn/turn-plan.js";
-import { peerToolsOf } from "../../peers/peer-tools.js";
-import { mcpToolsOf } from "../../capabilities/mcp-tools.js";
+import { turnToolsOf } from "../../agent/tools/turn-tools.js";
 import type { Services } from "../../composition.js";
 
 // Any provider id outside the native six is an installed `agent`-kind capability served over the Agent Client Protocol.
@@ -24,12 +23,7 @@ export const planAcpTurn = async (
         return { ok: false, message: `Unknown agent provider "${provider}", add it as an Agent capability first.` };
     }
     const acpConfig = capability.config;
-    const tools = [
-        ...services.tools,
-        ...mcpToolsOf(granted),
-        ...peerToolsOf("host", granted, services.config.sandbox.port, services.hostBridgeToken),
-        ...peerToolsOf("webext", granted, services.config.sandbox.port, services.webextBridgeToken),
-    ];
+    const tools = turnToolsOf(services, granted, input.conversationId);
     return {
         ok: true,
         run: (turnRequest) => services.acpAgent(provider, acpConfig, turnRequest),

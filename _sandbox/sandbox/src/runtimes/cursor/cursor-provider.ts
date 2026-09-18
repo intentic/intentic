@@ -1,14 +1,15 @@
 import { join } from "node:path";
 import type { AgentTurn, Capability } from "@intentic/sandbox-contract";
 import type { Logger } from "pino";
-import { browserOutputDir } from "../../browser/cast/browser-artifacts.js";
+import { browserFields } from "../../browser/tools/browser-fields.js";
 import { browserServersOf } from "../../browser/tools/browser-tools.js";
 import { attemptProbe, type AgentAdapter, healthReady, healthUnavailable, healthUnknown } from "../../agent/providers/adapter.js";
 import { withAttachments } from "../../agent/prompt/attachment-note.js";
 import { authStateRelPath, type ProviderModule, providerAccountEntry } from "../../agent/providers/provider-module.js";
 import type { TurnContext, TurnArmPlan } from "../../agent/run/turn/turn-plan.js";
+import { turnToolsOf } from "../../agent/tools/turn-tools.js";
 import type { Services } from "../../composition.js";
-import { turnPersona } from "../../personas/personas.js";
+import { mayDelegate, turnPersona } from "../../personas/personas.js";
 import { createCursorAgent } from "./cursor-agent.js";
 import { type CursorCatalog, createCursorCatalog } from "./cursor-catalog.js";
 import { type CursorStore, fileCursorStore, readCursorCredentials, usableCursorAccount } from "./cursor-credentials.js";
@@ -74,34 +75,26 @@ export const planCursorTurn = async (
         browserServersOf(granted, services.workspace.root, persona.powers.browser, input.conversationId),
     ]);
     const model = input.model !== undefined && catalog.models.some((entry) => entry.id === input.model) ? input.model : catalog.default;
-    const withAuth = {
+    // The same remote MCP set the harness and ACP arms mount, which cursorMcpServers turns into http servers: a machine,
+    // a connected browser or an mcp capability the owner granted must reach a Cursor turn like any other.
+    const tools = turnToolsOf(services, granted, input.conversationId);
+    const request = {
         ...context.base,
         model,
         cursorApiKey: account.apiKey,
+        ...(tools.length > 0 ? { tools } : {}),
         ...(context.steering !== undefined ? { steering: context.steering } : {}),
         // Same predicate the harness arm applies: a child has shell and write; a narrowed turn can't proxy them back.
-        ...(context.children !== undefined && persona.powers.delegate && persona.powers.shell && persona.powers.files === "write"
-            ? { children: context.children }
-            : {}),
+        ...(context.children !== undefined && mayDelegate(persona) ? { children: context.children } : {}),
+        ...browserFields(services.workspace.root, browser),
     };
-    const withBrowser =
-        Object.keys(browser.servers).length === 0
-            ? withAuth
-            : {
-                  ...withAuth,
-                  sdkServers: browser.servers,
-                  browserOutputDir: browserOutputDir(services.workspace.root),
-                  browserPorts: browser.ports,
-                  browserPasskeys: browser.passkeys,
-                  browserAccounts: browser.accounts,
-              };
     return {
         ok: true,
         run: services.cursorAgent,
         // Real account id, not a shared marker: usage and rate-limit frames can name which connection paid.
         account: account.id,
         // Attachments fold into the prompt as a file list; Cursor's read tool takes them off disk, like OpenCode/Pi.
-        request: withAttachments(withBrowser, context.attachmentPaths),
+        request: withAttachments(request, context.attachmentPaths),
     };
 };
 

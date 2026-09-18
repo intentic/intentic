@@ -32,7 +32,6 @@ const NARROW_TAKERS = new Set([
 // Snapshot of value-import cycles, a <-> b sorted; cut via a type-only port, an event, or a module above both.
 const MUTUAL_PAIRS = new Set([
     "agent <-> runtimes/acp",
-    "capabilities <-> runtimes/acp",
     "agent <-> agents",
     "agent <-> automations",
     "agent <-> browser",
