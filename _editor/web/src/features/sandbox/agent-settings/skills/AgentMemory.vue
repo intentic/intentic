@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { MEMORY_FILE } from "@intentic/constants";
-import { Button, Card, CopyButton, MarkdownDocument, Notice, type NoticeModel, Row, ui } from "@intentic/ui";
+import { Button, CopyButton, MarkdownDocument, Notice, type NoticeModel, RowGroup, RowNote, ui } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
 import { onMounted, ref } from "vue";
 import { IMPORT_PROMPT, mergeMemory } from "../../../extensions/memoryImport";
@@ -8,7 +8,7 @@ import { useSandbox } from "../../client/useSandbox";
 import { useWorkspaceTree } from "../../../workspace/explorer/useWorkspaceTree";
 import { useT } from "@intentic/ui/i18n";
 
-// One file, read at the top of every turn on every runtime; this card can read, edit and delete it, not just append
+// One file, read at the top of every turn on every runtime; this group can read, edit and delete it, not just append
 // via import. Save is explicit since a half-typed sentence going live would be read on the next turn.
 
 const t = useT();
@@ -77,75 +77,75 @@ const importMemory = async (): Promise<void> => {
 </script>
 
 <template>
-    <Card class="flex flex-col gap-3">
-        <Row flush :heading="2" icon="sparkles" :title="t(`sandbox.agentMemory.memory`)">
-            <template #description>
+    <RowGroup :label="t(`sandbox.agentMemory.memory`)">
+        <RowNote variant="block">
+            <p class="text-xs text-muted">
                 {{ t(`sandbox.agentMemory.standingInstructions`) }}
                 <span class="font-medium text-content">{{ sandbox.active.value?.name ?? t(`sandbox.agentMemory.sandbox`) }}</span>
                 {{ t(`sandbox.agentMemory.carriesIntoEveryTurn`) }} <code>{{ MEMORY_FILE }}</code>
                 {{ t(`sandbox.agentMemory.atWorkspaceRootFolder`) }}
-            </template>
-        </Row>
+            </p>
 
-        <Notice v-if="error" :of="error" />
+            <Notice v-if="error" :of="error" class="mt-3" />
 
-        <div class="ui-field-shell max-h-[60dvh] overflow-auto p-3" style="--prose-measure: 72ch">
-            <MarkdownDocument
-                v-model="draft"
-                :editable="onDisk !== undefined"
-                :stored="onDisk"
-                :saving="saving"
-                save="explicit"
-                :label="MEMORY_FILE"
-                :placeholder="
-                    onDisk === undefined
-                        ? t(`sandbox.agentMemory.reading`, { memory_file: MEMORY_FILE })
-                        : t(`sandbox.agentMemory.nothingHereYetWhat`)
-                "
-                class="min-h-48"
-                @save="commit"
-            >
-                <template #note
-                    ><code>{{ MEMORY_FILE }}</code
-                    >{{ t(`sandbox.agentMemory.atWorkspaceRoot`) }}</template
+            <div class="ui-field-shell mt-3 max-h-[60dvh] overflow-auto p-3" style="--prose-measure: 72ch">
+                <MarkdownDocument
+                    v-model="draft"
+                    :editable="onDisk !== undefined"
+                    :stored="onDisk"
+                    :saving="saving"
+                    save="explicit"
+                    :label="MEMORY_FILE"
+                    :placeholder="
+                        onDisk === undefined
+                            ? t(`sandbox.agentMemory.reading`, { memory_file: MEMORY_FILE })
+                            : t(`sandbox.agentMemory.nothingHereYetWhat`)
+                    "
+                    class="min-h-48"
+                    @save="commit"
                 >
-            </MarkdownDocument>
-        </div>
+                    <template #note
+                        ><code>{{ MEMORY_FILE }}</code
+                        >{{ t(`sandbox.agentMemory.atWorkspaceRoot`) }}</template
+                    >
+                </MarkdownDocument>
+            </div>
 
-        <!-- Import sits under the document; editing is the primary path, this is the narrow one. -->
-        <div class="flex flex-col gap-3 border-t border-line/60 pt-3">
-            <span class="text-sm font-medium text-content">{{ t(`sandbox.agentMemory.bringMemoryOverAnother`) }}</span>
+            <!-- Import sits under the document; editing is the primary path, this is the narrow one. -->
+            <div class="mt-3 flex flex-col gap-3 border-t border-line/60 pt-3">
+                <span class="text-sm font-medium text-content">{{ t(`sandbox.agentMemory.bringMemoryOverAnother`) }}</span>
 
-            <label class="flex flex-col gap-1.5">
-                <span class="flex items-center gap-2 text-xs text-subtle">
-                    <span class="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-content/10 text-2xs font-semibold">1</span>
-                    {{ t(`sandbox.agentMemory.copyPromptIntoChat`) }}
-                </span>
-                <textarea :value="IMPORT_PROMPT" readonly rows="6" :class="ui.input('w-full font-mono resize-y text-subtle')"></textarea>
-                <CopyButton class="self-end" :text="IMPORT_PROMPT" :label="t(`sandbox.agentMemory.copyPrompt`)" />
-            </label>
+                <label class="flex flex-col gap-1.5">
+                    <span class="flex items-center gap-2 text-xs text-subtle">
+                        <span class="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-content/10 text-2xs font-semibold">1</span>
+                        {{ t(`sandbox.agentMemory.copyPromptIntoChat`) }}
+                    </span>
+                    <textarea :value="IMPORT_PROMPT" readonly rows="6" :class="ui.input('w-full font-mono resize-y text-subtle')"></textarea>
+                    <CopyButton class="self-end" :text="IMPORT_PROMPT" :label="t(`sandbox.agentMemory.copyPrompt`)" />
+                </label>
 
-            <label class="flex flex-col gap-1.5">
-                <span class="flex items-center gap-2 text-xs text-subtle">
-                    <span class="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-content/10 text-2xs font-semibold">2</span>
-                    {{ t(`sandbox.agentMemory.pasteResultBelowTo`) }}
-                </span>
-                <textarea
-                    v-model="importText"
-                    rows="8"
-                    :placeholder="t(`sandbox.agentMemory.pasteMemoryDetailsHere`)"
-                    :class="ui.input('w-full font-mono resize-y')"
-                ></textarea>
-                <Button
-                    class="self-end"
-                    :label="t(`sandbox.agentMemory.addToMemory`)"
-                    :loading="importing"
-                    :disabled="importText.trim().length === 0"
-                    @click="importMemory"
-                >
-                    <template #icon><Icon name="sparkles" /></template>
-                </Button>
-            </label>
-        </div>
-    </Card>
+                <label class="flex flex-col gap-1.5">
+                    <span class="flex items-center gap-2 text-xs text-subtle">
+                        <span class="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-content/10 text-2xs font-semibold">2</span>
+                        {{ t(`sandbox.agentMemory.pasteResultBelowTo`) }}
+                    </span>
+                    <textarea
+                        v-model="importText"
+                        rows="8"
+                        :placeholder="t(`sandbox.agentMemory.pasteMemoryDetailsHere`)"
+                        :class="ui.input('w-full font-mono resize-y')"
+                    ></textarea>
+                    <Button
+                        class="self-end"
+                        :label="t(`sandbox.agentMemory.addToMemory`)"
+                        :loading="importing"
+                        :disabled="importText.trim().length === 0"
+                        @click="importMemory"
+                    >
+                        <template #icon><Icon name="sparkles" /></template>
+                    </Button>
+                </label>
+            </div>
+        </RowNote>
+    </RowGroup>
 </template>

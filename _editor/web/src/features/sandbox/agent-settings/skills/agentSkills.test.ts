@@ -139,7 +139,6 @@ test(`a switched-off skill still gets a row, drained and switchable`, () => {
     expect(host.querySelector(`.grayscale`)).not.toBeNull();
 });
 
-// No per-row explanation anymore; what a kind lets you do moved to the group's info icon.
 test(`each row names where it came from, with its owner when it has one`, () => {
     skills.value = [
         skill({ id: `plugin:pack:review`, name: `review`, origin: `plugin`, owner: `pack`, switchable: false, editable: false, removable: false }),

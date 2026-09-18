@@ -8,7 +8,6 @@ import { useSandboxOutline } from "../../overview/useSandboxOutline";
 import { useSkills } from "../../environment/useSkills";
 import SkillForm from "./SkillForm.vue";
 import SkillRow from "./SkillRow.vue";
-import SkillsInfo from "./SkillsInfo.vue";
 import { bySection, isTunable, matchesSkill } from "./skillList";
 import type { SkillSources } from "./skillVisual";
 import { useT } from "@intentic/ui/i18n";
@@ -101,14 +100,10 @@ const removeSkill = (skill: SkillSummary): void => {
     remove.mutate(skill.name);
     close();
 };
-
-// Counts what's currently shown; a stale total over a filtered list can't be trusted.
-const count = computed<number | undefined>(() => (filtering.value ? matches.value.length : skills.value.length || undefined));
 </script>
 
 <template>
-    <RowGroup :label="t(`sandbox.agentSkills.skills`)" :count="count">
-        <template #info><SkillsInfo /></template>
+    <RowGroup :label="t(`sandbox.agentSkills.skills`)">
         <!-- One field, not a toolbar: a full bar for a single control would look like it belongs to more than this group. -->
         <template v-if="filterable" #actions>
             <SearchBar
