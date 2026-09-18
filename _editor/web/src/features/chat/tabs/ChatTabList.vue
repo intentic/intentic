@@ -22,7 +22,7 @@ import { sessionCategory } from "../../../app/sessionCategory";
 import { useAgentFilter } from "../../agents/board/useAgentFilter";
 import { boxNameOf } from "../../agents/fleet/fleetScope";
 import { useAgents } from "../../agents/fleet/useAgents";
-import { FINISHED_WINDOW, type FleetAgent, finishedHead, finishedLaneOrder, finishedNeedsAction, windowFinished } from "../../agents/fleet/useAgents-fleet";
+import { FINISHED_WINDOW, type FleetAgent, finishedHead, finishedLaneOrder, windowFinished } from "../../agents/fleet/useAgents-fleet";
 import { type CacheCooling, cacheCooling } from "../../agents/fleet/promptCache";
 import HoverCard from "../../../components/HoverCard.vue";
 import OriginMark from "../../../components/OriginMark.vue";
@@ -211,12 +211,7 @@ const occupiedLanes = computed(() => LANES.value.filter((lane) => lanes.value[la
 // Caps Finished at windowFinished (the board's own cap): a browsing limit, not a close, everything stays open
 // and reachable. The active chat is always pinned in; a filter or the row's own expand lifts the cap.
 const finishedWindow = computed(() =>
-    windowFinished(
-        lanes.value.finished,
-        windowed.value ? activeId.value : undefined,
-        (entry) => entry.conversation.conversationId,
-        (entry) => entry.agent !== undefined && finishedNeedsAction(entry.agent),
-    ),
+    windowFinished(lanes.value.finished, windowed.value ? activeId.value : undefined, (entry) => entry.conversation.conversationId),
 );
 // Includes hidden runs: hiding a run also hides its chats, so the count must cover the whole workflow.
 const hiddenRuns = computed(

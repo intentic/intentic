@@ -39,7 +39,8 @@ export const FINISHED_WINDOW = 6;
 export const finishedNeedsReland = (agent: Pick<FleetAgent, "landedPresence">): boolean =>
     agent.landedPresence !== undefined && agent.landedPresence.present < agent.landedPresence.landed;
 
-// Every finished card that still owes a press or has words at risk; the window must never fold these away.
+// Every finished card that still owes a press or has words at risk; such a card is never done with (doneWith), so
+// the rail keeps its row without a press.
 export const finishedNeedsAction = (
     agent: Pick<FleetAgent, "unsent" | "unfinished" | "status" | "landedPresence">,
 ): boolean =>
@@ -59,19 +60,15 @@ export const doneWith = (agent: FleetAgent): boolean =>
 const finishedRecency = (agent: FleetAgent): number => agent.unfinished?.at ?? agent.updatedAt;
 
 // Caps browsing, not existence, and never order: the lane already decided that (finishedLaneOrder), and a window
-// that re-sorted would hoist a stale press back over the finish that just happened. Two guarantees rather than one
-// budget split between them — nothing owing a press is ever folded away, and the lane's freshest cards are always
-// drawn, so a backlog of presses cannot squeeze out the card that just arrived. Shared by both Finished lanes.
+// that re-sorted would hoist a stale press back over the finish that just happened. The cap is the lane's own head,
+// FINISHED_WINDOW cards and no more — a card owing a press rides in by ranking there (pinnedRank), never by growing
+// the window past what the board should read as. Shared by both Finished lanes.
 export const windowFinished = <T>(
     finished: readonly T[],
     selectedId: string | undefined,
     idOf: (entry: T) => string,
-    needsAction: (entry: T) => boolean = () => false,
 ): { shown: T[]; hidden: number } => {
-    const kept = new Set(finished.filter(needsAction).map(idOf));
-    for (const entry of finished.slice(0, FINISHED_WINDOW)) {
-        kept.add(idOf(entry));
-    }
+    const kept = new Set(finished.slice(0, FINISHED_WINDOW).map(idOf));
     // A selection past the fold joins the window where the lane puts it, not at either end; an id no longer in the
     // lane matches nothing.
     if (selectedId !== undefined) {

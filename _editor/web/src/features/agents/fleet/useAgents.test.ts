@@ -24,7 +24,7 @@ import { useChat } from "../../chat/run/useChat";
 import { useNotifications } from "../../../shell/notifications/notifications";
 import { queryClient } from "../../../lib/queryPersistence";
 import { resetAgents, useAgents } from "./useAgents";
-import { canArchive, doneWith, FINISHED_WINDOW, type FleetAgent, finishedNeedsAction, windowFinished } from "./useAgents-fleet";
+import { canArchive, doneWith, FINISHED_WINDOW, type FleetAgent, windowFinished } from "./useAgents-fleet";
 import { auditRoster, resetArchive, setAgents } from "./useAgents-registry";
 
 // The Finished lane's cap, and the one card it may never drop: the board's selection ring points at whatever the
@@ -70,19 +70,19 @@ describe("windowFinished", () => {
     it("keeps a selected actionable card where the lane put it, at neither end", () => {
         const entries = lane(10);
         entries[8] = { ...entries[8]!, status: `ready`, updatedAt: 100 };
-        const { shown } = windowFinished(entries, `a8`, byId, finishedNeedsAction);
+        const { shown } = windowFinished(entries, `a8`, byId);
 
         expect(ids(shown)).toEqual([`a0`, `a1`, `a2`, `a3`, `a4`, `a5`, `a8`]);
     });
 
-    // Presses used to take the whole window — the room grew with them and receipts got what was left, which was none —
-    // so a lane carrying eight of them drew no receipt at all, the freshest finish included.
-    it("draws the lane's freshest cards even when more cards owe a press than the window holds", () => {
+    // Presses used to widen the window — every card owing one was drawn wherever it sat — so a lane carrying a day of
+    // unlanded branches read twice as tall as the board is meant to. The cap is the cap; ranking is what gets a press seen.
+    it("holds the cap when more cards owe a press than the window holds", () => {
         const entries = lane(20).map((agent, at) => (at < 12 ? agent : { ...agent, status: `ready` as const }));
-        const { shown, hidden } = windowFinished(entries, undefined, byId, finishedNeedsAction);
+        const { shown, hidden } = windowFinished(entries, undefined, byId);
 
-        expect(ids(shown)).toEqual([`a0`, `a1`, `a2`, `a3`, `a4`, `a5`, `a12`, `a13`, `a14`, `a15`, `a16`, `a17`, `a18`, `a19`]);
-        expect(hidden).toBe(6);
+        expect(ids(shown)).toEqual([`a0`, `a1`, `a2`, `a3`, `a4`, `a5`]);
+        expect(hidden).toBe(14);
     });
 
     it("leaves the lane alone when the selection is already inside the window: no card is ever shown twice", () => {
@@ -1128,11 +1128,12 @@ describe("the finished fold", () => {
             ],
             1,
         );
-        const { shown } = windowFinished(useAgents().lanes.value.finished, undefined, (entry) => entry.id, finishedNeedsAction);
+        const { shown, hidden } = windowFinished(useAgents().lanes.value.finished, undefined, (entry) => entry.id);
 
         expect(shown[0]?.id).toBe(`just-finished`);
-        // And none of them folded away: every branch still owing a Land is drawn, just under the timeline rather than over it.
-        expect(shown.map((entry) => entry.id)).toEqual([`just-finished`, ...Array.from({ length: 8 }, (_, at) => `stale-ready-${at}`)]);
+        // Six cards, not nine: the stale presses sit under the timeline and the last of them fold, reachable behind the row.
+        expect(shown.map((entry) => entry.id)).toEqual([`just-finished`, ...Array.from({ length: 5 }, (_, at) => `stale-ready-${at}`)]);
+        expect(hidden).toBe(3);
     });
 });
 

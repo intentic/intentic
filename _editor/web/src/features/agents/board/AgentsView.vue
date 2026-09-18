@@ -19,7 +19,7 @@ import { agentInProject, heldWakeInProject, runInProject } from "./projectMember
 import { type FleetLane, reviewAction, unregistered, watching } from "../fleet/agentStatus";
 import { useAgents } from "../fleet/useAgents";
 import { agentSeed } from "../fleet/useAgents-actions";
-import { canArchive, FINISHED_WINDOW, type FleetAgent, finishedNeedsAction, laneGroups, windowFinished } from "../fleet/useAgents-fleet";
+import { canArchive, FINISHED_WINDOW, type FleetAgent, laneGroups, windowFinished } from "../fleet/useAgents-fleet";
 import { boxNameOf, fleetScope, isRemote, openInSandbox, otherFleet, partialAnswer, readingAcross, scopeOffered } from "../fleet/fleetScope";
 import { refreshAcross, subscribe as watchOtherBoxes } from "../../sandbox/live/fleetAcross";
 import { insideRun, laneOfRun, runIdsInLedger, runMatches, runsInLane, runsNeedingYou, useWorkflowRuns } from "../fleet/useWorkflowRuns";
@@ -335,7 +335,7 @@ const inPane = (id: string): boolean => {
 // phone's tab set is one deep.
 const peeked = (id: string): boolean => !mobile.value && chatStrip.value.tabs.some((tab) => tab.id === id && tab.peek);
 const finishedWindow = computed(() =>
-    windowFinished(boardLanes.value.finished, windowed.value ? highlightId.value : undefined, (agent) => agent.id, finishedNeedsAction),
+    windowFinished(boardLanes.value.finished, windowed.value ? highlightId.value : undefined, (agent) => agent.id),
 );
 // Finished shows its window, or the archive when open; the other two lanes show everything. A filter lifts Finished's
 // window, since a result set must not hide some of its own matches.
@@ -650,7 +650,7 @@ watch(
         // a ring exists to pin the card.
         // On a phone the ring vanishes with the flash, so the window would close over the very card the link was for;
         // there, the whole lane opens instead. Whether it would is asked of the window itself rather than the card's
-        // index: the window is not the lane's first FINISHED_WINDOW cards, since everything owing a press is drawn too.
+        // index, since a ring already pinned into the window moves nothing.
         if (filtering.value && !matches(agent)) {
             query.value = ``;
         }
