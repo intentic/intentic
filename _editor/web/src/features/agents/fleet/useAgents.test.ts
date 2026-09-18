@@ -1050,9 +1050,10 @@ describe("the finished fold", () => {
         ).toEqual([`a6`, `a7`, `a8`]);
     });
 
-    // Sorts by how easily each is lost: unsent (lives only in this window), then unfinished work
-    // (AgentSummary.unfinished), then ready-to-land, then recency.
-    it("orders unfinished cards under the unsent ones and above the ones ready to land", () => {
+    // Below the unsent card the lane is a plain timeline: what each card still owes is drawn on it and never moves it,
+    // so an unfinished check (`a3`, oldest) sorts under a press (`a2`) that sorts under a receipt (`a0`) that is newer
+    // than both.
+    it("orders everything but the unsent card by time, whatever it still owes", () => {
         const writing = new Conversation(`a1`);
         writing.registered.value = true;
         writing.draft.value = `picking this back up:`;
@@ -1068,21 +1069,19 @@ describe("the finished fold", () => {
             1,
         );
 
-        expect(useAgents().lanes.value.finished.map((entry) => entry.id)).toEqual([`a1`, `a3`, `a2`, `a0`]);
+        expect(useAgents().lanes.value.finished.map((entry) => entry.id)).toEqual([`a1`, `a0`, `a2`, `a3`]);
     });
 
-    // A press from the same stretch of work as the lane's newest card leads it; one from an earlier stretch is backlog
-    // and sorts on recency like anything else. The boundary is four hours behind the lane's own head: `ready-4h` sits
-    // exactly on it and is still pinned, `ready-5h` is past it and falls under the finish that just happened.
-    it("leads with the presses this lane's head still belongs to and drops the older ones back onto the timeline", () => {
+    // The reported case: a lane led by two-hour-old branches while the session that had just ended sat fifth, because
+    // owing a press outranked time for four hours after it. Nothing a card owes outranks time now.
+    it("puts the session that just ended at the head, over every older card owing a press", () => {
         const hour = 3_600_000;
         const now = 100_000_000;
         setAgents(
             [
-                landed(`receipt-now`, now),
+                { ...landed(`unfinished-2h`, now - 2 * hour), unfinished: { at: now - 2 * hour, check: `Verify before you finish` } },
                 { ...landed(`ready-3h`, now - 3 * hour), status: `ready` },
-                { ...landed(`ready-4h`, now - 4 * hour), status: `ready` },
-                { ...landed(`ready-5h`, now - 5 * hour), status: `ready` },
+                landed(`just-finished`, now),
                 { ...landed(`reland-15h`, now - 15 * hour), landedPresence: { landed: 2, present: 1 } },
                 landed(`receipt-22h`, now - 22 * hour),
             ],
@@ -1090,17 +1089,16 @@ describe("the finished fold", () => {
         );
 
         expect(useAgents().lanes.value.finished.map((entry) => entry.id)).toEqual([
+            `just-finished`,
+            `unfinished-2h`,
             `ready-3h`,
-            `ready-4h`,
-            `receipt-now`,
-            `ready-5h`,
             `reland-15h`,
             `receipt-22h`,
         ]);
     });
 
-    // Unsent words are the one rank that never decays: they live only in this browser, so age is what makes losing
-    // them likely rather than what makes it acceptable. A day-old draft still leads a lane headed by a fresh finish.
+    // The one exception to the timeline: unsent words live only in this browser, so a fold really does lose them, and
+    // age is what makes that likely rather than what makes it acceptable.
     it("keeps a day-old unsent card above everything, presses and fresh finishes alike", () => {
         const hour = 3_600_000;
         const now = 100_000_000;
@@ -1111,13 +1109,12 @@ describe("the finished fold", () => {
 
         setAgents([landed(`receipt-now`, now), { ...landed(`ready-9h`, now - 9 * hour), status: `ready` }, landed(`stale-unsent`, now - 26 * hour)], 1);
 
-        // The press decays past the fresh receipt behind it; the unsent card does not, though it is the oldest of the three.
+        // The press sorts on its own time, under the fresh receipt; the unsent card leads though it is the oldest of the three.
         expect(useAgents().lanes.value.finished.map((entry) => entry.id)).toEqual([`stale-unsent`, `receipt-now`, `ready-9h`]);
     });
 
-    // End to end, the reported case: the sort and the window have to agree, or one buries what the other surfaced. A
-    // day's worth of unlanded branches used to fill the window by itself, leaving no room at all for the session that
-    // had just ended.
+    // End to end, the sort and the window have to agree, or one buries what the other surfaced: a day's worth of
+    // unlanded branches used to fill the window by itself, leaving no room for the session that had just ended.
     it("puts a session that just finished at the head of the window with a day of unlanded branches behind it", () => {
         const hour = 3_600_000;
         const now = 100_000_000;

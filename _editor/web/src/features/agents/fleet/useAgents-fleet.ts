@@ -56,8 +56,10 @@ export const finishedNeedsAction = (
 export const doneWith = (agent: FleetAgent): boolean =>
     !unregistered(agent.status) && laneOf(agent) === `finished` && !finishedNeedsAction(agent) && (!agent.unread || agent.workflow !== undefined);
 
-// When the turn ended, not the last observe frame; `updatedAt` on a settled card is finish/land time only.
-const finishedRecency = (agent: FleetAgent): number => agent.unfinished?.at ?? agent.updatedAt;
+// The card's last event, agent's or reader's: when the turn ended (`updatedAt` on a settled card is finish/land time
+// only, never the last observe frame), or when the composer took words, whichever is later. A chat closed with a draft
+// in it has no finish time at all, so the draft's own instant is what places it.
+const finishedRecency = (agent: FleetAgent): number => Math.max(agent.unfinished?.at ?? agent.updatedAt, agent.draftAt ?? 0);
 
 // Caps browsing, not existence, and never order: the lane already decided that (finishedLaneOrder), and a window
 // that re-sorted would hoist a stale press back over the finish that just happened. The cap is the lane's own head,
@@ -283,40 +285,12 @@ export const canArchive = (agent: Pick<FleetAgent, "status" | "attention" | "arc
 // swap places every tick. The id itself is arbitrary, chosen only to stay the same next frame.
 const byId = (a: FleetAgent, b: FleetAgent): number => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
 
-// How far behind the lane's own head a press may sit and still be pinned above the timeline. Measured against the
-// lane rather than the wall clock: a board nobody has touched since yesterday still leads with what it owes, while
-// on a working day a Land nobody made in four hours stops outranking the session that just ended.
-const PINNED_SPAN_MS = 4 * 60 * 60 * 1000;
-
-// The instant a lane reads itself against: its own freshest card. 0 for an empty lane, which pins nothing.
-export const finishedHead = (agents: readonly FleetAgent[]): number =>
-    agents.reduce((newest, agent) => Math.max(newest, finishedRecency(agent)), 0);
-
-// Where a card sits above the timeline, 0 being on it. Unsent words never decay: they live only in this browser, and
-// age is what makes losing them likely, not what makes it acceptable. The presses do — a press left from an earlier
-// stretch of work is backlog, and ranking backlog over a fresh finish is what buries the finish.
-const pinnedRank = (agent: FleetAgent, head: number): number => {
-    if (agent.unsent) {
-        return 4;
-    }
-    if (finishedRecency(agent) < head - PINNED_SPAN_MS) {
-        return 0;
-    }
-    if (agent.unfinished !== undefined) {
-        return 3;
-    }
-    if (agent.status === `ready`) {
-        return 2;
-    }
-    return finishedNeedsReland(agent) ? 1 : 0;
-};
-
-// One ordering for every Finished lane: newest first, under a head of what is easiest to lose or miss. Curried on the
-// lane's head (finishedHead) so both lanes rank against the same instant rather than each card against itself.
-export const finishedLaneOrder =
-    (head: number) =>
-    (a: FleetAgent, b: FleetAgent): number =>
-        pinnedRank(b, head) - pinnedRank(a, head) || finishedRecency(b) - finishedRecency(a) || byId(a, b);
+// One ordering for every Finished lane: a timeline, newest first. What a card still owes — a Land, a press, a check
+// left unfinished — is drawn on the card and never moves it, since ranking by state made a two-hour-old branch
+// outrank the session that had just ended, and a lane whose order does not track time cannot be read as a lane.
+// Unsent words are the one exception: they exist only in this browser, so a fold really does lose them.
+export const finishedLaneOrder = (a: FleetAgent, b: FleetAgent): number =>
+    Number(b.unsent) - Number(a.unsent) || finishedRecency(b) - finishedRecency(a) || byId(a, b);
 
 // Splits a flat list into the board's three lanes, factored out of `fleet` so the all-sandboxes board can apply
 // the same rule to a wider list (this fleet plus other boxes' summaries) without duplicating the sort.
@@ -331,7 +305,7 @@ export const laneGroups = (agents: readonly FleetAgent[]): Record<FleetLane, Fle
             Number(b.status === `draft`) - Number(a.status === `draft`) || (a.startedAt ?? a.updatedAt) - (b.startedAt ?? b.updatedAt) || byId(a, b),
     );
     grouped.attention.sort((a, b) => b.updatedAt - a.updatedAt || byId(a, b));
-    grouped.finished.sort(finishedLaneOrder(finishedHead(grouped.finished)));
+    grouped.finished.sort(finishedLaneOrder);
     return grouped;
 };
 
