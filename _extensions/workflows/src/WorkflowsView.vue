@@ -310,9 +310,8 @@ const RUN_VARIANT: Record<WorkflowRun["state"], StatusVariant> = {
             </section>
 
             <section v-else-if="!isLoading && workflows.length > 0">
-                <div class="mb-2 flex items-center gap-2 px-0.5">
+                <div class="mb-2 px-0.5">
                     <span :class="ui.sectionLabel()">{{ t(`workflowsView.workflows2`) }}</span>
-                    <span class="text-2xs font-medium text-subtle">{{ workflows.length }}</span>
                 </div>
                 <div class="flex flex-col gap-3">
                     <WorkflowCard
@@ -385,7 +384,7 @@ const RUN_VARIANT: Record<WorkflowRun["state"], StatusVariant> = {
             </section>
 
             <!-- Rows, not cards: a loop has no shape to draw, just three facts on a line (what ends it, how far, what it's for). -->
-            <RowGroup v-if="loops.length > 0" :label="t(`workflowsView.loops`)" :count="loops.length" :caption="t(`workflowsView.pickOneInChat`)">
+            <RowGroup v-if="loops.length > 0" :label="t(`workflowsView.loops`)">
                 <Row v-for="design in loops" :key="design.id" icon="repeat" density="compact" class="group/item">
                     <template #title>{{ design.name }}</template>
                     <template #description>
@@ -430,10 +429,6 @@ const RUN_VARIANT: Record<WorkflowRun["state"], StatusVariant> = {
             <section>
                 <div class="mb-2 flex flex-wrap items-center gap-x-2 gap-y-1 px-0.5">
                     <span :class="ui.sectionLabel()">{{ t(`workflowsView.startTemplate`) }}</span>
-                    <!-- Avoids claiming an empty library while the read is still in flight; `[]` looks the same either way. -->
-                    <span class="min-w-0 text-2xs text-subtle">
-                        {{ workflows.length > 0 || isLoading ? t(`workflowsView.readyMadeDesignOpened`) : t(`workflowsView.nothingSavedYetOpen`) }}
-                    </span>
                     <button type="button" :class="ui.linkButton('ml-auto text-2xs text-muted hover:text-content')" @click="blank()">
                         {{ t(`workflowsView.startBlank`) }}
                     </button>
@@ -466,7 +461,7 @@ const RUN_VARIANT: Record<WorkflowRun["state"], StatusVariant> = {
                 </div>
             </section>
 
-            <RowGroup v-if="past.length > 0" :label="t(`workflowsView.earlierRuns`)" :count="past.length">
+            <RowGroup v-if="past.length > 0" :label="t(`workflowsView.earlierRuns`)">
                 <button
                     v-for="run in past"
                     :key="run.runId"
