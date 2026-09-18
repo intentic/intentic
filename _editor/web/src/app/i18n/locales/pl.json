@@ -2715,26 +2715,6 @@
             "landFinishedWorkAutomatically": "Land finished work automatically",
             "saveVersionAcceptedWork": "Save a version of accepted work"
         },
-        "rulesInfo": {
-            "agentFinishesOneQuestion": "When an agent finishes there is one question: does this land, so the",
-            "anythingBlocksPushHolds": "Anything that blocks a push, holds work back, or sends the assistant back to work is written to your activity feed with the rule's name on it, so \"why won't my push go\" has an answer on screen rather than in a log.",
-            "beforeTurnEndsBefore": "Before a turn ends, and before a push:",
-            "eachRuleAlsoShows": "Each rule also shows when it last did anything. A rule that has never fired is either aimed at something that hasn't happened yet, or written wrong: worth a look either way.",
-            "every": "every",
-            "first": "first",
-            "matchingRuleAnswersRest": "matching rule answers it and the rest are not asked. Put your narrow rules above your broad ones.",
-            "matchingRuleRunsIn": "matching rule runs, in the order they sit in the list. A push stops at the first one that fails: it isn't going anywhere, and the rest would only spend your time saying so again.",
-            "momentsDecide": "Moments that decide",
-            "momentsDoThings": "Moments that do things",
-            "narrowingByPath": "Narrowing by path",
-            "nothingHereRuleApplies": "With nothing here, a rule applies whenever its moment comes round. That is what the three rules above this group do: they're ordinary rules with a nicer switch, and you can see exactly what they wrote by turning one on and reading it back here.",
-            "pathsWrittenWayYoud": "Paths are written the way you'd write them in the search box:",
-            "readWorkspaceRootSame": ", and read from your workspace root, so the same pattern means the same thing at every moment. A rule matches if the change touches any one of them.",
-            "ruleDoesSomething": "When a rule does something",
-            "ruleSentenceAtMoment": "A rule is a sentence: at this moment, if this is true, do this. It's how you tell the sandbox something once instead of remembering it every time.",
-            "rules": "Rules",
-            "severalRulesMatch": "When several rules match"
-        },
         "runtimeInstalls": {
             "addToImage": "Add to the image",
             "askAgentWhereBelongs": "Ask an agent where it belongs",

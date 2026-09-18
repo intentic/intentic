@@ -8,7 +8,6 @@ import { useRules } from "../../environment/useRules";
 import { useSandboxOutline } from "../../overview/useSandboxOutline";
 import RuleCommand from "./RuleCommand.vue";
 import RuleForm from "./RuleForm.vue";
-import RulesInfo from "./RulesInfo.vue";
 import { momentOf, type RuleDraft } from "./ruleWords";
 import { useT } from "@intentic/ui/i18n";
 
@@ -96,8 +95,6 @@ const firedOf = (rule: Rule): string => {
 
 <template>
     <RowGroup :label="t(`sandbox.agentRules.rules`)">
-        <template #info><RulesInfo /></template>
-
         <template v-for="rule in listed" :key="rule.id">
             <!-- Editing happens in place, so the list doesn't lose your position. -->
             <Row v-if="editingId === rule.id" icon="pencil" :title="rule.label">
