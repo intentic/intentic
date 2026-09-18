@@ -1,5 +1,6 @@
 import type { AgentEvent, AgentReply, AskQuestion, ToolCallLocation } from "@intentic/sandbox-contract";
 import { createRequest } from "../../agent/tools/agent-requests.js";
+import { type SteeringChannel, steeringRelay } from "../../agent/anchors/agent-steering.js";
 import type { AgentRequest } from "../../agent/run/agent.js";
 import { splitAttachments, withFileNote } from "../../agent/prompt/attachment-note.js";
 import { unsentParameterFrame } from "../../agent/run/error-frames.js";
@@ -142,60 +143,6 @@ const codexAnswers = (questions: readonly CodexQuestion[], reply: Extract<AgentR
             return [question.id, reply.answers[question.question] ?? []];
         }),
     );
-
-// Lends the turn's one steering queue to whichever phase is running: a plan turn is two app-servers with an approval
-// pause between them, and pulling from the queue directly would deliver a mid-pause message to the phase that already
-// closed. Drained here once; what arrives during the pause waits for the next phase's channel.
-interface SteeringChannel {
-    readonly steering: AsyncIterable<string>;
-    readonly close: () => void;
-}
-
-const steeringRelay = (queue: AsyncIterable<string>): (() => SteeringChannel) => {
-    const waiting: string[] = [];
-    let wake: (() => void) | undefined;
-    let drained = false;
-    void (async () => {
-        for await (const text of queue) {
-            waiting.push(text);
-            wake?.();
-        }
-        drained = true;
-        wake?.();
-    })();
-    return () => {
-        let closed = false;
-        return {
-            steering: {
-                async *[Symbol.asyncIterator](): AsyncGenerator<string> {
-                    for (;;) {
-                        // A message still waiting when the phase closes stays queued for the next phase, not this
-                        // closing one.
-                        if (closed) {
-                            return;
-                        }
-                        const next = waiting.shift();
-                        if (next !== undefined) {
-                            yield next;
-                            continue;
-                        }
-                        if (drained) {
-                            return;
-                        }
-                        await new Promise<void>((resolve) => {
-                            wake = resolve;
-                        });
-                        wake = undefined;
-                    }
-                },
-            },
-            close: () => {
-                closed = true;
-                wake?.();
-            },
-        };
-    };
-};
 
 const threadOptions = (request: AgentRequest, sandboxMode: CodexSandboxMode, gated: boolean): CodexThreadOptions => {
     const effort = request.effort !== undefined ? reasoningEffort(request.effort) : undefined;

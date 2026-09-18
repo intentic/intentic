@@ -171,8 +171,8 @@ export const PI: AgentCapabilities = {
 // other runtimes lack are function arguments here. The harness axis doesn't apply: the SDK is the only door.
 export const CURSOR: AgentCapabilities = {
     runtime: "cursor",
-    // The SDK's Run can be cancelled but not written to mid-flight; a second send errors rather than injecting.
-    steering: false,
+    // Run.steer injects into the live run; only a `complete_delivered` ack transfers ownership of the message.
+    steering: true,
     // Cursor's own plan mode, not this repo's emulation; not "modes" since the hook can't gate the whole surface.
     permissions: "plan",
     // True since the daemon supplies its own ask tool; Cursor's own can fabricate an answer, so it's disallowed.
@@ -191,7 +191,8 @@ export const CURSOR: AgentCapabilities = {
     terminals: false,
     // The SDK throws typed errors instead of dissolving a refusal into prose, so the adapter files coded frames.
     recovery: true,
-    // append, reached differently: `beforeSubmitPrompt`'s reply folds the prompt onto Cursor's base, unreplaceable.
+    // append, reached differently: `beforeSubmitPrompt`'s reply folds the daemon's text onto Cursor's base. The SDK can
+    // replace that base outright, but only for an entitled account, so the seam every turn can reach is this one.
     instructions: "append",
     skillDiscovery: "prompt",
     // The full hook tier, the only foreign runtime to reach it: a hold parks since the vendor waits on the hook.

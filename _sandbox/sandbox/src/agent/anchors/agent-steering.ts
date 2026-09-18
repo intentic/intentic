@@ -47,6 +47,60 @@ export class SteeringQueue implements AsyncIterable<string> {
     }
 }
 
+// Lends the turn's one steering queue to whichever phase is running: a plan turn is two runs with an approval pause
+// between them, and pulling from the queue directly would deliver a mid-pause message to the phase that already closed.
+// Drained here once; what arrives during the pause waits for the next phase's channel.
+export interface SteeringChannel {
+    readonly steering: AsyncIterable<string>;
+    readonly close: () => void;
+}
+
+export const steeringRelay = (queue: AsyncIterable<string>): (() => SteeringChannel) => {
+    const waiting: string[] = [];
+    let wake: (() => void) | undefined;
+    let drained = false;
+    void (async () => {
+        for await (const text of queue) {
+            waiting.push(text);
+            wake?.();
+        }
+        drained = true;
+        wake?.();
+    })();
+    return () => {
+        let closed = false;
+        return {
+            steering: {
+                async *[Symbol.asyncIterator](): AsyncGenerator<string> {
+                    for (;;) {
+                        // A message still waiting when the phase closes stays queued for the next phase, not this
+                        // closing one.
+                        if (closed) {
+                            return;
+                        }
+                        const next = waiting.shift();
+                        if (next !== undefined) {
+                            yield next;
+                            continue;
+                        }
+                        if (drained) {
+                            return;
+                        }
+                        await new Promise<void>((resolve) => {
+                            wake = resolve;
+                        });
+                        wake = undefined;
+                    }
+                },
+            },
+            close: () => {
+                closed = true;
+                wake?.();
+            },
+        };
+    };
+};
+
 export interface ActiveTurn {
     // Hard-cancels the turn (aborts the SDK/provider adapter).
     readonly abort: () => void;

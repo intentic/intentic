@@ -76,10 +76,17 @@ What that buys is the second-richest capability row in the catalog. The daemon's
 (`customTools`), so a Cursor turn gets a real question card while Cursor's own `askQuestion` is withheld — in
 headless runs it has been reported to answer itself with a fabricated "Questions skipped by the user", which is
 consent nobody gave. Plan mode is Cursor's own read-only posture rather than this repo's prompt-level
-emulation. And the owner's command rulebook is enforced at the full `hooks` tier, the only foreign runtime that
-reaches it: the daemon writes Cursor's machine-wide hooks file and answers `beforeShellExecution` over a Unix
-socket ([src/runtimes/cursor/cursor-hooks.ts](src/runtimes/cursor/cursor-hooks.ts)), so a `hold` genuinely parks on a card while
-Cursor waits on a script rather than being downgraded to a refusal.
+emulation. A message from `/agent/steer` is injected into the live run (`Run.steer`) rather than forcing an
+abort-and-resend, and only a `complete_delivered` ack counts as delivered. And the owner's command rulebook is
+enforced at the full `hooks` tier, the only foreign runtime that reaches it: the daemon writes Cursor's
+machine-wide hooks file and answers it over a Unix socket
+([src/runtimes/cursor/cursor-hooks.ts](src/runtimes/cursor/cursor-hooks.ts)), so a `hold` genuinely parks on a card while Cursor waits on a
+script rather than being downgraded to a refusal. That same socket answers two more hooks, because Cursor's SDK
+has no seam for either: `sessionStart` projects the turn's capability environment, and `beforeSubmitPrompt`
+returns the daemon's composed instructions as `additional_context` — the persona the turn acts as, the
+workspace's standing rules, and the owner's own system prompt, which is why this runtime's `instructions` axis
+reads `append`. Only the rulebook hook fails closed; a turn missing its environment or its instructions is
+degraded, while a command that outran its rules is what the gate exists to stop.
 
 That transport is bidirectional, which is what lifts the native Codex runtime off the foreign-loop floor. A
 mid-turn message from `/agent/steer` is delivered as `turn/steer` rather than forcing an abort-and-resend; the

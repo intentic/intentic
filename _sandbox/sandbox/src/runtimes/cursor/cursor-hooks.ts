@@ -5,8 +5,9 @@ import type { AgentEvent } from "@intentic/sandbox-contract";
 import type { Logger } from "pino";
 import { type CommandGate, consultWith, vendorSubject } from "../../guard/command-gate.js";
 
-// Owner's command rulebook enforced inside Cursor's own loop via beforeShellExecution: the hook is a process this
-// daemon wrote, so it can hold the answer while a card waits on a person, unlike a clocked vendor approval channel.
+// Owner's command rulebook enforced inside Cursor's own loop via beforeShellExecution, and the owner's standing
+// instructions folded onto Cursor's base prompt via beforeSubmitPrompt: the hook is a process this daemon wrote, so it
+// can hold the answer while a card waits on a person, unlike a clocked vendor approval channel.
 // Lives at /etc/cursor/hooks.json, the enterprise layer, not ~/.cursor or the workspace's own.
 
 // Fixed by Cursor, not configurable; the one location no workspace or user can move. The env override is test-only: it
@@ -21,6 +22,10 @@ export interface CursorGateTurn {
     readonly conversationId: string;
     // Capability credentials and persona values for this turn, never the daemon's ambient env.
     readonly cliEnv?: Record<string, string>;
+    // What the daemon adds to Cursor's own base prompt (AgentRequest.systemAppend): product guidance, the persona note,
+    // the workspace's standing instructions. Cursor has no system seam, so it rides beforeSubmitPrompt's
+    // additional_context instead, which is what `instructions: "append"` means on this runtime.
+    readonly systemAppend?: string;
     readonly gate: CommandGate;
     readonly push: (event: AgentEvent) => void;
 }
@@ -40,17 +45,22 @@ export interface CursorHookService {
 }
 
 // Node, not a shell script: it speaks HTTP over a Unix socket, and node, unlike curl, is guaranteed to be in the image.
-// Every failure path answers allow silently, since an unregistered call is usually the owner's own manual run.
+// Every failure path answers the harmless verdict silently, since an unregistered call is usually the owner's own
+// manual run: no environment, no added context, and an allowed command.
 const gateScript = (socketPath: string): string =>
     [
         `// managed by intentic: overwritten on daemon boot (src/cursor/cursor-hooks.ts).`,
-        `// Asks the daemon for either the current turn's environment or a command-gate verdict.`,
-        `// Missing session environment is always empty; a missing gate verdict is always allow.`,
+        `// Asks the daemon for the current turn's environment, its standing instructions, or a command-gate verdict.`,
         `import { request } from "node:http";`,
         ``,
-        `const mode = process.argv[2] === "session-env" ? "session-env" : "gate";`,
+        `const MODES = {`,
+        `    "session-env": { path: "/session-env", fallback: {} },`,
+        `    prompt: { path: "/prompt", fallback: { continue: true } },`,
+        `    gate: { path: "/gate", fallback: { permission: "allow" } },`,
+        `};`,
+        `const mode = MODES[process.argv[2]] ?? MODES.gate;`,
         `const fallback = () => {`,
-        `    process.stdout.write(JSON.stringify(mode === "session-env" ? {} : { permission: "allow" }));`,
+        `    process.stdout.write(JSON.stringify(mode.fallback));`,
         `    process.exit(0);`,
         `};`,
         `const chunks = [];`,
@@ -62,7 +72,7 @@ const gateScript = (socketPath: string): string =>
         `    const call = request(`,
         `        {`,
         `            socketPath: ${JSON.stringify(socketPath)},`,
-        `            path: mode === "session-env" ? "/session-env" : "/gate",`,
+        `            path: mode.path,`,
         `            method: "POST",`,
         `            headers: { "content-type": "application/json" },`,
         `        },`,
@@ -85,14 +95,17 @@ const gateScript = (socketPath: string): string =>
         ``,
     ].join("\n");
 
-// sessionStart projects the turn's env; beforeShellExecution enforces the rulebook. afterShellExecution is skipped, its
-// return value is discarded upstream, which is why the secrets axis reads "none" here.
+// sessionStart projects the turn's env; beforeSubmitPrompt folds the daemon's instructions onto Cursor's base;
+// beforeShellExecution enforces the rulebook. Only the rulebook fails closed: a turn without its environment or its
+// standing instructions is degraded, while a command that outran its rules is the thing this gate exists to stop.
+// afterShellExecution is skipped, its return value is discarded upstream, which is why the secrets axis reads "none".
 const hooksJson = (scriptPath: string): string =>
     `${JSON.stringify(
         {
             version: 1,
             hooks: {
                 sessionStart: [{ command: `node ${JSON.stringify(scriptPath)} session-env`, failClosed: false }],
+                beforeSubmitPrompt: [{ command: `node ${JSON.stringify(scriptPath)} prompt`, failClosed: false }],
                 beforeShellExecution: [{ command: `node ${JSON.stringify(scriptPath)} gate`, failClosed: true }],
             },
         },
@@ -108,7 +121,8 @@ interface GateRequest {
     readonly cwd?: unknown;
 }
 
-interface SessionStartRequest {
+// Both hooks that answer from a turn's own state rather than from the rulebook; neither reads anything else it carries.
+interface TurnScopedRequest {
     readonly conversation_id?: unknown;
 }
 
@@ -160,12 +174,23 @@ export const createCursorHookService = (socketDir: string, logger: Logger): Curs
 
     // Never uses the gate's single-live-turn fallback: a sessionStart hook can come from an owner's own hand-run Cursor
     // process, and handing it a turn's environment would cross the capability boundary. No exact id, no environment.
-    const environmentFor = (payload: SessionStartRequest): { env: Record<string, string> } => {
+    const environmentFor = (payload: TurnScopedRequest): { env: Record<string, string> } => {
         const conversationId = asString(payload.conversation_id);
         if (conversationId === undefined) {
             return { env: {} };
         }
         return { env: turns.get(conversationId)?.cliEnv ?? {} };
+    };
+
+    // Exact id only, for the same reason as the environment above: the append carries the workspace's own standing
+    // instructions and the persona this turn acts as, neither of which belongs in a Cursor process this daemon didn't
+    // start. An empty append is omitted rather than sent blank, so Cursor's own prompt is left exactly as it was.
+    // `continue` is stated rather than left unset: false is how this hook family blocks a prompt outright, and no
+    // answer of ours ever means that.
+    const instructionsFor = (payload: TurnScopedRequest): { continue: true; additional_context?: string } => {
+        const conversationId = asString(payload.conversation_id);
+        const append = conversationId === undefined ? undefined : turns.get(conversationId)?.systemAppend;
+        return append === undefined || append === "" ? { continue: true } : { continue: true, additional_context: append };
     };
 
     return {
@@ -182,27 +207,32 @@ export const createCursorHookService = (socketDir: string, logger: Logger): Curs
                     response.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify({ pid: process.pid }));
                     return;
                 }
-                if (request.method !== "POST" || (request.url !== "/gate" && request.url !== "/session-env")) {
+                const endpoint = request.method === "POST" ? request.url : undefined;
+                if (endpoint !== "/gate" && endpoint !== "/session-env" && endpoint !== "/prompt") {
                     response.writeHead(405).end();
                     return;
                 }
-                const sessionEnvironment = request.url === "/session-env";
+                const answer = (body: unknown): void => {
+                    response.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify(body));
+                };
                 const chunks: Buffer[] = [];
                 request.on("data", (chunk: Buffer) => chunks.push(chunk));
                 request.on("end", () => {
                     void (async () => {
-                        let payload: GateRequest | SessionStartRequest;
+                        let payload: GateRequest | TurnScopedRequest;
                         try {
-                            payload = JSON.parse(Buffer.concat(chunks).toString("utf8")) as GateRequest | SessionStartRequest;
+                            payload = JSON.parse(Buffer.concat(chunks).toString("utf8")) as GateRequest | TurnScopedRequest;
                         } catch {
-                            const fallback = sessionEnvironment ? {} : { permission: "allow" };
-                            response.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify(fallback));
+                            // The same harmless verdict the script writes when it can't reach this socket at all.
+                            answer(endpoint === "/gate" ? { permission: "allow" } : endpoint === "/prompt" ? { continue: true } : {});
                             return;
                         }
-                        if (sessionEnvironment) {
-                            response
-                                .writeHead(200, { "content-type": "application/json" })
-                                .end(JSON.stringify(environmentFor(payload as SessionStartRequest)));
+                        if (endpoint === "/session-env") {
+                            answer(environmentFor(payload as TurnScopedRequest));
+                            return;
+                        }
+                        if (endpoint === "/prompt") {
+                            answer(instructionsFor(payload as TurnScopedRequest));
                             return;
                         }
                         // Answers allow on error, rather than stall the turn for the script's own timeout.
@@ -210,7 +240,7 @@ export const createCursorHookService = (socketDir: string, logger: Logger): Curs
                             logger.error({ err: error }, "cursor: command gate failed, allowing the command");
                             return { permission: "allow" as const };
                         });
-                        response.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify(verdict));
+                        answer(verdict);
                     })();
                 });
             });

@@ -2,6 +2,7 @@ import type { AgentOptions, InteractionUpdate, ModelSelection, Run, SDKAgent, Se
 import type { AgentEvent } from "@intentic/sandbox-contract";
 import type { Logger } from "pino";
 import { whenAborted } from "../../abort.js";
+import { type SteeringChannel, steeringRelay } from "../../agent/anchors/agent-steering.js";
 import type { AgentRequest } from "../../agent/run/agent.js";
 import { splitAttachments, withFileNote } from "../../agent/prompt/attachment-note.js";
 import { EXECUTE_PROMPT, type ExecutePhase, PLAN_PREAMBLE, type PlanPhase, runPlanEmulation } from "../../agent/prompt/plan-emulation.js";
@@ -92,6 +93,27 @@ class UpdateQueue {
 // this repo asks for collapses onto `agent`: finer approvals are the command rulebook's job, not a mode.
 const modeFor = (planning: boolean): "plan" | "agent" => (planning ? "plan" : "agent");
 
+// Mid-turn injection rides the live Run, not the prompt, so the pump waits for the handle `send` resolves rather than
+// racing it. Only `complete_delivered` transfers ownership; every other ack means the run would not take the message,
+// and it stays in the relay for the next phase of a plan turn (there is none after the last, so it is reported).
+// `Run.steer` ships in @cursor/sdk 1.0.31, the version engines.json blesses and every turn loads, and is declared
+// optional there; a dev checkout's node_modules can still hold an older copy whose types lack it, so it is reached by
+// shape rather than through the Run type.
+type SteerableRun = { readonly steer?: (text: string) => Promise<"complete_delivered" | "revert_to_followup"> };
+
+const steerInto = async (started: Promise<Run | undefined>, channel: SteeringChannel, logger: Logger): Promise<void> => {
+    for await (const text of channel.steering) {
+        const run = (await started) as SteerableRun | undefined;
+        const outcome = await run?.steer?.(text).catch((error: unknown) => {
+            logger.warn({ err: error }, "cursor: steering message rejected by the run");
+            return undefined;
+        });
+        if (outcome !== "complete_delivered") {
+            logger.warn({ outcome }, "cursor: steering message not taken by the running turn");
+        }
+    }
+};
+
 export const createCursorAgent = (deps: CursorAgentDeps) => {
     // Forwards every mapped frame for one turn; the caller emits `done` once, since a plan turn runs two of these.
     // While planning, the assistant's prose is captured, not streamed, becoming the plan text.
@@ -101,6 +123,7 @@ export const createCursorAgent = (deps: CursorAgentDeps) => {
         prompt: string,
         selection: ModelSelection | undefined,
         planning: boolean,
+        channel: SteeringChannel | undefined,
     ): AsyncGenerator<AgentEvent, { errored: boolean; planText: string | undefined }> {
         const mapper = createCursorEventMapper(request.cwd, planning);
         const queue = new UpdateQueue();
@@ -125,6 +148,11 @@ export const createCursorAgent = (deps: CursorAgentDeps) => {
         };
         // A pre-pull Stop hits an aborted signal no listener catches; unwatched, send starts a run nothing can cancel.
         const unwatchAbort = whenAborted(request.signal, onAbort);
+
+        // Not awaited: it lives as long as this phase's channel, and the frames below are what the turn is waiting on.
+        if (channel !== undefined) {
+            void steerInto(started, channel, deps.logger);
+        }
 
         // Closes the queue when the run itself finishes, ending the drain below.
         const finished = started.then(async (handle) => {
@@ -238,22 +266,33 @@ export const createCursorAgent = (deps: CursorAgentDeps) => {
         const retire = deps.hooks.register({
             conversationId: agent.agentId,
             ...(request.cliEnv !== undefined ? { cliEnv: request.cliEnv } : {}),
+            ...(request.systemAppend !== undefined ? { systemAppend: request.systemAppend } : {}),
             gate,
             push,
         });
 
+        // This turn's one consumer of the steering queue; absent for a bench or benchmark run with no queue.
+        const relay = request.steering === undefined ? undefined : steeringRelay(request.steering);
+
         try {
             const live = agent;
             const send = async function* (prompt: string, planning: boolean): AsyncGenerator<AgentEvent, { errored: boolean; planText?: string }> {
-                const phase = runPhase(live, request, prompt, selection, planning);
-                let step = await phase.next();
-                while (step.done !== true) {
-                    yield step.value;
+                // Each phase borrows its own channel and closes it, so a message typed during a plan's approval pause
+                // waits for the executing phase instead of being delivered to the run that already finished.
+                const channel = relay?.();
+                const phase = runPhase(live, request, prompt, selection, planning, channel);
+                try {
+                    let step = await phase.next();
+                    while (step.done !== true) {
+                        yield step.value;
+                        yield* flush();
+                        step = await phase.next();
+                    }
                     yield* flush();
-                    step = await phase.next();
+                    return { errored: step.value.errored, ...(step.value.planText !== undefined ? { planText: step.value.planText } : {}) };
+                } finally {
+                    channel?.close();
                 }
-                yield* flush();
-                return { errored: step.value.errored, ...(step.value.planText !== undefined ? { planText: step.value.planText } : {}) };
             };
 
             if (request.permissionMode === "plan") {

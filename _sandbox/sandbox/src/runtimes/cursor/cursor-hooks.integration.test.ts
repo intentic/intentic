@@ -37,7 +37,7 @@ const started = async (): Promise<{ service: CursorHookService; dir: string }> =
 };
 
 // Runs the generated script as Cursor would: a child process, payload on stdin, answer on stdout.
-const askHook = async (dir: string, mode: "gate" | "session-env", payload: unknown): Promise<unknown> => {
+const askHook = async (dir: string, mode: "gate" | "session-env" | "prompt", payload: unknown): Promise<unknown> => {
     const child = execFile("node", [join(dir, "intentic-command-gate.mjs"), mode]);
     child.stdin?.end(JSON.stringify(payload));
     const stdout = await new Promise<string>((settle) => {
@@ -49,6 +49,7 @@ const askHook = async (dir: string, mode: "gate" | "session-env", payload: unkno
 };
 const askGate = (dir: string, payload: unknown): Promise<unknown> => askHook(dir, "gate", payload);
 const askSessionEnv = (dir: string, payload: unknown): Promise<unknown> => askHook(dir, "session-env", payload);
+const askPrompt = (dir: string, payload: unknown): Promise<unknown> => askHook(dir, "prompt", payload);
 
 // A gate that denies every command with the given reason.
 const denying = (reason: string): CommandGate => ({
@@ -108,6 +109,33 @@ test("retiring a turn removes its capability environment", async () => {
     const retire = hooks.register({ conversationId: "agent-1", cliEnv: { SECRET: "fake-secret" }, gate: allowing(), push: () => {} });
     retire();
     expect(await askSessionEnv(dir, { conversation_id: "agent-1" })).toEqual({ env: {} });
+});
+
+// The runtime's only system seam: without this hook the persona note, the workspace's standing instructions and the
+// owner's own prompt are composed by turn-plan and then reach nothing.
+test("a registered turn's standing instructions ride beforeSubmitPrompt as added context", async () => {
+    const { service: hooks, dir } = await started();
+    const append = "You are acting as release-editor.\n\nThe workspace forbids force pushes.";
+    hooks.register({ conversationId: "agent-1", systemAppend: append, gate: allowing(), push: () => {} });
+    expect(await askPrompt(dir, { conversation_id: "agent-1", prompt: "ship it" })).toEqual({ continue: true, additional_context: append });
+});
+
+// Same rule as the environment above, and for the same reason: the append names the persona and quotes the workspace's
+// own rules, so it may never reach a Cursor process this daemon did not start.
+test("added context requires an exact conversation id even with one turn running", async () => {
+    const { service: hooks, dir } = await started();
+    hooks.register({ conversationId: "agent-1", systemAppend: "workspace rules", gate: allowing(), push: () => {} });
+    expect(await askPrompt(dir, { conversation_id: "someone-elses-agent" })).toEqual({ continue: true });
+    expect(await askPrompt(dir, {})).toEqual({ continue: true });
+});
+
+// An absent key, not a blank one: Cursor's own prompt must be left exactly as it was when there is nothing to add.
+test("a turn with nothing to add sends no context key at all", async () => {
+    const { service: hooks, dir } = await started();
+    hooks.register({ conversationId: "agent-1", gate: allowing(), push: () => {} });
+    expect(await askPrompt(dir, { conversation_id: "agent-1" })).toEqual({ continue: true });
+    hooks.register({ conversationId: "agent-2", systemAppend: "", gate: allowing(), push: () => {} });
+    expect(await askPrompt(dir, { conversation_id: "agent-2" })).toEqual({ continue: true });
 });
 
 test("a consult from no known turn is allowed rather than refused", async () => {
@@ -173,6 +201,7 @@ test("a script that cannot reach the daemon fails safely rather than hanging", a
     service = undefined;
     expect(await askGate(dir, { command: "ls", conversation_id: "agent-1" })).toEqual({ permission: "allow" });
     expect(await askSessionEnv(dir, { conversation_id: "agent-1" })).toEqual({});
+    expect(await askPrompt(dir, { conversation_id: "agent-1" })).toEqual({ continue: true });
 });
 
 test("a payload that is not JSON is allowed rather than crashing the turn", async () => {
@@ -194,9 +223,13 @@ test("the hooks file promises exactly the shape Cursor is documented to read", a
     const installed = readFileSync(hooksFile, "utf8").trim();
     const parsed = JSON.parse(installed) as { version: number; hooks: Record<string, { command: string; failClosed?: boolean }[]> };
     expect(parsed.version).toBe(1);
-    expect(Object.keys(parsed.hooks)).toEqual(["sessionStart", "beforeShellExecution"]);
+    expect(Object.keys(parsed.hooks)).toEqual(["sessionStart", "beforeSubmitPrompt", "beforeShellExecution"]);
     expect(parsed.hooks["sessionStart"]?.[0]?.failClosed).toBe(false);
     expect(parsed.hooks["sessionStart"]?.[0]?.command).toBe(`node ${JSON.stringify(script)} session-env`);
+    expect(parsed.hooks["beforeSubmitPrompt"]?.[0]?.failClosed).toBe(false);
+    expect(parsed.hooks["beforeSubmitPrompt"]?.[0]?.command).toBe(`node ${JSON.stringify(script)} prompt`);
+    // The one hook that must refuse when its own script cannot run: a command that outran its rules is what it exists
+    // to stop, while a turn missing its environment or its instructions is merely degraded.
     expect(parsed.hooks["beforeShellExecution"]?.[0]?.failClosed).toBe(true);
     expect(parsed.hooks["beforeShellExecution"]?.[0]?.command).toBe(`node ${JSON.stringify(script)} gate`);
 });

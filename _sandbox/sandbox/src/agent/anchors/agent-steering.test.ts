@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { registerTurn, SteeringQueue, steerTurn, stopTurn, turnActive, turnSteered } from "./agent-steering.js";
+import { registerTurn, SteeringQueue, steeringRelay, steerTurn, stopTurn, turnActive, turnSteered } from "./agent-steering.js";
 
 const drain = async (queue: SteeringQueue): Promise<string[]> => {
     const out: string[] = [];
@@ -34,6 +34,56 @@ test("a consumer parked on an empty queue wakes on push", async () => {
     queue.push("woken");
     queue.close();
     expect(await drained).toEqual(["woken"]);
+});
+
+// The relay exists for one shape: a plan turn is two runs with an approval pause between them, and both borrow the
+// conversation's single queue. Shared by the Codex and Cursor adapters, which both run that shape.
+
+test("each phase borrows the queue in turn, and a closed phase yields nothing more", async () => {
+    const queue = new SteeringQueue();
+    const lend = steeringRelay(queue);
+    const first = lend();
+    queue.push("during planning");
+    const planning: string[] = [];
+    const reading = (async () => {
+        for await (const text of first.steering) {
+            planning.push(text);
+        }
+    })();
+    await new Promise((resolve) => setImmediate(resolve));
+    first.close();
+    await reading;
+    expect(planning).toEqual(["during planning"]);
+});
+
+test("a message typed during the pause waits for the next phase rather than reaching the closed one", async () => {
+    const queue = new SteeringQueue();
+    const lend = steeringRelay(queue);
+    const first = lend();
+    const planning: string[] = [];
+    const reading = (async () => {
+        for await (const text of first.steering) {
+            planning.push(text);
+        }
+    })();
+    await new Promise((resolve) => setImmediate(resolve));
+    first.close();
+    await reading;
+    // Typed while the plan card is on screen: no phase is reading, so the relay holds it.
+    queue.push("actually, skip the tests");
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(planning).toEqual([]);
+
+    const second = lend();
+    const executing: string[] = [];
+    const draining = (async () => {
+        for await (const text of second.steering) {
+            executing.push(text);
+        }
+    })();
+    queue.close();
+    await draining;
+    expect(executing).toEqual(["actually, skip the tests"]);
 });
 
 test("steer and stop reach the registered turn; unknown conversations report false", () => {
