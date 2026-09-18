@@ -318,20 +318,19 @@ const confirmRemove = async (): Promise<void> => {
                     </template>
 
                     <!-- The row's name renames itself: same box, same type, and the row never opens on that press. -->
+                    <!-- Brief sits in the title column, not `#description`, so it shares the rename's inset and stays under the name. -->
                     <template #title>
-                        <InlineRename
-                            :value="persona.label ?? persona.id"
-                            :write="renameOf(persona)"
-                            :label="t(`sandbox.sandboxPersonas.personaName`)"
-                            :action="t(`sandbox.sandboxPersonas.renamePersona`)"
-                            failure="Couldn't rename this persona."
-                            class="font-medium"
-                        />
-                    </template>
-
-                    <!-- A persona brief is the matching text for new chats. -->
-                    <template v-if="persona.brief !== undefined" #description>
-                        <span class="truncate">{{ persona.brief }}</span>
+                        <div class="flex min-w-0 flex-col">
+                            <InlineRename
+                                :value="persona.label ?? persona.id"
+                                :write="renameOf(persona)"
+                                :label="t(`sandbox.sandboxPersonas.personaName`)"
+                                :action="t(`sandbox.sandboxPersonas.renamePersona`)"
+                                failure="Couldn't rename this persona."
+                                class="font-medium"
+                            />
+                            <span v-if="persona.brief !== undefined" class="truncate px-1 text-2xs text-muted">{{ persona.brief }}</span>
+                        </div>
                     </template>
 
                     <template #meta>

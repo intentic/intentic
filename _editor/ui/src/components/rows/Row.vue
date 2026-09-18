@@ -117,14 +117,14 @@ const picked = as === `button`;
             <div v-if="$slots[`before`]" class="flex shrink-0 items-center"><slot name="before" /></div>
             <div :class="$slots[`before`] ? `min-w-0 flex-1` : `contents`">
                 <!-- Wraps rather than squeezes: below the tier's headline width the trailing cluster takes a line of its own, since a title crushed to one word per line is not a narrower row, it's a broken one. -->
-                <div class="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+                <div class="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
                     <!-- The left region takes the free space (`grow`) rather than shrink-wrapping the title, so the gap after a short name is still part of the hit area. -->
                     <component
                         :is="headerButton ? `button` : `div`"
                         :type="headerButton ? `button` : undefined"
                         :aria-expanded="headerButton ? headerExpanded : undefined"
                         :aria-controls="headerButton ? headerControls : undefined"
-                        class="flex min-w-0 grow items-center"
+                        class="flex min-w-0 grow items-start"
                         :class="[
                             TIERS[tier].gap,
                             TIERS[tier].headline,
@@ -144,7 +144,7 @@ const picked = as === `button`;
                             :class="[TIERS[tier].icon, selected && tone === `default` ? `text-link` : TONES[tone]]"
                         />
                         <!-- `break-words` so an address, a path or an id breaks instead of running out of its box and painting over the `#meta` cluster beside it. -->
-                        <div class="min-w-0 break-words" @click="onHeadlineClick">
+                        <div class="min-w-0 flex-1 break-words" @click="onHeadlineClick">
                             <component
                                 :is="heading === undefined ? `div` : `h${heading}`"
                                 v-if="title !== undefined || $slots[`title`]"
