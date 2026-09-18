@@ -59,7 +59,9 @@ const TONE: Record<WorkflowRun["state"], string> = {
             // a board that says so about a session but not about a run makes the run look like a thing you
             // cannot point the chat at.
             selected ? 'session-card-on' : '',
-            stopping ? 'pointer-events-none opacity-60' : '',
+            // Dimmed while the stop runs, and no more: its presses are pressed out one by one below, and the click
+            // that opens the run's sessions is not one of them.
+            stopping ? 'opacity-60' : '',
         ]"
         @click="emit(`open`)"
         @keydown.enter.self.prevent="emit(`open`)"
@@ -100,6 +102,7 @@ const TONE: Record<WorkflowRun["state"], string> = {
                 type="button"
                 :aria-label="t(`agents.workflowRunCard.archiveRun`)"
                 v-tooltip.top="t(`agents.workflowRunCard.archiveTakesRunSessions`)"
+                :disabled="stopping"
                 class="shrink-0 rounded p-1 text-subtle opacity-0 transition-opacity hover:bg-content/10 hover:text-content focus-visible:opacity-100 group-hover:opacity-100"
                 @click.stop="emit(`archive`)"
             >
@@ -111,6 +114,7 @@ const TONE: Record<WorkflowRun["state"], string> = {
                 type="button"
                 :aria-label="t(`agents.workflowRunCard.restoreRun`)"
                 v-tooltip.top="t(`agents.workflowRunCard.putRunSessionsBack`)"
+                :disabled="stopping"
                 class="shrink-0 rounded p-1 text-subtle opacity-0 transition-opacity hover:bg-content/10 hover:text-content focus-visible:opacity-100 group-hover:opacity-100"
                 @click.stop="emit(`restore`)"
             >

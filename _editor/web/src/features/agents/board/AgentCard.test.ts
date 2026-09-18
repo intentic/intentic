@@ -65,7 +65,7 @@ let app: App | undefined;
 const mount = (
     agent: FleetAgent,
     pending?: PendingAction,
-    handlers: { onClose?: () => void; onReland?: () => void; onUnwatch?: () => void } = {},
+    handlers: { onOpen?: () => void; onClose?: () => void; onReland?: () => void; onUnwatch?: () => void } = {},
 ): HTMLElement => {
     const el = document.createElement(`div`);
     document.body.append(el);
@@ -165,6 +165,28 @@ it(`holds the land open on the daemon's own landing status, spinning and pressed
 // Otherwise a Land button would spin through an archive, reporting a land nobody asked for.
 it(`leaves the land button alone while some other action holds the card`, () => {
     expect(landButton(mount(ready(), `archive`))?.textContent?.trim()).toBe(`Land now`);
+});
+
+// The card the dim is drawn on, which is also the press that opens the chat.
+const body = (el: HTMLElement): HTMLElement => el.querySelector<HTMLElement>(`.session-card`)!;
+
+// A land takes minutes, and for all of them the transcript is the one thing a reader wants from the card. Nothing
+// about it contends with the land, so the dim says "busy", not "gone": the card still opens.
+it(`opens the chat on a click while a land holds the card`, () => {
+    const opened = vi.fn();
+    const el = mount(ready(`landing`), `land`, { onOpen: opened });
+    // jsdom runs a dispatched click whatever `pointer-events` says, so the class is what witnesses it in a browser.
+    expect(body(el).className).toContain(`opacity-60`);
+    expect(body(el).className).not.toContain(`pointer-events-none`);
+    body(el).click();
+    expect(opened).toHaveBeenCalledTimes(1);
+});
+
+// What the dim does withhold: the presses that would start a SECOND action on the same agent, each pressed out on
+// its own button rather than by a sheet over the card that took the click to the chat with it.
+it(`presses out the archive while an archive is already running`, () => {
+    expect(buttonLabelled(mount(ready(), `archive`), `Archive agent`)?.disabled).toBe(true);
+    expect(landButton(mount(ready(), `archive`))?.disabled).toBe(true);
 });
 
 // Once the daemon re-derives status after a land, the button is simply gone, not locally hidden.

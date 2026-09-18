@@ -201,6 +201,9 @@ const statusMeta = computed(() => (receipt.value && !QUIET_INK.has(meta.value.cl
 // Never in `dense` (the stacked, narrow board): there the lanes are stacked, so their order already says which is
 // which, and the extra padding costs a card per screen where cards per screen is the scarce thing.
 const live = computed(() => props.dense !== true && lane.value !== `finished`);
+// An action of this card's own is in flight: every press that would start a second one is pressed out, since the
+// daemon refuses it. Opening the card is not one of those — a transcript is readable while the work lands.
+const busy = computed(() => props.pending !== undefined);
 // True while this card's own land is pending; `pending` names the action so archiving doesn't leave Land spinning too.
 // The daemon's own `landing` counts as well, so a land started in another window (or one whose request already answered
 // while the lease is still held) reads as busy here rather than as a press the daemon would refuse.
@@ -378,6 +381,10 @@ const grab = (event: PointerEvent): void => {
     if (event.button !== 0) {
         return;
     }
+    // A drop is another action, so a card already running one is held still; the click that opens it still lands.
+    if (busy.value) {
+        return;
+    }
     if (edit.editing || !(event.currentTarget instanceof HTMLElement) || !(event.target instanceof Element)) {
         return;
     }
@@ -405,7 +412,8 @@ const grab = (event: PointerEvent): void => {
             lane === 'attention' ? 'session-card-attention' : '',
             selected ? 'session-card-on' : '',
             dragging ? 'opacity-40' : '',
-            pending !== undefined ? 'pointer-events-none opacity-60' : '',
+            /* A dim and nothing else: each press is withheld on its own button (see `busy`), so the card itself still opens the chat. */
+            busy ? 'opacity-60' : '',
         ]"
         @pointerdown="grab"
         @dragstart.prevent
@@ -483,6 +491,7 @@ const grab = (event: PointerEvent): void => {
                     type="button"
                     :aria-label="t(`agents.agentCard.renameAgent`)"
                     v-tooltip.top="t(`ui.action.rename`)"
+                    :disabled="busy"
                     :class="[HOVER_ACTION, mobile ? 'opacity-60' : 'opacity-0 focus-visible:opacity-100 group-hover:opacity-100']"
                     @click.stop="edit.begin()"
                 >
@@ -497,6 +506,7 @@ const grab = (event: PointerEvent): void => {
                             ? t(`agents.agentCard.archiveConversationKept`)
                             : t(`agents.agentCard.archiveBranchDiffConversation`)
                     "
+                    :disabled="busy"
                     :class="[HOVER_ACTION, mobile ? 'opacity-60' : 'opacity-0 focus-visible:opacity-100 group-hover:opacity-100']"
                     @click.stop="emit(`archive`)"
                 >
@@ -507,6 +517,7 @@ const grab = (event: PointerEvent): void => {
                     type="button"
                     :aria-label="t(`agents.agentCard.closeAgent`)"
                     v-tooltip.top="closeHint"
+                    :disabled="busy"
                     :class="[HOVER_ACTION, mobile ? 'opacity-60' : 'opacity-0 focus-visible:opacity-100 group-hover:opacity-100']"
                     @click.stop="emit(`close`)"
                 >
@@ -517,6 +528,7 @@ const grab = (event: PointerEvent): void => {
                     type="button"
                     :aria-label="t(`agents.agentCard.restoreAgent`)"
                     v-tooltip.top="t(`agents.agentCard.putAgentBackOn`)"
+                    :disabled="busy"
                     :class="[HOVER_ACTION, mobile ? 'opacity-60' : 'opacity-0 focus-visible:opacity-100 group-hover:opacity-100']"
                     @click.stop="emit(`restore`)"
                 >
@@ -623,7 +635,7 @@ const grab = (event: PointerEvent): void => {
 
             <!-- The one board state that's a decision, not a report: the agent redoes the merge in its own worktree, so a wrong answer costs nothing. -->
             <div v-if="resolvable" class="flex min-w-0 flex-col gap-1">
-                <Button size="small" class="self-start whitespace-nowrap" @click.stop="emit('resolve')">
+                <Button size="small" :disabled="busy" class="self-start whitespace-nowrap" @click.stop="emit('resolve')">
                     <Icon :name="handingOver ? 'spinner' : 'sparkles'" :spin="handingOver" />{{
                         handingOver ? t(`agents.agentCard.handingOver`) : words.resolveConflict
                     }}
@@ -650,7 +662,14 @@ const grab = (event: PointerEvent): void => {
                     >
                 </span>
                 <!-- No resting glyph: the line above it already leads with this exact icon, and a repeat would read as a stutter. -->
-                <Button size="small" severity="secondary" :text="true" class="shrink-0 whitespace-nowrap" @click.stop="emit('reland')">
+                <Button
+                    size="small"
+                    severity="secondary"
+                    :text="true"
+                    :disabled="busy"
+                    class="shrink-0 whitespace-nowrap"
+                    @click.stop="emit('reland')"
+                >
                     <Icon v-if="relanding" name="spinner" spin class="text-2xs" />{{ relanding ? words.landing : words.landAgain }}
                 </Button>
             </div>
@@ -665,7 +684,7 @@ const grab = (event: PointerEvent): void => {
                 <Button
                     size="small"
                     severity="success"
-                    :disabled="landing"
+                    :disabled="landing || busy"
                     class="ui-button-thumb self-start whitespace-nowrap"
                     @click.stop="emit('land')"
                 >
@@ -681,7 +700,7 @@ const grab = (event: PointerEvent): void => {
                     }}</span>
                 </p>
                 <template v-else>
-                    <Button size="small" severity="secondary" class="self-start whitespace-nowrap" @click.stop="requestLand">
+                    <Button size="small" severity="secondary" :disabled="busy" class="self-start whitespace-nowrap" @click.stop="requestLand">
                         <Icon :name="requesting ? 'spinner' : 'send'" :spin="requesting" />{{
                             requesting ? t(`agents.agentCard.asking`) : words.requestLand
                         }}
@@ -732,7 +751,7 @@ const grab = (event: PointerEvent): void => {
                         v-if="limited(agent) && agent.limitHeld === true"
                         type="button"
                         :class="ui.linkButton('inline-flex shrink-0 gap-1 font-medium')"
-                        :disabled="resending"
+                        :disabled="resending || busy"
                         v-tooltip.top="t(`agents.agentCard.sendTurnAgainSame`)"
                         @click.stop="sendAgain"
                     >
@@ -792,6 +811,7 @@ const grab = (event: PointerEvent): void => {
                             class="shrink-0"
                             :aria-label="t(`agents.agentCard.stopWatching`)"
                             v-tooltip.top="t(`agents.agentCard.stopWatchingConversationStays`)"
+                            :disabled="busy"
                             :class="mobile ? 'opacity-60' : 'opacity-0 focus-visible:opacity-100 group-hover:opacity-100'"
                             @click.stop="emit(`unwatch`)"
                         >
