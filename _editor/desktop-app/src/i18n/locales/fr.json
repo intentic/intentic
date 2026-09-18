@@ -19,7 +19,6 @@
         "mirroringPortsFrom": "Mirroring ports from {sandbox} to this device",
         "noSandboxesHereYet": "No sandboxes here yet. Set one up from your workspace: this screen is where you manage it afterwards.",
         "nothingOnComputerChanges": "Nothing on this computer changes until you say so.",
-        "onComputer": "On this computer",
         "openFolder": "Open its folder",
         "openWorkspace": "Open workspace",
         "pickingUpWhereRestart": "Picking up where the restart left off. Nothing needs doing: this window carries on by itself.",

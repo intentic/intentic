@@ -10,10 +10,9 @@ sign in, click **Run on this computer**.
    (a panel the page pops out is the page's own second window, see "A panel in a window of its own")
 
 ┌─ Intentic ──────────────────┐   ┌─ Intentic, Setting up… ─────┐   ┌─ Intentic, This computer ───┐
-│                             │   │ ◇ ON THIS COMPUTER          │   │ ● work        ▶ ■  update   │
-│  app.intentic.dev           │ ⇄ │ Setting up work.            │ ⇄ │ folders · ports · image     │
-│  the hosted SPA             │   │ ⟳ Download the image        │   │ agent · logs                │
-│                             │   │ ▓▓▓▓▓|▓▓▓|░░░|░░░░░░░░░░░   │   │                             │
+│                             │   │ ◇ Setting up work.          │   │ ● work        ▶ ■  update   │
+│  app.intentic.dev           │ ⇄ │ ⟳ Download the image        │ ⇄ │ folders · ports · image     │
+│  the hosted SPA             │   │ ▓▓▓▓▓|▓▓▓|░░░|░░░░░░░░░░░   │   │ agent · logs                │
 │                             │   │ Step 5 of 9 · about 4 min   │   │                             │
 └─────────────────────────────┘   └─────────────────────────────┘   └─────────────────────────────┘
                │                                │                                 │

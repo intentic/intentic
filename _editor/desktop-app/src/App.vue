@@ -1067,16 +1067,11 @@ onUnmounted(() => {
             <!-- SETUP: a SCREEN of this window, in the middle of the frame the workspace was filling (windows.rs), not a second window standing in front of it. -->
             <template v-if="setupMode">
                 <!-- THE HEADER IS THE TITLE BAR: every press on it that isn't the way back moves the window (dragWindow.ts). -->
-                <header class="flex items-start gap-3 select-none" @mousedown="dragWindow">
-                    <AppBrand shape="mark" class="mt-0.5 shrink-0 text-xl" />
-                    <div class="min-w-0 flex-1">
-                        <p class="entry-eyebrow">
-                            <span class="entry-lozenge"></span><span>{{ t(`desktop.app.onComputer`) }}</span>
-                        </p>
-                        <h1 class="mt-1.5 text-2xl leading-tight font-semibold">
-                            {{ t(`desktop.app.settingUp`) }} {{ pending?.name ?? t(`desktop.app.sandbox`) }}<span class="text-primary-fill">.</span>
-                        </h1>
-                    </div>
+                <header class="flex items-center gap-3 select-none" @mousedown="dragWindow">
+                    <AppBrand shape="mark" class="shrink-0 text-2xl" />
+                    <h1 class="min-w-0 flex-1 text-2xl leading-tight font-semibold">
+                        {{ t(`desktop.app.settingUp`) }} {{ pending?.name ?? t(`desktop.app.sandbox`) }}<span class="text-primary-fill">.</span>
+                    </h1>
                     <!-- SAYS WHERE IT GOES, in its label, because a bare × on a screen that fills its window reads as "close Intentic", which is the one thing it does not do. -->
                     <button
                         type="button"
