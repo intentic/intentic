@@ -105,6 +105,7 @@ export default async (): Promise<void> => {
             webhookSecret: FAKE_STRIPE.webhookSecret,
             webhookUrl: `${API_URL}/hosted-plan/webhook`,
             checkoutWebhookDelayMs: 5_000,
+            priceId: FAKE_STRIPE.priceId,
         });
         (globalThis as { intenticFakeStripe?: FakeStripe }).intenticFakeStripe = fakeStripe;
         state.fakeStripe = true;

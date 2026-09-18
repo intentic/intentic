@@ -180,6 +180,35 @@ describe(`the Stripe stand-in's API`, () => {
         expect(fake.calls.at(-1)).toMatchObject({ path: `/checkout/sessions`, authorized: false });
     });
 
+    // The refusal that took the real platform's Subscribe button down: the price had been archived in the dashboard and
+    // nothing else changed. The client's own message ("Stripe refused: …") is built from this body.
+    it(`refuses a checkout for an archived price, and for a price it has never heard of`, async () => {
+        const { stripe: fake } = await collecting();
+        fake.archivePrice();
+        const archived = await fetch(`${fake.url}/checkout/sessions`, {
+            method: `POST`,
+            headers: { authorization: `Bearer ${SECRETS.secretKey}`, "content-type": `application/x-www-form-urlencoded` },
+            body: new URLSearchParams({
+                mode: `subscription`,
+                "line_items[0][price]": fake.price.id,
+                client_reference_id: `user-1`,
+                customer_email: `buyer@example.com`,
+                success_url: RETURN,
+                cancel_url: RETURN,
+            }).toString(),
+        });
+        expect(archived.status).toBe(400);
+        expect((await archived.json()) as { error: { message: string } }).toMatchObject({
+            error: { message: `The price specified is inactive. This field only accepts active prices.` },
+        });
+
+        const unknown = await fetch(`${fake.url}/prices/price_nobody_configured`, { headers: { authorization: `Bearer ${SECRETS.secretKey}` } });
+        expect(unknown.status).toBe(404);
+        expect((await unknown.json()) as { error: { message: string } }).toMatchObject({
+            error: { message: `No such price: 'price_nobody_configured'` },
+        });
+    });
+
     it(`refuses a checkout naming both a customer and an email, exactly as Stripe does`, async () => {
         const { stripe: fake } = await collecting();
         const response = await fetch(`${fake.url}/checkout/sessions`, {

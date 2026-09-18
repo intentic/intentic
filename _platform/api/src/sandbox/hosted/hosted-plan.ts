@@ -1,7 +1,7 @@
 import type { PrismaClient } from "@intentic/prisma";
 import type { Logger } from "pino";
 import type { Config } from "../../config.js";
-import { type StripeGateway, stripeGateway, type StripeSubscription } from "./hosted-plan-stripe.js";
+import { type StripeGateway, stripeGateway, type StripePrice, type StripeSubscription } from "./hosted-plan-stripe.js";
 
 // The one thing this platform sells: a Stripe subscription that makes the owner's hosted sandboxes always on (no
 // awake-hour ceiling) and never collected, one slot per sandbox (the subscription item's quantity). Nothing else in the
@@ -51,6 +51,51 @@ export const onHostedPlan = async (prisma: PrismaClient, config: Config, userId:
 export const hostedSlotsOf = async (prisma: Pick<PrismaClient, "hostedPlan">, config: Config, userId: string): Promise<number> => {
     const plan = await prisma.hostedPlan.findUnique({ where: { userId }, select: { status: true, quantity: true } });
     return plan !== null && isOnPlan(plan) ? Math.max(plan.quantity, config.hosted.perUser) : config.hosted.perUser;
+};
+
+const money = (cents: number, currency: string): string => `${(cents / 100).toFixed(2)} ${currency.toUpperCase()}`;
+
+/* WHAT STOPS THE CONFIGURED PRICE FROM BEING SOLD, in the words an operator can act on; empty when checkout will take it. */
+export const priceFaults = (price: StripePrice, config: Config): readonly string[] => {
+    const faults: string[] = [];
+    if (!price.active) {
+        faults.push(`it is archived in Stripe, and checkout only accepts active prices`);
+    }
+    if (price.interval === ``) {
+        faults.push(`it is a one-off price, and the plan is sold in subscription mode`);
+    }
+    const advertised = Math.round(config.hostedPlan.priceUsd * 100);
+    if (price.unitAmount !== advertised) {
+        faults.push(`it charges ${money(price.unitAmount, price.currency)}, while the Billing page advertises ${money(advertised, `usd`)}`);
+    }
+    return faults;
+};
+
+// Asks Stripe about the price once, at boot: an archived or missing one is otherwise found by the first buyer, as a 500
+// on checkout and no word anywhere else. Never throws and never blocks serving; a refusal is a log line.
+export const checkHostedPlanPrice = async (config: Config, logger: Logger, gateway?: StripeGateway): Promise<void> => {
+    if (!hostedPlanEnabled(config)) {
+        return;
+    }
+    const priceId = config.hostedPlan.stripePriceId;
+    let price: StripePrice;
+    try {
+        price = await (gateway ?? stripeGateway(config.hostedPlan)).price(priceId);
+    } catch (error) {
+        logger.error({ err: error, priceId }, `hosted plan: Stripe would not answer for the configured price, so nobody can subscribe`);
+        return;
+    }
+    const faults = priceFaults(price, config);
+    if (faults.length > 0) {
+        logger.error({ priceId, livemode: price.livemode, faults }, `hosted plan: the configured price cannot be sold: ${faults.join(`; `)}`);
+        return;
+    }
+    const selling = `hosted plan: selling ${priceId} at ${money(price.unitAmount, price.currency)} per ${price.interval}`;
+    if (price.livemode) {
+        logger.info({ priceId }, selling);
+        return;
+    }
+    logger.warn({ priceId }, `${selling}, on a Stripe TEST-mode key: buyers subscribe and no money ever moves`);
 };
 
 // Mirrors one subscription into the plan table; userId is known on checkout/slot writes, otherwise the customer id is

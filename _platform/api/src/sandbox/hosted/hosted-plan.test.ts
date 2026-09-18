@@ -2,8 +2,11 @@ import { createHmac } from "node:crypto";
 import type { PrismaClient } from "@intentic/prisma";
 import { describe, expect, it, vi } from "vitest";
 import { configSchema, type Config } from "../../config.js";
-import { cancelHostedPlan, hostedSlotsOf, onHostedPlan } from "./hosted-plan.js";
-import type { StripeGateway } from "./hosted-plan-stripe.js";
+import { call } from "@orpc/server";
+import type { OrpcContext } from "../../context.js";
+import { cancelHostedPlan, checkHostedPlanPrice, hostedSlotsOf, onHostedPlan } from "./hosted-plan.js";
+import { StripeError, type StripeGateway, type StripePrice } from "./hosted-plan-stripe.js";
+import { hostedPlanRoutes } from "./hosted-plan.orpc.js";
 import { hostedPlanHttpRoutes } from "./hosted-plan.routes.js";
 
 // Pins what a buyer would call betrayal if it drifted: on-plan means a paid row or the comp list, the webhook never
@@ -244,6 +247,115 @@ describe(`cancelling the plan with its account`, () => {
         const errors = vi.fn();
         await cancelHostedPlan(fakePrisma({ plans: [row(`active`)] }).prisma, baseConfig, { info: vi.fn(), error: errors } as never, `user-1`, gateway);
         expect(errors).toHaveBeenCalledWith(expect.objectContaining({ subscription: `sub_1` }), expect.stringContaining(`by hand`));
+    });
+});
+
+// A price nobody can buy is otherwise found by the first buyer, as a 500 on checkout and no word anywhere else; this is
+// the boot read that says so first, in the terms an operator can act on.
+describe(`the price the plan sells`, () => {
+    const price = (over: Partial<StripePrice> = {}): StripePrice => ({
+        active: true,
+        livemode: true,
+        unitAmount: 2000,
+        currency: `usd`,
+        interval: `month`,
+        ...over,
+    });
+
+    const logs = () => {
+        const spies = { info: vi.fn(), warn: vi.fn(), error: vi.fn() };
+        return { ...spies, logger: spies as never };
+    };
+
+    const answering = (answer: StripePrice | Error): StripeGateway =>
+        ({
+            price: vi.fn(async () => {
+                if (answer instanceof Error) {
+                    throw answer;
+                }
+                return answer;
+            }),
+        }) as unknown as StripeGateway;
+
+    it(`asks nothing of Stripe on a platform that sells nothing`, async () => {
+        const gateway = answering(price());
+        const log = logs();
+        await checkHostedPlanPrice(configWith({ stripePriceId: `` }), log.logger, gateway);
+        expect(gateway.price).not.toHaveBeenCalled();
+        expect([log.error, log.warn, log.info].every((spy) => spy.mock.calls.length === 0)).toBe(true);
+    });
+
+    it(`says an archived price cannot be sold, naming the price`, async () => {
+        const log = logs();
+        await checkHostedPlanPrice(baseConfig, log.logger, answering(price({ active: false })));
+        expect(log.error).toHaveBeenCalledWith(expect.objectContaining({ priceId: `price_1` }), expect.stringContaining(`archived`));
+    });
+
+    it(`says a one-off price cannot be sold in subscription mode`, async () => {
+        const log = logs();
+        await checkHostedPlanPrice(baseConfig, log.logger, answering(price({ interval: `` })));
+        expect(log.error).toHaveBeenCalledWith(expect.anything(), expect.stringContaining(`subscription mode`));
+    });
+
+    // The Billing page's number is display only, so a price charging something else is a lie nothing else would catch.
+    it(`says so when Stripe charges something other than the advertised price`, async () => {
+        const log = logs();
+        await checkHostedPlanPrice(baseConfig, log.logger, answering(price({ unitAmount: 599 })));
+        expect(log.error).toHaveBeenCalledWith(expect.anything(), expect.stringContaining(`5.99 USD, while the Billing page advertises 20.00 USD`));
+    });
+
+    it(`keeps Stripe's own words when it refuses the read, and does not throw`, async () => {
+        const log = logs();
+        await checkHostedPlanPrice(baseConfig, log.logger, answering(new Error(`Stripe refused: No such price: 'price_1'`)));
+        expect(log.error).toHaveBeenCalledWith(
+            expect.objectContaining({ err: expect.objectContaining({ message: expect.stringContaining(`No such price`) }) }),
+            expect.stringContaining(`nobody can subscribe`),
+        );
+    });
+
+    it(`warns that a test-mode price charges nobody, and stays quiet about a live one`, async () => {
+        const testMode = logs();
+        await checkHostedPlanPrice(baseConfig, testMode.logger, answering(price({ livemode: false })));
+        expect(testMode.error).not.toHaveBeenCalled();
+        expect(testMode.warn).toHaveBeenCalledWith(expect.anything(), expect.stringContaining(`TEST-mode`));
+
+        const live = logs();
+        await checkHostedPlanPrice(baseConfig, live.logger, answering(price()));
+        expect(live.error).not.toHaveBeenCalled();
+        expect(live.warn).not.toHaveBeenCalled();
+        expect(live.info).toHaveBeenCalledWith(expect.anything(), expect.stringContaining(`selling price_1 at 20.00 USD per month`));
+    });
+});
+
+// What the buyer is told when Stripe says no: the refusal's own words with a gateway code, because an unhandled throw
+// here is a 500 the Billing page can only render as "couldn't open the payment page".
+describe(`the doors to Stripe`, () => {
+    const contextFor = (prisma: PrismaClient): OrpcContext =>
+        ({ prisma, config: baseConfig, user: { id: `user-1`, email: `buyer@intentic.dev` }, logger }) as unknown as OrpcContext;
+
+    it(`answers a refused checkout with Stripe's reason, not an unhandled error`, async () => {
+        const refusing = {
+            checkoutSession: vi.fn(async () => {
+                throw new StripeError(`Stripe refused: The price specified is inactive. This field only accepts active prices.`);
+            }),
+        } as unknown as StripeGateway;
+        await expect(call(hostedPlanRoutes(refusing).checkout, {}, { context: contextFor(fakePrisma().prisma) })).rejects.toMatchObject({
+            code: `BAD_GATEWAY`,
+            message: `Stripe refused: The price specified is inactive. This field only accepts active prices.`,
+        });
+    });
+
+    it(`answers a refused portal the same way`, async () => {
+        const refusing = {
+            portalSession: vi.fn(async () => {
+                throw new StripeError(`Stripe refused: No configuration provided`);
+            }),
+        } as unknown as StripeGateway;
+        const { prisma } = fakePrisma({ plans: [row(`active`)] });
+        await expect(call(hostedPlanRoutes(refusing).portal, {}, { context: contextFor(prisma) })).rejects.toMatchObject({
+            code: `BAD_GATEWAY`,
+            message: `Stripe refused: No configuration provided`,
+        });
     });
 });
 

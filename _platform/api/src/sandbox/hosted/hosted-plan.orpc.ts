@@ -4,7 +4,7 @@ import type { OrpcContext } from "../../context.js";
 import { requireUser } from "../../guards.js";
 import { hostedEnabled } from "./hosted.js";
 import { applySubscription, hostedPlanEnabled, hostedSlotsOf, isComped, isOnPlan } from "./hosted-plan.js";
-import { type StripeGateway, stripeGateway } from "./hosted-plan-stripe.js";
+import { StripeError, type StripeGateway, stripeGateway } from "./hosted-plan-stripe.js";
 import { hostedBudgetOf, usageMonth, usageResetsAt } from "./hosted-usage.js";
 
 const os = implement(apiContract).$context<OrpcContext>();
@@ -82,6 +82,18 @@ const requirePlanEnabled = (context: OrpcContext): void => {
 // (slots). Checkout carries the user id as client_reference_id; the webhook turns a completed payment into a plan row.
 export const hostedPlanRoutes = (gateway?: StripeGateway) => {
     const stripe = (context: OrpcContext): StripeGateway => gateway ?? stripeGateway(context.config.hostedPlan);
+    // A refusal from Stripe is a bad gateway with Stripe's own words, never an unhandled 500: the words are what tells
+    // the buyer it is not their card and the operator which knob is wrong.
+    const throughStripe = async <T>(work: () => Promise<T>): Promise<T> => {
+        try {
+            return await work();
+        } catch (error) {
+            if (error instanceof StripeError) {
+                throw new ORPCError(`BAD_GATEWAY`, { message: error.message });
+            }
+            throw error;
+        }
+    };
     return {
         state: os.hostedPlan.state.handler(({ context }) => hostedPlanStateOf(context)),
         checkout: os.hostedPlan.checkout.handler(async ({ context }) => {
@@ -93,15 +105,17 @@ export const hostedPlanRoutes = (gateway?: StripeGateway) => {
             if (isOnPlan(plan)) {
                 throw new ORPCError(`CONFLICT`, { message: `you are already on the hosted plan` });
             }
-            return stripe(context).checkoutSession({
-                priceId: config.hostedPlan.stripePriceId,
-                clientReferenceId: user.id,
-                customerEmail: user.email,
-                // A resubscriber is the same Stripe customer they were: one invoice history, one portal.
-                ...(plan === null ? {} : { customer: plan.stripeCustomerId }),
-                successUrl: billingUrl(context, `?plan=welcome`),
-                cancelUrl: billingUrl(context),
-            });
+            return throughStripe(() =>
+                stripe(context).checkoutSession({
+                    priceId: config.hostedPlan.stripePriceId,
+                    clientReferenceId: user.id,
+                    customerEmail: user.email,
+                    // A resubscriber is the same Stripe customer they were: one invoice history, one portal.
+                    ...(plan === null ? {} : { customer: plan.stripeCustomerId }),
+                    successUrl: billingUrl(context, `?plan=welcome`),
+                    cancelUrl: billingUrl(context),
+                }),
+            );
         }),
         portal: os.hostedPlan.portal.handler(async ({ context }) => {
             const { prisma } = context;
@@ -111,7 +125,7 @@ export const hostedPlanRoutes = (gateway?: StripeGateway) => {
             if (plan === null) {
                 throw new ORPCError(`NOT_FOUND`, { message: `no plan to manage` });
             }
-            return stripe(context).portalSession(plan.stripeCustomerId, billingUrl(context));
+            return throughStripe(() => stripe(context).portalSession(plan.stripeCustomerId, billingUrl(context)));
         }),
         // How many hosted sandboxes the plan covers; refused below the count already in use, since a slot with a
         // machine on it can't be sold back. Written on Stripe with proration, mirrored at once rather than waiting on
@@ -132,11 +146,14 @@ export const hostedPlanRoutes = (gateway?: StripeGateway) => {
             }
             const gatewayNow = stripe(context);
             // A row mirrored before the item id was read has none; the subscription itself always does.
-            const itemId = plan.stripeItemId === `` ? (await gatewayNow.subscription(plan.stripeSubscriptionId)).itemId : plan.stripeItemId;
+            const itemId =
+                plan.stripeItemId === ``
+                    ? (await throughStripe(() => gatewayNow.subscription(plan.stripeSubscriptionId))).itemId
+                    : plan.stripeItemId;
             if (itemId === ``) {
                 throw new ORPCError(`BAD_GATEWAY`, { message: `Stripe returned a subscription with no item to change` });
             }
-            const updated = await gatewayNow.setQuantity(plan.stripeSubscriptionId, itemId, input.quantity);
+            const updated = await throughStripe(() => gatewayNow.setQuantity(plan.stripeSubscriptionId, itemId, input.quantity));
             await applySubscription(prisma, updated, { userId: user.id });
             return hostedPlanStateOf(context);
         }),

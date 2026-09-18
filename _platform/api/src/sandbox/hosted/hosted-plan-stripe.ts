@@ -1,7 +1,7 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { z } from "zod";
 
-// Thin typed client for the six Stripe operations the hosted plan needs, hand-rolled over fetch rather than the SDK
+// Thin typed client for the Stripe operations the hosted plan needs, hand-rolled over fetch rather than the SDK
 // (fewer dependencies). The host is config (hostedPlan.stripeApiUrl), never set in production, so tests point this same
 // client at a stand-in (@intentic/testing/stripe-fake) and exercise the whole money path.
 
@@ -12,7 +12,7 @@ export interface StripeClientConfig {
 }
 
 // Why a refusal happened, not just that one did: Stripe's `{ error: { message } }` is meant for a person to act on.
-class StripeError extends Error {}
+export class StripeError extends Error {}
 
 const RefusalSchema = z.object({ error: z.object({ message: z.string() }) });
 
@@ -107,6 +107,39 @@ const toSubscription = (raw: unknown, now: () => Date): StripeSubscription => {
     };
 };
 
+// `recurring` is null on a one-off price, which subscription-mode checkout cannot sell; `unit_amount` is null on a
+// tiered one, read as zero so it fails the comparison against the advertised price rather than passing unseen.
+const PriceSchema = z.object({
+    active: z.boolean(),
+    livemode: z.boolean(),
+    unit_amount: z.number().int().nullable(),
+    currency: z.string(),
+    recurring: z.object({ interval: z.string() }).nullable().optional(),
+});
+
+export interface StripePrice {
+    // False for an archived price: Stripe refuses it in checkout, so nobody can subscribe.
+    readonly active: boolean;
+    // False for a test-mode price: buyers go through checkout and no money moves.
+    readonly livemode: boolean;
+    // Cents.
+    readonly unitAmount: number;
+    readonly currency: string;
+    // `month`, `year`, …; empty when the price is one-off.
+    readonly interval: string;
+}
+
+const toPrice = (raw: unknown): StripePrice => {
+    const parsed = PriceSchema.parse(raw);
+    return {
+        active: parsed.active,
+        livemode: parsed.livemode,
+        unitAmount: parsed.unit_amount ?? 0,
+        currency: parsed.currency,
+        interval: parsed.recurring?.interval ?? ``,
+    };
+};
+
 // The subscription id a webhook event names; state is re-read fresh rather than trusted off the event. Undefined for
 // any other object shape, read as not for us.
 const EventSubscriptionSchema = z.object({ id: z.string(), object: z.literal(`subscription`) });
@@ -138,6 +171,8 @@ export interface StripeGateway {
     // Sets the one item's quantity (slot count) with Stripe's default proration, so a mid-month change is prorated;
     // answers the subscription as it now stands.
     readonly setQuantity: (id: string, itemId: string, quantity: number) => Promise<StripeSubscription>;
+    // The price the plan is configured to sell, as Stripe holds it; refuses when no such price exists for this key.
+    readonly price: (id: string) => Promise<StripePrice>;
 }
 
 export const stripeGateway = (client: StripeClientConfig, fetchFn: typeof fetch = fetch, now: () => Date = () => new Date()): StripeGateway => ({
@@ -167,6 +202,7 @@ export const stripeGateway = (client: StripeClientConfig, fetchFn: typeof fetch 
             }),
             now,
         ),
+    price: async (id) => toPrice(await get(fetchFn, client, `/prices/${encodeURIComponent(id)}`)),
 });
 
 // How far a webhook's timestamp may drift from now; Stripe's own recommended replay window.

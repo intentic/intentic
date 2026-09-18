@@ -11,7 +11,7 @@ import { startHostedCanary } from "./sandbox/hosted/hosted-canary.js";
 import { startHostedCleanup } from "./sandbox/hosted/hosted-cleanup.js";
 import { startHostedHealth } from "./sandbox/hosted/hosted-health.js";
 import { startHostedMeter } from "./sandbox/hosted/hosted-meter.js";
-import { hostedPlanEnabled } from "./sandbox/hosted/hosted-plan.js";
+import { checkHostedPlanPrice, hostedPlanEnabled } from "./sandbox/hosted/hosted-plan.js";
 import { startHostedPool } from "./sandbox/hosted/hosted-pool.js";
 import { startRetention } from "./retention.js";
 import { startTracing } from "./tracing.js";
@@ -38,6 +38,9 @@ if (hostedPlanEnabled(config) && !config.hostedPlan.stripeWebhookSecret) {
         `HOSTED_PLAN_STRIPE_WEBHOOK_SECRET unset while the hosted plan is on sale: every payment will be taken and no plan will ever activate`,
     );
 }
+// Says here whether the price on sale can actually be bought, and in which Stripe mode; not awaited, since serving does
+// not depend on the answer.
+void checkHostedPlanPrice(config, logger);
 
 const prisma = createPrisma(config);
 startHostedCleanup(prisma, config, logger);

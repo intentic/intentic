@@ -89,6 +89,13 @@ describe.skipIf(!tier.runs)(tier.title, () => {
         expect(read.currentPeriodEnd.getTime()).toBeGreaterThan(Date.now() + 20 * DAY_MS);
     });
 
+    // What the boot check reads: an archived or one-off price here is a Subscribe button that 500s for every buyer.
+    it(`reads the configured price the way the boot check does`, async () => {
+        const price = await gateway.price(priceId);
+        expect(price).toMatchObject({ active: true, livemode: false, currency: `usd`, interval: `month` });
+        expect(price.unitAmount).toBeGreaterThan(0);
+    });
+
     it(`changes the slot count with proration and reads the new count back`, async () => {
         expect((await gateway.setQuantity(subscriptionId, itemId, 2)).quantity).toBe(2);
         expect((await gateway.subscription(subscriptionId)).quantity).toBe(2);

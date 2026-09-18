@@ -20,6 +20,10 @@ export interface FakeStripeOptions {
     readonly now?: () => Date;
     /** How long the hosted checkout page waits after redirecting before `checkout.session.completed` lands. */
     readonly checkoutWebhookDelayMs?: number;
+    /** The one price this "Stripe" holds; any other id is refused the way Stripe refuses one. */
+    readonly priceId?: string;
+    /** What that price charges, in cents. */
+    readonly priceCents?: number;
     /** A fixed port, or 0 (the default) for any free one. */
     readonly port?: number;
 }
@@ -27,6 +31,15 @@ export interface FakeStripeOptions {
 export interface FakeCustomer {
     readonly id: string;
     readonly email: string;
+}
+
+export interface FakePrice {
+    readonly id: string;
+    /** False once archived: checkout refuses it, which is how a live plan stops selling without anything else changing. */
+    active: boolean;
+    readonly unit_amount: number;
+    readonly currency: string;
+    readonly interval: string;
 }
 
 export interface FakeSubscription {
@@ -84,6 +97,9 @@ export interface FakeStripe {
     readonly customers: Map<string, FakeCustomer>;
     readonly subscriptions: Map<string, FakeSubscription>;
     readonly sessions: Map<string, FakeSession>;
+    readonly price: FakePrice;
+    /** Archives the price, as the dashboard does: every checkout from then on is refused. */
+    archivePrice(): void;
     /** Complete a checkout the way a buyer paying does: a customer, a live subscription, and the completed event delivered. */
     complete(sessionId: string): Promise<{ subscription: FakeSubscription; delivered: Response }>;
     /** Change a subscription on "Stripe's" side (a cancel in the portal, a failed charge, a renewal) and deliver the event. */
@@ -170,12 +186,19 @@ const wireSubscription = (subscription: FakeSubscription): Record<string, unknow
 });
 
 // The refusals Stripe makes of a checkout request that the client's encoding must never provoke.
-const checkoutRefusal = (params: Record<string, string>, customers: Map<string, FakeCustomer>): string | undefined => {
+const checkoutRefusal = (params: Record<string, string>, customers: Map<string, FakeCustomer>, price: FakePrice): string | undefined => {
     if (params["mode"] !== "subscription") {
         return "Invalid mode: the hosted plan is sold in subscription mode";
     }
     if ([params["line_items[0][price]"], params["client_reference_id"], params["success_url"], params["cancel_url"]].includes(undefined)) {
         return "Missing required param: line_items[0][price], client_reference_id, success_url and cancel_url are required";
+    }
+    const asked = params["line_items[0][price]"];
+    if (asked !== price.id) {
+        return `No such price: '${asked ?? ""}'`;
+    }
+    if (!price.active) {
+        return "The price specified is inactive. This field only accepts active prices.";
     }
     const customer = params["customer"];
     if (customer !== undefined && params["customer_email"] !== undefined) {
@@ -222,6 +245,13 @@ export const startFakeStripe = async (options: FakeStripeOptions): Promise<FakeS
     const customers = new Map<string, FakeCustomer>();
     const subscriptions = new Map<string, FakeSubscription>();
     const sessions = new Map<string, FakeSession>();
+    const price: FakePrice = {
+        id: options.priceId ?? "price_1",
+        active: true,
+        unit_amount: options.priceCents ?? 2000,
+        currency: "usd",
+        interval: "month",
+    };
     let origin = "";
 
     const emit: FakeStripe["emit"] = async (type, object, opts = {}) => {
@@ -322,7 +352,7 @@ export const startFakeStripe = async (options: FakeStripeOptions): Promise<FakeS
             method: "POST",
             pattern: /^\/v1\/checkout\/sessions$/,
             handle: api(({ res }, params) => {
-                const refusal = checkoutRefusal(params, customers);
+                const refusal = checkoutRefusal(params, customers, price);
                 if (refusal !== undefined) {
                     return refuse(res, 400, refusal);
                 }
@@ -341,6 +371,24 @@ export const startFakeStripe = async (options: FakeStripeOptions): Promise<FakeS
                 };
                 sessions.set(session.id, session);
                 json(res, { id: session.id, object: "checkout.session", url: session.url, mode: "subscription", status: "open" });
+            }),
+        },
+        {
+            method: "GET",
+            pattern: /^\/v1\/prices\/([^/]+)$/,
+            handle: api((hit) => {
+                const asked = decodeURIComponent(hit.match[1] ?? "");
+                return asked === price.id
+                    ? json(hit.res, {
+                          id: price.id,
+                          object: "price",
+                          active: price.active,
+                          livemode: false,
+                          unit_amount: price.unit_amount,
+                          currency: price.currency,
+                          recurring: { interval: price.interval, interval_count: 1 },
+                      })
+                    : refuse(hit.res, 404, `No such price: '${asked}'`);
             }),
         },
         {
@@ -510,6 +558,10 @@ export const startFakeStripe = async (options: FakeStripeOptions): Promise<FakeS
         customers,
         subscriptions,
         sessions,
+        price,
+        archivePrice: () => {
+            price.active = false;
+        },
         complete,
         update,
         emit,
