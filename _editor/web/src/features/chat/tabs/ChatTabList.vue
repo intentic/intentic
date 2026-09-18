@@ -22,7 +22,7 @@ import { sessionCategory } from "../../../app/sessionCategory";
 import { useAgentFilter } from "../../agents/board/useAgentFilter";
 import { boxNameOf } from "../../agents/fleet/fleetScope";
 import { useAgents } from "../../agents/fleet/useAgents";
-import { compareFinishedLane, FINISHED_WINDOW, type FleetAgent, finishedNeedsAction, windowFinished } from "../../agents/fleet/useAgents-fleet";
+import { FINISHED_WINDOW, type FleetAgent, finishedHead, finishedLaneOrder, finishedNeedsAction, windowFinished } from "../../agents/fleet/useAgents-fleet";
 import { type CacheCooling, cacheCooling } from "../../agents/fleet/promptCache";
 import HoverCard from "../../../components/HoverCard.vue";
 import OriginMark from "../../../components/OriginMark.vue";
@@ -172,10 +172,12 @@ const lanes = computed<Record<FleetLane, OpenChat[]>>(() => {
             (a.agent?.startedAt ?? lastActive(a)) - (b.agent?.startedAt ?? lastActive(b)),
     );
     grouped.attention.sort((a, b) => lastActive(b) - lastActive(a));
-    // Same order as the board (compareFinishedLane); agent-less chats fall back to recency only.
+    // Same order as the board (finishedLaneOrder), ranked against this lane's own head; agent-less chats fall back to
+    // recency only.
+    const order = finishedLaneOrder(finishedHead(grouped.finished.flatMap((entry) => (entry.agent === undefined ? [] : [entry.agent]))));
     grouped.finished.sort((a, b) => {
         if (a.agent !== undefined && b.agent !== undefined) {
-            return compareFinishedLane(a.agent, b.agent);
+            return order(a.agent, b.agent);
         }
         return Number(b.conversation.unsent.value) - Number(a.conversation.unsent.value) || lastActive(b) - lastActive(a);
     });

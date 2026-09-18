@@ -58,31 +58,27 @@ export const doneWith = (agent: FleetAgent): boolean =>
 // When the turn ended, not the last observe frame; `updatedAt` on a settled card is finish/land time only.
 const finishedRecency = (agent: FleetAgent): number => agent.unfinished?.at ?? agent.updatedAt;
 
-// Caps browsing, not existence: every actionable card stays in the window, receipts fill what is left, and a selected
-// card beyond the fold is prepended when it still owes a press (never demoted to the tail). Shared by both Finished lanes.
+// Caps browsing, not existence, and never order: the lane already decided that (finishedLaneOrder), and a window
+// that re-sorted would hoist a stale press back over the finish that just happened. Two guarantees rather than one
+// budget split between them — nothing owing a press is ever folded away, and the lane's freshest cards are always
+// drawn, so a backlog of presses cannot squeeze out the card that just arrived. Shared by both Finished lanes.
 export const windowFinished = <T>(
     finished: readonly T[],
     selectedId: string | undefined,
     idOf: (entry: T) => string,
     needsAction: (entry: T) => boolean = () => false,
 ): { shown: T[]; hidden: number } => {
-    const acting = finished.filter(needsAction);
-    const receipts = finished.filter((entry) => !needsAction(entry));
-    const room = Math.max(FINISHED_WINDOW, acting.length);
-    const shown = [...acting, ...receipts.slice(0, Math.max(0, room - acting.length))];
-    const shownIds = new Set(shown.map(idOf));
-    const hidden = finished.length - shown.length;
-    if (selectedId === undefined || shownIds.has(selectedId)) {
-        return { shown, hidden };
+    const kept = new Set(finished.filter(needsAction).map(idOf));
+    for (const entry of finished.slice(0, FINISHED_WINDOW)) {
+        kept.add(idOf(entry));
     }
-    const pinned = finished.find((entry) => idOf(entry) === selectedId);
-    if (pinned === undefined) {
-        return { shown, hidden };
+    // A selection past the fold joins the window where the lane puts it, not at either end; an id no longer in the
+    // lane matches nothing.
+    if (selectedId !== undefined) {
+        kept.add(selectedId);
     }
-    if (needsAction(pinned)) {
-        return { shown: [pinned, ...shown], hidden: hidden - 1 };
-    }
-    return { shown: [...shown, pinned], hidden: hidden - 1 };
+    const shown = finished.filter((entry) => kept.has(idOf(entry)));
+    return { shown, hidden: finished.length - shown.length };
 };
 
 // Built from the stored tab alone, since no daemon row or open tab exists for it; carries its origin sandbox so
@@ -290,14 +286,40 @@ export const canArchive = (agent: Pick<FleetAgent, "status" | "attention" | "arc
 // swap places every tick. The id itself is arbitrary, chosen only to stay the same next frame.
 const byId = (a: FleetAgent, b: FleetAgent): number => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
 
-// One ordering for every Finished lane: what is easiest to lose or miss rises to the top before recency.
-export const compareFinishedLane = (a: FleetAgent, b: FleetAgent): number =>
-    Number(b.unsent) - Number(a.unsent) ||
-    Number(b.unfinished !== undefined) - Number(a.unfinished !== undefined) ||
-    Number(b.status === `ready`) - Number(a.status === `ready`) ||
-    Number(finishedNeedsReland(b)) - Number(finishedNeedsReland(a)) ||
-    finishedRecency(b) - finishedRecency(a) ||
-    byId(a, b);
+// How far behind the lane's own head a press may sit and still be pinned above the timeline. Measured against the
+// lane rather than the wall clock: a board nobody has touched since yesterday still leads with what it owes, while
+// on a working day a Land nobody made in four hours stops outranking the session that just ended.
+const PINNED_SPAN_MS = 4 * 60 * 60 * 1000;
+
+// The instant a lane reads itself against: its own freshest card. 0 for an empty lane, which pins nothing.
+export const finishedHead = (agents: readonly FleetAgent[]): number =>
+    agents.reduce((newest, agent) => Math.max(newest, finishedRecency(agent)), 0);
+
+// Where a card sits above the timeline, 0 being on it. Unsent words never decay: they live only in this browser, and
+// age is what makes losing them likely, not what makes it acceptable. The presses do — a press left from an earlier
+// stretch of work is backlog, and ranking backlog over a fresh finish is what buries the finish.
+const pinnedRank = (agent: FleetAgent, head: number): number => {
+    if (agent.unsent) {
+        return 4;
+    }
+    if (finishedRecency(agent) < head - PINNED_SPAN_MS) {
+        return 0;
+    }
+    if (agent.unfinished !== undefined) {
+        return 3;
+    }
+    if (agent.status === `ready`) {
+        return 2;
+    }
+    return finishedNeedsReland(agent) ? 1 : 0;
+};
+
+// One ordering for every Finished lane: newest first, under a head of what is easiest to lose or miss. Curried on the
+// lane's head (finishedHead) so both lanes rank against the same instant rather than each card against itself.
+export const finishedLaneOrder =
+    (head: number) =>
+    (a: FleetAgent, b: FleetAgent): number =>
+        pinnedRank(b, head) - pinnedRank(a, head) || finishedRecency(b) - finishedRecency(a) || byId(a, b);
 
 // Splits a flat list into the board's three lanes, factored out of `fleet` so the all-sandboxes board can apply
 // the same rule to a wider list (this fleet plus other boxes' summaries) without duplicating the sort.
@@ -312,7 +334,7 @@ export const laneGroups = (agents: readonly FleetAgent[]): Record<FleetLane, Fle
             Number(b.status === `draft`) - Number(a.status === `draft`) || (a.startedAt ?? a.updatedAt) - (b.startedAt ?? b.updatedAt) || byId(a, b),
     );
     grouped.attention.sort((a, b) => b.updatedAt - a.updatedAt || byId(a, b));
-    grouped.finished.sort(compareFinishedLane);
+    grouped.finished.sort(finishedLaneOrder(finishedHead(grouped.finished)));
     return grouped;
 };
 

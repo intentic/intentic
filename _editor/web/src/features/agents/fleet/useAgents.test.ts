@@ -65,12 +65,24 @@ describe("windowFinished", () => {
         expect(hidden).toBe(3);
     });
 
-    it("prepends a selected actionable card instead of demoting it under the fold", () => {
+    // The window picks which cards survive the cap and never which order they sit in: the lane already decided that,
+    // and a window that re-sorted would hoist a stale press back over the finish that just happened.
+    it("keeps a selected actionable card where the lane put it, at neither end", () => {
         const entries = lane(10);
         entries[8] = { ...entries[8]!, status: `ready`, updatedAt: 100 };
         const { shown } = windowFinished(entries, `a8`, byId, finishedNeedsAction);
 
-        expect(ids(shown)[0]).toBe(`a8`);
+        expect(ids(shown)).toEqual([`a0`, `a1`, `a2`, `a3`, `a4`, `a5`, `a8`]);
+    });
+
+    // Presses used to take the whole window — the room grew with them and receipts got what was left, which was none —
+    // so a lane carrying eight of them drew no receipt at all, the freshest finish included.
+    it("draws the lane's freshest cards even when more cards owe a press than the window holds", () => {
+        const entries = lane(20).map((agent, at) => (at < 12 ? agent : { ...agent, status: `ready` as const }));
+        const { shown, hidden } = windowFinished(entries, undefined, byId, finishedNeedsAction);
+
+        expect(ids(shown)).toEqual([`a0`, `a1`, `a2`, `a3`, `a4`, `a5`, `a12`, `a13`, `a14`, `a15`, `a16`, `a17`, `a18`, `a19`]);
+        expect(hidden).toBe(6);
     });
 
     it("leaves the lane alone when the selection is already inside the window: no card is ever shown twice", () => {
@@ -977,6 +989,7 @@ describe("draft cards", () => {
 // The Finished lane windows to FINISHED_WINDOW cards, so an old session sits behind the fold until its chat gets
 // unsent words, which move it ahead regardless of age.
 describe("the finished fold", () => {
+    // Unread is derived, not declared: no `seenAt` against a positive `updatedAt` is what makes it true.
     const landed = (id: string, updatedAt: number): AgentSummary => ({
         id,
         status: `landed`,
@@ -1058,64 +1071,68 @@ describe("the finished fold", () => {
         expect(useAgents().lanes.value.finished.map((entry) => entry.id)).toEqual([`a1`, `a3`, `a2`, `a0`]);
     });
 
-    // Fresh ready-to-land sessions must lead landed receipts, or the window reads like a history list and Land now hides below the fold.
-    it("puts ready-to-land sessions ahead of landed receipts regardless of age", () => {
+    // A press from the same stretch of work as the lane's newest card leads it; one from an earlier stretch is backlog
+    // and sorts on recency like anything else. The boundary is four hours behind the lane's own head: `ready-4h` sits
+    // exactly on it and is still pinned, `ready-5h` is past it and falls under the finish that just happened.
+    it("leads with the presses this lane's head still belongs to and drops the older ones back onto the timeline", () => {
         const hour = 3_600_000;
         const now = 100_000_000;
         setAgents(
             [
-                landed(`receipt-4h`, now - 4 * hour),
+                landed(`receipt-now`, now),
+                { ...landed(`ready-3h`, now - 3 * hour), status: `ready` },
+                { ...landed(`ready-4h`, now - 4 * hour), status: `ready` },
+                { ...landed(`ready-5h`, now - 5 * hour), status: `ready` },
                 { ...landed(`reland-15h`, now - 15 * hour), landedPresence: { landed: 2, present: 1 } },
-                landed(`receipt-22h-a`, now - 22 * hour),
-                landed(`receipt-22h-b`, now - 22 * hour),
-                landed(`receipt-22h-c`, now - 22 * hour),
-                // Unread is derived, not declared: no `seenAt` against a positive `updatedAt` is what makes it true.
-                { ...landed(`ready-now`, now - 1_000), status: `ready` },
-                { ...landed(`ready-1m`, now - 60_000), status: `ready` },
+                landed(`receipt-22h`, now - 22 * hour),
             ],
             1,
         );
 
         expect(useAgents().lanes.value.finished.map((entry) => entry.id)).toEqual([
-            `ready-now`,
-            `ready-1m`,
+            `ready-3h`,
+            `ready-4h`,
+            `receipt-now`,
+            `ready-5h`,
             `reland-15h`,
-            `receipt-4h`,
-            `receipt-22h-a`,
-            `receipt-22h-b`,
-            `receipt-22h-c`,
+            `receipt-22h`,
         ]);
     });
 
-    // The window must surface actionable cards even when the caller's list has them at the tail.
-    it("keeps every ready-to-land card in the finished window", () => {
-        const landedOnly = Array.from({ length: FINISHED_WINDOW + 2 }, (_, at) => ({
-            id: `a${at}`,
-            status: `landed` as const,
-            provider: `claude` as const,
-            harness: `native` as const,
-            updatedAt: 1_000 - at,
-            attention: { plan: false, question: false, permission: false, capability: false, credential: false, conflict: false },
-            open: false,
-            unread: false,
-            unsent: false,
-        }));
-        const ready = {
-            id: `ready`,
-            status: `ready` as const,
-            provider: `claude` as const,
-            harness: `native` as const,
-            updatedAt: 9_000,
-            attention: { plan: false, question: false, permission: false, capability: false, credential: false, conflict: false },
-            open: false,
-            unread: true,
-            unsent: false,
-        };
-        const misordered = [...landedOnly, ready];
-        const { shown } = windowFinished(misordered, undefined, (entry) => entry.id, finishedNeedsAction);
+    // Unsent words are the one rank that never decays: they live only in this browser, so age is what makes losing
+    // them likely rather than what makes it acceptable. A day-old draft still leads a lane headed by a fresh finish.
+    it("keeps a day-old unsent card above everything, presses and fresh finishes alike", () => {
+        const hour = 3_600_000;
+        const now = 100_000_000;
+        const writing = new Conversation(`stale-unsent`);
+        writing.registered.value = true;
+        writing.draft.value = `picking this back up:`;
+        useChat().conversations.value = [...useChat().conversations.value, writing];
 
-        expect(shown.map((entry) => entry.id)).toContain(`ready`);
-        expect(shown.findIndex((entry) => entry.id === `ready`)).toBeLessThan(shown.findIndex((entry) => entry.id === `a0`));
+        setAgents([landed(`receipt-now`, now), { ...landed(`ready-9h`, now - 9 * hour), status: `ready` }, landed(`stale-unsent`, now - 26 * hour)], 1);
+
+        // The press decays past the fresh receipt behind it; the unsent card does not, though it is the oldest of the three.
+        expect(useAgents().lanes.value.finished.map((entry) => entry.id)).toEqual([`stale-unsent`, `receipt-now`, `ready-9h`]);
+    });
+
+    // End to end, the reported case: the sort and the window have to agree, or one buries what the other surfaced. A
+    // day's worth of unlanded branches used to fill the window by itself, leaving no room at all for the session that
+    // had just ended.
+    it("puts a session that just finished at the head of the window with a day of unlanded branches behind it", () => {
+        const hour = 3_600_000;
+        const now = 100_000_000;
+        setAgents(
+            [
+                landed(`just-finished`, now),
+                ...Array.from({ length: 8 }, (_, at) => ({ ...landed(`stale-ready-${at}`, now - (6 + at) * hour), status: `ready` as const })),
+            ],
+            1,
+        );
+        const { shown } = windowFinished(useAgents().lanes.value.finished, undefined, (entry) => entry.id, finishedNeedsAction);
+
+        expect(shown[0]?.id).toBe(`just-finished`);
+        // And none of them folded away: every branch still owing a Land is drawn, just under the timeline rather than over it.
+        expect(shown.map((entry) => entry.id)).toEqual([`just-finished`, ...Array.from({ length: 8 }, (_, at) => `stale-ready-${at}`)]);
     });
 });
 

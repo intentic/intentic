@@ -649,13 +649,14 @@ watch(
         // Uncovers the card: the filter and archive are lifted by hand, but the Finished window only lifts itself where
         // a ring exists to pin the card.
         // On a phone the ring vanishes with the flash, so the window would close over the very card the link was for;
-        // there, the whole lane opens instead.
+        // there, the whole lane opens instead. Whether it would is asked of the window itself rather than the card's
+        // index: the window is not the lane's first FINISHED_WINDOW cards, since everything owing a press is drawn too.
         if (filtering.value && !matches(agent)) {
             query.value = ``;
         }
         if (agent.archivedAt !== undefined) {
             archiveOpen.value = true;
-        } else if (mobile.value && lanes.value.finished.findIndex((candidate) => candidate.id === agent.id) >= FINISHED_WINDOW) {
+        } else if (mobile.value && !finishedWindow.value.shown.some((candidate) => candidate.id === agent.id)) {
             showAllFinished.value = true;
         }
         open(agent);
