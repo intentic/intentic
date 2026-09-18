@@ -2,7 +2,6 @@
 import { MarkdownDocument, Notice, RowGroup, RowNote } from "@intentic/ui";
 import { useSafetyPolicy } from "../../environment/useSafetyPolicy";
 import { useDraft } from "../../../../lib/useDraft";
-import SafetyPolicyInfo from "./SafetyPolicyInfo.vue";
 import { useT } from "@intentic/ui/i18n";
 
 // Replaces six regex-verdict pickers, which couldn't tell a real `rm -rf /` from one quoted in a README; danger is now
@@ -19,8 +18,6 @@ const draft = useDraft(() => (isLoading.value ? undefined : text.value));
 
 <template>
     <RowGroup :label="t(`sandbox.agentSafetyPolicy.safetyPolicy`)">
-        <template #info><SafetyPolicyInfo /></template>
-
         <RowNote variant="block">
             <!-- The frame scrolls long policies without moving Save. -->
             <div class="ui-field-shell max-h-[60dvh] overflow-auto p-3" style="--prose-measure: 72ch">

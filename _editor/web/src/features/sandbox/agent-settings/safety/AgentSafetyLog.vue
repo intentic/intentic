@@ -155,15 +155,6 @@ const commandSummary = (program: string): string => {
     return firstLine || program;
 };
 
-const groupCount = computed(() => {
-    if (entries.value.length === 0) {
-        return undefined;
-    }
-    if (isFiltering.value) {
-        return `${filteredEntries.value.length} of ${entries.value.length}`;
-    }
-    return entries.value.length;
-});
 </script>
 
 <template>
@@ -180,7 +171,7 @@ const groupCount = computed(() => {
             </template>
         </FilterBar>
 
-        <RowGroup :label="t(`sandbox.agentSafetyLog.recentDecisions`)" :count="groupCount">
+        <RowGroup :label="t(`sandbox.agentSafetyLog.recentDecisions`)">
             <SkeletonRows v-if="isLoading" :rows="4" description />
 
             <RowNote v-else-if="error !== undefined" variant="block">
