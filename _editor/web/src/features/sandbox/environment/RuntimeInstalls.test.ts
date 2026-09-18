@@ -84,7 +84,6 @@ afterEach(() => {
 it(`heads the list the way the rest of the tab heads a section`, () => {
     const el = mount([TEMPLATABLE, HUMAN]);
     expect(el.textContent).toContain(`Installed at runtime`);
-    expect(el.textContent).toContain(`2 items`);
     expect(el.textContent).toContain(`Not in the image`);
     expect(el.textContent).not.toContain(`playwright install --with-deps`);
 });
@@ -130,17 +129,15 @@ it(`dismisses one entry, and lets that be undone`, async () => {
     expect(decisions).toEqual([[`zizmor`, `restore`]]);
 });
 
-it(`folds an answered row out of the list, and out of the count`, async () => {
+it(`folds an answered row out of the list`, async () => {
     const el = mount([TEMPLATABLE, { ...HUMAN, declined: true }]);
     expect(el.textContent).toContain(`chromium-headless-shell`);
     expect(el.textContent).not.toContain(`zizmor`);
-    expect(el.textContent).toContain(`1 item`);
     expect(el.textContent).toContain(`1 dismissed`);
 
     await unfold(el);
     expect(el.textContent).toContain(`zizmor`);
     expect([...el.querySelectorAll(`button[aria-expanded]`)].map((row) => row.textContent?.includes(`zizmor`))).toEqual([false, true]);
-    expect(el.textContent).toContain(`1 item`);
 });
 
 it(`says nothing of a list whose every entry is answered`, async () => {

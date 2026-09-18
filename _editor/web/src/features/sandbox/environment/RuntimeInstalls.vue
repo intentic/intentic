@@ -37,10 +37,6 @@ const awaiting = computed(() => entries.filter((entry) => entry.declined !== tru
 const dismissed = computed(() => entries.filter((entry) => entry.declined === true).toSorted(byRecency));
 // Revealed rows land after the ones still asking something; unfolding doesn't re-sort them.
 const shown = computed(() => (revealed.value ? [...awaiting.value, ...dismissed.value] : awaiting.value));
-// undefined, not '0 items', once nothing is awaiting: an empty count is the section saying it's settled.
-const countLabel = computed(() =>
-    awaiting.value.length === 0 ? undefined : `${awaiting.value.length} ${awaiting.value.length === 1 ? `item` : `items`}`,
-);
 
 // Dismissing also closes the row, so revealing the fold later opens on headlines, not whatever was expanded.
 const decide = (entry: EnvironmentRecurring, decision: `adopt` | `dismiss` | `restore`): void => {
@@ -103,7 +99,6 @@ const brief = (entry: EnvironmentRecurring): string =>
         flat
         undivided
         :label="t(`sandbox.runtimeInstalls.installedAtRuntime`)"
-        :count="countLabel"
         :caption="awaiting.length ? t(`sandbox.runtimeInstalls.notInImageEvery`) : undefined"
     >
         <!-- The fold lives in the header, not as a row: it's a fact about the list, not an entry in it. -->

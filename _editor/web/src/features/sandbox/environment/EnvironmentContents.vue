@@ -87,9 +87,6 @@ const opening = (item: EnvironmentItem): string => paragraphs(item)[0] ?? ``;
 const rest = (item: EnvironmentItem): string => paragraphs(item).slice(1).join(`\n\n`);
 // True whenever there is anything beyond the row's own line: detail, commands, or a plumbing extras count.
 const expandable = (item: EnvironmentItem): boolean => item.detail !== undefined || item.commands !== undefined || item.extras !== undefined;
-
-// Phrased as '3 items', not a bare number, so it doesn't read as another version beside the row's version numbers.
-const countLabel = (group: ContentsGroup): string => `${group.items.length} ${group.items.length === 1 ? `item` : `items`}`;
 </script>
 
 <template>
@@ -97,7 +94,7 @@ const countLabel = (group: ContentsGroup): string => `${group.items.length} ${gr
     <!-- `@container`: what fits on a row is a fact about this list's width, and the hub's body is a pane the docked chat can leave far narrower than the window. -->
     <div class="@container flex flex-col gap-5">
         <!-- `flat`: this list already sits inside the Environment group's own frame. -->
-        <RowGroup v-for="group in rowGroups" :key="group.origin" flat undivided :label="group.label" :count="countLabel(group)">
+        <RowGroup v-for="group in rowGroups" :key="group.origin" flat undivided :label="group.label">
             <!-- Expandable rows keep their disclosure control in the lead slot. -->
 
             <DisclosureRow
@@ -190,7 +187,7 @@ const countLabel = (group: ContentsGroup): string => `${group.items.length} ${gr
         </RowGroup>
 
         <!-- The staples as a strip: many names and versions in a few lines instead of one row each. -->
-        <RowGroup v-if="staples !== undefined" flat :label="staples.label" :count="countLabel(staples)">
+        <RowGroup v-if="staples !== undefined" flat :label="staples.label">
             <!-- The strip and its description stay within one group note. -->
             <RowNote variant="block">
                 <div class="flex flex-col gap-2">
