@@ -27,6 +27,13 @@ export interface CursorAgentDeps {
 // Grace period for a cancel to unwind Cursor's tool calls before frames stop; a request, not a kill.
 const CANCEL_GRACE_MS = 5_000;
 
+// How long a phase waits for its first delta before calling the run stalled. Bounds the opening only: once deltas flow,
+// a silent gap is a tool call running long, and a cap there would end working turns.
+export const FIRST_DELTA_MS = 5 * 60_000;
+
+// Coded like a 5xx so the outage breaker queues the turn and resumes it on its own session, rather than stranding it.
+const CURSOR_STALLED = "Cursor took the turn and then sent nothing at all; treating the provider as unavailable.";
+
 // Maps everything the SDK can throw to the coded error frames auto-resume/reconnect already key off, matched by the
 // SDK's exported error classes, not message text (which is not public API).
 const codedError = async (error: unknown, sdk: Awaited<ReturnType<typeof cursorSdk>>): Promise<Extract<AgentEvent, { kind: "error" }>> => {
@@ -127,10 +134,14 @@ export const createCursorAgent = (deps: CursorAgentDeps) => {
     ): AsyncGenerator<AgentEvent, { errored: boolean; planText: string | undefined }> {
         const mapper = createCursorEventMapper(request.cwd, planning);
         const queue = new UpdateQueue();
+        let sawDelta = false;
         const options: SendOptions = {
             mode: modeFor(planning),
             ...(selection !== undefined ? { model: selection } : {}),
-            onDelta: ({ update }) => queue.push(update),
+            onDelta: ({ update }) => {
+                sawDelta = true;
+                queue.push(update);
+            },
         };
 
         let sendError: unknown;
@@ -140,6 +151,19 @@ export const createCursorAgent = (deps: CursorAgentDeps) => {
             queue.close();
             return undefined;
         });
+
+        // Covers both silences the SDK can hold a turn in: a `send` that never resolves, and a run that resolves and
+        // then never deltas. Cancel is best-effort, so the queue closes on this timer rather than on the cancel.
+        let stalled = false;
+        const stall = setTimeout(() => {
+            if (sawDelta) {
+                return;
+            }
+            stalled = true;
+            void started.then((handle) => handle?.cancel().catch(() => undefined));
+            queue.close();
+        }, FIRST_DELTA_MS);
+        stall.unref();
 
         // Stop cancels the run instead of abandoning it, so Cursor unwinds tool calls and the transcript ends resolved.
         const onAbort = (): void => {
@@ -155,6 +179,7 @@ export const createCursorAgent = (deps: CursorAgentDeps) => {
         }
 
         // Closes the queue when the run itself finishes, ending the drain below.
+        let settled = false;
         const finished = started.then(async (handle) => {
             if (handle === undefined) {
                 return undefined;
@@ -163,6 +188,7 @@ export const createCursorAgent = (deps: CursorAgentDeps) => {
                 sendError = error;
                 return undefined;
             });
+            settled = true;
             queue.close();
             return result;
         });
@@ -177,8 +203,13 @@ export const createCursorAgent = (deps: CursorAgentDeps) => {
                     yield frame;
                 }
             }
-            const result = await finished;
-            if (sendError !== undefined) {
+            // Only the run's own settle resolves `finished`; a stall or a cancel grace ends the drain without one, and
+            // awaiting it there is the hang this phase is bounded against.
+            const result = settled ? await finished : undefined;
+            if (stalled) {
+                errored = true;
+                yield { kind: "error", message: CURSOR_STALLED, code: "provider-outage" };
+            } else if (sendError !== undefined) {
                 errored = true;
                 yield await codedError(sendError, await cursorSdk());
             } else if (result?.status === "error") {
@@ -190,6 +221,7 @@ export const createCursorAgent = (deps: CursorAgentDeps) => {
                 yield usage;
             }
         } finally {
+            clearTimeout(stall);
             // One listener per phase; a plan turn runs two, so an unremoved one leaks into the next phase.
             unwatchAbort();
         }
