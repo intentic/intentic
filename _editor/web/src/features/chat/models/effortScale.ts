@@ -1,4 +1,4 @@
-import { type AgentProvider, type CatalogOption, effortAllowed, NATIVE_PROVIDERS, type NativeProvider } from "@intentic/sandbox-contract";
+import { type AgentProvider, type CatalogOption, effortAllowed, EFFORT_TIERS, NATIVE_PROVIDERS, type NativeProvider } from "@intentic/sandbox-contract";
 import { providerModels } from "../accounts/providerCatalog";
 
 // Which reasoning tiers a model offers, and what a pick runs at: a scale is a property of the model, not the provider
@@ -6,9 +6,6 @@ import { providerModels } from "../accounts/providerCatalog";
 // written back, so a smaller model never ratchets the pick down.
 
 const EFFORT_LABELS: Record<string, string> = { minimal: `Minimal`, low: `Low`, medium: `Medium`, high: `High`, xhigh: `X-High`, max: `Max` };
-
-// Every tier any provider has, weakest first; an order only, not an offer.
-const EFFORT_SCALE: readonly string[] = [`minimal`, `low`, `medium`, `high`, `xhigh`, `max`];
 
 // Default floor tiers, deliberately without 'max' (a provider must claim it); Claude's is the exception.
 const STATIC_EFFORTS: readonly string[] = [`low`, `medium`, `high`, `xhigh`];
@@ -33,9 +30,9 @@ export const clampEffort = (effort: string, provider: AgentProvider, modelId: st
     if (offered.length === 0 || offered.includes(effort)) {
         return effort;
     }
-    const wanted = EFFORT_SCALE.indexOf(effort);
-    const ranked = offered.toSorted((left, right) => EFFORT_SCALE.indexOf(left) - EFFORT_SCALE.indexOf(right));
-    return ranked.findLast((value) => EFFORT_SCALE.indexOf(value) <= wanted) ?? ranked[0]!;
+    const wanted = EFFORT_TIERS.indexOf(effort);
+    const ranked = offered.toSorted((left, right) => EFFORT_TIERS.indexOf(left) - EFFORT_TIERS.indexOf(right));
+    return ranked.findLast((value) => EFFORT_TIERS.indexOf(value) <= wanted) ?? ranked[0]!;
 };
 
 // Label for the tier a selection runs at: clamp first, then name the rung. Undefined for a pick with no tier pinned.

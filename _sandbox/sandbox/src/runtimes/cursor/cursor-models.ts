@@ -14,28 +14,39 @@ export const CURSOR_DEFAULT_MODEL = "auto";
 // Matches the thinking dial by name (reasoning/effort/think), loosely: Cursor's vocabulary varies per model.
 const EFFORT_PARAM = /reason|effort|think/iu;
 
+// A two-position switch, not a ladder: every Claude model lists a boolean `thinking` ahead of its real `effort` scale,
+// so a name match alone stops there and publishes "false"/"true" as the model's tiers.
+const SWITCH_VALUE = /^(?:true|false)$/iu;
+
+// Cursor's own spelling for two rungs of the shared scale (EFFORT_TIERS); every other value it publishes already
+// matches one. Applied in both directions, so every tier the picker offers is a value this model accepts back.
+const TIER_BY_VALUE: Record<string, string> = { "extra-high": "xhigh", none: "minimal" };
+const tierOf = (value: string): string => TIER_BY_VALUE[value.toLowerCase()] ?? value.toLowerCase();
+
 export const effortParameterOf = (item: ModelListItem): { id: string; values: string[] } | undefined => {
-    const parameter = (item.parameters ?? []).find((entry) => EFFORT_PARAM.test(entry.id));
-    if (parameter === undefined || parameter.values.length === 0) {
+    const parameter = (item.parameters ?? []).find(
+        (entry) => EFFORT_PARAM.test(entry.id) && entry.values.length > 0 && !entry.values.some((value) => SWITCH_VALUE.test(value.value)),
+    );
+    if (parameter === undefined) {
         return undefined;
     }
     return { id: parameter.id, values: parameter.values.map((value) => value.value) };
 };
 
-// Matches the tier against what this model published, case-insensitively; an unmatched one falls back to Cursor's own
-// default variant. "max" has no equivalent outside Claude's scale, so it reads as this model's highest instead of
-// dropped.
+// Matches the tier against what this model published, through the shared vocabulary; an unmatched one falls back to
+// Cursor's own default variant. "max" is absent from most of these scales, so it reads as this model's highest instead
+// of dropped.
 export const paramsForEffort = (item: ModelListItem, effort: string | undefined): ModelParameterValue[] => {
     const dial = effortParameterOf(item);
     const fallback = (item.variants ?? []).find((variant) => variant.isDefault)?.params ?? [];
     if (dial === undefined || effort === undefined || effort === "") {
         return fallback;
     }
-    const exact = dial.values.find((value) => value.toLowerCase() === effort.toLowerCase());
+    const exact = dial.values.find((value) => tierOf(value) === tierOf(effort));
     if (exact !== undefined) {
         return [{ id: dial.id, value: exact }];
     }
-    if (effort === "max") {
+    if (tierOf(effort) === "max") {
         // Published order is lowest to highest in every scale of this shape, so the last entry is this model's highest.
         const highest = dial.values.at(-1);
         return highest === undefined ? fallback : [{ id: dial.id, value: highest }];
@@ -57,7 +68,7 @@ export const toModel = (item: ModelListItem): Model => {
         id: item.id,
         label: item.displayName !== "" ? item.displayName : item.id,
         ...(item.description !== undefined && item.description !== "" ? { description: item.description } : {}),
-        ...(dial !== undefined ? { efforts: dial.values } : {}),
+        ...(dial !== undefined ? { efforts: dial.values.map(tierOf) } : {}),
     };
 };
 
