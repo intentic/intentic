@@ -1,11 +1,10 @@
 import { createServer } from "vite";
 import vue from "@vitejs/plugin-vue";
 import tailwindcss from "@tailwindcss/vite";
-import { join, dirname } from "node:path";
+import { join } from "node:path";
 import { mkdir, writeFile } from "node:fs/promises";
-import { fileURLToPath } from "node:url";
 
-const here = dirname(fileURLToPath(import.meta.url));
+const here = import.meta.dirname;
 const appRoot = join(here, "..");
 const repoRoot = join(appRoot, "../..");
 const previewDir = join(appRoot, ".preview-setup");
@@ -34,9 +33,9 @@ await writeFile(
 import { installUi, AppBrand, ui } from "@intentic/ui";
 import { startI18n } from "@intentic/ui/i18n";
 import { createApp, h, ref } from "vue";
-import SetupProgress from "${appRoot}/src/components/SetupProgress.vue";
-import { registerDesktopCatalog } from "${appRoot}/src/i18n/index.ts";
-import "${appRoot}/src/styles.css";
+import SetupProgress from "../src/components/SetupProgress.vue";
+import { registerDesktopCatalog } from "../src/i18n/index.ts";
+import "../src/styles.css";
 
 await registerDesktopCatalog();
 await startI18n();

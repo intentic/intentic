@@ -2,9 +2,9 @@
 import { installUi, AppBrand, ui } from "@intentic/ui";
 import { startI18n } from "@intentic/ui/i18n";
 import { createApp, h, ref } from "vue";
-import SetupProgress from "/history/worktrees/sleek-lynx-1852/intentic/_editor/desktop-app/src/components/SetupProgress.vue";
-import { registerDesktopCatalog } from "/history/worktrees/sleek-lynx-1852/intentic/_editor/desktop-app/src/i18n/index.ts";
-import "/history/worktrees/sleek-lynx-1852/intentic/_editor/desktop-app/src/styles.css";
+import SetupProgress from "../src/components/SetupProgress.vue";
+import { registerDesktopCatalog } from "../src/i18n/index.ts";
+import "../src/styles.css";
 
 await registerDesktopCatalog();
 await startI18n();

@@ -2867,15 +2867,12 @@
             "alreadyDownloadedHereReleased": "{stagedBehind} is already downloaded here, but {latest} has been released since. Updating now gives you {stagedBehind2}, or download the newer one first.",
             "and": "…and",
             "applyRestartsSandbox": "Apply it: this restarts your sandbox:",
-            "doBothNowDownloading": "Or do both now, downloading and restarting in one go:",
             "downloadCostsNothing": "Downloading it now costs it nothing, and the restart can wait. | Downloading it now costs them nothing, and the restart can wait.",
-            "downloadNowNothingRestarts": "Download it now: nothing restarts until you say so:",
             "downloaded": "downloaded",
             "iveReadWhatChanges": "I've read what changes: show me the update",
             "midTurnRestart": "An agent is mid-turn right now, restarting the sandbox interrupts its work. | {count} agents are mid-turn right now, restarting the sandbox interrupts their work.",
             "midTurnRollback": "An agent is mid-turn right now, rolling back interrupts its work. | {count} agents are mid-turn right now, rolling back interrupts their work.",
             "more": "more:",
-            "newerSandboxImageReleased": "A newer sandbox image has been released. Downloading it interrupts nothing: your sandbox keeps working until you apply it, and your files (in /work) are kept.",
             "publishedNewerThanWhat": "The published {latest} is newer than what this sandbox reports, but taking it discards the image built from your checkout. On the device that runs it:",
             "ratherGoBack": "Rather go back?",
             "readChangelog": "read the changelog",
@@ -2893,8 +2890,7 @@
             "updateRemovesChangesThings": "This update removes or changes things you may rely on: read what changes below before taking it. Your files (in /work) are kept either way, and you can roll back afterwards:",
             "waitFleetToSettle": "Wait for the fleet to settle, or continue if that is acceptable.",
             "whatChanges": "What changes",
-            "whatUpdatesNeverBreak": "what updates never break",
-            "whatsNew": "What's new"
+            "whatUpdatesNeverBreak": "what updates never break"
         },
         "sandboxUsage": {
             "agent": "Agent",
