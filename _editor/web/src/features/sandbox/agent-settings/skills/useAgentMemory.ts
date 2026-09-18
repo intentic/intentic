@@ -1,5 +1,5 @@
 import { MEMORY_FILE } from "@intentic/constants";
-import { type NoticeModel } from "@intentic/ui";
+import type { NoticeModel } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
 import { ref } from "vue";
 import { mergeMemory } from "../../../extensions/memoryImport";
