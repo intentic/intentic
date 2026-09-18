@@ -392,6 +392,15 @@ describe("agents registry", () => {
         expect(persisted.get("c1")?.subagents).toEqual({ running: 1, total: 2 });
     });
 
+    it("leaves updatedAt on a settled card alone: observe must not steal recency from a fresher finish", async () => {
+        const registry = createAgentsRegistry(memoryStore(), standings(), presences());
+        await registry.init();
+        await registry.begin(turn(), 1_000);
+        await registry.finish("c1", 2_000);
+        registry.observe("c1", { kind: "delta", text: "a subagent frame on a parent that already settled" });
+        expect(registry.get("c1")?.updatedAt).toBe(2_000);
+    });
+
     it("markSeen persists the read marker, broadcasts it, and leaves updatedAt alone", async () => {
         const store = memoryStore();
         const registry = createAgentsRegistry(store, standings(), presences());

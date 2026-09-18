@@ -45,8 +45,11 @@ export const finishedNeedsAction = (
 ): boolean =>
     agent.unsent || agent.unfinished !== undefined || agent.status === `ready` || agent.status === `landing` || finishedNeedsReland(agent);
 
-// Caps browsing, not existence: every actionable card stays in the window, receipts fill what is left, and the
-// selected card is pinned at the tail when it would otherwise sit past the fold. Shared by both Finished lanes.
+// When the turn ended, not the last observe frame; `updatedAt` on a settled card is finish/land time only.
+const finishedRecency = (agent: FleetAgent): number => agent.unfinished?.at ?? agent.updatedAt;
+
+// Caps browsing, not existence: every actionable card stays in the window, receipts fill what is left, and a selected
+// card beyond the fold is prepended when it still owes a press (never demoted to the tail). Shared by both Finished lanes.
 export const windowFinished = <T>(
     finished: readonly T[],
     selectedId: string | undefined,
@@ -65,6 +68,9 @@ export const windowFinished = <T>(
     const pinned = finished.find((entry) => idOf(entry) === selectedId);
     if (pinned === undefined) {
         return { shown, hidden };
+    }
+    if (needsAction(pinned)) {
+        return { shown: [pinned, ...shown], hidden: hidden - 1 };
     }
     return { shown: [...shown, pinned], hidden: hidden - 1 };
 };
@@ -248,7 +254,7 @@ export const compareFinishedLane = (a: FleetAgent, b: FleetAgent): number =>
     Number(b.unfinished !== undefined) - Number(a.unfinished !== undefined) ||
     Number(b.status === `ready`) - Number(a.status === `ready`) ||
     Number(finishedNeedsReland(b)) - Number(finishedNeedsReland(a)) ||
-    b.updatedAt - a.updatedAt ||
+    finishedRecency(b) - finishedRecency(a) ||
     byId(a, b);
 
 // Splits a flat list into the board's three lanes, factored out of `fleet` so the all-sandboxes board can apply

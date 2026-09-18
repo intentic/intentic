@@ -320,6 +320,10 @@ const liveStatus = (state: RuntimeState, parked: readonly string[]): AgentStatus
     return parked.length > 0 ? "awaiting" : "running";
 };
 
+// Whether a turn is still unwinding or a land/resume lease is held; settled cards must not borrow `lastAt` for `updatedAt`.
+const activityLive = (state: RuntimeState | undefined): boolean =>
+    state !== undefined && (state.running || state.stopping !== undefined || state.resuming || state.landing);
+
 // Status precedence: the live turn, then an armed resume, then a held land lease, then how the last turn ended, then
 // the land standing; only `idle` yields to the standing. A running turn's own end-of-turn land stays `running`: the
 // lease reads as `landing` only between turns. Pure, so the rule is testable without a registry.
@@ -553,7 +557,7 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
             ...(entry.runner !== undefined ? { runner: entry.runner } : {}),
             ...opt("startIn", entry.startIn),
             ...opt("actsAs", entry.actsAs),
-            updatedAt: Math.max(entry.updatedAt, state?.lastAt ?? 0),
+            updatedAt: activityLive(state) ? Math.max(entry.updatedAt, state!.lastAt ?? 0) : entry.updatedAt,
             attention: {
                 plan: parked.includes("plan"),
                 question: parked.includes("question"),

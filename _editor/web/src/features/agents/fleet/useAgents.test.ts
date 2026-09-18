@@ -57,12 +57,20 @@ describe("windowFinished", () => {
         expect(hidden).toBe(4);
     });
 
-    it("keeps the selected card whatever its age: pinned at the tail, and counted OUT of the row that hides the rest", () => {
+    it("keeps the selected receipt at the tail when it would otherwise sit past the fold", () => {
         const { shown, hidden } = windowFinished(lane(10), `a8`, byId);
 
         expect(ids(shown)).toEqual([`a0`, `a1`, `a2`, `a3`, `a4`, `a5`, `a8`]);
         // Seven cards on screen out of ten: the row below may only claim the three it actually hides.
         expect(hidden).toBe(3);
+    });
+
+    it("prepends a selected actionable card instead of demoting it under the fold", () => {
+        const entries = lane(10);
+        entries[8] = { ...entries[8]!, status: `ready`, updatedAt: 100 };
+        const { shown } = windowFinished(entries, `a8`, byId, finishedNeedsAction);
+
+        expect(ids(shown)[0]).toBe(`a8`);
     });
 
     it("leaves the lane alone when the selection is already inside the window: no card is ever shown twice", () => {
