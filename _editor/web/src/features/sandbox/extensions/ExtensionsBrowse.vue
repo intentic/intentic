@@ -280,7 +280,6 @@ const emptyNote = computed<string | undefined>(() => {
         <div v-for="section in sections" :key="section.id" class="flex flex-col gap-2">
             <div class="flex flex-wrap items-baseline gap-x-2">
                 <span :class="ui.sectionLabel()">{{ section.label }}</span>
-                <span class="text-2xs tabular-nums text-subtle">{{ section.listings.length }}</span>
                 <span v-if="section.caption" class="text-2xs text-muted">{{ section.caption }}</span>
             </div>
             <!-- Container query: how many cards fit depends on this pane's own width, not the viewport. -->

@@ -168,8 +168,7 @@ const confirmRemove = async (): Promise<void> => {
 
 <template>
     <div class="flex flex-col gap-5">
-        <!-- Each count is what the section holds, not the total: rows leave it for the pinned group above and for the filter. -->
-        <RowGroup v-for="section in sections" :key="section.id" :label="section.label" :count="section.entries.length" :caption="section.caption">
+        <RowGroup v-for="section in sections" :key="section.id" :label="section.label" :caption="section.caption">
             <ExtensionRow
                 v-for="entry in section.entries"
                 :key="entry.extension.id"
