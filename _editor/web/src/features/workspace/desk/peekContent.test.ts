@@ -2,7 +2,12 @@ import type { WorkspaceTreeEntry } from "@intentic/api-contract";
 import { describe, expect, it } from "vitest";
 import { kindLabel, PEEK_LINES, peekLines, peekPlan } from "./peekContent";
 
-const file = (name: string, size?: number): WorkspaceTreeEntry => ({ name, path: `dir/${name}`, type: `file`, ...(size === undefined ? {} : { size }) });
+const file = (name: string, size?: number): WorkspaceTreeEntry => ({
+    name,
+    path: `dir/${name}`,
+    type: `file`,
+    ...(size === undefined ? {} : { size }),
+});
 const dir = (name: string): WorkspaceTreeEntry => ({ name, path: name, type: `dir`, children: [] });
 
 describe(`what a hover can show`, () => {
@@ -24,6 +29,16 @@ describe(`what a hover can show`, () => {
     it(`plays a video`, () => {
         expect(peekPlan(file(`intro.mp4`))).toEqual({ kind: `video` });
         expect(peekPlan(file(`clip.webm`))).toEqual({ kind: `video` });
+    });
+
+    it(`draws a document as its own pages`, () => {
+        expect(peekPlan(file(`brief.docx`, 40_000))).toEqual({ kind: `document` });
+        expect(peekPlan(file(`notes.odt`, 40_000))).toEqual({ kind: `document` });
+        expect(peekPlan(file(`memo.rtf`, 40_000))).toEqual({ kind: `document` });
+    });
+
+    it(`leaves a document too big to parse under the pointer`, () => {
+        expect(peekPlan(file(`thesis.docx`, 40 * 1024 * 1024))).toEqual({ kind: `none` });
     });
 
     it(`shows nothing of bytes it cannot read`, () => {

@@ -59,13 +59,17 @@ export const unstagePaths = async (dir: string, paths: readonly string[], git: G
     await overPaths(
         dir,
         paths,
-        head !== undefined ? (chunk) => ["reset", "-q", "--", ...chunk] : (chunk) => ["rm", "-r", "-q", "--cached", "--ignore-unmatch", "--", ...chunk],
+        head !== undefined
+            ? (chunk) => ["reset", "-q", "--", ...chunk]
+            : (chunk) => ["rm", "-r", "-q", "--cached", "--ignore-unmatch", "--", ...chunk],
         git,
     );
 };
 
 // Commits whatever is staged, touching nothing else; the only way the panel records a commit.
 // False means the index is already clean; a whole-index commit also works mid-merge, unlike `commit --only`.
+// `--no-textconv`/`--no-ext-diff` on the emptiness check: this image reads every binary extension through fileq, and
+// two different documents whose readings match would otherwise answer "nothing changed" and go uncommitted.
 export const commitIndex = async (
     dir: string,
     message: string,
@@ -74,7 +78,7 @@ export const commitIndex = async (
 ): Promise<boolean> => {
     const head = await headSha(dir, git);
     try {
-        await git(dir, ["diff", "--cached", "--quiet", head ?? EMPTY_TREE]);
+        await git(dir, ["diff", "--cached", "--quiet", "--no-textconv", "--no-ext-diff", head ?? EMPTY_TREE]);
         return false;
     } catch {
         // The index differs from HEAD, fall through to commit.
@@ -100,7 +104,7 @@ export const commitOnly = async (
     await stagePaths(dir, paths, git);
     const head = await headSha(dir, git);
     try {
-        await git(dir, ["diff", "--cached", "--quiet", head ?? EMPTY_TREE, "--", ...paths]);
+        await git(dir, ["diff", "--cached", "--quiet", "--no-textconv", "--no-ext-diff", head ?? EMPTY_TREE, "--", ...paths]);
         return false;
     } catch {
         // The paths differ from HEAD, fall through to commit.
@@ -138,7 +142,9 @@ export const discardPaths = async (dir: string, paths: readonly string[] | undef
     await overPaths(
         dir,
         list,
-        head !== undefined ? (chunk) => ["reset", "-q", "--", ...chunk] : (chunk) => ["rm", "-r", "-q", "--cached", "--ignore-unmatch", "--", ...chunk],
+        head !== undefined
+            ? (chunk) => ["reset", "-q", "--", ...chunk]
+            : (chunk) => ["rm", "-r", "-q", "--cached", "--ignore-unmatch", "--", ...chunk],
         git,
     );
     // Targets are now on the unstaged side; "added" means untracked (delete), anything else tracked (restore).

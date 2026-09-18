@@ -5,10 +5,10 @@ import { resolveFile } from "../explorer/fileType";
 import { extOf, isVideoName } from "./deskOrder";
 
 // What a hover can show of an entry, and what to call it. Text gets its first lines, a picture gets painted, a video
-// plays silently, a folder lists what it holds; anything else (a PDF, an archive, a font) has no cheap look and gets
-// its name and size only. Pure, no framework code.
+// plays silently, a document is drawn as its own first page, a folder lists what it holds; anything else (a PDF, an
+// archive, a font) has no cheap look and gets its name and size only. Pure, no framework code.
 
-export type PeekKind = "folder" | "text" | "picture" | "video" | "none";
+export type PeekKind = "folder" | "text" | "picture" | "video" | "document" | "none";
 
 export interface PeekPlan {
     readonly kind: PeekKind;
@@ -19,6 +19,14 @@ export interface PeekPlan {
 // Pictures a browser paints on its own; the rest of the `image` category (psd, tiff, heic) has no viewer here either.
 const PICTURE_EXTS: ReadonlySet<string> = new Set([`png`, `jpg`, `jpeg`, `gif`, `webp`, `avif`, `bmp`, `ico`, `svg`]);
 
+// Formats whose viewer draws pages and nothing else, so the card can mount it as it stands: a deck, a book and a
+// spreadsheet bring their own toolbar, and a PDF is the browser's plugin, neither of which belongs in a card that
+// takes no pointer.
+const DOCUMENT_EXTS: ReadonlySet<string> = new Set([`docx`, `odt`, `ott`, `rtf`]);
+// Parsed on the main thread under the pointer, so a document this big is left to the tab that can afford it.
+const DOCUMENT_MAX_BYTES = 4 * 1024 * 1024;
+const documentPlan = (size: number | undefined): PeekPlan => ((size ?? 0) > DOCUMENT_MAX_BYTES ? { kind: `none` } : { kind: `document` });
+
 export const peekPlan = (entry: WorkspaceTreeEntry): PeekPlan => {
     if (entry.type === `dir`) {
         return { kind: `folder` };
@@ -27,11 +35,15 @@ export const peekPlan = (entry: WorkspaceTreeEntry): PeekPlan => {
     if (entry.size === 0) {
         return { kind: `none` };
     }
-    if (PICTURE_EXTS.has(extOf(entry.name))) {
+    const ext = extOf(entry.name);
+    if (PICTURE_EXTS.has(ext)) {
         return { kind: `picture` };
     }
     if (isVideoName(entry.name)) {
         return { kind: `video` };
+    }
+    if (DOCUMENT_EXTS.has(ext)) {
+        return documentPlan(entry.size);
     }
     const resolved = resolveFile(entry.path, entry.size);
     if (resolved.mode === `binary` || resolved.mode === `empty`) {

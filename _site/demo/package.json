@@ -12,7 +12,8 @@
     "dependencies": {
         "@intentic/api-contract": "workspace:*",
         "@intentic/web": "workspace:*",
-        "@intentic/sandbox-contract": "workspace:*"
+        "@intentic/sandbox-contract": "workspace:*",
+        "fflate": "catalog:"
     },
     "devDependencies": {
         "@dagrejs/dagre": "catalog:",

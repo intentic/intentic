@@ -53,6 +53,7 @@ import {
     setExtensionEnabled,
     vendoredBundle,
 } from "./fixture/sandbox";
+import { HANDOVER_DOCX, HANDOVER_PATH } from "./fixture/document";
 import { transcriptFor } from "./fixture/transcripts";
 import {
     agentChanges,
@@ -810,8 +811,15 @@ function savePersonaRoute({ request }: RouteContext): Promise<Response> {
 // check existence.
 const workspaceRead = (path: string): Response => json(readFile(path));
 
-// Serves only report screenshots; svg keeps them a few kilobytes and sharp at any size.
+// Report screenshots (svg keeps them a few kilobytes and sharp at any size) and the one document, which is the only
+// path here whose bytes are bytes: a viewer parses it, so text would not do.
 const workspaceRaw = (path: string): Response => {
+    if (path === HANDOVER_PATH) {
+        return new Response(HANDOVER_DOCX, {
+            status: 200,
+            headers: { "content-type": `application/vnd.openxmlformats-officedocument.wordprocessingml.document` },
+        });
+    }
     const body = fileBody(path);
     if (body === undefined) {
         return refuse(`No such file: ${path}`, 404);

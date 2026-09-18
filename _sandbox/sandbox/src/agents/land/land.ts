@@ -51,7 +51,9 @@ const stderrOf = (error: unknown): string => {
 // Diff written straight to a file, never held as a string, since a giant patch would blow the git runner's output
 // ceiling. Returns the file's size, since that's all callers ever wanted.
 const writePatch = async (main: string, patchPath: string, range: readonly string[], git: GitRunner): Promise<number> => {
-    await git(main, ["diff", `--output=${patchPath}`, "--binary", "-M", ...range]);
+    // `--no-textconv`/`--no-ext-diff`: a patch converted for reading (this image routes every binary extension through
+    // fileq) carries no bytes `git apply` can use, and a document's diff would come out empty and land as nothing.
+    await git(main, ["diff", `--output=${patchPath}`, "--binary", "--no-textconv", "--no-ext-diff", "-M", ...range]);
     return (await stat(patchPath).catch(() => undefined))?.size ?? 0;
 };
 

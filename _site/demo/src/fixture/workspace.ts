@@ -18,6 +18,7 @@ import { includeGlobs } from "@intentic/sandbox-contract";
 import { acceptanceFiles } from "./acceptance";
 import { SUPPORT_SWEEP_PATH, SUPPORT_SWEEP_SHOT } from "./browserShots";
 import { choreFiles } from "./chores";
+import { HANDOVER_DOCX, HANDOVER_PATH } from "./document";
 import { documentationFiles } from "./docs";
 import { CONFLICT_AGENT_ID, REVIEW_AGENT_ID } from "./fleet";
 
@@ -411,6 +412,8 @@ const SOURCES: [string, string | number][] = [
 
     // A dropped archive: listed as the file it is, and entered like a folder (ARCHIVES below answers what is inside).
     [`drop/brand-kit.zip`, 48_200],
+    // Its real length, since /workspace/raw serves this one's real bytes (fixture/document.ts).
+    [HANDOVER_PATH, HANDOVER_DOCX.length],
 ];
 
 // What an archive holds, which the daemon answers by unpacking it out of sight. Keyed by the archive's own path and
