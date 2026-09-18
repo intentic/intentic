@@ -1,3 +1,4 @@
+import { WORKSPACE_ROOT } from "@intentic/constants";
 import type { AgentEvent } from "@intentic/sandbox-contract";
 import { describe, expect, it } from "vitest";
 import { openSpawnedChild, resetSubagents, settleSpawnedChild, type SubagentTurn } from "../../agent/subagents/subagents.js";
@@ -40,7 +41,7 @@ const denying = (reason: string): CommandGate => ({
 });
 
 // In-memory only, so a script that reached the runtime would still write nothing; the tests below assert it never does.
-const jsPlan = (): JsExecutionPlan => ({ readRoots: [], writeRoots: [], allowSpawn: false, env: {} }) as JsExecutionPlan;
+const jsPlan = (): JsExecutionPlan => ({ cwd: WORKSPACE_ROOT, readRoots: [], writeRoots: [], allowSpawn: false, env: {} });
 
 const supervisor = (over: Partial<ChildSupervisor> = {}): ChildSupervisor => ({
     spawn: async () => ({ ok: true, id: "sub-x" }),

@@ -1,9 +1,10 @@
-import type { AgentOptions, InteractionUpdate, ModelSelection, Run, SDKAgent, SendOptions } from "@cursor/sdk";
+import type { AgentOptions, ModelSelection, Run, SDKAgent, SendOptions } from "@cursor/sdk";
 import type { AgentEvent } from "@intentic/sandbox-contract";
 import type { Logger } from "pino";
 import { whenAborted } from "../../abort.js";
 import { type SteeringChannel, steeringRelay } from "../../agent/anchors/agent-steering.js";
 import type { AgentRequest } from "../../agent/run/agent.js";
+import { EventQueue } from "../../agent/run/event-queue.js";
 import { splitAttachments, withFileNote } from "../../agent/prompt/attachment-note.js";
 import { EXECUTE_PROMPT, type ExecutePhase, PLAN_PREAMBLE, type PlanPhase, runPlanEmulation } from "../../agent/prompt/plan-emulation.js";
 import { createTurnGate } from "../../guard/turn-gate.js";
@@ -61,40 +62,10 @@ const codedError = async (error: unknown, sdk: Awaited<ReturnType<typeof cursorS
     return { kind: "error", message };
 };
 
-// Callback-to-generator bridge: `onDelta` pushes, the generator yields, one producer and one consumer.
-// No backpressure: the consuming HTTP stream drains fast enough that the model should never wait on a browser.
-class UpdateQueue {
-    private readonly items: InteractionUpdate[] = [];
-    private wake: (() => void) | undefined;
-    private closed = false;
-
-    push(update: InteractionUpdate): void {
-        this.items.push(update);
-        this.wake?.();
-    }
-
-    close(): void {
-        this.closed = true;
-        this.wake?.();
-    }
-
-    async *drain(): AsyncGenerator<InteractionUpdate> {
-        for (;;) {
-            while (this.items.length > 0) {
-                yield this.items.shift() as InteractionUpdate;
-            }
-            if (this.closed) {
-                return;
-            }
-            await new Promise<void>((settle) => {
-                this.wake = () => {
-                    this.wake = undefined;
-                    settle();
-                };
-            });
-        }
-    }
-}
+// Ends one phase's drain without ending the turn's queue: a plan turn runs two phases, and the tools that push into it
+// were bound to it once, when the agent was created.
+const PHASE_END = Symbol("cursor-phase-end");
+type PhaseItem = AgentEvent | typeof PHASE_END;
 
 // Cursor's `plan` mode is read-only by the runtime's own enforcement; `agent` is the full toolbox. Every other posture
 // this repo asks for collapses onto `agent`: finer approvals are the command rulebook's job, not a mode.
@@ -122,38 +93,53 @@ const steerInto = async (started: Promise<Run | undefined>, channel: SteeringCha
 };
 
 export const createCursorAgent = (deps: CursorAgentDeps) => {
-    // Forwards every mapped frame for one turn; the caller emits `done` once, since a plan turn runs two of these.
+    // Forwards one phase of the turn's queue; the caller emits `done` once, since a plan turn runs two of these.
     // While planning, the assistant's prose is captured, not streamed, becoming the plan text.
     async function* runPhase(
         agent: SDKAgent,
         request: AgentRequest,
+        queue: EventQueue<PhaseItem>,
         prompt: string,
         selection: ModelSelection | undefined,
         planning: boolean,
         channel: SteeringChannel | undefined,
     ): AsyncGenerator<AgentEvent, { errored: boolean; planText: string | undefined }> {
         const mapper = createCursorEventMapper(request.cwd, planning);
-        const queue = new UpdateQueue();
         let sawDelta = false;
         const options: SendOptions = {
             mode: modeFor(planning),
             ...(selection !== undefined ? { model: selection } : {}),
+            // Mapped where it arrives rather than where it is read: the drain below can be parked on a tool handler,
+            // and what the mapper captures is read the moment the phase ends.
             onDelta: ({ update }) => {
                 sawDelta = true;
-                queue.push(update);
+                for (const frame of mapper.map(update)) {
+                    queue.push(frame);
+                }
             },
+        };
+
+        // Once per phase, however many of the three ways to end one fire; a second sentinel would end the next phase
+        // before it had streamed anything.
+        let ended = false;
+        const endPhase = (): void => {
+            if (ended) {
+                return;
+            }
+            ended = true;
+            queue.push(PHASE_END);
         };
 
         let sendError: unknown;
         // Not awaited: frames arrive via onDelta while this resolves; awaiting first would buffer the turn's opening.
         const started: Promise<Run | undefined> = agent.send(prompt, options).catch((error: unknown) => {
             sendError = error;
-            queue.close();
+            endPhase();
             return undefined;
         });
 
         // Covers both silences the SDK can hold a turn in: a `send` that never resolves, and a run that resolves and
-        // then never deltas. Cancel is best-effort, so the queue closes on this timer rather than on the cancel.
+        // then never deltas. Cancel is best-effort, so the phase ends on this timer rather than on the cancel.
         let stalled = false;
         const stall = setTimeout(() => {
             if (sawDelta) {
@@ -161,14 +147,14 @@ export const createCursorAgent = (deps: CursorAgentDeps) => {
             }
             stalled = true;
             void started.then((handle) => handle?.cancel().catch(() => undefined));
-            queue.close();
+            endPhase();
         }, FIRST_DELTA_MS);
         stall.unref();
 
         // Stop cancels the run instead of abandoning it, so Cursor unwinds tool calls and the transcript ends resolved.
         const onAbort = (): void => {
             void started.then((handle) => handle?.cancel().catch(() => undefined));
-            setTimeout(() => queue.close(), CANCEL_GRACE_MS).unref();
+            setTimeout(endPhase, CANCEL_GRACE_MS).unref();
         };
         // A pre-pull Stop hits an aborted signal no listener catches; unwatched, send starts a run nothing can cancel.
         const unwatchAbort = whenAborted(request.signal, onAbort);
@@ -178,7 +164,7 @@ export const createCursorAgent = (deps: CursorAgentDeps) => {
             void steerInto(started, channel, deps.logger);
         }
 
-        // Closes the queue when the run itself finishes, ending the drain below.
+        // Ends the phase when the run itself finishes, ending the drain below.
         let settled = false;
         const finished = started.then(async (handle) => {
             if (handle === undefined) {
@@ -189,19 +175,20 @@ export const createCursorAgent = (deps: CursorAgentDeps) => {
                 return undefined;
             });
             settled = true;
-            queue.close();
+            endPhase();
             return result;
         });
 
         let errored = false;
         try {
-            for await (const update of queue.drain()) {
-                for (const frame of mapper.map(update)) {
-                    if (frame.kind === "error") {
-                        errored = true;
-                    }
-                    yield frame;
+            for await (const item of queue) {
+                if (item === PHASE_END) {
+                    break;
                 }
+                if (item.kind === "error") {
+                    errored = true;
+                }
+                yield item;
             }
             // Only the run's own settle resolves `finished`; a stall or a cancel grace ends the drain without one, and
             // awaiting it there is the hang this phase is bounded against.
@@ -255,16 +242,12 @@ export const createCursorAgent = (deps: CursorAgentDeps) => {
         const { images, others } = splitAttachments(request.attachments ?? []);
         const basePrompt = withFileNote(request.prompt, [...images, ...others]);
 
-        // Custom tool handlers run inside Cursor's loop with no generator to yield from; they push frames here.
-        const frames: AgentEvent[] = [];
-        const push = (event: AgentEvent): void => {
-            frames.push(event);
-        };
-        const flush = function* (): Generator<AgentEvent> {
-            while (frames.length > 0) {
-                yield frames.shift() as AgentEvent;
-            }
-        };
+        // One stream for the turn, two producers: the SDK's mapped deltas, and the custom tool handlers and hooks that
+        // run inside Cursor's loop with no generator to yield from. They share it because a handler that parks on a
+        // person is itself what stops the deltas, so a card waiting for the next one would never be shown — and the
+        // handler holding the turn would never be answered.
+        const queue = new EventQueue<PhaseItem>();
+        const push = (event: AgentEvent): void => queue.push(event);
 
         // Rulebook axis "hooks" makes a hold park on a card, not refuse, while the hook process waits on the socket.
         // Built ahead of the options because the JS backend rides a custom tool and consults this gate from inside its
@@ -316,16 +299,9 @@ export const createCursorAgent = (deps: CursorAgentDeps) => {
                 // Each phase borrows its own channel and closes it, so a message typed during a plan's approval pause
                 // waits for the executing phase instead of being delivered to the run that already finished.
                 const channel = relay?.();
-                const phase = runPhase(live, request, prompt, selection, planning, channel);
                 try {
-                    let step = await phase.next();
-                    while (step.done !== true) {
-                        yield step.value;
-                        yield* flush();
-                        step = await phase.next();
-                    }
-                    yield* flush();
-                    return { errored: step.value.errored, ...(step.value.planText !== undefined ? { planText: step.value.planText } : {}) };
+                    const outcome = yield* runPhase(live, request, queue, prompt, selection, planning, channel);
+                    return { errored: outcome.errored, ...(outcome.planText !== undefined ? { planText: outcome.planText } : {}) };
                 } finally {
                     channel?.close();
                 }

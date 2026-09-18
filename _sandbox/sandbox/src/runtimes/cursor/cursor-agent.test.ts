@@ -1,10 +1,11 @@
-import type { InteractionUpdate, SendOptions } from "@cursor/sdk";
+import type { AgentOptions, InteractionUpdate, SDKCustomTool, SendOptions } from "@cursor/sdk";
 import { WORKSPACE_ROOT } from "@intentic/constants";
 import type { AgentEvent } from "@intentic/sandbox-contract";
 import { unstubbed } from "@intentic/testing";
 import type { Logger } from "pino";
 import { beforeEach, expect, test, vi } from "vitest";
 import type { AgentRequest } from "../../agent/run/agent.js";
+import { resolveRequest } from "../../agent/tools/agent-requests.js";
 import { createCursorAgent, type CursorAgentDeps, FIRST_DELTA_MS } from "./cursor-agent.js";
 import type { CursorHookService } from "./cursor-hooks.js";
 
@@ -90,6 +91,94 @@ test("a run that takes the turn and then says nothing at all ends as an outage r
     } finally {
         vi.useRealTimers();
     }
+});
+
+const QUESTION = {
+    question: `Which store?`,
+    header: `Store`,
+    multiSelect: false,
+    options: [
+        { label: `Postgres`, description: `p` },
+        { label: `SQLite`, description: `s` },
+    ],
+};
+
+// The live failure this covers: a card raised inside a custom tool waited for the next delta to be flushed out, and the
+// tool parked on that card is precisely what stops the deltas. The question was never shown, so it was never answered,
+// and the turn stood there until it was stopped — at which point the card finally appeared, unanswerable.
+test("a question raised inside a tool is streamed while that tool is still waiting for its answer", async () => {
+    let settleRun: (result: { status: string }) => void = () => {};
+    const ran = new Promise<{ status: string }>((resolve) => {
+        settleRun = resolve;
+    });
+    let asked: Promise<unknown> | undefined;
+    agentThat(
+        () => {
+            // Cursor invokes a custom tool inside its own loop and deltas nothing until the handler returns.
+            const created = create.mock.lastCall?.[0] as AgentOptions;
+            const ask = created.local?.customTools?.[`ask`] as SDKCustomTool;
+            asked = Promise.resolve(ask.execute({ questions: [QUESTION] }, {}));
+        },
+        () => ran,
+    );
+
+    const seen: AgentEvent[] = [];
+    const turn = (async () => {
+        for await (const event of createCursorAgent(deps())(request())) {
+            seen.push(event);
+        }
+    })();
+
+    await vi.waitFor(() => expect(seen.map((event) => event.kind)).toContain(`question`));
+    const card = seen.find((event): event is Extract<AgentEvent, { kind: `question` }> => event.kind === `question`);
+    expect(card?.questions).toEqual([QUESTION]);
+
+    expect(resolveRequest({ kind: `question`, requestId: card?.requestId ?? ``, answers: { [QUESTION.question]: [`Postgres`] } })).toBe(`settled`);
+    expect(await asked).toBe(`The user answered:\n- Store: Postgres`);
+
+    settleRun({ status: `success` });
+    await turn;
+    // The card's resolution is a pushed frame too, and the transcript replays the answered card from it.
+    expect(seen.filter((event) => event.kind === `resolved`)).toEqual([{ kind: `resolved`, requestId: card?.requestId, reply: expect.anything() }]);
+    expect(seen.at(-1)).toEqual({ kind: `done` });
+});
+
+// Two phases over one queue, since the tools that push into it are bound once, when the agent is created: what ends the
+// planning phase's drain must not still be sitting in the queue when the approved phase starts.
+test("an approved plan streams its executing phase on the queue the planning phase ended", async () => {
+    const settle: ((result: { status: string }) => void)[] = [];
+    let phases = 0;
+    create.mockResolvedValue({
+        agentId: `agent-planning`,
+        send: async (_prompt: string, options: SendOptions) => {
+            phases += 1;
+            options.onDelta?.({ update: { type: `text-delta`, text: phases === 1 ? `ship it` : `working on it` } as InteractionUpdate });
+            return { wait: () => new Promise((resolve: (result: { status: string }) => void) => settle.push(resolve)), cancel };
+        },
+        close: () => {},
+    });
+
+    const seen: AgentEvent[] = [];
+    const turn = (async () => {
+        for await (const event of createCursorAgent(deps())({ ...request(), permissionMode: `plan` })) {
+            seen.push(event);
+        }
+    })();
+
+    await vi.waitFor(() => expect(settle).toHaveLength(1));
+    settle[0]?.({ status: `success` });
+    await vi.waitFor(() => expect(seen.map((event) => event.kind)).toContain(`plan`));
+    const plan = seen.find((event): event is Extract<AgentEvent, { kind: `plan` }> => event.kind === `plan`);
+    // Planning holds the prose back rather than streaming it: the plan is what the phase captured.
+    expect(plan?.text).toBe(`ship it`);
+
+    expect(resolveRequest({ kind: `plan`, requestId: plan?.requestId ?? ``, approve: true })).toBe(`settled`);
+    await vi.waitFor(() => expect(settle).toHaveLength(2));
+    settle[1]?.({ status: `success` });
+    await turn;
+
+    expect(seen.filter((event) => event.kind === `delta`)).toEqual([{ kind: `delta`, text: `working on it` }]);
+    expect(seen.at(-1)).toEqual({ kind: `done` });
 });
 
 // The bound is on the opening only: a turn that has streamed is a turn Cursor is answering, and a long quiet stretch
