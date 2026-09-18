@@ -136,21 +136,15 @@ const updateHeading = computed(() => {
 
         <RowNote variant="block">
             <div class="flex flex-col gap-4">
-                <p v-if="(breaking || updateAvailable) && !localImage" class="text-xs text-muted">
-                    <template v-if="breaking">
-                        {{ t(`sandbox.sandboxUpdateCard.updateRemovesChangesThings`) }}
-                        <a href="https://intentic.dev/docs/updates/" target="_blank" rel="noopener" class="underline hover:text-content">{{
-                            t(`sandbox.sandboxUpdateCard.whatUpdatesNeverBreak`)
-                        }}</a
-                        >.
-                    </template>
-                    <!-- A bounded half-minute became sayable only once the host reported what it had already downloaded. -->
-                    <template v-else-if="updateStaged">
-                        {{ t(`sandbox.sandboxUpdateCard.alreadyDownloadedBuiltOn`) }}
-                    </template>
-                    <template v-else>
-                        {{ t(`sandbox.sandboxUpdateCard.newerSandboxImageReleased`) }}
-                    </template>
+                <p v-if="breaking && !localImage" class="text-xs text-muted">
+                    {{ t(`sandbox.sandboxUpdateCard.updateRemovesChangesThings`) }}
+                    <a href="https://intentic.dev/docs/updates/" target="_blank" rel="noopener" class="underline hover:text-content">{{
+                        t(`sandbox.sandboxUpdateCard.whatUpdatesNeverBreak`)
+                    }}</a
+                    >.
+                </p>
+                <p v-else-if="updateStaged && updateAvailable && !localImage" class="text-xs text-muted">
+                    {{ t(`sandbox.sandboxUpdateCard.alreadyDownloadedBuiltOn`) }}
                 </p>
 
                 <!-- Never truncated: a breaking note cut by a capped list is a break taken unwarned. -->
@@ -164,17 +158,16 @@ const updateHeading = computed(() => {
                     </ul>
                 </div>
 
-                <!-- Shown above the cost and the button, so the reader has something to weigh an update against. -->
-                <div v-if="updateAvailable && updateNotes.length > 0 && !localImage" class="mt-3 flex flex-col gap-1.5">
-                    <p class="text-xs font-medium text-content">{{ t(`sandbox.sandboxUpdateCard.whatsNew`) }}</p>
-                    <ul class="flex flex-col gap-1">
-                        <li v-for="note in updateNotes" :key="note" class="flex gap-2 text-2xs text-muted">
-                            <span class="mt-1.5 h-0.5 w-0.5 shrink-0 rounded-full bg-primary-500" />
+                <!-- Shown above the button, so the reader has something to weigh an update against. -->
+                <div v-if="updateAvailable && updateNotes.length > 0 && !localImage" class="flex flex-col gap-2">
+                    <ul class="flex flex-col gap-2">
+                        <li v-for="note in updateNotes" :key="note" class="flex gap-2.5 text-sm text-content">
+                            <span class="mt-2 h-1 w-1 shrink-0 rounded-full bg-primary-500" />
                             <span>{{ note }}</span>
                         </li>
                     </ul>
                     <!-- Tail of a long gap as a count, not more bullets, so an old sandbox doesn't bury the rest of the page. -->
-                    <p v-if="moreUpdateNotes > 0" class="text-2xs text-subtle">
+                    <p v-if="moreUpdateNotes > 0" class="text-xs text-subtle">
                         {{ t(`sandbox.sandboxUpdateCard.and`) }} {{ moreUpdateNotes }} {{ t(`sandbox.sandboxUpdateCard.more`) }}
                         <a href="https://intentic.dev/changelog/" target="_blank" rel="noopener" class="underline hover:text-content">{{
                             t(`sandbox.sandboxUpdateCard.readChangelog`)
@@ -240,16 +233,21 @@ const updateHeading = computed(() => {
                         <HostRecreate :slug="slug" action="Update" ready />
                     </template>
                     <template v-else-if="updateAvailable">
-                        <p class="text-xs font-medium text-content">{{ t(`sandbox.sandboxUpdateCard.downloadNowNothingRestarts`) }}</p>
-                        <HostRecreate :slug="slug" action="Download" />
-                        <p class="text-xs font-medium text-content">{{ t(`sandbox.sandboxUpdateCard.doBothNowDownloading`) }}</p>
-                        <HostRecreate :slug="slug" action="Update" />
+                        <div class="flex flex-col gap-2">
+                            <div class="flex flex-wrap items-center justify-between gap-2">
+                                <HostRecreate :slug="slug" action="Update" bare />
+                                <HostRecreate :slug="slug" action="Download" text bare />
+                            </div>
+                            <p class="text-2xs text-subtle">{{ t(`capabilities.hostRecreate.costBuildThenRestart`) }}</p>
+                        </div>
                     </template>
                     <!-- Offered alongside an available update too, since a rollback is as likely the reason someone opened this card. -->
-                    <p v-if="rollbackTo && !hosted" class="text-2xs text-subtle">
-                        <!-- Explicit space: Vue drops a whitespace-only text node spanning a newline, and the sentence would run into the link without it. -->
-                        <template v-if="updateAvailable">{{ t(`sandbox.sandboxUpdateCard.ratherGoBack`) }}</template>
-                        <template v-else>{{ t(`sandbox.sandboxUpdateCard.somethingWrongSinceLast`) }}</template>
+                    <p v-if="rollbackTo && !hosted" class="flex flex-wrap items-baseline gap-x-1 text-2xs text-subtle">
+                        <span>{{
+                            updateAvailable
+                                ? t(`sandbox.sandboxUpdateCard.ratherGoBack`)
+                                : t(`sandbox.sandboxUpdateCard.somethingWrongSinceLast`)
+                        }}</span>
                         <button type="button" class="underline hover:text-content" @click="toggleRollback">
                             {{ t(`sandbox.sandboxUpdateCard.rollBackToPrevious`) }}
                         </button>

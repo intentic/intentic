@@ -43,6 +43,9 @@ const props = defineProps<{
     // Whether the needed image is already on that machine, so the wait is just the restart; supplied by the update
     // card.
     ready?: boolean;
+    // Text button without the cost line beneath; the update card lays out download beside update.
+    text?: boolean;
+    bare?: boolean;
 }>();
 
 const { cmdOs } = useOsPreference();
@@ -209,20 +212,28 @@ const command = computed(() => {
 </script>
 
 <template>
-    <div class="flex flex-col gap-2">
+    <div :class="bare ? undefined : `flex flex-col gap-2`">
         <!-- Machine is reachable from here, so this is a button wherever you're reading it, even a phone elsewhere. -->
         <template v-if="hostId">
             <Button
-                :label="running ? t(`capabilities.hostRecreate.running`, { action: verb }) : t(`capabilities.hostRecreate.now`, { action: verb })"
+                v-tooltip.top="text && action === `Download` ? t(`capabilities.hostRecreate.costDownload`) : undefined"
+                :label="
+                    text && action === `Download`
+                        ? t(`capabilities.hostRecreate.downloadOnly`)
+                        : running
+                          ? t(`capabilities.hostRecreate.running`, { action: verb })
+                          : t(`capabilities.hostRecreate.now`, { action: verb })
+                "
                 size="small"
                 class="self-start"
-                :severity="action === `Download` ? `secondary` : undefined"
+                :severity="text || action === `Download` ? `secondary` : undefined"
+                :text="text"
                 :loading="running"
                 @click="runOnMachine"
             >
-                <template #icon><Icon :name="action === `Download` ? `download` : `bolt`" /></template>
+                <template v-if="!text" #icon><Icon :name="action === `Download` ? `download` : `bolt`" /></template>
             </Button>
-            <p class="text-2xs text-subtle">{{ t(`capabilities.hostRecreate.runsOnDeviceHosting`, { cost }) }}</p>
+            <p v-if="!bare" class="text-2xs text-subtle">{{ t(`capabilities.hostRecreate.runsOnDeviceHosting`, { cost }) }}</p>
             <DeviceRunLog
                 v-if="running || lines.length > 0"
                 :lines="lines"

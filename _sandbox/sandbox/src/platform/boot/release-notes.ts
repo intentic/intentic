@@ -12,7 +12,7 @@ const REFRESH_MS = 60 * 60_000;
 // Reads 30 releases back, about ten days at current rate; older sandboxes see what fits plus the update offer.
 
 // Most notes one card shows before pointing the reader to the changelog instead of unrolling fifty bullets.
-export const MAX_UPDATE_NOTES = 12;
+export const MAX_UPDATE_NOTES = 6;
 
 interface ReleaseNotes {
     readonly version: string;

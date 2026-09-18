@@ -610,6 +610,7 @@
             "costRebuild": "It builds the approved recipe on the image this sandbox already runs, which interrupts nothing, then restarts your sandbox for about half a minute. Your files (in /work) are kept.",
             "costRestartOnly": "It is already downloaded, so this is just the restart: about half a minute. Your files (in /work) are kept.",
             "doesButton": "does this with a button.",
+            "downloadOnly": "Download only",
             "downloadVerb": "Download",
             "environmentApprovedBeingSwapped": "The environment you approved is being swapped in — about half a minute, then this page reconnects on its own. Your files in /work are kept.",
             "intenticWindows": "Intentic for Windows",

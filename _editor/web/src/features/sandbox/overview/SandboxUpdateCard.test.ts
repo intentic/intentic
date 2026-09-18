@@ -62,7 +62,7 @@ afterEach(() => {
 
 it(`offers the published update on a sandbox that follows the registry`, () => {
     const el = mount();
-    expect([...el.querySelectorAll(`[data-recreate]`)].map((node) => node.getAttribute(`data-recreate`))).toEqual([`Download`, `Update`]);
+    expect([...el.querySelectorAll(`[data-recreate]`)].map((node) => node.getAttribute(`data-recreate`))).toEqual([`Update`, `Download`]);
     expect(el.querySelector(`[data-executor="checkout"]`)).toBeNull();
 });
 
