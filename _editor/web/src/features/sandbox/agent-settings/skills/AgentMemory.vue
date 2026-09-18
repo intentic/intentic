@@ -4,7 +4,6 @@ import { Button, CopyButton, MarkdownDocument, Notice, type NoticeModel, RowGrou
 import { noticeFrom } from "@intentic/ui/async";
 import { onMounted, ref } from "vue";
 import { IMPORT_PROMPT, mergeMemory } from "../../../extensions/memoryImport";
-import { useSandbox } from "../../client/useSandbox";
 import { useWorkspaceTree } from "../../../workspace/explorer/useWorkspaceTree";
 import { useT } from "@intentic/ui/i18n";
 
@@ -13,7 +12,6 @@ import { useT } from "@intentic/ui/i18n";
 
 const t = useT();
 
-const sandbox = useSandbox();
 const { readFile, saveText } = useWorkspaceTree();
 
 const draft = ref(``);
@@ -79,14 +77,7 @@ const importMemory = async (): Promise<void> => {
 <template>
     <RowGroup :label="t(`sandbox.agentMemory.memory`)">
         <RowNote variant="block">
-            <p class="text-xs text-muted">
-                {{ t(`sandbox.agentMemory.standingInstructions`) }}
-                <span class="font-medium text-content">{{ sandbox.active.value?.name ?? t(`sandbox.agentMemory.sandbox`) }}</span>
-                {{ t(`sandbox.agentMemory.carriesIntoEveryTurn`) }} <code>{{ MEMORY_FILE }}</code>
-                {{ t(`sandbox.agentMemory.atWorkspaceRootFolder`) }}
-            </p>
-
-            <Notice v-if="error" :of="error" class="mt-3" />
+            <Notice v-if="error" :of="error" />
 
             <div class="ui-field-shell mt-3 max-h-[60dvh] overflow-auto p-3" style="--prose-measure: 72ch">
                 <MarkdownDocument

@@ -1602,18 +1602,14 @@
         "agentMemory": {
             "addToMemory": "Add to memory",
             "atWorkspaceRoot": ", at the workspace root.",
-            "atWorkspaceRootFolder": "at the workspace root; a folder deeper in can carry its own, read on top of this one by a conversation that starts there.",
             "bringMemoryOverAnother": "Bring memory over from another assistant",
-            "carriesIntoEveryTurn": "carries into every turn, on whichever model runs it.",
             "copyPrompt": "Copy prompt",
             "copyPromptIntoChat": "Copy this prompt into a chat with your other AI provider",
             "memory": "Memory",
             "nothingHereYetWhat": "Nothing here yet. What every turn in this workspace should know.",
             "pasteMemoryDetailsHere": "Paste your memory details here",
             "pasteResultBelowTo": "Paste the result below to merge it into both files",
-            "reading": "Reading {memory_file}…",
-            "sandbox": "your sandbox",
-            "standingInstructions": "The standing instructions"
+            "reading": "Reading {memory_file}…"
         },
         "agentModels": {
             "addModelAutomaticTier": "Add a model for automatic tier selection",
@@ -2438,25 +2434,6 @@
             "import": "Import",
             "ownerOnly": "Owner only."
         },
-        "instructionsInfo": {
-            "agentInstallYourselfBrings": "An agent you install yourself brings its own prompt and offers no way to set one, so it keeps it, and the model picker says so on the chat it would affect. Ordinary preferences (\"answer in Polish\") do not need this: put them in Memory, which every model is told whatever prompt is in force. A single persona can run on a prompt of its own: see Personas.",
-            "editCopy": "Edit a copy of it",
-            "editingCostsOneTurns": "Editing it costs one turn's worth of the reuse that keeps long conversations cheap, then settles back. Write it and leave it. It isn't a place to steer a single task from.",
-            "everyChatInSandbox": "Every chat in this sandbox, automated wake-ups and web-chat visitors included, but what each model does with it depends on what that model lets us set.",
-            "gentlerRouteIntoCustom": "is the gentler route into Custom: fork whichever prompt you are on and change the parts you care about, keeping the rest. The trade is that a fork is a snapshot: it stops picking up improvements, which is why the dialog shows the version it came from. Switching back to Intentic or Claude is one click and loses nothing: your text stays in the box for the next time you pick Custom.",
-            "instructions": "Instructions",
-            "instructionsAssistantCarriesBefore": "The instructions the assistant carries before you type anything, who it is, how it works, what it may assume. Three to choose from, and you can read any of them in full before you pick:",
-            "intenticClaudePeersDifferent": "Intentic and Claude are peers: a different prompt, everything else identical, one click apart. Writing your own is the different one: it",
-            "notAddsToReplaces": "them. Not adds to them: replaces them. That is real power (an agent that is a release-notes writer, a support bot, a reviewer with your house rules) and it has a real cost, because this app talks to the assistant through that same prompt. If you want that power for one job rather than for the whole sandbox, a persona can carry its own prompt, and its own skills: without changing anything else here.",
-            "onSetting": "on the setting.",
-            "replaces": "replaces",
-            "systemPrompt": "System prompt",
-            "viewPrompt": "View this prompt",
-            "whatAssistantToldBefore": "What the assistant is told before you say anything. This sandbox only.",
-            "whatCustomGivesUp": "What Custom gives up",
-            "whatStays": "What stays",
-            "whereApplies": "Where it applies"
-        },
         "manifestNotice": {
             "remove": "Remove it",
             "rename": "Rename it"
@@ -3156,17 +3133,6 @@
             "keep": "Keep it",
             "noDescriptionAgentRarely": "No description, the agent rarely picks a skill without one.",
             "reading": "Reading…"
-        },
-        "skillsInfo": {
-            "assistantReadsEverySkills": "The assistant reads every skill's \"when to use it\" line on every single turn, so each one you keep costs a little attention on work it has nothing to do with. A short list the assistant reads properly beats a long one it skims. Switching a skill off keeps what you wrote: it just stops being handed over.",
-            "changesLandOnNext": "Changes land on the next turn: a conversation already running keeps the skills it started with.",
-            "everythingAgentCarryingRight": "This is everything your agent is carrying right now, wherever it came from. Six different things put skills in front of it, so the list is the only place the whole set is visible at once.",
-            "moreIsntBetter": "More isn't better",
-            "skillNoteAssistantReads": "A skill is a note the assistant reads when a job matches it: how to do one particular thing, written once. It's not code and it doesn't run: it's instructions, plus a line saying when to reach for them.",
-            "skills": "Skills",
-            "toUseLineDoes": "The \"when to use it\" line does the work. It's the only part read before the assistant decides whether to open the rest, so name the words and situations it should trigger on rather than describing the skill in the abstract. A skill nobody can tell when to use is a skill that never gets used, and nothing on screen looks wrong when that happens.",
-            "whereTheyCome": "Where they come from",
-            "writingGoodOne": "Writing a good one"
         },
         "spawnPosture": {
             "alwaysAllow": "Always allow",

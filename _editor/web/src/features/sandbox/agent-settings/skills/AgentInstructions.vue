@@ -7,7 +7,6 @@ import { sandboxJson } from "../../client/sandboxClient";
 import { useSandboxSettings } from "../../overview/useSandboxSettings";
 import { useDraft } from "../../../../lib/useDraft";
 import { promptReach, spokenList } from "./promptReach";
-import InstructionsInfo from "./InstructionsInfo.vue";
 import { useT } from "@intentic/ui/i18n";
 
 const t = useT();
@@ -68,8 +67,6 @@ const reachLine =
 
 <template>
     <RowGroup :label="t(`sandbox.agentInstructions.instructions`)">
-        <template #info><InstructionsInfo /></template>
-
         <Row icon="pencil" :title="t(`sandbox.agentInstructions.systemPrompt`)">
             <template #description>
                 <template v-if="promptMode === `custom`">{{ t(`sandbox.agentInstructions.ownPromptAgentRuns`) }}</template>
