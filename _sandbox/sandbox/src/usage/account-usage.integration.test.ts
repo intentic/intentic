@@ -65,9 +65,28 @@ test("an account left with no live window is absent, not reported as measured-an
     expect(Object.keys(await store.read())).toEqual(["fresh"]);
 });
 
-test("a window with no reset instant is kept: measuredAt carries the staleness caveat instead", async () => {
+// A five-hour pool nothing has spent yet is published with no reset instant at all, so retiring windows by that instant
+// alone left the one reading most likely to go wrong as the only one nothing could ever retire. An idle 0% read at
+// breakfast still said 0% at midnight, under a provider that had been refusing re-reads all day.
+test("a window with no reset instant is retired by its own length", async () => {
     const { store } = tempStore();
-    await store.record("acct-1", snapshot({ windows: [window({ resetsAt: undefined })], measuredAt: Date.now() - 5 * 24 * 3600 * SECOND }));
+    const idle = (agoMs: number): AccountUsage => snapshot({ windows: [window({ utilization: 0, resetsAt: undefined })], measuredAt: Date.now() - agoMs });
+
+    // Inside the five hours it describes, the reading can still be true, and measuredAt carries the staleness caveat.
+    await store.record("acct-1", idle(4 * 3600 * SECOND));
+    expect(Object.keys(await store.read())).toEqual(["acct-1"]);
+
+    // Past them a whole window has opened and closed since, so the figure describes nothing. An account left with no
+    // live window is absent, which every reader takes as "no reading" rather than "no limits".
+    await store.record("acct-1", idle(6 * 3600 * SECOND));
+    expect(await store.read()).toEqual({});
+});
+
+test("a window whose length nothing names still rests on its reset instant alone", async () => {
+    const { store } = tempStore();
+    // Neither the provider's key nor its name says how long this runs, so there is nothing to retire it by but a reset.
+    const unnamed = window({ kind: "claude:tangelo", resetsAt: undefined });
+    await store.record("acct-1", snapshot({ windows: [unnamed], measuredAt: Date.now() - 5 * 24 * 3600 * SECOND }));
     expect(Object.keys(await store.read())).toEqual(["acct-1"]);
 });
 

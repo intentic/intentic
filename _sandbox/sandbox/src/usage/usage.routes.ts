@@ -9,6 +9,9 @@ export type UsageRoutesDeps = Pick<Services, "headroom" | "usage" | "claudeStore
 // How long a forced re-measure waits for the sweep before returning the stale reading; bounded by the readers' own
 // timeouts.
 const FORCED_WAIT_MS = 9_000;
+// An unforced call is a screen arriving, and it wants `held` more than it wants a landed read: the sweep it triggers is
+// held to every target's own budget anyway, so waiting the forced wait would only delay the panel.
+const ARRIVAL_WAIT_MS = 1_500;
 
 // The store keys a routed account by `${provider}:${file}` and a native one by its id; over the wire an account is
 // always named the way its provider's list names it, since that is what a caller has in hand to match against.
@@ -20,7 +23,11 @@ export const createUsageRoutes = (services: UsageRoutesDeps) => {
     return {
         rollup: i.rollup.handler(async ({ input }) => ({ rows: await services.usage.rollup(input) })),
         refreshPlanLimits: i.refreshPlanLimits.handler(async ({ input }) => {
-            await services.headroom.refresh({ ...(input.force ? { maxAgeMs: 0 } : {}), withinMs: FORCED_WAIT_MS });
+            await services.headroom.refresh({
+                // Only a forced press is watched, and only a watched sweep may spend a target's own read budget early.
+                ...(input.force ? { maxAgeMs: 0, watched: true } : {}),
+                withinMs: input.force ? FORCED_WAIT_MS : ARRIVAL_WAIT_MS,
+            });
             // Reported in seconds like every other instant on the wire, so a caller can say when the number can move.
             return {
                 ok: true as const,
@@ -33,7 +40,7 @@ export const createUsageRoutes = (services: UsageRoutesDeps) => {
         }),
 /* A spent session window can continue through the Claude reset mechanism. */
         limitReset: i.limitReset.handler(async ({ input }) => {
-            const status = await readLimitReset(services.claudeStore, input.account);
+            const status = await readLimitReset({ store: services.claudeStore, headroom: services.headroom }, input.account);
             if (status === undefined) {
                 throw new ORPCError("SERVICE_UNAVAILABLE", { message: "The provider could not check reset availability. Try again in a moment." });
             }

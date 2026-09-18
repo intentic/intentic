@@ -1,4 +1,12 @@
-import { type AccountUsage, AccountUsageSchema, bindingWindow, gatingWindows, type ModelRef, type UsageWindow } from "@intentic/sandbox-contract";
+import {
+    type AccountUsage,
+    AccountUsageSchema,
+    bindingWindow,
+    gatingWindows,
+    type ModelRef,
+    type UsageWindow,
+    windowLive,
+} from "@intentic/sandbox-contract";
 import { z } from "zod";
 import { jsonFile } from "../store/json-file.js";
 
@@ -17,9 +25,11 @@ export interface AccountUsageStore {
 }
 
 // Utilization only climbs within a window, so a reading is a valid floor until `resetsAt`; past it the window no longer
-// exists. One with no reset instant is kept, its `measuredAt` carries the staleness caveat.
+// exists. A window with no published reset is retired by its own length instead (windowLive): a five-hour pool read as
+// empty says nothing about the window that opened after it, and without this a provider that publishes no reset for an
+// idle pool leaves a 0% on screen for as long as nothing can be re-read.
 const liveWindows = (usage: AccountUsage, now: number): UsageWindow[] =>
-    usage.windows.filter((window) => window.resetsAt === undefined || window.resetsAt * 1000 > now);
+    usage.windows.filter((window) => windowLive(window, usage.measuredAt, now));
 
 // Reset of the pool that refused the turn: the fullest pool this model spends (bindingWindow), scoped to the model
 // since a separately metered pool (e.g. Opus at 100%) must not name its reset over a refused Sonnet turn.

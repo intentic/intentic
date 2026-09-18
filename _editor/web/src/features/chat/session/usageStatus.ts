@@ -10,6 +10,8 @@ import {
     type TranslatorAccounts,
     type UsageWindow,
     type WindowGates,
+    windowPeriod,
+    type WindowPeriod,
 } from "@intentic/sandbox-contract";
 import { formatWeekdayTime, timeAgo } from "@intentic/ui/format";
 import { lookupUsage, providerAccounts, providerRefusals, translatorAccounts } from "../accounts/providerAccounts";
@@ -126,48 +128,12 @@ const usagePools = (usage: AccountUsage): readonly PlanLimitPool[] =>
     }));
 
 // Short label for a pool's window length (e.g. "5h", "wk"), so a narrow rail can show both allowances instead
-// of a bare percent. Read off the provider's own kind/label words; `seconds` orders windows soonest-first.
-export interface PoolPeriod {
-    readonly seconds: number;
-    readonly short: string;
-}
-
-const HOUR_SECONDS = 3_600;
-const DAY_SECONDS = 86_400;
-
-// Kind and label as space-padded lowercase words, underscores split, so `\b` matches across both spellings.
-const poolWords = (pool: Pick<PlanLimitPool, `kind` | `label`>): string =>
-    ` ${`${pool.kind} ${pool.label}`
-        .toLowerCase()
-        .replaceAll(/[^a-z0-9]+/gu, ` `)
-        .trim()} `;
+// of a bare percent. The rule lives in the contract (windowPeriod), since the daemon retires a reading with no
+// published reset by the same window length this column names it by.
+export type PoolPeriod = WindowPeriod;
 
 /** Window length behind a pool, and the short token a narrow column names it by. */
-export const poolPeriod = (pool: Pick<PlanLimitPool, `kind` | `label`>): PoolPeriod | undefined => {
-    const words = poolWords(pool);
-    const hours = /\b(\d+) hours?\b/u.exec(words)?.[1];
-    const days = /\b(\d+) days?\b/u.exec(words)?.[1];
-    if (/\bfive hours?\b/u.test(words) || hours === `5`) {
-        return { seconds: 5 * HOUR_SECONDS, short: `5h` };
-    }
-    if (hours !== undefined) {
-        return { seconds: Number(hours) * HOUR_SECONDS, short: `${hours}h` };
-    }
-    if (/\bseven days?\b/u.test(words) || days === `7` || /\bweek(ly|s)?\b/u.test(words)) {
-        return { seconds: 7 * DAY_SECONDS, short: `wk` };
-    }
-    if (/\bmonth(ly|s)?\b/u.test(words)) {
-        return { seconds: 30 * DAY_SECONDS, short: `mo` };
-    }
-    if (/\bdaily\b/u.test(words) || days === `1`) {
-        return { seconds: DAY_SECONDS, short: `24h` };
-    }
-    if (days !== undefined) {
-        return { seconds: Number(days) * DAY_SECONDS, short: `${days}d` };
-    }
-    const minutes = /\b(\d+) minutes?\b/u.exec(words)?.[1];
-    return minutes === undefined ? undefined : { seconds: Number(minutes) * 60, short: `${minutes}m` };
-};
+export const poolPeriod = (pool: Pick<PlanLimitPool, `kind` | `label`>): PoolPeriod | undefined => windowPeriod(pool);
 
 // Words that name only the period, not scope; used to strip them so poolScope can find a pool's actual name.
 const PERIOD_WORDS = new Set([

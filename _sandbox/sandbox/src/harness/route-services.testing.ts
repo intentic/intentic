@@ -284,6 +284,8 @@ export const services = (overrides: ServiceOverrides = {}): Services => {
         headroom: {
             refresh: async () => {},
             held: () => [],
+            parked: async () => false,
+            park: async () => {},
             record: async () => {},
             clear: async () => {},
             read: async () => ({}),

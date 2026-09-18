@@ -26,6 +26,9 @@ export const HISTORY_STATE_FILES: readonly StateFile[] = [
     { path: "activity.jsonl", portability: "carry" },
     { path: "usage.jsonl", portability: "carry" },
     { path: "account-usage.json", portability: "carry" },
+    // Per-account stay-away for a provider's usage endpoint. Carried, not re-earned: earning one costs the very read it
+    // holds off, and is answered with a deadline measured from that moment. Entries past their instant are inert.
+    { path: "usage-parks.json", portability: "carry" },
     { path: "provider-refusals.json", portability: "carry" },
     // Models refused to this sandbox's credentials; expires daily, same subscriptions apply elsewhere.
     { path: "model-refusals.json", portability: "carry" },

@@ -1,7 +1,9 @@
+import type { UsageWindow } from "@intentic/sandbox-contract";
 import { unstubbed } from "@intentic/testing";
 import { expect, test } from "vitest";
 import type { ClaudeStore, StoredAccount } from "../runtimes/claude/claude-credentials.js";
-import { claimLimitReset, readLimitReset } from "./claude-limit-reset.js";
+import { claimLimitReset, type LimitResetDeps, readLimitReset } from "./claude-limit-reset.js";
+import { claudeUsageWindows, RATE_LIMIT_PARK_MS } from "./claude-usage.js";
 
 // Once-a-week session-limit reset, over its two seams: the stored credential and the provider (stubbed as fetch).
 // Shapes are transcribed from live responses, not invented.
@@ -11,6 +13,25 @@ const ACCOUNT: StoredAccount = { id: "a", connectedAt: 1, accessToken: "tok" };
 // Enough of the store for `ensureFreshToken`: a stored account whose token has no expiry is usable as it
 // stands, so nothing here ever reaches the refresh path (which is claude-credentials' own subject).
 const store = (account: StoredAccount | undefined = ACCOUNT): ClaudeStore => unstubbed<ClaudeStore>("claudeStore", { read: async () => account });
+
+// The probe shares the headroom service's park for this endpoint, and files the reading its answer carries. Recorded
+// here rather than stubbed away, since both are the point of routing it through the service at all.
+interface Gate {
+    readonly parks: { provider: string; account: string; forMs: number }[];
+    readonly filed: { account: string; windows: readonly UsageWindow[] }[];
+}
+const gate = (claudeStore: ClaudeStore, seen: Gate = { parks: [], filed: [] }, parkedAccounts: ReadonlySet<string> = new Set()): LimitResetDeps => ({
+    store: claudeStore,
+    headroom: {
+        parked: async (account) => parkedAccounts.has(account),
+        park: async (provider, account, forMs) => {
+            seen.parks.push({ provider, account, forMs });
+        },
+        record: async (_provider, account, usage) => {
+            seen.filed.push({ account, windows: usage.windows });
+        },
+    },
+});
 
 interface Call {
     readonly url: string;
@@ -44,7 +65,7 @@ const eligible = {
 test("an eligible account is offered, and the probe identifies itself as the CLI the allowance is spent by", async () => {
     const { fetchFn, calls } = provider({ "/api/oauth/usage": { body: { juniper_tide: eligible } } });
 
-    expect(await readLimitReset(store(), "a", fetchFn)).toEqual({ available: true, weeklyResetsAt: Date.parse("2026-09-08T00:00:00Z") / 1000 });
+    expect(await readLimitReset(gate(store()), "a", fetchFn)).toEqual({ available: true, weeklyResetsAt: Date.parse("2026-09-08T00:00:00Z") / 1000 });
     // Without the CLI User-Agent header, the provider answers ineligible_reason "surface" for every account.
     expect(calls[0]?.userAgent).toMatch(/^claude-cli\//);
     // Only asked at the wall, the one moment the claim is true.
@@ -58,14 +79,14 @@ test("general eligibility does not offer a reset outside the provider's reset ro
         const { fetchFn } = provider({
             "/api/oauth/usage": { body: { juniper_tide: { eligible: true, available: true, ...enrollment } } },
         });
-        expect(await readLimitReset(store(), "a", fetchFn)).toEqual({ available: false });
+        expect(await readLimitReset(gate(store()), "a", fetchFn)).toEqual({ available: false });
     }
 });
 
 test("every way of having nothing to offer answers the same way, so no button is ever drawn from a guess", async () => {
     // Organisation-managed plan is outside the programme entirely, told so with a null block.
     const outside = provider({ "/api/oauth/usage": { body: { juniper_tide: null } } });
-    expect(await readLimitReset(store(), "a", outside.fetchFn)).toEqual({ available: false });
+    expect(await readLimitReset(gate(store()), "a", outside.fetchFn)).toEqual({ available: false });
 
     // Eligible but this week's grant is spent; the provider's own reason is carried through.
     const spent = provider({
@@ -75,7 +96,7 @@ test("every way of having nothing to offer answers the same way, so no button is
             },
         },
     });
-    expect(await readLimitReset(store(), "a", spent.fetchFn)).toEqual({
+    expect(await readLimitReset(gate(store()), "a", spent.fetchFn)).toEqual({
         available: false,
         reason: "already_used",
         nextAvailableAt: Date.parse("2026-09-08T00:00:00Z") / 1000,
@@ -83,18 +104,18 @@ test("every way of having nothing to offer answers the same way, so no button is
 
     // A missing credential is a known absence. A refused probe is not an answer about eligibility.
     const refused = provider({ "/api/oauth/usage": { status: 500 } });
-    expect(await readLimitReset(store(), "a", refused.fetchFn)).toBeUndefined();
-    expect(await readLimitReset(unstubbed<ClaudeStore>("missing account", { read: async () => undefined }), "a", refused.fetchFn)).toEqual({
+    expect(await readLimitReset(gate(store()), "a", refused.fetchFn)).toBeUndefined();
+    expect(await readLimitReset(gate(unstubbed<ClaudeStore>("missing account", { read: async () => undefined })), "a", refused.fetchFn)).toEqual({
         available: false,
     });
 });
 
 test("a busy or malformed status endpoint leaves eligibility unanswered and a later probe can recover", async () => {
     for (const answer of [{ status: 429 }, { status: 503 }, { body: {} }, { body: null }, { body: { juniper_tide: {} } }]) {
-        expect(await readLimitReset(store(), "a", provider({ "/api/oauth/usage": answer }).fetchFn)).toBeUndefined();
+        expect(await readLimitReset(gate(store()), "a", provider({ "/api/oauth/usage": answer }).fetchFn)).toBeUndefined();
     }
     const available = provider({ "/api/oauth/usage": { body: { juniper_tide: eligible } } });
-    expect(await readLimitReset(store(), "a", available.fetchFn)).toMatchObject({ available: true });
+    expect(await readLimitReset(gate(store()), "a", available.fetchFn)).toMatchObject({ available: true });
 });
 
 test("claiming addresses the account's organisation and hands back the provider's own word for what it did", async () => {
@@ -132,4 +153,37 @@ test("a claim that changed nothing says which kind of nothing, and never reports
     const nameless = provider({ "/api/oauth/profile": { body: {} } });
     expect(await claimLimitReset(store(), "a", nameless.fetchFn)).toMatchObject({ result: "error" });
     expect(nameless.calls.some((call) => call.url.includes("reset_rate_limits"))).toBe(false);
+});
+
+// This probe reads the same URL the headroom sweep does. Two readers of one budgeted endpoint have to share one
+// stay-away, or the budget the number on screen depends on is spent by the caller that is not being bounded.
+
+test("a probe never lands on an endpoint the provider is already holding off, and arms that hold from its own 429", async () => {
+    const held = provider({ "/api/oauth/usage": { body: { juniper_tide: eligible } } });
+    expect(await readLimitReset(gate(store(), undefined, new Set(["a"])), "a", held.fetchFn)).toBeUndefined();
+    // Not asked at all: a probe spends this endpoint's budget exactly like a sweep's read does.
+    expect(held.calls).toEqual([]);
+
+    const seen: Gate = { parks: [], filed: [] };
+    const busy = provider({ "/api/oauth/usage": { status: 429 } });
+    expect(await readLimitReset(gate(store(), seen), "a", busy.fetchFn)).toBeUndefined();
+    // No retry-after on this answer, so the endpoint's own park stands in — the same one readClaudeUsage falls back to.
+    expect(seen.parks).toEqual([{ provider: "claude", account: "a", forMs: RATE_LIMIT_PARK_MS }]);
+});
+
+test("the usage payload a probe already paid for is filed as a reading rather than discarded", async () => {
+    const seen: Gate = { parks: [], filed: [] };
+    const { fetchFn } = provider({
+        "/api/oauth/usage": {
+            body: { juniper_tide: eligible, five_hour: { utilization: 100, resets_at: "2026-09-08T00:00:00Z" }, seven_day: { utilization: 4 } },
+        },
+    });
+    expect(await readLimitReset(gate(store(), seen), "a", fetchFn)).toMatchObject({ available: true });
+    // For an account at the wall this is the freshest reading anything will get: the sweep is the caller being held off.
+    expect(seen.filed).toEqual([
+        {
+            account: "a",
+            windows: claudeUsageWindows({ five_hour: { utilization: 100, resets_at: "2026-09-08T00:00:00Z" }, seven_day: { utilization: 4 } }),
+        },
+    ]);
 });

@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { bindingWindow, gatesModel, gatingWindows, scopedWindow } from "./plan-pools.js";
+import { bindingWindow, gatesModel, gatingWindows, scopedWindow, windowLive, windowPeriod } from "./plan-pools.js";
 import type { AccountUsage, UsageWindow } from "../schemas/providers/plan-limits.js";
 
 // One rule for which pool blocks a given model, shared by the daemon and the browser: a plan can meter models
@@ -63,4 +63,43 @@ test("names the pool a plan meters this model by on its own, preferring the more
     expect(scopedWindow(layered, { id: "claude-opus-4-6" })?.kind).toBe("model:Claude Opus");
     const tied = usage(window({ kind: "model:Opus", gates: { models: ["Opus"] } }), window({ kind: "model:Claude", gates: { models: ["Claude"] } }));
     expect(scopedWindow(tied, { id: "claude-opus-4-6" })).toBeUndefined();
+});
+
+// How long a pool's window runs, read off the provider's own key and name. Two things turn on it, which is why it is
+// one function: a narrow column names the window by `short`, and a reading with no published reset may only be trusted
+// for that long.
+
+test("a window's length is read off the provider's own key, and off its name where the key says nothing", () => {
+    const period = (kind: string, label?: string) => windowPeriod(label === undefined ? { kind } : { kind, label });
+    expect(period("five_hour")).toEqual({ seconds: 5 * 3_600, short: "5h" });
+    expect(period("seven_day")).toEqual({ seconds: 7 * 86_400, short: "wk" });
+    expect(period("seven_day_opus")).toEqual({ seconds: 7 * 86_400, short: "wk" });
+    // Anthropic's own key says nothing; the label the reader built from it does.
+    expect(period("model:Fable", "Weekly · Fable")).toEqual({ seconds: 7 * 86_400, short: "wk" });
+    expect(period("google:gemini-weekly", "Gemini Models · Weekly Limit Remaining")).toEqual({ seconds: 7 * 86_400, short: "wk" });
+    expect(period("monthly", "Monthly · all models")).toEqual({ seconds: 30 * 86_400, short: "mo" });
+    expect(period("claude:12_hour")).toEqual({ seconds: 12 * 3_600, short: "12h" });
+    expect(period("daily")).toEqual({ seconds: 86_400, short: "24h" });
+    expect(period("30_minutes")).toEqual({ seconds: 1_800, short: "30m" });
+    // A pool nothing names the length of answers nothing, rather than guessing one.
+    expect(period("claude:tangelo")).toBeUndefined();
+    expect(period("model:Fable", "Fable")).toBeUndefined();
+});
+
+test("a reading is live until its reset, or, with none published, for one window's length after it was taken", () => {
+    const NOW = 1_700_000_000_000;
+    const HOUR = 3_600_000;
+    // A published reset is the authority whatever the window's length says, in both directions.
+    expect(windowLive(window({ kind: "five_hour", resetsAt: NOW / 1_000 + 60 }), NOW - 50 * HOUR, NOW)).toBe(true);
+    expect(windowLive(window({ kind: "seven_day", resetsAt: NOW / 1_000 - 1 }), NOW, NOW)).toBe(false);
+
+    // With none — what an idle five-hour pool is published with — the window's own length retires it.
+    const idle = window({ kind: "five_hour", utilization: 0 });
+    expect(windowLive(idle, NOW - 4 * HOUR, NOW)).toBe(true);
+    expect(windowLive(idle, NOW - 6 * HOUR, NOW)).toBe(false);
+    // A weekly pool read on the same morning is still describing the week it was read in.
+    expect(windowLive(window({ kind: "seven_day", utilization: 78 }), NOW - 12 * HOUR, NOW)).toBe(true);
+
+    // And a pool whose length nothing names has only its reset instant; without one it stands.
+    expect(windowLive(window({ kind: "claude:tangelo" }), NOW - 400 * HOUR, NOW)).toBe(true);
 });

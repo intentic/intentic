@@ -44,18 +44,18 @@ describe(`what the rail offers`, () => {
         };
         translatorAccounts.value = NO_ROUTED;
 
-        const [entry] = chatCapacity(NOW).providers;
+        const [entry] = chatCapacity([], NOW).providers;
         expect(entry?.rows.map((row) => row.label)).toEqual([`fresh@example.com`, `busy@example.com`]);
         expect([entry?.ready, entry?.total]).toEqual([2, 3]);
-        expect(chatCapacity(NOW).out).toEqual([]);
+        expect(chatCapacity([], NOW).out).toEqual([]);
     });
 
     it(`keeps offering an account until its pool is exhausted, not from the moment it turns red`, () => {
         providerAccounts.value = { claude: [claude({ id: `a`, label: `edge`, usage: usage(99) })] };
-        expect(chatCapacity(NOW).providers[0]?.rows[0]?.percent).toBe(99);
+        expect(chatCapacity([], NOW).providers[0]?.rows[0]?.percent).toBe(99);
 
         providerAccounts.value = { claude: [claude({ id: `a`, label: `edge`, usage: usage(100) })] };
-        expect(chatCapacity(NOW).providers).toEqual([]);
+        expect(chatCapacity([], NOW).providers).toEqual([]);
     });
 
     it(`keeps an account whose per-model slice is spent, and ranks it by what still gates every turn`, () => {
@@ -76,14 +76,14 @@ describe(`what the rail offers`, () => {
             ],
         };
 
-        const [entry] = chatCapacity(NOW).providers;
+        const [entry] = chatCapacity([], NOW).providers;
         expect(entry?.rows[0]?.percent).toBe(73);
         expect(entry?.rows[0]?.lanes.map((lane) => [lane.short, lane.scope, lane.percent])).toEqual([
             [`5h`, undefined, 58],
             [`wk`, `Fable`, 100],
             [`wk`, undefined, 73],
         ]);
-        expect(chatCapacity(NOW).out).toEqual([]);
+        expect(chatCapacity([], NOW).out).toEqual([]);
     });
 
     it(`drops an account whose all-models pool is exhausted, however much room its slices have`, () => {
@@ -103,7 +103,7 @@ describe(`what the rail offers`, () => {
             ],
         };
 
-        const capacity = chatCapacity(NOW);
+        const capacity = chatCapacity([], NOW);
         expect(capacity.providers).toEqual([]);
         expect(capacity.out[0]).toMatchObject({ reason: `spent`, reopensAt: 1_700_003_600 });
     });
@@ -124,15 +124,15 @@ describe(`what the rail offers`, () => {
         });
 
         translatorAccounts.value = { ...NO_ROUTED, gemini: [{ name: `gemini-1`, label: `one@gmail.com`, usage: families(100, 21) }] };
-        expect(chatCapacity(NOW).providers[0]?.rows[0]?.percent).toBe(21);
+        expect(chatCapacity([], NOW).providers[0]?.rows[0]?.percent).toBe(21);
 
         translatorAccounts.value = { ...NO_ROUTED, gemini: [{ name: `gemini-1`, label: `one@gmail.com`, usage: families(100, 100) }] };
-        expect(chatCapacity(NOW).providers).toEqual([]);
+        expect(chatCapacity([], NOW).providers).toEqual([]);
     });
 
     it(`offers an account with no reading, and says which kind of nothing it has`, () => {
         providerAccounts.value = { claude: [claude({ id: `a`, label: `unread` })] };
-        const [entry] = chatCapacity(NOW).providers;
+        const [entry] = chatCapacity([], NOW).providers;
         expect(entry?.rows[0]).toMatchObject({ percent: undefined, note: `no reading yet` });
     });
 });
@@ -146,7 +146,7 @@ describe(`what cannot serve a turn, whatever its pools say`, () => {
             claude: { at: NOW - 60_000, kind: `entitlement`, message: `Claude Code is not enabled for this account.`, account: `a` },
         };
 
-        const [entry] = chatCapacity(NOW).providers;
+        const [entry] = chatCapacity([], NOW).providers;
         expect(entry?.rows.map((row) => row.label)).toEqual([`fine`]);
     });
 
@@ -158,7 +158,7 @@ describe(`what cannot serve a turn, whatever its pools say`, () => {
             gemini: { at: NOW - 60_000, kind: `entitlement`, message: `Gemini for Google Cloud has not been enabled for this project.` },
         };
 
-        const capacity = chatCapacity(NOW);
+        const capacity = chatCapacity([], NOW);
         expect(capacity.providers).toEqual([]);
         expect(capacity.out.map((entry) => entry.reason)).toEqual([`refused your last turn`]);
     });
@@ -169,7 +169,7 @@ describe(`what cannot serve a turn, whatever its pools say`, () => {
         translatorAccounts.value = { ...NO_ROUTED, gemini: [google(1, 4)] };
         providerRefusals.value = { gemini: { at: NOW - 60_000, kind: `limit`, message: `Quota exceeded for this project.` } };
 
-        const capacity = chatCapacity(NOW);
+        const capacity = chatCapacity([], NOW);
         expect(capacity.providers).toEqual([]);
         expect(capacity.out[0]).toMatchObject({ reason: `spent`, reopensAt: 1_700_003_600 });
     });
@@ -202,7 +202,7 @@ describe(`what cannot serve a turn, whatever its pools say`, () => {
             },
         };
 
-        const [entry] = chatCapacity(NOW).providers;
+        const [entry] = chatCapacity([], NOW).providers;
         expect(entry?.rows[0]).toMatchObject({ percent: 40 });
         expect(entry?.rows[0]?.lanes.map((lane) => [lane.scope, lane.percent])).toEqual([
             [undefined, 20],
@@ -231,14 +231,14 @@ describe(`what cannot serve a turn, whatever its pools say`, () => {
             claude: { at: NOW - 30_000, kind: `limit`, message: `You've reached your 5-hour limit.`, account: `a`, model: `claude-haiku-4-5` },
         };
 
-        const capacity = chatCapacity(NOW);
+        const capacity = chatCapacity([], NOW);
         expect(capacity.providers).toEqual([]);
         expect(capacity.out[0]).toMatchObject({ reason: `spent`, reopensAt: 1_700_003_600 });
     });
 
     it(`holds back a credential that can no longer be refreshed, and counts it where the fix is`, () => {
         providerAccounts.value = { claude: [claude({ id: `a`, label: `expired`, usage: usage(3), needsReauth: true })] };
-        const capacity = chatCapacity(NOW);
+        const capacity = chatCapacity([], NOW);
         expect(capacity.providers).toEqual([]);
         expect(capacity.blocked).toEqual([{ reason: `sign-in expired`, count: 1 }]);
         expect(capacity.out[0]?.reason).toBe(`sign-in expired`);
@@ -253,7 +253,7 @@ describe(`what cannot serve a turn, whatever its pools say`, () => {
             gemini: [google(1, 4), google(2, 100), { name: `gemini-3`, label: `new@gmail.com`, cooling: { reason: NO_PROJECT } }],
         };
 
-        const capacity = chatCapacity(NOW);
+        const capacity = chatCapacity([], NOW);
         const [entry] = capacity.providers;
         expect([entry?.ready, entry?.total, entry?.blocked]).toEqual([1, 2, 1]);
         expect(capacity.blocked).toEqual([{ reason: NO_PROJECT, count: 1 }]);
@@ -262,13 +262,13 @@ describe(`what cannot serve a turn, whatever its pools say`, () => {
     // "Cooling down" promises a wait that fixes it; nothing about a missing project is waiting for anything.
     it(`says what a provider is missing when nothing it holds can serve, and still dates a bench that will lift`, () => {
         translatorAccounts.value = { ...NO_ROUTED, gemini: [{ name: `gemini-1`, label: `new@gmail.com`, cooling: { reason: NO_PROJECT } }] };
-        expect(chatCapacity(NOW).out[0]).toMatchObject({ reason: NO_PROJECT, reopensAt: undefined });
+        expect(chatCapacity([], NOW).out[0]).toMatchObject({ reason: NO_PROJECT, reopensAt: undefined });
 
         translatorAccounts.value = {
             ...NO_ROUTED,
             gemini: [{ name: `gemini-1`, label: `busy@gmail.com`, cooling: { until: 1_700_003_600, reason: `Individual quota reached` } }],
         };
-        expect(chatCapacity(NOW).out[0]).toMatchObject({ reason: `cooling down`, reopensAt: 1_700_003_600 });
+        expect(chatCapacity([], NOW).out[0]).toMatchObject({ reason: `cooling down`, reopensAt: 1_700_003_600 });
     });
 });
 
@@ -284,9 +284,9 @@ describe(`how old the rail says its readings are`, () => {
             ],
         };
 
-        expect(chatCapacity(NOW).measuredAt).toBe(NOW - 120_000);
+        expect(chatCapacity([], NOW).measuredAt).toBe(NOW - 120_000);
         // And the expired sign-in is still accounted for, in the words of what it is missing.
-        expect(chatCapacity(NOW).blocked).toEqual([{ reason: `sign-in expired`, count: 1 }]);
+        expect(chatCapacity([], NOW).blocked).toEqual([{ reason: `sign-in expired`, count: 1 }]);
     });
 
     it(`keeps the oldest reading of an account it is still drawing, however stale`, () => {
@@ -298,7 +298,25 @@ describe(`how old the rail says its readings are`, () => {
         };
 
         // Both are drawn, so the age qualifies the older one: this is the reading a press could not move.
-        expect(chatCapacity(NOW).measuredAt).toBe(NOW - 10 * 3_600_000);
+        expect(chatCapacity([], NOW).measuredAt).toBe(NOW - 10 * 3_600_000);
+    });
+
+    // A provider that is rate-limiting one account freezes that account's age for as long as it holds. Left in the
+    // reckoning it dates the whole fleet, so a re-measure that read thirty accounts a second ago still says "10h ago" —
+    // the control reads as broken, and the one line that explains it only appears after the press.
+    it(`leaves out an account whose provider is holding reads off, since no press can move its age`, () => {
+        providerAccounts.value = {
+            claude: [
+                claude({ id: `a`, label: `live@example.com`, usage: { ...usage(40), measuredAt: NOW - 60_000 } }),
+                claude({ id: `b`, label: `stuck@example.com`, usage: { ...usage(74), measuredAt: NOW - 10 * 3_600_000 } }),
+            ],
+        };
+        const held = [{ provider: `claude`, account: `b`, resumesAt: NOW / 1_000 + 600 }];
+
+        expect(chatCapacity(held, NOW).measuredAt).toBe(NOW - 60_000);
+        // Held is what the provider said at the last press; once its instant has passed the next trigger reads that
+        // account, so the claim is over and its age counts again.
+        expect(chatCapacity([{ ...held[0]!, resumesAt: NOW / 1_000 - 1 }], NOW).measuredAt).toBe(NOW - 10 * 3_600_000);
     });
 });
 
@@ -306,7 +324,7 @@ describe(`what the rail says about what it is not offering`, () => {
     // An absent provider could mean spent-until-later or never-connected; the footnote is what tells those apart.
     it(`names a spent provider and the instant it comes back`, () => {
         providerAccounts.value = { claude: [claude({ id: `a`, label: `spent`, usage: usage(100, 1_700_090_000) })] };
-        expect(chatCapacity(NOW).out).toEqual([
+        expect(chatCapacity([], NOW).out).toEqual([
             { provider: `claude`, label: `Claude Code`, reason: `spent`, reopensAt: 1_700_090_000, detail: undefined },
         ]);
     });
@@ -327,12 +345,12 @@ describe(`what the rail says about what it is not offering`, () => {
                 }),
             ],
         };
-        expect(chatCapacity(NOW).out[0]?.reopensAt).toBe(1_700_400_000);
+        expect(chatCapacity([], NOW).out[0]?.reopensAt).toBe(1_700_400_000);
     });
 
     it(`offers no reopen instant when every spent pool's reset has already passed`, () => {
         providerAccounts.value = { claude: [claude({ id: `a`, label: `spent`, usage: usage(100, Math.floor(NOW / 1000) - 60) })] };
-        expect(chatCapacity(NOW).out[0]).toMatchObject({ reason: `spent`, reopensAt: undefined });
+        expect(chatCapacity([], NOW).out[0]).toMatchObject({ reason: `spent`, reopensAt: undefined });
     });
 });
 
@@ -344,7 +362,7 @@ describe(`a pool nobody picks among`, () => {
             gemini: [google(1, 44), google(2, 4), google(3, 100), google(4, 30), google(5, 12)],
         };
 
-        const [entry] = chatCapacity(NOW).providers;
+        const [entry] = chatCapacity([], NOW).providers;
         expect(entry?.pooled).toBe(true);
         expect(entry?.rows).toHaveLength(1);
         expect(entry?.rows[0]).toMatchObject({ label: undefined, percent: 4 });
@@ -355,14 +373,14 @@ describe(`a pool nobody picks among`, () => {
         providerAccounts.value = {
             claude: [1, 2, 3, 4, 5].map((index) => claude({ id: `a${index}`, label: `a${index}@example.com`, usage: usage(index * 5) })),
         };
-        const [entry] = chatCapacity(NOW).providers;
+        const [entry] = chatCapacity([], NOW).providers;
         expect(entry?.rows.map((row) => row.label)).toEqual([`a1@example.com`, `a2@example.com`, `a3@example.com`]);
         expect(entry?.hidden).toBe(2);
     });
 
     it(`leaves a lone account's row unnamed and lets its lanes carry the pools`, () => {
         providerAccounts.value = { claude: [claude({ id: `a`, label: `only@example.com`, usage: usage(30) })] };
-        const [row] = chatCapacity(NOW).providers[0]?.rows ?? [];
+        const [row] = chatCapacity([], NOW).providers[0]?.rows ?? [];
         expect(row).toMatchObject({ label: undefined });
         expect(row?.lanes.map((lane) => [lane.short, lane.percent])).toEqual([[`wk`, 30]]);
     });
@@ -382,7 +400,7 @@ describe(`the allowances behind one account`, () => {
             claude: [claude({ id: `a`, usage: pools({ kind: `seven_day`, utilization: 87 }, { kind: `five_hour`, utilization: 12 }) })],
         };
 
-        const [row] = chatCapacity(NOW).providers[0]?.rows ?? [];
+        const [row] = chatCapacity([], NOW).providers[0]?.rows ?? [];
         expect(row?.percent).toBe(87);
         expect(row?.lanes.map((lane) => [lane.short, lane.percent])).toEqual([
             [`5h`, 12],
@@ -404,7 +422,7 @@ describe(`the allowances behind one account`, () => {
             ],
         };
 
-        const [row] = chatCapacity(NOW).providers[0]?.rows ?? [];
+        const [row] = chatCapacity([], NOW).providers[0]?.rows ?? [];
         expect(row?.lanes.map((lane) => [lane.short, lane.scope])).toEqual([
             [`wk`, `Opus`],
             [`wk`, `Fable`],
@@ -422,7 +440,7 @@ describe(`the allowances behind one account`, () => {
             ],
         };
 
-        const [row] = chatCapacity(NOW).providers[0]?.rows ?? [];
+        const [row] = chatCapacity([], NOW).providers[0]?.rows ?? [];
         expect(row?.lanes.map((lane) => lane.label)).toEqual([`5-hour session`]);
     });
 
@@ -443,7 +461,7 @@ describe(`the allowances behind one account`, () => {
             ],
         };
 
-        const [row] = chatCapacity(NOW).providers[0]?.rows ?? [];
+        const [row] = chatCapacity([], NOW).providers[0]?.rows ?? [];
         expect(row?.lanes.map((lane) => lane.short)).toEqual([`5h`, `12h`, `wk`]);
     });
 });
@@ -457,7 +475,7 @@ describe(`the order the providers are read in`, () => {
             // Grok publishes no usage data: unmeasurable, not the same as roomy.
             grok: [{ name: `grok-1`, label: `grok@example.com` }],
         };
-        expect(chatCapacity(NOW).providers.map((entry) => entry.provider)).toEqual([`gemini`, `claude`, `grok`]);
+        expect(chatCapacity([], NOW).providers.map((entry) => entry.provider)).toEqual([`gemini`, `claude`, `grok`]);
     });
 });
 

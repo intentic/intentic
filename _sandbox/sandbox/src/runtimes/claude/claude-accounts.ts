@@ -64,7 +64,9 @@ export const claudeAccountDoor = (services: ClaudeAccountDeps): AccountDoor => {
         list: async (force) => {
             await services.headroom.refresh({
                 scope: { providers: ["claude"] },
-                ...(force ? { maxAgeMs: 0 } : {}),
+                // Forced is a person pressing re-measure and watching the age, the one caller allowed past the
+                // endpoint's own read budget.
+                ...(force ? { maxAgeMs: 0, watched: true } : {}),
                 withinMs: force ? FORCED_USAGE_WAIT_MS : USAGE_WAIT_MS,
             });
             const [accounts, usage, seats] = await Promise.all([services.claudeStore.list(), services.accountUsage.read(), services.claudeSeats.read()]);

@@ -11,7 +11,7 @@ import type { SeatRefusal } from "./claude-seats.js";
 // Empty by default, matching a sandbox before any turn runs.
 const door = (
     claudeStore: ClaudeAccountDeps["claudeStore"],
-    sweeps: { withinMs: number | undefined; maxAgeMs: number | undefined }[] = [],
+    sweeps: { withinMs: number | undefined; maxAgeMs: number | undefined; watched: boolean | undefined }[] = [],
     // Real state like accountUsage: tracks the org's turn-away row, and disconnect forgets it with the credential.
     seats = new Map<string, SeatRefusal>(),
 ) =>
@@ -28,12 +28,14 @@ const door = (
                     seats.delete(id);
                 },
             },
-            // Records what refresh was asked for (withinMs/maxAgeMs); there is no real sweep to run under test.
+            // Records what refresh was asked for (withinMs/maxAgeMs/watched); there is no real sweep to run under test.
             headroom: {
                 refresh: async (options) => {
-                    sweeps.push({ withinMs: options?.withinMs, maxAgeMs: options?.maxAgeMs });
+                    sweeps.push({ withinMs: options?.withinMs, maxAgeMs: options?.maxAgeMs, watched: options?.watched });
                 },
                 held: () => [],
+                parked: async () => false,
+                park: async () => {},
                 record: async () => {},
                 clear: async () => {},
                 read: async () => ({}),
@@ -133,11 +135,13 @@ test("Claude: rename writes the label through, blank restores the derived name, 
 });
 
 test("Claude: a forced list re-measures, and waits longer for it", async () => {
-    const sweeps: { withinMs: number | undefined; maxAgeMs: number | undefined }[] = [];
+    const sweeps: { withinMs: number | undefined; maxAgeMs: number | undefined; watched: boolean | undefined }[] = [];
     const claude = door(memoryStore(new Map()), sweeps);
     await claude.list(false);
     await claude.list(true);
     // maxAgeMs undefined applies the service's own freshness bound; 0 forces a fresh read.
     expect(sweeps.map((sweep) => sweep.maxAgeMs)).toEqual([undefined, 0]);
+    // Only the forced list is watched: that flag, not the zero, is what lets a sweep spend a target's read budget early.
+    expect(sweeps.map((sweep) => sweep.watched)).toEqual([undefined, true]);
     expect(sweeps[1]!.withinMs).toBeGreaterThan(sweeps[0]!.withinMs!);
 });

@@ -508,8 +508,8 @@ const ROUTES: readonly (readonly [string, string, Handler])[] = [
     // files from it.
     [`POST`, `/capabilities/marketplace`, () => json(demoRegistry())],
     [`GET`, `/usage/rollup`, () => json({ rows: demoUsageRollup(STARTED_AT) })],
-    // What the chat rail's refresh control posts. Nothing held: every demo reading is taken, so the press moves the age
-    // rather than explaining why it couldn't.
+    // What every connection read posts, on arrival and on the rail's refresh control alike. Nothing held: every demo
+    // reading is taken, so the press moves the age rather than explaining why it couldn't.
     [`POST`, `/usage/plan-limits/refresh`, () => json({ ok: true, held: [] })],
     [`GET`, `/secrets/inventory`, () => json({ secrets: [] })],
     [`GET`, `/ports`, () => json({ ports: [] })],

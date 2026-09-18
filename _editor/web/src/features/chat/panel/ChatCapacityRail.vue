@@ -16,7 +16,8 @@ const t = useT();
 
 onMounted(() => void refreshConnections());
 
-const capacity = computed(() => chatCapacity());
+// Held accounts ride in so the age below counts only what a press could actually move; the line under it says the rest.
+const capacity = computed(() => chatCapacity(heldAccounts.value));
 
 const measuredProviders = computed(() => capacity.value.providers.filter((entry) => entry.rows.some((row) => row.lanes.length > 0)));
 

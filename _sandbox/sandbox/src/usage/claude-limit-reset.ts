@@ -1,8 +1,23 @@
-import type { LimitResetClaim, LimitResetStatus } from "@intentic/sandbox-contract";
+import type { AccountUsage, AgentProvider, LimitResetClaim, LimitResetStatus } from "@intentic/sandbox-contract";
+import { claudeUsageWindows, rateLimitParkMs } from "./claude-usage.js";
 import { asRecord, asString, resetFromIso } from "./payload.js";
 import { type ClaudeStore, ensureFreshToken } from "../runtimes/claude/claude-credentials.js";
 
 /* Anthropic's once-a-week session reset. */
+
+// This probe reads the same URL the headroom sweep does, so it shares that endpoint's park rather than keeping one of
+// its own: the sweep's budget is only a budget if every reader of the endpoint is inside it. Satisfied by
+// HeadroomService.
+export interface UsageEndpointGate {
+    readonly parked: (account: string) => Promise<boolean>;
+    readonly park: (provider: AgentProvider, account: string, forMs: number) => Promise<void>;
+    readonly record: (provider: AgentProvider, account: string, usage: AccountUsage) => Promise<void>;
+}
+
+export interface LimitResetDeps {
+    readonly store: ClaudeStore;
+    readonly headroom: UsageEndpointGate;
+}
 
 const USAGE_ENDPOINT = "https://api.anthropic.com/api/oauth/usage?at_wall=1&skip_spend=1";
 const PROFILE_ENDPOINT = "https://api.anthropic.com/api/oauth/profile";
@@ -40,24 +55,50 @@ const statusFrom = (block: Record<string, unknown>): LimitResetStatus => {
     };
 };
 
-export const readLimitReset = async (store: ClaudeStore, id: string, fetchFn: typeof fetch = fetch): Promise<LimitResetStatus | undefined> => {
-    const token = await ensureFreshToken(store, id).catch(() => undefined);
+// The grant this answer describes, or undefined when the answer was not about one.
+// `null` is what an account outside the programme gets, and it is a real answer rather than a failure: an
+// organisation-managed plan is told nothing at all here, where a personal one is told why not.
+const grantFrom = (body: Record<string, unknown> | undefined): LimitResetStatus | undefined => {
+    if (body === undefined || !(PROGRAM in body)) {
+        return undefined;
+    }
+    const block = asRecord(body[PROGRAM]);
+    return body[PROGRAM] === null ? NOTHING : block === undefined || typeof block[`eligible`] !== "boolean" ? undefined : statusFrom(block);
+};
+
+// This answer is a whole usage payload, the same one the headroom sweep reads. Filing it is a reading the endpoint has
+// already been paid for, and for an account at the wall it is the freshest one anything will get. Best-effort: a
+// reading that could not be filed must not cost the answer about the reset.
+const fileUsage = async (deps: LimitResetDeps, id: string, body: Record<string, unknown> | undefined): Promise<void> => {
+    const windows = body === undefined ? [] : claudeUsageWindows(body);
+    if (windows.length > 0) {
+        await deps.headroom.record("claude", id, { windows, measuredAt: Date.now() }).catch(() => undefined);
+    }
+};
+
+export const readLimitReset = async (deps: LimitResetDeps, id: string, fetchFn: typeof fetch = fetch): Promise<LimitResetStatus | undefined> => {
+    // While the provider is holding this account's usage reads off, asking again only spends the budget the headroom
+    // number depends on, and is answered with a longer stay-away. Unanswered, so a later probe can still offer a reset.
+    if (await deps.headroom.parked(id)) {
+        return undefined;
+    }
+    const token = await ensureFreshToken(deps.store, id).catch(() => undefined);
     if (token === undefined) {
         return NOTHING;
     }
     try {
         const response = await fetchFn(USAGE_ENDPOINT, { headers: headers(token), signal: AbortSignal.timeout(PROBE_TIMEOUT_MS) });
+        if (response.status === 429) {
+            // Armed from this reader's own refusal: a 429 is the endpoint's word to every caller, not just the sweep's.
+            await deps.headroom.park("claude", id, rateLimitParkMs(response));
+            return undefined;
+        }
         if (!response.ok) {
             return response.status === 401 || response.status === 403 ? NOTHING : undefined;
         }
         const body = asRecord(await response.json());
-        if (body === undefined || !(PROGRAM in body)) {
-            return undefined;
-        }
-        const block = asRecord(body[PROGRAM]);
-        // `null` is what an account outside the programme gets, and it is a real answer rather than a failure:
-        // an organisation-managed plan is told nothing at all here, where a personal one is told why not.
-        return body[PROGRAM] === null ? NOTHING : block === undefined || typeof block[`eligible`] !== "boolean" ? undefined : statusFrom(block);
+        await fileUsage(deps, id, body);
+        return grantFrom(body);
     } catch {
         return undefined;
     }

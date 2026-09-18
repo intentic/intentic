@@ -1,6 +1,7 @@
 import type { AccountUsage, AgentProvider, UsageWindow } from "@intentic/sandbox-contract";
 import type { Logger } from "pino";
 import type { AccountUsageStore } from "./account-usage.js";
+import type { ParkedRead, UsageParkStore } from "./usage-parks.js";
 
 // One headroom service for every provider: readings are triggered by what happened (a turn settling, a refusal, a
 // screen opening, a re-measure press) via `refresh(scope, maxAge)`, not on a timer, with an idle floor (`start`) for a
@@ -40,6 +41,10 @@ export interface RefreshOptions {
     readonly maxAgeMs?: number;
     // Resolve after this long even without a landed read; a waiting page gets what it has, else the sweep.
     readonly withinMs?: number;
+    // Someone pressed something and is watching the number: the only thing that spends a target's own read budget
+    // (`minAgeMs`) ahead of schedule. Never set by an automatic trigger, however fresh it wants the reading — a
+    // refusal, a settled turn and a warm-up all recur on their own, and together they outrun any endpoint's budget.
+    readonly watched?: boolean;
 }
 
 /** An account whose provider is holding reads off, and the instant it may be asked again. */
@@ -54,6 +59,12 @@ export interface HeadroomService {
     readonly refresh: (options?: RefreshOptions) => Promise<void>;
     // Targets a provider is currently rate-limiting; what a re-measure could not read, and why nothing moved.
     readonly held: () => readonly HeldTarget[];
+    // Whether this account's provider is holding reads off right now, for a reader of the same endpoint that does not
+    // come through the sweep (claude-limit-reset.ts). Without it the park bounds one caller and the other spends the
+    // budget it was protecting.
+    readonly parked: (account: string) => Promise<boolean>;
+    // Arms the same park from such a reader's own 429, so one refusal is honoured by every caller.
+    readonly park: (provider: AgentProvider, account: string, forMs: number) => Promise<void>;
     // Records a reading obtained elsewhere (a turn's stream, a provider's push) exactly as a swept one; provider rides
     // along since the store key alone doesn't say whose row it is.
     readonly record: (provider: AgentProvider, account: string, usage: AccountUsage) => Promise<void>;
@@ -80,16 +91,36 @@ const deadline = (ms: number): Promise<void> =>
 
 export const createHeadroomService = (deps: {
     readonly store: AccountUsageStore;
+    readonly parks: UsageParkStore;
     readonly sources: readonly HeadroomSource[];
     readonly logger: Logger;
 }): HeadroomService => {
     // When each target was last asked, not answered; bounds retries of a failing read the store can't cache.
     const attemptedAt = new Map<string, number>();
-    // Endpoint's stay-away per target, honoured even by a forced trigger.
-    const blockedUntil = new Map<string, { readonly provider: AgentProvider; readonly until: number }>();
+    // Endpoint's stay-away per target, honoured even by a watched trigger. Mirrors the park store so `held` can answer
+    // without a round trip; the store is the authority across restarts.
+    const blockedUntil = new Map<string, ParkedRead>();
     // Read in flight per target, so concurrent triggers share one round-trip.
     const inFlight = new Map<string, Promise<void>>();
     const listeners = new Set<(provider: AgentProvider, account: string, usage: AccountUsage | undefined) => void>();
+
+    // Reads the parks from disk once per process, before the first sweep decides anything: a boot sweep that ran ahead
+    // of them would ask the very account the provider is refusing.
+    let seeded: Promise<void> | undefined;
+    const seed = (): Promise<void> =>
+        (seeded ??= deps.parks
+            .read()
+            .then((stored) => {
+                for (const [account, parked] of Object.entries(stored)) {
+                    blockedUntil.set(account, parked);
+                }
+            })
+            .catch((error: unknown) => deps.logger.warn({ err: error }, "headroom: parked reads could not be loaded, this process will re-earn them")));
+
+    const parkUntil = async (provider: AgentProvider, account: string, until: number): Promise<void> => {
+        blockedUntil.set(account, { provider, until });
+        await deps.parks.record(account, { provider, until });
+    };
 
     const announce = (provider: AgentProvider, account: string, usage: AccountUsage | undefined): void => {
         for (const listener of listeners) {
@@ -116,7 +147,7 @@ export const createHeadroomService = (deps: {
             const reading = await target.read();
             if (reading.retryAfterMs !== undefined) {
                 const until = Date.now() + reading.retryAfterMs;
-                blockedUntil.set(target.key, { provider: target.provider, until });
+                await parkUntil(target.provider, target.key, until);
                 // Said out loud: a reading that silently stops moving is the one failure nobody can see from a screen.
                 deps.logger.warn(
                     { account: target.key, provider: target.provider, until: new Date(until).toISOString() },
@@ -143,11 +174,13 @@ export const createHeadroomService = (deps: {
         const [targets, stored] = await Promise.all([
             Promise.all(deps.sources.map((source) => source.targets().catch(() => []))).then((lists) => lists.flat()),
             deps.store.read(),
+            seed(),
         ]);
         const now = Date.now();
-        // A watched re-measure asks for zero and gets it; every other trigger is held to the endpoint's own budget,
-        // since a background sweep that outruns it spends the account's allowance to read the same number.
-        const bound = (target: HeadroomTarget): number => (maxAgeMs === 0 ? 0 : Math.max(maxAgeMs, target.minAgeMs ?? 0));
+        // A re-measure someone is watching asks for zero and gets it; every other trigger is held to the endpoint's own
+        // budget however fresh it asked for, since a trigger that outruns it spends the account's allowance to read the
+        // same number.
+        const bound = (target: HeadroomTarget): number => (options.watched === true ? maxAgeMs : Math.max(maxAgeMs, target.minAgeMs ?? 0));
         const due = targets.filter(
             (target) =>
                 inScope(target, options.scope) &&
@@ -164,8 +197,11 @@ export const createHeadroomService = (deps: {
         await Promise.all(Array.from({ length: Math.min(CONCURRENCY, pending.length) }, worker));
     };
 
-    // Never rejects: an account list must not fail because a quota read did.
-    const refresh = (options: RefreshOptions = {}): Promise<void> => {
+    // Never rejects: an account list must not fail because a quota read did. Seeds before racing the caller's deadline,
+    // so `held` is answerable the moment any refresh returns — including the first one after a restart, which is
+    // exactly when a caller is owed the park this process did not earn itself.
+    const refresh = async (options: RefreshOptions = {}): Promise<void> => {
+        await seed();
         const pending = sweep(options).catch((error: unknown) => deps.logger.warn({ err: error }, "headroom: sweep failed, the next trigger retries"));
         return options.withinMs === undefined ? pending : Promise.race([pending, deadline(options.withinMs)]);
     };
@@ -178,11 +214,17 @@ export const createHeadroomService = (deps: {
                 .flatMap(([account, parked]) => (parked.until > now ? [{ provider: parked.provider, account, until: parked.until }] : []))
                 .toSorted((left, right) => left.until - right.until);
         },
+        parked: async (account) => {
+            // Awaits the seed rather than the mirror alone: this is asked by a reader that may run before any sweep has.
+            await seed();
+            return (blockedUntil.get(account)?.until ?? 0) > Date.now();
+        },
+        park: (provider, account, forMs) => parkUntil(provider, account, Date.now() + forMs),
         record,
         clear: async (provider, account) => {
             attemptedAt.delete(account);
             blockedUntil.delete(account);
-            await deps.store.clear(account);
+            await Promise.all([deps.store.clear(account), deps.parks.clear(account)]);
             announce(provider, account, undefined);
         },
         read: deps.store.read,

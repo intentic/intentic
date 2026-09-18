@@ -115,6 +115,7 @@ import { createSessions, type MintedSession } from "./auth/session.js";
 import { type AccountUsageStore, fileAccountUsageStore } from "./usage/account-usage.js";
 import { claudeHeadroomSource } from "./usage/claude-usage.js";
 import { createHeadroomService, type HeadroomService } from "./usage/headroom.js";
+import { fileUsageParkStore } from "./usage/usage-parks.js";
 import { fileModelRefusalStore, type ModelRefusalStore } from "./usage/model-refusals.js";
 import { fileProviderRefusalStore, type ProviderRefusalStore } from "./usage/provider-refusals.js";
 import { type ApprovalsStore, fileApprovalsStore } from "./approvals/approvals-store.js";
@@ -787,6 +788,7 @@ export const createServices = (config: Config, logger: Logger): Services => {
     // Both halves of 'what each account has left': Claude's own tokens, routed subscriptions via the translator.
     const headroom = createHeadroomService({
         store: accountUsage,
+        parks: fileUsageParkStore(join(config.historyRoot, "usage-parks.json")),
         sources: [claudeHeadroomSource(claude.claudeStore), cliProxy.headroom],
         logger,
     });

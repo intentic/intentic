@@ -252,16 +252,22 @@ const reopensAt = (group: PlanLimitGroup, now: number): number | undefined => {
 // Roomiest offer ranks the provider; an unmeasured provider sorts last, never as a zero.
 const roomOf = (entry: CapacityProvider): number => entry.rows[0]?.percent ?? Number.POSITIVE_INFINITY;
 
-export const chatCapacity = (now: number = Date.now()): ChatCapacity => {
+export const chatCapacity = (held: readonly PlanLimitsHeld[] = [], now: number = Date.now()): ChatCapacity => {
     const rows = planLimitRows(providerAccounts.value, translatorAccounts.value);
     const groups = planLimitGroups(rows, providerRefusals.value, now);
     const judged = groups.map((group) => {
         const refused = refusedAccounts(group);
         return { group, refused, ready: group.rows.filter((row) => canServe(row, refused)).toSorted(byRoom) };
     });
+    // An account whose provider is holding reads off has an age nothing can move, so it must not date the fleet: one
+    // stuck credential would otherwise print "11h ago" over thirty accounts read a minute ago. It is not dropped from
+    // the reckoning, it is said separately (heldReadings), which is the only form of it a reader can act on.
+    const heldNow = new Set(held.flatMap((entry) => (entry.resumesAt * 1000 > now ? [`${entry.provider}:${entry.account}`] : [])));
     // Held to the rows whose reading this rail rests something on: a credential no turn can run on is named by what it
     // is missing, never by a figure, so its last reading — of any age — must not date the ones that are drawn.
-    const measured = rows.flatMap((row) => (row.measuredAt === undefined || blockedReason(row) !== undefined ? [] : [row.measuredAt]));
+    const measured = rows.flatMap((row) =>
+        row.measuredAt === undefined || blockedReason(row) !== undefined || heldNow.has(row.id) ? [] : [row.measuredAt],
+    );
     return {
         providers: judged
             .flatMap((entry) => (entry.ready.length === 0 ? [] : [capacityProvider(entry.group, entry.ready)]))

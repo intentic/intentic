@@ -12,10 +12,9 @@
 // sandbox/src/rules/turn-ending.ts), so a gate that stopped at its first failure could only ever name two of a
 // turn's problems.
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync, symlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { CHECKS } from "../../checks/manifest.mjs";
 import { affectedBy, readWorkspaceGraph } from "../../checks/lib/workspace-graph.mjs";
 import { repoRoot } from "../../constants/src/node.mjs";
 import { changedPaths, git } from "../lib/git.mjs";
@@ -73,15 +72,31 @@ const problemLines = (verdict) =>
             .map((line) => [line.replace(LINE_NUMBER, ":#"), line]),
     );
 
+// A snapshot is a checkout, not an install, so a check that resolves a parser out of the tree it is reading (vue's SFC
+// compiler, vue-i18n's) finds nothing there and measures nothing. Left that way the check has no answer about HEAD at
+// all, and every standing line it prints is charged to whichever turn runs next. The live tree's installs are lent to
+// the snapshot instead: symlinks, per workspace package since pnpm hoists nothing to the root, thrown away with it.
+const lendInstalls = (snapshot) => {
+    for (const dir of ["", ...[...readWorkspaceGraph(root).packages.values()].map((entry) => entry.dir)]) {
+        const from = join(root, dir, "node_modules");
+        const to = join(snapshot, dir, "node_modules");
+        // A package this turn added has no directory in the snapshot to hang one on; that check simply measures less at
+        // HEAD, which is the direction this was already wrong in.
+        if (existsSync(from) && !existsSync(to) && existsSync(join(snapshot, dir))) {
+            try {
+                symlinkSync(from, to, "junction");
+            } catch {
+                // Lending is best-effort by construction: a link that cannot be made costs freshness, never the run.
+            }
+        }
+    }
+};
+
 // Checks out HEAD in its own worktree (not a stash, which would mutate the tree the turn is standing in) to ask what
 // each failing check said BEFORE this turn. `--detach`: nothing here needs a branch. Returns `undefined` when the
 // snapshot couldn't be taken, in which case every problem counts as the turn's own, the safe direction to be wrong in.
-//
-// A `node_modules` check is never asked: the snapshot has none, so it would report a different thing there for a reason
-// that has nothing to do with the turn, and every line it prints would read as newly introduced.
 const reportsAtHead = (ids) => {
-    const readable = ids.filter((id) => CHECKS.find((check) => check.id === id)?.needs !== "node_modules");
-    if (readable.length === 0 || git(root, "rev-parse", "-q", "--verify", "HEAD") === undefined) {
+    if (ids.length === 0 || git(root, "rev-parse", "-q", "--verify", "HEAD") === undefined) {
         return undefined; // nothing askable, or a fresh repository with no commit: there is no "before" to compare against
     }
     const parent = mkdtempSync(join(tmpdir(), "verify-turn-head-"));
@@ -90,7 +105,8 @@ const reportsAtHead = (ids) => {
         if (git(root, "worktree", "add", "--detach", snapshot, "HEAD") === undefined) {
             return undefined;
         }
-        const verdicts = checkVerdicts(snapshot, readable);
+        lendInstalls(snapshot);
+        const verdicts = checkVerdicts(snapshot, ids);
         return verdicts === undefined ? undefined : new Map(verdicts.map((verdict) => [verdict.id, { ok: verdict.ok, lines: problemLines(verdict) }]));
     } finally {
         git(root, "worktree", "remove", "--force", snapshot);

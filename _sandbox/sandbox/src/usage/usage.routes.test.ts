@@ -45,12 +45,24 @@ test("usage.rollup round-trips the ledger's rows and forwards the day bounds to 
     expect(asked).toEqual([{ from: "2026-07-01", to: "2026-07-31" }]);
 });
 
+// The eligibility probe reads the same endpoint the headroom sweep does, so it asks that service whether the provider
+// is holding this account off, and arms the same park from its own refusal.
+const sharedGate = (parked: Set<string> = new Set()) =>
+    unstubbed<UsageRoutesDeps["headroom"]>("headroom", {
+        parked: async (account) => parked.has(account),
+        park: async (_provider, account) => {
+            parked.add(account);
+        },
+        record: async () => {},
+    });
+
 test("usage.limitReset answers for an account the store has no credential for, rather than failing the strip that asked", async () => {
     const asked: string[] = [];
     const client = routesClient(
         usageContract,
         createUsageRoutes(
             unstubbed<UsageRoutesDeps>("usage deps", {
+                headroom: sharedGate(),
                 claudeStore: unstubbed("claudeStore", {
                     read: async (id) => {
                         asked.push(id);
@@ -67,7 +79,7 @@ test("usage.limitReset answers for an account the store has no credential for, r
     expect(asked).toEqual(["nobody", "nobody"]);
 });
 
-test("a rate-limited eligibility probe fails over the wire so the client can retry it", async () => {
+test("a rate-limited eligibility probe fails over the wire, and the ask after it is held off rather than sent", async () => {
     const fetcher = vi
         .spyOn(globalThis, "fetch")
         .mockResolvedValueOnce(new Response("{}", { status: 429 }))
@@ -77,14 +89,20 @@ test("a rate-limited eligibility probe fails over the wire so the client can ret
             usageContract,
             createUsageRoutes(
                 unstubbed<UsageRoutesDeps>("usage deps", {
+                    headroom: sharedGate(),
                     claudeStore: unstubbed("claudeStore", {
                         read: async () => ({ id: "a", accessToken: "test-token", connectedAt: 1 }),
                     }),
                 }),
             ),
         );
+        // Failed rather than cached as "no grant": a 429 says nothing about whether this account has one.
         await expect(client.limitReset({ account: "a" })).rejects.toMatchObject({ code: "SERVICE_UNAVAILABLE" });
-        expect(await client.limitReset({ account: "a" })).toEqual({ available: true });
+        // That 429 armed the park this endpoint's readers share, so the next strip to appear costs no read at all.
+        // Uncached failures are how this probe is meant to recover; without the park they are also how it spends the
+        // budget the headroom number depends on.
+        await expect(client.limitReset({ account: "a" })).rejects.toMatchObject({ code: "SERVICE_UNAVAILABLE" });
+        expect(fetcher).toHaveBeenCalledTimes(1);
     } finally {
         fetcher.mockRestore();
     }

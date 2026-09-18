@@ -117,6 +117,14 @@ export interface ClaudeUsageReading {
 // Without it a rate-limited account is retried by every trigger, which is what keeps the endpoint's budget spent.
 export const RATE_LIMIT_PARK_MS = 10 * 60_000;
 
+// How long a 429 from this endpoint asks to be left alone for. Shared with claude-limit-reset.ts, which reads the same
+// URL: two readers that disagree about a stay-away are two readers spending one budget.
+export const rateLimitParkMs = (response: Response): number => {
+    // retry-after is whole seconds; anything else falls back to the park rather than to an immediate retry.
+    const seconds = Number(response.headers.get("retry-after"));
+    return Number.isFinite(seconds) && seconds > 0 ? seconds * 1000 : RATE_LIMIT_PARK_MS;
+};
+
 // Best-effort: every failure reads as "no reading" (caller keeps the last one), except a 429, which always carries a
 // stay-away for the sweep to honour.
 export const readClaudeUsage = async (oauthToken: string, fetchFn: typeof fetch, timeoutMs = 10_000): Promise<ClaudeUsageReading> => {
@@ -126,9 +134,7 @@ export const readClaudeUsage = async (oauthToken: string, fetchFn: typeof fetch,
             signal: AbortSignal.timeout(timeoutMs),
         });
         if (response.status === 429) {
-            // retry-after is whole seconds; anything else falls back to the park rather than to an immediate retry.
-            const seconds = Number(response.headers.get("retry-after"));
-            return { windows: [], retryAfterMs: Number.isFinite(seconds) && seconds > 0 ? seconds * 1000 : RATE_LIMIT_PARK_MS };
+            return { windows: [], retryAfterMs: rateLimitParkMs(response) };
         }
         if (!response.ok) {
             return { windows: [] };

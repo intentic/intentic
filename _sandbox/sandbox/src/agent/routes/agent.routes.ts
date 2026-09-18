@@ -1281,7 +1281,9 @@ async function* runTurn(
                             ...(request.model === undefined || request.model === "" ? {} : { model: request.model }),
                         })
                         .catch((error: unknown) => services.logger.warn({ err: error }, "provider refusal: write failed"));
-                    // Re-measures what just refused, at once, while it's still the freshest signal.
+                    // Re-measures what just refused, while it's still the freshest signal. Not `watched`: a plan at its
+                    // wall refuses turn after turn, and a re-measure per refusal is what spends the read budget the
+                    // number itself depends on.
                     void services.headroom.refresh({
                         scope: { providers: [provider], ...(resolvedAccount === undefined ? {} : { account: resolvedAccount }) },
                         maxAgeMs: 0,

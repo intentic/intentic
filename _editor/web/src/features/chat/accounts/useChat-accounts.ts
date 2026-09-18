@@ -165,20 +165,31 @@ export const heldAccounts = ref<readonly PlanLimitsHeld[]>([]);
 // Reads every connection (accounts and translator subscriptions) as one call, since to a user they're
 // one question. `accountsLoaded` flips only once a real read lands; the translator read is excluded
 // since it swallows its own failure.
+// Asks the daemon to re-measure and says what it could not read. Forced, it measures even a reading taken a moment ago
+// and is worth waiting for; unforced it is the same question a screen asks on arrival, and answers from the sweep
+// already due. Held accounts come back either way: a number that cannot move must not need a press to explain itself.
+const readPlanLimits = async (force: boolean): Promise<void> => {
+    const refreshed = await sandboxJson<PlanLimitsRefreshed>(`/usage/plan-limits/refresh`, jsonBody(`POST`, { force })).catch(() => undefined);
+    // Only on an answer: a daemon that didn't reply hasn't withdrawn the accounts it last said were held.
+    if (refreshed !== undefined) {
+        heldAccounts.value = refreshed.held ?? [];
+    }
+};
+
 const readConnections = async (force: boolean): Promise<void> => {
     // Forced: one route re-measures every connection first, past the freshness bound a background sweep is held to.
     if (force) {
         // A press that lands on a rate-limited account changes no number, so what it could not read is kept and said.
-        const refreshed = await sandboxJson<PlanLimitsRefreshed>(`/usage/plan-limits/refresh`, jsonBody(`POST`, { force: true })).catch(
-            () => undefined,
-        );
-        heldAccounts.value = refreshed?.held ?? [];
+        await readPlanLimits(true);
     }
     const natives = NATIVE_PROVIDERS.filter((target) => !subscriptionOnly(target));
     const [reads] = await Promise.all([
         Promise.allSettled(natives.map((target) => refreshAccounts(target))),
         refreshTranslatorAccounts(),
         refreshProviderRefusals(),
+        // Alongside the lists rather than before them: unforced it must not delay the panel, and its own answer lands
+        // on `heldAccounts` whenever it arrives.
+        force ? undefined : readPlanLimits(false),
     ]);
     if (reads.some((read) => read.status === `fulfilled`)) {
         accountsLoaded.value = true;

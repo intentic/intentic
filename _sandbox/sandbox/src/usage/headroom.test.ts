@@ -3,6 +3,7 @@ import { pino } from "pino";
 import { expect, test, vi } from "vitest";
 import type { AccountUsageStore } from "./account-usage.js";
 import { createHeadroomService, FRESH_MS, type HeadroomReading, type HeadroomSource, type HeadroomTarget } from "./headroom.js";
+import { memoryUsageParkStore, type UsageParkStore } from "./usage-parks.js";
 
 /* WHEN A READING IS TAKEN, which is the whole of what this service decides: the readers are stood up as counting stubs. */
 
@@ -57,7 +58,7 @@ test("reads every target in scope, records what it found, and announces each wri
             { key: "a", provider: "claude" },
             { key: "gemini:g.json", provider: "gemini" },
         ]);
-        const service = createHeadroomService({ store, sources: [claude], logger: silent });
+        const service = createHeadroomService({ store, parks: memoryUsageParkStore(), sources: [claude], logger: silent });
         const announced: string[] = [];
         service.onChange((provider, account) => announced.push(`${provider}/${account}`));
 
@@ -81,7 +82,7 @@ test("a reading within the freshness bound is not retaken, unless the caller say
         const fresh: AccountUsage = { windows: [...WINDOWS.windows], measuredAt: NOW - FRESH_MS / 2 };
         const { store } = memoryStore({ a: fresh });
         const { source: claude, reads } = source([{ key: "a", provider: "claude" }]);
-        const service = createHeadroomService({ store, sources: [claude], logger: silent });
+        const service = createHeadroomService({ store, parks: memoryUsageParkStore(), sources: [claude], logger: silent });
 
         await service.refresh();
         expect(reads).toEqual({});
@@ -104,7 +105,7 @@ test("two triggers landing together cost one read, and a failed read leaves the 
         answer = () => resolve({ windows: [] });
     });
     const { source: claude, reads } = source([{ key: "a", provider: "claude", answer: () => held }]);
-    const service = createHeadroomService({ store, sources: [claude], logger: silent });
+    const service = createHeadroomService({ store, parks: memoryUsageParkStore(), sources: [claude], logger: silent });
 
     const first = service.refresh({ maxAgeMs: 0 });
     const second = service.refresh({ maxAgeMs: 0 });
@@ -115,7 +116,7 @@ test("two triggers landing together cost one read, and a failed read leaves the 
     expect(recorded["a"]).toBe(known);
 });
 
-test("a target's own read budget outranks a background trigger's freshness, but never a watched re-measure", async () => {
+test("a target's own read budget outranks any freshness a trigger asks for, and only a watched re-measure spends it early", async () => {
     vi.useFakeTimers({ now: NOW });
     try {
         const budget = FRESH_MS * 5;
@@ -124,21 +125,27 @@ test("a target's own read budget outranks a background trigger's freshness, but 
             { key: "budgeted", provider: "claude", minAgeMs: budget },
             { key: "gemini:g.json", provider: "gemini" },
         ]);
-        const service = createHeadroomService({ store, sources: [mixed], logger: silent });
+        const service = createHeadroomService({ store, parks: memoryUsageParkStore(), sources: [mixed], logger: silent });
 
         // Both are past the service's own bound; only the one with no budget of its own is read.
         await service.refresh();
         expect(reads).toEqual({ "gemini:g.json": 1 });
 
-        // Someone is watching this one, so it is taken now rather than at the endpoint's convenience.
+        // "Something just happened" is not a person waiting: a refused turn, a settled turn and a warm-up all say zero,
+        // they all recur on their own, and together they outrun any endpoint's budget. The budget wins.
         await service.refresh({ maxAgeMs: 0 });
-        expect(reads).toEqual({ budgeted: 1, "gemini:g.json": 2 });
+        expect(reads).toEqual({ "gemini:g.json": 2 });
+
+        // Someone pressed something and is watching the number, so it is taken now rather than at the endpoint's
+        // convenience. The one caller allowed to spend the budget early, because there is a person per press.
+        await service.refresh({ maxAgeMs: 0, watched: true });
+        expect(reads).toEqual({ budgeted: 1, "gemini:g.json": 3 });
     } finally {
         vi.useRealTimers();
     }
 });
 
-test("honours the endpoint's own stay-away, even for a caller that says something happened", async () => {
+test("honours the endpoint's own stay-away, even for a press someone is watching", async () => {
     vi.useFakeTimers({ now: NOW });
     try {
         const { store } = memoryStore();
@@ -153,20 +160,68 @@ test("honours the endpoint's own stay-away, even for a caller that says somethin
                 },
             },
         ]);
-        const service = createHeadroomService({ store, sources: [claude], logger: silent });
+        const service = createHeadroomService({ store, parks: memoryUsageParkStore(), sources: [claude], logger: silent });
 
-        await service.refresh({ maxAgeMs: 0 });
-        await service.refresh({ maxAgeMs: 0 });
+        await service.refresh({ maxAgeMs: 0, watched: true });
+        await service.refresh({ maxAgeMs: 0, watched: true });
         expect(calls).toBe(1);
         // Reported for as long as it holds, so a screen can say why a re-measure moved nothing.
         expect(service.held()).toEqual([{ provider: "claude", account: "a", until: NOW + 600_000 }]);
+        expect(await service.parked("a")).toBe(true);
         vi.setSystemTime(NOW + 600_001);
         expect(service.held()).toEqual([]);
-        await service.refresh({ maxAgeMs: 0 });
+        expect(await service.parked("a")).toBe(false);
+        await service.refresh({ maxAgeMs: 0, watched: true });
         expect(calls).toBe(2);
     } finally {
         vi.useRealTimers();
     }
+});
+
+// The park is the only thing standing between a rate-limited account and a read it will be refused. Held in memory it
+// lasted exactly as long as the process: every restart dropped it, the boot sweep asked the account the provider was
+// refusing, and the answer was a stay-away measured from that moment — so restarting pushed the number further out of
+// reach than leaving it alone would have.
+test("a park outlives the process that earned it, so a restart cannot spend the read it was holding off", async () => {
+    vi.useFakeTimers({ now: NOW });
+    try {
+        const parks: UsageParkStore = memoryUsageParkStore();
+        const reader = (): ReturnType<typeof source> =>
+            source([{ key: "a", provider: "claude", answer: async () => ({ windows: [], retryAfterMs: 3_600_000 }) }]);
+
+        const before = reader();
+        const first = createHeadroomService({ store: memoryStore().store, parks, sources: [before.source], logger: silent });
+        await first.refresh({ maxAgeMs: 0, watched: true });
+        expect(before.reads).toEqual({ a: 1 });
+
+        // Same box, new process: fresh service, fresh maps, the same park file.
+        const after = reader();
+        const restarted = createHeadroomService({ store: memoryStore().store, parks, sources: [after.source], logger: silent });
+        await restarted.refresh({ maxAgeMs: 0, watched: true });
+        expect(after.reads).toEqual({});
+        // And the new process can say what it is waiting on, without having earned the refusal itself.
+        expect(restarted.held()).toEqual([{ provider: "claude", account: "a", until: NOW + 3_600_000 }]);
+
+        // Past the instant the provider named, the next trigger asks again — a park is a wait, not a write-off.
+        vi.setSystemTime(NOW + 3_600_001);
+        await restarted.refresh({ maxAgeMs: 0, watched: true });
+        expect(after.reads).toEqual({ a: 1 });
+    } finally {
+        vi.useRealTimers();
+    }
+});
+
+test("disconnecting an account lifts its park too, so a reconnect is not held off by the credential it replaced", async () => {
+    const parks = memoryUsageParkStore();
+    const { store } = memoryStore();
+    const { source: claude } = source([{ key: "a", provider: "claude", answer: async () => ({ windows: [], retryAfterMs: 600_000 }) }]);
+    const service = createHeadroomService({ store, parks, sources: [claude], logger: silent });
+
+    await service.refresh({ maxAgeMs: 0, watched: true });
+    expect(await service.parked("a")).toBe(true);
+    await service.clear("claude", "a");
+    expect(await service.parked("a")).toBe(false);
+    expect(await parks.read()).toEqual({});
 });
 
 test("answers a caller on time even when the endpoint is not, and the reading still lands", async () => {
@@ -176,7 +231,7 @@ test("answers a caller on time even when the endpoint is not, and the reading st
         answer = () => resolve(WINDOWS);
     });
     const { source: claude } = source([{ key: "a", provider: "claude", answer: () => held }]);
-    const service = createHeadroomService({ store, sources: [claude], logger: silent });
+    const service = createHeadroomService({ store, parks: memoryUsageParkStore(), sources: [claude], logger: silent });
 
     await service.refresh({ withinMs: 1 });
     expect(recorded).toEqual({});
@@ -187,7 +242,7 @@ test("answers a caller on time even when the endpoint is not, and the reading st
 
 test("a reading handed in from elsewhere is recorded and announced like a swept one, and a clear is announced too", async () => {
     const { store, recorded } = memoryStore();
-    const service = createHeadroomService({ store, sources: [], logger: silent });
+    const service = createHeadroomService({ store, parks: memoryUsageParkStore(), sources: [], logger: silent });
     const announced: [string, string, AccountUsage | undefined][] = [];
     service.onChange((provider, account, usage) => announced.push([provider, account, usage]));
 
