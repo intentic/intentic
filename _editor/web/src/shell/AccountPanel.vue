@@ -103,20 +103,32 @@ onUnmounted(() => {
     <!-- Same inset as the sandbox switcher above; the popover's default padding is a content card's, not a menu's. -->
     <AnchoredOverlay v-model="open" :anchor="trigger ?? undefined" side="right" cross="end">
         <div class="flex w-60 flex-col p-1">
-            <!-- Chip sits inside the identity block, as a `<span>`, not a link or row competing with the actions below. -->
+            <!-- Chip sits beside the name (or email when there is no name), not on its own row below the identity block. -->
             <div class="flex items-center gap-2 px-2 py-1.5">
                 <Avatar :size="28" :src="avatarImage" />
                 <div class="min-w-0 flex-1">
-                    <span class="truncate text-xs font-medium text-content">{{ user?.email }}</span>
-                    <div v-if="user?.name" class="truncate text-2xs text-muted">{{ user.name }}</div>
-                    <StatusBadge
-                        v-if="planBadge"
-                        :variant="planBadge.variant"
-                        :label="planBadge.label"
-                        size="xs"
-                        class="mt-1"
-                        v-tooltip.right="planBadge.detail"
-                    />
+                    <div :class="user?.name ? undefined : `flex min-w-0 items-center gap-1.5`">
+                        <span class="truncate text-xs font-medium text-content" :class="user?.name ? undefined : `min-w-0`">{{ user?.email }}</span>
+                        <StatusBadge
+                            v-if="planBadge && !user?.name"
+                            :variant="planBadge.variant"
+                            :label="planBadge.label"
+                            size="xs"
+                            class="shrink-0"
+                            v-tooltip.right="planBadge.detail"
+                        />
+                    </div>
+                    <div v-if="user?.name" class="flex min-w-0 items-center gap-1.5">
+                        <span class="min-w-0 truncate text-2xs text-muted">{{ user.name }}</span>
+                        <StatusBadge
+                            v-if="planBadge"
+                            :variant="planBadge.variant"
+                            :label="planBadge.label"
+                            size="xs"
+                            class="shrink-0"
+                            v-tooltip.right="planBadge.detail"
+                        />
+                    </div>
                 </div>
             </div>
 
