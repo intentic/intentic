@@ -13,8 +13,6 @@ import {
     SearchBar,
     SegmentedControl,
     SkeletonRows,
-    StatusTally,
-    type TallyItem,
     useLoadingReveal,
     vAction,
 } from "@intentic/extension-ui";
@@ -22,15 +20,14 @@ import { computed, reactive, ref } from "vue";
 import AutomationComposer from "./AutomationComposer.vue";
 import AutomationRow from "./AutomationRow.vue";
 import FrontDeskInstallDialog from "./FrontDeskInstallDialog.vue";
-import { nextIn } from "./cronSchedule";
 import { host } from "./host";
 import { availableTemplates, glyph, useCatalog, withAvailability } from "./catalog";
 import { useAutomations } from "./useAutomations";
 import { t } from "./i18n.js";
 
 // Automations: trigger, then optional guard, then the prompt the agent wakes with; the daemon fires them and records
-// history. The page answers three questions top-down: is anything wrong (the tally), what's standing (two shelves of
-// rows), what else could be (the offers below). Creating and editing happen inline, never in a dialog.
+// history. The page lists what's standing (two shelves of rows) and what else could be (the offers below). Creating
+// and editing happen inline, never in a dialog.
 
 const { automations, isLoading, error: listError, save, setEnabled, remove, run } = useAutomations();
 // Only draws the wait once it's lasted long enough to be worth seeing.
@@ -77,20 +74,6 @@ const counts = computed(() => ({
     off: searched.value.filter((automation) => !automation.enabled).length,
     failing: searched.value.filter(failing).length,
 }));
-// Reads the whole list, not the filtered one, since it sits above the filter and answers a different question
-// ("anything wrong", not "in this view"). Only `on` is always shown; a zero elsewhere is dropped.
-const tally = computed<readonly TallyItem[]>(() => [
-    { label: `on`, value: automations.value.filter((automation) => automation.enabled).length, variant: `success`, always: true },
-    { label: `paused`, value: automations.value.filter((automation) => !automation.enabled).length, variant: `neutral` },
-    { label: `failing`, value: automations.value.filter(failing).length, variant: `danger` },
-]);
-// The soonest due time across every enabled row, a fact no single row can give; absent is an honest silence, not a
-// zero.
-const nextFire = computed<number | undefined>(() => {
-    const due = automations.value.flatMap((automation) => (automation.enabled && automation.nextRun !== undefined ? [automation.nextRun] : []));
-    return due.length === 0 ? undefined : Math.min(...due);
-});
-
 // The Errors tab appears only once something fails, so its presence is itself the alert; it stays while active so a
 // fixed run can't strand the filter.
 const viewOptions = computed<{ label: string; value: View; badge: number }[]>(() => [
@@ -187,14 +170,6 @@ const toggleDetail = (id: string): void => {
 <template>
     <Page width="wide">
         <PageHeader :title="t(`automationsView.automations`)">
-            <!-- On the title row, not under it, to spend that height on the body instead. -->
-            <template #info>
-                <StatusTally v-if="!isLoading && automations.length > 0" :items="tally" class="ml-2">
-                    <span v-if="nextFire !== undefined" class="text-xs text-subtle">{{
-                        t(`automationsView.next`, { nextFire: nextIn(nextFire) })
-                    }}</span>
-                </StatusTally>
-            </template>
             <template #actions>
                 <PageAction icon="plus" :label="t(`automationsView.newAutomation`)" primary @click="createOpen = true" />
             </template>
@@ -264,12 +239,7 @@ const toggleDetail = (id: string): void => {
                 </button>
             </div>
 
-            <RowGroup
-                v-if="chores.length > 0"
-                :label="t(`automationsView.codeChores`)"
-                :count="chores.length"
-                :caption="t(`automationsView.maintenanceCodebase`)"
-            >
+            <RowGroup v-if="chores.length > 0" :label="t(`automationsView.codeChores`)">
                 <AutomationRow
                     v-for="chore in chores"
                     :key="chore.id"
@@ -286,12 +256,7 @@ const toggleDetail = (id: string): void => {
                 />
             </RowGroup>
 
-            <RowGroup
-                v-if="integrations.length > 0"
-                :label="t(`automationsView.integrations`)"
-                :count="integrations.length"
-                :caption="t(`automationsView.firedOutsideWorkspace`)"
-            >
+            <RowGroup v-if="integrations.length > 0" :label="t(`automationsView.integrations`)">
                 <AutomationRow
                     v-for="automation in integrations"
                     :key="automation.id"
@@ -310,16 +275,11 @@ const toggleDetail = (id: string): void => {
 
             <!-- Automation sections use one equal-width grid. -->
             <section v-if="availableChores.length > 0 || availableSuggestions.length > 0" class="@container">
-                <div class="mb-2.5 flex flex-wrap items-baseline gap-x-2 gap-y-1 px-1">
+                <div class="mb-2.5 px-1">
                     <span :class="ui.sectionLabel()">{{ t(`automationsView.addAutomation`) }}</span>
-                    <span class="text-2xs text-subtle">{{ t(`automationsView.thingsSandboxDoNobody`) }}</span>
                 </div>
                 <div class="flex flex-col gap-3">
-                    <div v-if="availableChores.length > 0" class="flex flex-col gap-1.5">
-                        <span class="px-1 text-2xs text-subtle">
-                            <b class="font-medium text-muted">{{ t(`automationsView.codeChores`) }}</b> {{ t(`automationsView.checkRunsFreeFirst`) }}
-                        </span>
-                        <div class="grid gap-1.5 @xl:grid-cols-2 @3xl:grid-cols-3">
+                    <div v-if="availableChores.length > 0" class="grid gap-1.5 @xl:grid-cols-2 @3xl:grid-cols-3">
                             <button
                                 v-for="recipe in availableChores"
                                 :key="recipe.id"
@@ -336,15 +296,9 @@ const toggleDetail = (id: string): void => {
                                 <!-- The chevron opens the recipe details; it does not create a run. -->
                                 <Icon name="chevron-right" class="mt-0.5 shrink-0 text-2xs text-subtle" />
                             </button>
-                        </div>
                     </div>
 
-                    <div v-if="availableSuggestions.length > 0" class="flex flex-col gap-1.5">
-                        <span class="px-1 text-2xs text-subtle">
-                            <b class="font-medium text-muted">{{ t(`automationsView.reachAgentElsewhere`) }}</b>
-                            {{ t(`automationsView.fewDetailsToFill`) }}
-                        </span>
-                        <div class="grid gap-1.5 @xl:grid-cols-2 @3xl:grid-cols-3">
+                    <div v-if="availableSuggestions.length > 0" class="grid gap-1.5 @xl:grid-cols-2 @3xl:grid-cols-3">
                             <button
                                 v-for="recipe in availableSuggestions"
                                 :key="recipe.id"
@@ -361,7 +315,6 @@ const toggleDetail = (id: string): void => {
                                 <!-- A chevron, not a plus: this also opens the composer prefilled, not a one-click create. -->
                                 <Icon name="chevron-right" class="mt-0.5 shrink-0 text-2xs text-subtle" />
                             </button>
-                        </div>
                     </div>
                 </div>
             </section>
