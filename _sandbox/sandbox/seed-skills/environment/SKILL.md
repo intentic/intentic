@@ -140,8 +140,8 @@ few minutes and counts against the sandbox's awake hours. A server-managed sandb
 finds this sandbox by its slug there, and `swap_sandbox` rebuilds the approved environment. Doing so restarts
 this container and therefore ends your turn, so say that first and get a yes; with no device connected, the
 Environment card's own button (or the command it shows) is the owner's. Until the rebuild, the new tools are
-not available: say so instead of retrying. A capability that extends the image (VPN, a browser connector,
-Docker) composes its own fragment automatically: never propose an overlay for those, just point at the same
+not available: say so instead of retrying. A capability that extends the image (VPN, a network disk, a browser
+connector, Docker) composes its own fragment automatically: never propose an overlay for those, just point at the same
 rebuild.
 
 ## Docker Engine problems are the Docker capability's options, not an overlay

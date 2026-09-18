@@ -59,13 +59,13 @@ const CHILD_ROUTES = new Set([
     "GET /children/providers",
 ]);
 
+// The live-link surfaces the `vpn`, `geo` and `netdisk` CLIs drive: dial/drop a tunnel, start/move/rotate/stop an exit,
+// mount/unmount a disk. One bargain for all three: operate what's already configured, never read the credential behind
+// it, which stays on the manifest this token never reaches.
+const LIVE_LINK_ROUTES = /^\/(?:vpn|exit|netdisk)(?:\/|$)/;
+
 const agentReach = (method: string, path: string): boolean =>
-    path === "/vpn" ||
-    path.startsWith("/vpn/") ||
-    // The geo-exit surface the `exit` CLI drives: list, catalog, start, move, rotate, check, stop.
-    // Same bargain as /vpn: operates what's already configured, never reads the credential behind it.
-    path === "/exit" ||
-    path.startsWith("/exit/") ||
+    LIVE_LINK_ROUTES.test(path) ||
     (method === "GET" && /^\/capabilities\/[^/]+\/otp$/.test(path)) ||
     // The capability setup gate the `capabilities` CLI drives: discovery (names only, never config) and the ask.
     // The ask parks on an owner-decided card in chat; consent is enforced at the route.

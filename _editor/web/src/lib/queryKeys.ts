@@ -114,3 +114,4 @@ export const SYNC_HEALTH = family(`sync-health`);
 export const TERMINALS = family(`terminals`);
 export const USAGE_ROLLUP = family(`usage-rollup`);
 export const VPN = family(`vpn`);
+export const NETDISK = family(`netdisk`);

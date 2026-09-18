@@ -14,6 +14,7 @@ import { integrationHandler } from "./handlers/integration.js";
 import { localModelHandler } from "./handlers/localmodel.handler.js";
 import { mcpHandler } from "./handlers/mcp.handler.js";
 import { monorepoHandler } from "./handlers/monorepo.handler.js";
+import { netdiskHandler } from "./handlers/netdisk.handler.js";
 import { pluginHandler } from "./handlers/plugin.handler.js";
 import { serviceHandler } from "./handlers/service.handler.js";
 import { sshHandler } from "./handlers/ssh.handler.js";
@@ -34,6 +35,7 @@ export const registry: Record<CapabilityKind, CapabilityHandler> = {
     ssh: sshHandler,
     vpn: vpnHandler,
     exit: exitHandler,
+    netdisk: netdiskHandler,
     docker: dockerHandler,
     browser: browserHandler,
     identity: identityHandler,

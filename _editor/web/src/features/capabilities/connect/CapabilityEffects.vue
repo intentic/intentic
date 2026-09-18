@@ -15,6 +15,29 @@ interface EffectRow {
     readonly warn?: boolean;
 }
 
+// The two privilege rows, out of the switch: each is its own decision (privileged vs net-admin, writable vs not) and
+// the switch is one case per kind, not per decision.
+const describeRuntime = (level: `net-admin` | `privileged`): EffectRow =>
+    level === `privileged`
+        ? { icon: `shield`, label: t(`capabilities.capabilityEffects.runsSandboxContainerPrivileged`), warn: true }
+        : { icon: `shield`, label: t(`capabilities.capabilityEffects.requiresNetworkAdminContainer`) };
+
+// Writable is the warned half: a read-only mount can cost the server nothing, a writable one can.
+const describeMount = (target: string, writable: boolean): EffectRow => {
+    const named = target !== ``;
+    if (writable) {
+        return {
+            icon: `server`,
+            label: named ? t(`capabilities.capabilityEffects.mountsTargetReadWrite`, { target }) : t(`capabilities.capabilityEffects.mountsShareReadWrite`),
+            warn: true,
+        };
+    }
+    return {
+        icon: `server`,
+        label: named ? t(`capabilities.capabilityEffects.mountsTargetReadOnly`, { target }) : t(`capabilities.capabilityEffects.mountsShareReadOnly`),
+    };
+};
+
 const describe = (effect: CapabilityEffect): EffectRow => {
     switch (effect.kind) {
         case "skill":
@@ -34,11 +57,11 @@ const describe = (effect: CapabilityEffect): EffectRow => {
         case "image":
             return { icon: `box`, label: t(`capabilities.capabilityEffects.extendsSandboxImageOne`) };
         case "runtime":
-            return effect.level === `privileged`
-                ? { icon: `shield`, label: t(`capabilities.capabilityEffects.runsSandboxContainerPrivileged`), warn: true }
-                : { icon: `shield`, label: t(`capabilities.capabilityEffects.requiresNetworkAdminContainer`) };
+            return describeRuntime(effect.level);
         case "gpu":
             return { icon: `bolt`, label: t(`capabilities.capabilityEffects.claimsEveryNvidiaGpu`), warn: true };
+        case "mount":
+            return describeMount(effect.target, effect.writable);
         case "restart":
             return { icon: `refresh`, label: t(`capabilities.capabilityEffects.appliesWithoutRebuildBy`, { process: effect.process }) };
         case "process":

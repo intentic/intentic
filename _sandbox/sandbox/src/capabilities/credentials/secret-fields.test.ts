@@ -69,6 +69,15 @@ const SAMPLES: Record<CapabilityKind, readonly Capability[]> = {
         },
     ],
     // country is the only non-secret field on tor/vpngate; a dropped echo there loses the whole exit entry.
+    netdisk: [
+        {
+            id: "archive",
+            kind: "netdisk",
+            config: { provider: "smb", server: "nas.local", share: "archive", username: "agent", password: "pw", access: "read", version: "auto", autoMount: "on" },
+        },
+        // A guest share: no secret field at all, so vaulting must leave the entry untouched.
+        { id: "public", kind: "netdisk", config: { provider: "smb", server: "nas.local", share: "public", username: "guest", access: "readwrite", version: "1.0", autoMount: "off" } },
+    ],
     exit: [
         { id: "tor-exit", kind: "exit", config: { provider: "tor", country: "DE", autoStart: "on" } },
         { id: "vpngate-exit", kind: "exit", config: { provider: "vpngate", country: "JP", autoStart: "off" } },

@@ -83,6 +83,30 @@ A user holding an exported FortiClient configuration imports it rather than re-k
 FortiClient's machine-bound `EncX` encryption and are **not** recoverable, so every encrypted value is dropped
 and reported as a field the user must supply: importing an unusable value would be worse than asking.
 
+### Network disks
+
+A network disk is the VPN's shape once more: **adding** one is an ordinary capability (`netdisk`: server, share,
+credential, `access`, `autoMount`), and **mounting** it is a runtime operation on the `/netdisk` routes
+([netdisk.contract.ts](../../_shared/sandbox-contract/src/contracts/netdisk.contract.ts),
+[netdisk/](../../_sandbox/sandbox/src/netdisk/)), driven by the card and by the agent's `netdisk` CLI alike. Mount
+state is read back from `/proc/self/mountinfo` on every look, never remembered. One protocol today, SMB through the
+kernel's cifs client (`mount.cifs`), behind the same total-over-the-union driver table the VPN uses, so NFS is a new
+arm and a compile error until implemented.
+
+**It costs no new container privilege.** Every sandbox already runs with `CAP_SYS_ADMIN` (the run contract grants it
+for mount namespaces), which is all a cifs mount needs; the capability's fragment installs `cifs-utils` and carries no
+`# intentic:runtime` line. What it cannot do is get past a host AppArmor profile that denies `mount` (docker-default on
+an Ubuntu host); the mount fails with an errno the driver explains, and the sandbox has to run unconfined or privileged
+there.
+
+**`access` is the card's one decision, and it is enforced twice, honestly.** `read` is the `ro` mount flag: the kernel
+refuses a write before the server ever sees it. But a flag is all it is: the container that mounted it can remount it,
+so the skill tells the agent that read-only is the user's decision and never something to work around, the netdisk
+invariant reads the flag back off the mount table on every sweep and reports a disk whose live mount stopped matching
+its card, and the card tells the owner to give a read-only disk a **read-only account on the server**, the one fence
+nothing in the container can move. Mounts are `soft`, so a server that went away (a dropped tunnel) returns errors
+instead of hanging every shell that touches the path. Boot restore mounts after the VPNs reconnect.
+
 ### Geo exits
 
 A **geo exit** is somewhere chosen traffic can *leave* from, so a page fetches as if read in Berlin or Osaka.

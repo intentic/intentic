@@ -25,6 +25,7 @@ import { panelsContract } from "./contracts/panels.contract.js";
 import { portsContract } from "./contracts/ports.contract.js";
 import { publicContract } from "./contracts/public.contract.js";
 import { prepushContract } from "./contracts/prepush.contract.js";
+import { netdiskContract } from "./contracts/netdisk.contract.js";
 import { providersContract } from "./contracts/providers.contract.js";
 import { pushContract } from "./contracts/push.contract.js";
 import { safetyContract } from "./contracts/safety.contract.js";
@@ -84,6 +85,7 @@ export { skillsContract } from "./contracts/skills.contract.js";
 export { systemContract } from "./contracts/system.contract.js";
 export { translatorContract } from "./contracts/translator.contract.js";
 export { type PlanLimitsHeld, type PlanLimitsRefreshed, PlanLimitsRefreshedSchema, usageContract } from "./contracts/usage.contract.js";
+export { netdiskContract } from "./contracts/netdisk.contract.js";
 export { vpnContract } from "./contracts/vpn.contract.js";
 export { workflowsContract } from "./contracts/workflows.contract.js";
 export { workspaceContract } from "./contracts/workspace.contract.js";
@@ -177,6 +179,7 @@ export * from "./schemas/public.js";
 export * from "./schemas/push.js";
 export * from "./schemas/git/remote-refs.js";
 export * from "./schemas/secrets.js";
+export * from "./schemas/netdisk.js";
 export * from "./schemas/sessions.js";
 export * from "./schemas/settings.js";
 export * from "./schemas/share.js";
@@ -243,6 +246,7 @@ export const sandboxContract = {
     usage: usageContract,
     vpn: vpnContract,
     exit: exitContract,
+    netdisk: netdiskContract,
     workflows: workflowsContract,
 };
 

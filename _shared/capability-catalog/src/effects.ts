@@ -44,7 +44,10 @@ export type CapabilityEffect =
     | { readonly kind: "endpoint"; readonly url: string }
     // Lets the agent spend real money; the only effect measured in dollars. The two ceilings are per-payment/per-day;
     // `carded` says whether every payment stops for a click or a delegated band settles automatically.
-    | { readonly kind: "spend"; readonly perPaymentUsd: string; readonly dailyUsd: string; readonly carded: boolean };
+    | { readonly kind: "spend"; readonly perPaymentUsd: string; readonly dailyUsd: string; readonly carded: boolean }
+    // Mounts somebody's file server into the sandbox; `writable` is the whole decision, so it is its own row rather
+    // than a config detail. `target` is //server/share, empty while the form is still blank.
+    | { readonly kind: "mount"; readonly target: string; readonly writable: boolean };
 
 export interface CapabilityEffectInput {
     readonly kind: CapabilityKind;
@@ -140,6 +143,21 @@ const KIND_EFFECTS: Record<CapabilityKind, (input: CapabilityEffectInput) => rea
             effects.push({ kind: "runtime", level: "net-admin" });
         }
         if (provider === "wireguard") {
+            effects.push({ kind: "secret", exposure: "disk" });
+        }
+        return effects;
+    },
+    // The image row is cifs-utils; no runtime row, since every sandbox already carries the mount capability. The
+    // credential is optional (a guest share stores none).
+    netdisk: (input) => {
+        const server = filled(input.config["server"]) ? String(input.config["server"]) : "";
+        const share = filled(input.config["share"]) ? String(input.config["share"]) : "";
+        const effects: CapabilityEffect[] = [
+            { kind: "mount", target: server === "" || share === "" ? "" : `//${server}/${share}`, writable: input.config["access"] === "readwrite" },
+            { kind: "skill", name: "netdisk" },
+            { kind: "image" },
+        ];
+        if (filled(input.config["password"]) || input.config["hasPassword"] === true) {
             effects.push({ kind: "secret", exposure: "disk" });
         }
         return effects;

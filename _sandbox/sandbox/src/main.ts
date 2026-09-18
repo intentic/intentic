@@ -31,6 +31,7 @@ import { localModelPanelKey, startLocalModelsIfEnabled } from "./capabilities/ha
 import { writeAgentToken } from "./auth/agent-token.js";
 import { createCiPoller } from "./ci/poller.js";
 import { restoreExits } from "./exit/exit-links.js";
+import { remountNetdisks } from "./netdisk/netdisk-links.js";
 import { reconnectVpns } from "./vpn/vpn-links.js";
 import { startProviderBoot } from "./agent/providers/provider-registry.js";
 import { createServices } from "./composition.js";
@@ -851,7 +852,8 @@ const main = async (): Promise<void> => {
     // after the sweep, best-effort (failures land in state or the log, not the boot path).
     const bootCtx = capabilityCtx(services);
     if (role.container) {
-        void reconnectVpns(services.capabilities, services.logger);
+        // Disks come after the tunnels, since a share behind a VPN is unreachable until it is up.
+        void reconnectVpns(services.capabilities, services.logger).then(() => remountNetdisks(services.capabilities, services.logger));
         // Geo exits restore the same way, plus one step: a tunnel exit's client survives the daemon dying, but the
         // SOCKS proxy publishing it lived in this process, so this republishes it without disturbing the tunnel.
         void restoreExits(services.capabilities, services.logger);

@@ -63,6 +63,22 @@ describe("capabilityEffects", () => {
         ]);
     });
 
+    it("a network disk discloses the mount and its writability first, the image, and a credential only when one is typed", () => {
+        expect(capabilityEffects({ kind: "netdisk", config: { server: "nas.local", share: "archive", access: "read", password: "x" } })).toEqual([
+            { kind: "mount", target: "//nas.local/archive", writable: false },
+            { kind: "skill", name: "netdisk" },
+            { kind: "image" },
+            { kind: "secret", exposure: "disk" },
+        ]);
+        // A guest share stores nothing; a blank form has no target yet; read-write is the warned form.
+        expect(capabilityEffects({ kind: "netdisk", config: { access: "readwrite" } })).toEqual([
+            { kind: "mount", target: "", writable: true },
+            { kind: "skill", name: "netdisk" },
+            { kind: "image" },
+        ]);
+        expect(capabilityEffects({ kind: "netdisk", config: { server: "nas", share: "s", hasPassword: true } })).toContainEqual({ kind: "secret", exposure: "disk" });
+    });
+
     it("always stores an ssh credential on disk, for both auth modes", () => {
         for (const auth of ["key", "password"]) {
             expect(capabilityEffects({ kind: "ssh", config: { auth } })).toEqual([

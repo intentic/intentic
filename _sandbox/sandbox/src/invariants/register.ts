@@ -9,6 +9,7 @@ import { checks as engineChecks, owner as engineOwner } from "../engines/invaria
 import { checks as exitChecks, type ExitInvariantDeps, owner as exitOwner } from "../exit/invariant.js";
 import { checks as issueChecks, type IssuesInboxDeps, owner as issueOwner } from "../issues/invariant.js";
 import { checks as hostChecks, owner as hostOwner } from "../hosts/invariant.js";
+import { checks as netdiskChecks, type NetdiskInvariantDeps, owner as netdiskOwner } from "../netdisk/invariant.js";
 import { checks as peerChecks, owner as peerOwner, type PeerRegistryDeps } from "../peers/invariant.js";
 import { checks as runnerChecks, owner as runnerOwner } from "../runners/invariant.js";
 import { checks as fenceChecks, owner as fenceOwner } from "../fences/invariant.js";
@@ -25,6 +26,7 @@ export type DaemonInvariantDeps = TurnJournalDeps &
     FleetRegistryDeps &
     ManifestSecretDeps &
     ExitInvariantDeps &
+    NetdiskInvariantDeps &
     PeerRegistryDeps &
     IssuesInboxDeps &
     CommandGateDeps;
@@ -34,6 +36,7 @@ export const registerDaemonInvariants = (registry: InvariantRegistry, deps: Daem
     registry.register(agentsOwner, agentsChecks(deps));
     registry.register(capabilityOwner, capabilityChecks(deps));
     registry.register(exitOwner, exitChecks(deps));
+    registry.register(netdiskOwner, netdiskChecks(deps));
     registry.register(peerOwner, peerChecks(deps));
     registry.register(issueOwner, issueChecks(deps));
     registry.register(cursorOwner, cursorChecks(deps));

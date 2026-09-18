@@ -1,4 +1,4 @@
-// The 39 groups of the daemon's surface, hand-written since the contract can't state reading order or audience. Order
+// The 40 groups of the daemon's surface, hand-written since the contract can't state reading order or audience. Order
 // is editorial, not alphabetical; shelves are consecutive runs of it, enforced by spec.test.ts, which also fails a
 // contract group missing here or an entry with no routes.
 
@@ -236,6 +236,14 @@ export const SPEC_GROUPS: readonly SpecGroup[] = [
         summary: "Corporate tunnels the sandbox can hold open",
         description:
             "What is configured, dialling and dropping one, and reading connections out of an exported client configuration. Link state is read back from the operating system, not from memory.",
+    },
+    {
+        name: "netdisk",
+        shelf: "connections",
+        label: "Network disks",
+        summary: "Shares on a file server the sandbox can hold mounted",
+        description:
+            "What is configured, mounting and unmounting one. Mount state is read back from the kernel's mount table, not from memory, and a disk added as read-only is mounted read-only.",
     },
     {
         name: "exit",

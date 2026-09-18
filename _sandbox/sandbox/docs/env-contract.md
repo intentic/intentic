@@ -12,7 +12,7 @@ Set once at build time, present in every process in the container:
 | Variable | Value | Why |
 | --- | --- | --- |
 | `WORKSPACE_ROOT` | `/work` | the workspace volume; an isolated turn's worktree is bind-mounted over it, so the path is the same whether or not a turn is isolated |
-| `SANDBOX_PORT` | `8787` | the daemon's loopback port; the agent CLIs (`agents`, `secrets`, `services`, `capabilities`, `wallet`, `vpn`, `geo`, `otp`) dial it |
+| `SANDBOX_PORT` | `8787` | the daemon's loopback port; the agent CLIs (`agents`, `secrets`, `services`, `capabilities`, `wallet`, `vpn`, `geo`, `netdisk`, `otp`) dial it |
 | `LANG` | `C.utf8` | without a UTF-8 locale zsh counts bytes as columns and the prompt corrupts |
 | `EXTENSIONS_DIR` | `/opt/extensions` | the image-baked first-party extensions the daemon enumerates |
 | `IQ_MODEL_DIR`, `IQ_PLUGIN_DIR`, `WEBQ_PLUGIN_DIR` | `/opt/iq-models`, `/opt/iq-plugin`, `/opt/webq-plugin` | the search models (absent on the core profile ⇒ lexical only) and the two always-loaded plugins |

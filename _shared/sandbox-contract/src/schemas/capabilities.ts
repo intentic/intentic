@@ -4,6 +4,7 @@ import { z } from "zod";
 import { ExitConfigSchema } from "./exit.js";
 import { entryId } from "./internal.js";
 import { ServiceKindSchema } from "./inventory.js";
+import { NetdiskConfigSchema } from "./netdisk.js";
 import { VpnConfigSchema } from "./vpn.js";
 // One-way: the browser extension bundles webext.js alone, so nothing there may reach back into this file.
 import { WebExtConfigSchema } from "./webext.js";
@@ -22,6 +23,7 @@ export const CapabilityKindSchema = z.enum([
     "ssh",
     "vpn",
     "exit",
+    "netdisk",
     "docker",
     "browser",
     "identity",
@@ -293,6 +295,8 @@ export const CapabilitySchema = z.discriminatedUnion("kind", [
     // A geo exit; deliberately not a vpn arm, since it routes nothing into the main table and carries no full-tunnel
     // warning.
     z.object({ id: entryId, kind: z.literal("exit"), config: ExitConfigSchema }),
+    // A network disk mounted under /mnt/netdisk/<id>; its live state is on the /netdisk routes, like a vpn's.
+    z.object({ id: entryId, kind: z.literal("netdisk"), config: NetdiskConfigSchema }),
     // The in-sandbox Docker Engine, baked into the image, dormant by default. No remove: de-privileging it silently
     // would be more destructive than useful given what runs on it.
     z.object({ id: entryId, kind: z.literal("docker"), config: DockerConfigSchema }),

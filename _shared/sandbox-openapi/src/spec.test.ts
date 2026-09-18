@@ -4,7 +4,7 @@ import { SPEC_GROUPS, SPEC_SHELVES, specShelves } from "./groups.js";
 import { sandboxSpec, serializeSpec, type SandboxSpecDocument, type SpecOperation } from "./spec.js";
 
 // Guards a generated document with no committed copy to diff (see spec.ts): total coverage, grouping, and determinism,
-// all checked by walking the contract. The 39 group paragraphs are checked against it in both directions.
+// all checked by walking the contract. The 40 group paragraphs are checked against it in both directions.
 
 /** Every `<group>.<route>` name the contract declares, read off the contract rather than from a list. */
 const contractRoutes = (): { group: string; route: string; method: string; path: string }[] => {

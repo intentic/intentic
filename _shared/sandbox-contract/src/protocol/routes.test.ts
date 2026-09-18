@@ -144,6 +144,8 @@ describe(`the real sandbox contract`, () => {
             `exit.use`,
             `intentic.applyEvents`,
             `intentic.run`,
+            // A mount dials a file server and can fail at any step with something to read, like a vpn dial.
+            `netdisk.mount`,
             `system.events`,
             `system.manageDeviceSandbox`,
             // The device agent updates or restarts itself; the stream dies with the process, so lines arrive as they
@@ -155,7 +157,7 @@ describe(`the real sandbox contract`, () => {
 
     it(`fingerprints every other route exactly once`, () => {
         expect(Object.keys(SANDBOX_ROUTE_SHAPES).every((name) => SANDBOX_ROUTE_NAMES.includes(name))).toBe(true);
-        expect(Object.keys(SANDBOX_ROUTE_SHAPES).length).toBe(SANDBOX_ROUTE_NAMES.length - 11);
+        expect(Object.keys(SANDBOX_ROUTE_SHAPES).length).toBe(SANDBOX_ROUTE_NAMES.length - 12);
     });
 
     it(`derives a route table with no duplicate names`, () => {

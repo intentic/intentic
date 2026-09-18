@@ -57,6 +57,9 @@ vi.mock(`../sandbox/devices/useVpn`, () => ({
     importForticlient: (xml: string) => importForticlient(xml),
     useVpn: () => ({ links: ref([]), error: ref(undefined), connect: vi.fn(), disconnect: vi.fn() }),
 }));
+vi.mock(`../sandbox/devices/useNetdisk`, () => ({
+    useNetdisk: () => ({ links: ref([]), error: ref(undefined), mount: vi.fn(), unmount: vi.fn() }),
+}));
 
 const { default: Capabilities } = await import("./Capabilities.vue");
 

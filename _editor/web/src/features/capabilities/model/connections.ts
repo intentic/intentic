@@ -1,6 +1,6 @@
 import type { CapabilitySummary } from "@intentic/api-contract";
 import { capabilityEffects } from "@intentic/capability-catalog";
-import type { CapabilityKind, CapabilityState, VpnLink } from "@intentic/sandbox-contract";
+import type { CapabilityKind, CapabilityState, NetdiskLink, VpnLink } from "@intentic/sandbox-contract";
 import type { StatusVariant } from "@intentic/ui";
 import { t } from "@intentic/ui/i18n";
 
@@ -41,6 +41,16 @@ export const vpnFacts = (id: string, links: readonly VpnLink[]): string | undefi
     return [link.address, link.routes.includes(`0.0.0.0/0`) ? `all traffic` : link.routes.join(`, `)]
         .filter((fact) => fact !== undefined && fact !== ``)
         .join(` · `);
+};
+
+// A mounted disk's live facts: where it is and whether it takes writes, as the kernel has it; undefined while
+// unmounted, since the row's status already says that.
+export const netdiskFacts = (id: string, links: readonly NetdiskLink[]): string | undefined => {
+    const link = links.find((candidate) => candidate.id === id);
+    if (link === undefined || link.state !== `mounted`) {
+        return undefined;
+    }
+    return `${link.mountPoint} · ${link.writable === true ? `read-write` : `read-only`}`;
 };
 
 export interface ConnectionState {

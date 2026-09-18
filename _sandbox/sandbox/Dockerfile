@@ -523,6 +523,10 @@ COPY --chmod=755 _sandbox/sandbox/bin/vpn /usr/local/bin/vpn
 # NAMED `geo` BECAUSE `exit` IS A SHELL BUILTIN: a binary called exit is unreachable from any command line
 # (`exit list` exits the shell instead of running it). The capability and the routes keep the word.
 COPY --chmod=755 _sandbox/sandbox/bin/geo /usr/local/bin/geo
+# The network-disk command the agent's netdisk skill teaches. Same shape as vpn: it calls the daemon's /netdisk
+# routes, never mount.cifs directly, so a disk the agent mounts and one the owner mounts are the same operation.
+# cifs-utils is NOT baked — it rides the netdisk capability's fragment; a sandbox with no disk carries no client.
+COPY --chmod=755 _sandbox/sandbox/bin/netdisk /usr/local/bin/netdisk
 # The one-time-code command connector skills teach for services whose write path asks for a 2FA code (npm
 # publish --otp). Same shape as vpn: it calls the daemon's code mint and owns no totp logic, so the stored seed
 # never reaches a shell — only codes that die within their period do.

@@ -1,6 +1,7 @@
 import { expect, test } from "vitest";
 import { CapabilitiesListSchema } from "./capabilities.js";
 import { SandboxSettingsSchema } from "./settings.js";
+import { SmbNetdiskConfigSchema } from "./netdisk.js";
 import { IpsecVpnConfigSchema } from "./vpn.js";
 
 // Settings cross a version seam: the browser can be newer than the daemon. An absent key must parse as that field's
@@ -54,4 +55,22 @@ test("routed networks take a CIDR list and reject what charon could not load", (
     expect(IpsecVpnConfigSchema.safeParse({ ...ipsec, routedNetworks: "192.168.0.168" }).success).toBe(false);
     expect(IpsecVpnConfigSchema.safeParse({ ...ipsec, routedNetworks: "10.0.0.0/8,nonsense" }).success).toBe(false);
     expect(IpsecVpnConfigSchema.safeParse({ ...ipsec, routedNetworks: "" }).success).toBe(false);
+});
+
+const smb = { provider: "smb", server: "nas.local", share: "archive", username: "agent" };
+
+test("a network disk is read-only, auto-negotiated and mounted on start unless it says otherwise", () => {
+    const parsed = SmbNetdiskConfigSchema.parse(smb);
+    expect(parsed.access).toBe("read");
+    expect(parsed.version).toBe("auto");
+    expect(parsed.autoMount).toBe("on");
+    expect(parsed.password).toBeUndefined();
+});
+
+test("server and share are single names, and the folder inside stays inside", () => {
+    expect(SmbNetdiskConfigSchema.safeParse({ ...smb, server: "//nas.local/x" }).success).toBe(false);
+    expect(SmbNetdiskConfigSchema.safeParse({ ...smb, share: "archive/2026" }).success).toBe(false);
+    expect(SmbNetdiskConfigSchema.safeParse({ ...smb, path: "2026/q3" }).success).toBe(true);
+    expect(SmbNetdiskConfigSchema.safeParse({ ...smb, path: "/2026" }).success).toBe(false);
+    expect(SmbNetdiskConfigSchema.safeParse({ ...smb, path: "../etc" }).success).toBe(false);
 });

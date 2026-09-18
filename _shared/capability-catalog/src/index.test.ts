@@ -84,6 +84,8 @@ describe("contributionCard", () => {
             "localmodel",
             "mcp",
             "monorepo",
+            // Static like vpn: mounting is core code and the access switch is a fence an extension must never set.
+            "netdisk",
             "plugin",
             "ssh",
             "vpn",

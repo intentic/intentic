@@ -22,6 +22,10 @@ test("the agent grant reaches /vpn and the otp mint, and nothing that reveals a 
     }
     expect(await verdict(agent, "agent", "GET", "/vpn")).toBe("ok");
     expect(await verdict(agent, "agent", "POST", "/vpn/office/connect")).toBe("ok");
+    // The disk surface rides the same bargain: mount and unmount what is configured, never the credential behind it.
+    expect(await verdict(agent, "agent", "GET", "/netdisk")).toBe("ok");
+    expect(await verdict(agent, "agent", "POST", "/netdisk/archive/mount")).toBe("ok");
+    expect(await verdict(agent, "agent", "GET", "/netdiskette")).toBe("out-of-scope");
     expect(await verdict(agent, "agent", "GET", "/capabilities/npm/otp")).toBe("ok");
     // The routes a code-minting token must never buy: the manifest, a capability's config, the secrets page.
     expect(await verdict(agent, "agent", "GET", "/capabilities")).toBe("out-of-scope");

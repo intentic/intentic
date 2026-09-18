@@ -234,9 +234,10 @@ A reader's tour of `src/`: which directory answers which question, and the file 
     hashes) into per-line drift on the runner's summary, and the sync door (`runner.routes.ts`) pushes this
     sandbox's settings down the live link (replace semantics — the parent is a runner's whole authority).
     `docs/remote-runners-plan.md` at the workspace root says why every seam sits where it does.
-- [src/tunnel](../src/tunnel), the substrate under the two things the sandbox holds a TUNNEL for: a VPN into
-  somewhere of the user's ([src/vpn](../src/vpn)) and a geo exit out of somewhere else ([src/exit](../src/exit)).
-  The second was written as the first one's shape retold and said so; what was retold is here once: the
+- [src/tunnel](../src/tunnel), the substrate under the three things the sandbox holds a link to: a VPN into
+  somewhere of the user's ([src/vpn](../src/vpn)), a geo exit out of somewhere else ([src/exit](../src/exit)), and a
+  network disk mounted from a file server ([src/netdisk](../src/netdisk)). The second was written as the first
+  one's shape retold and said so, and the third is the same shape once more; what was retold is here once: the
   interface-name rule (IFNAMSIZ, a hash fallback, an `x` prefix so the two kinds cannot meet in one netns),
   the advisory up marker, the manifest join (`tunnelEntries`, `tunnelEntry`, the "not carried yet" sentence a
   dial answers with before the rebuild), the one-move-per-id streaming route (`heldStream`: refuse the second
@@ -246,7 +247,16 @@ A reader's tour of `src/`: which directory answers which question, and the file 
   skill with the last entry), wg-quick as both kinds drive it, and `net-probe.ts`, which reads a live tunnel
   back off the machine. What a kind keeps is exactly what differs: its link's shape, its drivers' SPI, and
   what a start owes before it counts (an exit must prove its country from the outside; a vpn's interface is
-  the whole answer).
+  the whole answer; a disk is mounted or it is not, read off `/proc/self/mountinfo`).
+- [src/netdisk](../src/netdisk): an SMB share mounted at `/mnt/netdisk/<id>` through the kernel's cifs client
+  (`mount.cifs`, which the capability's fragment installs; no runtime directive, since every sandbox already
+  holds `CAP_SYS_ADMIN`). The card's one decision is `access`: `read` is the `ro` mount flag, which the kernel
+  enforces before the server sees a write. It is also only a flag: the container CAN remount, so the skill
+  tells the agent that read-only is a decision and `invariant.ts` reads the flag back off the mount table on
+  every sweep and reports a disk that stopped matching its card, and the card says to give a read-only disk a
+  read-only account on the server, the one fence nothing in the container can move. Boot restore mounts after
+  the VPNs reconnect, since a share behind a tunnel is unreachable before it. `soft`, not `hard`: a server that
+  went away (a dropped tunnel) returns EIO instead of hanging every shell that touches the mount.
 - [src/guard/guard.ts](../src/guard/guard.ts): the one gate every gated action consults (fail-closed); [src/guard/actions.ts](../src/guard/actions.ts) is the catalog of decisions, and [src/guard/command-gate.ts](../src/guard/command-gate.ts) is the one that can park a running turn on a card. It runs four tiers and only the last interrupts anybody: TRIAGE (the classifier), the HARD RULE (`commandRun`, un-waivable, one class), the JUDGE (a model reading the owner's policy), and the PERSON. The last two are the owner's to decline (`settings.commandJudge`: `off` never calls the judge, `watch` calls it and records every verdict while holding nothing, `on` lets the verdict decide) — a tier that spends money and interrupts people has to be refusable, and the redesign had quietly made itself the one part of the sandbox you could only opt further into. The hard rule is outside all three, so no setting can leave a turn with nothing between it and a formatted disk, which is what makes the switch offerable. THE CARD'S TITLE IS THE JUDGE'S OWN SENTENCE, not a class: it used to be `This command would ${LABEL[matches[0]]}`, the first class the catalog matched, in the catalog's own order — so a command that cleaned a build directory and then published a package read "This command would delete files recursively" over a sentence about npm, with the `rm -rf` marked beneath it as the fragment it was stopped for. Every word of that card except the sentence was about the wrong half of the command, and it is how a gate comes to look like it is crying wolf about deletions when it never was. Only the hard rule still titles a consequence, because it alone is a typed verdict over a named class. `credentialUse` is the catalog's fifth action and the only one whose sole DENY is "there is nobody to ask": a gate is never a ban, so an unattended turn and a turn with no live conversation are refusals while everything else is a hold that asks a named person (src/secrets/credential-gate.ts). WHAT a command is, as opposed to what may be done about it, lives one package out in
   [sandbox-contract/src/policy/command-classes.ts](../../../_shared/sandbox-contract/src/policy/command-classes.ts): the same table the
   machine agent reads before running anything on somebody's own computer, so the two enforcement points cannot

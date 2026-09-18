@@ -44,6 +44,7 @@ import CapabilityInstanceRow from "./connect/CapabilityInstanceRow.vue";
 import CapabilityRenameDialog from "./connect/CapabilityRenameDialog.vue";
 import CapabilityRail, { type CapabilityScope } from "./connect/CapabilityRail.vue";
 import SyncOnlyDeviceRow from "./connect/SyncOnlyDeviceRow.vue";
+import NetdiskMounts from "../../components/NetdiskMounts.vue";
 import VpnConnections from "../../components/VpnConnections.vue";
 import { startAgent } from "../agents/fleet/agentActions";
 import { sandboxJson } from "../sandbox/client/sandboxClient";
@@ -57,6 +58,7 @@ import {
     machineGrants,
     rebuildStep,
     signsInByHand,
+    netdiskFacts,
     vpnFacts,
 } from "./model/connections";
 import { rememberedSecrets, rememberSecrets } from "./model/devSecrets";
@@ -87,6 +89,7 @@ import { useRegistry } from "../extensions/useRegistry";
 import { type BackgroundProcessRow, useBackgroundProcesses, viewProcessLogs } from "../terminal/useBackgroundProcesses";
 import { useTerminalPanel } from "../terminal/useTerminalPanel";
 import { HOST_DOOR, usePeerConnect, WEBEXT_DOOR } from "../sandbox/devices/usePeerConnect";
+import { useNetdisk } from "../sandbox/devices/useNetdisk";
 import { useVpn } from "../sandbox/devices/useVpn";
 import { revokeSyncDevice, useDevices } from "../sandbox/devices/useDevices";
 import { type DeviceConnection, deviceConnections, isDeviceConnection, machineNamed, sameMachineNote } from "./model/deviceConnections";
@@ -102,6 +105,8 @@ const { hasCapability, recommendationFor, capabilities, error: listError, add, r
 const { contributionOf, enabled: enabledExtensions, extensions, settled: extensionsSettled } = useExtensions();
 // A tunnel's live address for the Connected slice; the VPN card reads the same query, so the two can't disagree.
 const { links: vpnLinks } = useVpn();
+// Same for a disk's mount point and whether it takes writes; the disk card reads the same query.
+const { links: netdiskLinks } = useNetdisk();
 
 // Identities a browser card can file under; instance state, which the manifest can't know.
 const identityIds = computed(() => capabilities.value.filter((instance) => instance.kind === `identity`).map((instance) => instance.id));
@@ -632,6 +637,7 @@ const startAudit = (): void => {
 
 // A tunnel's live address and routes, which no stored config can answer.
 const vpnAddress = (id: string): string | undefined => vpnFacts(id, vpnLinks.value);
+const netdiskMount = (id: string): string | undefined => netdiskFacts(id, netdiskLinks.value);
 // A connection's state, with the machine/browser roster's online answer folded in where there is one.
 const rowState = (entry: CapabilityCatalogEntry, instance: CapabilitySummary): ConnectionState =>
     connectionState(entry.kind, instance, (entry.kind === `webext` ? browserFor(instance.id) : hostFor(instance.id))?.online);
@@ -651,6 +657,7 @@ const connectionRow = (card: CatalogCard, instance: CapabilitySummary): Connecti
     const state = rowState(card.entry, instance);
     const facts =
         (card.entry.kind === `vpn` ? vpnAddress(instance.id) : undefined) ??
+        (card.entry.kind === `netdisk` ? netdiskMount(instance.id) : undefined) ??
         (card.entry.kind === `host` ? hostFacts(instance) : connectionFacts(instance));
     // An unnamed connection took the card's id; the card is then the name, and the line below is free for facts.
     const named = instance.id !== card.entry.id;
@@ -727,8 +734,8 @@ const visibleCount = computed(() => (showingConnections.value ? visibleConnectio
 const nothingMatches = computed(() => (showingConnections.value ? connectionGroups.value.length === 0 : groupedCatalog.value.length === 0));
 
 // A card's own connection rows (vs. the Connected slice above) share the same state vocabulary (connectionState),
-// plus live facts a stored config can't answer. VPN is drawn separately by <VpnConnections> since a tunnel's facts
-// change live.
+// plus live facts a stored config can't answer. VPN and network disks are drawn separately by <VpnConnections> and
+// <NetdiskMounts> since a link's facts change live.
 const cardRowFacts = (instance: CapabilitySummary): string => {
     if (selected.value?.kind === `host`) {
         return hostFacts(instance);
@@ -1254,6 +1261,14 @@ const submitLabel = computed(() => {
                             <!-- What you already have of this card, suppressed on a singleton card. -->
                             <VpnConnections
                                 v-if="selected.kind === 'vpn' && selectedInstances.length > 0"
+                                :instances="selectedInstances"
+                                :editing-id="editing?.id"
+                                @edit="openEdit"
+                                @rename="askRename"
+                                @remove="askRemove"
+                            />
+                            <NetdiskMounts
+                                v-else-if="selected.kind === 'netdisk' && selectedInstances.length > 0"
                                 :instances="selectedInstances"
                                 :editing-id="editing?.id"
                                 @edit="openEdit"

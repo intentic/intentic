@@ -142,7 +142,7 @@ export const CAPABILITY_CATEGORIES: readonly { readonly id: CapabilityCategory; 
     { id: "business", label: "Business & docs", hint: "Connect payments and knowledge bases." },
     // Distinct from Servers: a server is something the sandbox dials, a device is something that dials the sandbox.
     { id: "devices", label: "Your devices", hint: "Let the agent work on your own device, run commands, handle files, see the screen." },
-    { id: "servers", label: "Servers", hint: "Give the agent remote machines over SSH and private networks over VPN." },
+    { id: "servers", label: "Servers", hint: "Give the agent remote machines over SSH, private networks over VPN, and the disks on them." },
     { id: "deploy", label: "Deploy & infra", hint: "Drive your container deployments, stacks, services and releases." },
     { id: "extend", label: "Extend", hint: "Add any MCP server or Claude Code plugin." },
 ];
@@ -505,6 +505,75 @@ export const CAPABILITY_CATALOG: readonly CapabilityCatalogEntry[] = [
                 "FortiGate: the gateway host and port FortiClient dials.",
                 "IPsec: pre-shared key, plus XAuth if the gateway asks.",
                 "2FA gateway? Press `Connect` on its row below and enter the code there.",
+            ],
+        },
+    },
+    {
+        id: "netdisk",
+        name: "Network disk",
+        kind: "netdisk",
+        category: "servers",
+        icon: "server",
+        description: "A share on a NAS or file server, mounted read-only or read-write.",
+        fields: [
+            // The discriminator: SMB today; NFS would be a second arm here and on the contract.
+            { key: "provider", label: "Protocol", default: "smb", options: [{ value: "smb", label: "SMB / CIFS (Windows share, NAS)" }] },
+            { key: "server", label: "Server", placeholder: "nas.local or 192.168.1.20", when: "provider == 'smb'" },
+            { key: "share", label: "Share", placeholder: "projects", hint: "The name after the server in \\\\server\\share.", when: "provider == 'smb'" },
+            {
+                key: "path",
+                label: "Folder inside the share",
+                optional: true,
+                placeholder: "leave empty for the whole share",
+                when: "provider == 'smb'",
+            },
+            {
+                key: "username",
+                label: "Username",
+                hint: "For a read-only disk, use an account the server itself limits to reading: that is the fence the agent cannot move.",
+                when: "provider == 'smb'",
+            },
+            { key: "password", label: "Password", secret: true, optional: true, placeholder: "empty for a guest share", when: "provider == 'smb'" },
+            { key: "domain", label: "Domain / workgroup", optional: true, advanced: true, placeholder: "only if the server asks", when: "provider == 'smb'" },
+            // The decision this card exists for: read-only is the default, and it is the mount flag AND the advice above.
+            {
+                key: "access",
+                label: "Access",
+                default: "read",
+                options: [
+                    { value: "read", label: "Read-only" },
+                    { value: "readwrite", label: "Read and write" },
+                ],
+            },
+            {
+                key: "version",
+                label: "SMB version",
+                default: "auto",
+                advanced: true,
+                options: [
+                    { value: "auto", label: "Auto (3.1.1 → 2.1)" },
+                    { value: "3.1.1", label: "3.1.1" },
+                    { value: "3.0", label: "3.0" },
+                    { value: "2.1", label: "2.1" },
+                    { value: "1.0", label: "1.0 (old NAS firmware)" },
+                ],
+                when: "provider == 'smb'",
+            },
+            {
+                key: "autoMount",
+                label: "Mount on start",
+                default: "on",
+                boolean: true,
+                hint: "Mounted after the sandbox's VPNs reconnect, so a disk behind a tunnel comes back too.",
+            },
+        ],
+        hint: "Mounts at /mnt/netdisk/<name>. Mount and unmount right here, on the disk you added (the agent can too). Behind a VPN? Add and connect that VPN first.",
+        guide: {
+            steps: [
+                "Server and share are the two parts of `\\\\server\\share`.",
+                "Read-only: mounted `ro`, and give it a read-only account on the server too.",
+                "Behind a VPN: add the VPN card first; the disk mounts after the tunnel on every restart.",
+                "Mount it on its row below; the agent finds the files under `/mnt/netdisk/<name>`.",
             ],
         },
     },
