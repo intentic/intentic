@@ -110,43 +110,64 @@ const onArrivals = (records: MutationRecord[]): void => {
    then `start_dragging` off the callback), and a press released before it began — a click on the background, a drag
    the page took over — left the window glued to the pointer with no release to end it (tauri-apps/tauri#10767). */
 const DRAG_THRESHOLD_PX = 4;
+
+/* AND IT SELECTS NOTHING WHILE IT IS DOWN. The webview answers a press on the background by anchoring a selection at
+   the caret position NEAREST it — for a press on the empty band, a line of text elsewhere on the screen entirely —
+   and extends it over the very travel that asks for the drag. Cancelling `selectstart` stops that and leaves the
+   focus and the click alone, which cancelling the press itself would not; it also covers what the move loop leaves
+   behind, since that loop swallows the button's release (`start_dragging`, windows.rs) and the webview goes on
+   believing the button is down: a `selectstart` refused once is refused for the rest of that press, and the travel
+   before the loop starts always draws one. */
+
+/* A press this page took for the window, while it is still down; `armed` is where it landed, until it becomes a drag. */
+let holding = false;
 let armed: { readonly x: number; readonly y: number } | undefined;
 
-const disarm = (): void => {
-    if (armed === undefined) {
+const blockSelection = (event: Event): void => {
+    event.preventDefault();
+};
+
+const letGo = (): void => {
+    if (!holding) {
         return;
     }
+    holding = false;
     armed = undefined;
-    window.removeEventListener(`pointermove`, onArmedMove, true);
-    window.removeEventListener(`pointerup`, disarm, true);
-    window.removeEventListener(`pointercancel`, disarm, true);
-    window.removeEventListener(`dragstart`, disarm, true);
-    window.removeEventListener(`blur`, disarm);
+    document.removeEventListener(`selectstart`, blockSelection, true);
+    window.removeEventListener(`pointermove`, onHeldMove, true);
+    window.removeEventListener(`pointerup`, letGo, true);
+    window.removeEventListener(`pointercancel`, letGo, true);
+    window.removeEventListener(`dragstart`, letGo, true);
+    window.removeEventListener(`blur`, letGo);
 };
-const onArmedMove = (event: PointerEvent): void => {
-    if (armed === undefined) {
+const onHeldMove = (event: PointerEvent): void => {
+    if (!holding) {
         return;
     }
     // The button is up and its release was never seen (the platform ate it): there is nothing to drag with.
     if ((event.buttons & 1) === 0) {
-        disarm();
+        letGo();
         return;
     }
-    if (Math.hypot(event.clientX - armed.x, event.clientY - armed.y) < DRAG_THRESHOLD_PX) {
+    if (armed === undefined || Math.hypot(event.clientX - armed.x, event.clientY - armed.y) < DRAG_THRESHOLD_PX) {
         return;
     }
-    disarm();
+    // Asked once per press; the press stays held, so the selection stays blocked for the whole of the platform's move loop.
+    armed = undefined;
     workDesktopWindow(`drag`);
 };
-const arm = (x: number, y: number): void => {
-    disarm();
-    armed = { x, y };
+/* Takes a press for the window: blocks the selection it would start, and arms the drag (a maximise has none to arm). */
+const take = (x: number, y: number, drag: boolean): void => {
+    letGo();
+    holding = true;
+    armed = drag ? { x, y } : undefined;
+    document.addEventListener(`selectstart`, blockSelection, true);
     // Capture, so a surface that stops its own pointer events can neither hide the travel nor the release.
-    window.addEventListener(`pointermove`, onArmedMove, true);
-    window.addEventListener(`pointerup`, disarm, true);
-    window.addEventListener(`pointercancel`, disarm, true);
-    window.addEventListener(`dragstart`, disarm, true);
-    window.addEventListener(`blur`, disarm);
+    window.addEventListener(`pointermove`, onHeldMove, true);
+    window.addEventListener(`pointerup`, letGo, true);
+    window.addEventListener(`pointercancel`, letGo, true);
+    window.addEventListener(`dragstart`, letGo, true);
+    window.addEventListener(`blur`, letGo);
 };
 
 const onPress = (event: MouseEvent): void => {
@@ -155,12 +176,14 @@ const onPress = (event: MouseEvent): void => {
         return;
     }
     const gesture = windowGesture(pressOf(event), domLayout(cornerOf().bottom));
+    if (gesture === undefined) {
+        return;
+    }
+    take(event.clientX, event.clientY, gesture === `drag`);
     // A maximise is a click, answered on the press; a drag is answered once it is one (the names are the app's own,
     // environments/desktop.ts `DesktopWindowVerb`).
     if (gesture === `maximize`) {
         workDesktopWindow(`maximize`);
-    } else if (gesture === `drag`) {
-        arm(event.clientX, event.clientY);
     }
 };
 
@@ -202,7 +225,7 @@ onUnmounted(() => {
         return;
     }
     document.documentElement.removeAttribute(`data-frameless`);
-    disarm();
+    letGo();
     observer?.disconnect();
     observer = undefined;
     watched.clear();

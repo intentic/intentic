@@ -193,4 +193,53 @@ describe(`a press on the background`, () => {
         press(600, 10, 2);
         expect(verb).toHaveBeenCalledWith(`maximize`);
     });
+
+    /* THE HIGHLIGHT A DRAG USED TO LEAVE BEHIND. The webview anchors a selection at the caret position nearest the
+       press — for a press on the empty band, a line of text elsewhere on the screen — and extends it over the very
+       travel that asks for the drag; the platform's move loop then takes the button's release, so it went on
+       extending with the button already up. Refusing `selectstart` for the press settles both. */
+    describe(`the selection under it`, () => {
+        // What the webview would start; true when the page refused it.
+        const selects = (): boolean => {
+            const event = new Event(`selectstart`, { bubbles: true, cancelable: true });
+            ground.dispatchEvent(event);
+            return !event.defaultPrevented;
+        };
+
+        it(`selects nothing for as long as a press the window took is down`, () => {
+            press(600, 300);
+            expect(selects(), `the press is the window's from the moment it lands`).toBe(false);
+            travel(612, 300);
+            expect(verb).toHaveBeenCalledWith(`drag`);
+            expect(selects(), `and stays the window's for the whole of the move loop`).toBe(false);
+        });
+
+        it(`selects again once the button is up`, () => {
+            press(600, 300);
+            window.dispatchEvent(new MouseEvent(`pointerup`, { bubbles: true, button: 0, clientX: 600, clientY: 300 }));
+            expect(selects()).toBe(true);
+        });
+
+        /* The press the move loop left behind: no release ever arrives, so the first move with the button already up ends it. */
+        it(`selects again once a move finds the release the move loop swallowed`, () => {
+            press(600, 300);
+            travel(612, 300);
+            expect(verb).toHaveBeenCalledWith(`drag`);
+            travel(640, 300, 0);
+            expect(selects()).toBe(true);
+        });
+
+        it(`selects nothing under the double-click that maximises`, () => {
+            press(600, 10, 2);
+            expect(selects(), `a word picked out of the band is not what a maximise meant`).toBe(false);
+        });
+
+        it(`leaves a press the page kept to select as it likes`, () => {
+            const button = document.createElement(`button`);
+            ground.append(button);
+            button.dispatchEvent(new MouseEvent(`mousedown`, { bubbles: true, button: 0, clientX: 600, clientY: 300 }));
+            expect(verb).not.toHaveBeenCalled();
+            expect(selects()).toBe(true);
+        });
+    });
 });
