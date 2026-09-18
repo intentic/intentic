@@ -90,6 +90,9 @@ overrides:
   # fixed in 3.22.0). Nothing here connects to MySQL — the datasource in _platform/prisma/schema.prisma is
   # postgresql — so this is a tree hygiene bump, not a live exposure; same major, no code of ours touches it.
   mysql2: 3.24.3
+  # react-dom@19.3.0 peers react@^19.3.0; better-auth pulls react-dom into @intentic/web, and react@19.2.8 is one
+  # patch behind — peer-deps flags it for @intentic/share-view.
+  react: 19.3.0
   # onnxruntime-node's `adm-zip: ^0.5.16` is used only by its postinstall unpacker, which `allowBuilds` disables
   # here — so the extraction advisories are unreachable in this workspace. Pinned past them anyway so the tree
   # does not carry a known-bad copy for whoever enables that build later. 0.6.0 no longer clears that bar: the

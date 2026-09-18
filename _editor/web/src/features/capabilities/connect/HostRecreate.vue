@@ -33,6 +33,9 @@ const t = useT();
 
 type Action = `Download` | `Update` | `Rebuild` | `Roll back`;
 
+// Action members for template comparisons: the i18n gate reads bound-attribute expressions, not enum switches.
+const DOWNLOAD: Action = `Download`;
+
 const props = defineProps<{
     slug: string;
     // The approved overlay's sha256; present for a rebuild, absent otherwise.
@@ -216,9 +219,9 @@ const command = computed(() => {
         <!-- Machine is reachable from here, so this is a button wherever you're reading it, even a phone elsewhere. -->
         <template v-if="hostId">
             <Button
-                v-tooltip.top="text && action === `Download` ? t(`capabilities.hostRecreate.costDownload`) : undefined"
+                v-tooltip.top="text && action === DOWNLOAD ? t(`capabilities.hostRecreate.costDownload`) : undefined"
                 :label="
-                    text && action === `Download`
+                    text && action === DOWNLOAD
                         ? t(`capabilities.hostRecreate.downloadOnly`)
                         : running
                           ? t(`capabilities.hostRecreate.running`, { action: verb })
@@ -226,12 +229,12 @@ const command = computed(() => {
                 "
                 size="small"
                 class="self-start"
-                :severity="text || action === `Download` ? `secondary` : undefined"
+                :severity="text || action === DOWNLOAD ? `secondary` : undefined"
                 :text="text"
                 :loading="running"
                 @click="runOnMachine"
             >
-                <template v-if="!text" #icon><Icon :name="action === `Download` ? `download` : `bolt`" /></template>
+                <template v-if="!text" #icon><Icon :name="action === DOWNLOAD ? `download` : `bolt`" /></template>
             </Button>
             <p v-if="!bare" class="text-2xs text-subtle">{{ t(`capabilities.hostRecreate.runsOnDeviceHosting`, { cost }) }}</p>
             <DeviceRunLog
@@ -262,7 +265,7 @@ const command = computed(() => {
         </template>
 
         <!-- Desktop deep link covers all three swaps including rollback. -->
-        <template v-else-if="desktop && action !== `Download`">
+        <template v-else-if="desktop && action !== DOWNLOAD">
             <Button
                 :label="t(`capabilities.hostRecreate.now`, { action: verb })"
                 size="small"

@@ -21,7 +21,8 @@
     "dependencies": {
         "@intentic/extension-api": "workspace:*",
         "@intentic/extension-manifest": "workspace:*",
-        "@intentic/extension-ui": "workspace:*"
+        "@intentic/extension-ui": "workspace:*",
+        "@intentic/sandbox-contract": "workspace:*"
     },
     "devDependencies": {
         "@intentic/testing": "workspace:*",

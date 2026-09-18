@@ -2,6 +2,8 @@ import { join } from "node:path";
 import { type DiffSourceQuery, DiffSourceQuerySchema } from "@intentic/sandbox-contract";
 import { gitBytes } from "@intentic/scaffold";
 import type { Services } from "../../composition.js";
+
+export type DiffLocatorDeps = Pick<Services, "files" | "workspace" | "agents" | "agentWorktrees" | "history">;
 import { isValidRepoId } from "../../workspace/layout/repo-discovery.js";
 import { MAX_RAW_BYTES } from "../../workspace/files/workspace-files-download.js";
 import { isControlPlanePath, isReviewableStatePath, resolveWithin } from "../../workspace/files/workspace-files-paths.js";
@@ -61,7 +63,7 @@ export interface DiffLocator {
     readonly read: (located: BlobLocation) => Promise<Buffer>;
 }
 
-export const createDiffLocator = (services: Services): DiffLocator => {
+export const createDiffLocator = (services: DiffLocatorDeps): DiffLocator => {
     // The worktree side, via the same file service /workspace/raw reads; a deleted file 404s honestly.
     const readWorktreeFile = async (file: string): Promise<Buffer> => {
         const size = await services.files.size(file);

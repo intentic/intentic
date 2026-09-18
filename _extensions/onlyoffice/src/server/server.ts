@@ -4,6 +4,7 @@ import { mkdir, readFile, rename, stat, writeFile } from "node:fs/promises";
 import { basename, join, posix } from "node:path";
 import { Readable } from "node:stream";
 import type { ExtensionServerApi, ExtensionServerContext } from "@intentic/extension-api";
+import { STATE_DIR } from "@intentic/sandbox-contract";
 import type { DocsState, OpenRequest, OpenResult } from "../contract.js";
 import { documentTypeOf, extensionOf } from "../formats.js";
 import { autoStartOf } from "../settings.js";
@@ -17,8 +18,8 @@ import { Sessions, type Session } from "./sessions.js";
 // and the framed editor page, and the container's lifecycle. Runs inside the daemon's extension host with node
 // builtins only.
 
-// Under .intentic/local: shared across turns and sessions, never tracked, kept across sandbox rebuilds by the volume.
-const SECRET_PATH = ".intentic/local/onlyoffice/jwt-secret";
+// Under the workspace state dir: shared across turns and sessions, never tracked, kept across sandbox rebuilds by the volume.
+const SECRET_PATH = `${STATE_DIR}/local/onlyoffice/jwt-secret`;
 
 // How the document server reaches this listener from inside its container (the engine's host gateway).
 const CONTAINER_TO_SANDBOX = "host.docker.internal";
