@@ -560,7 +560,7 @@ const onBackgroundMenu = (event: MouseEvent): void => {
                     <section v-for="group in groups" :key="group.key">
                         <!-- Named only when there is a second kind to tell apart; a folder of one kind reads without a label. -->
                         <h3 v-if="showLabels" class="px-2 pt-3 pb-1 text-2xs text-muted">
-                            {{ group.label }} <span class="text-subtle">{{ group.entries.length }}</span>
+                            {{ group.label }}
                         </h3>
                         <div class="grid grid-cols-[repeat(auto-fill,minmax(7.5rem,1fr))] gap-0.5">
                             <DeskTile

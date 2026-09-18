@@ -23,8 +23,15 @@ describe(`which group a desk entry lands in`, () => {
         expect(groupOf(file(`package.json`))).toBe(`config`);
         expect(groupOf(file(`pnpm-lock.yaml`))).toBe(`config`);
         expect(groupOf(file(`README.md`))).toBe(`documents`);
+        expect(groupOf(file(`Spec.docx`))).toBe(`documents`);
+        expect(groupOf(file(`report.pdf`))).toBe(`documents`);
+        expect(groupOf(file(`deck.pptx`))).toBe(`documents`);
+        expect(groupOf(file(`book.epub`))).toBe(`documents`);
+        expect(groupOf(file(`sheet.xlsx`))).toBe(`data`);
+        expect(groupOf(file(`rows.csv`))).toBe(`data`);
         expect(groupOf(file(`logo.png`))).toBe(`pictures`);
         expect(groupOf(file(`site.zip`))).toBe(`archives`);
+        expect(groupOf(file(`app.jar`))).toBe(`archives`);
         expect(groupOf(file(`Inter.woff2`))).toBe(`other`);
         expect(groupOf(file(`LICENSE`))).toBe(`other`);
     });
