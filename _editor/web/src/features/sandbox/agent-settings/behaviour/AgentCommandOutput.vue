@@ -7,7 +7,6 @@ import { useSavings } from "../../usage/useSavings";
 import { useSandboxSettings } from "../../overview/useSandboxSettings";
 import { allCleanerIds, cleanerOptions, savedByCleaner } from "../../usage/savingsChart";
 import { asPercent } from "../models/numberInputs";
-import CommandOutputInfo from "./CommandOutputInfo.vue";
 import MeasurementPanel, { type PanelReading } from "../models/MeasurementPanel.vue";
 import { useT } from "@intentic/ui/i18n";
 
@@ -124,7 +123,6 @@ const savedTokens = computed(() => savedByCleaner(savings.value?.input));
 
 <template>
     <RowGroup :label="t(`sandbox.agentCommandOutput.commandOutput`)">
-        <template #info><CommandOutputInfo /></template>
         <Row
             spine
             icon="bolt"

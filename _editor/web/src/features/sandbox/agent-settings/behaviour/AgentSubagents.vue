@@ -5,7 +5,6 @@ import { computed } from "vue";
 import { useSandboxSettings } from "../../overview/useSandboxSettings";
 import { commitCount } from "../models/numberInputs";
 import { type Posture, postureOf, postures, withPosture } from "../safety/spawnPosture";
-import SubagentsInfo from "./SubagentsInfo.vue";
 import { useT } from "@intentic/ui/i18n";
 
 // Four rows over one activity: whether it may delegate at all, how wide one fan-out is, the lifetime budget per
@@ -31,8 +30,6 @@ const spawnDenied = computed(() => posture.value === `deny`);
 
 <template>
     <RowGroup :label="t(`sandbox.agentSubagents.subagents`)">
-        <template #info><SubagentsInfo /></template>
-
         <!-- Leads the group: narrows from "may it delegate" to "how far", the natural reading order. -->
         <Row icon="robot" :title="t(`sandbox.agentSubagents.startAgentsOwn`)" :description="t(`sandbox.agentSubagents.childAgentSpendsSame`)">
             <template #control>

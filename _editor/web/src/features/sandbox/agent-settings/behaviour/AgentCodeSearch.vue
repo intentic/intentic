@@ -8,7 +8,6 @@ import { useSandboxSettings } from "../../overview/useSandboxSettings";
 import { useSidecarStatus } from "../../../workspace/files/useSidecarStatus";
 import { asPercent } from "../models/numberInputs";
 import { verdictsOf } from "../../usage/savingsChart";
-import CodeSearchInfo from "./CodeSearchInfo.vue";
 import MeasurementPanel, { type PanelReading } from "../models/MeasurementPanel.vue";
 import { useT } from "@intentic/ui/i18n";
 
@@ -65,8 +64,6 @@ const shadowSummary = computed<string>(() => {
 
 <template>
     <RowGroup :label="t(`sandbox.agentCodeSearch.codeSearch`)">
-        <template #info><CodeSearchInfo /></template>
-
         <!-- Loads the iq plugin so the assistant searches with the iq CLI instead of grep/find/glob. -->
         <!-- `spine` hangs the measurement block off this row's name rather than the group's edge. -->
         <Row spine icon="search" :title="t(`sandbox.agentCodeSearch.iqCodeSearch`)" :description="t(`sandbox.agentCodeSearch.useIqSearchCli`)">
