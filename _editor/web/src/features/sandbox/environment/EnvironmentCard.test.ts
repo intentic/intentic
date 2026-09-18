@@ -67,7 +67,16 @@ vi.mock(`../../workspace/viewers/DiffToolbar.vue`, () => ({ default: defineCompo
 // Marks each executor with data-executor, so a test can tell which one rendered without mounting it.
 vi.mock(`../../capabilities/connect/HostRecreate.vue`, () => ({ default: defineComponent({ render: () => h(`div`, { "data-executor": `host` }) }) }));
 vi.mock(`./HostedRebuild.vue`, () => ({ default: defineComponent({ render: () => h(`div`, { "data-executor": `hosted` }) }) }));
-vi.mock(`./DevRebuild.vue`, () => ({ default: defineComponent({ render: () => h(`div`, { "data-executor": `checkout` }) }) }));
+// Carries `recipePending` out with it: whether the checkout's rebuild knows a recipe is waiting is what makes it
+// describe itself as applying that recipe rather than as a second, unrelated rebuild.
+vi.mock(`./DevRebuild.vue`, () => ({
+    default: defineComponent({
+        props: { recipePending: { type: Boolean, default: false } },
+        render(): ReturnType<typeof h> {
+            return h(`div`, { "data-executor": `checkout`, "data-recipe-pending": String(this.recipePending) });
+        },
+    }),
+}));
 
 const { default: EnvironmentCard } = await import("./EnvironmentCard.vue");
 
@@ -137,14 +146,25 @@ it(`offers a rebuild from the checkout only on a sandbox whose base was built fr
     expect(mount().querySelector(`[data-executor="checkout"]`)).not.toBeNull();
 });
 
-// Two rebuilds on one card: the recipe's, which re-applies what was approved to the image already built, and the
-// checkout's, which builds a new one. Saying so is what stops the second from reading as a duplicate of the first.
-it(`separates the recipe's rebuild from the checkout's when a pending overlay meets a local base`, () => {
+// Two rebuilds on one card: the recipe's, which applies what was approved to the image already built, and the
+// checkout's, which builds a new base and applies the same recipe on it. The second is told about the first HERE,
+// through the offer itself — a sentence under the other button is the shape that had a reader press the slow one
+// believing it was the same thing.
+it(`tells the checkout's rebuild that a recipe is waiting, so it can say it applies that recipe too`, () => {
     pending.value = { content: OVERLAY, hash: `pending` };
     localImage.value = { base: `intentic-sandbox:dev`, root: `/home/ada/intentic` };
     const el = mount();
     expect(el.querySelector(`[data-executor="host"]`)).not.toBeNull();
-    expect(el.textContent).toContain(`re-applies this recipe on the image it already runs`);
+    expect(el.querySelector(`[data-executor="checkout"]`)?.getAttribute(`data-recipe-pending`)).toBe(`true`);
+});
+
+// Nothing pending is the dev loop's ordinary state, and there the checkout rebuild is the card's only action: it has
+// no recipe to speak for, and claiming one would be the same misdirection pointed the other way.
+it(`leaves the checkout's rebuild speaking only for itself when nothing is pending`, () => {
+    localImage.value = { base: `intentic-sandbox:dev`, root: `/home/ada/intentic` };
+    const el = mount();
+    expect(el.querySelector(`[data-executor="host"]`)).toBeNull();
+    expect(el.querySelector(`[data-executor="checkout"]`)?.getAttribute(`data-recipe-pending`)).toBe(`false`);
 });
 
 it(`stands down once the only runtime installs left are ones you dismissed`, () => {

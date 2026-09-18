@@ -64,6 +64,11 @@ const cost = computed(() => {
     if (props.action === `Download`) {
         return t(`capabilities.hostRecreate.costDownload`);
     }
+    // A rebuild downloads nothing — it builds the approved recipe on the image already there. Saying which image is
+    // also what tells it apart from the checkout rebuild that shares the Environment card.
+    if (props.action === `Rebuild`) {
+        return t(`capabilities.hostRecreate.costRebuild`);
+    }
     if (props.ready === true) {
         return t(`capabilities.hostRecreate.costRestartOnly`);
     }

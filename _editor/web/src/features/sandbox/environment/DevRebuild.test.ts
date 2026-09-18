@@ -38,7 +38,7 @@ const { useDevRebuild } = await import("./useDevRebuild");
 
 let app: App | undefined;
 
-const mount = (props: { slug: string; base: string; root?: string }): HTMLElement => {
+const mount = (props: { slug: string; base: string; root?: string; recipePending?: boolean }): HTMLElement => {
     const el = document.createElement(`div`);
     document.body.append(el);
     app = createApp({ render: () => h(DevRebuild, props) });
@@ -133,6 +133,39 @@ it(`renders current state text in fallback when device or root is absent`, () =>
     hostId.value = undefined;
     const el = mount({ slug: nextSlug(), base: `intentic-sandbox:dev`, root: `/home/radarsu/intentic` });
     expect(el.textContent).toContain(`Runs intentic-sandbox:dev from your checkout, not a published release.`);
+});
+
+// WHAT SENT A READER DOWN THE SLOW PATH BELIEVING IT WAS THE QUICK ONE. Both buttons on the Environment card apply the
+// approved recipe, and this one is the superset — it rebuilds the base first. The card used to say that in a sentence
+// under the OTHER button, where a reader attaches it to the button above it, so the relationship is stated here
+// instead: on the offer, and again in the dialog that asks.
+it(`says it applies the waiting recipe, at the offer and at the confirmation`, async () => {
+    const el = mount({ slug: nextSlug(), base: `intentic-sandbox:dev`, root: `/home/ada/intentic`, recipePending: true });
+
+    expect(el.textContent).toContain(`that applies this same recipe`);
+    expect(el.textContent).toContain(`takes longer than the rebuild above`);
+    // Not the bolt the recipe's own rebuild wears: one glyph per action, or the card offers one action twice.
+    expect(el.querySelector(`button [data-icon]`)?.getAttribute(`data-icon`)).toBe(`hammer`);
+
+    buttonSaying(`Rebuild from checkout`)?.click();
+    await nextTick();
+
+    expect(document.body.textContent).toContain(`Your approved recipe is applied as part of this`);
+    expect(document.body.textContent).toContain(`the pending rebuild clears once the sandbox is back`);
+});
+
+// Nothing pending is the dev loop's ordinary state. Promising to apply a recipe there would be the same misdirection
+// pointed the other way, so the offer keeps to what it does: picks up the code.
+it(`promises no recipe when none is waiting`, async () => {
+    const el = mount({ slug: nextSlug(), base: `intentic-sandbox:dev`, root: `/home/ada/intentic` });
+
+    expect(el.textContent).not.toContain(`applies this same recipe`);
+
+    buttonSaying(`Rebuild from checkout`)?.click();
+    await nextTick();
+
+    expect(document.body.textContent).toContain(`Rebuild from checkout?`);
+    expect(document.body.textContent).not.toContain(`Your approved recipe is applied`);
 });
 
 it(`confirms first, then starts the build and stops offering to start another`, async () => {

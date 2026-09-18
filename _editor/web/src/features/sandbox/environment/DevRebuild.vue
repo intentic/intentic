@@ -33,6 +33,9 @@ const props = defineProps<{
     base: string;
     // Host path of that checkout; absent on a sandbox handed a local image without one, which leaves only the command.
     root?: string | undefined;
+    // Whether an approved recipe is waiting to be built. This rebuild applies it either way — the overlay rides the
+    // image it builds — so the offer says so, and stands down to the quicker button that does only that.
+    recipePending?: boolean;
 }>();
 
 // The door that can reach `root`, not merely one that reports the container: a PC answers through its Windows side
@@ -193,17 +196,24 @@ const checkout = computed(() => {
 
 <template>
     <div class="flex flex-col gap-2">
+        <!-- Above the button it describes, not under the other one: the reader's question at this moment is whether
+             this rebuild also settles the recipe, and the answer is the first thing it reads. -->
+        <p v-if="recipePending && !live" class="text-xs text-content">{{ t(`sandbox.devRebuild.orRebuildFromCheckout`) }}</p>
+
         <!-- The machine holding the checkout is reachable from here, so this is a button wherever you're reading it. -->
         <template v-if="hostId && root">
             <div ref="anchorRef" class="inline-flex self-start" @pointerenter="onEnter" @pointerleave="onLeave" @focusin="onFocus" @focusout="onBlur">
+                <!-- A hammer, never the bolt the recipe's own rebuild wears: two identical glyphs on one card is what
+                     made these read as one action offered twice. -->
                 <Button
                     :label="live ? t(`sandbox.devRebuild.rebuilding`) : t(`sandbox.devRebuild.rebuildCheckout`)"
                     size="small"
+                    :severity="recipePending ? `secondary` : undefined"
                     :loading="live"
                     :disabled="live"
                     @click="onButtonClick"
                 >
-                    <template #icon><Icon name="bolt" /></template>
+                    <template #icon><Icon name="hammer" /></template>
                 </Button>
             </div>
 
@@ -297,6 +307,12 @@ const checkout = computed(() => {
                     <p class="flex items-center gap-2 text-2xs text-muted">
                         <Icon name="check" class="shrink-0 text-success" />
                         <span>/work is kept. Nothing else on that device is touched.</span>
+                    </p>
+
+                    <!-- At the moment of asking, since this is what the reader is weighing against the quicker button. -->
+                    <p v-if="recipePending" class="flex items-center gap-2 text-2xs text-muted">
+                        <Icon name="check" class="shrink-0 text-success" />
+                        <span>{{ t(`sandbox.devRebuild.approvedRecipeAppliedPart`) }}</span>
                     </p>
 
                     <!-- The cost nobody can see from here: what is running now, and whether the restart hands it back. -->

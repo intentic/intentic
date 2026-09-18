@@ -607,6 +607,7 @@
             "copyRunCommandBelow": "Copy and run the command below. {cost}",
             "costBuildThenRestart": "It downloads and builds first, which interrupts nothing, then restarts your sandbox for about half a minute. Your files (in /work) are kept.",
             "costDownload": "It downloads and builds the update in the background. Nothing restarts and nothing is interrupted: your sandbox keeps working throughout.",
+            "costRebuild": "It builds the approved recipe on the image this sandbox already runs, which interrupts nothing, then restarts your sandbox for about half a minute. Your files (in /work) are kept.",
             "costRestartOnly": "It is already downloaded, so this is just the restart: about half a minute. Your files (in /work) are kept.",
             "doesButton": "does this with a button.",
             "downloadVerb": "Download",
@@ -2032,6 +2033,7 @@
             "windowsPowershell": "Windows (PowerShell)"
         },
         "devRebuild": {
+            "approvedRecipeAppliedPart": "Your approved recipe is applied as part of this, so the pending rebuild clears once the sandbox is back.",
             "buildsImage": "Builds the image",
             "cantReadLogAt": "Can't read the log at the moment — the build itself is unaffected. {hiccup}",
             "checkoutNotPublishedRelease": "from your checkout, not a published release. Rebuild to pick up code you've written since.",
@@ -2040,6 +2042,7 @@
             "keepWorking": "You keep working",
             "makesButtonOn": "makes this a button from then on.",
             "onDevice": "on that device.",
+            "orRebuildFromCheckout": "Or rebuild from your checkout: that applies this same recipe, on a base rebuilt from your code — so it also picks up what you've written since. It rebuilds the whole image first, so it takes longer than the rebuild above.",
             "rebuildCheckout": "Rebuild from checkout",
             "rebuildCheckout2": "Rebuild from checkout?",
             "rebuildCommand": "Rebuild command",
@@ -2260,7 +2263,6 @@
             "onlySandboxOwnerRebuild": "Only the sandbox owner can rebuild it.",
             "overlayDockerfileBuilt": "The overlay Dockerfile it is built from",
             "pendingRebuild": "pending rebuild",
-            "reAppliesRecipeOn": "That re-applies this recipe on the image it already runs. Rebuilding from your checkout, below, does the same and picks up the code you've written since.",
             "recipe": "Recipe",
             "reject": "Reject",
             "sandboxsImageOlderThan": "This sandbox's image is older than the plain-language contents list. Update the sandbox and the list appears beside the recipe.",

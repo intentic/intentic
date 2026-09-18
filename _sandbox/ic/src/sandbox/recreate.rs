@@ -298,10 +298,11 @@ fn recreate(mode: Mode, slug: Option<String>, reach: Reach, auto: bool) -> Resul
             println!("intentic: rolling back to {registry_image}…");
             stage_overlay(&container, &overlay_path)?;
             /* The overlay must ride the TARGET, not its own FROM: the FROM names the channel tag, which now points at the very build being rolled back from. */
-            let overlay = std::fs::read_to_string(&overlay_path)?;
-            if !overlay.is_empty() {
-                env_hash = Some(sha256_hex(overlay.as_bytes()));
-                std::fs::write(&overlay_path, rewrite_from(&overlay, &registry_image))?;
+            let approved = std::fs::read_to_string(&overlay_path)?;
+            if !approved.is_empty() {
+                let (hash, rebased) = rebase_overlay(&approved, &registry_image);
+                env_hash = Some(hash);
+                std::fs::write(&overlay_path, rebased)?;
             }
         }
         Mode::Reshape(_) => {
@@ -318,9 +319,11 @@ fn recreate(mode: Mode, slug: Option<String>, reach: Reach, auto: bool) -> Resul
             // capability's packages, while rebuild would hand you the packages on the LAST RELEASE's
             // daemon. The FROM is rewritten to the dev tag; --base-image below keeps composing against it.
             let staged = stage_overlay(&container, &overlay_path)?;
-            let overlay = std::fs::read_to_string(&overlay_path)?;
-            if !overlay.is_empty() {
-                std::fs::write(&overlay_path, rewrite_from(&overlay, DEV_TAG))?;
+            let approved = std::fs::read_to_string(&overlay_path)?;
+            if !approved.is_empty() {
+                let (hash, rebased) = rebase_overlay(&approved, DEV_TAG);
+                env_hash = Some(hash);
+                std::fs::write(&overlay_path, rebased)?;
             }
             // Said out loud, because this is the loop a developer runs a dozen times a day: the one shape
             // where a dev swap legitimately hands back a bare image is a sandbox that has nothing approved,
@@ -397,9 +400,8 @@ fn recreate(mode: Mode, slug: Option<String>, reach: Reach, auto: bool) -> Resul
             target_image = DEV_TAG.to_string();
             base_image = DEV_TAG.to_string();
             if !overlay.is_empty() {
-                let hash = sha256_hex(overlay.as_bytes());
+                let hash = env_hash.as_deref().expect("dev set the hash");
                 target_image = format!("intentic-sandbox-dev-env-{slug}:{}", &hash[..12]);
-                env_hash = Some(hash);
                 println!("intentic: building {target_image} — the overlay's tooling on top of {DEV_TAG}…");
                 build_overlay(&target_image, &overlay_path, false, &log);
             }
@@ -859,6 +861,16 @@ pub(crate) fn build_overlay(tag: &str, overlay: &Path, pull: bool, log: &Log) {
     }
     args.extend_from_slice(&["-t", tag, "-"]);
     let _ = docker::stream_with_stdin(&args, &content, log);
+}
+
+/// The overlay a re-basing recreate builds and the hash its container carries, derived together because they have
+/// to name the SAME base — the one arm the two modes that move an overlay onto another image share (dev onto
+/// DEV_TAG, rollback onto the pinned previous build). The daemon recomposes the approved file from
+/// SANDBOX_BASE_IMAGE on every boot and compares that hash with SANDBOX_ENVIRONMENT_HASH, so the hash is the
+/// REBASED file's; pinning the pre-rebase bytes leaves a recreate that worked reading as "pending rebuild" forever.
+fn rebase_overlay(approved: &str, base: &str) -> (String, String) {
+    let rebased = rewrite_from(approved, base);
+    (sha256_hex(rebased.as_bytes()), rebased)
 }
 
 /// Rewrite the FIRST `FROM` line to `base` — the dev-mode re-base. Only the first, as the sed range did:
@@ -1486,5 +1498,25 @@ mod tests {
         assert!(rewritten.contains("FROM intentic-sandbox:dev\n"));
         assert!(rewritten.contains("FROM scratch AS second"));
         assert!(rewritten.ends_with('\n'));
+    }
+
+    /// Both modes that move an overlay onto another image, since the hash each stamps is the one the daemon will
+    /// recompute from the base it left the container on — not the bytes it was handed.
+    #[test]
+    fn a_rebase_pins_the_hash_of_the_overlay_as_the_new_base_leaves_it() {
+        let approved = "# Composed\n\nFROM ghcr.io/intentic/sandbox:stable\n\nRUN npm install -g posthog-cli\n";
+        for base in [DEV_TAG, "intentic-sandbox-prev-demo:0e2a1f"] {
+            let (hash, rebased) = rebase_overlay(approved, base);
+            assert_eq!(overlay_base(&rebased).as_deref(), Some(base));
+            assert_eq!(hash, sha256_hex(rebased.as_bytes()));
+            assert_ne!(hash, sha256_hex(approved.as_bytes()));
+        }
+
+        // Every sandbox the app offers the checkout rebuild on already sits on the dev base (the daemon gates that
+        // button on it), so there the rebase is the identity and the two hashes cannot disagree.
+        let (hash, rebased) = rebase_overlay(approved, DEV_TAG);
+        let again = rebase_overlay(&rebased, DEV_TAG);
+        assert_eq!(again.0, hash);
+        assert_eq!(again.1, rebased);
     }
 }

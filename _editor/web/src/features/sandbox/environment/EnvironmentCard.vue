@@ -168,15 +168,21 @@ const reject = (): Promise<void> => decide(`/environment/reject`);
                 <template v-else-if="slug">
                     <p class="text-xs font-medium text-content">{{ t(`sandbox.environmentCard.toFinishRebuildSandbox`) }}</p>
                     <HostRecreate :slug="slug" :hash="pending.hash" action="Rebuild" />
-                    <!-- Two rebuilds are on this card for a dogfooding sandbox, and only their inputs differ. -->
-                    <p v-if="localImage" class="text-2xs text-subtle">
-                        {{ t(`sandbox.environmentCard.reAppliesRecipeOn`) }}
-                    </p>
                 </template>
             </template>
 
-            <!-- A base compiled from a checkout: what a newer image contains comes from there, not from a release. -->
-            <DevRebuild v-if="localImage && slug && canOperate" :slug="slug" :base="localImage.base" :root="localImage.root" />
+            <!-- A base compiled from a checkout: what a newer image contains comes from there, not from a release. On a
+                 pending recipe that makes two rebuilds on one card, and the second is a SUPERSET of the first — it
+                 applies the same recipe on a base it rebuilds first. That fact is told by the offer itself
+                 (`recipePending`), never by a sentence under the other button, which is where a reader attaches it to
+                 the wrong one. -->
+            <DevRebuild
+                v-if="localImage && slug && canOperate"
+                :slug="slug"
+                :base="localImage.base"
+                :root="localImage.root"
+                :recipe-pending="pending !== undefined"
+            />
 
             <Notice v-if="actionNotice" :of="actionNotice" />
         </RowNote>
