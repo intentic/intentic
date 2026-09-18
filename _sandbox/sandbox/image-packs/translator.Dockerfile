@@ -10,7 +10,7 @@
 # each Codex executor separately and misses the compaction call, which is the one request a long turn makes at
 # its very end. Upstream moved the strip into the shared request converter, so no Codex path can forward a
 # parameter this sandbox never sets. Never pin below it.
-RUN version=7.2.140 \
+RUN version=7.3.7 \
     && arch="$(dpkg --print-architecture)" \
     && case "$arch" in arm64) arch="aarch64" ;; esac \
     && mkdir -p /tmp/cliproxy \

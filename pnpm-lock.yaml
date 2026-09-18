@@ -169,8 +169,8 @@ catalogs:
       specifier: 1.3.0
       version: 1.3.0
     '@anthropic-ai/claude-agent-sdk':
-      specifier: 0.3.257
-      version: 0.3.257
+      specifier: 0.3.276
+      version: 0.3.276
     '@ast-grep/lang-go':
       specifier: 0.0.6
       version: 0.0.6
@@ -202,8 +202,8 @@ catalogs:
       specifier: 21.2.0
       version: 21.2.0
     '@cursor/sdk':
-      specifier: 1.0.28
-      version: 1.0.28
+      specifier: 1.0.31
+      version: 1.0.31
     '@dagrejs/dagre':
       specifier: 3.0.0
       version: 3.0.0
@@ -229,11 +229,11 @@ catalogs:
       specifier: 4.2.0
       version: 4.2.0
     '@openai/codex-sdk':
-      specifier: 0.147.0
-      version: 0.147.0
+      specifier: 0.155.0
+      version: 0.155.0
     '@opencode-ai/sdk':
-      specifier: 1.18.29
-      version: 1.18.29
+      specifier: 1.18.31
+      version: 1.18.31
     '@opentelemetry/api':
       specifier: 1.9.1
       version: 1.9.1
@@ -1809,10 +1809,10 @@ importers:
         version: 5.9.3
       vite:
         specifier: 'catalog:'
-        version: 8.2.0(@types/node@24.13.2)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.1)
+        version: 8.2.0(@types/node@24.13.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.1)
       vitest:
         specifier: 'catalog:'
-        version: 4.1.10(@opentelemetry/api@1.9.1)(@types/node@24.13.2)(jsdom@30.0.1(@noble/hashes@2.4.0))(vite@8.3.0(@types/node@24.13.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.1))
+        version: 4.1.10(@opentelemetry/api@1.9.1)(@types/node@24.13.2)(jsdom@30.0.1(@noble/hashes@2.4.0))(vite@8.2.0(@types/node@24.13.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.1))
       vue:
         specifier: 'catalog:'
         version: 3.5.40(typescript@5.9.3)
@@ -2522,10 +2522,10 @@ importers:
         version: 1.3.0(zod@4.5.4)
       '@anthropic-ai/claude-agent-sdk':
         specifier: 'catalog:'
-        version: 0.3.257(@anthropic-ai/sdk@0.126.0(zod@4.5.4))(@modelcontextprotocol/sdk@1.30.0(supports-color@10.2.2)(zod@4.5.4))(zod@4.5.4)
+        version: 0.3.276(@anthropic-ai/sdk@0.126.0(zod@4.5.4))(@modelcontextprotocol/sdk@1.30.0(supports-color@10.2.2)(zod@4.5.4))(zod@4.5.4)
       '@cursor/sdk':
         specifier: 'catalog:'
-        version: 1.0.28
+        version: 1.0.31
       '@hono/node-server':
         specifier: 'catalog:'
         version: 2.0.12(hono@4.12.34)
@@ -2600,10 +2600,10 @@ importers:
         version: link:../workspace-setup
       '@openai/codex-sdk':
         specifier: 'catalog:'
-        version: 0.147.0
+        version: 0.155.0
       '@opencode-ai/sdk':
         specifier: 'catalog:'
-        version: 1.18.29
+        version: 1.18.31
       '@orpc/client':
         specifier: 'catalog:'
         version: 1.14.13(@opentelemetry/api@1.9.1)
@@ -3332,7 +3332,7 @@ importers:
     dependencies:
       astro:
         specifier: 'catalog:'
-        version: 7.3.2(@emnapi/core@1.11.1)(@emnapi/runtime@1.11.1)(@types/node@24.13.2)(idb-keyval@6.3.0)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.1)
+        version: 7.3.2(@emnapi/core@1.11.2)(@emnapi/runtime@1.11.3)(@types/node@24.13.2)(idb-keyval@6.3.0)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.1)
 
   _site/demo:
     dependencies:
@@ -3344,7 +3344,7 @@ importers:
         version: link:../../_shared/sandbox-contract
       '@intentic/web':
         specifier: workspace:*
-        version: file:_editor/web(@opentelemetry/api@1.9.1)(@prisma/client@7.9.1(prisma@7.9.1(@types/node@24.13.2)(@types/react@19.3.0)(magicast@0.5.5)(react-dom@19.3.0(react@19.2.8))(react@19.2.8)(typescript@5.9.3))(typescript@5.9.3))(esbuild@0.28.2)(mysql2@3.24.3(@types/node@24.13.2))(pg@8.22.0)(prisma@7.9.1(@types/node@24.13.2)(@types/react@19.3.0)(magicast@0.5.5)(react-dom@19.3.0(react@19.2.8))(react@19.2.8)(typescript@5.9.3))(react-dom@19.3.0(react@19.2.8))(react@19.2.8)(rolldown@1.2.8)(typescript@5.9.3)(vite@8.2.0(@types/node@24.13.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.1))(vitest@4.1.10(@opentelemetry/api@1.9.1)(@types/node@24.13.2)(jsdom@30.0.1(@noble/hashes@2.4.0))(vite@8.3.0(@types/node@24.13.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.1)))
+        version: file:_editor/web(@opentelemetry/api@1.9.1)(@prisma/client@7.9.1(prisma@7.9.1(@types/node@24.13.2)(@types/react@19.3.0)(magicast@0.5.5)(react-dom@19.3.0(react@19.2.8))(react@19.2.8)(typescript@5.9.3))(typescript@5.9.3))(esbuild@0.28.2)(mysql2@3.24.3(@types/node@24.13.2))(pg@8.22.0)(prisma@7.9.1(@types/node@24.13.2)(@types/react@19.3.0)(magicast@0.5.5)(react-dom@19.3.0(react@19.2.8))(react@19.2.8)(typescript@5.9.3))(react-dom@19.3.0(react@19.2.8))(react@19.2.8)(rolldown@1.2.8)(typescript@5.9.3)(vite@8.2.0(@types/node@24.13.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.1))(vitest@4.1.10(@opentelemetry/api@1.9.1)(@types/node@24.13.2)(jsdom@30.0.1(@noble/hashes@2.4.0))(vite@8.2.0(@types/node@24.13.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.1)))
       fflate:
         specifier: 'catalog:'
         version: 0.8.3
@@ -3396,7 +3396,7 @@ importers:
         version: 3.7.4
       '@intentic/astro-integrations':
         specifier: workspace:*
-        version: file:_site/astro-integrations(astro@7.3.2(@emnapi/core@1.11.2)(@emnapi/runtime@1.11.3)(@types/node@24.13.2)(idb-keyval@6.3.0)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.1))
+        version: link:../astro-integrations
       '@intentic/constants':
         specifier: workspace:*
         version: link:../../_tools/constants
@@ -3408,7 +3408,7 @@ importers:
         version: link:../../_shared/registry
       '@intentic/sandbox-openapi':
         specifier: workspace:*
-        version: file:_shared/sandbox-openapi(@opentelemetry/api@1.9.1)(crossws@0.3.5)(ws@8.21.3)
+        version: link:../../_shared/sandbox-openapi
       '@intentic/site-content':
         specifier: workspace:*
         version: link:../site-content
@@ -3433,7 +3433,7 @@ importers:
         version: 0.9.10(prettier@3.9.6)(typescript@5.9.3)
       '@intentic/demo':
         specifier: workspace:*
-        version: file:_site/demo(@opentelemetry/api@1.9.1)(@prisma/client@7.9.1(prisma@7.9.1(@types/node@24.13.2)(@types/react@19.3.0)(magicast@0.5.5)(typescript@5.9.3))(typescript@5.9.3))(@vue/compiler-sfc@3.5.42)(esbuild@0.28.2)(prisma@7.9.1(@types/node@24.13.2)(@types/react@19.3.0)(magicast@0.5.5)(typescript@5.9.3))(rolldown@1.2.8)(typescript@5.9.3)(vite@8.2.0(@types/node@24.13.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.1))(vitest@4.1.10(@opentelemetry/api@1.9.1)(@types/node@24.13.2)(jsdom@30.0.1(@noble/hashes@2.4.0))(vite@8.3.0(@types/node@24.13.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.1)))
+        version: file:_site/demo(@opentelemetry/api@1.9.1)(@prisma/client@7.9.1(prisma@7.9.1(@types/node@24.13.2)(@types/react@19.3.0)(magicast@0.5.5)(typescript@5.9.3))(typescript@5.9.3))(@vue/compiler-sfc@3.5.42)(esbuild@0.28.2)(prisma@7.9.1(@types/node@24.13.2)(@types/react@19.3.0)(magicast@0.5.5)(typescript@5.9.3))(rolldown@1.2.8)(typescript@5.9.3)(vite@8.2.0(@types/node@24.13.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.1))(vitest@4.1.10(@opentelemetry/api@1.9.1)(@types/node@24.13.2)(jsdom@30.0.1(@noble/hashes@2.4.0))(vite@8.2.0(@types/node@24.13.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.1)))
       playwright:
         specifier: 'catalog:'
         version: 1.62.1
@@ -3454,7 +3454,7 @@ importers:
         version: link:../../_tools/constants
       '@intentic/sandbox-openapi':
         specifier: workspace:*
-        version: file:_shared/sandbox-openapi(@opentelemetry/api@1.9.1)(crossws@0.3.5)(ws@8.21.3)
+        version: link:../../_shared/sandbox-openapi
     devDependencies:
       '@intentic/tsconfig':
         specifier: workspace:*
@@ -3758,52 +3758,52 @@ packages:
     resolution: {integrity: sha512-U4+70Pc5ZS9osnCBCE5Jha/ciHM+Yp+CNMNC/7HvYbNRk1Ldd+f7qO65W5qfhu/TCv+/ozljlXXe9Nj8419DMA==}
     engines: {node: '>=10'}
 
-  '@anthropic-ai/claude-agent-sdk-darwin-arm64@0.3.257':
-    resolution: {integrity: sha512-ITjFPYB8riu9tbxbrWArokiZ/90w/NDrYbtEvyr3ScilVtu1iupkComxkhvbUxoyT4JRDpKsdw/ZOfwSl/pkpA==}
+  '@anthropic-ai/claude-agent-sdk-darwin-arm64@0.3.276':
+    resolution: {integrity: sha512-WdpZ7UXoIDGYeb97OWRFADqkMDLv/bB3YrRxvomqdxfRZC2RLAPLUxsBat9zVL9B5dsiJmZN8h1D0NlMe92Uzw==}
     cpu: [arm64]
     os: [darwin]
 
-  '@anthropic-ai/claude-agent-sdk-darwin-x64@0.3.257':
-    resolution: {integrity: sha512-0s7QoLRnopbMvCqVpgCnvBWg4UNxPUybMZTknkn3HLBMvUjUdHs1QXb77c/yrT1WAPqDTw1Ju+H0esXwWa8/Kg==}
+  '@anthropic-ai/claude-agent-sdk-darwin-x64@0.3.276':
+    resolution: {integrity: sha512-y5J+K1q7llwYkf85OhjG71R5AqsulHzC+HpgUOrg6klO+jBKsesGGS7tsEGzsM4YJtDntr6Rylw/sH3ZmXvjhg==}
     cpu: [x64]
     os: [darwin]
 
-  '@anthropic-ai/claude-agent-sdk-linux-arm64-musl@0.3.257':
-    resolution: {integrity: sha512-t2WHfKjY4Jjgzfk0lbBUt6EVPQe+wXvXvRmYnK7ICfzZ1jS8CrpDajwBQErKFSMiUqGAutZy3vwDwGziW32cpw==}
+  '@anthropic-ai/claude-agent-sdk-linux-arm64-musl@0.3.276':
+    resolution: {integrity: sha512-Pb7PVWLktFCgD1cUtF61lx9riT2bh3ZSE6rq94EjaesyCnpzddlQ59/LLwLVUwGunBq9N2WayXaElOsk8+pK/g==}
     cpu: [arm64]
     os: [linux]
     libc: [musl]
 
-  '@anthropic-ai/claude-agent-sdk-linux-arm64@0.3.257':
-    resolution: {integrity: sha512-38tv1s1CaIE6CyEBmJpfKtvwPzrasxPiRT079BEs5aaiLPQ+pmSGF0+Lwy7ot9i6xqr7v5/91TVo5JXHI8Pkpg==}
+  '@anthropic-ai/claude-agent-sdk-linux-arm64@0.3.276':
+    resolution: {integrity: sha512-IaBni1kRiUKEsSRTHocVW8jqzl4KyC6ms6fr6KAJPPcjJTu2Ptpb1ohj/OfDixTc/AErrNVL0ye8ICpZ+88k7w==}
     cpu: [arm64]
     os: [linux]
     libc: [glibc]
 
-  '@anthropic-ai/claude-agent-sdk-linux-x64-musl@0.3.257':
-    resolution: {integrity: sha512-qSlgAUEpj2JAA+YqMD222iv2W3x8xBDSYwdoaOx20VbaJRjFq8feViI7kcr1C6wVN+ApX4Rxl7YX6gekiBkA2g==}
+  '@anthropic-ai/claude-agent-sdk-linux-x64-musl@0.3.276':
+    resolution: {integrity: sha512-OaZAlVBhAUFkivWgb5ZsJYCT08qTo9LyomaN/2jNwsvVkpurr8kXEGncsTk8sM5JyIzSSiWuR+Sfxphq071XPA==}
     cpu: [x64]
     os: [linux]
     libc: [musl]
 
-  '@anthropic-ai/claude-agent-sdk-linux-x64@0.3.257':
-    resolution: {integrity: sha512-0FRyIwV4jEJErdDDoYMC0v9lzuFNz5y0lK2340H5fP02eNXsP3U0htKW/bfRP8Ppei+xc4QUZgdCI6rVzkhXGg==}
+  '@anthropic-ai/claude-agent-sdk-linux-x64@0.3.276':
+    resolution: {integrity: sha512-MR/HQn8xi3RGujnzgJhyVolKR7JO+BiPhBBJ0GqbIlM4huso1aIDFhYhetdGIPb4shr7R1OZzSj1QFJoJQQ8/A==}
     cpu: [x64]
     os: [linux]
     libc: [glibc]
 
-  '@anthropic-ai/claude-agent-sdk-win32-arm64@0.3.257':
-    resolution: {integrity: sha512-7iEwy14lSqaAWvNR3KucBusQs5+hG6uoliYWZ2M2FyaCk5PHYymVf9mrRPtWhaYfNwum/YY13acYIIvnAbz0kA==}
+  '@anthropic-ai/claude-agent-sdk-win32-arm64@0.3.276':
+    resolution: {integrity: sha512-dk7lxCdvRwXVf5LAh9nQ2/MLLedfT3K1HIQsv5KBgexUE1F7JYYd5/R3eYs/qT9UQOeKrMmKq7GG9RxDDXCgjA==}
     cpu: [arm64]
     os: [win32]
 
-  '@anthropic-ai/claude-agent-sdk-win32-x64@0.3.257':
-    resolution: {integrity: sha512-NW0zMjHXFBdu2TcjT9Zo5o/1tJaDy6A7v4Gt/vLVJgaipV/RzAbyRGXZzH37hswyiKrSLGaSoYYP1vUfncbkUQ==}
+  '@anthropic-ai/claude-agent-sdk-win32-x64@0.3.276':
+    resolution: {integrity: sha512-CKPz5K94qpVHdP0hmSugntpiTshHrPFs4RtQYcFvP4PVltZv/wtth090Rff21XJna3Lxt4Lb5ce3tMqTnDRu9Q==}
     cpu: [x64]
     os: [win32]
 
-  '@anthropic-ai/claude-agent-sdk@0.3.257':
-    resolution: {integrity: sha512-Se55zXv48IYLg/WzoXzpbPLcq86suwDSbRUoNb69l4dkovorqS/47Xuy7MUo/gPNwwcPB4a+aqbXbshU33dcdQ==}
+  '@anthropic-ai/claude-agent-sdk@0.3.276':
+    resolution: {integrity: sha512-Dic43v4uuGLhibPAArWy3RSfq3zHdn+4Oh2AI2/18a5tlbNKkvChEpazyp8c+grUJvzxkzt0jETCa1wrADbkyw==}
     engines: {node: '>=18.0.0'}
     peerDependencies:
       '@anthropic-ai/sdk': '>=0.93.0'
@@ -4620,38 +4620,38 @@ packages:
     resolution: {integrity: sha512-QxULHAm7cNu72w97JUNCBFODFaXpbDg+dP8b/oWFAZ2MTRppA3U00Y2L1HqaS4J6yBqxwa/Y3nMBaxVKbB/NsA==}
     engines: {node: '>=20.19.0'}
 
-  '@cursor/sdk-darwin-arm64@1.0.28':
-    resolution: {integrity: sha512-P9k17dHzyYirjvMIkdxGtIWFEpkC1lB0TSbNE3AEusr5UwYTHFt13+MK5j9GK8Tg3r9ncg4IeSDQgx7HvA2VAw==}
+  '@cursor/sdk-darwin-arm64@1.0.31':
+    resolution: {integrity: sha512-i6INDIQhV7xDeFKfND0yr/SOwv4uJthPMfXXvNpZapO+IbJTx30aPzJVMBqdksvDHyn/cekJB/92Jkz+a5K8Ow==}
     cpu: [arm64]
     os: [darwin]
     hasBin: true
 
-  '@cursor/sdk-darwin-x64@1.0.28':
-    resolution: {integrity: sha512-SFamp6b3a5/Og4RIYpxivA9TNqSam8+yeDwdu4+iV9GwZygtw2y1r8Qz2r7VpDj40gou2UP/p8Nu54nAdAl4Mg==}
+  '@cursor/sdk-darwin-x64@1.0.31':
+    resolution: {integrity: sha512-vCmrGykwflJNAAr4RVY4UlZ+F0fmUF+WCR8zFzP4Jl1Da2b8Oh1rxrVLbIbleS1/LKsX/OPbTQNRL0SEER95Sg==}
     cpu: [x64]
     os: [darwin]
     hasBin: true
 
-  '@cursor/sdk-linux-arm64@1.0.28':
-    resolution: {integrity: sha512-J0Pp2vZLApRm4+j35zNFaMkAuI7AoTzY7bt1UdRC/NSAcJsh74soCf/HqB59Ps94HaznF7PYl1ft6ltnn4to4g==}
+  '@cursor/sdk-linux-arm64@1.0.31':
+    resolution: {integrity: sha512-BHTwumfhWjTy0k41+KaaXfTm3MGu6WEYU76FmXqc/r1+ynuQroqfBKWyfH4XBcx3uzyaZJQLxNB9BBbs8yHUig==}
     cpu: [arm64]
     os: [linux]
     hasBin: true
 
-  '@cursor/sdk-linux-x64@1.0.28':
-    resolution: {integrity: sha512-YFBA2syvFJZE15d1MBtgqJJCuYGbZEU7GcE8EaGDU3A6iJguZg7PB97c3ux2qN5kJtdk0+EveevrIi2UJsr5Ag==}
+  '@cursor/sdk-linux-x64@1.0.31':
+    resolution: {integrity: sha512-y+ahiKQvEISUn9y6z75jwKjLQkrJ/nY7ehL1Vi9X8zdbjz14fiEtMTICAHccTiTq5cf6dZjXC5QfPdJRat6dhg==}
     cpu: [x64]
     os: [linux]
     hasBin: true
 
-  '@cursor/sdk-win32-x64@1.0.28':
-    resolution: {integrity: sha512-+9G30RcR+cDkQxiyFBfrNWSBkZJc19G9L7+bTl9PdiBI7FPCu1vCCdP4BBvntdCkFS9LwEX3iJyWJqEreFjNQg==}
+  '@cursor/sdk-win32-x64@1.0.31':
+    resolution: {integrity: sha512-5ti4AwUz8kh5ovM86K/fTiHmVGL6jk1faQkTCX08lcCxFSlUDwpeyhn90pWsbNFQ4Vy2PttqEjanV6895p13eA==}
     cpu: [x64]
     os: [win32]
     hasBin: true
 
-  '@cursor/sdk@1.0.28':
-    resolution: {integrity: sha512-bO7Ld00xXV5kFB9WDeBiyADgon3r/BQXc9qZ4sHlXX9ZQpzIkTfHrYU7g278pcHTuz+l/vPcPcc7JByeRWHeqA==}
+  '@cursor/sdk@1.0.31':
+    resolution: {integrity: sha512-0SdJQqp5oXn81oJqIVkLpgHih+CL6CAudK83pCsdJyA23AvInSWlMaGpLi+JlrK3efHoswiEhhASs9WpeEz3QQ==}
     engines: {node: '>=22.13'}
 
   '@dagrejs/dagre@3.0.0':
@@ -5439,11 +5439,6 @@ packages:
   '@intentic/api-contract@file:_shared/api-contract':
     resolution: {directory: _shared/api-contract, type: directory}
 
-  '@intentic/astro-integrations@file:_site/astro-integrations':
-    resolution: {directory: _site/astro-integrations, type: directory}
-    peerDependencies:
-      astro: 7.3.2
-
   '@intentic/base@file:_tools/base':
     resolution: {directory: _tools/base, type: directory}
 
@@ -5479,6 +5474,11 @@ packages:
 
   '@intentic/ext-git-history@file:_extensions/git-history':
     resolution: {directory: _extensions/git-history, type: directory}
+    peerDependencies:
+      vue: '3'
+
+  '@intentic/ext-onlyoffice@file:_extensions/onlyoffice':
+    resolution: {directory: _extensions/onlyoffice, type: directory}
     peerDependencies:
       vue: '3'
 
@@ -5542,9 +5542,6 @@ packages:
 
   '@intentic/sandbox-contract@file:_shared/sandbox-contract':
     resolution: {directory: _shared/sandbox-contract, type: directory}
-
-  '@intentic/sandbox-openapi@file:_shared/sandbox-openapi':
-    resolution: {directory: _shared/sandbox-openapi, type: directory}
 
   '@intentic/sandbox-run@file:_shared/sandbox-run':
     resolution: {directory: _shared/sandbox-run, type: directory}
@@ -5734,53 +5731,53 @@ packages:
   '@octokit/types@18.0.0':
     resolution: {integrity: sha512-l6bAF43PNxkJp6g+W4PjoUSSkxHomXw2nOum5CTftJz1NlV3vu93NImgOYtLf6CbBUb5j+fiuzW0PPQ5JTSvZA==}
 
-  '@openai/codex-sdk@0.147.0':
-    resolution: {integrity: sha512-nJL0maDBZy31uEArs+u46tW22veNdHjfs96AGaFTnI3jF+g8U+a422uaPiDZwEKmyxcNwStTRz6sIh6C7XxGFQ==}
+  '@openai/codex-sdk@0.155.0':
+    resolution: {integrity: sha512-oD/7iCZnXqDlrnoWWpGkZExrUStpAau1koyUO/fSW3WwkqewRf+MGj3OS41Buw7gNwj0oM6ilI9RHqP5QQWJaQ==}
     engines: {node: '>=18'}
 
-  '@openai/codex@0.147.0':
-    resolution: {integrity: sha512-EQLEXecAG2ptxI7UpBMo2TR/ga5596/c/OsYF/0LoUDh5JANZ7IoGqlzBEWbuEVQ76JePIbtTW/ihCkp1a7Z3w==}
+  '@openai/codex@0.155.0':
+    resolution: {integrity: sha512-35a85Hbwy9WXkDTJumLjTcmMgpR7BMdrTloWBVGjoA+FBCh7jb3+cYp2W+3U4klqGAjAskoIvQZv7/eedmCjHA==}
     engines: {node: '>=16'}
     hasBin: true
 
-  '@openai/codex@0.147.0-darwin-arm64':
-    resolution: {integrity: sha512-BEUVkiOW7kLcRyrMLfAr/h9wF8sRVJyZDy6OHtVn6QGDXiv3BvAZVTY1Pu9xF7KdIdkYXbp4uayN0aDQQaAUJw==}
+  '@openai/codex@0.155.0-darwin-arm64':
+    resolution: {integrity: sha512-c0vbt2ZS6XiXq9gQkNictu7PH0deMyq/bw4Ia9bdihU1iJHuGuwC5vD4swU4xhLUKoTs4tMOHwYWKaofFZcVRg==}
     engines: {node: '>=16'}
     cpu: [arm64]
     os: [darwin]
 
-  '@openai/codex@0.147.0-darwin-x64':
-    resolution: {integrity: sha512-Tb8McE5SvJIH0Vs5R6sq7u+quiC931yan2KOOl6km1OdZ82+Wi7eF5XrSFPs5CF7xCgoIK4Vs+byMbT5hN+ZUw==}
+  '@openai/codex@0.155.0-darwin-x64':
+    resolution: {integrity: sha512-Epo33vwukf4uPyxg1c7+7+P4J6YgggdwQrCR/BRGuhjpadZAzoAntfm54CPCNHvW6uSq8BHQX/e9G+f5/0XQ7Q==}
     engines: {node: '>=16'}
     cpu: [x64]
     os: [darwin]
 
-  '@openai/codex@0.147.0-linux-arm64':
-    resolution: {integrity: sha512-SLC1JXw2TYfr/c3HhrJubyyLelq7vTOLWVmiThFA+z0+WgzCPmaseJ/kzDD3Gge/TO7fCnnj7UcPmC0d2c8XAg==}
+  '@openai/codex@0.155.0-linux-arm64':
+    resolution: {integrity: sha512-iMyMjIYHlBUUDeTEGeEftQozQz0h7nYYCaLDJlZnqDF2Y0+bfdD/ppDS3vsw6mIz/z49haC6TCer11iEWO6fsA==}
     engines: {node: '>=16'}
     cpu: [arm64]
     os: [linux]
 
-  '@openai/codex@0.147.0-linux-x64':
-    resolution: {integrity: sha512-0W9MBxPpWW0cSkNqrTDN2jR7rzzT7oNMhQY5446lT2Lw5cz5yhDTck4Va9rjkQEm+HlFzP/dmEMSZbXfJsINmw==}
+  '@openai/codex@0.155.0-linux-x64':
+    resolution: {integrity: sha512-CiXkVTy4ERdFSXXP8n98/iOyVUCOYFPQ8cuwgeOEEbLhe1LnlQbgH/H8ZeuxO9WXKIZLJg0x626UgR9axY2zSA==}
     engines: {node: '>=16'}
     cpu: [x64]
     os: [linux]
 
-  '@openai/codex@0.147.0-win32-arm64':
-    resolution: {integrity: sha512-e2ZstJ8zT8Rm1nvR7CUVO+Gr3cTChE41+VfOzGhynzDXEoW0wfbjUQbc2bWbh1arG94LMm4y3dqBtUIbSrfeGA==}
+  '@openai/codex@0.155.0-win32-arm64':
+    resolution: {integrity: sha512-aFIONQhKxg+XEVsInLRI2OG8S9OUvfK+nzc4sWcbn8DgxlmuPkbVzloSrD5psh1lKnG4s2qd3QK8tCClSgLzJw==}
     engines: {node: '>=16'}
     cpu: [arm64]
     os: [win32]
 
-  '@openai/codex@0.147.0-win32-x64':
-    resolution: {integrity: sha512-oT7Ss5fAPf2fiWE9QNURqZcQGAAawSVxmIUdgPzckq4KFZAM+pRz9JbM4Rr498CjtbNgTOjWvDJ+DXvIBSfOPA==}
+  '@openai/codex@0.155.0-win32-x64':
+    resolution: {integrity: sha512-yfB9DHAB0YLTy3oD4one21pzGIJ99b+U/PW4htAq6OLccPSZa8OZz5HeN3XVy1a2/BbCqwWmK+w4p/aG/3DCRw==}
     engines: {node: '>=16'}
     cpu: [x64]
     os: [win32]
 
-  '@opencode-ai/sdk@1.18.29':
-    resolution: {integrity: sha512-4CS+FoLPkymTlcga8jxivGDDb2AbWMIIl3b8+myoe2wtv/1ANYCErslgz1xy5hTVHymWE6CtVNKzRuPU0ED57A==}
+  '@opencode-ai/sdk@1.18.31':
+    resolution: {integrity: sha512-Raouthf8Lhe9edjvYeeSK7SgvdoU6bBjH9qV3f70dHoa6h+z0X2TMz/e22/wKp/StlFUZ4kIRpYYxFnY8/k01w==}
 
   '@opentelemetry/api-logs@0.221.0':
     resolution: {integrity: sha512-OlanaW1vv7ufTqQ3/fPLI4arGt5ZoM+P8abOMki6uEYnpRazepSWDwDnnw+la7kE26SHVC18//SMccrDvLKOXQ==}
@@ -7547,9 +7544,6 @@ packages:
 
   '@types/node@18.19.130':
     resolution: {integrity: sha512-GRaXQx6jGfL8sKfaIDD6OupbIHBr9jv7Jnaml9tB7l4v068PAOXqfcujMMo5PhbIs6ggR1XODELqahT2R8v0fg==}
-
-  '@types/node@22.20.3':
-    resolution: {integrity: sha512-DZmzkmwHzXrLPAXPyKNDzlIwMMUZCVacoD25ywdy5YTKGbOx/2ld+Q38Im2zJ0vBuZP5Prd3VZutKZyXwkOS8A==}
 
   '@types/node@24.13.2':
     resolution: {integrity: sha512-fRa09kZTgu8o71KFcDjUFuc7F+dEbZYZmkI0mg5YBTRs0yMKjYHsq/c0urDKeDb+D5qVgXOdFcuu+DZPKOITwA==}
@@ -12205,9 +12199,6 @@ packages:
   undici-types@5.26.5:
     resolution: {integrity: sha512-JlCMO+ehdEIKqlFxk6IfVoAUVmgz7cU7zD/h9XZ0qzeosSHmUJVOzSQvvYSYWXkFXC+IfLKSIffhv0sVZup6pA==}
 
-  undici-types@6.21.0:
-    resolution: {integrity: sha512-iwDZqg0QAGrg9Rav5H4n0M64c3mkR59cJ6wQp+7C4nI0gsmExaedaYLNO44eT4AtBBwjbTiGPMlt2Md0T9H9JQ==}
-
   undici-types@7.18.2:
     resolution: {integrity: sha512-AsuCzffGHJybSaRrmr5eHr81mwJU3kjw6M+uprWvCXiNeN9SOGwQ3Jn8jb8m3Z6izVgknn1R0FTCEAP2QrLY/w==}
 
@@ -13007,44 +12998,44 @@ snapshots:
 
   '@alloc/quick-lru@5.3.0': {}
 
-  '@anthropic-ai/claude-agent-sdk-darwin-arm64@0.3.257':
+  '@anthropic-ai/claude-agent-sdk-darwin-arm64@0.3.276':
     optional: true
 
-  '@anthropic-ai/claude-agent-sdk-darwin-x64@0.3.257':
+  '@anthropic-ai/claude-agent-sdk-darwin-x64@0.3.276':
     optional: true
 
-  '@anthropic-ai/claude-agent-sdk-linux-arm64-musl@0.3.257':
+  '@anthropic-ai/claude-agent-sdk-linux-arm64-musl@0.3.276':
     optional: true
 
-  '@anthropic-ai/claude-agent-sdk-linux-arm64@0.3.257':
+  '@anthropic-ai/claude-agent-sdk-linux-arm64@0.3.276':
     optional: true
 
-  '@anthropic-ai/claude-agent-sdk-linux-x64-musl@0.3.257':
+  '@anthropic-ai/claude-agent-sdk-linux-x64-musl@0.3.276':
     optional: true
 
-  '@anthropic-ai/claude-agent-sdk-linux-x64@0.3.257':
+  '@anthropic-ai/claude-agent-sdk-linux-x64@0.3.276':
     optional: true
 
-  '@anthropic-ai/claude-agent-sdk-win32-arm64@0.3.257':
+  '@anthropic-ai/claude-agent-sdk-win32-arm64@0.3.276':
     optional: true
 
-  '@anthropic-ai/claude-agent-sdk-win32-x64@0.3.257':
+  '@anthropic-ai/claude-agent-sdk-win32-x64@0.3.276':
     optional: true
 
-  '@anthropic-ai/claude-agent-sdk@0.3.257(@anthropic-ai/sdk@0.126.0(zod@4.5.4))(@modelcontextprotocol/sdk@1.30.0(supports-color@10.2.2)(zod@4.5.4))(zod@4.5.4)':
+  '@anthropic-ai/claude-agent-sdk@0.3.276(@anthropic-ai/sdk@0.126.0(zod@4.5.4))(@modelcontextprotocol/sdk@1.30.0(supports-color@10.2.2)(zod@4.5.4))(zod@4.5.4)':
     dependencies:
       '@anthropic-ai/sdk': 0.126.0(zod@4.5.4)
       '@modelcontextprotocol/sdk': 1.30.0(supports-color@10.2.2)(zod@4.5.4)
       zod: 4.5.4
     optionalDependencies:
-      '@anthropic-ai/claude-agent-sdk-darwin-arm64': 0.3.257
-      '@anthropic-ai/claude-agent-sdk-darwin-x64': 0.3.257
-      '@anthropic-ai/claude-agent-sdk-linux-arm64': 0.3.257
-      '@anthropic-ai/claude-agent-sdk-linux-arm64-musl': 0.3.257
-      '@anthropic-ai/claude-agent-sdk-linux-x64': 0.3.257
-      '@anthropic-ai/claude-agent-sdk-linux-x64-musl': 0.3.257
-      '@anthropic-ai/claude-agent-sdk-win32-arm64': 0.3.257
-      '@anthropic-ai/claude-agent-sdk-win32-x64': 0.3.257
+      '@anthropic-ai/claude-agent-sdk-darwin-arm64': 0.3.276
+      '@anthropic-ai/claude-agent-sdk-darwin-x64': 0.3.276
+      '@anthropic-ai/claude-agent-sdk-linux-arm64': 0.3.276
+      '@anthropic-ai/claude-agent-sdk-linux-arm64-musl': 0.3.276
+      '@anthropic-ai/claude-agent-sdk-linux-x64': 0.3.276
+      '@anthropic-ai/claude-agent-sdk-linux-x64-musl': 0.3.276
+      '@anthropic-ai/claude-agent-sdk-win32-arm64': 0.3.276
+      '@anthropic-ai/claude-agent-sdk-win32-x64': 0.3.276
 
   '@anthropic-ai/sdk@0.126.0(zod@4.5.4)':
     dependencies:
@@ -13177,14 +13168,6 @@ snapshots:
   '@astrojs/compiler-binding-linux-x64-musl@0.4.1':
     optional: true
 
-  '@astrojs/compiler-binding-wasm32-wasi@0.4.1(@emnapi/core@1.11.1)(@emnapi/runtime@1.11.1)':
-    dependencies:
-      '@napi-rs/wasm-runtime': 1.2.4(@emnapi/core@1.11.1)(@emnapi/runtime@1.11.1)
-    transitivePeerDependencies:
-      - '@emnapi/core'
-      - '@emnapi/runtime'
-    optional: true
-
   '@astrojs/compiler-binding-wasm32-wasi@0.4.1(@emnapi/core@1.11.2)(@emnapi/runtime@1.11.3)':
     dependencies:
       '@napi-rs/wasm-runtime': 1.2.4(@emnapi/core@1.11.2)(@emnapi/runtime@1.11.3)
@@ -13199,22 +13182,6 @@ snapshots:
   '@astrojs/compiler-binding-win32-x64-msvc@0.4.1':
     optional: true
 
-  '@astrojs/compiler-binding@0.4.1(@emnapi/core@1.11.1)(@emnapi/runtime@1.11.1)':
-    optionalDependencies:
-      '@astrojs/compiler-binding-android-arm64': 0.4.1
-      '@astrojs/compiler-binding-darwin-arm64': 0.4.1
-      '@astrojs/compiler-binding-darwin-x64': 0.4.1
-      '@astrojs/compiler-binding-linux-arm64-gnu': 0.4.1
-      '@astrojs/compiler-binding-linux-arm64-musl': 0.4.1
-      '@astrojs/compiler-binding-linux-x64-gnu': 0.4.1
-      '@astrojs/compiler-binding-linux-x64-musl': 0.4.1
-      '@astrojs/compiler-binding-wasm32-wasi': 0.4.1(@emnapi/core@1.11.1)(@emnapi/runtime@1.11.1)
-      '@astrojs/compiler-binding-win32-arm64-msvc': 0.4.1
-      '@astrojs/compiler-binding-win32-x64-msvc': 0.4.1
-    transitivePeerDependencies:
-      - '@emnapi/core'
-      - '@emnapi/runtime'
-
   '@astrojs/compiler-binding@0.4.1(@emnapi/core@1.11.2)(@emnapi/runtime@1.11.3)':
     optionalDependencies:
       '@astrojs/compiler-binding-android-arm64': 0.4.1
@@ -13227,13 +13194,6 @@ snapshots:
       '@astrojs/compiler-binding-wasm32-wasi': 0.4.1(@emnapi/core@1.11.2)(@emnapi/runtime@1.11.3)
       '@astrojs/compiler-binding-win32-arm64-msvc': 0.4.1
       '@astrojs/compiler-binding-win32-x64-msvc': 0.4.1
-    transitivePeerDependencies:
-      - '@emnapi/core'
-      - '@emnapi/runtime'
-
-  '@astrojs/compiler-rs@0.4.1(@emnapi/core@1.11.1)(@emnapi/runtime@1.11.1)':
-    dependencies:
-      '@astrojs/compiler-binding': 0.4.1(@emnapi/core@1.11.1)(@emnapi/runtime@1.11.1)
     transitivePeerDependencies:
       - '@emnapi/core'
       - '@emnapi/runtime'
@@ -13878,22 +13838,22 @@ snapshots:
 
   '@csstools/css-tokenizer@4.0.0': {}
 
-  '@cursor/sdk-darwin-arm64@1.0.28':
+  '@cursor/sdk-darwin-arm64@1.0.31':
     optional: true
 
-  '@cursor/sdk-darwin-x64@1.0.28':
+  '@cursor/sdk-darwin-x64@1.0.31':
     optional: true
 
-  '@cursor/sdk-linux-arm64@1.0.28':
+  '@cursor/sdk-linux-arm64@1.0.31':
     optional: true
 
-  '@cursor/sdk-linux-x64@1.0.28':
+  '@cursor/sdk-linux-x64@1.0.31':
     optional: true
 
-  '@cursor/sdk-win32-x64@1.0.28':
+  '@cursor/sdk-win32-x64@1.0.31':
     optional: true
 
-  '@cursor/sdk@1.0.28':
+  '@cursor/sdk@1.0.31':
     dependencies:
       '@bufbuild/protobuf': 1.10.0
       '@connectrpc/connect': 1.7.0(@bufbuild/protobuf@1.10.0)
@@ -13902,11 +13862,11 @@ snapshots:
       '@statsig/js-client': 3.31.0
       zod: 3.25.76
     optionalDependencies:
-      '@cursor/sdk-darwin-arm64': 1.0.28
-      '@cursor/sdk-darwin-x64': 1.0.28
-      '@cursor/sdk-linux-arm64': 1.0.28
-      '@cursor/sdk-linux-x64': 1.0.28
-      '@cursor/sdk-win32-x64': 1.0.28
+      '@cursor/sdk-darwin-arm64': 1.0.31
+      '@cursor/sdk-darwin-x64': 1.0.31
+      '@cursor/sdk-linux-arm64': 1.0.31
+      '@cursor/sdk-linux-x64': 1.0.31
+      '@cursor/sdk-win32-x64': 1.0.31
 
   '@dagrejs/dagre@3.0.0':
     dependencies:
@@ -14533,10 +14493,6 @@ snapshots:
     transitivePeerDependencies:
       - '@opentelemetry/api'
 
-  '@intentic/astro-integrations@file:_site/astro-integrations(astro@7.3.2(@emnapi/core@1.11.2)(@emnapi/runtime@1.11.3)(@types/node@24.13.2)(idb-keyval@6.3.0)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.1))':
-    dependencies:
-      astro: 7.3.2(@emnapi/core@1.11.2)(@emnapi/runtime@1.11.3)(@types/node@24.13.2)(idb-keyval@6.3.0)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.1)
-
   '@intentic/base@file:_tools/base':
     dependencies:
       tslib: 2.8.1
@@ -14557,11 +14513,11 @@ snapshots:
 
   '@intentic/constants@file:_tools/constants': {}
 
-  '@intentic/demo@file:_site/demo(@opentelemetry/api@1.9.1)(@prisma/client@7.9.1(prisma@7.9.1(@types/node@24.13.2)(@types/react@19.3.0)(magicast@0.5.5)(typescript@5.9.3))(typescript@5.9.3))(@vue/compiler-sfc@3.5.42)(esbuild@0.28.2)(prisma@7.9.1(@types/node@24.13.2)(@types/react@19.3.0)(magicast@0.5.5)(typescript@5.9.3))(rolldown@1.2.8)(typescript@5.9.3)(vite@8.2.0(@types/node@24.13.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.1))(vitest@4.1.10(@opentelemetry/api@1.9.1)(@types/node@24.13.2)(jsdom@30.0.1(@noble/hashes@2.4.0))(vite@8.3.0(@types/node@24.13.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.1)))':
+  '@intentic/demo@file:_site/demo(@opentelemetry/api@1.9.1)(@prisma/client@7.9.1(prisma@7.9.1(@types/node@24.13.2)(@types/react@19.3.0)(magicast@0.5.5)(typescript@5.9.3))(typescript@5.9.3))(@vue/compiler-sfc@3.5.42)(esbuild@0.28.2)(prisma@7.9.1(@types/node@24.13.2)(@types/react@19.3.0)(magicast@0.5.5)(typescript@5.9.3))(rolldown@1.2.8)(typescript@5.9.3)(vite@8.2.0(@types/node@24.13.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.1))(vitest@4.1.10(@opentelemetry/api@1.9.1)(@types/node@24.13.2)(jsdom@30.0.1(@noble/hashes@2.4.0))(vite@8.2.0(@types/node@24.13.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.1)))':
     dependencies:
       '@intentic/api-contract': file:_shared/api-contract(@opentelemetry/api@1.9.1)
       '@intentic/sandbox-contract': file:_shared/sandbox-contract(@opentelemetry/api@1.9.1)
-      '@intentic/web': file:_editor/web(@opentelemetry/api@1.9.1)(@prisma/client@7.9.1(prisma@7.9.1(@types/node@24.13.2)(@types/react@19.3.0)(magicast@0.5.5)(typescript@5.9.3))(typescript@5.9.3))(@vue/compiler-sfc@3.5.42)(esbuild@0.28.2)(prisma@7.9.1(@types/node@24.13.2)(@types/react@19.3.0)(magicast@0.5.5)(typescript@5.9.3))(rolldown@1.2.8)(typescript@5.9.3)(vite@8.2.0(@types/node@24.13.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.1))(vitest@4.1.10(@opentelemetry/api@1.9.1)(@types/node@24.13.2)(jsdom@30.0.1(@noble/hashes@2.4.0))(vite@8.3.0(@types/node@24.13.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.1)))
+      '@intentic/web': file:_editor/web(@opentelemetry/api@1.9.1)(@prisma/client@7.9.1(prisma@7.9.1(@types/node@24.13.2)(@types/react@19.3.0)(magicast@0.5.5)(typescript@5.9.3))(typescript@5.9.3))(@vue/compiler-sfc@3.5.42)(esbuild@0.28.2)(prisma@7.9.1(@types/node@24.13.2)(@types/react@19.3.0)(magicast@0.5.5)(typescript@5.9.3))(rolldown@1.2.8)(typescript@5.9.3)(vite@8.2.0(@types/node@24.13.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.1))(vitest@4.1.10(@opentelemetry/api@1.9.1)(@types/node@24.13.2)(jsdom@30.0.1(@noble/hashes@2.4.0))(vite@8.2.0(@types/node@24.13.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.1)))
     transitivePeerDependencies:
       - '@cloudflare/workers-types'
       - '@farmfe/core'
@@ -14650,6 +14606,15 @@ snapshots:
     transitivePeerDependencies:
       - '@opentelemetry/api'
       - '@vue/composition-api'
+
+  '@intentic/ext-onlyoffice@file:_extensions/onlyoffice(@opentelemetry/api@1.9.1)(vue@3.5.40(typescript@5.9.3))':
+    dependencies:
+      '@intentic/extension-api': file:_shared/extension-api(@opentelemetry/api@1.9.1)(vue@3.5.40(typescript@5.9.3))
+      '@intentic/extension-manifest': file:_shared/extension-manifest
+      '@intentic/extension-ui': file:_shared/extension-ui(vue@3.5.40(typescript@5.9.3))
+      vue: 3.5.40(typescript@5.9.3)
+    transitivePeerDependencies:
+      - '@opentelemetry/api'
 
   '@intentic/ext-pipelines@file:_extensions/pipelines(@opentelemetry/api@1.9.1)(vue@3.5.40(typescript@5.9.3))':
     dependencies:
@@ -14774,20 +14739,6 @@ snapshots:
     transitivePeerDependencies:
       - '@opentelemetry/api'
 
-  '@intentic/sandbox-openapi@file:_shared/sandbox-openapi(@opentelemetry/api@1.9.1)(crossws@0.3.5)(ws@8.21.3)':
-    dependencies:
-      '@intentic/sandbox-contract': file:_shared/sandbox-contract(@opentelemetry/api@1.9.1)
-      '@orpc/contract': 1.14.13(@opentelemetry/api@1.9.1)
-      '@orpc/openapi': 1.14.13(@opentelemetry/api@1.9.1)(crossws@0.3.5)(ws@8.21.3)
-      json-schema-typed: 8.0.2
-      tslib: 2.8.1
-      zod: 4.5.4
-    transitivePeerDependencies:
-      - '@opentelemetry/api'
-      - crossws
-      - fastify
-      - ws
-
   '@intentic/sandbox-run@file:_shared/sandbox-run':
     dependencies:
       '@intentic/constants': file:_tools/constants
@@ -14828,6 +14779,7 @@ snapshots:
       '@intentic/ext-approvals': file:_extensions/approvals(@opentelemetry/api@1.9.1)(vue@3.5.40(typescript@5.9.3))
       '@intentic/ext-automations': file:_extensions/automations(@opentelemetry/api@1.9.1)(vue@3.5.40(typescript@5.9.3))
       '@intentic/ext-git-history': file:_extensions/git-history(@opentelemetry/api@1.9.1)(vue@3.5.40(typescript@5.9.3))
+      '@intentic/ext-onlyoffice': file:_extensions/onlyoffice(@opentelemetry/api@1.9.1)(vue@3.5.40(typescript@5.9.3))
       '@intentic/ext-pipelines': file:_extensions/pipelines(@opentelemetry/api@1.9.1)(vue@3.5.40(typescript@5.9.3))
       '@intentic/ext-preview': file:_extensions/preview(@opentelemetry/api@1.9.1)(vue@3.5.40(typescript@5.9.3))
       '@intentic/ext-projects': file:_extensions/projects(@opentelemetry/api@1.9.1)(vue@3.5.40(typescript@5.9.3))
@@ -14862,6 +14814,7 @@ snapshots:
       primevue: 4.5.5(patch_hash=df5c12d98e45d34b51bc87bbe7cb90dc7f3960744e435acdba0ea9c474c89a68)(vue@3.5.40(typescript@5.9.3))
       tslib: 2.8.1
       vue: 3.5.40(typescript@5.9.3)
+      vue-i18n: 11.4.12(vue@3.5.40(typescript@5.9.3))
       vue-router: 5.2.0(@vue/compiler-sfc@3.5.42)(esbuild@0.28.2)(rolldown@1.2.8)(vite@8.2.0(@types/node@24.13.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.1))(vue@3.5.40(typescript@5.9.3))
       zod: 4.5.4
     transitivePeerDependencies:
@@ -14902,7 +14855,7 @@ snapshots:
       - vitest
       - webpack
 
-  '@intentic/web@file:_editor/web(@opentelemetry/api@1.9.1)(@prisma/client@7.9.1(prisma@7.9.1(@types/node@24.13.2)(@types/react@19.3.0)(magicast@0.5.5)(react-dom@19.3.0(react@19.2.8))(react@19.2.8)(typescript@5.9.3))(typescript@5.9.3))(esbuild@0.28.2)(mysql2@3.24.3(@types/node@24.13.2))(pg@8.22.0)(prisma@7.9.1(@types/node@24.13.2)(@types/react@19.3.0)(magicast@0.5.5)(react-dom@19.3.0(react@19.2.8))(react@19.2.8)(typescript@5.9.3))(react-dom@19.3.0(react@19.2.8))(react@19.2.8)(rolldown@1.2.8)(typescript@5.9.3)(vite@8.2.0(@types/node@24.13.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.1))(vitest@4.1.10(@opentelemetry/api@1.9.1)(@types/node@24.13.2)(jsdom@30.0.1(@noble/hashes@2.4.0))(vite@8.3.0(@types/node@24.13.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.1)))':
+  '@intentic/web@file:_editor/web(@opentelemetry/api@1.9.1)(@prisma/client@7.9.1(prisma@7.9.1(@types/node@24.13.2)(@types/react@19.3.0)(magicast@0.5.5)(react-dom@19.3.0(react@19.2.8))(react@19.2.8)(typescript@5.9.3))(typescript@5.9.3))(esbuild@0.28.2)(mysql2@3.24.3(@types/node@24.13.2))(pg@8.22.0)(prisma@7.9.1(@types/node@24.13.2)(@types/react@19.3.0)(magicast@0.5.5)(react-dom@19.3.0(react@19.2.8))(react@19.2.8)(typescript@5.9.3))(react-dom@19.3.0(react@19.2.8))(react@19.2.8)(rolldown@1.2.8)(typescript@5.9.3)(vite@8.2.0(@types/node@24.13.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.1))(vitest@4.1.10(@opentelemetry/api@1.9.1)(@types/node@24.13.2)(jsdom@30.0.1(@noble/hashes@2.4.0))(vite@8.2.0(@types/node@24.13.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.1)))':
     dependencies:
       '@intentic/api-contract': file:_shared/api-contract(@opentelemetry/api@1.9.1)
       '@intentic/base': file:_tools/base
@@ -14914,6 +14867,7 @@ snapshots:
       '@intentic/ext-approvals': file:_extensions/approvals(@opentelemetry/api@1.9.1)(vue@3.5.40(typescript@5.9.3))
       '@intentic/ext-automations': file:_extensions/automations(@opentelemetry/api@1.9.1)(vue@3.5.40(typescript@5.9.3))
       '@intentic/ext-git-history': file:_extensions/git-history(@opentelemetry/api@1.9.1)(vue@3.5.40(typescript@5.9.3))
+      '@intentic/ext-onlyoffice': file:_extensions/onlyoffice(@opentelemetry/api@1.9.1)(vue@3.5.40(typescript@5.9.3))
       '@intentic/ext-pipelines': file:_extensions/pipelines(@opentelemetry/api@1.9.1)(vue@3.5.40(typescript@5.9.3))
       '@intentic/ext-preview': file:_extensions/preview(@opentelemetry/api@1.9.1)(vue@3.5.40(typescript@5.9.3))
       '@intentic/ext-projects': file:_extensions/projects(@opentelemetry/api@1.9.1)(vue@3.5.40(typescript@5.9.3))
@@ -14941,13 +14895,14 @@ snapshots:
       '@xterm/addon-web-links': 0.12.0
       '@xterm/addon-webgl': 0.19.0
       '@xterm/xterm': 6.0.0
-      better-auth: 1.6.25(@opentelemetry/api@1.9.1)(@prisma/client@7.9.1(prisma@7.9.1(@types/node@24.13.2)(@types/react@19.3.0)(magicast@0.5.5)(react-dom@19.3.0(react@19.2.8))(react@19.2.8)(typescript@5.9.3))(typescript@5.9.3))(mysql2@3.24.3(@types/node@24.13.2))(pg@8.22.0)(prisma@7.9.1(@types/node@24.13.2)(@types/react@19.3.0)(magicast@0.5.5)(react-dom@19.3.0(react@19.2.8))(react@19.2.8)(typescript@5.9.3))(react-dom@19.3.0(react@19.2.8))(react@19.2.8)(vitest@4.1.10(@opentelemetry/api@1.9.1)(@types/node@24.13.2)(jsdom@30.0.1(@noble/hashes@2.4.0))(vite@8.3.0(@types/node@24.13.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.1)))(vue@3.5.40(typescript@5.9.3))
+      better-auth: 1.6.25(@opentelemetry/api@1.9.1)(@prisma/client@7.9.1(prisma@7.9.1(@types/node@24.13.2)(@types/react@19.3.0)(magicast@0.5.5)(react-dom@19.3.0(react@19.2.8))(react@19.2.8)(typescript@5.9.3))(typescript@5.9.3))(mysql2@3.24.3(@types/node@24.13.2))(pg@8.22.0)(prisma@7.9.1(@types/node@24.13.2)(@types/react@19.3.0)(magicast@0.5.5)(react-dom@19.3.0(react@19.2.8))(react@19.2.8)(typescript@5.9.3))(react-dom@19.3.0(react@19.2.8))(react@19.2.8)(vitest@4.1.10(@opentelemetry/api@1.9.1)(@types/node@24.13.2)(jsdom@30.0.1(@noble/hashes@2.4.0))(vite@8.2.0(@types/node@24.13.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.1)))(vue@3.5.40(typescript@5.9.3))
       idb-keyval: 6.3.0
       monaco-editor-core: 0.55.1(patch_hash=f43544ed76acfd0e96e3029a7cc969fbf8a832d4168f015cde90f0b150a93703)
       posthog-js: 1.409.5
       primevue: 4.5.5(patch_hash=df5c12d98e45d34b51bc87bbe7cb90dc7f3960744e435acdba0ea9c474c89a68)(vue@3.5.40(typescript@5.9.3))
       tslib: 2.8.1
       vue: 3.5.40(typescript@5.9.3)
+      vue-i18n: 11.4.12(vue@3.5.40(typescript@5.9.3))
       vue-router: 5.2.0(@vue/compiler-sfc@3.5.42)(esbuild@0.28.2)(rolldown@1.2.8)(vite@8.2.0(@types/node@24.13.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.1))(vue@3.5.40(typescript@5.9.3))
       zod: 4.5.4
     transitivePeerDependencies:
@@ -14988,7 +14943,7 @@ snapshots:
       - vitest
       - webpack
 
-  '@intentic/web@file:_editor/web(@opentelemetry/api@1.9.1)(@prisma/client@7.9.1(prisma@7.9.1(@types/node@24.13.2)(@types/react@19.3.0)(magicast@0.5.5)(typescript@5.9.3))(typescript@5.9.3))(@vue/compiler-sfc@3.5.42)(esbuild@0.28.2)(prisma@7.9.1(@types/node@24.13.2)(@types/react@19.3.0)(magicast@0.5.5)(typescript@5.9.3))(rolldown@1.2.8)(typescript@5.9.3)(vite@8.2.0(@types/node@24.13.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.1))(vitest@4.1.10(@opentelemetry/api@1.9.1)(@types/node@24.13.2)(jsdom@30.0.1(@noble/hashes@2.4.0))(vite@8.3.0(@types/node@24.13.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.1)))':
+  '@intentic/web@file:_editor/web(@opentelemetry/api@1.9.1)(@prisma/client@7.9.1(prisma@7.9.1(@types/node@24.13.2)(@types/react@19.3.0)(magicast@0.5.5)(typescript@5.9.3))(typescript@5.9.3))(@vue/compiler-sfc@3.5.42)(esbuild@0.28.2)(prisma@7.9.1(@types/node@24.13.2)(@types/react@19.3.0)(magicast@0.5.5)(typescript@5.9.3))(rolldown@1.2.8)(typescript@5.9.3)(vite@8.2.0(@types/node@24.13.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.1))(vitest@4.1.10(@opentelemetry/api@1.9.1)(@types/node@24.13.2)(jsdom@30.0.1(@noble/hashes@2.4.0))(vite@8.2.0(@types/node@24.13.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.1)))':
     dependencies:
       '@intentic/api-contract': file:_shared/api-contract(@opentelemetry/api@1.9.1)
       '@intentic/base': file:_tools/base
@@ -15000,6 +14955,7 @@ snapshots:
       '@intentic/ext-approvals': file:_extensions/approvals(@opentelemetry/api@1.9.1)(vue@3.5.40(typescript@5.9.3))
       '@intentic/ext-automations': file:_extensions/automations(@opentelemetry/api@1.9.1)(vue@3.5.40(typescript@5.9.3))
       '@intentic/ext-git-history': file:_extensions/git-history(@opentelemetry/api@1.9.1)(vue@3.5.40(typescript@5.9.3))
+      '@intentic/ext-onlyoffice': file:_extensions/onlyoffice(@opentelemetry/api@1.9.1)(vue@3.5.40(typescript@5.9.3))
       '@intentic/ext-pipelines': file:_extensions/pipelines(@opentelemetry/api@1.9.1)(vue@3.5.40(typescript@5.9.3))
       '@intentic/ext-preview': file:_extensions/preview(@opentelemetry/api@1.9.1)(vue@3.5.40(typescript@5.9.3))
       '@intentic/ext-projects': file:_extensions/projects(@opentelemetry/api@1.9.1)(vue@3.5.40(typescript@5.9.3))
@@ -15027,13 +14983,14 @@ snapshots:
       '@xterm/addon-web-links': 0.12.0
       '@xterm/addon-webgl': 0.19.0
       '@xterm/xterm': 6.0.0
-      better-auth: 1.6.25(@opentelemetry/api@1.9.1)(@prisma/client@7.9.1(prisma@7.9.1(@types/node@24.13.2)(@types/react@19.3.0)(magicast@0.5.5)(typescript@5.9.3))(typescript@5.9.3))(prisma@7.9.1(@types/node@24.13.2)(@types/react@19.3.0)(magicast@0.5.5)(typescript@5.9.3))(vitest@4.1.10(@opentelemetry/api@1.9.1)(@types/node@24.13.2)(jsdom@30.0.1(@noble/hashes@2.4.0))(vite@8.3.0(@types/node@24.13.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.1)))(vue@3.5.40(typescript@5.9.3))
+      better-auth: 1.6.25(@opentelemetry/api@1.9.1)(@prisma/client@7.9.1(prisma@7.9.1(@types/node@24.13.2)(@types/react@19.3.0)(magicast@0.5.5)(typescript@5.9.3))(typescript@5.9.3))(prisma@7.9.1(@types/node@24.13.2)(@types/react@19.3.0)(magicast@0.5.5)(typescript@5.9.3))(vitest@4.1.10(@opentelemetry/api@1.9.1)(@types/node@24.13.2)(jsdom@30.0.1(@noble/hashes@2.4.0))(vite@8.2.0(@types/node@24.13.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.1)))(vue@3.5.40(typescript@5.9.3))
       idb-keyval: 6.3.0
       monaco-editor-core: 0.55.1(patch_hash=f43544ed76acfd0e96e3029a7cc969fbf8a832d4168f015cde90f0b150a93703)
       posthog-js: 1.409.5
       primevue: 4.5.5(patch_hash=df5c12d98e45d34b51bc87bbe7cb90dc7f3960744e435acdba0ea9c474c89a68)(vue@3.5.40(typescript@5.9.3))
       tslib: 2.8.1
       vue: 3.5.40(typescript@5.9.3)
+      vue-i18n: 11.4.12(vue@3.5.40(typescript@5.9.3))
       vue-router: 5.2.0(@vue/compiler-sfc@3.5.42)(esbuild@0.28.2)(rolldown@1.2.8)(vite@8.2.0(@types/node@24.13.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.1))(vue@3.5.40(typescript@5.9.3))
       zod: 4.5.4
     transitivePeerDependencies:
@@ -15305,38 +15262,38 @@ snapshots:
     dependencies:
       '@octokit/openapi-types': 29.0.1
 
-  '@openai/codex-sdk@0.147.0':
+  '@openai/codex-sdk@0.155.0':
     dependencies:
-      '@openai/codex': 0.147.0
+      '@openai/codex': 0.155.0
 
-  '@openai/codex@0.147.0':
+  '@openai/codex@0.155.0':
     optionalDependencies:
-      '@openai/codex-darwin-arm64': '@openai/codex@0.147.0-darwin-arm64'
-      '@openai/codex-darwin-x64': '@openai/codex@0.147.0-darwin-x64'
-      '@openai/codex-linux-arm64': '@openai/codex@0.147.0-linux-arm64'
-      '@openai/codex-linux-x64': '@openai/codex@0.147.0-linux-x64'
-      '@openai/codex-win32-arm64': '@openai/codex@0.147.0-win32-arm64'
-      '@openai/codex-win32-x64': '@openai/codex@0.147.0-win32-x64'
+      '@openai/codex-darwin-arm64': '@openai/codex@0.155.0-darwin-arm64'
+      '@openai/codex-darwin-x64': '@openai/codex@0.155.0-darwin-x64'
+      '@openai/codex-linux-arm64': '@openai/codex@0.155.0-linux-arm64'
+      '@openai/codex-linux-x64': '@openai/codex@0.155.0-linux-x64'
+      '@openai/codex-win32-arm64': '@openai/codex@0.155.0-win32-arm64'
+      '@openai/codex-win32-x64': '@openai/codex@0.155.0-win32-x64'
 
-  '@openai/codex@0.147.0-darwin-arm64':
+  '@openai/codex@0.155.0-darwin-arm64':
     optional: true
 
-  '@openai/codex@0.147.0-darwin-x64':
+  '@openai/codex@0.155.0-darwin-x64':
     optional: true
 
-  '@openai/codex@0.147.0-linux-arm64':
+  '@openai/codex@0.155.0-linux-arm64':
     optional: true
 
-  '@openai/codex@0.147.0-linux-x64':
+  '@openai/codex@0.155.0-linux-x64':
     optional: true
 
-  '@openai/codex@0.147.0-win32-arm64':
+  '@openai/codex@0.155.0-win32-arm64':
     optional: true
 
-  '@openai/codex@0.147.0-win32-x64':
+  '@openai/codex@0.155.0-win32-x64':
     optional: true
 
-  '@opencode-ai/sdk@1.18.29':
+  '@opencode-ai/sdk@1.18.31':
     dependencies:
       cross-spawn: 7.0.6
 
@@ -16419,13 +16376,13 @@ snapshots:
 
   '@slack/logger@5.0.0':
     dependencies:
-      '@types/node': 24.13.2
+      '@types/node': 24.13.5
 
   '@slack/socket-mode@3.0.0(undici@7.29.1)':
     dependencies:
       '@slack/logger': 5.0.0
       '@slack/web-api': 8.0.0
-      '@types/node': 24.13.2
+      '@types/node': 24.13.5
       eventemitter3: 5.0.4
       undici: 7.29.1
 
@@ -16435,7 +16392,7 @@ snapshots:
     dependencies:
       '@slack/logger': 5.0.0
       '@slack/types': 3.1.0
-      '@types/node': 24.13.2
+      '@types/node': 24.13.5
       '@types/retry': 0.12.0
       eventemitter3: 5.0.4
       p-queue: 6.6.2
@@ -16835,7 +16792,7 @@ snapshots:
 
   '@types/d3-interpolate@3.0.1':
     dependencies:
-      '@types/d3-color': 3.1.0
+      '@types/d3-color': 3.1.3
 
   '@types/d3-interpolate@3.0.4':
     dependencies:
@@ -16853,7 +16810,7 @@ snapshots:
 
   '@types/d3-scale@4.0.2':
     dependencies:
-      '@types/d3-time': 3.0.0
+      '@types/d3-time': 3.0.4
 
   '@types/d3-scale@4.0.9':
     dependencies:
@@ -16925,13 +16882,13 @@ snapshots:
 
   '@types/docker-modem@3.0.6':
     dependencies:
-      '@types/node': 24.13.2
+      '@types/node': 24.13.5
       '@types/ssh2': 1.15.5
 
   '@types/dockerode@4.0.1':
     dependencies:
       '@types/docker-modem': 3.0.6
-      '@types/node': 24.13.2
+      '@types/node': 24.13.5
       '@types/ssh2': 1.15.5
 
   '@types/estree-jsx@1.0.5':
@@ -16954,7 +16911,7 @@ snapshots:
 
   '@types/mailparser@3.4.6':
     dependencies:
-      '@types/node': 24.13.2
+      '@types/node': 24.13.5
       iconv-lite: 0.6.3
 
   '@types/mdast@4.0.4':
@@ -16971,10 +16928,6 @@ snapshots:
     dependencies:
       undici-types: 5.26.5
 
-  '@types/node@22.20.3':
-    dependencies:
-      undici-types: 6.21.0
-
   '@types/node@24.13.2':
     dependencies:
       undici-types: 7.18.2
@@ -16987,7 +16940,7 @@ snapshots:
 
   '@types/pg@8.20.0':
     dependencies:
-      '@types/node': 22.20.3
+      '@types/node': 24.13.5
       pg-protocol: 1.16.0
       pg-types: 2.2.0
 
@@ -17003,11 +16956,11 @@ snapshots:
 
   '@types/ssh2-streams@0.1.13':
     dependencies:
-      '@types/node': 24.13.2
+      '@types/node': 24.13.5
 
   '@types/ssh2@0.5.52':
     dependencies:
-      '@types/node': 24.13.2
+      '@types/node': 24.13.5
       '@types/ssh2-streams': 0.1.13
 
   '@types/ssh2@1.15.5':
@@ -17016,7 +16969,7 @@ snapshots:
 
   '@types/tar-stream@3.1.4':
     dependencies:
-      '@types/node': 24.13.2
+      '@types/node': 24.13.5
 
   '@types/trusted-types@2.0.7':
     optional: true
@@ -17027,11 +16980,11 @@ snapshots:
 
   '@types/web-push@3.6.4':
     dependencies:
-      '@types/node': 24.13.2
+      '@types/node': 24.13.5
 
   '@types/ws@8.18.1':
     dependencies:
-      '@types/node': 24.13.2
+      '@types/node': 24.13.5
 
   '@typescript/native-preview-darwin-arm64@7.0.0-dev.20260707.2':
     optional: true
@@ -17656,97 +17609,6 @@ snapshots:
       - '@noble/hashes'
       - canvas
 
-  astro@7.3.2(@emnapi/core@1.11.1)(@emnapi/runtime@1.11.1)(@types/node@24.13.2)(idb-keyval@6.3.0)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.1):
-    dependencies:
-      '@astrojs/compiler-rs': 0.4.1(@emnapi/core@1.11.1)(@emnapi/runtime@1.11.1)
-      '@astrojs/internal-helpers': 0.11.0
-      '@astrojs/markdown-satteri': 0.4.1
-      '@astrojs/telemetry': 3.3.3
-      '@capsizecss/unpack': 4.0.1
-      '@clack/prompts': 1.8.1
-      '@oslojs/encoding': 1.1.0
-      am-i-vibing: 0.4.0
-      aria-query: 5.3.2
-      axobject-query: 4.1.0
-      ci-info: 4.4.0
-      clsx: 2.1.1
-      common-ancestor-path: 2.0.0
-      cookie: 2.0.1
-      devalue: 5.9.2
-      diff: 9.0.0
-      dset: 3.1.4
-      es-module-lexer: 2.3.2
-      esbuild: 0.28.2
-      find-proc: 0.1.0
-      flattie: 1.1.1
-      fontace: 0.4.1
-      get-tsconfig: 5.0.0-beta.4
-      github-slugger: 2.0.0
-      html-escaper: 3.0.3
-      http-cache-semantics: 4.2.0
-      js-yaml: 4.3.2
-      jsonc-parser: 3.3.1
-      magic-string: 1.4.1
-      magicast: 0.5.5
-      mrmime: 2.0.1
-      neotraverse: 1.0.1
-      obug: 2.2.1
-      p-limit: 7.3.2
-      p-queue: 9.3.3
-      package-manager-detector: 1.8.0
-      piccolore: 0.1.3
-      picomatch: 4.0.7
-      semver: 7.8.5
-      shiki: 4.4.3
-      smol-toml: 1.8.0
-      svgo: 4.1.0
-      tinyclip: 0.1.15
-      tinyexec: 1.3.1
-      tinyglobby: 0.2.17
-      ultrahtml: 1.7.0
-      unifont: 0.7.5
-      unstorage: 1.17.5(idb-keyval@6.3.0)
-      vite: 8.3.0(@types/node@24.13.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.1)
-      vitefu: 1.1.3(vite@8.3.0(@types/node@24.13.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.1))
-      xxhash-wasm: 1.1.0
-      yargs-parser: 22.0.0
-      zod: 4.5.4
-    optionalDependencies:
-      sharp: 0.35.4(@types/node@24.13.2)
-    transitivePeerDependencies:
-      - '@azure/app-configuration'
-      - '@azure/cosmos'
-      - '@azure/data-tables'
-      - '@azure/identity'
-      - '@azure/keyvault-secrets'
-      - '@azure/storage-blob'
-      - '@capacitor/preferences'
-      - '@deno/kv'
-      - '@emnapi/core'
-      - '@emnapi/runtime'
-      - '@netlify/blobs'
-      - '@planetscale/database'
-      - '@types/node'
-      - '@upstash/redis'
-      - '@vercel/blob'
-      - '@vercel/functions'
-      - '@vercel/kv'
-      - '@vitejs/devtools'
-      - aws4fetch
-      - db0
-      - idb-keyval
-      - ioredis
-      - jiti
-      - less
-      - sass
-      - sass-embedded
-      - stylus
-      - sugarss
-      - terser
-      - tsx
-      - uploadthing
-      - yaml
-
   astro@7.3.2(@emnapi/core@1.11.2)(@emnapi/runtime@1.11.3)(@types/node@24.13.2)(idb-keyval@6.3.0)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.1):
     dependencies:
       '@astrojs/compiler-rs': 0.4.1(@emnapi/core@1.11.2)(@emnapi/runtime@1.11.3)
@@ -17986,6 +17848,38 @@ snapshots:
       - '@cloudflare/workers-types'
       - '@opentelemetry/api'
 
+  better-auth@1.6.25(@opentelemetry/api@1.9.1)(@prisma/client@7.9.1(prisma@7.9.1(@types/node@24.13.2)(@types/react@19.3.0)(magicast@0.5.5)(react-dom@19.3.0(react@19.2.8))(react@19.2.8)(typescript@5.9.3))(typescript@5.9.3))(mysql2@3.24.3(@types/node@24.13.2))(pg@8.22.0)(prisma@7.9.1(@types/node@24.13.2)(@types/react@19.3.0)(magicast@0.5.5)(react-dom@19.3.0(react@19.2.8))(react@19.2.8)(typescript@5.9.3))(react-dom@19.3.0(react@19.2.8))(react@19.2.8)(vitest@4.1.10(@opentelemetry/api@1.9.1)(@types/node@24.13.2)(jsdom@30.0.1(@noble/hashes@2.4.0))(vite@8.2.0(@types/node@24.13.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.1)))(vue@3.5.40(typescript@5.9.3)):
+    dependencies:
+      '@better-auth/core': 1.6.25(@better-auth/utils@0.4.2)(@better-fetch/fetch@1.3.1)(@opentelemetry/api@1.9.1)(better-call@1.3.7(zod@4.5.4))(jose@6.2.12)(kysely@0.29.6)(nanostores@1.5.3)
+      '@better-auth/drizzle-adapter': 1.6.25(@better-auth/core@1.6.25(@better-auth/utils@0.4.2)(@better-fetch/fetch@1.3.1)(@opentelemetry/api@1.9.1)(better-call@1.3.7(zod@4.5.4))(jose@6.2.12)(kysely@0.29.6)(nanostores@1.5.3))(@better-auth/utils@0.4.2)
+      '@better-auth/kysely-adapter': 1.6.25(@better-auth/core@1.6.25(@better-auth/utils@0.4.2)(@better-fetch/fetch@1.3.1)(@opentelemetry/api@1.9.1)(better-call@1.3.7(zod@4.5.4))(jose@6.2.12)(kysely@0.29.6)(nanostores@1.5.3))(@better-auth/utils@0.4.2)(kysely@0.29.6)
+      '@better-auth/memory-adapter': 1.6.25(@better-auth/core@1.6.25(@better-auth/utils@0.4.2)(@better-fetch/fetch@1.3.1)(@opentelemetry/api@1.9.1)(better-call@1.3.7(zod@4.5.4))(jose@6.2.12)(kysely@0.29.6)(nanostores@1.5.3))(@better-auth/utils@0.4.2)
+      '@better-auth/mongo-adapter': 1.6.25(@better-auth/core@1.6.25(@better-auth/utils@0.4.2)(@better-fetch/fetch@1.3.1)(@opentelemetry/api@1.9.1)(better-call@1.3.7(zod@4.5.4))(jose@6.2.12)(kysely@0.29.6)(nanostores@1.5.3))(@better-auth/utils@0.4.2)
+      '@better-auth/prisma-adapter': 1.6.25(@better-auth/core@1.6.25(@better-auth/utils@0.4.2)(@better-fetch/fetch@1.3.1)(@opentelemetry/api@1.9.1)(better-call@1.3.7(zod@4.5.4))(jose@6.2.12)(kysely@0.29.6)(nanostores@1.5.3))(@better-auth/utils@0.4.2)(@prisma/client@7.9.1(prisma@7.9.1(@types/node@24.13.2)(@types/react@19.3.0)(magicast@0.5.5)(typescript@5.9.3))(typescript@5.9.3))(prisma@7.9.1(@types/node@24.13.2)(@types/react@19.3.0)(magicast@0.5.5)(typescript@5.9.3))
+      '@better-auth/telemetry': 1.6.25(@better-auth/core@1.6.25(@better-auth/utils@0.4.2)(@better-fetch/fetch@1.3.1)(@opentelemetry/api@1.9.1)(better-call@1.3.7(zod@4.5.4))(jose@6.2.12)(kysely@0.29.6)(nanostores@1.5.3))(@better-auth/utils@0.4.2)(@better-fetch/fetch@1.3.1)
+      '@better-auth/utils': 0.4.2
+      '@better-fetch/fetch': 1.3.1
+      '@noble/ciphers': 2.4.0
+      '@noble/hashes': 2.4.0
+      better-call: 1.3.7(zod@4.5.4)
+      defu: 6.1.7
+      jose: 6.2.12
+      kysely: 0.29.6
+      nanostores: 1.5.3
+      zod: 4.5.4
+    optionalDependencies:
+      '@prisma/client': 7.9.1(prisma@7.9.1(@types/node@24.13.2)(@types/react@19.3.0)(magicast@0.5.5)(typescript@5.9.3))(typescript@5.9.3)
+      mysql2: 3.24.3(@types/node@24.13.2)
+      pg: 8.22.0
+      prisma: 7.9.1(@types/node@24.13.2)(@types/react@19.3.0)(magicast@0.5.5)(react-dom@19.3.0(react@19.2.8))(react@19.2.8)(typescript@5.9.3)
+      react: 19.2.8
+      react-dom: 19.3.0(react@19.2.8)
+      vitest: 4.1.10(@opentelemetry/api@1.9.1)(@types/node@24.13.2)(jsdom@30.0.1(@noble/hashes@2.4.0))(vite@8.2.0(@types/node@24.13.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.1))
+      vue: 3.5.40(typescript@5.9.3)
+    transitivePeerDependencies:
+      - '@cloudflare/workers-types'
+      - '@opentelemetry/api'
+
   better-auth@1.6.25(@opentelemetry/api@1.9.1)(@prisma/client@7.9.1(prisma@7.9.1(@types/node@24.13.2)(@types/react@19.3.0)(magicast@0.5.5)(react-dom@19.3.0(react@19.2.8))(react@19.2.8)(typescript@5.9.3))(typescript@5.9.3))(mysql2@3.24.3(@types/node@24.13.2))(pg@8.22.0)(prisma@7.9.1(@types/node@24.13.2)(@types/react@19.3.0)(magicast@0.5.5)(react-dom@19.3.0(react@19.2.8))(react@19.2.8)(typescript@5.9.3))(react-dom@19.3.0(react@19.2.8))(react@19.2.8)(vitest@4.1.10(@opentelemetry/api@1.9.1)(@types/node@24.13.2)(jsdom@30.0.1(@noble/hashes@2.4.0))(vite@8.3.0(@types/node@24.13.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.1)))(vue@3.5.40(typescript@5.9.3)):
     dependencies:
       '@better-auth/core': 1.6.25(@better-auth/utils@0.4.2)(@better-fetch/fetch@1.3.1)(@opentelemetry/api@1.9.1)(better-call@1.3.7(zod@4.5.4))(jose@6.2.12)(kysely@0.29.6)(nanostores@1.5.3)
@@ -18018,7 +17912,7 @@ snapshots:
       - '@cloudflare/workers-types'
       - '@opentelemetry/api'
 
-  better-auth@1.6.25(@opentelemetry/api@1.9.1)(@prisma/client@7.9.1(prisma@7.9.1(@types/node@24.13.2)(@types/react@19.3.0)(magicast@0.5.5)(typescript@5.9.3))(typescript@5.9.3))(prisma@7.9.1(@types/node@24.13.2)(@types/react@19.3.0)(magicast@0.5.5)(typescript@5.9.3))(vitest@4.1.10(@opentelemetry/api@1.9.1)(@types/node@24.13.2)(jsdom@30.0.1(@noble/hashes@2.4.0))(vite@8.3.0(@types/node@24.13.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.1)))(vue@3.5.40(typescript@5.9.3)):
+  better-auth@1.6.25(@opentelemetry/api@1.9.1)(@prisma/client@7.9.1(prisma@7.9.1(@types/node@24.13.2)(@types/react@19.3.0)(magicast@0.5.5)(typescript@5.9.3))(typescript@5.9.3))(prisma@7.9.1(@types/node@24.13.2)(@types/react@19.3.0)(magicast@0.5.5)(typescript@5.9.3))(vitest@4.1.10(@opentelemetry/api@1.9.1)(@types/node@24.13.2)(jsdom@30.0.1(@noble/hashes@2.4.0))(vite@8.2.0(@types/node@24.13.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.1)))(vue@3.5.40(typescript@5.9.3)):
     dependencies:
       '@better-auth/core': 1.6.25(@better-auth/utils@0.4.2)(@better-fetch/fetch@1.3.1)(@opentelemetry/api@1.9.1)(better-call@1.3.7(zod@4.5.4))(jose@6.2.12)(kysely@0.29.6)(nanostores@1.5.3)
       '@better-auth/drizzle-adapter': 1.6.25(@better-auth/core@1.6.25(@better-auth/utils@0.4.2)(@better-fetch/fetch@1.3.1)(@opentelemetry/api@1.9.1)(better-call@1.3.7(zod@4.5.4))(jose@6.2.12)(kysely@0.29.6)(nanostores@1.5.3))(@better-auth/utils@0.4.2)
@@ -18040,7 +17934,7 @@ snapshots:
     optionalDependencies:
       '@prisma/client': 7.9.1(prisma@7.9.1(@types/node@24.13.2)(@types/react@19.3.0)(magicast@0.5.5)(typescript@5.9.3))(typescript@5.9.3)
       prisma: 7.9.1(@types/node@24.13.2)(@types/react@19.3.0)(magicast@0.5.5)(react-dom@19.3.0(react@19.2.8))(react@19.2.8)(typescript@5.9.3)
-      vitest: 4.1.10(@opentelemetry/api@1.9.1)(@types/node@24.13.2)(jsdom@30.0.1(@noble/hashes@2.4.0))(vite@8.3.0(@types/node@24.13.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.1))
+      vitest: 4.1.10(@opentelemetry/api@1.9.1)(@types/node@24.13.2)(jsdom@30.0.1(@noble/hashes@2.4.0))(vite@8.2.0(@types/node@24.13.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.1))
       vue: 3.5.40(typescript@5.9.3)
     transitivePeerDependencies:
       - '@cloudflare/workers-types'
@@ -18154,7 +18048,7 @@ snapshots:
 
   bun-types@1.4.0:
     dependencies:
-      '@types/node': 22.20.3
+      '@types/node': 24.13.5
 
   bun@1.4.0-canary.20260903.1:
     optionalDependencies:
@@ -18844,7 +18738,7 @@ snapshots:
 
   docker-compose@1.4.2:
     dependencies:
-      yaml: 2.9.0
+      yaml: 2.9.1
 
   docker-modem@5.0.7(supports-color@10.2.2):
     dependencies:
@@ -21000,28 +20894,28 @@ snapshots:
       extend: 3.0.2
       postcss: 8.5.25
 
-  postcss-import@15.1.0(postcss@8.5.25):
+  postcss-import@15.1.0(postcss@8.5.28):
     dependencies:
-      postcss: 8.5.25
+      postcss: 8.5.28
       postcss-value-parser: 4.2.0
       read-cache: 1.0.2
       resolve: 1.22.12
 
-  postcss-js@4.1.0(postcss@8.5.25):
+  postcss-js@4.1.0(postcss@8.5.28):
     dependencies:
       camelcase-css: 2.0.1
-      postcss: 8.5.25
+      postcss: 8.5.28
 
-  postcss-load-config@4.0.2(postcss@8.5.25):
+  postcss-load-config@4.0.2(postcss@8.5.28):
     dependencies:
       lilconfig: 3.1.3
       yaml: 2.9.1
     optionalDependencies:
-      postcss: 8.5.25
+      postcss: 8.5.28
 
-  postcss-nested@6.2.0(postcss@8.5.25):
+  postcss-nested@6.2.0(postcss@8.5.28):
     dependencies:
-      postcss: 8.5.25
+      postcss: 8.5.28
       postcss-selector-parser: 6.1.4
 
   postcss-selector-parser@6.1.4:
@@ -21150,7 +21044,7 @@ snapshots:
       '@protobufjs/path': 1.1.2
       '@protobufjs/pool': 1.1.0
       '@protobufjs/utf8': 1.1.2
-      '@types/node': 24.13.2
+      '@types/node': 24.13.5
       long: 5.3.2
 
   proxy-addr@2.0.8:
@@ -21919,11 +21813,11 @@ snapshots:
       normalize-path: 3.0.0
       object-hash: 3.0.0
       picocolors: 1.1.1
-      postcss: 8.5.25
-      postcss-import: 15.1.0(postcss@8.5.25)
-      postcss-js: 4.1.0(postcss@8.5.25)
-      postcss-load-config: 4.0.2(postcss@8.5.25)
-      postcss-nested: 6.2.0(postcss@8.5.25)
+      postcss: 8.5.28
+      postcss-import: 15.1.0(postcss@8.5.28)
+      postcss-js: 4.1.0(postcss@8.5.28)
+      postcss-load-config: 4.0.2(postcss@8.5.28)
+      postcss-nested: 6.2.0(postcss@8.5.28)
       postcss-selector-parser: 6.1.4
       postcss-value-parser: 4.2.0
       resolve: 1.22.12
@@ -22200,8 +22094,6 @@ snapshots:
   underscore@1.13.8: {}
 
   undici-types@5.26.5: {}
-
-  undici-types@6.21.0: {}
 
   undici-types@7.18.2: {}
 
