@@ -2,11 +2,11 @@ import { join } from "node:path";
 import { type DiffSourceQuery, DiffSourceQuerySchema } from "@intentic/sandbox-contract";
 import { gitBytes } from "@intentic/scaffold";
 import type { Services } from "../../composition.js";
-
-export type DiffLocatorDeps = Pick<Services, "files" | "workspace" | "agents" | "agentWorktrees" | "history">;
 import { isValidRepoId } from "../../workspace/layout/repo-discovery.js";
 import { MAX_RAW_BYTES } from "../../workspace/files/workspace-files-download.js";
 import { isControlPlanePath, isReviewableStatePath, resolveWithin } from "../../workspace/files/workspace-files-paths.js";
+
+export type DiffLocatorDeps = Pick<Services, "files" | "workspace" | "agents" | "agentWorktrees" | "history">;
 
 // Where one side of a named diff lives, and its bytes: the one resolver behind every route that answers a diff with
 // something other than its text (bytes on /diff/raw, derived text on /diff/derived). Each source mirrors the pairing
