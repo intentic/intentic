@@ -53,8 +53,8 @@ A sentence with markup inside it stays ONE message, with the markup as slots —
 translator cannot reorder:
 
 ```html
-<i18n-t keypath="sandbox.repoChecksInfo.moments" tag="p" scope="global">
-    <template #when><span class="font-mono">when</span></template>
+<i18n-t keypath="area.file.seeDocsAt" tag="p" scope="global">
+    <template #link><a :href="url">{{ t(`area.file.docs`) }}</a></template>
 </i18n-t>
 ```
 

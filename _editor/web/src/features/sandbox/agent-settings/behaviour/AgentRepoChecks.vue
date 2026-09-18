@@ -4,7 +4,6 @@ import { computed } from "vue";
 import { useRepoChecks } from "../../environment/useRepoChecks";
 import { useSandboxOutline } from "../../overview/useSandboxOutline";
 import RepoCheckRow from "./RepoCheckRow.vue";
-import RepoChecksInfo from "./RepoChecksInfo.vue";
 import { useT } from "@intentic/ui/i18n";
 
 const t = useT();
@@ -20,8 +19,6 @@ const waiting = computed(() => (repos.value ?? []).filter((entry) => !entry.adop
 
 <template>
     <RowGroup :label="t(`sandbox.agentRepoChecks.repositoryChecks`)">
-        <template #info><RepoChecksInfo /></template>
-
         <div v-if="repos === undefined" role="status" aria-busy="true">
             <template v-if="outline">
                 <span class="sr-only">{{ t(`sandbox.agentRepoChecks.readingWhatWorkspacesRepositories`) }}</span>

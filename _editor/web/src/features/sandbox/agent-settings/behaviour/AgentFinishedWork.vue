@@ -4,7 +4,6 @@ import ToggleSwitch from "primevue/toggleswitch";
 import { useSandboxSettings } from "../../overview/useSandboxSettings";
 import { autoLandRule, autoVersionRule, NAMED_RULES } from "../../environment/rules";
 import { useRules } from "../../environment/useRules";
-import FinishedWorkInfo from "./FinishedWorkInfo.vue";
 import { useT } from "@intentic/ui/i18n";
 import { computed } from "vue";
 
@@ -50,8 +49,6 @@ const RETENTION_OPTIONS = computed(() => [
 
 <template>
     <RowGroup :label="t(`sandbox.agentFinishedWork.finishedWork`)">
-        <template #info><FinishedWorkInfo /></template>
-
         <!-- Daemon-side, not a browser preference, since automation-opened agents (Discord, webhooks, email) finish with no browser present. -->
         <Row
             icon="download"

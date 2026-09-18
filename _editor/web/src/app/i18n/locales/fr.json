@@ -2334,29 +2334,6 @@
             "removed": "Removed {manifest}.",
             "runningNotListed": "Running but not listed"
         },
-        "finishedWorkInfo": {
-            "agentFinishes": "Agent finishes",
-            "agentWorksOnOwn": "An agent works on its own branch, in its own checkout. Landing is the step that brings that work back to your workspace as uncommitted changes: the same state as if you'd made the edits yourself, ready to read, amend or throw away.",
-            "archiveFinishedAgents": "Archive finished agents",
-            "archived": "Archived",
-            "branchDiffWholeConversation": "Its branch, its diff, and the whole conversation: restorable any time.",
-            "cardNothingTouchesWorkspace": "card. Nothing touches your workspace until you press it, from the board or the review.",
-            "checkoutRepoSpotOn": "Its checkout of your repo, and its spot on the board.",
-            "cleanFinishAppliesStraight": "A clean finish applies straight away. You come back to the work already in your workspace, and nothing is waiting on you to notice it.",
-            "everyAgentWorksIn": "Every agent works in its own checkout of your repository, so two can never trip over each other's edits. That checkout is real disk, and it stays put after the agent stops: as does its card on the board.",
-            "everyCleanFinishBecomes": "Every clean finish becomes a",
-            "finishedWork": "Finished work",
-            "kept": "Kept",
-            "landFinishedWorkAutomatically": "Land finished work automatically",
-            "offDefault": "Off: the default",
-            "on": "On",
-            "quietChosenTime": "Quiet for your chosen time",
-            "readyToLand": "Ready to land",
-            "released": "Released",
-            "sandboxWideDefaultRather": "It's a sandbox-wide default rather than a browser preference because agents started by an automation: Discord, a webhook, a scheduled wake-up: finish their turns with no browser in the room. Any single agent can disagree with it from the hold toggle on its review panel; agents without an opinion follow this wherever it points next. Work that ends with a conflict or a failure never lands by itself.",
-            "talkingToAgentResets": "Talking to an agent resets its clock, so one you're still using never ages out from under you. The sweep runs when the sandbox starts and once an hour after. \"Never\" keeps every card, and one checkout per agent: indefinitely.",
-            "whatHappensAfterAgent": "What happens after an agent stops: to its work, and to the agent."
-        },
         "folderPicker": {
             "change": "Change",
             "choose": "Choose",
@@ -2600,17 +2577,6 @@
             "declaredNotRunningNothing": "Declared, not running. Nothing a repository asks for runs until you say so.",
             "onlyTouching": "only when touching",
             "runChecksDeclares": "Run the checks {name} declares"
-        },
-        "repoChecksInfo": {
-            "fileInRepositoryCommand": "A file in a repository is a command somebody else may have written, and it would otherwise run on your machine without being read. So nothing declared runs until you switch it on here, and if the declaration changes afterwards it stops until you look again. Git has kept the same rule since the beginning: hooks are never cloned.",
-            "inRepository": "in that repository",
-            "moments": "{when} is {edit} (on each file as it is written, where {file} becomes its path), {turn} (before the assistant finishes) or {push} (before anything leaves the machine). An {editAgain} check runs once per file written, so it has to be one that takes a file. The command runs {there}, so it reads exactly as it would in a terminal there — no {cd} in front of it. Paths are written relative to the repository.",
-            "repositoryChecks": "Repository checks",
-            "repositoryMaySayWhat": "A repository may say what to run. What happens when it fails is yours and stays in your settings: whether work lands, whether a push goes, what an agent may reach for. A repository cannot lower a bar you set.",
-            "repositorySayWhatShould": "A repository can say what should be run on its own code. It goes in the repository, at",
-            "travelsTeammateWhoClones": ", and travels with it: a teammate who clones it gets the same checks, and renaming the script and the check that calls it is one commit.",
-            "whatStaysYours": "What stays yours",
-            "whyToSwitchOn": "Why you have to switch it on"
         },
         "restartWatch": {
             "seeLog": "See the log",
