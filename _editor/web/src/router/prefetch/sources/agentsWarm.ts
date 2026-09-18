@@ -3,7 +3,7 @@ import { router } from "../..";
 import { agentChangesKey, agentFileDiffQuery, fetchAgentChanges } from "../../../features/agents/review/useAgentChanges";
 import { unregistered } from "../../../features/agents/fleet/agentStatus";
 import { useAgents } from "../../../features/agents/fleet/useAgents";
-import { type FleetAgent, windowFinished } from "../../../features/agents/fleet/useAgents-fleet";
+import { type FleetAgent, finishedNeedsAction, windowFinished } from "../../../features/agents/fleet/useAgents-fleet";
 import { agentTranscriptQuery } from "../../../features/chat/transcript/agentTranscript";
 import { useChat } from "../../../features/chat/run/useChat";
 import { queryClient } from "../../../lib/queryPersistence";
@@ -59,7 +59,7 @@ export const agentsWarmSource = (): readonly WarmTask[] => {
     const board = lanes.value;
     // The focused card gets `now`: it's on screen, and finished-window pinning must agree with the lane.
     const focused = active.value.conversationId;
-    const finished = windowFinished(board.finished, focused, (agent) => agent.id).shown;
+    const finished = windowFinished(board.finished, focused, (agent) => agent.id, finishedNeedsAction).shown;
     const cards = [...board.attention, ...board.active, ...finished]
         .filter((agent) => !unregistered(agent.status))
         .slice(0, MAX_CARDS)

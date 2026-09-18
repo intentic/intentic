@@ -35,20 +35,38 @@ export interface FleetAgent extends Omit<AgentSummary, "status"> {
 // fold below it is one press away. The number is small on purpose — the lane is a ledger you skim, not the work.
 export const FINISHED_WINDOW = 6;
 
-// Caps browsing, not existence: the currently open card is never culled even past the window, pinned at the tail
-// and excluded from the hidden count. Shared by both Finished lanes (board and chat list) so they can't disagree.
+// Landed work the workspace no longer holds; the card offers Land again, not a receipt.
+export const finishedNeedsReland = (agent: Pick<FleetAgent, "landedPresence">): boolean =>
+    agent.landedPresence !== undefined && agent.landedPresence.present < agent.landedPresence.landed;
+
+// Every finished card that still owes a press or has words at risk; the window must never fold these away.
+export const finishedNeedsAction = (
+    agent: Pick<FleetAgent, "unsent" | "unfinished" | "status" | "landedPresence">,
+): boolean =>
+    agent.unsent || agent.unfinished !== undefined || agent.status === `ready` || agent.status === `landing` || finishedNeedsReland(agent);
+
+// Caps browsing, not existence: every actionable card stays in the window, receipts fill what is left, and the
+// selected card is pinned at the tail when it would otherwise sit past the fold. Shared by both Finished lanes.
 export const windowFinished = <T>(
     finished: readonly T[],
     selectedId: string | undefined,
     idOf: (entry: T) => string,
+    needsAction: (entry: T) => boolean = () => false,
 ): { shown: T[]; hidden: number } => {
-    const shown = finished.slice(0, FINISHED_WINDOW);
-    const beyond = finished.slice(FINISHED_WINDOW);
-    const pinned = selectedId === undefined ? undefined : beyond.find((entry) => idOf(entry) === selectedId);
-    if (pinned === undefined) {
-        return { shown, hidden: beyond.length };
+    const acting = finished.filter(needsAction);
+    const receipts = finished.filter((entry) => !needsAction(entry));
+    const room = Math.max(FINISHED_WINDOW, acting.length);
+    const shown = [...acting, ...receipts.slice(0, Math.max(0, room - acting.length))];
+    const shownIds = new Set(shown.map(idOf));
+    let hidden = finished.length - shown.length;
+    if (selectedId === undefined || shownIds.has(selectedId)) {
+        return { shown, hidden };
     }
-    return { shown: [...shown, pinned], hidden: beyond.length - 1 };
+    const pinned = finished.find((entry) => idOf(entry) === selectedId);
+    if (pinned === undefined) {
+        return { shown, hidden };
+    }
+    return { shown: [...shown, pinned], hidden: hidden - 1 };
 };
 
 // Built from the stored tab alone, since no daemon row or open tab exists for it; carries its origin sandbox so
@@ -224,6 +242,15 @@ export const canArchive = (agent: Pick<FleetAgent, "status" | "attention" | "arc
 // swap places every tick. The id itself is arbitrary, chosen only to stay the same next frame.
 const byId = (a: FleetAgent, b: FleetAgent): number => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
 
+// One ordering for every Finished lane: what is easiest to lose or miss rises to the top before recency.
+export const compareFinishedLane = (a: FleetAgent, b: FleetAgent): number =>
+    Number(b.unsent) - Number(a.unsent) ||
+    Number(b.unfinished !== undefined) - Number(a.unfinished !== undefined) ||
+    Number(b.status === `ready`) - Number(a.status === `ready`) ||
+    Number(finishedNeedsReland(b)) - Number(finishedNeedsReland(a)) ||
+    b.updatedAt - a.updatedAt ||
+    byId(a, b);
+
 // Splits a flat list into the board's three lanes, factored out of `fleet` so the all-sandboxes board can apply
 // the same rule to a wider list (this fleet plus other boxes' summaries) without duplicating the sort.
 export const laneGroups = (agents: readonly FleetAgent[]): Record<FleetLane, FleetAgent[]> => {
@@ -237,16 +264,7 @@ export const laneGroups = (agents: readonly FleetAgent[]): Record<FleetLane, Fle
             Number(b.status === `draft`) - Number(a.status === `draft`) || (a.startedAt ?? a.updatedAt) - (b.startedAt ?? b.updatedAt) || byId(a, b),
     );
     grouped.attention.sort((a, b) => b.updatedAt - a.updatedAt || byId(a, b));
-    // Unsent first (words at risk of being lost), then unfinished, then ready-to-land, then recency: this lane is
-    // windowed (FINISHED_WINDOW), and pure recency would let a fold push a waiting card out of view.
-    grouped.finished.sort(
-        (a, b) =>
-            Number(b.unsent) - Number(a.unsent) ||
-            Number(b.unfinished !== undefined) - Number(a.unfinished !== undefined) ||
-            Number(b.status === `ready`) - Number(a.status === `ready`) ||
-            b.updatedAt - a.updatedAt ||
-            byId(a, b),
-    );
+    grouped.finished.sort(compareFinishedLane);
     return grouped;
 };
 

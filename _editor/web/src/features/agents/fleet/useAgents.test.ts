@@ -24,7 +24,7 @@ import { useChat } from "../../chat/run/useChat";
 import { useNotifications } from "../../../shell/notifications/notifications";
 import { queryClient } from "../../../lib/queryPersistence";
 import { resetAgents, useAgents } from "./useAgents";
-import { canArchive, FINISHED_WINDOW, type FleetAgent, windowFinished } from "./useAgents-fleet";
+import { canArchive, FINISHED_WINDOW, type FleetAgent, finishedNeedsAction, windowFinished } from "./useAgents-fleet";
 import { auditRoster, resetArchive, setAgents } from "./useAgents-registry";
 
 // The Finished lane's cap, and the one card it may never drop: the board's selection ring points at whatever the
@@ -927,6 +927,65 @@ describe("the finished fold", () => {
         );
 
         expect(useAgents().lanes.value.finished.map((entry) => entry.id)).toEqual([`a1`, `a3`, `a2`, `a0`]);
+    });
+
+    // Fresh ready-to-land sessions must lead landed receipts, or the window reads like a history list and Land now hides below the fold.
+    it("puts ready-to-land sessions ahead of landed receipts regardless of age", () => {
+        const hour = 3_600_000;
+        const now = 100_000_000;
+        setAgents(
+            [
+                landed(`receipt-4h`, now - 4 * hour),
+                { ...landed(`reland-15h`, now - 15 * hour), landedPresence: { landed: 2, present: 1 } },
+                landed(`receipt-22h-a`, now - 22 * hour),
+                landed(`receipt-22h-b`, now - 22 * hour),
+                landed(`receipt-22h-c`, now - 22 * hour),
+                { ...landed(`ready-now`, now - 1_000), status: `ready`, unread: true },
+                { ...landed(`ready-1m`, now - 60_000), status: `ready`, unread: true },
+            ],
+            1,
+        );
+
+        expect(useAgents().lanes.value.finished.map((entry) => entry.id)).toEqual([
+            `ready-now`,
+            `ready-1m`,
+            `reland-15h`,
+            `receipt-4h`,
+            `receipt-22h-a`,
+            `receipt-22h-b`,
+            `receipt-22h-c`,
+        ]);
+    });
+
+    // The window must surface actionable cards even when the caller's list has them at the tail.
+    it("keeps every ready-to-land card in the finished window", () => {
+        const landedOnly = Array.from({ length: FINISHED_WINDOW + 2 }, (_, at) => ({
+            id: `a${at}`,
+            status: `landed` as const,
+            provider: `claude` as const,
+            harness: `native` as const,
+            updatedAt: 1_000 - at,
+            attention: { plan: false, question: false, permission: false, capability: false, credential: false, conflict: false },
+            open: false,
+            unread: false,
+            unsent: false,
+        }));
+        const ready = {
+            id: `ready`,
+            status: `ready` as const,
+            provider: `claude` as const,
+            harness: `native` as const,
+            updatedAt: 9_000,
+            attention: { plan: false, question: false, permission: false, capability: false, credential: false, conflict: false },
+            open: false,
+            unread: true,
+            unsent: false,
+        };
+        const misordered = [...landedOnly, ready];
+        const { shown } = windowFinished(misordered, undefined, (entry) => entry.id, finishedNeedsAction);
+
+        expect(shown.map((entry) => entry.id)).toContain(`ready`);
+        expect(shown.findIndex((entry) => entry.id === `ready`)).toBeLessThan(shown.findIndex((entry) => entry.id === `a0`));
     });
 });
 

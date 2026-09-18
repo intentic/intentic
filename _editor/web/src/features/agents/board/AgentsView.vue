@@ -19,7 +19,7 @@ import { agentInProject, heldWakeInProject, runInProject } from "./projectMember
 import { type FleetLane, reviewAction, unregistered, watching } from "../fleet/agentStatus";
 import { useAgents } from "../fleet/useAgents";
 import { agentSeed } from "../fleet/useAgents-actions";
-import { canArchive, FINISHED_WINDOW, type FleetAgent, laneGroups, windowFinished } from "../fleet/useAgents-fleet";
+import { canArchive, FINISHED_WINDOW, type FleetAgent, finishedNeedsAction, laneGroups, windowFinished } from "../fleet/useAgents-fleet";
 import { boxNameOf, fleetScope, isRemote, openInSandbox, otherFleet, partialAnswer, readingAcross, scopeOffered } from "../fleet/fleetScope";
 import { refreshAcross, subscribe as watchOtherBoxes } from "../../sandbox/live/fleetAcross";
 import { insideRun, laneOfRun, runIdsInLedger, runMatches, runsInLane, runsNeedingYou, useWorkflowRuns } from "../fleet/useWorkflowRuns";
@@ -334,7 +334,9 @@ const inPane = (id: string): boolean => {
 // Whether the chat is open only as a look (TabFacts.peek), read off the strip like the ring; desktop only, since a
 // phone's tab set is one deep.
 const peeked = (id: string): boolean => !mobile.value && chatStrip.value.tabs.some((tab) => tab.id === id && tab.peek);
-const finishedWindow = computed(() => windowFinished(boardLanes.value.finished, windowed.value ? highlightId.value : undefined, (agent) => agent.id));
+const finishedWindow = computed(() =>
+    windowFinished(boardLanes.value.finished, windowed.value ? highlightId.value : undefined, (agent) => agent.id, finishedNeedsAction),
+);
 // Finished shows its window, or the archive when open; the other two lanes show everything. A filter lifts Finished's
 // window, since a result set must not hide some of its own matches.
 // The archive keeps its own page under a filter instead, since its pile is unbounded; nothing is hidden, the tail row

@@ -22,7 +22,7 @@ import { sessionCategory } from "../../../app/sessionCategory";
 import { useAgentFilter } from "../../agents/board/useAgentFilter";
 import { boxNameOf } from "../../agents/fleet/fleetScope";
 import { useAgents } from "../../agents/fleet/useAgents";
-import { FINISHED_WINDOW, type FleetAgent, windowFinished } from "../../agents/fleet/useAgents-fleet";
+import { compareFinishedLane, FINISHED_WINDOW, type FleetAgent, finishedNeedsAction, windowFinished } from "../../agents/fleet/useAgents-fleet";
 import { type CacheCooling, cacheCooling } from "../../agents/fleet/promptCache";
 import HoverCard from "../../../components/HoverCard.vue";
 import OriginMark from "../../../components/OriginMark.vue";
@@ -172,8 +172,13 @@ const lanes = computed<Record<FleetLane, OpenChat[]>>(() => {
             (a.agent?.startedAt ?? lastActive(a)) - (b.agent?.startedAt ?? lastActive(b)),
     );
     grouped.attention.sort((a, b) => lastActive(b) - lastActive(a));
-    // Finished sorts unsent-draft chats first, so a half-written message can't fall behind the window's fold.
-    grouped.finished.sort((a, b) => Number(b.conversation.unsent.value) - Number(a.conversation.unsent.value) || lastActive(b) - lastActive(a));
+    // Same order as the board (compareFinishedLane); agent-less chats fall back to recency only.
+    grouped.finished.sort((a, b) => {
+        if (a.agent !== undefined && b.agent !== undefined) {
+            return compareFinishedLane(a.agent, b.agent);
+        }
+        return Number(b.conversation.unsent.value) - Number(a.conversation.unsent.value) || lastActive(b) - lastActive(a);
+    });
     return grouped;
 });
 // Clear's own words for the lane: the adjective its label counts ("3 working chats"), and what becomes of
@@ -204,7 +209,12 @@ const occupiedLanes = computed(() => LANES.value.filter((lane) => lanes.value[la
 // Caps Finished at windowFinished (the board's own cap): a browsing limit, not a close, everything stays open
 // and reachable. The active chat is always pinned in; a filter or the row's own expand lifts the cap.
 const finishedWindow = computed(() =>
-    windowFinished(lanes.value.finished, windowed.value ? activeId.value : undefined, (entry) => entry.conversation.conversationId),
+    windowFinished(
+        lanes.value.finished,
+        windowed.value ? activeId.value : undefined,
+        (entry) => entry.conversation.conversationId,
+        (entry) => entry.agent !== undefined && finishedNeedsAction(entry.agent),
+    ),
 );
 // Includes hidden runs: hiding a run also hides its chats, so the count must cover the whole workflow.
 const hiddenRuns = computed(
