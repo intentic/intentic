@@ -771,6 +771,7 @@ const syncSummary = computed<string>(() => {
     const spread = syncRepos.value.length > 1 ? ` · ${plural(syncRepos.value.length, `repo`)}` : ``;
     return (counts.length > 0 ? counts.join(` `) : `no upstream yet`) + spread;
 });
+const syncRepoSpread = computed(() => (syncRepos.value.length > 1 ? plural(syncRepos.value.length, `repo`) : undefined));
 // Every push funnels through `pushFlow.askSync` (the bar and both row pills) — a second door to the same verb
 // would be a way around the pre-push check, which is also why useChanges exports no one-repo push.
 
@@ -1150,7 +1151,33 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                 </Button>
             </template>
             <template v-else>
-                <span class="min-w-0 flex-1 truncate whitespace-nowrap text-2xs text-muted" v-tooltip.right="syncHint">{{ syncSummary }}</span>
+                <div
+                    class="flex min-w-0 flex-1 items-center gap-1.5 truncate"
+                    v-tooltip.right="syncHint"
+                    :aria-label="syncSummary"
+                >
+                    <template v-if="behindTotal > 0 || aheadTotal > 0">
+                        <span
+                            v-if="behindTotal > 0"
+                            class="ui-status-pill inline-flex shrink-0 items-center gap-0.5 bg-overlay text-2xs font-medium tabular-nums text-content"
+                        >
+                            <Icon name="arrow-down-left" class="text-2xs text-link" aria-hidden="true" />
+                            {{ behindTotal }}
+                        </span>
+                        <span
+                            v-if="aheadTotal > 0"
+                            class="ui-status-pill inline-flex shrink-0 items-center gap-0.5 bg-overlay text-2xs font-medium tabular-nums text-content"
+                        >
+                            <Icon name="arrow-up-right" class="text-2xs text-link" aria-hidden="true" />
+                            {{ aheadTotal }}
+                        </span>
+                        <span v-if="syncRepoSpread !== undefined" class="truncate text-2xs text-subtle">{{ syncRepoSpread }}</span>
+                    </template>
+                    <template v-else>
+                        <span class="truncate text-2xs text-subtle">no upstream yet</span>
+                        <span v-if="syncRepoSpread !== undefined" class="truncate text-2xs text-subtle">{{ syncRepoSpread }}</span>
+                    </template>
+                </div>
                 <!-- Fetch lives with the number it refreshes, and there's one of it now: its scope is every repo with a remote. -->
                 <button
                     type="button"
