@@ -769,7 +769,7 @@ const syncMeta = computed(() => (syncVerb.value === undefined ? undefined : SYNC
 const syncSummary = computed<string>(() => {
     const counts = [...(behindTotal.value > 0 ? [`↓${behindTotal.value}`] : []), ...(aheadTotal.value > 0 ? [`↑${aheadTotal.value}`] : [])];
     const spread = syncRepos.value.length > 1 ? ` · ${plural(syncRepos.value.length, `repo`)}` : ``;
-    return (counts.length > 0 ? counts.join(` `) : `no upstream yet`) + spread;
+    return (counts.length > 0 ? counts.join(` `) : t(`workspace.reviewPanel.noUpstreamYet`)) + spread;
 });
 const syncRepoSpread = computed(() => (syncRepos.value.length > 1 ? plural(syncRepos.value.length, `repo`) : undefined));
 // Every push funnels through `pushFlow.askSync` (the bar and both row pills) — a second door to the same verb

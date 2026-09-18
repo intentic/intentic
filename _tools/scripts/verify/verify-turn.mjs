@@ -1,24 +1,25 @@
 #!/usr/bin/env node
 // `pnpm verify:turn`: what a turn can answer for at Stop, scoped to what it actually touched, since a model can
 // only act on its own diff (the full repository runs after the land, on main, in verify.mjs/verify-deps.ts). Three
-// independent readers, each judged against what the turn did: (1) the checks, diffed against HEAD line by line, so a
-// problem already standing before this turn is reported but not held against it and a new one is refused whatever its
-// gate — which is the whole of what `tidy` means here, and why nothing coarser than a turn can enforce it; (2) the
-// linter, over the turn's own changed files,
-// falling back to the whole repo when the changed set isn't smaller; (3) typecheck+test over the affected closure
-// (lib/workspace-graph.mjs), the packages holding a dirty file plus everything that transitively depends on one.
+// independent readers, each judged against what the turn did: (1) the checks, diffed against HEAD line by line
+// (turn-findings.mjs), so a problem already standing before this turn is reported but not held against it and a new one
+// is refused whatever its gate — which is the whole of what `tidy` means here, and why nothing coarser than a turn can
+// enforce it; (2) the linter, over the turn's own changed files, falling back to the whole repo when the changed set
+// isn't smaller; (3) typecheck+test over the affected closure (lib/workspace-graph.mjs), the packages holding a dirty
+// file plus everything that transitively depends on one.
 // The dirty set is the turn's own worktree diff (or, in the primary checkout, everyone's uncommitted work). All
 // three readers report at once (lib/steps.mjs): the Stop sends a model back at most twice (MAX_FOLLOW_UPS,
 // sandbox/src/rules/turn-ending.ts), so a gate that stopped at its first failure could only ever name two of a
 // turn's problems.
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdtempSync, rmSync, symlinkSync } from "node:fs";
+import { existsSync, mkdtempSync, readdirSync, rmSync, symlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { affectedBy, readWorkspaceGraph } from "../../checks/lib/workspace-graph.mjs";
 import { repoRoot } from "../../constants/src/node.mjs";
 import { changedPaths, git } from "../lib/git.mjs";
 import { createSteps } from "../lib/steps.mjs";
+import { blindAtHead, judgeAgainstHead, problemLines } from "./turn-findings.mjs";
 
 const root = repoRoot(import.meta.url);
 const { say, step, skip, fail, finish } = createSteps("verify:turn", root);
@@ -51,45 +52,70 @@ const checkVerdicts = (at, only) => {
     }
 };
 
-// WHAT A CHECK SAID, FINDING BY FINDING, so a turn can be held to its own problems rather than to the tree's.
-//
-// A finding names a location, and that is what tells it apart from the prose around it: either a `- ` bullet (every
-// check that reports through lib/report.mjs's `finish`) or a `path.ext:12` anchor (the ones that print their own, like
-// path-literals and the UI tiers). Headings and explanatory epilogues name no location and are dropped — which is not
-// cosmetic: a turn that rewords a check's own failure message would otherwise be accused of every finding that message
-// introduces, and rewording a message is not tightening a rule.
-//
-// Line numbers are flattened in the KEY: inserting a line above a standing finding moves it from `:180` to `:181`,
-// which is the same problem. The key maps to the line as written, so what gets reported is the real anchor.
-const FINDING = /^\s*-\s|[\w.-]+\.[a-z]+:\d+/;
-const LINE_NUMBER = /:\d+/g;
-const problemLines = (verdict) =>
-    new Map(
-        `${verdict.stderr}${verdict.stdout}`
-            .split("\n")
-            .map((line) => line.trimEnd())
-            .filter((line) => FINDING.test(line))
-            .map((line) => [line.replace(LINE_NUMBER, ":#"), line]),
-    );
-
-// A snapshot is a checkout, not an install, so a check that resolves a parser out of the tree it is reading (vue's SFC
-// compiler, vue-i18n's) finds nothing there and measures nothing. Left that way the check has no answer about HEAD at
-// all, and every standing line it prints is charged to whichever turn runs next. The live tree's installs are lent to
-// the snapshot instead: symlinks, per workspace package since pnpm hoists nothing to the root, thrown away with it.
-const lendInstalls = (snapshot) => {
-    for (const dir of ["", ...[...readWorkspaceGraph(root).packages.values()].map((entry) => entry.dir)]) {
-        const from = join(root, dir, "node_modules");
-        const to = join(snapshot, dir, "node_modules");
-        // A package this turn added has no directory in the snapshot to hang one on; that check simply measures less at
-        // HEAD, which is the direction this was already wrong in.
-        if (existsSync(from) && !existsSync(to) && existsSync(join(snapshot, dir))) {
-            try {
-                symlinkSync(from, to, "junction");
-            } catch {
-                // Lending is best-effort by construction: a link that cannot be made costs freshness, never the run.
+// Every `node_modules` a checkout holds, repo-relative. A pnpm workspace puts one at the root and one in each member,
+// and a check resolves its parser from the package that declares the dependency, so the member's own has to be there
+// too or the resolution lands nowhere. Depth-bounded like the workspace walk (lib/workspace-graph.mjs): a member sits
+// at most this deep, and below one lies a build output nobody here reads.
+const MEMBER_DEPTH = 4;
+const installedModules = (at) => {
+    const found = [];
+    const walk = (rel, depth) => {
+        let entries;
+        try {
+            entries = readdirSync(join(at, rel), { withFileTypes: true });
+        } catch {
+            return; // a directory this process may not read is not one worth failing over
+        }
+        for (const entry of entries) {
+            const child = rel === "" ? entry.name : `${rel}/${entry.name}`;
+            // A symlink counts here and nowhere else: an install is sometimes parked outside the checkout and linked in,
+            // and node resolves through the chain either way. Descending through one would be a different matter, since
+            // a link back up the tree is a walk that never ends.
+            if (entry.name === "node_modules") {
+                if (entry.isDirectory() || entry.isSymbolicLink()) {
+                    found.push(child);
+                }
+            } else if (entry.isDirectory() && !entry.name.startsWith(".") && depth < MEMBER_DEPTH) {
+                walk(child, depth + 1);
             }
         }
+    };
+    walk("", 0);
+    return found;
+};
+
+// LENDS THE SNAPSHOT THE INSTALLED MODULES, so the two runs differ by this turn's diff and by nothing else. Without them
+// a check that `needs: "node_modules"` measures a different thing at HEAD — i18n-literals and vue-templates read no
+// template at all there and pass vouching for nothing — and then every line the real checkout prints reads as newly
+// introduced, which is the opposite of what this comparison is for.
+//
+// Lent per package rather than once at the root, because pnpm hoists nothing there: a workspace member resolves out of
+// its own node_modules, so a single root link would leave every member's check reading an empty tree.
+//
+// Linked, not installed: an install per turn costs minutes, and what these four load from node_modules is a parser for
+// this repository's own source (vue/compiler-sfc, vue-i18n's compiler), not a dependency whose version is what any of
+// their findings is about. The one thing this cannot reproduce is HEAD's own dependency set, so a turn that moves the
+// lockfile is measured against what is installed now rather than what was; `lockfile` and `peer-deps` are the checks
+// that read that, and they need no install.
+//
+// Returns the links so they can be taken back first: nothing that deletes a directory tree should be pointed at the
+// live node_modules through one of them, however sure we are that it would not follow.
+const lendModules = (from, to) => {
+    const links = [];
+    for (const rel of installedModules(from)) {
+        const at = join(to, rel);
+        // A package that exists only in the working tree has no counterpart at HEAD, and nothing there asks for its modules.
+        if (!existsSync(dirname(at)) || existsSync(at)) {
+            continue;
+        }
+        try {
+            symlinkSync(join(from, rel), at, "junction"); // the one directory link Windows allows unprivileged; the type is ignored elsewhere
+            links.push(at);
+        } catch {
+            return { links, lent: false };
+        }
     }
+    return { links, lent: links.includes(join(to, "node_modules")) };
 };
 
 // Checks out HEAD in its own worktree (not a stash, which would mutate the tree the turn is standing in) to ask what
@@ -101,14 +127,20 @@ const reportsAtHead = (ids) => {
     }
     const parent = mkdtempSync(join(tmpdir(), "verify-turn-head-"));
     const snapshot = join(parent, "head");
+    let borrowed = { links: [], lent: false };
     try {
         if (git(root, "worktree", "add", "--detach", snapshot, "HEAD") === undefined) {
             return undefined;
         }
-        lendInstalls(snapshot);
+        borrowed = lendModules(root, snapshot);
         const verdicts = checkVerdicts(snapshot, ids);
-        return verdicts === undefined ? undefined : new Map(verdicts.map((verdict) => [verdict.id, { ok: verdict.ok, lines: problemLines(verdict) }]));
+        return verdicts === undefined
+            ? undefined
+            : new Map(verdicts.map((verdict) => [verdict.id, { ok: verdict.ok, lines: problemLines(verdict), blind: blindAtHead(verdict, borrowed.lent) }]));
     } finally {
+        for (const link of borrowed.links) {
+            rmSync(link, { force: true }); // unlinks the link itself: node's rm reads it with lstat and never walks through one
+        }
         git(root, "worktree", "remove", "--force", snapshot);
         rmSync(parent, { recursive: true, force: true });
     }
@@ -137,20 +169,21 @@ if (verdicts === undefined) {
         // true of a line THIS turn wrote, which is why the refusal belongs here and at no coarser moment: it is the
         // only gate that can tell the two apart, and the only one still holding the model that wrote the line.
         const before = reportsAtHead(failed.map(({ id }) => id));
-        const judged = failed.map((verdict) => {
-            const standing = before?.get(verdict.id);
-            const added = [...problemLines(verdict)].filter(([key]) => standing === undefined || !standing.lines.has(key)).map(([, line]) => line);
-            // A check that PASSED at HEAD and fails now is this turn's whatever its lines look like: `added` being
-            // empty there would mean the check reports in a shape `FINDING` does not recognise, and the safe way to be
-            // wrong about a new shape is to name the turn that made it red, not to wave it through.
-            const wholeCheck = standing?.ok === true && added.length === 0;
-            return { verdict, added: wholeCheck ? [`${verdict.id} passed at HEAD and fails now`] : added };
-        });
+        const judged = judgeAgainstHead(failed, before);
         const mine = judged.filter(({ added }) => added.length > 0);
-        const theirs = judged.filter(({ added }) => added.length === 0);
+        const unsure = judged.filter(({ added, unsure: lines }) => added.length === 0 && lines.length > 0);
+        const theirs = judged.filter(({ added, unsure: lines }) => added.length === 0 && lines.length === 0);
         if (theirs.length > 0) {
             say(
                 `${theirs.map(({ verdict }) => verdict.id).join(", ")}: failing at HEAD too and no worse for this turn, so not this turn's to fix — the land measures the tree it leaves behind`,
+            );
+        }
+        // Reported in full and charged to nobody: the snapshot could not put these checks where the live run stands, so
+        // whether a line is new is a question nothing here can answer. Printed rather than counted, because somebody has
+        // to be told what was found even when there is no one to hold to it.
+        for (const { verdict, unsure: lines } of unsure) {
+            process.stderr.write(
+                `\n? ${verdict.id} (${verdict.file}), ${lines.length} problem${lines.length === 1 ? "" : "s"} HEAD could not be asked about — reported, not laid at this turn's door\n${lines.join("\n")}\n`,
             );
         }
         for (const { verdict, added } of mine) {

@@ -205,11 +205,28 @@ const expressionLiterals = (ts, expression) => {
     return found;
 };
 
+/**
+ * A catalog key built from a variable: `t(\`docxCompare.${tick.kind}\`)` asks for one of a set of messages, which is
+ * what this check is for rather than a breach of it. Cutting the interpolation out leaves `docxCompare.` — a key whose
+ * last segment is missing — and the NOT_PROSE shape that spares a written-out key wants a segment after every dot, so
+ * the stub reads as English and the call is reported as if the words had been typed there.
+ *
+ * Judged on the parts, not on the joined text, because to anything that only sees a string `docxCompare.` and `Stop `
+ * are the same thing: a template whose static halves carry nothing but key characters, with at least one dot among
+ * them, is a key. `\`Stop ${n}\`` keeps its space and stays prose. i18n-keys.mjs reads the same construct from the
+ * other end, keeping the prefix before `${` so the messages under it are not reported as nobody's.
+ */
+const KEY_CHARS = /^[\w$.]*$/;
+const isSplitKey = (parts) => {
+    const statics = parts.filter((part) => part.text !== undefined).map((part) => part.text);
+    return parts.some((part) => part.expression !== undefined) && statics.every((text) => KEY_CHARS.test(text)) && statics.join("").includes(".");
+};
+
 // Literals inside one expression, as findings against the file: shared by a bound attribute and a `{{ }}`, which are
 // the same thing — an expression whose result is drawn.
 const inExpression = (ts, expression, base, name) =>
     expressionLiterals(ts, expression)
-        .filter((literal) => isProse(literal.parts.map((part) => part.text ?? "").join(" "), literal.parts.length > 1))
+        .filter((literal) => !isSplitKey(literal.parts) && isProse(literal.parts.map((part) => part.text ?? "").join(" "), literal.parts.length > 1))
         .map((literal) => ({
             kind: literal.parts.length === 1 ? "expr" : "tpl",
             name,
