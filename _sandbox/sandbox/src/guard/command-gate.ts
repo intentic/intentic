@@ -82,7 +82,9 @@ export interface GateSubject {
 }
 
 const BASH_SUBJECT: GateSubject = { toolName: "Bash", displayName: "Run command", noun: "command", language: "bash" };
-const JS_SUBJECT: GateSubject = { toolName: JS_TOOL_NAME, displayName: "Run code", noun: "script", language: "javascript" };
+// Exported for the runtimes that mount the backend as their own tool rather than through a hook, and so consult from
+// inside the handler; the card must name the same subject wherever the script came from.
+export const JS_SUBJECT: GateSubject = { toolName: JS_TOOL_NAME, displayName: "Run code", noun: "script", language: "javascript" };
 
 // A vendor runtime's own command tool, whatever it's called; one subject serves all of them.
 export const vendorSubject = (toolName: string): GateSubject => ({ toolName, displayName: "Run command", noun: "command", language: "bash" });

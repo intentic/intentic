@@ -234,6 +234,11 @@ export const createCursorAgent = (deps: CursorAgentDeps) => {
             }
         };
 
+        // Rulebook axis "hooks" makes a hold park on a card, not refuse, while the hook process waits on the socket.
+        // Built ahead of the options because the JS backend rides a custom tool and consults this gate from inside its
+        // own handler, where no hook can reach it.
+        const { gate, taint, release } = createTurnGate(request);
+
         const options: AgentOptions = {
             model: selection,
             apiKey,
@@ -243,7 +248,7 @@ export const createCursorAgent = (deps: CursorAgentDeps) => {
                 // mdm carries the command gate (cursor-hooks.ts); user is skipped, it also reads this daemon's Claude
                 // settings.
                 settingSources: ["mdm", "project"],
-                customTools: cursorCustomTools(request, push),
+                customTools: cursorCustomTools(request, { gate, taint }, push),
             },
             mcpServers: cursorMcpServers(request),
         };
@@ -252,6 +257,7 @@ export const createCursorAgent = (deps: CursorAgentDeps) => {
         try {
             agent = request.sessionId !== undefined ? await sdk.Agent.resume(request.sessionId, options) : await sdk.Agent.create(options);
         } catch (error) {
+            release();
             yield await codedError(error, sdk);
             yield { kind: "done" };
             return;
@@ -261,8 +267,6 @@ export const createCursorAgent = (deps: CursorAgentDeps) => {
         yield { kind: "session", sessionId: agent.agentId };
         yield { kind: "init", model: modelId };
 
-        // Rulebook axis "hooks" makes a hold park on a card, not refuse, while the hook process waits on the socket.
-        const { gate, release } = createTurnGate(request);
         const retire = deps.hooks.register({
             conversationId: agent.agentId,
             ...(request.cliEnv !== undefined ? { cliEnv: request.cliEnv } : {}),

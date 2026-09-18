@@ -179,7 +179,9 @@ export const CURSOR: AgentCapabilities = {
     questions: true,
     // stdio + http/sse MCP servers plus host callbacks; everything but a Claude Code plugin checkout.
     mcp: "tools",
-    execution: ["shell"],
+    // The JS backend rides Cursor's custom-tool seam rather than an MCP server, and consults the rulebook in its
+    // handler, since the hook file only covers the shell.
+    execution: ["shell", "js"],
     // Cursor publishes effort as model parameters, not one scale; true here just means it's forwardable at all.
     effort: true,
     fastMode: false,

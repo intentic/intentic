@@ -4,6 +4,18 @@ import { createRequest } from "../../agent/tools/agent-requests.js";
 import type { AgentRequest } from "../../agent/run/agent.js";
 import { formatAnswers } from "../../agent/tools/question-answers.js";
 import { waitForSubagent, type SubagentWaitUntil } from "../../agent/subagents/subagents.js";
+import { type CommandGate, consultWith, JS_SUBJECT } from "../../guard/command-gate.js";
+import { outsideSourceOf, sealResult } from "../../guard/outside-results.js";
+import type { TurnTaint } from "../../guard/turn-taint.js";
+import { JS_TIMEOUT_DEFAULT_S, JS_TIMEOUT_MAX_S } from "../../execution/js-runtime.js";
+import { JS_TOOL_NAME, jsToolDescription, runJsTool } from "../../execution/js-tool.js";
+
+// What the turn's gate answers with and what it marks, the two halves a tool needs to run a program safely. Carried
+// together because a runtime that consults without marking would launder outside content past the judge.
+export interface CursorGuard {
+    readonly gate: CommandGate;
+    readonly taint: TurnTaint;
+}
 
 // Turn tools on Cursor's runtime, three seams: remote MCP tools become http servers, the browser stack (already stdio
 // process specs) becomes stdio servers, and the daemon's own in-process tools become customTools. The third seam is
@@ -233,10 +245,70 @@ const waitTool = (request: AgentRequest): SDKCustomTool => ({
     },
 });
 
+// The JS backend as Cursor's own tool rather than an MCP server, the same seam ask and the supervision set ride. Its
+// description is jsToolDescription, so what the model is promised is what js-runtime enforces, on every runtime that
+// mounts it.
+//
+// The gate is consulted HERE, and the result sealed HERE, not by hooks: Cursor's hook file only covers
+// beforeShellExecution and its afterShellExecution reply is discarded, so a script arriving through a custom tool would
+// otherwise both run with the owner's command rules unread and bring the web back into the turn unwrapped. Same
+// subject, same consult and same envelope the Claude loop's PreToolUse and PostToolUse matchers raise, so one rule and
+// one judge cover both.
+const codeTool = (
+    request: AgentRequest,
+    plan: NonNullable<AgentRequest["jsExecution"]>,
+    guard: CursorGuard,
+    push: (event: AgentEvent) => void,
+): SDKCustomTool => ({
+    description: jsToolDescription(plan),
+    inputSchema: {
+        type: "object",
+        properties: {
+            code: { type: "string", description: "The ES module to run. Top-level await allowed; print what you need back." },
+            timeoutSeconds: {
+                type: "number",
+                minimum: 1,
+                maximum: JS_TIMEOUT_MAX_S,
+                description: `Seconds before the run is killed. Default ${JS_TIMEOUT_DEFAULT_S}, max ${JS_TIMEOUT_MAX_S}.`,
+            },
+        },
+        required: ["code"],
+    },
+    execute: async (args) => {
+        const code = typeof args["code"] === "string" ? args["code"] : "";
+        if (code === "") {
+            return "No code was supplied, so nothing ran.";
+        }
+        const verdict = await consultWith(guard.gate, code, JS_SUBJECT, push);
+        if (!verdict.allow) {
+            return verdict.reason;
+        }
+        const output = await runJsTool(
+            {
+                plan,
+                placement: request.isolation,
+                signal: request.signal,
+                ...(request.secrets === undefined ? {} : { secrets: request.secrets }),
+            },
+            { code, ...(typeof args["timeoutSeconds"] === "number" ? { timeoutSeconds: args["timeoutSeconds"] } : {}) },
+        );
+        // Read off the script, not the output: a program that reached the network brought back a stranger's words,
+        // whatever they look like.
+        const source = outsideSourceOf(JS_TOOL_NAME, { code });
+        if (source === undefined) {
+            return output;
+        }
+        guard.taint.mark(source);
+        return sealResult(JS_TOOL_NAME, output, source) as string;
+    },
+});
+
 // unattended is the one condition that changes ask's answer: a card on an unwatched turn would deadlock, not just go
 // unused. The supervision set isn't card-shaped and rides unattended turns too; a child settles on its own clock.
-export const cursorCustomTools = (request: AgentRequest, push: (event: AgentEvent) => void): Record<string, SDKCustomTool> => ({
+export const cursorCustomTools = (request: AgentRequest, guard: CursorGuard, push: (event: AgentEvent) => void): Record<string, SDKCustomTool> => ({
     ...(request.unattended === true ? {} : { ask: askTool(request, push) }),
+    // Absent, not refused, when the persona's card withheld the backend: jsExecutionPlanOf answers undefined there.
+    ...(request.jsExecution === undefined ? {} : { code: codeTool(request, request.jsExecution, guard, push) }),
     ...(request.children !== undefined
         ? {
               spawn: spawnTool(request.children),

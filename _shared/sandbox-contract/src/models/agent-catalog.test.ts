@@ -204,10 +204,14 @@ test("the instruction axis discloses its two weaker answers, differently", () =>
     expect(limitationsOf(acpCaps).length).toBeGreaterThan(limitationsOf(codexCaps).length);
 });
 
-test("only the Claude Code loop hosts the js execution backend", () => {
+// The backend is one of the daemon's own functions, so it takes a runtime that can call one directly AND a gate the
+// daemon controls: Claude Code has the SDK server plus its PreToolUse matcher, Cursor has customTools plus a consult
+// inside the handler. Every other runtime is a child process with neither, where a script would run unread.
+test("the js execution backend rides the two runtimes that can host the daemon's own tools", () => {
+    const hosts: ReadonlySet<string> = new Set(["claude-code", "cursor"]);
     for (const { provider, harness } of pairs) {
         const capabilities = capabilitiesOf(provider, harness);
-        expect(capabilities.execution.includes("js")).toBe(capabilities.runtime === "claude-code");
+        expect(capabilities.execution.includes("js")).toBe(hosts.has(capabilities.runtime));
     }
 });
 

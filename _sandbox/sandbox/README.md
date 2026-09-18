@@ -88,6 +88,13 @@ workspace's standing rules, and the owner's own system prompt, which is why this
 reads `append`. Only the rulebook hook fails closed; a turn missing its environment or its instructions is
 degraded, while a command that outran its rules is what the gate exists to stop.
 
+The JS execution backend rides the same custom-tool seam rather than an MCP server, which is what puts `js` on
+this runtime's `execution` axis. It carries its own guards because Cursor's hooks cannot: the handler consults
+the command gate under the same `JS_SUBJECT` the Claude loop's PreToolUse matcher raises, so one rule covers a
+script wherever it was written, and it seals a result whose script reached the network in the same
+`<untrusted-content>` envelope, marking the turn's taint bit — Cursor's `afterShellExecution` reply is discarded
+upstream, so the envelope goes on here or nowhere.
+
 That transport is bidirectional, which is what lifts the native Codex runtime off the foreign-loop floor. A
 mid-turn message from `/agent/steer` is delivered as `turn/steer` rather than forcing an abort-and-resend; the
 thread's skills are published as the composer's `/` commands and a picked one rides back as a structured skill
