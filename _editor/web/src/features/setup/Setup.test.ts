@@ -9,6 +9,7 @@ import { IconStub } from "@intentic/ui/testing";
 // Both useDevice (matchMedia) and environment.ts (window.env) read globals at module scope on import.
 
 const push = vi.fn();
+const replace = vi.fn();
 // Query string the page was opened with; unset means a cold, linkless visit.
 const query = ref<Record<string, string>>({});
 vi.mock(import(`vue-router`), async (importOriginal) => ({
@@ -19,7 +20,7 @@ vi.mock(import(`vue-router`), async (importOriginal) => ({
                 return query.value;
             },
         }) as never,
-    useRouter: () => ({ push, replace: vi.fn() }) as never,
+    useRouter: () => ({ push, replace }) as never,
     // RouterLink stub: the real component resolves its href from a router this bare mount never installs.
     RouterLink: (await import(`../../testing/routerLinkStub`)).RouterLinkStub as never,
 }));
@@ -46,6 +47,8 @@ const hostedRelease = vi.fn<(sandboxId: string) => Promise<SandboxSummary>>();
 const refresh = vi.fn<() => Promise<SandboxSummary[]>>();
 // The discard rule's one observable act: leaving without committing deletes the draft this page minted.
 const remove = vi.fn<(id: string) => Promise<void>>();
+// The attach lane's one write; named so a test can assert the probe was never even attempted.
+const attach = vi.fn<(id: string, url: string) => Promise<void>>();
 // activeSandboxId/reachable belong to the chat store, read at module scope; omitting them crashes the import.
 vi.mock(`../sandbox/client/useSandbox`, () => ({
     useSandbox: () => ({
@@ -57,7 +60,7 @@ vi.mock(`../sandbox/client/useSandbox`, () => ({
         refresh,
         remove,
         select: vi.fn(),
-        attach: vi.fn(),
+        attach,
         activeSandboxId: ref<string | undefined>(undefined),
         reachable: ref(false),
     }),
@@ -191,7 +194,9 @@ beforeEach(() => {
         return row;
     });
     remove.mockReset().mockResolvedValue(undefined);
+    attach.mockReset().mockResolvedValue(undefined);
     push.mockReset();
+    replace.mockReset();
 });
 
 // Every exit path: the discard rule hangs off unmount, so tests must actually unmount to trigger it.
@@ -279,6 +284,32 @@ it(`resumes an unfinished sandbox rather than making a second`, async () => {
     // No "picking up where you left off" messaging yet: nothing has happened to this row since it was minted.
     expect(el.textContent).not.toContain(`Picking up where you left off`);
     expect(el.textContent).not.toContain(`Use a new sandbox instead`);
+});
+
+// A reload is the case that matters: `openRow`'s fallback when it recognises no row is to CREATE one, so without the
+// id in the URL a reader who got bounced mid-install came back to a second sandbox and a command for neither.
+it(`names the sandbox it settled on in the URL, so a reload resumes it instead of making another`, async () => {
+    await mount();
+    expect(create).toHaveBeenCalledWith(`workspace`);
+    expect(replace).toHaveBeenCalledWith({ path: `/setup`, query: { sandbox: `new` } });
+});
+
+it(`names a resumed sandbox in the URL too, and leaves the rest of the query alone`, async () => {
+    const unfinished = sandboxRow({ id: `s1`, name: `my-laptop` });
+    sandboxes.value = [unfinished];
+    list.mockResolvedValue([unfinished]);
+    query.value = { machine: `mine` };
+    await mount();
+    expect(replace).toHaveBeenCalledWith({ path: `/setup`, query: { machine: `mine`, sandbox: `s1` } });
+});
+
+it(`leaves the URL alone when it already names the row being set up`, async () => {
+    const named = sandboxRow({ id: `s1`, name: `my-laptop` });
+    sandboxes.value = [named];
+    list.mockResolvedValue([named]);
+    query.value = { sandbox: `s1` };
+    await mount();
+    expect(replace).not.toHaveBeenCalled();
 });
 
 it(`does say where you left off once something has actually happened to the sandbox`, async () => {
@@ -713,6 +744,74 @@ it(`states what an addressless platform can do, without spinning and without ope
     // Never auto-switches to the attach lane; it stays one labelled click away.
     expect(el.textContent).not.toContain(`Connect your sandbox`);
     expect(el.textContent).toContain(`Already running a sandbox somewhere?`);
+});
+
+// This form connects a sandbox the reader already serves. Our own hostname in it can only probe `unreachable`, which
+// reads as a verdict about their DNS: the observed failure was ten presses of Connect against the same red box.
+it(`refuses to probe an address we handed out, and points back at the command`, async () => {
+    setupCode.mockResolvedValue(MINTED);
+    const el = await mount();
+    await vi.waitFor(() => expect(el.textContent).toContain(MINTED.hostname));
+    buttonLabelled(`Use a different address`)!.click();
+    await nextTick();
+    buttonLabelled(`a domain it already answers on`)!.click();
+    await nextTick();
+
+    const field = el.querySelector<HTMLInputElement>(`input`)!;
+    field.value = MINTED.hostname;
+    field.dispatchEvent(new Event(`input`));
+    await nextTick();
+
+    expect(el.textContent).toContain(`That address is ours`);
+    expect(el.textContent).toContain(`run the install command instead`);
+    // Not merely explained: pressing it anyway is the loop this closes.
+    expect(buttonLabelled(`Connect`)?.disabled).toBe(true);
+    expect(attach).not.toHaveBeenCalled();
+});
+
+// WEB_ORIGIN is a variable from a script most readers never ran. Printed as the second thing to check it reads as a
+// third fault; folded, the two checks anyone can actually make come first.
+it(`folds the WEB_ORIGIN cause away until the checks anyone can make have been tried`, async () => {
+    setupCode.mockResolvedValue(MINTED);
+    const el = await mount();
+    await vi.waitFor(() => expect(el.textContent).toContain(MINTED.hostname));
+    buttonLabelled(`Use a different address`)!.click();
+    await nextTick();
+    buttonLabelled(`a domain it already answers on`)!.click();
+    await nextTick();
+
+    const field = el.querySelector<HTMLInputElement>(`input`)!;
+    field.value = `sandbox.example.com`;
+    field.dispatchEvent(new Event(`input`));
+    await nextTick();
+    // Nothing is listening in a unit run, so the probe's own verdict is the `unreachable` this notice is for.
+    buttonLabelled(`Connect`)!.click();
+    await vi.waitFor(() => expect(el.textContent).toContain(`Nothing answered at that address.`));
+
+    expect(el.textContent).toContain(`Check the sandbox is running`);
+    expect(el.textContent).not.toContain(`WEB_ORIGIN`);
+
+    buttonLabelled(`Checked both, still nothing?`)!.click();
+    await nextTick();
+    expect(el.textContent).toContain(`WEB_ORIGIN`);
+});
+
+it(`still attaches a domain of the reader's own`, async () => {
+    setupCode.mockResolvedValue(MINTED);
+    const el = await mount();
+    await vi.waitFor(() => expect(el.textContent).toContain(MINTED.hostname));
+    buttonLabelled(`Use a different address`)!.click();
+    await nextTick();
+    buttonLabelled(`a domain it already answers on`)!.click();
+    await nextTick();
+
+    const field = el.querySelector<HTMLInputElement>(`input`)!;
+    field.value = `sandbox.example.com`;
+    field.dispatchEvent(new Event(`input`));
+    await nextTick();
+
+    expect(el.textContent).not.toContain(`That address is ours`);
+    expect(buttonLabelled(`Connect`)?.disabled).toBe(false);
 });
 
 // A failed read isn't proof of "provisions nothing"; that verdict needs an actual answer, not silence.

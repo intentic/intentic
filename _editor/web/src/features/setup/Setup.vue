@@ -48,7 +48,7 @@ import SetupSyncOption from "./SetupSyncOption.vue";
 import { arrivalFor, type Arrival } from "./setupArrival";
 import { lanesFor, type OfferRead } from "./setupLanes";
 import type { ComposeArgs } from "./setupCompose";
-import { type AttachOutcome, daemonUrlProblem, normalizeDaemonUrl, probeDaemon } from "./setupAttach";
+import { addressZone, type AttachOutcome, daemonUrlProblem, normalizeDaemonUrl, ownAddressProblem, probeDaemon } from "./setupAttach";
 import { autoSandboxName } from "./setupName";
 import { setupReportView } from "./setupReport";
 import { hostedWaitView, machineIsDown } from "./hostedWait";
@@ -129,9 +129,15 @@ const domain = ref(``);
 const attachToken = ref(``);
 const attaching = ref(false);
 const attachOutcome = ref<AttachOutcome | undefined>(undefined);
+// Unfolds the WEB_ORIGIN line under a failed probe; folded by default, since a reader who never set it reads it as a
+// third thing wrong with their setup rather than as the rarest of the three causes.
+const originHelp = ref(false);
 
 const normalizedDomain = computed(() => normalizeDaemonUrl(domain.value));
-const domainProblem = computed(() => daemonUrlProblem(domain.value));
+// Our own hostname pasted in here probes as `unreachable`, indistinguishable from a wrong domain, so it is caught
+// before the press instead: the reader's way forward is the command, not a second guess at DNS.
+const ownAddress = computed(() => ownAddressProblem(domain.value, addressZone(setup.value?.hostname)));
+const domainProblem = computed(() => ownAddress.value ?? daemonUrlProblem(domain.value));
 
 // Distinguishes reconnecting a sandbox that has run before from resuming one that never started.
 const neverStarted = computed(() => created.value !== null && created.value.lastSeenAt === null);
@@ -867,7 +873,9 @@ const attachConnectToken = (): string | undefined => {
 // the row the previous attempt created. On success there is nothing left to do: straight to the workspace.
 const connectDomain = async (): Promise<void> => {
     const url = normalizedDomain.value;
-    if (url === undefined || attaching.value) {
+    // `ownAddress` guards here too, not only on the button: the field submits on Enter, and probing our own hostname
+    // can only answer `unreachable`, which reads as a verdict about the reader's DNS.
+    if (url === undefined || attaching.value || ownAddress.value !== undefined) {
         return;
     }
     attaching.value = true;
@@ -1245,6 +1253,21 @@ const startFresh = (): void => {
     void autoCreate();
 };
 
+// Names the row in the URL the moment one is settled, so this page survives being reloaded onto. `openRow` reads
+// `?sandbox=` first and only re-derives a row when it finds none — and its fallback is to CREATE one, which is how a
+// reload mid-install left a reader with a second sandbox while the first was still pulling its image. A replace, not
+// a push: the reader took no navigation step, so the back button must not have to undo one.
+watch(
+    () => created.value?.id,
+    (id) => {
+        if (id === undefined || route.query[`sandbox`] === id) {
+            return;
+        }
+        void router.replace({ path: `/setup`, query: { ...route.query, sandbox: id } });
+    },
+    { immediate: true },
+);
+
 // Watch the registry while we sit on /setup; the moment the daemon reports in, open the workspace.
 const timer = setInterval(() => void check(), 3000);
 
@@ -1426,7 +1449,7 @@ const warmSandboxCredential = async (): Promise<void> => {
                                     :label="t(`ui.action.connect`)"
                                     class="w-full justify-center md:w-fit"
                                     :loading="attaching"
-                                    :disabled="attaching || normalizedDomain === undefined"
+                                    :disabled="attaching || normalizedDomain === undefined || ownAddress !== undefined"
                                     @click="connectDomain"
                                 >
                                     <template #icon><Icon name="link" /></template>
@@ -1441,9 +1464,17 @@ const warmSandboxCredential = async (): Promise<void> => {
                         </label>
 
                         <!-- Each probe failure names the one thing the user can do about it. -->
+                        <!-- Two checks anyone can make, then the one that needs a variable they may never have set: a
+                             reader who has not heard of WEB_ORIGIN reads it as a fourth thing wrong with their setup. -->
                         <Notice v-if="attachOutcome?.kind === `unreachable`" :of="{ tone: `danger`, title: `Nothing answered at that address.` }">
-                            <span class="mt-0.5 block text-2xs">
-                                {{ t(`setup.setup.checkSandboxRunningDomain`) }} <code>WEB_ORIGIN</code> {{ t(`setup.setup.alsoToName`) }}
+                            <span class="mt-0.5 block text-2xs">{{ t(`setup.setup.checkSandboxRunningDomain`) }}</span>
+                            <!-- A button rather than <details>: Notice's slot lives inside a <span>, which takes phrasing
+                                 content only, and this page already folds by toggle everywhere else. -->
+                            <button v-if="!originHelp" type="button" :class="ui.linkButton(`mt-1 text-2xs`)" @click="originHelp = true">
+                                {{ t(`setup.setup.checkedBothStillNothing`) }}
+                            </button>
+                            <span v-else class="mt-1 block text-2xs">
+                                {{ t(`setup.setup.daemonsWebOrigin`) }} <code>WEB_ORIGIN</code> {{ t(`setup.setup.alsoToName`) }}
                                 <span>{{ webOrigin() ?? PLATFORM_WEB_ORIGIN }}</span
                                 >. Otherwise your browser blocks the call before it's sent.
                             </span>

@@ -220,6 +220,54 @@ describe(`sandbox routes`, () => {
         expect(Object.keys((update.mock.calls.at(-1)![0] as { data: Record<string, unknown> }).data)).not.toContain(`tunnelId`);
     });
 
+    // The wizard mints on every mount, so this is what a reload does. Rotating here would orphan an install already
+    // running: /setup/claim and /setup/report both find the sandbox BY its code, and the claim stamp is the only
+    // evidence the wizard has that the command was ever pasted.
+    it(`setupCode hands back the live code rather than rotating it, so a reload keeps the claim stamp`, async () => {
+        const first = vi.fn().mockResolvedValue(sandboxRow);
+        const firstPrisma = fakePrisma({ sandbox: { findFirst: vi.fn().mockResolvedValue(sandboxRow), update: first } });
+        const minted = await call(sandboxRoutes.setupCode, { sandboxId: `s1` }, { context: context({ prisma: firstPrisma }) });
+
+        // The row as it stands after that mint, with a machine's claim already stamped on it.
+        const claimed = {
+            ...sandboxRow,
+            setupCode: minted.code,
+            setupCodeExpiresAt: new Date(minted.expiresAt),
+            setupCodeClaimedAt: new Date(),
+            setupPayload: (first.mock.calls.at(-1)![0] as { data: { setupPayload: string } }).data.setupPayload,
+        };
+        const update = vi.fn().mockResolvedValue(claimed);
+        const prisma = fakePrisma({ sandbox: { findFirst: vi.fn().mockResolvedValue(claimed), update } });
+
+        const again = await call(sandboxRoutes.setupCode, { sandboxId: `s1` }, { context: context({ prisma }) });
+
+        expect(again.code).toBe(minted.code);
+        expect(again.expiresAt).toBe(minted.expiresAt);
+        // No write at all is the claim stamp surviving; asserting on the code alone would pass a rewrite of the row.
+        expect(update).not.toHaveBeenCalled();
+    });
+
+    // The other half: a code that no longer buys what the caller is asking for has to be replaced.
+    it(`setupCode mints afresh once the code it holds has expired`, async () => {
+        const stale = vi.fn().mockResolvedValue(sandboxRow);
+        const stalePrisma = fakePrisma({ sandbox: { findFirst: vi.fn().mockResolvedValue(sandboxRow), update: stale } });
+        const minted = await call(sandboxRoutes.setupCode, { sandboxId: `s1` }, { context: context({ prisma: stalePrisma }) });
+
+        const expired = {
+            ...sandboxRow,
+            setupCode: minted.code,
+            setupCodeExpiresAt: new Date(Date.now() - 1000),
+            setupPayload: (stale.mock.calls.at(-1)![0] as { data: { setupPayload: string } }).data.setupPayload,
+        };
+        const update = vi.fn().mockResolvedValue(expired);
+        const prisma = fakePrisma({ sandbox: { findFirst: vi.fn().mockResolvedValue(expired), update } });
+
+        const again = await call(sandboxRoutes.setupCode, { sandboxId: `s1` }, { context: context({ prisma }) });
+
+        expect(again.code).not.toBe(minted.code);
+        expect((update.mock.calls.at(-1)![0] as { data: { setupCodeClaimedAt: Date | null } }).data.setupCodeClaimedAt).toBeNull();
+    });
+
     it(`setupCode 404s when this platform has no reachability fabric configured`, async () => {
         const prisma = fakePrisma({ sandbox: { findFirst: vi.fn().mockResolvedValue(sandboxRow), update: vi.fn() } });
         const noFabric = context({ prisma });

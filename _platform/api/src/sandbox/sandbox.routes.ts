@@ -610,6 +610,25 @@ export const sandboxRoutes = {
         if (seed !== undefined) {
             payload[ENV_DEFINITION_SEED] = seed;
         }
+        // Re-minting is NOT free, which is why an unchanged ask returns the live code untouched. Rotating it would
+        // orphan an install already under way: /setup/claim and /setup/report both find a sandbox BY its setup code,
+        // so the running machine's stage reports stop matching any row, and the claim stamp below is the wizard's
+        // only evidence the command was ever pasted. The wizard mints on every mount, so without this a reload
+        // mid-install tells a reader "still nothing" about a machine that is pulling the image right then.
+        // `?? null` on both: these columns are optional as well as nullable, and `undefined !== null` would read an
+        // unminted row as holding a live code.
+        const held = sandbox.setupCode ?? null;
+        const heldUntil = sandbox.setupCodeExpiresAt ?? null;
+        if (
+            held !== null &&
+            heldUntil !== null &&
+            heldUntil.getTime() > Date.now() &&
+            typeof sandbox.setupPayload === `string` &&
+            // Ciphertext is not comparable (encryptSecret salts each call), so the plaintext is what settles it.
+            decryptSecret(context.config, sandbox.setupPayload) === JSON.stringify(payload)
+        ) {
+            return { code: held, hostname, expiresAt: heldUntil.toISOString() };
+        }
         const code = randomBytes(8).toString(`base64url`);
         const expiresAt = new Date(Date.now() + SETUP_CODE_TTL_MS);
         // Claim stamp belongs to the code: a fresh code must start unclaimed, or the wizard would report a stale claim.

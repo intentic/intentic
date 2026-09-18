@@ -1,5 +1,5 @@
 import { afterEach, expect, test, vi } from "vitest";
-import { daemonUrlProblem, normalizeDaemonUrl, probeDaemon } from "./setupAttach";
+import { addressZone, daemonUrlProblem, normalizeDaemonUrl, ownAddressProblem, probeDaemon } from "./setupAttach";
 
 afterEach(() => {
     vi.unstubAllGlobals();
@@ -30,6 +30,34 @@ test("http gets its own explanation instead of a generic invalid-address message
     // Nothing typed yet is not a mistake; a valid one has no problem to report.
     expect(daemonUrlProblem(``)).toBeUndefined();
     expect(daemonUrlProblem(`sandbox.example.com`)).toBeUndefined();
+});
+
+test("the zone we hand addresses out on is read off a minted hostname, not configured a second time", () => {
+    expect(addressZone(`sandbox-ac1d5035e930.sbx.intentic.dev`)).toBe(`sbx.intentic.dev`);
+    // A bare label names no zone, and neither does a page that has not minted yet.
+    expect(addressZone(`localhost`)).toBeUndefined();
+    expect(addressZone(undefined)).toBeUndefined();
+});
+
+// Typing our own hostname here probes as `unreachable`, which is indistinguishable from a wrong domain and sends the
+// reader checking DNS and a WEB_ORIGIN they never set. It is a dead end until the install command runs.
+test("our own address is named as ours, and points back at the command rather than at DNS", () => {
+    const zone = `sbx.intentic.dev`;
+    const ours = ownAddressProblem(`sandbox-ac1d5035e930.sbx.intentic.dev`, zone);
+    expect(ours).toContain(`ours`);
+    expect(ours).toContain(`install command`);
+    // Full URL, not just the bare hostname the field pre-fills from: both are what a reader pastes.
+    expect(ownAddressProblem(`https://sandbox-226b69d04ad0.sbx.intentic.dev/`, zone)).toBe(ours);
+});
+
+test("a domain of the reader's own is left alone, zone suffix and all", () => {
+    const zone = `sbx.intentic.dev`;
+    expect(ownAddressProblem(`sandbox.example.com`, zone)).toBeUndefined();
+    // Ends with the zone's letters but is not under it: `notsbx.intentic.dev` is somebody else's domain.
+    expect(ownAddressProblem(`box.notsbx.intentic.dev`, zone)).toBeUndefined();
+    // Nothing typed, and a page with no zone to compare against, both stay silent.
+    expect(ownAddressProblem(``, zone)).toBeUndefined();
+    expect(ownAddressProblem(`sandbox-ac1d5035e930.sbx.intentic.dev`, undefined)).toBeUndefined();
 });
 
 const stubFetch = (routes: Record<string, { status: number; body?: unknown }>) => {
