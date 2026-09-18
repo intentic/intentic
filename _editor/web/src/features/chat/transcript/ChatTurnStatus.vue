@@ -16,23 +16,24 @@ const t = useT();
 const { conversation, streaming } = usePaneView();
 const { agentById } = useAgents();
 
-// Status words cycled while a turn streams.
+// Status words cycled while a turn streams. Keys, not words: the list is read through `t` at render time, so the
+// cycle follows the language instead of freezing the English it was written in.
 const LOADER_WORDS = [
-    `Thinking`,
-    `Pondering`,
-    `Perusing`,
-    `Conjuring`,
-    `Noodling`,
-    `Musing`,
-    `Cogitating`,
-    `Ruminating`,
-    `Percolating`,
-    `Brewing`,
-    `Tinkering`,
-    `Scheming`,
-    `Untangling`,
-    `Synthesizing`,
-];
+    `thinking`,
+    `pondering`,
+    `perusing`,
+    `conjuring`,
+    `noodling`,
+    `musing`,
+    `cogitating`,
+    `ruminating`,
+    `percolating`,
+    `brewing`,
+    `tinkering`,
+    `scheming`,
+    `untangling`,
+    `synthesizing`,
+] as const;
 
 // Ticking clock behind elapsed/retry countdown, armed only while a turn is live.
 const now = useNow(() => streaming.value);
@@ -49,22 +50,30 @@ const loaderElapsed = computed(() => {
 });
 // Swaps to "Waiting on N subagents" once the turn is only waiting on children, matching the roster count.
 const liveSubagents = computed(() => agentById(conversation.value.conversationId)?.subagents?.running ?? 0);
-const loaderWord = computed(() =>
-    liveSubagents.value > 0
-        ? `Waiting on ${liveSubagents.value} subagent${liveSubagents.value === 1 ? `` : `s`}`
-        : (LOADER_WORDS[Math.floor(loaderSeconds.value / 2) % LOADER_WORDS.length] ?? `Thinking`),
-);
+const loaderWord = computed(() => {
+    if (liveSubagents.value > 0) {
+        return t(`chat.chatTurnStatus.waitingOnSubagents`, { count: liveSubagents.value }, liveSubagents.value);
+    }
+    const word = LOADER_WORDS[Math.floor(loaderSeconds.value / 2) % LOADER_WORDS.length] ?? `thinking`;
+    return t(`chat.chatTurnStatus.loader.${word}`);
+});
 
 // Replaces the loader word during a provider outage, so a silent turn reads as waiting, not hung.
 const providerRetry = computed(() => conversation.value.providerRetry.value);
 // Countdown only when the harness reports nextAttemptAt; Codex reports just the attempt number, not a time.
 const retryWait = computed(() => {
     const nextAttemptAt = providerRetry.value?.nextAttemptAt;
-    return nextAttemptAt === undefined ? `retrying` : `retrying in ${Math.max(0, Math.round((nextAttemptAt - now.value) / 1000))}s`;
+    return nextAttemptAt === undefined
+        ? t(`chat.chatTurnStatus.retrying`)
+        : t(`chat.chatTurnStatus.retryingIn`, { seconds: Math.max(0, Math.round((nextAttemptAt - now.value) / 1000)) });
 });
 // 529 is capacity, 429 is the account's rate limit, anything else is a fault; each implies a different fix.
 const retryReason = computed(() =>
-    providerRetry.value?.status === 529 ? `at capacity` : providerRetry.value?.status === 429 ? `rate-limiting` : `not responding`,
+    providerRetry.value?.status === 529
+        ? t(`chat.chatTurnStatus.atCapacity`)
+        : providerRetry.value?.status === 429
+          ? t(`chat.chatTurnStatus.rateLimiting`)
+          : t(`chat.chatTurnStatus.notResponding`),
 );
 </script>
 

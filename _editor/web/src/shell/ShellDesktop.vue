@@ -430,8 +430,13 @@ const onTileContextMenu = (tile: RailSeat, event: MouseEvent): void => {
 // rail rank; each row can pin the area (railPins.ts). Never badges — anything with something to say is already seated.
 const moreTrigger = ref<HTMLButtonElement | null>(null);
 const moreOpen = ref(false);
-// The count is the whole point of hovering; phrased like every other tile's label.
-const moreLabel = computed(() => (moreTiles.value.length === 0 ? `More areas` : `More areas · ${moreTiles.value.length} not on the rail`));
+// The count is the whole point of hovering; phrased like every other tile's label. A `computed`, so it is rebuilt
+// when the language changes rather than holding the words it was born with.
+const moreLabel = computed(() =>
+    moreTiles.value.length === 0
+        ? t(`shell.shellDesktop.moreAreas`)
+        : t(`shell.shellDesktop.moreAreasOffRail`, { count: moreTiles.value.length }, moreTiles.value.length),
+);
 const dismissMore = (event: MouseEvent): void => {
     if (!browserOwnsClick(event)) {
         moreOpen.value = false;

@@ -1,33 +1,33 @@
 {
     "activityTimeline": {
-        "activityFeed": "Activity feed",
-        "idleNoEnabledListener": "Idle: no enabled listener automation for {label} yet, so nothing is being listened for.",
-        "loadingActivity": "Loading activity",
-        "nothingEntriesAppearMessage": "Nothing {window}. Entries appear when a message wakes the agent, when it calls a connected provider, and on every turn it runs.",
-        "showingMostRecentEntries": "Showing the most recent entries only: this window holds more than the feed fetches at once."
+        "activityFeed": "Registro de actividad",
+        "idleNoEnabledListener": "Inactivo: todavía no hay ninguna automatización de escucha activada para {label}, así que no se está escuchando nada.",
+        "loadingActivity": "Cargando la actividad",
+        "nothingEntriesAppearMessage": "Nada {window}. Las entradas aparecen cuando un mensaje despierta al agente, cuando llama a un proveedor conectado, y en cada turno que ejecuta.",
+        "showingMostRecentEntries": "Mostrando solo las entradas más recientes: esta ventana contiene más de lo que el registro trae de una vez."
     },
     "activityView": {
-        "activity": "Activity",
-        "connectedProviderWokeAgent": ": a connected provider that woke the agent, a schedule, or you. A turn's whole lifecycle: start, plan, failure, completion, and every provider call it made, is one entry; expand it for the raw events the daemon recorded.",
-        "noSpeakersYet": "no speakers yet",
-        "oneEntryPerThing": "One entry per thing that happened, grouped by",
-        "transcribing": "transcribing",
+        "activity": "Actividad",
+        "connectedProviderWokeAgent": ": un proveedor conectado que despertó al agente, una programación, o tú. Todo el ciclo de vida de un turno —inicio, plan, fallo, finalización y cada llamada a proveedor que hizo— es una entrada; despliégala para ver los eventos en crudo que registró el daemon.",
+        "noSpeakersYet": "todavía sin hablantes",
+        "oneEntryPerThing": "Una entrada por cada cosa que pasó, agrupada por",
+        "transcribing": "transcribiendo",
         "voiceMinutes": "{minutes} min: {speakers}",
-        "whoSetOff": "who set it off"
+        "whoSetOff": "quién lo puso en marcha"
     },
     "episodeRow": {
-        "failed": "failed",
-        "openTranscript": "Open transcript",
-        "session": "session {sessionId}",
-        "source": "source {sourceKey}"
+        "failed": "falló",
+        "openTranscript": "Abrir la transcripción",
+        "session": "sesión {sessionId}",
+        "source": "origen {sourceKey}"
     },
-    "filter": "Filter by text, channel, session…",
-    "source": "Source",
+    "filter": "Filtrar por texto, canal, sesión…",
+    "source": "Origen",
     "sourceFilter": {
-        "allSources": "All sources",
-        "connections": "Connections",
-        "direct": "Direct"
+        "allSources": "Todos los orígenes",
+        "connections": "Conexiones",
+        "direct": "Directo"
     },
-    "sourceLabel": "Activity source",
-    "title": "Activity"
+    "sourceLabel": "Origen de la actividad",
+    "title": "Actividad"
 }

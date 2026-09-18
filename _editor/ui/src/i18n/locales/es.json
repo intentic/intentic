@@ -1,204 +1,204 @@
 {
     "action": {
-        "add": "Add",
-        "apply": "Apply",
-        "approve": "Approve",
-        "back": "Back",
-        "cancel": "Cancel",
-        "clear": "Clear",
-        "close": "Close",
-        "connect": "Connect",
-        "continue": "Continue",
-        "copied": "Copied",
-        "copy": "Copy",
-        "create": "Create",
-        "delete": "Delete",
-        "disconnect": "Disconnect",
-        "dismiss": "Dismiss",
-        "done": "Done",
-        "download": "Download",
-        "edit": "Edit",
-        "next": "Next",
-        "open": "Open",
-        "refresh": "Refresh",
-        "remove": "Remove",
-        "rename": "Rename",
-        "retry": "Retry",
-        "save": "Save",
-        "send": "Send",
-        "start": "Start",
-        "stop": "Stop",
-        "tryAgain": "Try again",
-        "update": "Update"
+        "add": "Añadir",
+        "apply": "Aplicar",
+        "approve": "Aprobar",
+        "back": "Atrás",
+        "cancel": "Cancelar",
+        "clear": "Vaciar",
+        "close": "Cerrar",
+        "connect": "Conectar",
+        "continue": "Continuar",
+        "copied": "Copiado",
+        "copy": "Copiar",
+        "create": "Crear",
+        "delete": "Eliminar",
+        "disconnect": "Desconectar",
+        "dismiss": "Descartar",
+        "done": "Listo",
+        "download": "Descargar",
+        "edit": "Editar",
+        "next": "Siguiente",
+        "open": "Abrir",
+        "refresh": "Recargar",
+        "remove": "Quitar",
+        "rename": "Renombrar",
+        "retry": "Reintentar",
+        "save": "Guardar",
+        "send": "Enviar",
+        "start": "Iniciar",
+        "stop": "Detener",
+        "tryAgain": "Inténtalo de nuevo",
+        "update": "Actualizar"
     },
     "agentRunButton": {
-        "configureStartRun": "Configure and start this run — {spend}"
+        "configureStartRun": "Configura e inicia esta ejecución — {spend}"
     },
     "code": {
-        "showAll": "Show all",
-        "showLess": "Show less"
+        "showAll": "Mostrar todo",
+        "showLess": "Mostrar menos"
     },
     "colorPicker": {
-        "accentColour": "Accent colour",
-        "azure": "Azure",
-        "brass": "Brass",
-        "cobalt": "Cobalt",
-        "ember": "Ember",
-        "emerald": "Emerald",
-        "fern": "Fern",
-        "graphite": "Graphite",
+        "accentColour": "Color de acento",
+        "azure": "Azur",
+        "brass": "Latón",
+        "cobalt": "Cobalto",
+        "ember": "Brasa",
+        "emerald": "Esmeralda",
+        "fern": "Helecho",
+        "graphite": "Grafito",
         "iris": "Iris",
-        "lagoon": "Lagoon",
-        "moss": "Moss",
-        "orchid": "Orchid",
-        "rose": "Rose",
-        "vermilion": "Vermilion"
+        "lagoon": "Laguna",
+        "moss": "Musgo",
+        "orchid": "Orquídea",
+        "rose": "Rosa",
+        "vermilion": "Bermellón"
     },
     "confirmDialog": {
-        "more": "…and {count} more"
+        "more": "…y {count} más"
     },
     "dagEditor": {
-        "fitWholeGraph": "Fit the whole graph"
+        "fitWholeGraph": "Encajar el grafo entero"
     },
     "deviceAgent": {
-        "agentAliveStoppedMaking": "Its agent is alive but has stopped making rounds, so this sandbox's picture of its folders and ports is as old as the last one.",
-        "commands": "Commands",
-        "folders": "Folders",
-        "loopKeepsBuildStarted": "A loop keeps the build it started with until it restarts, so replacing the file on disk changes nothing on its own.",
-        "ports": "Ports",
-        "restartAgent": "Restart agent",
-        "stopsStartsDevicesAgent": "Stops and starts this device's agent loop. Nothing is downloaded — the build already installed there is the one that comes up."
+        "agentAliveStoppedMaking": "Su agente está vivo pero ha dejado de hacer rondas, así que la imagen que este sandbox tiene de sus carpetas y puertos es tan vieja como la última ronda.",
+        "commands": "Comandos",
+        "folders": "Carpetas",
+        "loopKeepsBuildStarted": "Un bucle conserva la compilación con la que arrancó hasta que se reinicia, así que reemplazar el archivo en disco no cambia nada por sí solo.",
+        "ports": "Puertos",
+        "restartAgent": "Reiniciar el agente",
+        "stopsStartsDevicesAgent": "Detiene e inicia el bucle del agente de este dispositivo. No se descarga nada: arranca la compilación que ya está instalada allí."
     },
     "deviceAgentGroup": {
-        "agent": "Agent",
-        "agent2": "Agent {version}",
-        "agentOnThisDevice": "Agent on this device"
+        "agent": "Agente",
+        "agent2": "Agente {version}",
+        "agentOnThisDevice": "Agente en este dispositivo"
     },
     "deviceDetail": {
-        "backup": "backup: {folder}",
-        "copyPath": "Copy path",
-        "deviceIsntSyncingFolder": "This device isn't syncing a folder or holding any ports for this sandbox.",
-        "folder": "Folder",
-        "image": "Image",
+        "backup": "copia de seguridad: {folder}",
+        "copyPath": "Copiar la ruta",
+        "deviceIsntSyncingFolder": "Este dispositivo no sincroniza ninguna carpeta ni retiene puertos para este sandbox.",
+        "folder": "Carpeta",
+        "image": "Imagen",
         "localhost": "localhost:",
-        "more": "… and {more} more",
-        "noFolderDeviceOnly": "no folder: this device only mirrors ports",
-        "noFolderSynced": "no folder synced",
-        "notRunningHere": "not running here",
-        "offDeviceIsntPutting": "Off: this device isn't putting this sandbox's ports on its own localhost. File syncing is unaffected.",
-        "ports": "Ports",
-        "share": "Share",
-        "show": "show it",
-        "stopped": "stopped",
-        "sync": "Sync"
+        "more": "… y {more} más",
+        "noFolderDeviceOnly": "sin carpeta: este dispositivo solo replica puertos",
+        "noFolderSynced": "sin carpeta sincronizada",
+        "notRunningHere": "no se ejecuta aquí",
+        "offDeviceIsntPutting": "Desactivado: este dispositivo no pone los puertos de este sandbox en su propio localhost. La sincronización de archivos no se ve afectada.",
+        "ports": "Puertos",
+        "share": "Reparto",
+        "show": "verlo",
+        "stopped": "detenido",
+        "sync": "Sincronización"
     },
     "deviceRunLog": {
-        "working": "Working…"
+        "working": "Trabajando…"
     },
     "filterBar": {
-        "filter": "Filter…"
+        "filter": "Filtrar…"
     },
     "imageView": {
-        "actualSize1": "Actual size (1)",
-        "ctrlScrollToZoom": "Ctrl + scroll to zoom · drag to pan · double-click to fit",
-        "fit": "Fit",
-        "fitToPane0": "Fit to the pane (0)",
-        "imagePreviewCtrlScroll": "Image preview: Ctrl and scroll to zoom, drag to pan",
-        "zoomIn": "Zoom in (+)",
-        "zoomIn2": "Zoom in",
-        "zoomOut": "Zoom out (−)",
-        "zoomOut2": "Zoom out"
+        "actualSize1": "Tamaño real (1)",
+        "ctrlScrollToZoom": "Ctrl + rueda para ampliar · arrastra para desplazar · doble clic para encajar",
+        "fit": "Encajar",
+        "fitToPane0": "Encajar en el panel (0)",
+        "imagePreviewCtrlScroll": "Vista previa de la imagen: Ctrl y rueda para ampliar, arrastra para desplazar",
+        "zoomIn": "Ampliar (+)",
+        "zoomIn2": "Ampliar",
+        "zoomOut": "Reducir (−)",
+        "zoomOut2": "Reducir"
     },
     "inlineRename": {
-        "couldntSaveName": "Couldn't save that name.",
-        "saveEnter": "Save · Enter",
-        "unnamed": "Unnamed"
+        "couldntSaveName": "No se pudo guardar ese nombre.",
+        "saveEnter": "Guardar · Intro",
+        "unnamed": "Sin nombre"
     },
     "layoutRepoRail": {
-        "allRepositories": "All repositories"
+        "allRepositories": "Todos los repositorios"
     },
     "markdownDocument": {
-        "document": "Document"
+        "document": "Documento"
     },
     "markdownDocumentSurface": {
-        "document": "Document"
+        "document": "Documento"
     },
     "navRail": {
-        "filter": "Filter…"
+        "filter": "Filtrar…"
     },
     "noteEditor": {
-        "copyRawNote": "Copy the raw note",
-        "editNote": "Edit this note",
-        "it": "{verb} it",
-        "keep": "Keep it",
-        "loading": "Loading…",
-        "note": "{verb} this note",
-        "note2": "Note",
-        "unsaved": "unsaved",
-        "writeNote": "Write the note."
+        "copyRawNote": "Copiar la nota en crudo",
+        "editNote": "Editar esta nota",
+        "it": "{verb}",
+        "keep": "Conservarla",
+        "loading": "Cargando…",
+        "note": "{verb} esta nota",
+        "note2": "Nota",
+        "unsaved": "sin guardar",
+        "writeNote": "Escribe la nota."
     },
     "picker": {
-        "select": "Select…"
+        "select": "Seleccionar…"
     },
     "pickerPanel": {
-        "noMatches": "No matches.",
-        "options": "{count} options"
+        "noMatches": "Sin coincidencias.",
+        "options": "{count} opciones"
     },
     "projectChip": {
-        "hidden": "· {hidden} hidden"
+        "hidden": "· {hidden} ocultos"
     },
     "repoRail": {
-        "allRepositories": "All repositories",
-        "repository": "Repository"
+        "allRepositories": "Todos los repositorios",
+        "repository": "Repositorio"
     },
     "sandboxDeviceDetail": {
-        "devicesAgentDoesntReport": "This device's agent doesn't report which paths they are. Updating it lists them here."
+        "devicesAgentDoesntReport": "El agente de este dispositivo no informa de qué rutas son. Al actualizarlo aparecerán aquí."
     },
     "sandboxResourcesDialog": {
-        "all": "all",
-        "allMax": "all {max}",
-        "applyingRestartsSandboxOnto": "Applying restarts the sandbox onto the same image, about a minute, and interrupts whoever is working in it. Its files (in /work) are kept, and the new share survives every later update, rollback and rebuild.",
-        "askedComputerNoNvidia": "Asked for, but this computer has no NVIDIA container runtime, so the sandbox runs without it.",
-        "cores": "cores",
-        "cpuCapInCores": "CPU cap in cores",
-        "cpus": "CPUs",
-        "cpusWhole": "Whole CPUs, {bounds} on this computer. Empty is no limit: every core it has.",
-        "default": "default",
-        "defaultMax": "default: {max}",
-        "fullAccessToComputers": "Full access to this computer's devices and kernel, the way a nested Docker engine needs. Only for a tool that cannot run without it.",
+        "all": "todos",
+        "allMax": "los {max}",
+        "applyingRestartsSandboxOnto": "Aplicarlo reinicia el sandbox sobre la misma imagen, tarda alrededor de un minuto e interrumpe a quien esté trabajando dentro. Sus archivos (en /work) se conservan, y el nuevo reparto sobrevive a cada actualización, reversión y reconstrucción posterior.",
+        "askedComputerNoNvidia": "Se pidió, pero este ordenador no tiene el runtime de contenedores de NVIDIA, así que el sandbox se ejecuta sin ella.",
+        "cores": "núcleos",
+        "cpuCapInCores": "Límite de CPU en núcleos",
+        "cpus": "CPU",
+        "cpusWhole": "Núcleos enteros, {bounds} en este ordenador. Vacío es sin límite: todos los que tenga.",
+        "default": "predeterminado",
+        "defaultMax": "predeterminado: {max}",
+        "fullAccessToComputers": "Acceso total a los dispositivos y al núcleo de este ordenador, tal como lo necesita un motor de Docker anidado. Solo para una herramienta que no puede funcionar sin él.",
         "gib": "GiB",
         "gpu": "GPU",
-        "memory": "Memory",
-        "memoryCapInGib": "Memory cap in GiB",
-        "memoryWhole": "Whole GiB, {bounds} on this computer. Empty is the default: everything it has beyond what it keeps for itself.",
-        "passComputersNvidiaGpus": "Pass this computer's NVIDIA GPUs into the sandbox: the driver rides in with them.",
-        "passGpuThrough": "Pass the GPU through",
-        "privileged": "Privileged",
-        "range": "{min} to {max}",
-        "resources": "Resources for {name}",
-        "runPrivileged": "Run privileged",
-        "sandboxUsingRightNow": "This is the sandbox you are using right now: this page will lose it until it is back."
+        "memory": "Memoria",
+        "memoryCapInGib": "Límite de memoria en GiB",
+        "memoryWhole": "GiB enteros, {bounds} en este ordenador. Vacío es lo predeterminado: todo lo que tenga más allá de lo que se reserva.",
+        "passComputersNvidiaGpus": "Pasar las GPU NVIDIA de este ordenador al sandbox: el controlador entra con ellas.",
+        "passGpuThrough": "Pasar la GPU",
+        "privileged": "Privilegiado",
+        "range": "{min} a {max}",
+        "resources": "Recursos de {name}",
+        "runPrivileged": "Ejecutar en modo privilegiado",
+        "sandboxUsingRightNow": "Este es el sandbox que estás usando ahora mismo: esta página lo perderá hasta que vuelva."
     },
     "sandboxSandboxVerbs": {
-        "deletesSandboxEverythingIn": "This deletes the sandbox and everything in it — its files and its history — from that device. This cannot be undone.",
-        "sandboxRestartsOntoImage": "The sandbox restarts onto the image it ran before its last update. Its files are kept.",
-        "sandboxRestartsOntoNewest": "The sandbox restarts onto the newest image and is unavailable while that happens — seconds if the update is already downloaded, a few minutes if not. Its files are kept."
+        "deletesSandboxEverythingIn": "Esto elimina el sandbox y todo lo que contiene — sus archivos y su historial — de ese dispositivo. No se puede deshacer.",
+        "sandboxRestartsOntoImage": "El sandbox se reinicia sobre la imagen que tenía antes de su última actualización. Sus archivos se conservan.",
+        "sandboxRestartsOntoNewest": "El sandbox se reinicia sobre la imagen más reciente y no está disponible mientras eso ocurre: segundos si la actualización ya está descargada, unos minutos si no. Sus archivos se conservan."
     },
     "sandboxVerbs": {
-        "moreActions": "More actions"
+        "moreActions": "Más acciones"
     },
     "searchBar": {
         "aa": "Aa",
-        "clearEsc": "Clear (Esc)",
-        "clearFilter": "Clear filter",
-        "filter": "Filter…",
-        "matchCase": "Match case"
+        "clearEsc": "Vaciar (Esc)",
+        "clearFilter": "Vaciar el filtro",
+        "filter": "Filtrar…",
+        "matchCase": "Distinguir mayúsculas"
     },
     "stepSection": {
-        "done": "{title}: done"
+        "done": "{title}: listo"
     },
     "timeWindow": {
-        "all": "All"
+        "all": "Todo"
     },
     "useOsPreference": {
         "linuxMacos": "Linux / macOS",

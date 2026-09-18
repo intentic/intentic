@@ -3,52 +3,52 @@
         "pipelines": "Pipelines"
     },
     "pipelineDagGraph": {
-        "expand": "Expand",
-        "failingRunsInRow": "Failing for {name} runs in a row",
-        "fit": "Fit",
-        "openJobGraphFull": "Open the job graph full screen",
-        "zoomOutUntilWhole": "Zoom out until the whole run is in frame"
+        "expand": "Aufklappen",
+        "failingRunsInRow": "Fällt bei {name} seit mehreren Läufen in Folge durch",
+        "fit": "Einpassen",
+        "openJobGraphFull": "Den Job-Graphen im Vollbild öffnen",
+        "zoomOutUntilWhole": "Herauszoomen, bis der ganze Lauf im Bild ist"
     },
     "pipelineGraph": {
-        "failingRunsInRow": "Failing for {name} runs in a row"
+        "failingRunsInRow": "Fällt bei {name} seit mehreren Läufen in Folge durch"
     },
     "pipelineRunRow": {
-        "agentAlreadyWorkingOn": "An agent is already working on {branch}, started from run #{runId} — open it",
-        "agentOnBranch": "Agent on branch",
-        "cancel": "Cancel",
-        "continue": "Continue",
-        "failedJobs": "Failed jobs",
-        "fixAgent": "Fix with agent",
-        "fixInWorkspaceRun": "The fix is in your workspace: run the pipeline again to prove it",
-        "jobGraph": "{headline}: job graph",
-        "loadingJobs": "Loading jobs",
-        "noJobDetailsAvailable": "No job details available for this run.",
-        "reRun": "Re-run",
-        "setAttemptAsideStart": "Set this attempt aside and start a fresh one — opens the picker first",
-        "startOver": "Start over",
-        "supersededBy": "superseded by",
-        "wentGreenAgainIn": "{branch} went green again in this run: open it to check the job that failed here even ran"
+        "agentAlreadyWorkingOn": "Ein Agent arbeitet bereits an {branch}, gestartet aus Lauf #{runId} — öffnen",
+        "agentOnBranch": "Agent auf Branch",
+        "cancel": "Abbrechen",
+        "continue": "Fortfahren",
+        "failedJobs": "Fehlgeschlagene Jobs",
+        "fixAgent": "Mit Agent reparieren",
+        "fixInWorkspaceRun": "Die Reparatur liegt in Ihrem Workspace: lassen Sie die Pipeline erneut laufen, um es zu beweisen",
+        "jobGraph": "{headline}: Job-Graph",
+        "loadingJobs": "Jobs werden geladen",
+        "noJobDetailsAvailable": "Für diesen Lauf sind keine Job-Details verfügbar.",
+        "reRun": "Erneut laufen lassen",
+        "setAttemptAsideStart": "Diesen Versuch beiseitelegen und einen neuen beginnen — öffnet zuerst die Auswahl",
+        "startOver": "Von vorn beginnen",
+        "supersededBy": "überholt von",
+        "wentGreenAgainIn": "{branch} ist in diesem Lauf wieder grün geworden: öffnen Sie ihn, um zu prüfen, ob der hier fehlgeschlagene Job überhaupt gelaufen ist"
     },
     "pipelinesSkeleton": {
-        "loadingPipelines": "Loading pipelines"
+        "loadingPipelines": "Pipelines werden geladen"
     },
     "pipelinesTally": {
-        "passRate": "{rate}% pass rate"
+        "passRate": "{rate} % Erfolgsquote"
     },
     "pipelinesView": {
-        "allRepositories": "All repositories",
-        "connectedRepos": "any of the {count} connected repos",
-        "failedLastRunsOn": "{job} has failed the last {runs} runs on {repo} {branch}",
-        "failingRepeatedly": "Failing repeatedly",
-        "noRunsYet": "No pipeline has run yet on {where}. Runs land here as soon as one does.",
-        "noRunsYet2": "No runs yet",
-        "noRunsYetRepo": "No runs yet for this repo.",
-        "noWorkspaceRepoMaps": "No workspace repo maps to a connected GitHub/GitLab account: clone a repo from your connected host, or connect the matching capability on the + page.",
-        "openPipelines": "Open {project} pipelines",
-        "openProjectOn": "Open {project} on {host}",
+        "allRepositories": "Alle Repositorys",
+        "connectedRepos": "eines der {count} verbundenen Repos",
+        "failedLastRunsOn": "{job} ist bei den letzten {runs} Läufen auf {repo} {branch} durchgefallen",
+        "failingRepeatedly": "Fällt wiederholt durch",
+        "noRunsYet": "Auf {where} ist noch keine Pipeline gelaufen. Läufe landen hier, sobald eine läuft.",
+        "noRunsYet2": "Noch keine Läufe",
+        "noRunsYetRepo": "Noch keine Läufe für dieses Repo.",
+        "noWorkspaceRepoMaps": "Kein Workspace-Repo passt zu einem verbundenen GitHub-/GitLab-Konto: klonen Sie ein Repo von Ihrem verbundenen Host, oder verbinden Sie die passende Fähigkeit auf der +-Seite.",
+        "openPipelines": "{project}-Pipelines öffnen",
+        "openProjectOn": "{project} auf {host} öffnen",
         "pipelines": "Pipelines",
         "repository": "Repository",
-        "runs": "{runs} runs",
-        "thisRepo": "this repo"
+        "runs": "{runs} Läufe",
+        "thisRepo": "dieses Repo"
     }
 }

@@ -541,9 +541,9 @@ onUnmounted(stopStartingPoll);
             <div v-else-if="reach?.outcome === `unreachable`" class="flex flex-1 flex-col items-center justify-center gap-3 px-6 text-center">
                 <Icon name="exclamation-triangle" class="text-2xl text-subtle" />
                 <p class="text-sm text-muted">{{ t(`preview.previewPanel.previewAddressDoesntReach`) }}</p>
-                <p class="max-w-sm text-2xs text-subtle">
-                    <span class="font-mono">{{ target.url }}</span> {{ t(`preview.previewPanel.answersSomewhereIsntSandboxs`) }}
-                </p>
+                <i18n-t keypath="preview.previewPanel.addressAnswersElsewhere" tag="p" class="max-w-sm text-2xs text-subtle" scope="global">
+                    <template #url><span class="font-mono">{{ target.url }}</span></template>
+                </i18n-t>
                 <div class="flex items-center gap-2">
                     <Button :label="t(`ui.action.tryAgain`)" size="small" severity="secondary" @click="resolvePreview()" />
                     <RouterLink
@@ -558,17 +558,18 @@ onUnmounted(stopStartingPoll);
             <!-- Ordinary monorepo shape: `dev` fans out across packages on their own ports, so no single preview address applies. -->
             <div v-else-if="!target.url && target.servers.length > 0" class="flex flex-1 flex-col items-center justify-center gap-3 px-6 text-center">
                 <Icon name="globe" class="text-2xl text-subtle" />
-                <p class="text-sm text-muted">
-                    <span class="font-mono">{{ target.label }}</span> {{ t(`preview.previewPanel.running`) }}
-                    {{
-                        target.servers.length === 1
-                            ? t(`preview.previewPanel.devServer`)
-                            : t(`preview.previewPanel.devServers`, { count: target.servers.length })
-                    }}
-                    {{ t(`preview.previewPanel.on`) }} {{ target.servers.length === 1 ? t(`preview.previewPanel.port`) : `ports` }}
-                    {{ t(`preview.previewPanel.of`) }} {{ target.servers.length === 1 ? `its` : `their` }}
-                    {{ t(`preview.previewPanel.ownOnePreviewAddress`) }}
-                </p>
+                <!-- One message, not seven fragments: the count decides the form, and only a whole sentence lets a
+                     translator put the number, the noun and the possessive where their own grammar needs them. -->
+                <i18n-t
+                    keypath="preview.previewPanel.serversOnOwnPorts"
+                    tag="p"
+                    class="text-sm text-muted"
+                    scope="global"
+                    :plural="target.servers.length"
+                >
+                    <template #label><span class="font-mono">{{ target.label }}</span></template>
+                    <template #count>{{ target.servers.length }}</template>
+                </i18n-t>
                 <ul class="flex w-full max-w-md flex-col gap-1">
                     <li
                         v-for="server in target.servers"
@@ -630,15 +631,14 @@ onUnmounted(stopStartingPoll);
 
             <!-- The stopped state explains the next action and its destination. -->
             <div v-else class="flex flex-1 flex-col items-center justify-center gap-2 px-6 text-center">
-                <p class="text-sm text-muted">
-                    <span class="font-mono">{{ target.label }}</span> {{ t(`preview.previewPanel.isntRunning`) }}
-                </p>
+                <i18n-t keypath="preview.previewPanel.labelIsntRunning" tag="p" class="text-sm text-muted" scope="global">
+                    <template #label><span class="font-mono">{{ target.label }}</span></template>
+                </i18n-t>
                 <p v-if="startHint" class="max-w-md text-2xs text-subtle">{{ startHint }}</p>
-                <p v-else class="max-w-md text-2xs text-subtle">
-                    {{ t(`preview.previewPanel.noDevServerPanel`) }} <span class="font-mono">operator/</span> {{ t(`preview.previewPanel.panelNo`) }}
-                    <span class="font-mono">dev</span>
-                    {{ t(`preview.previewPanel.scriptAtRootAnything`) }}
-                </p>
+                <i18n-t v-else keypath="preview.previewPanel.noDevServerToStart" tag="p" class="max-w-md text-2xs text-subtle" scope="global">
+                    <template #operator><span class="font-mono">operator/</span></template>
+                    <template #dev><span class="font-mono">dev</span></template>
+                </i18n-t>
                 <Button v-if="target.startable" :label="t(`ui.action.start`)" size="small" :disabled="busy" class="mt-1" @click="act(start)">
                     <template #icon><Icon name="play" /></template>
                 </Button>

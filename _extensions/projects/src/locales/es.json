@@ -1,26 +1,26 @@
 {
     "extension": {
-        "lookingAtOnly": "looking at {project} only",
-        "projects": "Projects",
-        "projects2": "Projects · {project}"
+        "lookingAtOnly": "mirando solo {project}",
+        "projects": "Proyectos",
+        "projects2": "Proyectos · {project}"
     },
     "projectsView": {
-        "allProjects": "All projects",
-        "cancel": "Cancel",
-        "create": "Create",
-        "everyProjectRepositoryIn": "Every project is a repository in this workspace. Open one and the files, the agents and the checks narrow to it.",
-        "folder": "Folder: {slug}",
-        "freshRepositoryReadyAgent": "A fresh repository, ready for an agent.",
-        "name": "Name",
-        "newProject": "New project",
-        "noDescriptionInReadme": "No description in its README yet.",
-        "open": "Open {name}",
-        "open2": "Open",
-        "projectRepositoryInWorkspace": "A project is a repository in this workspace. Make one and an agent can get to work in it.",
-        "projects": "Projects",
-        "seeRunning": "See it running",
-        "startFirstProject": "Start your first project",
-        "starting": "Starting…",
-        "workingInFilesAgents": "Working in {current}: its files, its agents, its checks. Open another to switch, or show them all."
+        "allProjects": "Todos los proyectos",
+        "cancel": "Cancelar",
+        "create": "Crear",
+        "everyProjectRepositoryIn": "Cada proyecto es un repositorio de este espacio de trabajo. Abre uno y los archivos, los agentes y las comprobaciones se estrechan a él.",
+        "folder": "Carpeta: {slug}",
+        "freshRepositoryReadyAgent": "Un repositorio nuevo, listo para un agente.",
+        "name": "Nombre",
+        "newProject": "Proyecto nuevo",
+        "noDescriptionInReadme": "Todavía sin descripción en su README.",
+        "open": "Abrir {name}",
+        "open2": "Abrir",
+        "projectRepositoryInWorkspace": "Un proyecto es un repositorio de este espacio de trabajo. Crea uno y un agente podrá ponerse a trabajar en él.",
+        "projects": "Proyectos",
+        "seeRunning": "Verlo funcionando",
+        "startFirstProject": "Empieza tu primer proyecto",
+        "starting": "Iniciando…",
+        "workingInFilesAgents": "Trabajando en {current}: sus archivos, sus agentes, sus comprobaciones. Abre otro para cambiar, o muéstralos todos."
     }
 }

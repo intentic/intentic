@@ -1,204 +1,204 @@
 {
     "action": {
-        "add": "Add",
-        "apply": "Apply",
-        "approve": "Approve",
-        "back": "Back",
-        "cancel": "Cancel",
-        "clear": "Clear",
-        "close": "Close",
-        "connect": "Connect",
-        "continue": "Continue",
-        "copied": "Copied",
-        "copy": "Copy",
-        "create": "Create",
-        "delete": "Delete",
-        "disconnect": "Disconnect",
-        "dismiss": "Dismiss",
-        "done": "Done",
-        "download": "Download",
-        "edit": "Edit",
-        "next": "Next",
-        "open": "Open",
-        "refresh": "Refresh",
-        "remove": "Remove",
-        "rename": "Rename",
-        "retry": "Retry",
-        "save": "Save",
-        "send": "Send",
-        "start": "Start",
-        "stop": "Stop",
-        "tryAgain": "Try again",
-        "update": "Update"
+        "add": "Dodaj",
+        "apply": "Zastosuj",
+        "approve": "Zatwierdź",
+        "back": "Wstecz",
+        "cancel": "Anuluj",
+        "clear": "Wyczyść",
+        "close": "Zamknij",
+        "connect": "Połącz",
+        "continue": "Kontynuuj",
+        "copied": "Skopiowano",
+        "copy": "Kopiuj",
+        "create": "Utwórz",
+        "delete": "Usuń",
+        "disconnect": "Rozłącz",
+        "dismiss": "Odrzuć",
+        "done": "Gotowe",
+        "download": "Pobierz",
+        "edit": "Edytuj",
+        "next": "Dalej",
+        "open": "Otwórz",
+        "refresh": "Odśwież",
+        "remove": "Usuń z listy",
+        "rename": "Zmień nazwę",
+        "retry": "Ponów",
+        "save": "Zapisz",
+        "send": "Wyślij",
+        "start": "Uruchom",
+        "stop": "Zatrzymaj",
+        "tryAgain": "Spróbuj ponownie",
+        "update": "Zaktualizuj"
     },
     "agentRunButton": {
-        "configureStartRun": "Configure and start this run — {spend}"
+        "configureStartRun": "Skonfiguruj i uruchom ten przebieg — {spend}"
     },
     "code": {
-        "showAll": "Show all",
-        "showLess": "Show less"
+        "showAll": "Pokaż wszystko",
+        "showLess": "Pokaż mniej"
     },
     "colorPicker": {
-        "accentColour": "Accent colour",
-        "azure": "Azure",
-        "brass": "Brass",
-        "cobalt": "Cobalt",
-        "ember": "Ember",
-        "emerald": "Emerald",
-        "fern": "Fern",
-        "graphite": "Graphite",
-        "iris": "Iris",
-        "lagoon": "Lagoon",
-        "moss": "Moss",
-        "orchid": "Orchid",
-        "rose": "Rose",
-        "vermilion": "Vermilion"
+        "accentColour": "Kolor akcentu",
+        "azure": "Lazur",
+        "brass": "Mosiądz",
+        "cobalt": "Kobalt",
+        "ember": "Żar",
+        "emerald": "Szmaragd",
+        "fern": "Paproć",
+        "graphite": "Grafit",
+        "iris": "Irys",
+        "lagoon": "Laguna",
+        "moss": "Mech",
+        "orchid": "Storczyk",
+        "rose": "Róż",
+        "vermilion": "Cynober"
     },
     "confirmDialog": {
-        "more": "…and {count} more"
+        "more": "…i {count} więcej"
     },
     "dagEditor": {
-        "fitWholeGraph": "Fit the whole graph"
+        "fitWholeGraph": "Dopasuj cały graf"
     },
     "deviceAgent": {
-        "agentAliveStoppedMaking": "Its agent is alive but has stopped making rounds, so this sandbox's picture of its folders and ports is as old as the last one.",
-        "commands": "Commands",
-        "folders": "Folders",
-        "loopKeepsBuildStarted": "A loop keeps the build it started with until it restarts, so replacing the file on disk changes nothing on its own.",
-        "ports": "Ports",
-        "restartAgent": "Restart agent",
-        "stopsStartsDevicesAgent": "Stops and starts this device's agent loop. Nothing is downloaded — the build already installed there is the one that comes up."
+        "agentAliveStoppedMaking": "Jego agent żyje, ale przestał robić obchody, więc obraz folderów i portów, jaki ma ten sandbox, jest tak stary jak ostatni obchód.",
+        "commands": "Polecenia",
+        "folders": "Foldery",
+        "loopKeepsBuildStarted": "Pętla trzyma build, z którym wystartowała, aż do restartu — podmiana pliku na dysku sama z siebie niczego nie zmienia.",
+        "ports": "Porty",
+        "restartAgent": "Uruchom agenta ponownie",
+        "stopsStartsDevicesAgent": "Zatrzymuje i uruchamia pętlę agenta na tym urządzeniu. Nic nie jest pobierane — podnosi się build, który już tam jest zainstalowany."
     },
     "deviceAgentGroup": {
         "agent": "Agent",
         "agent2": "Agent {version}",
-        "agentOnThisDevice": "Agent on this device"
+        "agentOnThisDevice": "Agent na tym urządzeniu"
     },
     "deviceDetail": {
-        "backup": "backup: {folder}",
-        "copyPath": "Copy path",
-        "deviceIsntSyncingFolder": "This device isn't syncing a folder or holding any ports for this sandbox.",
+        "backup": "kopia zapasowa: {folder}",
+        "copyPath": "Kopiuj ścieżkę",
+        "deviceIsntSyncingFolder": "To urządzenie nie synchronizuje żadnego folderu ani nie trzyma portów dla tego sandboxa.",
         "folder": "Folder",
-        "image": "Image",
+        "image": "Obraz",
         "localhost": "localhost:",
-        "more": "… and {more} more",
-        "noFolderDeviceOnly": "no folder: this device only mirrors ports",
-        "noFolderSynced": "no folder synced",
-        "notRunningHere": "not running here",
-        "offDeviceIsntPutting": "Off: this device isn't putting this sandbox's ports on its own localhost. File syncing is unaffected.",
-        "ports": "Ports",
-        "share": "Share",
-        "show": "show it",
-        "stopped": "stopped",
-        "sync": "Sync"
+        "more": "… i {more} więcej",
+        "noFolderDeviceOnly": "brak folderu: to urządzenie odbija tylko porty",
+        "noFolderSynced": "brak synchronizowanego folderu",
+        "notRunningHere": "nie działa tutaj",
+        "offDeviceIsntPutting": "Wyłączone: to urządzenie nie wystawia portów tego sandboxa na własnym localhoście. Synchronizacja plików działa bez zmian.",
+        "ports": "Porty",
+        "share": "Przydział",
+        "show": "pokaż go",
+        "stopped": "zatrzymany",
+        "sync": "Synchronizacja"
     },
     "deviceRunLog": {
-        "working": "Working…"
+        "working": "Pracuje…"
     },
     "filterBar": {
-        "filter": "Filter…"
+        "filter": "Filtruj…"
     },
     "imageView": {
-        "actualSize1": "Actual size (1)",
-        "ctrlScrollToZoom": "Ctrl + scroll to zoom · drag to pan · double-click to fit",
-        "fit": "Fit",
-        "fitToPane0": "Fit to the pane (0)",
-        "imagePreviewCtrlScroll": "Image preview: Ctrl and scroll to zoom, drag to pan",
-        "zoomIn": "Zoom in (+)",
-        "zoomIn2": "Zoom in",
-        "zoomOut": "Zoom out (−)",
-        "zoomOut2": "Zoom out"
+        "actualSize1": "Rozmiar rzeczywisty (1)",
+        "ctrlScrollToZoom": "Ctrl + kółko przybliża · przeciąganie przesuwa · dwuklik dopasowuje",
+        "fit": "Dopasuj",
+        "fitToPane0": "Dopasuj do panelu (0)",
+        "imagePreviewCtrlScroll": "Podgląd obrazu: Ctrl i kółko przybliżają, przeciąganie przesuwa",
+        "zoomIn": "Przybliż (+)",
+        "zoomIn2": "Przybliż",
+        "zoomOut": "Oddal (−)",
+        "zoomOut2": "Oddal"
     },
     "inlineRename": {
-        "couldntSaveName": "Couldn't save that name.",
-        "saveEnter": "Save · Enter",
-        "unnamed": "Unnamed"
+        "couldntSaveName": "Nie udało się zapisać tej nazwy.",
+        "saveEnter": "Zapisz · Enter",
+        "unnamed": "Bez nazwy"
     },
     "layoutRepoRail": {
-        "allRepositories": "All repositories"
+        "allRepositories": "Wszystkie repozytoria"
     },
     "markdownDocument": {
-        "document": "Document"
+        "document": "Dokument"
     },
     "markdownDocumentSurface": {
-        "document": "Document"
+        "document": "Dokument"
     },
     "navRail": {
-        "filter": "Filter…"
+        "filter": "Filtruj…"
     },
     "noteEditor": {
-        "copyRawNote": "Copy the raw note",
-        "editNote": "Edit this note",
-        "it": "{verb} it",
-        "keep": "Keep it",
-        "loading": "Loading…",
-        "note": "{verb} this note",
-        "note2": "Note",
-        "unsaved": "unsaved",
-        "writeNote": "Write the note."
+        "copyRawNote": "Kopiuj surową notatkę",
+        "editNote": "Edytuj tę notatkę",
+        "it": "{verb}",
+        "keep": "Zostaw ją",
+        "loading": "Wczytywanie…",
+        "note": "{verb} tę notatkę",
+        "note2": "Notatka",
+        "unsaved": "niezapisane",
+        "writeNote": "Napisz notatkę."
     },
     "picker": {
-        "select": "Select…"
+        "select": "Wybierz…"
     },
     "pickerPanel": {
-        "noMatches": "No matches.",
-        "options": "{count} options"
+        "noMatches": "Brak dopasowań.",
+        "options": "{count} opcji"
     },
     "projectChip": {
-        "hidden": "· {hidden} hidden"
+        "hidden": "· {hidden} ukrytych"
     },
     "repoRail": {
-        "allRepositories": "All repositories",
-        "repository": "Repository"
+        "allRepositories": "Wszystkie repozytoria",
+        "repository": "Repozytorium"
     },
     "sandboxDeviceDetail": {
-        "devicesAgentDoesntReport": "This device's agent doesn't report which paths they are. Updating it lists them here."
+        "devicesAgentDoesntReport": "Agent tego urządzenia nie podaje, które to ścieżki. Po jego aktualizacji pojawią się tutaj."
     },
     "sandboxResourcesDialog": {
-        "all": "all",
-        "allMax": "all {max}",
-        "applyingRestartsSandboxOnto": "Applying restarts the sandbox onto the same image, about a minute, and interrupts whoever is working in it. Its files (in /work) are kept, and the new share survives every later update, rollback and rebuild.",
-        "askedComputerNoNvidia": "Asked for, but this computer has no NVIDIA container runtime, so the sandbox runs without it.",
-        "cores": "cores",
-        "cpuCapInCores": "CPU cap in cores",
-        "cpus": "CPUs",
-        "cpusWhole": "Whole CPUs, {bounds} on this computer. Empty is no limit: every core it has.",
-        "default": "default",
-        "defaultMax": "default: {max}",
-        "fullAccessToComputers": "Full access to this computer's devices and kernel, the way a nested Docker engine needs. Only for a tool that cannot run without it.",
+        "all": "wszystkie",
+        "allMax": "wszystkie {max}",
+        "applyingRestartsSandboxOnto": "Zastosowanie restartuje sandbox na tym samym obrazie, trwa około minuty i przerywa pracę każdemu, kto w nim siedzi. Jego pliki (w /work) zostają, a nowy przydział przetrwa każdą późniejszą aktualizację, cofnięcie i przebudowę.",
+        "askedComputerNoNvidia": "Zażądano, ale ten komputer nie ma środowiska kontenerowego NVIDIA, więc sandbox działa bez niego.",
+        "cores": "rdzeni",
+        "cpuCapInCores": "Limit CPU w rdzeniach",
+        "cpus": "CPU",
+        "cpusWhole": "Całe rdzenie, {bounds} na tym komputerze. Puste oznacza brak limitu: każdy rdzeń, jaki ma.",
+        "default": "domyślnie",
+        "defaultMax": "domyślnie: {max}",
+        "fullAccessToComputers": "Pełny dostęp do urządzeń i jądra tego komputera, tak jak potrzebuje go zagnieżdżony silnik Dockera. Tylko dla narzędzia, które bez tego nie zadziała.",
         "gib": "GiB",
         "gpu": "GPU",
-        "memory": "Memory",
-        "memoryCapInGib": "Memory cap in GiB",
-        "memoryWhole": "Whole GiB, {bounds} on this computer. Empty is the default: everything it has beyond what it keeps for itself.",
-        "passComputersNvidiaGpus": "Pass this computer's NVIDIA GPUs into the sandbox: the driver rides in with them.",
-        "passGpuThrough": "Pass the GPU through",
-        "privileged": "Privileged",
-        "range": "{min} to {max}",
-        "resources": "Resources for {name}",
-        "runPrivileged": "Run privileged",
-        "sandboxUsingRightNow": "This is the sandbox you are using right now: this page will lose it until it is back."
+        "memory": "Pamięć",
+        "memoryCapInGib": "Limit pamięci w GiB",
+        "memoryWhole": "Całe GiB, {bounds} na tym komputerze. Puste to wartość domyślna: wszystko ponad to, co zostawia sobie.",
+        "passComputersNvidiaGpus": "Przekaż karty NVIDIA tego komputera do sandboxa: sterownik wjeżdża razem z nimi.",
+        "passGpuThrough": "Przekaż GPU",
+        "privileged": "Uprzywilejowany",
+        "range": "{min} do {max}",
+        "resources": "Zasoby dla {name}",
+        "runPrivileged": "Uruchom w trybie uprzywilejowanym",
+        "sandboxUsingRightNow": "To jest sandbox, w którym właśnie pracujesz: ta strona straci go, dopóki nie wróci."
     },
     "sandboxSandboxVerbs": {
-        "deletesSandboxEverythingIn": "This deletes the sandbox and everything in it — its files and its history — from that device. This cannot be undone.",
-        "sandboxRestartsOntoImage": "The sandbox restarts onto the image it ran before its last update. Its files are kept.",
-        "sandboxRestartsOntoNewest": "The sandbox restarts onto the newest image and is unavailable while that happens — seconds if the update is already downloaded, a few minutes if not. Its files are kept."
+        "deletesSandboxEverythingIn": "To usuwa sandbox i wszystko, co w nim jest — jego pliki i jego historię — z tego urządzenia. Tego nie można cofnąć.",
+        "sandboxRestartsOntoImage": "Sandbox restartuje na obrazie, na którym działał przed ostatnią aktualizacją. Jego pliki zostają.",
+        "sandboxRestartsOntoNewest": "Sandbox restartuje na najnowszym obrazie i przez ten czas jest niedostępny — sekundy, jeśli aktualizacja jest już pobrana, kilka minut, jeśli nie. Jego pliki zostają."
     },
     "sandboxVerbs": {
-        "moreActions": "More actions"
+        "moreActions": "Więcej akcji"
     },
     "searchBar": {
         "aa": "Aa",
-        "clearEsc": "Clear (Esc)",
-        "clearFilter": "Clear filter",
-        "filter": "Filter…",
-        "matchCase": "Match case"
+        "clearEsc": "Wyczyść (Esc)",
+        "clearFilter": "Wyczyść filtr",
+        "filter": "Filtruj…",
+        "matchCase": "Uwzględniaj wielkość liter"
     },
     "stepSection": {
-        "done": "{title}: done"
+        "done": "{title}: gotowe"
     },
     "timeWindow": {
-        "all": "All"
+        "all": "Wszystko"
     },
     "useOsPreference": {
         "linuxMacos": "Linux / macOS",

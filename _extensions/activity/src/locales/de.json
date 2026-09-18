@@ -1,33 +1,33 @@
 {
     "activityTimeline": {
-        "activityFeed": "Activity feed",
-        "idleNoEnabledListener": "Idle: no enabled listener automation for {label} yet, so nothing is being listened for.",
-        "loadingActivity": "Loading activity",
-        "nothingEntriesAppearMessage": "Nothing {window}. Entries appear when a message wakes the agent, when it calls a connected provider, and on every turn it runs.",
-        "showingMostRecentEntries": "Showing the most recent entries only: this window holds more than the feed fetches at once."
+        "activityFeed": "Aktivitätsverlauf",
+        "idleNoEnabledListener": "Untätig: für {label} gibt es noch keine aktivierte Listener-Automation, es wird also auf nichts gehört.",
+        "loadingActivity": "Aktivität wird geladen",
+        "nothingEntriesAppearMessage": "Nichts {window}. Einträge erscheinen, wenn eine Nachricht den Agenten weckt, wenn er einen verbundenen Anbieter aufruft, und bei jedem Zug, den er ausführt.",
+        "showingMostRecentEntries": "Es werden nur die neuesten Einträge gezeigt: dieses Fenster hält mehr, als der Verlauf auf einmal holt."
     },
     "activityView": {
-        "activity": "Activity",
-        "connectedProviderWokeAgent": ": a connected provider that woke the agent, a schedule, or you. A turn's whole lifecycle: start, plan, failure, completion, and every provider call it made, is one entry; expand it for the raw events the daemon recorded.",
-        "noSpeakersYet": "no speakers yet",
-        "oneEntryPerThing": "One entry per thing that happened, grouped by",
-        "transcribing": "transcribing",
-        "voiceMinutes": "{minutes} min: {speakers}",
-        "whoSetOff": "who set it off"
+        "activity": "Aktivität",
+        "connectedProviderWokeAgent": ": ein verbundener Anbieter, der den Agenten geweckt hat, ein Zeitplan, oder Sie. Der ganze Lebenslauf eines Zugs — Start, Plan, Fehlschlag, Abschluss und jeder Anbieteraufruf, den er gemacht hat — ist ein Eintrag; klappen Sie ihn auf für die rohen Ereignisse, die der Daemon aufgezeichnet hat.",
+        "noSpeakersYet": "noch keine Sprecher",
+        "oneEntryPerThing": "Ein Eintrag pro Sache, die passiert ist, gruppiert nach",
+        "transcribing": "wird transkribiert",
+        "voiceMinutes": "{minutes} Min.: {speakers}",
+        "whoSetOff": "wer es ausgelöst hat"
     },
     "episodeRow": {
-        "failed": "failed",
-        "openTranscript": "Open transcript",
-        "session": "session {sessionId}",
-        "source": "source {sourceKey}"
+        "failed": "fehlgeschlagen",
+        "openTranscript": "Transkript öffnen",
+        "session": "Session {sessionId}",
+        "source": "Quelle {sourceKey}"
     },
-    "filter": "Filter by text, channel, session…",
-    "source": "Source",
+    "filter": "Nach Text, Kanal, Session filtern…",
+    "source": "Quelle",
     "sourceFilter": {
-        "allSources": "All sources",
-        "connections": "Connections",
-        "direct": "Direct"
+        "allSources": "Alle Quellen",
+        "connections": "Verbindungen",
+        "direct": "Direkt"
     },
-    "sourceLabel": "Activity source",
-    "title": "Activity"
+    "sourceLabel": "Aktivitätsquelle",
+    "title": "Aktivität"
 }

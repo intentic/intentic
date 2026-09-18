@@ -1,74 +1,74 @@
 {
     "deck": {
-        "pictureInFormatBrowsers": "Picture in a format browsers cannot draw"
+        "pictureInFormatBrowsers": "Bild in einem Format, das Browser nicht zeichnen können"
     },
     "documentPaper": {
-        "documentNoTextIn": "This document has no text in it."
+        "documentNoTextIn": "Dieses Dokument enthält keinen Text."
     },
     "docxCompare": {
-        "added": "{count} added",
-        "changed": "{count} changed",
-        "changes": "{count} change | {count} changes",
-        "couldNotCompare": "Could not draw these two versions as one document.",
-        "legendAdded": "added",
-        "legendRemoved": "removed",
-        "nextChange": "Next change",
-        "nothingMoved": "No words moved: what changed is formatting, pictures or file metadata.",
-        "position": "{current} of {count}",
-        "previousChange": "Previous change",
-        "removed": "{count} removed",
-        "removedPicture": "[picture]",
-        "tooDifferent": "Too different to align: the old text is struck through whole and the new underlined."
+        "added": "{count} hinzugefügt",
+        "changed": "{count} geändert",
+        "changes": "{count} Änderung | {count} Änderungen",
+        "couldNotCompare": "Diese beiden Fassungen ließen sich nicht als ein Dokument zeichnen.",
+        "legendAdded": "hinzugefügt",
+        "legendRemoved": "entfernt",
+        "nextChange": "Nächste Änderung",
+        "nothingMoved": "Keine Worte haben sich bewegt: geändert haben sich Formatierung, Bilder oder Datei-Metadaten.",
+        "position": "{current} von {count}",
+        "previousChange": "Vorherige Änderung",
+        "removed": "{count} entfernt",
+        "removedPicture": "[Bild]",
+        "tooDifferent": "Zu verschieden zum Ausrichten: der alte Text ist ganz durchgestrichen und der neue unterstrichen."
     },
     "epubViewer": {
-        "bookNoChaptersIn": "This book has no chapters in it.",
-        "chapter": "Chapter",
-        "contents": "Contents"
+        "bookNoChaptersIn": "Dieses Buch enthält keine Kapitel.",
+        "chapter": "Kapitel",
+        "contents": "Inhalt"
     },
     "mediaViewer": {
-        "back10Seconds": "Back 10 seconds",
-        "back10sJ": "Back 10s (J)",
-        "download": "Download",
-        "exitFullScreen": "Exit full screen",
-        "formatCantPlayedIn": "This format can't be played in the browser. Download it to open in a media player.",
-        "forward10Seconds": "Forward 10 seconds",
-        "forward10sL": "Forward 10s (L)",
-        "fullScreen": "Full screen",
-        "fullScreenF": "Full screen (F)",
-        "loop": "Loop",
-        "mute": "Mute",
-        "muteM": "Mute (M)",
+        "back10Seconds": "10 Sekunden zurück",
+        "back10sJ": "10 s zurück (J)",
+        "download": "Herunterladen",
+        "exitFullScreen": "Vollbild verlassen",
+        "formatCantPlayedIn": "Dieses Format lässt sich im Browser nicht abspielen. Laden Sie es herunter, um es in einem Mediaplayer zu öffnen.",
+        "forward10Seconds": "10 Sekunden vor",
+        "forward10sL": "10 s vor (L)",
+        "fullScreen": "Vollbild",
+        "fullScreenF": "Vollbild (F)",
+        "loop": "Schleife",
+        "mute": "Stummschalten",
+        "muteM": "Stummschalten (M)",
         "pause": "Pause",
         "pauseK": "Pause (K)",
-        "pictureInPicture": "Picture in picture",
-        "pictureInPictureP": "Picture in picture (P)",
-        "play": "Play",
-        "playK": "Play (K)",
-        "playbackSpeed": "Playback speed",
-        "playbackSpeed2": "Playback speed (, and .)",
-        "seek": "Seek: {displayTime} of {duration}",
-        "spaceToPlayArrows": "{filename}: space to play, arrows to seek, F for fullscreen",
-        "unmute": "Unmute",
-        "volume": "Volume"
+        "pictureInPicture": "Bild im Bild",
+        "pictureInPictureP": "Bild im Bild (P)",
+        "play": "Abspielen",
+        "playK": "Abspielen (K)",
+        "playbackSpeed": "Wiedergabegeschwindigkeit",
+        "playbackSpeed2": "Wiedergabegeschwindigkeit (, und .)",
+        "seek": "Springen: {displayTime} von {duration}",
+        "spaceToPlayArrows": "{filename}: Leertaste zum Abspielen, Pfeile zum Springen, F für Vollbild",
+        "unmute": "Stummschaltung aufheben",
+        "volume": "Lautstärke"
     },
     "odfSlidesViewer": {
-        "presentationNoSlides": "This presentation has no slides."
+        "presentationNoSlides": "Diese Präsentation hat keine Folien."
     },
     "pdfViewer": {
-        "download": "Download",
-        "pdfCantDisplayedInline": "This PDF can't be displayed inline."
+        "download": "Herunterladen",
+        "pdfCantDisplayedInline": "Dieses PDF lässt sich nicht eingebettet anzeigen."
     },
     "pptxViewer": {
-        "pictureOnSlide": "Picture on slide {number}",
-        "presentationNoSlides": "This presentation has no slides.",
-        "slide": "Slide {number}",
-        "speakerNotes": "Speaker notes"
+        "pictureOnSlide": "Bild auf Folie {number}",
+        "presentationNoSlides": "Diese Präsentation hat keine Folien.",
+        "slide": "Folie {number}",
+        "speakerNotes": "Sprechernotizen"
     },
     "sheetViewer": {
-        "sheetEmpty": "This sheet is empty."
+        "sheetEmpty": "Dieses Blatt ist leer."
     },
     "svgViewer": {
-        "preview": "Preview",
-        "source": "Source"
+        "preview": "Vorschau",
+        "source": "Quelltext"
     }
 }

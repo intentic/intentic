@@ -188,4 +188,56 @@ describe(`the language layer`, () => {
             expect(seen[1]).not.toBe(seen[0]);
         });
     });
+
+    // A `|` message is picked by INDEX, and the index a count maps to is the language's grammar, not English's.
+    // vue-i18n's default rule is English's, so without the rules registered in `createI18n` a Polish reader gets
+    // "2 plików" where the language wants "2 pliki", and a French one "0 fichiers" where it wants "0 fichier".
+    describe(`a count picks the form its own language uses`, () => {
+        const counted = (forms: string): Catalog => ({
+            namespace: `probe`,
+            base: { files: `{count} file | {count} files` },
+            load: () => Promise.resolve({ default: { files: forms } }),
+        });
+
+        it(`gives Polish its three forms, teens included`, async () => {
+            const { registerCatalog, setLocale, t: typed } = await freshI18n();
+            const t = typed as unknown as (key: string, values: Record<string, unknown>, plural: number) => string;
+            await registerCatalog(counted(`{count} plik | {count} pliki | {count} plików`));
+            await setLocale(`pl`);
+
+            const files = (count: number): string => t(`probe.files`, { count }, count);
+            expect(files(1)).toBe(`1 plik`);
+            expect(files(2)).toBe(`2 pliki`);
+            expect(files(5)).toBe(`5 plików`);
+            // The exception the modulo-10 test alone gets wrong: 12–14 take the third form, 22–24 the second.
+            expect(files(13)).toBe(`13 plików`);
+            expect(files(22)).toBe(`22 pliki`);
+            // Zero is the genitive plural, not the singular.
+            expect(files(0)).toBe(`0 plików`);
+        });
+
+        it(`counts zero as singular in French, as the language does`, async () => {
+            const { registerCatalog, setLocale, t: typed } = await freshI18n();
+            const t = typed as unknown as (key: string, values: Record<string, unknown>, plural: number) => string;
+            await registerCatalog(counted(`{count} fichier | {count} fichiers`));
+            await setLocale(`fr`);
+
+            const files = (count: number): string => t(`probe.files`, { count }, count);
+            expect(files(0)).toBe(`0 fichier`);
+            expect(files(1)).toBe(`1 fichier`);
+            expect(files(2)).toBe(`2 fichiers`);
+        });
+
+        it(`leaves German on the English split it shares`, async () => {
+            const { registerCatalog, setLocale, t: typed } = await freshI18n();
+            const t = typed as unknown as (key: string, values: Record<string, unknown>, plural: number) => string;
+            await registerCatalog(counted(`{count} Datei | {count} Dateien`));
+            await setLocale(`de`);
+
+            const files = (count: number): string => t(`probe.files`, { count }, count);
+            expect(files(1)).toBe(`1 Datei`);
+            expect(files(2)).toBe(`2 Dateien`);
+            expect(files(0)).toBe(`0 Dateien`);
+        });
+    });
 });

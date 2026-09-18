@@ -1,6 +1,7 @@
 // What the next Send press means: one decision made once, read by the placeholder, tooltip, refusal
 // line and submit() so they can't disagree. Pure and value-typed, no refs, no conversation, no
 // daemon, so precedence is testable without mounting a chat.
+import { t } from "@intentic/ui/i18n";
 
 // The intents, in the order they claim the press.
 //
@@ -79,31 +80,40 @@ export const sendIntentOf = (situation: ComposerSituation): SendIntent => {
 };
 
 // Plan and edit are separate entries: while a plan is pending, an armed edit still reads for what it is.
+// Every entry is a FUNCTION, never a string built at import: `t` reads the active language from a ref, so a table
+// evaluated once at module load would hold the words it was born with and never hear the language change.
 const PLACEHOLDER: Record<SendIntent, (words: ComposerWords) => string> = {
-    place: (words) => `Write as ${words.provider}, placed into the transcript, no reply…`,
+    place: (words) => t(`chat.composerIntent.placeholderPlace`, { provider: words.provider }),
     // Read only once the box is cleared, exactly when "what was I doing?" needs answering.
-    edit: () => `Ask this turn again, differently…`,
-    plan: () => `Reply to revise the plan…`,
-    idle: (words) => (words.onTrial ? `Ask anything…` : `Ask ${words.provider}…`),
-    parked: () => `Answer above, or add a message for after…`,
-    steer: (words) => `Steer ${words.provider} mid-turn…`,
-    queue: () => `Add a message for when this turn ends…`,
+    edit: () => t(`chat.composerIntent.placeholderEdit`),
+    plan: () => t(`chat.composerIntent.placeholderPlan`),
+    idle: (words) =>
+        words.onTrial ? t(`chat.composerIntent.placeholderIdleTrial`) : t(`chat.composerIntent.placeholderIdle`, { provider: words.provider }),
+    parked: () => t(`chat.composerIntent.placeholderParked`),
+    steer: (words) => t(`chat.composerIntent.placeholderSteer`, { provider: words.provider }),
+    queue: () => t(`chat.composerIntent.placeholderQueue`),
 };
 
 const SEND_HINT: Record<SendIntent, (words: ComposerWords) => string> = {
-    place: (words) => `Place into the transcript as ${words.provider}, no reply`,
+    place: (words) => t(`chat.composerIntent.hintPlace`, { provider: words.provider }),
     // Names the cost, singular where only the edited prompt itself goes.
-    edit: (words) => (words.editDropped === 1 ? `Replace this message` : `Replace this message and the ${words.editDropped - 1} below it`),
-    plan: () => `Send as feedback (keep planning)`,
-    idle: () => `Send`,
+    edit: (words) =>
+        words.editDropped === 1
+            ? t(`chat.composerIntent.hintEditOne`)
+            : t(`chat.composerIntent.hintEditMany`, { count: words.editDropped - 1 }, words.editDropped - 1),
+    plan: () => t(`chat.composerIntent.hintPlan`),
+    idle: () => t(`chat.composerIntent.hintIdle`),
     // Says whether Send reaches the running turn or waits, so identical buttons don't mean different things.
-    parked: () => `Queue for after the request above`,
-    steer: () => `Send to the running turn`,
-    queue: () => `Queue for when this turn ends`,
+    parked: () => t(`chat.composerIntent.hintParked`),
+    steer: () => t(`chat.composerIntent.hintSteer`),
+    queue: () => t(`chat.composerIntent.hintQueue`),
 };
 
-/** A viewer's composer is present but inert, the daemon floors every turn route at collaborator. */
-export const VIEWER_PLACEHOLDER = `You're viewing: ask the owner for a collaborator role to drive agents`;
+/**
+ * A viewer's composer is present but inert, the daemon floors every turn route at collaborator. A getter rather
+ * than a constant, for the same reason the tables above hold functions: a constant would freeze one language in.
+ */
+export const viewerPlaceholder = (): string => t(`chat.composerIntent.viewerPlaceholder`);
 
 export const placeholderFor = (intent: SendIntent, words: ComposerWords): string => PLACEHOLDER[intent](words);
 
@@ -119,25 +129,25 @@ export const sendRefusal = (situation: ComposerSituation): string | undefined =>
     // The agent's voice refuses more than your own, stating the daemon's rule before a failed round-trip.
     if (situation.voiceAgent) {
         if (situation.streaming) {
-            return `The agent is running: its words can be placed once the turn ends.`;
+            return t(`chat.composerIntent.refusalRunningPlace`);
         }
         if (situation.pendingPlan) {
-            return `A plan is awaiting your answer: decide it before speaking as the agent.`;
+            return t(`chat.composerIntent.refusalPlanPending`);
         }
         if (situation.attached) {
-            return `An attachment can't be placed as the agent's words: remove it (×) or switch back to your own voice.`;
+            return t(`chat.composerIntent.refusalAttachedVoice`);
         }
     }
     // A rewind is refused while a turn holds the conversation; said here rather than by a silently greyed
     // button.
     if (situation.editing && situation.streaming) {
-        return `The agent is running: this edit can be sent once the turn ends.`;
+        return t(`chat.composerIntent.refusalRunningEdit`);
     }
     if (situation.uploading) {
-        return `Waiting for the attachment to finish uploading…`;
+        return t(`chat.composerIntent.refusalUploading`);
     }
     if (situation.uploadFailed) {
-        return `An attachment failed to upload: remove it (×) to send.`;
+        return t(`chat.composerIntent.refusalUploadFailed`);
     }
     return undefined;
 };

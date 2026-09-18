@@ -1187,8 +1187,55 @@
             "thinking": "Thinking"
         },
         "chatTurnStatus": {
+            "atCapacity": "at capacity",
             "attemptNothingLost": "(attempt {attempt}, nothing lost)",
-            "modelProvider": "The model provider is"
+            "loader": {
+                "brewing": "Brewing",
+                "cogitating": "Cogitating",
+                "conjuring": "Conjuring",
+                "musing": "Musing",
+                "noodling": "Noodling",
+                "percolating": "Percolating",
+                "perusing": "Perusing",
+                "pondering": "Pondering",
+                "ruminating": "Ruminating",
+                "scheming": "Scheming",
+                "synthesizing": "Synthesizing",
+                "thinking": "Thinking",
+                "tinkering": "Tinkering",
+                "untangling": "Untangling"
+            },
+            "modelProvider": "The model provider is",
+            "notResponding": "not responding",
+            "rateLimiting": "rate-limiting",
+            "retrying": "retrying",
+            "retryingIn": "retrying in {seconds}s",
+            "waitingOnSubagents": "Waiting on {count} subagent | Waiting on {count} subagents"
+        },
+        "composerIntent": {
+            "hintEditMany": "Replace this message and the {count} below it",
+            "hintEditOne": "Replace this message",
+            "hintIdle": "Send",
+            "hintParked": "Queue for after the request above",
+            "hintPlace": "Place into the transcript as {provider}, no reply",
+            "hintPlan": "Send as feedback (keep planning)",
+            "hintQueue": "Queue for when this turn ends",
+            "hintSteer": "Send to the running turn",
+            "placeholderEdit": "Ask this turn again, differently…",
+            "placeholderIdle": "Ask {provider}…",
+            "placeholderIdleTrial": "Ask anything…",
+            "placeholderParked": "Answer above, or add a message for after…",
+            "placeholderPlace": "Write as {provider}, placed into the transcript, no reply…",
+            "placeholderPlan": "Reply to revise the plan…",
+            "placeholderQueue": "Add a message for when this turn ends…",
+            "placeholderSteer": "Steer {provider} mid-turn…",
+            "refusalAttachedVoice": "An attachment can’t be placed as the agent’s words: remove it (×) or switch back to your own voice.",
+            "refusalPlanPending": "A plan is awaiting your answer: decide it before speaking as the agent.",
+            "refusalRunningEdit": "The agent is running: this edit can be sent once the turn ends.",
+            "refusalRunningPlace": "The agent is running: its words can be placed once the turn ends.",
+            "refusalUploadFailed": "An attachment failed to upload: remove it (×) to send.",
+            "refusalUploading": "Waiting for the attachment to finish uploading…",
+            "viewerPlaceholder": "You’re viewing: ask the owner for a collaborator role to drive agents"
         },
         "composerModelPill": {
             "model": "Model: {modelLabelText}"
@@ -1447,35 +1494,28 @@
         },
         "previewPanel": {
             "address": "Address",
+            "addressAnswersElsewhere": "{url} answers from somewhere that isn't this sandbox's preview proxy: its name may still be propagating, or this sandbox publishes no preview hostnames at all.",
             "addressToPreview": "Address to preview",
-            "answersSomewhereIsntSandboxs": "answers from somewhere that isn't this sandbox's preview proxy: its name may still be propagating, or this sandbox publishes no preview hostnames at all.",
             "appToPreview": "Which app to preview",
-            "devServer": "a dev server",
             "devServerStopped": "Its dev server stopped.",
-            "devServers": "{count} dev servers",
             "dockBack": "Dock back",
             "dockPreviewBack": "Dock the preview back",
             "forwardedPorts": "Forwarded ports",
             "go": "Go",
-            "isntRunning": "isn't running.",
+            "labelIsntRunning": "{label} isn't running.",
             "localhost3000AnyAddress": "localhost:3000, or any address",
             "moveIntoNewWindow": "Move into new window",
             "movePreviewIntoOwn": "Move the preview into its own window",
-            "noDevServerPanel": "It has no dev server this panel can start: no",
+            "noDevServerToStart": "It has no dev server this panel can start: no {operator} panel and no {dev} script at its root. Anything it runs from a terminal shows up under Forwarded ports.",
             "nothingToPreviewYet": "Nothing to preview yet.",
-            "of": "of",
-            "on": "on",
             "openDevServersTerminal": "Open this dev server's terminal",
             "openInNewTab": "Open {label} in a new tab",
             "openInNewTab2": "Open in new tab",
             "openPorts": "Open Ports",
             "openTerminal": "Open its terminal",
             "opening": "Opening…",
-            "ownOnePreviewAddress": "own, so one preview address can't stand for it. Pick the one you mean:",
-            "panelNo": "panel and no",
             "phone": "Phone",
             "phoneToFramePreview": "Which phone to frame the preview in",
-            "port": "a port",
             "preparingPreview": "Preparing the preview…",
             "preview": "Preview",
             "preview2": "{label} preview",
@@ -1487,8 +1527,7 @@
             "reload": "Reload",
             "reloadPreview": "Reload the preview",
             "restart": "Restart",
-            "running": "is running",
-            "scriptAtRootAnything": "script at its root. Anything it runs from a terminal shows up under Forwarded ports.",
+            "serversOnOwnPorts": "{label} is running {count} dev server on a port of its own, so one preview address can't stand for it. Pick the one you mean: | {label} is running {count} dev servers on ports of their own, so one preview address can't stand for it. Pick the one you mean:",
             "startDevServerIn": "Start a dev server in a repository, or ask the agent to build an app: its live preview appears here the moment it answers.",
             "takingTooLong": "This is taking too long.",
             "terminal": "Terminal",
@@ -3272,25 +3311,21 @@
     "setup": {
         "acceptInvite": {
             "acceptInvitation": "Accept invitation",
-            "alreadyAccessTo": "You already have access to",
+            "alreadyHaveAccessTo": "You already have access to {sandbox}.",
             "continueGoogle": "Continue with Google",
-            "invite": "This invite is for",
             "inviteExpired": "Invite expired",
+            "inviteIsForButSignedIn": "This invite is for {invited}, but you’re signed in as {current}. Switch accounts to accept it.",
             "inviteLinkExpiredAsk": "This invite link has expired. Ask whoever invited you to send a new one.",
             "inviteLinkInvalidRevoked": "This invite link is invalid or has been revoked. Ask whoever invited you for a fresh link.",
             "inviteNotFound": "Invite not found",
+            "invitedToOpenSandbox": "You’ve been invited to open the {sandbox} sandbox. Sign in with Google as {email} to continue.",
+            "invitedToSandboxTo": "You’ve been invited to the {sandbox} sandbox, to {grant}.",
             "loadingInvite": "Loading your invite…",
             "openSandbox": "Open sandbox",
-            "sandboxSignInGoogle": "sandbox. Sign in with Google as",
-            "sandboxTo": "sandbox, to",
             "switchAccount": "Switch account",
-            "toContinue": "to continue.",
             "wrongAccount": "Wrong account",
             "youreAllSet": "You're all set",
-            "youreInvited": "You're invited",
-            "youreSignedIn": ", but you're signed in as",
-            "youveInvitedTo": "You've been invited to the",
-            "youveInvitedToOpen": "You've been invited to open the"
+            "youreInvited": "You're invited"
         },
         "desktopSetupProgress": {
             "answer": "Answer it",
@@ -3591,6 +3626,8 @@
             "everyAreaOnRail": "Every area is on the rail",
             "keepOnRail": "Keep {label} on the rail",
             "keepOnRail2": "Keep on the rail",
+            "moreAreas": "More areas",
+            "moreAreasOffRail": "More areas · {count} not on the rail",
             "nextRailArea": "Next Rail Area",
             "open": "{live} open",
             "previousRailArea": "Previous Rail Area",
@@ -4063,6 +4100,15 @@
             "toStartAgentRefactoring": "to start an agent refactoring it.",
             "top": "· top {count} of {hotspots}"
         },
+        "compareDiffView": {
+            "couldNotLoadVersions": "Could not load both versions of this document.",
+            "showTextInstead": "Show the text instead"
+        },
+        "conversionNotes": {
+            "after": "after",
+            "before": "before",
+            "fromConversion": "{count} note from the conversion | {count} notes from the conversion"
+        },
         "derivedDiffView": {
             "couldNotRenderVersions": "Could not render this document's versions as text.",
             "formattingNotShown": "formatting, pictures and layout not shown",
@@ -4148,17 +4194,17 @@
             "comments": "Comments",
             "commentsHiddenClickTo": "Comments hidden, click to show them",
             "commentsShownClickTo": "Comments shown, click to diff the code alone",
+            "documentDrawnWordsMarked": "The document as drawn, the words that moved marked in place",
             "documentTextWhatAdded": "The document's text with what was added underlined and what was removed struck through",
             "filesLinesSideBy": "The file's lines, side by side or inline",
             "prose": "Prose",
             "rowsAndCellsChangedMarked": "Rows and cells, with the cells that changed marked",
             "split": "Split",
             "table": "Table",
-            "textWhatAddedUnderlined": "The text with what was added underlined and what was removed struck through",
-            "unified": "Unified",
             "text": "Text",
-            "documentDrawnWordsMarked": "The document as drawn, the words that moved marked in place",
-            "textOfBothVersionsAgentReads": "The text of both versions, as an agent reads it, folded to the changes"
+            "textOfBothVersionsAgentReads": "The text of both versions, as an agent reads it, folded to the changes",
+            "textWhatAddedUnderlined": "The text with what was added underlined and what was removed struck through",
+            "unified": "Unified"
         },
         "diffView": {
             "nextChange": "Next change",
@@ -4590,15 +4636,6 @@
             "searchCtrlP": "Search with Ctrl+P",
             "technicalHidden": "{count} technical file hidden | {count} technical files hidden",
             "viewingFile": "viewing this file"
-        },
-        "conversionNotes": {
-            "after": "after",
-            "before": "before",
-            "fromConversion": "{count} note from the conversion | {count} notes from the conversion"
-        },
-        "compareDiffView": {
-            "couldNotLoadVersions": "Could not load both versions of this document.",
-            "showTextInstead": "Show the text instead"
         }
     }
 }

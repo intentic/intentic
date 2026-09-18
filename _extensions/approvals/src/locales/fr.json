@@ -1,80 +1,80 @@
 {
     "actionBody": {
-        "hideWhatAgentTold": "Hide what the agent will be told",
-        "whatAgentTold": "What the agent will be told"
+        "hideWhatAgentTold": "Masquer ce qui sera dit à l'agent",
+        "whatAgentTold": "Ce qui sera dit à l'agent"
     },
     "approvalMeta": {
-        "as": "as"
+        "as": "en tant que"
     },
     "approvalRail": {
-        "approvalSlice": "Approval slice",
-        "approvalSlices": "Approval slices",
-        "show": "Show",
-        "slices": "Slices"
+        "approvalSlice": "Tranche d'approbation",
+        "approvalSlices": "Tranches d'approbation",
+        "show": "Afficher",
+        "slices": "Tranches"
     },
     "approvalsView": {
-        "approvals": "Approvals",
-        "approve": "Approve",
-        "approve2": "Approve {count}",
-        "approveAll": "Approve all {count}",
-        "approveEverythingWaiting": "Approve everything waiting?",
-        "automation": "automation {automationId}",
-        "automations": "Automations",
-        "automationsHeld": "Automations held for you",
-        "backToReviewNothing": "Back to review: nothing happens",
-        "cancel": "Cancel",
-        "couldntReadApprovals": "Couldn't read your approvals.",
-        "couldntReadHeldAutomations": "Couldn't read the held automations.",
-        "couldntReadWontRun": "couldn't be read and won't run:",
-        "done": "Done",
-        "doneEditing": "Done editing",
-        "eachGoesAheadOn": "Each goes ahead on its own date, or after a short countdown if it has none.",
-        "edit": "Edit {item}",
-        "editPost": "Edit the post",
-        "failed": "Failed",
-        "file": "file",
-        "fileDeletedAgentWould": "The file is deleted. Your agent would have to propose it again.",
-        "fired": "fired",
-        "goingAhead": "Going ahead",
-        "inProgress": "in progress",
-        "needsReview": "Needs your review",
-        "nothingWaitingPostsAgent": "Nothing waiting. Posts your agent wants to publish, anything else it should not do unasked, and automations set to ask first all land here for you to approve.",
-        "open": "Open",
-        "postStaysUpOn": "The post stays up on {rejecting}: only this record of it is deleted.",
-        "proposed": "proposed {createdAt}",
-        "putBackInReview": "Put {item} back in review",
-        "putBackInReview2": "Put back in review",
-        "readingApprovalsQueue": "Reading the approvals queue…",
-        "reject": "Reject {item}",
-        "reject2": "Reject",
-        "reject3": "Reject this?",
-        "rejectDeletes": "Reject: deletes it",
-        "remove": "Remove",
-        "removeList": "Remove {item} from the list",
-        "removeListWhatDone": "Remove from this list: what was done stays done",
-        "removeRecord": "Remove this record?",
-        "retry": "Retry",
-        "scheduled": "Scheduled",
-        "startNow": "Start now",
-        "stop": "Stop",
-        "stopPutBackIn": "Stop {item} and put it back in review",
-        "whatDoneStaysDone": "What was done stays done: only this record of it is deleted."
+        "approvals": "Approbations",
+        "approve": "Approuver",
+        "approve2": "Approuver {count}",
+        "approveAll": "Approuver les {count}",
+        "approveEverythingWaiting": "Approuver tout ce qui attend ?",
+        "automation": "automatisation {automationId}",
+        "automations": "Automatisations",
+        "automationsHeld": "Automatisations retenues pour vous",
+        "backToReviewNothing": "Retour à la revue : il ne se passe rien",
+        "cancel": "Annuler",
+        "couldntReadApprovals": "Impossible de lire vos approbations.",
+        "couldntReadHeldAutomations": "Impossible de lire les automatisations retenues.",
+        "couldntReadWontRun": "n'a pas pu être lu et ne sera pas exécuté :",
+        "done": "Terminé",
+        "doneEditing": "Fin de l'édition",
+        "eachGoesAheadOn": "Chacune part à sa propre date, ou après un court compte à rebours si elle n'en a pas.",
+        "edit": "Modifier {item}",
+        "editPost": "Modifier la publication",
+        "failed": "Échoué",
+        "file": "fichier",
+        "fileDeletedAgentWould": "Le fichier est supprimé. Votre agent devrait le proposer à nouveau.",
+        "fired": "déclenchée",
+        "goingAhead": "Part",
+        "inProgress": "en cours",
+        "needsReview": "Demande votre revue",
+        "nothingWaitingPostsAgent": "Rien en attente. Les publications que votre agent veut publier, tout ce qu'il ne doit pas faire sans demander, et les automatisations réglées pour demander d'abord atterrissent toutes ici pour votre approbation.",
+        "open": "Ouvrir",
+        "postStaysUpOn": "La publication reste en ligne sur {rejecting} : seule cette trace en est supprimée.",
+        "proposed": "proposée {createdAt}",
+        "putBackInReview": "Remettre {item} en revue",
+        "putBackInReview2": "Remettre en revue",
+        "readingApprovalsQueue": "Lecture de la file d'approbations…",
+        "reject": "Rejeter {item}",
+        "reject2": "Rejeter",
+        "reject3": "Rejeter ceci ?",
+        "rejectDeletes": "Rejeter : cela le supprime",
+        "remove": "Retirer",
+        "removeList": "Retirer {item} de la liste",
+        "removeListWhatDone": "Retirer de cette liste : ce qui a été fait reste fait",
+        "removeRecord": "Retirer cette trace ?",
+        "retry": "Réessayer",
+        "scheduled": "Planifiée",
+        "startNow": "Démarrer maintenant",
+        "stop": "Arrêter",
+        "stopPutBackIn": "Arrêter {item} et le remettre en revue",
+        "whatDoneStaysDone": "Ce qui a été fait reste fait : seule cette trace en est supprimée."
     },
     "extension": {
-        "approvals": "Approvals",
-        "waitingOn": "{count} waiting on you"
+        "approvals": "Approbations",
+        "waitingOn": "{count} vous attendent"
     },
     "postBody": {
-        "showLess": "Show less",
-        "showWholePost": "Show the whole post"
+        "showLess": "Afficher moins",
+        "showWholePost": "Afficher toute la publication"
     },
     "postEditor": {
-        "postText": "Post text",
-        "postTitle": "Post title"
+        "postText": "Texte de la publication",
+        "postTitle": "Titre de la publication"
     },
     "scheduleControl": {
-        "goAheadAt": "Go ahead with {label} at",
-        "goesAheadSoonExecutor": "Goes ahead as soon as the executor picks it up, click to pick a date",
-        "noDate": "No date"
+        "goAheadAt": "Lancer {label} le",
+        "goesAheadSoonExecutor": "Part dès que l'exécuteur la prend, cliquez pour choisir une date",
+        "noDate": "Pas de date"
     }
 }

@@ -44,11 +44,37 @@ export interface Catalog {
 // so every slice a package declares — `ui`, and each extension's — would have to be present in this literal. The tree
 // is assembled the other way round, by `registerCatalog` calling `mergeLocaleMessage` as each package imports, which
 // is also the only shape that works for a catalog arriving at runtime.
+
+// A `|` message is chosen by INDEX, and the index a count maps to is the language's own grammar. vue-i18n's default
+// rule is English's — one form for 1, another for everything else — which is right for German and Spanish and wrong
+// for the other two. Only languages that disagree with it are listed; a language absent here gets the default.
+const pluralRules = {
+    // Three forms, because Polish has three: "1 plik", "2 pliki", "5 plików". The teens are the exception the
+    // modulo-10 test alone gets wrong — 12, 13, 14 take the third form, while 22, 23, 24 take the second.
+    pl: (choice: number, choicesLength: number): number => {
+        const count = Math.abs(choice);
+        if (count === 1) {
+            return 0;
+        }
+        // A message a translator wrote with two forms only: keep the second for everything that is not exactly one,
+        // rather than indexing past the end of what it carries.
+        if (choicesLength < 3) {
+            return 1;
+        }
+        const tens = count % 10;
+        const hundreds = count % 100;
+        return tens >= 2 && tens <= 4 && !(hundreds >= 12 && hundreds <= 14) ? 1 : 2;
+    },
+    // French counts zero as singular — "0 fichier", not "0 fichiers" — which is the one place it parts from English.
+    fr: (choice: number): number => (Math.abs(choice) <= 1 ? 0 : 1),
+};
+
 const i18n = createI18n({
     legacy: false,
     globalInjection: false,
     locale: BASE_LOCALE,
     fallbackLocale: BASE_LOCALE,
+    pluralRules,
 });
 
 const catalogs = new Set<Catalog>();

@@ -17,7 +17,7 @@ import {
     sendHintFor,
     sendIntentOf,
     sendRefusal,
-    VIEWER_PLACEHOLDER,
+    viewerPlaceholder,
 } from "../composer/composerIntent";
 import type { Conversation } from "../session/conversation";
 import { modelLabelFor, providerDisplayLabel } from "../accounts/providerCatalog";
@@ -559,7 +559,7 @@ const words = computed(() => ({ provider: providerName.value, onTrial: onTrial.v
 // A viewer's composer is present but inert (the daemon floors every route at collaborator); disabled-with-a-
 // reason, since a vanished input reads as broken.
 const { canDrive } = useRole();
-const composerPlaceholder = computed(() => (canDrive.value ? placeholderFor(intent.value, words.value) : VIEWER_PLACEHOLDER));
+const composerPlaceholder = computed(() => (canDrive.value ? placeholderFor(intent.value, words.value) : viewerPlaceholder()));
 const sendHint = computed(() => {
     if (!reachable.value) {
         return `The sandbox is busy: keep typing; Send is available when it is ready.`;

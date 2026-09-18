@@ -1,33 +1,33 @@
 {
     "activityTimeline": {
-        "activityFeed": "Activity feed",
-        "idleNoEnabledListener": "Idle: no enabled listener automation for {label} yet, so nothing is being listened for.",
-        "loadingActivity": "Loading activity",
-        "nothingEntriesAppearMessage": "Nothing {window}. Entries appear when a message wakes the agent, when it calls a connected provider, and on every turn it runs.",
-        "showingMostRecentEntries": "Showing the most recent entries only: this window holds more than the feed fetches at once."
+        "activityFeed": "Strumień aktywności",
+        "idleNoEnabledListener": "Bezczynnie: dla {label} nie ma jeszcze włączonej automatyzacji nasłuchu, więc niczego nie nasłuchujemy.",
+        "loadingActivity": "Wczytywanie aktywności",
+        "nothingEntriesAppearMessage": "Nic {window}. Wpisy pojawiają się, gdy wiadomość budzi agenta, gdy wywołuje on podłączonego dostawcę i przy każdej turze, którą wykonuje.",
+        "showingMostRecentEntries": "Pokazujemy tylko najnowsze wpisy: to okno mieści więcej, niż strumień pobiera za jednym razem."
     },
     "activityView": {
-        "activity": "Activity",
-        "connectedProviderWokeAgent": ": a connected provider that woke the agent, a schedule, or you. A turn's whole lifecycle: start, plan, failure, completion, and every provider call it made, is one entry; expand it for the raw events the daemon recorded.",
-        "noSpeakersYet": "no speakers yet",
-        "oneEntryPerThing": "One entry per thing that happened, grouped by",
-        "transcribing": "transcribing",
+        "activity": "Aktywność",
+        "connectedProviderWokeAgent": ": podłączony dostawca, który obudził agenta, harmonogram albo Ty. Cały cykl życia tury — start, plan, niepowodzenie, zakończenie i każde wywołanie dostawcy, jakie wykonała — to jeden wpis; rozwiń go, żeby zobaczyć surowe zdarzenia zapisane przez demona.",
+        "noSpeakersYet": "jeszcze brak mówiących",
+        "oneEntryPerThing": "Jeden wpis na każdą rzecz, która się wydarzyła, pogrupowane według",
+        "transcribing": "transkrypcja",
         "voiceMinutes": "{minutes} min: {speakers}",
-        "whoSetOff": "who set it off"
+        "whoSetOff": "kto to wywołał"
     },
     "episodeRow": {
-        "failed": "failed",
-        "openTranscript": "Open transcript",
-        "session": "session {sessionId}",
-        "source": "source {sourceKey}"
+        "failed": "nieudane",
+        "openTranscript": "Otwórz zapis rozmowy",
+        "session": "sesja {sessionId}",
+        "source": "źródło {sourceKey}"
     },
-    "filter": "Filter by text, channel, session…",
-    "source": "Source",
+    "filter": "Filtruj po tekście, kanale, sesji…",
+    "source": "Źródło",
     "sourceFilter": {
-        "allSources": "All sources",
-        "connections": "Connections",
-        "direct": "Direct"
+        "allSources": "Wszystkie źródła",
+        "connections": "Połączenia",
+        "direct": "Bezpośrednio"
     },
-    "sourceLabel": "Activity source",
-    "title": "Activity"
+    "sourceLabel": "Źródło aktywności",
+    "title": "Aktywność"
 }

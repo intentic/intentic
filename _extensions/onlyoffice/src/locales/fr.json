@@ -1,16 +1,16 @@
 {
     "onlyOfficeViewer": {
-        "downloading": "Downloading ONLYOFFICE Docs…",
-        "downloadingPercent": "Downloading ONLYOFFICE Docs, {percent}%…",
-        "editorNeedsAddressBrowser": "The editor needs an address the browser can reach. Your sandbox isn't reachable from outside yet: finish setup so it registers its address.",
-        "extensionSettings": "Extension settings",
-        "onlyofficeDocsRunsContainer": "ONLYOFFICE Docs runs as a container in this sandbox's Docker engine, which isn't on. {detail}",
-        "openCapabilities": "Open capabilities",
-        "openEditSaveDocument": "Open, edit and save this document in ONLYOFFICE Docs. The first start downloads the document server, about 2 GB, once.",
-        "openingInOnlyofficeDocs": "Opening in ONLYOFFICE Docs…",
-        "startOnlyofficeDocs": "Start ONLYOFFICE Docs",
-        "startSandboxNowOn": "Start it with the sandbox from now on",
-        "startingDocumentServerCold": "Starting the document server… A cold start takes about two minutes: it regenerates its fonts and themes every time. It stays up afterwards.",
-        "tryAgain": "Try again"
+        "downloading": "Téléchargement d'ONLYOFFICE Docs…",
+        "downloadingPercent": "Téléchargement d'ONLYOFFICE Docs, {percent} %…",
+        "editorNeedsAddressBrowser": "L'éditeur a besoin d'une adresse que le navigateur peut joindre. Votre sandbox n'est pas encore joignable de l'extérieur : terminez l'installation pour qu'il enregistre son adresse.",
+        "extensionSettings": "Paramètres de l'extension",
+        "onlyofficeDocsRunsContainer": "ONLYOFFICE Docs tourne comme conteneur dans le moteur Docker de ce sandbox, qui n'est pas allumé. {detail}",
+        "openCapabilities": "Ouvrir les capacités",
+        "openEditSaveDocument": "Ouvrez, modifiez et enregistrez ce document dans ONLYOFFICE Docs. Le premier démarrage télécharge le serveur de documents, environ 2 Go, une seule fois.",
+        "openingInOnlyofficeDocs": "Ouverture dans ONLYOFFICE Docs…",
+        "startOnlyofficeDocs": "Démarrer ONLYOFFICE Docs",
+        "startSandboxNowOn": "Le démarrer avec le sandbox désormais",
+        "startingDocumentServerCold": "Démarrage du serveur de documents… Un démarrage à froid prend environ deux minutes : il régénère ses polices et ses thèmes à chaque fois. Il reste ensuite allumé.",
+        "tryAgain": "Réessayer"
     }
 }

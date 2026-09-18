@@ -1,15 +1,15 @@
 {
     "payload": {
-        "nothingSharedToAddress": "Nothing has been shared to this address.",
-        "pageMissingConversation": "This page is missing its conversation.",
-        "pagesConversationCouldNot": "This page's conversation could not be read."
+        "nothingSharedToAddress": "Rien n’a été partagé à cette adresse.",
+        "pageMissingConversation": "Il manque sa conversation à cette page.",
+        "pagesConversationCouldNot": "La conversation de cette page n’a pas pu être lue."
     },
     "shareApp": {
-        "agentsWork": "with the agent's work",
-        "messagesOnly": "messages only",
-        "nothingToShow": "Nothing to show",
-        "runOwnAgents": ": run your own agents →",
-        "shared": "Shared from",
-        "thinking": "Thinking"
+        "agentsWork": "avec le travail de l’agent",
+        "messagesOnly": "messages seuls",
+        "nothingToShow": "Rien à afficher",
+        "runOwnAgents": " : lancez vos propres agents →",
+        "shared": "Partagé depuis",
+        "thinking": "Réflexion"
     }
 }

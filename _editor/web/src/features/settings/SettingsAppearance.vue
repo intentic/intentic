@@ -151,10 +151,15 @@ const treatPreview = (entry: { name: string; type: "file" | "dir" }) =>
             <!-- First in the group: it decides what every other row on this page is written in. -->
             <Row icon="globe" :title="t(`settings.appearance.look.language`)" :description="t(`settings.appearance.look.languageHint`)">
                 <template #control>
+                    <!-- Ghost, like every other Picker that sits in a settings Row: a bordered field here would tower
+                         over the segmented controls it shares the group with. -->
                     <Picker
                         :model-value="activeLocale"
                         :options="languageOptions"
+                        variant="ghost"
+                        class="shrink-0"
                         :aria-label="t(`settings.appearance.look.language`)"
+                        :header="t(`settings.appearance.look.language`)"
                         @update:model-value="pickLanguage"
                     />
                 </template>

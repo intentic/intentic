@@ -121,11 +121,10 @@ const switchAccount = async (): Promise<void> => {
 
             <template v-else-if="view === 'signin'">
                 <h2 class="text-2xl font-semibold tracking-tight">{{ t(`setup.acceptInvite.youreInvited`) }}</h2>
-                <p class="mt-2 text-sm text-muted">
-                    {{ t(`setup.acceptInvite.youveInvitedToOpen`) }} <span class="font-medium text-content">{{ sandboxName }}</span>
-                    {{ t(`setup.acceptInvite.sandboxSignInGoogle`) }} <span class="font-medium text-content">{{ invitedEmail }}</span>
-                    {{ t(`setup.acceptInvite.toContinue`) }}
-                </p>
+                <i18n-t keypath="setup.acceptInvite.invitedToOpenSandbox" tag="p" class="mt-2 text-sm text-muted" scope="global">
+                    <template #sandbox><span class="font-medium text-content">{{ sandboxName }}</span></template>
+                    <template #email><span class="font-medium text-content">{{ invitedEmail }}</span></template>
+                </i18n-t>
                 <Button :label="t(`setup.acceptInvite.continueGoogle`)" severity="secondary" class="mt-6 w-full justify-center" @click="signIn">
                     <template #icon><Icon name="google" /></template>
                 </Button>
@@ -133,10 +132,10 @@ const switchAccount = async (): Promise<void> => {
 
             <template v-else-if="view === 'accept'">
                 <h2 class="text-2xl font-semibold tracking-tight">{{ t(`setup.acceptInvite.youreInvited`) }}</h2>
-                <p class="mt-2 text-sm text-muted">
-                    {{ t(`setup.acceptInvite.youveInvitedTo`) }} <span class="font-medium text-content">{{ sandboxName }}</span>
-                    {{ t(`setup.acceptInvite.sandboxTo`) }} {{ grantSentence }}.
-                </p>
+                <i18n-t keypath="setup.acceptInvite.invitedToSandboxTo" tag="p" class="mt-2 text-sm text-muted" scope="global">
+                    <template #sandbox><span class="font-medium text-content">{{ sandboxName }}</span></template>
+                    <template #grant>{{ grantSentence }}</template>
+                </i18n-t>
                 <Button :label="t(`setup.acceptInvite.acceptInvitation`)" class="mt-6 w-full justify-center" :loading="busy" @click="accept">
                     <template #icon><Icon name="check" /></template>
                 </Button>
@@ -144,11 +143,10 @@ const switchAccount = async (): Promise<void> => {
 
             <template v-else-if="view === 'wrong-account'">
                 <h2 class="text-2xl font-semibold tracking-tight">{{ t(`setup.acceptInvite.wrongAccount`) }}</h2>
-                <p class="mt-2 text-sm text-muted">
-                    {{ t(`setup.acceptInvite.invite`) }} <span class="font-medium text-content">{{ invitedEmail }}</span
-                    >{{ t(`setup.acceptInvite.youreSignedIn`) }} <span class="font-medium text-content">{{ user?.email }}</span
-                    >. Switch accounts to accept it.
-                </p>
+                <i18n-t keypath="setup.acceptInvite.inviteIsForButSignedIn" tag="p" class="mt-2 text-sm text-muted" scope="global">
+                    <template #invited><span class="font-medium text-content">{{ invitedEmail }}</span></template>
+                    <template #current><span class="font-medium text-content">{{ user?.email }}</span></template>
+                </i18n-t>
                 <Button :label="t(`setup.acceptInvite.switchAccount`)" severity="secondary" class="mt-6 w-full justify-center" @click="switchAccount">
                     <template #icon><Icon name="sync" /></template>
                 </Button>
@@ -156,10 +154,9 @@ const switchAccount = async (): Promise<void> => {
 
             <template v-else>
                 <h2 class="text-2xl font-semibold tracking-tight">{{ t(`setup.acceptInvite.youreAllSet`) }}</h2>
-                <p class="mt-2 text-sm text-muted">
-                    {{ t(`setup.acceptInvite.alreadyAccessTo`) }} <span class="font-medium text-content">{{ sandboxName }}</span
-                    >.
-                </p>
+                <i18n-t keypath="setup.acceptInvite.alreadyHaveAccessTo" tag="p" class="mt-2 text-sm text-muted" scope="global">
+                    <template #sandbox><span class="font-medium text-content">{{ sandboxName }}</span></template>
+                </i18n-t>
                 <Button :as="RouterLink" to="/" :label="t(`setup.acceptInvite.openSandbox`)" class="mt-6 w-full justify-center">
                     <template #icon><Icon name="arrow-right" /></template>
                 </Button>

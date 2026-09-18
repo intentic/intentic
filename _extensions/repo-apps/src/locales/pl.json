@@ -1,44 +1,44 @@
 {
     "addAppDialog": {
-        "add": "Add",
-        "addApp": "Add an app",
-        "eGShopApi": "e.g. shop-api",
-        "name": "Name:",
-        "pickOneMoreTemplates": "Pick one or more templates to scaffold into this monorepo. Name each instance to run several of a kind."
+        "add": "Dodaj",
+        "addApp": "Dodaj aplikację",
+        "eGShopApi": "np. shop-api",
+        "name": "Nazwa:",
+        "pickOneMoreTemplates": "Wybierz jeden albo więcej szablonów do wygenerowania w tym monorepo. Nazwij każdą instancję, żeby uruchomić kilka tego samego rodzaju."
     },
     "appsView": {
-        "addApp": "Add app",
-        "addingAppsFollowProgress": "Adding apps: follow progress in the terminal.",
+        "addApp": "Dodaj aplikację",
+        "addingAppsFollowProgress": "Dodawanie aplikacji: postęp śledź w terminalu.",
         "api": "API",
-        "libraryTests": "Library tests",
-        "noAppsYetUse": "No apps yet: use \"Add app\" to scaffold one and get a live preview.",
-        "noVitestProjectsFound": "No vitest projects found: nothing here owns a vitest.config.* or *.test.* file.",
-        "openPreview": "Open preview",
-        "openPreviewInNew": "Open {app} preview in a new tab",
-        "openTerminal": "Open {app} terminal",
-        "packages": "Packages",
-        "readingRepositorysApps": "Reading this repository's apps…",
-        "run": "Run",
-        "runAll": "Run all",
-        "runTests": "Run tests",
-        "runVitestApp": "Run vitest for this app",
+        "libraryTests": "Testy bibliotek",
+        "noAppsYetUse": "Nie ma jeszcze aplikacji: użyj „Dodaj aplikację”, żeby wygenerować jedną i dostać podgląd na żywo.",
+        "noVitestProjectsFound": "Nie znaleziono projektów vitest: nic tutaj nie ma pliku vitest.config.* ani *.test.*.",
+        "openPreview": "Otwórz podgląd",
+        "openPreviewInNew": "Otwórz podgląd {app} w nowej karcie",
+        "openTerminal": "Otwórz terminal {app}",
+        "packages": "Pakiety",
+        "readingRepositorysApps": "Odczytywanie aplikacji tego repozytorium…",
+        "run": "Uruchom",
+        "runAll": "Uruchom wszystkie",
+        "runTests": "Uruchom testy",
+        "runVitestApp": "Uruchom vitest dla tej aplikacji",
         "start": "Start",
-        "startAll": "Start all",
-        "stop": "Stop",
-        "stopAll": "Stop all",
+        "startAll": "Uruchom wszystkie",
+        "stop": "Zatrzymaj",
+        "stopAll": "Zatrzymaj wszystkie",
         "terminal": "Terminal",
         "web": "Web"
     },
     "dependenciesView": {
         "dev": "dev",
-        "devDependencies": "Dev dependencies",
-        "noWorkspacePackagesFound": "No workspace packages found: pnpm-workspace.yaml names no package dirs.",
-        "readingWorkspaceGraph": "Reading the workspace graph…",
-        "usedBy": "used by",
-        "uses": "uses"
+        "devDependencies": "Zależności deweloperskie",
+        "noWorkspacePackagesFound": "Nie znaleziono pakietów przestrzeni roboczej: pnpm-workspace.yaml nie wymienia żadnych katalogów pakietów.",
+        "readingWorkspaceGraph": "Odczytywanie grafu przestrzeni roboczej…",
+        "usedBy": "używane przez",
+        "uses": "używa"
     },
     "extension": {
-        "apps": "Apps",
-        "dependencies": "Dependencies"
+        "apps": "Aplikacje",
+        "dependencies": "Zależności"
     }
 }
