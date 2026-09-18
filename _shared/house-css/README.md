@@ -1,8 +1,7 @@
 # @intentic/house-css
 
-The metals the company's surfaces are cut from, stated once: carved stone, cast bronze, the cartouche frame
-kit and the three ember glows. One stylesheet, no selectors, nothing but `--house-*` custom properties on
-`:root`.
+The metals the company's surfaces are cut from, stated once: cast bronze, the cartouche frame kit and the
+three ember glows. One stylesheet, no selectors, nothing but `--house-*` custom properties on `:root`.
 
 ## Who paints these
 
@@ -13,9 +12,8 @@ kit and the three ember glows. One stylesheet, no selectors, nothing but `--hous
 | `_editor/web/src/skins/sanctum.css`     | the Sanctum skin — the whole app wearing the same design system |
 
 All three carried their own copy until this package existed. The bronze plaque was written out three times,
-the carved display face twice, the cartouche frame kit twice; 2.4 KB of inline SVG alone sat in triplicate,
-and `entry.css`'s header said the quiet part out loud — _"when a recipe moves there it moves here."_ It moved
-here instead.
+the cartouche frame kit twice; 2.4 KB of inline SVG alone sat in triplicate, and `entry.css`'s header said
+the quiet part out loud — _"when a recipe moves there it moves here."_ It moved here instead.
 
 ## The rules
 

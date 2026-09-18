@@ -8,7 +8,7 @@
 /* The design-system stylesheet loads after the cascade-layer order is declared. */
 @import "../../../_editor/ui/src/styles/index.css";
 
-/* THE HOUSE METALS — carved stone, cast bronze, the cartouche frame kit and the ember glows, as `--house-*` properties on `:root`. */
+/* THE HOUSE METALS — cast bronze, the cartouche frame kit and the ember glows, as `--house-*` properties on `:root`. */
 @import "../../../_shared/house-css/house.css";
 
 /* The class surface this app PROMISES to extension bundles — see the note where the extension `@source` used to be, below. */

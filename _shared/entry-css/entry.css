@@ -16,6 +16,8 @@
     --ink-subtle: #9c8b73;
 /* The lede under a headline, a step goldier than muted ink: the site's own `--role-hero-sub`, to the digit. */
     --ink-lede: #c2a077;
+/* The display face's ink: the stone ramp's mid stop, flat — _site/site/src/styles/global.css's --role-display-ink. */
+    --display-ink: #ab8c6c;
     --face-display: "Spectral", Georgia, "Times New Roman", serif;
     --face-mark: "Baloo 2", "Trebuchet MS", ui-rounded, sans-serif;
     --face-read: "Public Sans", ui-sans-serif, system-ui, sans-serif;
@@ -174,27 +176,15 @@ html[data-frameless] .entry {
     mask-position: center;
 }
 
-/* Stone surfaces use texture rather than additional colours. */
 .entry-display {
     font-family: var(--face-display);
     font-weight: var(--font-weight-semibold);
-    letter-spacing: 0.02em;
+    color: var(--display-ink);
+/* Normal, not positive tracking: Spectral is drawn for screens and already sets open. */
+    letter-spacing: normal;
     line-height: 1.24;
-    --descender: 0.2em;
-    padding-block-end: var(--descender);
-    margin-block-end: calc(-1 * var(--descender));
-    background-image: var(--house-stone-noise), var(--house-stone-ramp);
-    background-size:
-        480px 480px,
-        100% 100%;
-    background-blend-mode: soft-light, normal;
-    -webkit-background-clip: text;
-    background-clip: text;
-    color: transparent;
-    -webkit-text-fill-color: transparent;
-    filter: var(--house-stone-bevel);
 }
-/* Its own span, so it escapes the clipped gradient above. */
+/* Its own span, so the ember stop is not the display ink. */
 .entry-stop {
     color: var(--ember);
     font-family: var(--face-display);
@@ -627,12 +617,9 @@ html:not([data-mode="dark"]) .entry-socket {
         0 1px 0 rgb(255 255 255 / 0.55);
 }
 
-/* No stone to echo on paper: the headline is simply the page's ink. */
+/* On paper the headline is simply the page's ink. */
 html:not([data-mode="dark"]) .entry-display {
-    background-image: none;
     color: var(--ink);
-    -webkit-text-fill-color: var(--ink);
-    filter: none;
 }
 
 /* A warm room throws no neutral shadow, and none of this depth: the app's own light drop. */

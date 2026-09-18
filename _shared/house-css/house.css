@@ -1,14 +1,6 @@
 /* Shared house materials for the site, entry screens, and Sanctum skin. */
 
 :root {
-    /* CARVED STONE The display face's fill: a picture of stone clipped to the glyphs. */
-    --house-stone-noise: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='480' height='480'%3E%3Cfilter id='d' x='0' y='0' width='100%25' height='100%25' color-interpolation-filters='sRGB'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.008' numOctaves='4' seed='11' stitchTiles='stitch' result='macro'/%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' seed='5' stitchTiles='stitch' result='fine'/%3E%3CfeComposite in='fine' in2='macro' operator='arithmetic' k1='0.4' k2='0.6' k3='0' k4='-0.04' result='grain'/%3E%3CfeColorMatrix in='grain' type='matrix' values='0.33 0.33 0.33 0 0 0.33 0.33 0.33 0 0 0.33 0.33 0.33 0 0 0 0 0 0 1'/%3E%3CfeComponentTransfer%3E%3CfeFuncR type='linear' slope='0.72' intercept='0.14'/%3E%3CfeFuncG type='linear' slope='0.72' intercept='0.14'/%3E%3CfeFuncB type='linear' slope='0.72' intercept='0.14'/%3E%3C/feComponentTransfer%3E%3C/filter%3E%3Crect width='480' height='480' filter='url(%23d)'/%3E%3C/svg%3E");
-/* The ramp tops out at #cbb08d, not at white: the reference art's brightest 0.5% of glyph pixels average #dfc8aa. */
-    --house-stone-ramp: linear-gradient(176deg, #cbb08d 0%, #bda07d 24%, #ab8c6c 52%, #97795c 78%, #86694f 100%);
-/* THE BEVEL HAS TO BE `filter`, NEVER `text-shadow`: the fill above IS a background, and a background is painted BEFORE a text shadow. */
-    --house-stone-bevel: drop-shadow(0 -1px 0 rgba(247, 234, 208, 0.8)) drop-shadow(-1px -1px 0 rgba(247, 234, 208, 0.38))
-        drop-shadow(0 2px 0 rgba(0, 0, 0, 0.92)) drop-shadow(0 4px 5px rgba(0, 0, 0, 0.62)) drop-shadow(0 12px 24px rgba(0, 0, 0, 0.45));
-
     /* CAST BRONZE The committing action, and the only light-on-dark object on any of these surfaces. */
     --house-bronze-fill: #d9b169;
     --house-bronze-body: linear-gradient(180deg, #f2d69f 0%, #ddb571 40%, #c99a4f 74%, #b3823c 100%);

@@ -1,7 +1,7 @@
 # @intentic/entry-css
 
 The **entry skin**: the composition a person meets in their first minute here, dressed as the page they
-arrived from. The site's metals and ink laid over the design system's role tokens, the carved display face,
+arrived from. The site's metals and ink laid over the design system's role tokens, the flat display face,
 the gold eyebrow and lozenge, the framed plate with its turned corners and lotus finial, and the two button
 plaques — all scoped to `.entry`, and therefore inert on every screen that does not ask for it.
 
@@ -20,10 +20,10 @@ wearers; the third is in another package, so the material moved to where both ca
 
 ## What it is made of, and what it is not
 
-**Material from `house.css`, composition here.** Carved stone, cast bronze, the cartouche frame kit and the
-ember glows are `--house-*` properties on `:root` and belong to
-[`@intentic/house-css`](../house-css/README.md). This sheet decides what is made of them: which surface is a
-plate, which rule is gold, how big a corner is, what a primary button looks like on this ground.
+**Material from `house.css`, composition here.** Cast bronze, the cartouche frame kit and the ember glows are
+`--house-*` properties on `:root` and belong to [`@intentic/house-css`](../house-css/README.md). This sheet
+decides what is made of them: which surface is a plate, which rule is gold, how big a corner is, what a
+primary button looks like on this ground. The display face's flat ink lives here as `--display-ink`.
 
 **`--color-*`, never `--role-*`.** A custom property's `var()` is substituted where it is *declared*, so
 re-pointing `--role-canvas` from a descendant of `:root` changes nothing — the semantic layer already
