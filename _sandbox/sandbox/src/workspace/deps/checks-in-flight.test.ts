@@ -4,7 +4,7 @@ import { checkRunningIn, isBuildOutputPath, markCheckRunning } from "./checks-in
 test("a check marks the repo it runs in and no other; the root project is the root repo's", () => {
     const done = markCheckRunning("extensions/saldeo");
     expect(checkRunningIn("extensions/saldeo")).toBe(true);
-    expect(checkRunningIn("extensions/paperwork")).toBe(false);
+    expect(checkRunningIn("extensions/scrub")).toBe(false);
     expect(checkRunningIn("root")).toBe(false);
     done();
     expect(checkRunningIn("extensions/saldeo")).toBe(false);

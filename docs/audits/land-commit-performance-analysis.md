@@ -42,7 +42,7 @@ commands that crossed the 200 ms floor, aggregated by subcommand:
 | `branch --show-current` | 804 | 709 | `root` |
 | `rev-parse --path-format=absolute --git-dir` | 766 | 727 | `root` |
 | `remote` | 723 | 724 | `root` |
-| `rev-parse -q --verify` | 510 | 880 | `extensions/homelab` |
+| `rev-parse -q --verify` | 510 | 880 | `extensions/logs` |
 | `for-each-ref … refs/heads/agent/` | 298 | 939 | `root` |
 | `for-each-ref … refs/heads/main` (upstream) | 315 | 777 | `intentic` |
 | `remote -v` | 414 | 409 | `root` |

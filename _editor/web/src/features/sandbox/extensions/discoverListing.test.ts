@@ -7,11 +7,11 @@ const SHA = `a`.repeat(40);
 const OTHER_SHA = `b`.repeat(40);
 
 const entry = (over: Partial<RegistryEntry> = {}): RegistryEntry => ({
-    name: `radarsu.paperwork`,
+    name: `intentic.saldeo`,
     kind: `extension`,
     trust: `listed`,
     admitted: true,
-    install: { url: `https://github.com/radarsu/intentic-paperwork.git`, ref: SHA },
+    install: { url: `https://github.com/radarsu/intentic-saldeo.git`, ref: SHA },
     ...over,
 });
 
@@ -27,24 +27,24 @@ describe(`what a registry row becomes against this sandbox`, () => {
     });
 
     test(`matches on the manifest identity, not on what the installer happened to name it`, () => {
-        const installed = [installedAs(`radarsu.paperwork`, SHA)];
+        const installed = [installedAs(`intentic.saldeo`, SHA)];
         expect(listingState(entry(), installed).kind).toBe(`installed`);
     });
 
     test(`a different commit at the same identity is an update, and says which commit is here`, () => {
-        const state = listingState(entry(), [installedAs(`radarsu.paperwork`, OTHER_SHA)]);
+        const state = listingState(entry(), [installedAs(`intentic.saldeo`, OTHER_SHA)]);
         expect(state).toEqual({ kind: `update`, action: `Update`, installedRef: OTHER_SHA });
     });
 
     test(`an image-baked or workspace extension of the same name is installed, never updatable`, () => {
         for (const source of [`builtin`, `workspace`] as const) {
-            expect(listingState(entry(), [installedAs(`radarsu.paperwork`, OTHER_SHA, source)]).kind).toBe(`installed`);
+            expect(listingState(entry(), [installedAs(`intentic.saldeo`, OTHER_SHA, source)]).kind).toBe(`installed`);
         }
     });
 
     test(`blocked wins over everything, including already having it`, () => {
         const blocked = entry({ trust: `blocked`, trustReason: `Exfiltrates workspace files.` });
-        const state = listingState(blocked, [installedAs(`radarsu.paperwork`, SHA)]);
+        const state = listingState(blocked, [installedAs(`intentic.saldeo`, SHA)]);
         expect(state).toEqual({ kind: `blocked`, reason: `Exfiltrates workspace files.` });
     });
 
@@ -103,8 +103,8 @@ describe(`what last night's scan is allowed to claim`, () => {
 
 describe(`how the list is grouped and searched`, () => {
     const listings = [
-        toListing(entry({ name: `radarsu.paperwork`, description: `Invoices and receipts, filed.`, trust: `verified` }), []),
-        toListing(entry({ name: `radarsu.homelab`, description: `Four CLI cards for a home server.` }), []),
+        toListing(entry({ name: `intentic.saldeo`, description: `SaldeoSMART invoices and bank reconciliation.`, trust: `verified` }), []),
+        toListing(entry({ name: `intentic.logs`, description: `The sandbox debug log surface.`, install: { url: `https://github.com/intentic/extension-logs.git`, ref: SHA } }), []),
         toListing(entry({ name: `acme.standup`, description: `Yesterday, today, blockers.` }), []),
     ];
 
@@ -121,14 +121,14 @@ describe(`how the list is grouped and searched`, () => {
     });
 
     test(`the filter reaches the description, not just the name`, () => {
-        expect(listings[0]?.search).toContain(`invoices`);
-        expect(listings.filter((listing) => listing.search.includes(`radarsu`))).toHaveLength(2);
+        expect(listings[0]?.search).toContain(`saldeo`);
+        expect(listings.filter((listing) => listing.search.includes(`intentic`))).toHaveLength(2);
     });
 
     test(`the update count is what the hub row badges`, () => {
         const withUpdate = [
-            toListing(entry({ name: `radarsu.paperwork` }), [installedAs(`radarsu.paperwork`, OTHER_SHA)]),
-            toListing(entry({ name: `radarsu.homelab` }), []),
+            toListing(entry({ name: `intentic.saldeo` }), [installedAs(`intentic.saldeo`, OTHER_SHA)]),
+            toListing(entry({ name: `intentic.logs`, install: { url: `https://github.com/intentic/extension-logs.git`, ref: SHA } }), []),
         ];
         expect(updateCount(withUpdate)).toBe(1);
     });
@@ -136,7 +136,7 @@ describe(`how the list is grouped and searched`, () => {
 
 describe(`drawing a name nobody has seen before`, () => {
     test(`splits publisher from extension`, () => {
-        expect(splitListingName(`radarsu.paperwork`)).toEqual({ publisher: `radarsu`, title: `paperwork` });
+        expect(splitListingName(`intentic.saldeo`)).toEqual({ publisher: `intentic`, title: `saldeo` });
     });
 
     test(`a name this app would never install still draws as something`, () => {

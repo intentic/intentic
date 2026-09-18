@@ -25,9 +25,9 @@ const committed = (changes?: RepoChanges, originAgents?: CommitResult["originAge
 
 describe(`folding a commit's answer into the review`, () => {
     it(`replaces the committed repo IN PLACE, so the groups around it do not move`, () => {
-        const before = held([repo(`root`), repo(`intentic`, [{ path: `a.ts`, status: `modified` }]), repo(`extensions/homelab`)]);
+        const before = held([repo(`root`), repo(`intentic`, [{ path: `a.ts`, status: `modified` }]), repo(`extensions/logs`)]);
         const after = spliceRepoChanges(before, `intentic`, committed(repo(`intentic`, [{ path: `notes.md`, status: `added` }])));
-        expect(after.repos.map((entry) => entry.repo)).toEqual([`root`, `intentic`, `extensions/homelab`]);
+        expect(after.repos.map((entry) => entry.repo)).toEqual([`root`, `intentic`, `extensions/logs`]);
         expect(after.repos[1]?.unstaged).toEqual([{ path: `notes.md`, status: `added` }]);
     });
 
