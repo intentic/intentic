@@ -182,7 +182,7 @@ const focusedCard = computed(() => dag.value.nodes.find((node) => node.data.jobs
                             target="_blank"
                             rel="noopener"
                             draggable="false"
-                            class="min-w-0 flex-1 truncate rounded-xs text-2xs font-medium leading-tight underline-offset-2 hover:underline focus-visible:outline focus-visible:outline-1 focus-visible:outline-link"
+                            class="min-w-0 flex-1 truncate rounded-xs text-2xs font-medium leading-tight underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-link"
                             :class="member.job.status === `failed` ? `text-danger` : `text-content hover:text-link`"
                             v-tooltip.top="t(`pipelineDagGraph.openJobLog`, { name: member.job.name })"
                             @click.stop
