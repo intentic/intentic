@@ -901,9 +901,7 @@
             "hideCheck": "Ukryj sprawdzenie",
             "hideCommand": "Ukryj polecenie",
             "isntConnectedYet": "{name} nie jest jeszcze podłączone",
-            "keepChatOnMy": "Trzymaj ten czat na moim wyborze",
             "keepFutureWorkOn": "Wstrzymaj przyszłą pracę na gałęzi",
-            "laterTurnsRunModel": "(późniejsze tury idą na modelu, który wybrałeś, nawet jeśli wyglądają prosto)",
             "no": "Nie",
             "noKeepPlanning": "Nie, planuj dalej",
             "notNow": "Nie teraz",
@@ -940,15 +938,11 @@
             "wroteInAgentsVoice": "Napisałeś to głosem agenta: agent czyta to jako własne słowa"
         },
         "chatModelPicker": {
-            "allowed": "Dozwolone",
             "autoArmed": "A model reads your first message and picks what this chat runs on. Every turn after that stays on it, and you can change it whenever you like.",
             "autoDescription": "Let a model choose from what's connected and still has allowance",
             "autoLabel": "Auto",
-            "keepConversationOnPicked": "Trzymaj tę rozmowę na wybranym modelu",
-            "myPickOnly": "Tylko mój wybór",
+            "chooseWhichModelReads": "Choose which model does the reading",
             "notAvailableHere": "Tutaj niedostępne",
-            "simpleTurnsMayRun": "Proste tury mogą pójść taniej",
-            "turnOffEveryChat": "Wyłącz to dla każdego czatu",
             "whatIsntAvailableHere": "Co jest tu niedostępne"
         },
         "chatNotes": {
@@ -1267,6 +1261,7 @@
             "viewerPlaceholder": "Tylko patrzysz: poproś właściciela o rolę współpracownika, żeby sterować agentami"
         },
         "composerModelPill": {
+            "auto": "Auto",
             "model": "Model: {modelLabelText}"
         },
         "composerMore": {
@@ -1290,10 +1285,6 @@
             "runnerOnComputer": "Runner na Twoim komputerze",
             "sandbox": "Ten sandbox",
             "whereRuns": "Gdzie to działa"
-        },
-        "composerTierChip": {
-            "keptOn": "Utrzymane na {pick}",
-            "undo": "Cofnij"
         },
         "effortMeter": {
             "reasoningEffort": "Wysiłek rozumowania",
@@ -1701,34 +1692,16 @@
             "reading": "Odczytywanie {memory_file}…"
         },
         "agentModels": {
-            "addModelAutomaticTier": "Dodaj model do automatycznego wyboru poziomu",
             "advanced": "Zaawansowane",
-            "auto": "Automatycznie",
-            "autoChoosesPerChat": "The model picker gains an Auto row. Pick it, and a model reads a new chat's first message and chooses what that conversation runs on, from what is connected and still has allowance. Turns are no longer judged one by one.",
-            "automaticTier": "Poziom automatyczny",
-            "balanced": "Zrównoważony",
-            "cautious": "Ostrożny",
-            "cheaperModel": "Tańszy model",
-            "cheaperTurns": "Tańsze tury",
-            "cheapestChatsProvider": ": najtańszy od dostawcy tego czatu.",
             "clearModels": "Wyczyść modele",
-            "eager": "Chętny",
-            "howReadily": "Jak chętnie",
             "howToShow": "Jak pokazywać {toLowerCase}",
-            "measure": "Zmierz",
-            "notJobSubstitutionMade": "To nie zadanie: podmiana dokonana wewnątrz tury, którą uruchomiłeś.",
-            "nothingJudgedRecorded": "Nic nie jest oceniane ani zapisywane.",
             "nothingJudgingCommandsAt": "W tej chwili nic nie ocenia poleceń, więc to nie jest w użyciu.",
-            "off": "Wyłączone",
-            "on": "Włączone",
-            "runSimpleTurnsOn": "Uruchamiaj proste tury na tańszym modelu tego samego dostawcy.",
             "safetyJudgeOffNot": "Sędzia bezpieczeństwa jest wyłączony, więc to nie jest jedno z tych zadań i nic tutaj do niego nie pisze.",
             "selectEveryJobUnder": "Zaznacz każde zadanie w kategorii {toLowerCase}",
             "selectJobs": "Zaznacz zadania",
             "selected": "Zaznaczono: {count}",
             "setModelAll": "Ustaw model dla wszystkich…",
             "simple": "Proste",
-            "simpleTurnsRunOn": "Proste tury idą na tańszym modelu. Każda rozmowa może to zawetować.",
             "turnJudgeOn": "Włącz sędziego",
             "underSafety": "w sekcji Bezpieczeństwo.",
             "worthBetterModelThan": "Wart lepszego modelu niż reszta zadań automatycznych: czyta polecenie jako dane, a w turze, która wchłonęła coś z zewnątrz, ten tekst może argumentować za własnym zatwierdzeniem."

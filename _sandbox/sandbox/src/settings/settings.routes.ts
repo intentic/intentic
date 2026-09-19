@@ -7,7 +7,6 @@ import type { OrpcContext } from "../app-env.js";
 import { readInputSavings } from "../logs/filter-stats.js";
 import { declaredRepoChecks, readRepoDeclaration, summariesOf } from "../rules/repo-checks.js";
 import { ManifestUnreadableError } from "../store/json-file.js";
-import { readTierReport } from "../usage/tier-report.js";
 import { readTurnExperiments } from "../usage/turn-experiments.js";
 import { reconcileBakedSkills } from "./skills.js";
 
@@ -31,12 +30,11 @@ export const createSettingsRoutes = (services: Services) => {
             return { ok: true } as const;
         }),
         savings: i.savings.handler(async ({ input }) => {
-            const [inputSavings, experiments, tier] = await Promise.all([
+            const [inputSavings, experiments] = await Promise.all([
                 readInputSavings(services.config.historyRoot, input),
                 readTurnExperiments(services.usage, input),
-                readTierReport(services.usage, input),
             ]);
-            return { input: inputSavings, ...experiments, ...(tier !== undefined ? { tier } : {}) };
+            return { input: inputSavings, ...experiments };
         }),
         // Intentic's prompt is shipped text: instant, no version of its own. Claude's is read from the installed CLI;
         // the workspace root only says where to spawn that probe, nothing is read from it.

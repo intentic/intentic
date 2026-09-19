@@ -110,9 +110,9 @@ test("a thrown workspace turn settles its surfaced card as an error", async () =
         ),
     );
 
-    // Every turn emits a repo-sync note and a tier verdict first; filtered out here to isolate the error frame.
+    // The repo-sync note lands on the user's row, not as a fact, so the error frame is all this turn reports.
     const { facts } = await runAgentTurn(client, { prompt: "do it", conversationId: "workspace-error" });
-    expect(facts.filter((fact) => fact.kind !== "tier")).toEqual([{ kind: "error", message: "adapter crashed" }]);
+    expect(facts).toEqual([{ kind: "error", message: "adapter crashed" }]);
     // `failure` carries the message for a turn that produced nothing else, so a card need not read the transcript.
     expect((await client.agents.list()).agents[0]).toMatchObject({ id: "workspace-error", status: "error", failure: "adapter crashed" });
     expect((await client.agents.list()).agents[0]).not.toHaveProperty("branch");

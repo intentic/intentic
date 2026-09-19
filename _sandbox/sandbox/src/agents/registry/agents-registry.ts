@@ -388,7 +388,7 @@ const sessionBinding = (
 // The fields `begin` records for a turn. Placement (branch or not) is explicit here rather than inferred from the
 // provider, since isolated and workspace conversations share the same identity and status lifecycle.
 export type AgentTurnIdentity = Pick<AgentTurn, "prompt"> &
-    Partial<Pick<AgentTurn, "title" | "model" | "effort" | "thinking" | "fast" | "tierHold" | "account" | "origin" | "startIn" | "actsAs">> & {
+    Partial<Pick<AgentTurn, "title" | "model" | "effort" | "thinking" | "fast" | "account" | "origin" | "startIn" | "actsAs">> & {
         readonly conversationId: string;
         readonly isolated: boolean;
         // Latched like `isolated`; only a conversation never seen before takes the request's runner, and naming one
@@ -462,9 +462,6 @@ export interface AgentsRegistry {
     // Strips a deleted repo out of every composition, live and archived, since a frozen composition can't survive a
     // directory that no longer exists. Only the registry's half; agents/vanished-repos.ts decides the rest.
     readonly dropRepos: (repos: readonly string[]) => Promise<string[]>;
-    // Records the complexity judge's verdict for the next turn's `afterHardTurn` signal. Not part of `begin` (the
-    // daemon decides it after the request), and not broadcast, since nothing renders it.
-    readonly recordTier: (id: string, tier: "fast" | "standard") => Promise<void>;
     // Sets the title per the source ranking (AgentTitleSourceSchema): a rename always lands, an automatic source only
     // moves it up. A rejected promotion still returns the entry's current summary, not `undefined`.
     // `action` is the naming pass's one work word, stored beside the title and never shown; any other source clears it.
@@ -634,10 +631,6 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
             ...(entry.effort !== undefined ? { effort: entry.effort } : {}),
             ...(entry.thinking !== undefined ? { thinking: entry.thinking } : {}),
             ...(entry.fast !== undefined ? { fast: entry.fast } : {}),
-            // `tier` and `tierHold`: what the composer's pre-send preview needs to judge a follow-up and restore the
-            // user's toggle.
-            ...(entry.tier !== undefined ? { tier: entry.tier } : {}),
-            ...(entry.tierHold !== undefined ? { tierHold: entry.tierHold } : {}),
             ...(entry.account !== undefined ? { account: entry.account } : {}),
             ...postures(entry),
             ...(entry.landRequested !== undefined ? { landRequested: entry.landRequested } : {}),
@@ -865,7 +858,6 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
             const effort = turn.effort ?? existing?.effort;
             const thinking = turn.thinking ?? existing?.thinking;
             const fast = turn.fast ?? existing?.fast;
-            const tierHold = turn.tierHold ?? existing?.tierHold;
             const account = turn.account ?? existing?.account;
             // Provenance belongs to the turn that created the conversation, never re-derived, so a user's own follow-up
             // can't strip the origin that opened it.
@@ -892,10 +884,6 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
                 ...(effort !== undefined ? { effort } : {}),
                 ...(thinking !== undefined ? { thinking } : {}),
                 ...(fast !== undefined ? { fast } : {}),
-                ...(tierHold !== undefined ? { tierHold } : {}),
-                // Carried, never taken from the turn; an explicit field list means omitting it here would reset the
-                // tier every single turn.
-                ...(existing?.tier !== undefined ? { tier: existing.tier } : {}),
                 ...(account !== undefined ? { account } : {}),
                 ...(origin !== undefined ? { origin } : {}),
                 ...startedByOf(existing, turn),
@@ -978,15 +966,6 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
             await persist();
             broadcast();
             return touched.map((entry) => entry.id);
-        },
-        recordTier: async (id, tier) => {
-            const entry = entryOf(id);
-            // Entry gone mid-turn (archived, purged) is not worth surfacing; there is no next turn to read the value.
-            if (entry === undefined || entry.tier === tier) {
-                return;
-            }
-            replace({ ...entry, tier });
-            await persist();
         },
         setTitle: async (id, title, source, action) => {
             if (entryOf(id) === undefined || sanitizeTitle(title) === undefined) {

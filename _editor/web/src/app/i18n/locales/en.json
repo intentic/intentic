@@ -901,9 +901,7 @@
             "hideCheck": "Hide the check",
             "hideCommand": "Hide the command",
             "isntConnectedYet": "{name} isn't connected yet",
-            "keepChatOnMy": "Keep this chat on my pick",
             "keepFutureWorkOn": "Keep future work on the branch",
-            "laterTurnsRunModel": "(later turns run the model you chose, even when they look simple)",
             "no": "No",
             "noKeepPlanning": "No, keep planning",
             "notNow": "Not now",
@@ -940,15 +938,11 @@
             "wroteInAgentsVoice": "You wrote this in the agent's voice: the agent reads it as its own words"
         },
         "chatModelPicker": {
-            "allowed": "Allowed",
-            "autoArmed": "A model reads your first message and picks what this chat runs on. Every turn after that stays on it, and you can change it whenever you like.",
-            "autoDescription": "Let a model choose from what's connected and still has allowance",
+            "autoArmed": "Nothing is chosen yet. When you send, one model reads your first message and picks the model, effort and account this chat runs on, from what is connected and still has allowance. Every turn after that stays on it, and you can change it whenever you like.",
+            "autoDescription": "Let a model read your first message and pick what this chat runs on",
             "autoLabel": "Auto",
-            "keepConversationOnPicked": "Keep this conversation on the picked model",
-            "myPickOnly": "My pick only",
+            "chooseWhichModelReads": "Choose which model does the reading",
             "notAvailableHere": "Not available here",
-            "simpleTurnsMayRun": "Simple turns may run cheaper",
-            "turnOffEveryChat": "Turn it off for every chat",
             "whatIsntAvailableHere": "What isn't available here"
         },
         "chatNotes": {
@@ -1267,6 +1261,7 @@
             "viewerPlaceholder": "You’re viewing: ask the owner for a collaborator role to drive agents"
         },
         "composerModelPill": {
+            "auto": "Auto",
             "model": "Model: {modelLabelText}"
         },
         "composerMore": {
@@ -1290,10 +1285,6 @@
             "runnerOnComputer": "Runner on your computer",
             "sandbox": "This sandbox",
             "whereRuns": "Where this runs"
-        },
-        "composerTierChip": {
-            "keptOn": "Kept on {pick}",
-            "undo": "Undo"
         },
         "effortMeter": {
             "reasoningEffort": "Reasoning effort",
@@ -1701,34 +1692,16 @@
             "reading": "Reading {memory_file}…"
         },
         "agentModels": {
-            "addModelAutomaticTier": "Add a model for automatic tier selection",
             "advanced": "Advanced",
-            "auto": "Auto",
-            "autoChoosesPerChat": "The model picker gains an Auto row. Pick it, and a model reads a new chat's first message and chooses what that conversation runs on, from what is connected and still has allowance. Turns are no longer judged one by one.",
-            "automaticTier": "Automatic tier",
-            "balanced": "Balanced",
-            "cautious": "Cautious",
-            "cheaperModel": "Cheaper model",
-            "cheaperTurns": "Cheaper turns",
-            "cheapestChatsProvider": ": cheapest from the chat's provider.",
             "clearModels": "Clear models",
-            "eager": "Eager",
-            "howReadily": "How readily",
             "howToShow": "How to show {toLowerCase}",
-            "measure": "Measure",
-            "notJobSubstitutionMade": "Not a job: a substitution made inside a turn you started.",
-            "nothingJudgedRecorded": "Nothing is judged or recorded.",
             "nothingJudgingCommandsAt": "Nothing is judging commands at the moment, so this is not in use.",
-            "off": "Off",
-            "on": "On",
-            "runSimpleTurnsOn": "Run simple turns on a cheaper model from the same provider.",
             "safetyJudgeOffNot": "Safety judge is off, so it is not one of these and nothing here writes to it.",
             "selectEveryJobUnder": "Select every job under {toLowerCase}",
             "selectJobs": "Select jobs",
             "selected": "{count} selected",
             "setModelAll": "Set a model for all…",
             "simple": "Simple",
-            "simpleTurnsRunOn": "Simple turns run on the cheaper model. Each conversation can veto it.",
             "turnJudgeOn": "Turn the judge on",
             "underSafety": "under Safety.",
             "worthBetterModelThan": "Worth a better model than the rest of the automatic jobs: it reads the command as data, and on a turn that has taken in something from outside, that text may be arguing for its own approval."

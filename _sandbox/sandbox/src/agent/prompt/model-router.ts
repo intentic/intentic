@@ -9,9 +9,8 @@ import { askRoleModel } from "../models/role-model.js";
 // judgement about how the work should go. Runs once per chat and never again, so the cost is one reading amortised
 // over every turn that follows, and the user owns the pick from turn two.
 //
-// Distinct from prompt-complexity.ts, which stays as it is: that judges a turn at a time, for free, and may only name
-// a cheaper rung of the provider already picked. This one runs before anything has, chooses across providers, efforts
-// and accounts, and reads live allowances no prompt-only scorer can infer.
+// The only thing that chooses a model on the user's behalf. It runs before the conversation has, chooses across
+// providers, efforts and accounts, and reads live allowances no prompt-only scorer could infer.
 
 // Opening message front-loads the ask; a long message's tail only dilutes the question it opens with.
 const MESSAGE_MAX_CHARS = 600;

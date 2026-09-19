@@ -23,7 +23,6 @@ export interface TurnSettings {
     // Whether to ask for fast speed, already reconciled against the selected model (see turnSettings).
     readonly fast: boolean;
     // Keeps the picked model despite looking simple; sent even when false, to clear an earlier hold.
-    readonly tierHold: boolean;
     // This turn's model came from Auto's reading, not a hand. Absent on every other turn, which is the point: it
     // marks the one turn the judge decided.
     readonly autoPicked?: boolean;
@@ -55,7 +54,7 @@ export const resumes = (
 ): boolean =>
     session !== undefined && session.provider === selection.agent && session.account === selection.account && session.harness === selection.harness;
 
-// Flags that ride only when true, since the daemon reads false and unset the same way. `tierHold` is deliberately not
+// Flags that ride only when true, since the daemon reads false and unset the same way. `autoPicked` is deliberately not
 // one of them: unset there would leave an earlier turn's veto standing on the conversation.
 const setFlags = (settings: TurnSettings): { fast?: true; autoPicked?: true } => ({
     ...(settings.fast ? { fast: true as const } : {}),
@@ -117,7 +116,6 @@ export const turnRequestBody = (input: {
         thinking: input.settings.thinking,
         ...setFlags(input.settings),
         // Always sent: unlike the flags above, unset would leave an earlier turn's veto standing on the conversation.
-        tierHold: input.settings.tierHold,
         // Starting permission posture, passed straight to the SDK:
         //   plan – proposes then executes
         //   default – prompts per tool

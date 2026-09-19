@@ -43,10 +43,6 @@ export interface StoredTab {
     readonly autoContinue?: boolean;
     // The stopped-turn offer itself isn't persisted: a cached copy can't know if the daemon still holds the turn,
     // and the daemon already answers that on every hydrate (AgentTranscriptSchema.ending).
-    // Automatic-tier veto, per tab like `fast`; only bridges the reload gap, since the daemon persists it too.
-    readonly tierHold?: boolean;
-    // Complexity judge's last verdict, not a pick; without it a reload judges the next follow-up with no history.
-    readonly tier?: "fast" | "standard";
     // Chat is on Auto with its model still unchosen. Per tab, since it describes this chat's unanswered question, and
     // a reload without it would show a model the owner never picked as though they had.
     readonly auto?: boolean;
@@ -89,8 +85,6 @@ export const snapshotTab = (conversation: Conversation): StoredTab => ({
     thinking: conversation.thinking.value,
     fast: conversation.fast.value,
     autoContinue: conversation.autoContinue.value,
-    tierHold: conversation.tierHold.value,
-    tier: conversation.lastTier.value,
     auto: conversation.auto.value,
     harness: conversation.harness.value,
     // Session ref verbatim, never rebuilt field by field: the two must match exactly until something is switched.
@@ -212,9 +206,8 @@ const readStanding = (raw: unknown): { standing?: AgentStanding } => {
     return { standing: { ...(standing as unknown as AgentStanding), status: standing[`status`] as AgentStanding["status"], attention } };
 };
 
-// Two small closed vocabularies, read back only as one of their own members; anything else (an older build, a
-// hand edit) falls to the restore's own default.
-const readTier = (raw: unknown): { tier?: "fast" | "standard" } => (raw === `fast` || raw === `standard` ? { tier: raw } : {});
+// A small closed vocabulary, read back only as one of its own members; anything else (an older build, a hand edit)
+// falls to the restore's own default.
 const readHarness = (raw: unknown): { harness?: AgentHarness } => (raw === `claude-code` || raw === `native` ? { harness: raw } : {});
 
 // One entry, or undefined with no usable identity or draft. Skipped rather than fatal: one bad tab must not
@@ -249,9 +242,7 @@ const readTab = (raw: Record<string, unknown>): StoredTab | undefined => {
         ...readFlag(`peek`, raw[`peek`]),
         ...readFlag(`standIn`, raw[`standIn`]),
         ...readStanding(raw[`standing`]),
-        ...readFlag(`tierHold`, raw[`tierHold`]),
         ...readFlag(`auto`, raw[`auto`]),
-        ...readTier(raw[`tier`]),
         ...readHarness(raw[`harness`]),
         ...readSession(raw[`session`]),
         ...readFork(raw[`forkOf`]),

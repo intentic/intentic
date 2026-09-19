@@ -84,7 +84,6 @@ import ChatTurnStatus from "../transcript/ChatTurnStatus.vue";
 import ComposerEffort from "../composer/ComposerEffort.vue";
 import ComposerModelPill from "../composer/ComposerModelPill.vue";
 import ComposerMoreMenu from "../composer/ComposerMoreMenu.vue";
-import ComposerTierChip from "../composer/ComposerTierChip.vue";
 import { type ComposerControl, overflowRows, ridesRow } from "../composer/composerMore";
 import { startingMode } from "../run/turnDefaults";
 import { useT } from "@intentic/ui/i18n";
@@ -199,8 +198,11 @@ const { mobile } = useDevice();
 // chat/catalog.ts). Uses `providerDisplayLabel`, not the static table, which falls through to a raw id for
 // capability-derived providers.
 const providerName = computed(() => providerDisplayLabel(provider.value));
-// Shared with the picker menu so they can't drift; falls back to the provider name while a catalog loads.
-const modelLabelText = computed(() => modelLabelFor(provider.value, model.value));
+// Shared with the picker menu so they can't drift; falls back to the provider name while a catalog loads. On Auto it
+// says so, matching the pill: naming the model underneath would announce a pick nobody has made.
+const modelLabelText = computed(() =>
+    props.conversation.auto.value ? t(`chat.composerModelPill.auto`) : modelLabelFor(provider.value, model.value),
+);
 // The trial has no vendor to name — it's the product's own channel, not somebody's account.
 const onTrial = computed(() => isTrialProvider(provider.value));
 // Neither pill carries a hover label: the model pill's said the provider name its logo already shows, the mode
@@ -1469,9 +1471,6 @@ watch(
                                             :disabled="pickedWorkflow !== undefined"
                                             label-class="@max-lg:hidden"
                                         />
-
-                                        <!-- The tier chip previews the model choice before sending. -->
-                                        <ComposerTierChip :conversation="conversation" />
                                     </div>
 
                                     <!-- How the turn is shaped, and the press that sends it — the group holding the right edge. -->

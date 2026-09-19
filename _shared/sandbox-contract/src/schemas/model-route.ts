@@ -2,7 +2,7 @@ import { z } from "zod";
 import { AgentProviderSchema } from "./agent.js";
 
 // Asked once per chat, on the message it opens with; answers with the model, effort and account that whole
-// conversation runs on. Distinct from prompt-complexity.ts, which judges a turn at a time and may only ever name a
+// conversation runs on. The one place a model is chosen for a chat, and it runs once: from turn two the pick is an
 // cheaper rung of the provider already picked: this one chooses freely, and only before anything has run.
 
 export const ModelRouteAskSchema = z.object({

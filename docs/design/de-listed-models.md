@@ -3,8 +3,8 @@
 Written 2026-09-08 from the source as it stands. The question asked: a session pinned to Claude Opus 4.6
 (Thinking) on the Google channel kept moving itself to Gemini 3.1 Pro (Low) — in the composer, and then in the
 turn auto-continue sent — whenever Google was out of capacity for Opus. Nothing in the product claims to move
-a turn between models: `moveAfterLimit` is same-provider-and-account by construction and `autoTier` skips a
-rung on another provider rather than trying it. The answer, stated once here and argued below: **a model
+a turn between models: `moveAfterLimit` is same-provider-and-account by construction. The answer, stated once
+here and argued below: **a model
 missing from one catalog read is a state that ends, not a decision; the catalog holds it for a grace window,
 the composer only ever borrows a pick and owes it back, and a pin the provider genuinely no longer serves ends
 the turn instead of quietly spending a different allowance.**
@@ -82,7 +82,6 @@ that was already computed.
 
 ## 6. How to tell it worked
 
-`modelRequested` and `model` in the usage ledger are equal for every Google-channel turn the tier judge left
-alone (an `autoTier: "on"` downgrade is the one honest way for them to differ), or the turn ended
-`model-unavailable`. Any other row where they differ is a substitution, and there is no longer code that writes
+`modelRequested` and `model` in the usage ledger are equal for every Google-channel turn, or the turn ended
+`model-unavailable`. Any row where they differ is a substitution, and there is no longer code that writes
 one.

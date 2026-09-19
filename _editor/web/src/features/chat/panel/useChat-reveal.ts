@@ -220,9 +220,6 @@ export interface AgentTabSeed {
     effort?: string;
     thinking?: boolean;
     fast?: boolean;
-    // Automatic-tier state the registry keeps per conversation: last verdict, and the standing veto.
-    tier?: "fast" | "standard";
-    tierHold?: boolean;
     // Whether the fleet actually knows this agent; false only for the board's client-only draft card.
     registered?: boolean;
     // The card's own account of where this agent stands, so the chat lands in the same lane in a window whose
@@ -248,8 +245,6 @@ export const agentTabOf = (agent: AgentTabSeed): StoredTab => {
         effort: agent.effort,
         thinking: agent.thinking,
         fast: agent.fast,
-        tier: agent.tier,
-        tierHold: agent.tierHold,
         title: agent.title,
         // `agent.account` serves both fields but means two things: as the tab's pick, where the next turn goes; on the
         // session, what the last one actually ran under. They start equal; a switch afterward moves only the pick.

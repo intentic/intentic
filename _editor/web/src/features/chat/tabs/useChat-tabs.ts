@@ -180,16 +180,9 @@ const restoreTurnPicks = (conversation: Conversation, tab: StoredTab): void => {
     if (tab.fast !== undefined) {
         conversation.fast.value = tab.fast;
     }
-    // Auto is this chat's unanswered question; tierHold is a pick like the others; tier is the judge's own verdict,
-    // not re-derivable from a draft.
+    // Auto is this chat's unanswered question, not re-derivable from a draft.
     if (tab.auto !== undefined) {
         conversation.auto.value = tab.auto;
-    }
-    if (tab.tierHold !== undefined) {
-        conversation.tierHold.value = tab.tierHold;
-    }
-    if (tab.tier !== undefined) {
-        conversation.lastTier.value = tab.tier;
     }
     // Restored because it governs unattended runs; a reload must not quietly disarm one still in progress.
     if (tab.autoContinue !== undefined) {

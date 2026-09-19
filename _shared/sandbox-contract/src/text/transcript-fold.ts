@@ -259,11 +259,6 @@ export class TranscriptFold {
             case "error":
                 // Keeps a refusal (no prose from the provider) from reading as a session that ended mid-question.
                 return this.pushRow(errorRow(event));
-            case "tier":
-                // Notes a turn served on a cheaper model than requested, only when it actually routed.
-                return event.routed && event.model !== undefined
-                    ? this.pushRow({ role: "notice", text: `This turn looked simple, so it ran on ${event.model} instead of your pick.`, noticeAction: "tierHold" })
-                    : [];
             case "plan": {
                 // Folds a plan into an identical retired prose bubble instead of drawing the same markdown twice.
                 const adjacent = this.rows.at(-1);

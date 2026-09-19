@@ -97,7 +97,7 @@ const lastRankOf = (family: string, ranks: Readonly<Record<string, number>>): nu
 
 const releaseTierRankOf = (family: string): number => lastRankOf(family, RELEASE_TIER_RANK);
 
-// How hard an id says it will think; ties on tier, so only compareCheapestFirst's tiebreak may read it.
+// How hard an id says it will think; only the quiet-rung rule below reads it, and `namesThinking` for a label.
 const THINKING_RANK: Readonly<Record<string, number>> = {
     minimal: 0,
     none: 0,
@@ -143,28 +143,6 @@ export const compareModelIds = (left: string, right: string): number => {
 // The order for a catalog its endpoint published as an unordered set (everything but Anthropic). Ties break on id, not
 // arrival order, since a registry can reorder a tied set between refreshes.
 export const compareUnrankedModelIds = (left: string, right: string): number => compareModelIds(left, right) || left.localeCompare(right);
-
-// The same tier scale read from the weakest end, for the caller that wants the cheapest model, not the strongest. An
-// unranked family still sinks last on both orders; a tier-less catalog (Kimi) falls back to its newest release.
-export const compareCheapestFirst = (left: string, right: string): number => {
-    const leftFamily = familyOf(left);
-    const rightFamily = familyOf(right);
-    return (
-        tierRankOf(rightFamily) - tierRankOf(leftFamily) ||
-        // Before release: two rows differing only by thinking are the same model; recency must not pick between them.
-        thinkingRankOf(leftFamily) - thinkingRankOf(rightFamily) ||
-        compareRelease(releaseOf(left), releaseOf(right)) ||
-        releaseTierRankOf(rightFamily) - releaseTierRankOf(leftFamily)
-    );
-};
-
-// Tier only, not release or thinking level, so a downgrade stays legible as one. An unranked family is false on either
-// side: an unranked candidate might be the next flagship, and an unranked pick's tier is unknown to have been beaten.
-export const isCheaperRung = (candidate: string, pick: string): boolean => {
-    const candidateRank = tierRankOf(familyOf(candidate));
-    const pickRank = tierRankOf(familyOf(pick));
-    return candidateRank !== UNRANKED && pickRank !== UNRANKED && candidateRank > pickRank;
-};
 
 // True only for an id that spells out a level above the quiet end, so an unannotated id is never accused of it.
 // Exported so a settings row can label a pinned thinking variant.

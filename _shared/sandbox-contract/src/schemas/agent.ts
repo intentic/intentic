@@ -260,20 +260,12 @@ export const AgentTurnSchema = z
             .describe(
                 "Ask for the same work at a higher rate for a higher price. A request rather than a promise: the answer says what actually happened.",
             ),
-        // Vetoes automatic tier selection for this turn; the judge still runs and records its verdict, but nothing is
-        // substituted.
         // Set by the composer on the one turn whose model the Auto judge chose; the daemon only records it.
         autoPicked: z
             .boolean()
             .optional()
             .describe(
                 "Whether this turn's model was chosen for you by reading the conversation's opening message, rather than picked by hand. Recorded so the choice can be judged later against what you did next.",
-            ),
-        tierHold: z
-            .boolean()
-            .optional()
-            .describe(
-                "Run exactly the model that was picked, even when the turn looks simple enough for a cheaper one. The judgement is still recorded; nothing is substituted.",
             ),
         // The opt-in editor context chip: what the user is looking at, folded into the prompt daemon-side.
         editorContext: EditorContextSchema.optional().describe(

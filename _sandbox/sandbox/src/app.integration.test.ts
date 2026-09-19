@@ -581,14 +581,12 @@ test("agent.run streams the agent events, fenced by a user snapshot before and a
             }),
         ),
     );
-    // Tier verdict is dropped: the complexity judge runs every turn by default (settings.autoTier "shadow") and reports
-    // its own fact.
     // The repo-sync note this suite's unstubbed git.sync adds lands on the user's row instead, not as a fact.
     const { facts, rows } = await runAgentTurn(client, { prompt: "do it" });
     // The session frame carries the account the daemon resolved (here, "default"), since a session resumes only under
     // the credential that minted it.
     // Everything else arrives exactly as the adapter streamed it.
-    expect(facts.filter((fact) => fact.kind !== "tier")).toEqual(
+    expect(facts).toEqual(
         events.filter(isTurnFact).map((event) => (event.kind === "session" ? { ...event, account: "default" } : event)),
     );
     expect(rows).toMatchObject([

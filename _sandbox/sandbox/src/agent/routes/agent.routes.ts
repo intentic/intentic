@@ -83,7 +83,6 @@ import { turnRunOf } from "../run/turn/turn-runs.js";
 import { nameAgentTitle } from "../models/title-namer.js";
 import { createTurnMetrics } from "../run/turn/turn-metrics.js";
 import { planTurn } from "../run/turn/turn-plan.js";
-import { turnTier } from "../run/turn/turn-tier.js";
 import { sumUsage, type UsageFrame } from "../run/turn/turn-usage.js";
 import { withCacheTtl } from "../run/turn/prompt-cache.js";
 
@@ -290,7 +289,6 @@ async function* runConversationTurn(
             ...(input.effort !== undefined ? { effort: input.effort } : {}),
             ...(input.thinking !== undefined ? { thinking: input.thinking } : {}),
             ...(input.fast !== undefined ? { fast: input.fast } : {}),
-            ...(input.tierHold !== undefined ? { tierHold: input.tierHold } : {}),
             ...(input.account !== undefined ? { account: input.account } : {}),
             ...(input.origin !== undefined ? { origin: input.origin } : {}),
             ...opt("startedBy", input.actor),
@@ -972,39 +970,7 @@ async function* runTurn(
     // What is TRUE beside what was said, measured by the sandbox; rides the request as one more note.
     const handoffNote = await handoffNoteFor(services, input, history, heldBefore);
     mark("history");
-    // Judged while the turn is still a request, using the user's own unresolved pick as the ceiling.
     const settings = await services.perf.track("turn.plan.settings", {}, () => services.sandboxSettings.get());
-    const tier = await services.perf.track("turn.tier", {}, () =>
-        turnTier(services, input, {
-            settings,
-            provider: input.agent ?? "claude",
-            lastTier: input.conversationId === undefined ? undefined : services.agents.entry(input.conversationId)?.tier,
-            // The turn's own flag when it says anything, else the conversation's persisted veto.
-            hold: input.tierHold ?? (input.conversationId === undefined ? false : (services.agents.entry(input.conversationId)?.tierHold ?? false)),
-        }),
-    );
-    // The turn as the rest of this function must see it: only the model may differ, only downward.
-    const tierRouted = tier?.model !== undefined && tier.held !== true;
-    const planned: AgentTurn = tier !== undefined && tier.model !== undefined && tierRouted ? { ...input, model: tier.model } : input;
-    if (tier !== undefined && input.conversationId !== undefined) {
-        // Fire-and-forget: only the next turn's judgement needs this, and a write must never delay this one.
-        services.agents
-            .recordTier(input.conversationId, tier.verdict.tier)
-            .catch((error: unknown) => services.logger.warn({ err: error }, "auto tier: recording the verdict failed"));
-    }
-    // Reported on every judged turn, even standard, since the composer's preview needs the last verdict.
-    if (tier !== undefined) {
-        yield {
-            kind: "tier",
-            tier: tier.verdict.tier,
-            score: tier.verdict.score,
-            rules: [...tier.verdict.rules],
-            ...(tier.model !== undefined ? { model: tier.model } : {}),
-            routed: tierRouted,
-            ...(tier.held === true ? { held: true } : {}),
-        };
-    }
-    mark("tier");
     const base: AgentRequest = {
         prompt: history.length > 0 ? withRuntimeHistory(promptWithEditor, history) : promptWithEditor,
         cwd: effectiveCwd,
@@ -1014,8 +980,7 @@ async function* runTurn(
         signal: signal ?? new AbortController().signal,
         ...(Object.keys(cliEnv).length > 0 ? { cliEnv } : {}),
         ...(resumed !== undefined ? { sessionId: resumed } : {}),
-        // `planned`, not `input`: a downgraded turn must reach the arms as the model it will actually run.
-        ...(planned.model !== undefined ? { model: planned.model } : {}),
+        ...(input.model !== undefined ? { model: input.model } : {}),
         ...(input.permissionMode !== undefined ? { permissionMode: input.permissionMode } : {}),
         ...(input.allowedTools !== undefined ? { allowedTools: input.allowedTools } : {}),
         ...(input.effort !== undefined ? { effort: input.effort } : {}),
@@ -1029,14 +994,13 @@ async function* runTurn(
         spawnParent === undefined || input.outsideWake !== undefined
             ? undefined
             : childSupervisor(services, { conversationId: spawnParent, cwd: localCwd }, streamAgent);
-    const plan = await planTurn(services, planned, {
+    const plan = await planTurn(services, input, {
         base,
         attachmentPaths,
         localCwd,
         effectiveCwd,
         cliEnv,
         steering,
-        // Read once above for the tier judgement; planTurn accepts it too so this costs no extra read.
         settings,
         ...(worktree !== undefined ? { resync: worktree.resync } : {}),
         ...(children !== undefined ? { children } : {}),
@@ -1462,19 +1426,6 @@ async function* runTurn(
                 // conversation naming a different model reads as the user overruling it. Undefined drops on the way
                 // out, so an ordinary turn carries no field rather than a false one.
                 autoPicked: input.autoPicked,
-                // What the tier judge said, if it ran; absent, not zero, when it didn't.
-                ...(tier !== undefined
-                    ? {
-                          tierScore: tier.verdict.score,
-                          tierRules: [...tier.verdict.rules],
-                          // Written down, not re-derived: the cutoff is an owner setting.
-                          tierFast: tier.verdict.tier === "fast",
-                          tierCeiling: tier.verdict.ceiling,
-                          tierRouted: tier.model !== undefined && tier.held !== true,
-                          // The veto, only between a fast verdict and a real substitution.
-                          ...(tier.held === true ? { tierDenied: true } : {}),
-                      }
-                    : {}),
             })
             .catch((error: unknown) => services.logger.warn({ err: error }, "usage: ledger append failed"));
         // The runtimes with no Stop hook get their Stop from the daemon: the command rules Claude runs at its Stop run

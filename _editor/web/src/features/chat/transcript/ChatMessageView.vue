@@ -163,12 +163,6 @@ const stopThisWatch = async (): Promise<void> => {
     await stopWatching(conversation.value.conversationId, props.message.noticeWaitId).catch(() => undefined);
 };
 
-// One-press opt-out from automatic tier routing; flips the conversation's own tierHold flag, not the sandbox setting.
-const tierHoldOffer = computed(() => props.message.noticeAction === `tierHold` && !conversation.value.tierHold.value);
-const holdTier = (): void => {
-    conversation.value.setTierHold(true);
-};
-
 // Both prose surfaces share one composable (useMarkdown); one renderer per message, held for the component's life.
 // Workspace scope for file links: an isolated conversation's own checkout, undefined (= /work) for a shared one.
 const linkAgent = computed(() => (conversation.value.isolated.value ? conversation.value.conversationId : undefined));
@@ -593,12 +587,6 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
                 <button type="button" class="shrink-0 font-medium text-link hover:underline" @click="watchDepsInstall">
                     {{ t(`chat.chatMessageView.watchInstall`) }}
                 </button>
-            </template>
-            <template v-if="tierHoldOffer">
-                <button type="button" class="shrink-0 font-medium text-link hover:underline" @click="holdTier">
-                    {{ t(`chat.chatMessageView.keepChatOnMy`) }}
-                </button>
-                <span class="shrink-0">{{ t(`chat.chatMessageView.laterTurnsRunModel`) }}</span>
             </template>
         </div>
         <template v-else>

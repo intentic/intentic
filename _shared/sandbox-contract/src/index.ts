@@ -122,7 +122,6 @@ export * from "./policy/credential-material.js";
 export * from "./policy/capability-secrets.js";
 export * from "./ids/conversation-ids.js";
 export * from "./text/documents.js";
-export * from "./models/fast-tier.js";
 export * from "./protocol/host-protocol.js";
 export * from "./protocol/webext-protocol.js";
 export * from "./protocol/webext-links.js";
@@ -138,7 +137,6 @@ export * from "./models/model-roles.js";
 export * from "./models/plan-pools.js";
 export * from "./text/path-refs.js";
 export * from "./text/archives.js";
-export * from "./models/prompt-complexity.js";
 export * from "./policy/output-fields.js";
 export * from "./policy/approvals-execution.js";
 // Wire shapes, one module per subject area, mirroring `contracts/`; a `{param}` in the route path merges into the same

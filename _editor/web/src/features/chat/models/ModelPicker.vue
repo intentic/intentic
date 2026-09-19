@@ -50,8 +50,9 @@ const searchInput = ref<{ focus: () => void } | null>(null);
 
 const searching = computed(() => query.value.trim().length > 0);
 
-// A lead row belongs to no provider, so the readiness test would sink it below every connected model in search
-// results. It is always runnable by construction — it is a mode, not a credential.
+// A lead row belongs to no provider, so every provider-shaped question about it has to be short-circuited: readiness
+// (or search would sink it below every connected model), and the lock badge below. It is a mode, not a credential.
+const isLead = (entry: PickerEntry): boolean => (leadRows ?? []).some((lead) => lead.key === entry.key);
 const leadAwareReady = (candidate: AgentProvider): boolean =>
     (leadRows ?? []).some((entry) => entry.provider === candidate) || providerReady(candidate);
 
@@ -181,8 +182,9 @@ const { activeIndex, activeRow, move, setRowEl } = useListNavigation(flat, (entr
 const isSelected = (entry: PickerEntry): boolean =>
     leadSelected === undefined ? entry.provider === provider && entry.value === model : entry.key === leadSelected;
 const isDisabled = (entry: PickerEntry): boolean => unpickable?.(entry) === true;
-// A row whose provider has no credential yet; dimmed and lock-marked, never disabled.
-const isLocked = (entry: PickerEntry): boolean => !providerReady(entry.provider);
+// A row whose provider has no credential yet; dimmed and lock-marked, never disabled. A lead row has no provider to
+// hold a credential, so asking would lock a mode that is always available and make it read as refused.
+const isLocked = (entry: PickerEntry): boolean => !isLead(entry) && !providerReady(entry.provider);
 
 // Deep link to the handshake: `?connect=<provider>` opens the Agent tab on that card. A real link, not a button click,
 // so hover shows the destination and Ctrl/Cmd-click opens it in another tab.
@@ -229,7 +231,7 @@ const railTo = (target: string | undefined): void => {
 };
 
 const rowAriaLabel = (entry: PickerEntry): string =>
-    `${entry.label}${isSelected(entry) ? `, current model` : ``}${isLocked(entry) ? `, ${accessBadge(entry.provider)}` : ``}`;
+    `${entry.label}${isSelected(entry) ? `, current model` : ``}${isLocked(entry) ? `, ${accessBadge(entry.provider) ?? `not connected`}` : ``}`;
 
 // A provider whose connected account can no longer be refreshed; badged so a broken credential isn't mistaken for a
 // healthy one.

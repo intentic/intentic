@@ -5,8 +5,6 @@ import { InfoHint } from "@intentic/ui";
 import type { Conversation } from "../session/conversation";
 import { AUTO_KEY, autoEntry, type PickerEntry } from "./modelPickerState";
 import { usePickerAccounts } from "../accounts/pickerAccounts";
-import { modelLabelFor } from "../accounts/providerCatalog";
-import { useSandboxSettings } from "../../sandbox/overview/useSandboxSettings";
 import { type RunSettingsPatch, usePickerRunSettings } from "./run-settings/pickerRunSettings";
 import ModelPicker from "./ModelPicker.vue";
 import PickerAccounts from "../accounts/PickerAccounts.vue";
@@ -23,17 +21,17 @@ const emit = defineEmits<{ selected: [] }>();
 const { conversation } = defineProps<{ conversation: Conversation }>();
 
 // Destructured once; every host remounts this component (v-if) rather than swapping the prop in place.
-const { provider, harness, model, thinking, fast, effort, fastMode, tierHold, tierAnswer, streaming, generating, account, capabilities, box, auto } =
-    conversation;
+const { provider, harness, model, thinking, fast, effort, fastMode, streaming, generating, account, capabilities, box, auto, messages } = conversation;
 
-// Sandbox-wide automatic-tier mode; decides what the tier block may show (a dead control is worse than none).
-const { settings } = useSandboxSettings();
-const tierMode = computed(() => settings.value?.autoTier ?? `shadow`);
-
-// Auto is offered only in the mode that has somewhere to send the reading; everywhere else the row would be a control
-// that does nothing, which is worse than no row.
+// Gated by no setting: which model a chat runs on is a per-chat question, and a mode that only appears once you have
+// found a switch on a settings page is a mode nobody finds. Which model does the reading IS a setting (the
+// `model-router` job under Models), and that is the only part a sandbox configures.
+// Offered exactly where the reading can happen, which is modelRoute.ts's own rule: a chat of this sandbox's with
+// nothing sent yet. A chat already under way has a model, and it is running — an Auto row there would disarm itself at
+// the next send, which is a control that lies.
+const autoOffered = computed(() => messages.value.length === 0 && box.value === undefined);
 const leadRows = computed(() =>
-    tierMode.value === `judge` ? [autoEntry(t(`chat.chatModelPicker.autoLabel`), t(`chat.chatModelPicker.autoDescription`))] : [],
+    autoOffered.value ? [autoEntry(t(`chat.chatModelPicker.autoLabel`), t(`chat.chatModelPicker.autoDescription`))] : [],
 );
 const leadSelected = computed(() => (auto.value ? AUTO_KEY : undefined));
 
@@ -57,8 +55,10 @@ const applyRun = (patch: RunSettingsPatch): void => {
     }
 };
 
-// Hidden, not inert: another box's account pays for nothing; the model list stays since it isn't box-scoped.
-const accountsShown = computed(() => hasContent.value && box.value === undefined);
+// Hidden, not inert: another box's account pays for nothing; the model list stays since it isn't box-scoped. Under
+// Auto they are hidden for a second reason — the account is part of what the reading chooses, so offering one here
+// would be a control over a decision not yet made.
+const accountsShown = computed(() => hasContent.value && box.value === undefined && !auto.value);
 
 // Mid-stream, only a same-provider model swap is allowed (a provider switch retires the session).
 const unpickable = (entry: PickerEntry): boolean => streaming.value && entry.provider !== provider.value;
@@ -104,37 +104,10 @@ const fastSpeedNotice = computed<string | undefined>(() => {
         : (FAST_MODE_REASONS[state.reason] ?? `The last turn ran at standard speed (${state.reason}).`);
 });
 
-// Worth a row only in `on` mode; in Measure nothing is substituted, so the veto describes a non-event.
-const tierHoldOffered = computed(() => tierMode.value === `on`);
-
-// Shown only when the judge disagrees with the plain pick: a substitution, a veto, or measure's would-have.
-const tierNotice = computed<string | undefined>(() => {
-    const answer = tierAnswer.value;
-    if (answer === undefined || answer.tier !== `fast`) {
-        return undefined;
-    }
-    if (answer.routed && answer.model !== undefined) {
-        return `The last turn looked simple, so it ran on ${modelLabelFor(provider.value, answer.model)}.`;
-    }
-    if (answer.held === true) {
-        return `The last turn looked simple; your hold kept it on your pick.`;
-    }
-    if (tierMode.value === `shadow`) {
-        return `The last turn looked simple. Measuring: it still ran on your pick.`;
-    }
-    return undefined;
-});
-
 // Whether the footer earns its own border and padding; prevents a rule drawn above an otherwise-empty footer.
-const footerVisible = computed(
-    () =>
-        accountsShown.value ||
-        runSettingsShown.value ||
-        limitations.value.length > 0 ||
-        tierHoldOffered.value ||
-        tierNotice.value !== undefined ||
-        auto.value,
-);
+// Under Auto everything below the explanation describes the model the chat would fall back to, not the one it will
+// run: drawing accounts, effort and this runtime's limits there would be answering questions about the wrong model.
+const footerVisible = computed(() => (auto.value ? true : accountsShown.value || runSettingsShown.value || limitations.value.length > 0));
 </script>
 
 <template>
@@ -154,7 +127,13 @@ const footerVisible = computed(
             <!-- bg-canvas marks the footer as the surface the list stands on, not more list; a rule alone read unclearly on a tall picker. -->
             <div v-if="footerVisible" class="flex min-h-0 shrink flex-col gap-2 overflow-y-auto border-t border-line bg-canvas px-3 py-2">
                 <!-- What Auto is about to do, said where it was switched on: a mode that changes the model owes an explanation before it does, not after. -->
-                <span v-if="auto" class="text-2xs text-subtle">{{ t(`chat.chatModelPicker.autoArmed`) }}</span>
+                <div v-if="auto" class="flex flex-col gap-1">
+                    <span class="text-2xs text-subtle">{{ t(`chat.chatModelPicker.autoArmed`) }}</span>
+                    <!-- The one part of Auto a sandbox configures: which model does the reading. -->
+                    <RouterLink to="/sandbox/agent#models" class="text-2xs text-link hover:underline" @click="emit(`selected`)">
+                        {{ t(`chat.chatModelPicker.chooseWhichModelReads`) }}
+                    </RouterLink>
+                </div>
 
                 <!-- Account list and harness axis, shared with the shell's own picker. -->
                 <PickerAccounts
@@ -171,7 +150,7 @@ const footerVisible = computed(
                 />
 
                 <!-- Extended thinking and speed: the shell picker's and the settings page's own chips, shared verbatim (PickerRunSettings). -->
-                <div v-if="runSettingsShown" class="flex flex-col gap-1">
+                <div v-if="runSettingsShown && !auto" class="flex flex-col gap-1">
                     <PickerRunSettings
                         :provider="provider"
                         :model="model"
@@ -186,35 +165,8 @@ const footerVisible = computed(
                     <span v-if="fastSpeedNotice !== undefined" class="text-2xs text-subtle">{{ fastSpeedNotice }}</span>
                 </div>
 
-                <!-- The toggle is the standing veto (tierHold), shown only where it could stop something. -->
-                <div v-if="tierHoldOffered || tierNotice !== undefined" class="flex flex-col gap-1">
-                    <div v-if="tierHoldOffered" class="flex items-center justify-between gap-2">
-                        <span class="text-2xs font-medium uppercase tracking-wide text-muted">{{ t(`chat.chatModelPicker.simpleTurnsMayRun`) }}</span>
-                        <button
-                            type="button"
-                            class="composer-ghost h-7 gap-1 px-2.5 text-2xs font-medium max-md:h-10"
-                            :class="{ 'composer-active': tierHold }"
-                            @click="conversation.setTierHold(!tierHold)"
-                            :aria-pressed="tierHold"
-                            :aria-label="t(`chat.chatModelPicker.keepConversationOnPicked`)"
-                        >
-                            <Icon name="credit-card" class="text-2xs" />
-                            <span>{{ tierHold ? t(`chat.chatModelPicker.myPickOnly`) : t(`chat.chatModelPicker.allowed`) }}</span>
-                        </button>
-                    </div>
-                    <span v-if="tierNotice !== undefined" class="text-2xs text-subtle">{{ tierNotice }}</span>
-                    <RouterLink
-                        v-if="tierHoldOffered"
-                        to="/sandbox/agent#models"
-                        class="text-2xs text-link hover:underline"
-                        @click="emit(`selected`)"
-                    >
-                        {{ t(`chat.chatModelPicker.turnOffEveryChat`) }}
-                    </RouterLink>
-                </div>
-
                 <!-- One row (label-left/control-right), the list itself behind a hover card. -->
-                <div v-if="limitations.length > 0" class="flex items-center justify-between gap-2">
+                <div v-if="limitations.length > 0 && !auto" class="flex items-center justify-between gap-2">
                     <span class="text-2xs font-medium uppercase tracking-wide text-muted">{{ t(`chat.chatModelPicker.notAvailableHere`) }}</span>
                     <InfoHint :label="t(`chat.chatModelPicker.whatIsntAvailableHere`)" :text="`${limitations.length}`" class="shrink-0">
                         <!-- States its own heading, since the card teleports to the tooltip tier and may land clear of the row that raised it. -->

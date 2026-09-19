@@ -314,35 +314,6 @@ export const SandboxSettingsSchema = z.object({
         .describe(
             "Which repositories keep a changelog, and so get a user-facing note written alongside each merge. A list rather than a switch, and empty by default, because the commit writer's standing rule is to copy the house style rather than impose one, and a repository that has never written such a note gives it nothing to copy.",
         ),
-    // off: the judge never runs.
-    // shadow (default): the judge scores every turn to the ledger; nothing is routed.
-    // on: a turn judged fast runs on the cheap rung, where the provider publishes one.
-    // judge: the deterministic scorer keeps writing shadow rows but routes nothing; the Auto picker row is offered
-    // instead, and a model reads a new chat's opening message once to choose what the whole conversation runs on.
-    // Exclusive with `on` because the two answer the same question at different moments, and a per-turn downgrade
-    // underneath a picked-by-model conversation would be overruling a choice already made about this chat.
-    autoTier: z
-        .enum(["off", "shadow", "on", "judge"])
-        .default("shadow")
-        .describe(
-            "Whether an easy-looking turn may run on a cheaper model from the same provider. Three states rather than a switch, because the middle one is the only honest road to the third: it scores every turn and routes nothing, so the guess can become a measurement before it changes anything. It can only ever route down, so the worst case is one turn's quality rather than a bill nobody asked for. The fourth, Auto, answers a different question: rather than downgrading turns one by one, it offers an Auto row in the model picker and has a model read a new chat's first message to choose what that whole conversation runs on.",
-        ),
-    // `balanced` is what every verdict recorded before this setting existed was judged against, so shadow history stays
-    // comparable.
-    autoTierEagerness: z
-        .enum(["cautious", "balanced", "eager"])
-        .default("balanced")
-        .describe(
-            "How readily a turn counts as simple enough for the cheaper model. It moves only the cutoff: at every setting a turn still has to say something positively easy, so nothing here can downgrade a short vague request.",
-        ),
-    // Auto uses the same cheap-end order as this list (`compareCheapestFirst`), so the two can never disagree.
-    autoFastModels: z
-        .array(z.string())
-        .max(10)
-        .default([])
-        .describe(
-            "Which cheaper model a downgraded turn lands on. A list so a sandbox spanning providers can name a rung on each, but not a fallback ladder: an entry naming a different provider than the turn is on is skipped rather than tried, because switching provider retires the conversation and starting over to save a fraction of a penny is not a saving. Empty picks the cheapest the turn's own provider publishes.",
-        ),
     agentRetentionDays: z
         .number()
         .min(0)
@@ -522,27 +493,6 @@ export const TurnExperimentSchema = z.object({
     cohort: z.string().optional(),
 });
 export type TurnExperiment = z.infer<typeof TurnExperimentSchema>;
-// Absent when the experiment isn't running (flag off, or no holdout set); absence reads as "not measured", not as zero.
-// Read off the spend ledger's tier fields over the window; no counterfactual $ saved, since the ledger holds only what
-// turns cost. Not a `TurnExperiment`: there's no randomized control, routing follows the settings mode over time, not a
-// coin flip. Absent (no turn judged, autoTier off) reads as "not measured", not "measured, found nothing".
-export const TierReportSchema = z.object({
-    // Turns the judge ran on in the window, the denominator under everything below.
-    judged: z.number(),
-    // …of which landed at or below FAST_CEILING: the turns that looked simple. fast ÷ judged is the fast share.
-    fast: z.number(),
-    // Upper bound on any saving, never an estimate: moving these turns to the cheap rung would have cost something too.
-    atStakeUsd: z.number(),
-    // Turns that actually ran the cheap rung, and what they cost there. Realized, not projected.
-    routed: z.number(),
-    routedUsd: z.number(),
-    // The guardrail: fast-judged turns whose very next ledger row asked for a dearer model. Past a few percent of
-    // `fast`, the judge costs more in trust than it saves.
-    escalated: z.number(),
-    // Fast-judged turns the user vetoed outright (UsageTurn.tierDenied): the same signal, said even louder.
-    denied: z.number(),
-});
-export type TierReport = z.infer<typeof TierReportSchema>;
 // One dependency version or library improvement suggested or pinned.
 export const DependencyImprovementSchema = z.object({
     prevented: z.string(),
@@ -564,8 +514,6 @@ export const SavingsReportSchema = z.object({
     search: TurnExperimentSchema.optional(),
     // Same absence rule as `search`: not measured, never zero.
     map: TurnExperimentSchema.optional(),
-    // Automatic tier selection's readout, see TierReportSchema. Absent ⇒ nothing was judged in the window.
-    tier: TierReportSchema.optional(),
     dependencies: DependencySavingsSchema.optional(),
 });
 export type SavingsReport = z.infer<typeof SavingsReportSchema>;

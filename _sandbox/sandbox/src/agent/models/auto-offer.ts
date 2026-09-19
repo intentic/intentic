@@ -23,8 +23,8 @@ import { providerAccountLists, providerReadiness, sharedProviderReads } from "..
 // back with cannot be one the provider would refuse.
 //
 // Endpoint providers and the free trial are deliberately absent. The premise of this feature is choosing against a
-// readable allowance, and neither publishes one; an endpoint's cost is invisible here (the same reason turn-tier.ts
-// leaves them alone), and the trial is a disclosed bargain its owner opts into rather than one a router moves them to.
+// readable allowance, and neither publishes one; an endpoint's cost is invisible here, and the trial is a disclosed
+// bargain its owner opts into rather than one a router moves them to.
 
 const isTranslator = (provider: NativeProvider): provider is TranslatorProvider => (TRANSLATOR_PROVIDERS as readonly string[]).includes(provider);
 

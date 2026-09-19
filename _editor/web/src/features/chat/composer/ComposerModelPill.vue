@@ -25,8 +25,10 @@ const {
     ariaLabel?: string;
 }>();
 
-const { provider, model } = conversation;
-const modelLabelText = computed(() => modelLabelFor(provider.value, model.value));
+const { provider, model, auto } = conversation;
+// On Auto the pill says Auto, not the model underneath: that model is only the fallback if the reading never lands,
+// and naming it would read as though pressing the Auto row had done nothing.
+const modelLabelText = computed(() => (auto.value ? t(`chat.composerModelPill.auto`) : modelLabelFor(provider.value, model.value)));
 
 // The button itself: see the note above on why the anchor has to be this element and not a stand-in.
 const el = ref<HTMLButtonElement>();
@@ -42,7 +44,9 @@ defineExpose({ el, label: modelLabelText });
         :aria-expanded="expanded"
         :aria-label="ariaLabel ?? t(`chat.composerModelPill.model`, { modelLabelText })"
     >
-        <ProviderLogo :provider="provider" class="shrink-0 text-2xs text-link" />
+        <!-- Auto's own mark, so the armed state is legible with the label hidden on a narrow composer. -->
+        <Icon v-if="auto" name="sparkles" class="shrink-0 text-2xs text-link" aria-hidden="true" />
+        <ProviderLogo v-else :provider="provider" class="shrink-0 text-2xs text-link" />
         <span class="truncate" :class="labelClass">{{ modelLabelText }}</span>
         <Icon name="chevron-down" class="shrink-0 text-2xs text-subtle" />
     </button>

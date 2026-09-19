@@ -12,7 +12,6 @@ const settings = {
     effort: `high`,
     thinking: false,
     fast: false,
-    tierHold: false,
 } as const;
 
 // Wire body shape: every assertion is about an omission, since that's where the daemon's defaults live (unset
@@ -73,11 +72,6 @@ describe(`turnRequestBody`, () => {
     it(`carries the persona only once one is picked`, () => {
         expect(wire(turnRequestBody(base))).not.toHaveProperty(`actsAs`);
         expect(wire(turnRequestBody({ ...base, settings: { ...settings, actsAs: `work` } }))).toMatchObject({ actsAs: `work` });
-    });
-
-    it(`always states the tier hold, because absence there would leave an earlier hold standing`, () => {
-        expect(wire(turnRequestBody(base))).toMatchObject({ tierHold: false });
-        expect(wire(turnRequestBody({ ...base, settings: { ...settings, tierHold: true } }))).toMatchObject({ tierHold: true });
     });
 
     it(`sends no account of this box's when the turn runs in another sandbox`, () => {

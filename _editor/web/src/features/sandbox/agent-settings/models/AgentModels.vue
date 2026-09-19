@@ -1,29 +1,24 @@
 <script setup lang="ts">
 import {
     MODEL_ROLE_BLOCKS,
-    MODEL_ROLES,
     type ModelPin,
     type ModelRole,
     type ModelRoleBlockId,
     type ModelRoleSpec,
     modelPinKey,
-    parsePinned,
 } from "@intentic/sandbox-contract";
-import { Button, Row, RowGroup, SegmentedControl, Verdict } from "@intentic/ui";
+import { Button, RowGroup, SegmentedControl } from "@intentic/ui";
 import Checkbox from "primevue/checkbox";
 import { computed, ref, shallowRef, watch } from "vue";
 import { RouterLink } from "vue-router";
 import { useSandboxSettings } from "../../overview/useSandboxSettings";
-import { useSavings } from "../../usage/useSavings";
-import AddModelButton from "./AddModelButton.vue";
 import ModelGroupRow from "./ModelGroupRow.vue";
 import { type PinnedList, pinKnobSummary, pinnedList } from "./modelPinList";
-import ModelPinList from "./ModelPinList.vue";
 import ModelPinPicker from "./ModelPinPicker.vue";
 import ModelRoleRow from "./ModelRoleRow.vue";
 import { useT } from "@intentic/ui/i18n";
 
-// Every model choice the sandbox makes: one row per job from the catalog (MODEL_ROLES/MODEL_ROLE_BLOCKS), grouped by
+// Every model choice the sandbox makes: one row per job from the catalog (MODEL_ROLE_BLOCKS), grouped by
 // the catalog rather than by hand here. A block's Simple view stores nothing of its own, it reads and writes the same
 // per-job settings as Advanced, so switching views never changes what's saved.
 
@@ -31,37 +26,6 @@ const t = useT();
 
 const { settings, patch } = useSandboxSettings();
 const loaded = computed(() => settings.value !== undefined);
-
-// Fixed window: long enough to mean something, short enough not to grade a since-changed judge forever.
-const TIER_WINDOW_DAYS = 30;
-const tierWindow = computed(() => ({ from: new Date(Date.now() - TIER_WINDOW_DAYS * 24 * 60 * 60 * 1000).toISOString().slice(0, 10) }));
-const { savings } = useSavings(tierWindow);
-const tierReport = computed(() => savings.value?.tier);
-const pct = (part: number, whole: number): string => `${Math.round((part / whole) * 100)}%`;
-
-// Built here, not in the template, to avoid inline `v-if`s mid-sentence for the optional share.
-const tierUnit = computed<string>(() => {
-    const report = tierReport.value;
-    if (report === undefined) {
-        return ``;
-    }
-    const share = report.judged > 0 ? ` (${pct(report.fast, report.judged)})` : ``;
-    return `of ${report.judged} turns judged simple${share} · last ${TIER_WINDOW_DAYS} days`;
-});
-// Empty until something has happened; `<Verdict>` reads empty as absent, not as a measured zero.
-const tierEvidence = computed<string>(() => {
-    const report = tierReport.value;
-    if (report === undefined) {
-        return ``;
-    }
-    return [
-        report.routed > 0 ? `${report.routed} down-routed` : undefined,
-        report.escalated > 0 ? `${report.escalated}/${report.fast} bumped up` : undefined,
-        report.denied > 0 ? `${report.denied} vetoed` : undefined,
-    ]
-        .filter((part) => part !== undefined)
-        .join(` · `);
-});
 
 // Sends the whole `modelRoles` record every time: the settings patch merges only at the top level, so writing one
 // role's key alone would drop the others. The bulk editor batches several keys through here in one patch.
@@ -129,14 +93,6 @@ const groupList = (ids: readonly ModelRole[]): PinnedList =>
 const blocks = MODEL_ROLE_BLOCKS.map((block) => {
     const ids = block.roles.map((role) => role.id) as readonly ModelRole[];
     return { ...block, ids, rows: block.roles.map((role) => ({ role, list: editorFor(role.id) })), group: groupList(ids) };
-});
-
-// Not a role: a property of automatic tier selection, storing plain `${provider}:${model}` keys with no knobs.
-const fast = pinnedList({
-    read: () => settings.value?.autoFastModels ?? [],
-    write: (keys) => patch({ autoFastModels: [...keys] }),
-    decode: (key) => parsePinned(key),
-    encode: (pin) => modelPinKey(pin),
 });
 
 // Ordered list, not a Set (also read as a count); per-visit only, never persisted.
@@ -238,7 +194,7 @@ interface PickerTarget {
     readonly apply: (pin: ModelPin) => void;
     // Writes a knob through; differs from `apply` only while adding, where there's no entry yet to configure.
     readonly configure: (pin: ModelPin) => void;
-    // Whether the panel survives its answer: a row's doesn't; the selection's does, still needing a tier drawn.
+    // Whether the panel survives its answer: a row's does not; the selection's does, since more jobs may follow.
     readonly stayOpen: boolean;
 }
 
@@ -304,23 +260,6 @@ const setPickerOpen = (open: boolean): void => {
     editing.value = undefined;
     bulkPin.value = undefined;
 };
-
-// Middle state is the point, not a halfway house: measuring first ends the guessing about a cutoff. Auto sits at the
-// end because it answers the same question the other way round — once per chat, by asking a model, instead of turn by
-// turn for free — and the two cannot both be in force over one conversation.
-const autoTierOptions = computed(() => [
-    { label: t(`sandbox.agentModels.off`), value: `off` },
-    { label: t(`sandbox.agentModels.measure`), value: `shadow` },
-    { label: t(`sandbox.agentModels.on`), value: `on` },
-    { label: t(`sandbox.agentModels.auto`), value: `judge` },
-]);
-
-// Named, not numbered: the cutoff is meaningless unread; offered live in both Measure and On.
-const eagernessOptions = computed(() => [
-    { label: t(`sandbox.agentModels.cautious`), value: `cautious` },
-    { label: t(`sandbox.agentModels.balanced`), value: `balanced` },
-    { label: t(`sandbox.agentModels.eager`), value: `eager` },
-]);
 </script>
 
 <template>
@@ -438,84 +377,6 @@ const eagernessOptions = computed(() => [
             </template>
         </RowGroup>
 
-        <!-- Not a job (not selectable), so its own group rather than a nineteenth row needing a placeholder tick column. -->
-        <RowGroup :label="t(`sandbox.agentModels.cheaperTurns`)" :caption="t(`sandbox.agentModels.notJobSubstitutionMade`)">
-            <Row spine :title="t(`sandbox.agentModels.automaticTier`)" :description="t(`sandbox.agentModels.runSimpleTurnsOn`)">
-                <!-- The judge row uses the standard lead slot and mark size. -->
-                <template #lead="{ mark, iconClass }">
-                    <span class="flex shrink-0 items-center justify-center" :style="{ width: `${mark}px`, height: `${mark}px` }">
-                        <Icon name="credit-card" aria-hidden="true" class="text-muted" :class="iconClass" />
-                    </span>
-                </template>
-                <template #control>
-                    <SegmentedControl
-                        :model-value="settings?.autoTier ?? `shadow`"
-                        :options="autoTierOptions"
-                        @update:model-value="(autoTier: string) => patch({ autoTier: autoTier as `off` | `shadow` | `on` | `judge` })"
-                    />
-                </template>
-                <template #below>
-                    <div class="flex flex-col gap-3">
-                        <p v-if="settings?.autoTier === `off`" class="text-2xs text-muted">{{ t(`sandbox.agentModels.nothingJudgedRecorded`) }}</p>
-                        <p v-else-if="settings?.autoTier === `on`" class="text-2xs text-muted">
-                            {{ t(`sandbox.agentModels.simpleTurnsRunOn`) }}
-                        </p>
-                        <p v-else-if="settings?.autoTier === `judge`" class="text-2xs text-muted">
-                            {{ t(`sandbox.agentModels.autoChoosesPerChat`) }}
-                        </p>
-
-                        <!-- The app's standard shape for a measured answer; no background, since `#below` is inside the row's hairline. -->
-                        <Verdict
-                            v-if="settings?.autoTier !== `off` && tierReport !== undefined"
-                            tone="content"
-                            :value="`${tierReport.fast}`"
-                            :unit="tierUnit"
-                            :evidence="tierEvidence"
-                        />
-
-                        <div class="flex flex-col gap-1.5">
-                            <div class="flex flex-wrap items-center justify-between gap-3">
-                                <span class="text-xs font-medium text-content">{{ t(`sandbox.agentModels.cheaperModel`) }}</span>
-                                <div class="flex flex-wrap items-center justify-end gap-2">
-                                    <div
-                                        v-if="settings?.autoTier !== `off`"
-                                        class="flex shrink-0 items-center"
-                                        role="group"
-                                        :aria-label="t(`sandbox.agentModels.howReadily`)"
-                                    >
-                                        <SegmentedControl
-                                            :model-value="settings?.autoTierEagerness ?? `balanced`"
-                                            :options="eagernessOptions"
-                                            wrap
-                                            @update:model-value="
-                                                (autoTierEagerness: string) =>
-                                                    patch({ autoTierEagerness: autoTierEagerness as `cautious` | `balanced` | `eager` })
-                                            "
-                                        />
-                                    </div>
-                                    <AddModelButton
-                                        :label="t(`sandbox.agentModels.addModelAutomaticTier`)"
-                                        :disabled="!loaded"
-                                        @open="(anchor: HTMLElement) => openRowPicker(fast, undefined, anchor)"
-                                    />
-                                </div>
-                            </div>
-                            <ModelPinList
-                                v-if="fast.entries.value.length > 0"
-                                :entries="fast.entries.value"
-                                @promote="fast.promote"
-                                @remove="fast.remove"
-                                @edit="(index: number, anchor: HTMLElement) => openRowPicker(fast, index, anchor)"
-                            />
-                            <p v-else-if="loaded" class="text-2xs text-muted">
-                                <span class="text-content">{{ t(`sandbox.agentModels.auto`) }}</span
-                                >{{ t(`sandbox.agentModels.cheapestChatsProvider`) }}
-                            </p>
-                        </div>
-                    </div>
-                </template>
-            </Row>
-        </RowGroup>
     </div>
 
     <!-- Mount once so the picker can place itself on open. -->

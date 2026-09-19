@@ -91,17 +91,6 @@ export const UsageTurnSchema = z.object({
     compactions: z.number().optional(),
     contextTokens: z.number().optional(),
     contextWindow: z.number().optional(),
-    // tierScore (0..1 from judgeComplexity, vs FAST_CEILING) absent means the judge did not run. tierRules is which
-    // named features fired. tierRouted is whether it actually ran on the cheap rung, not implied by the score.
-    tierScore: z.number().optional(),
-    tierRules: z.array(z.string()).optional(),
-    tierRouted: z.boolean().optional(),
-    // The verdict and the cutoff it was judged against (settings.autoTierEagerness); absent rows predate the knob and
-    // fall back to FAST_CEILING.
-    tierFast: z.boolean().optional(),
-    tierCeiling: z.number().optional(),
-    // The turn carried AgentTurn.tierHold: the user vetoed a fast verdict. Absent means no veto.
-    tierDenied: z.boolean().optional(),
     // This turn's model was chosen by the Auto judge reading the conversation's opening message, not picked by hand.
     // Marked on that one turn only; a later row of the same conversation naming a different model is the user
     // overruling it, which is the escalation rate this feature has to be able to answer for.

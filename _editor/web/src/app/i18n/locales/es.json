@@ -901,9 +901,7 @@
             "hideCheck": "Ocultar la comprobación",
             "hideCommand": "Ocultar el comando",
             "isntConnectedYet": "{name} todavía no está conectado",
-            "keepChatOnMy": "Mantener este chat en mi elección",
             "keepFutureWorkOn": "Retener el trabajo futuro en la rama",
-            "laterTurnsRunModel": "(los turnos posteriores usan el modelo que elegiste, aunque parezcan sencillos)",
             "no": "No",
             "noKeepPlanning": "No, sigue planificando",
             "notNow": "Ahora no",
@@ -940,15 +938,11 @@
             "wroteInAgentsVoice": "Has escrito esto con la voz del agente: el agente lo lee como palabras suyas"
         },
         "chatModelPicker": {
-            "allowed": "Permitido",
             "autoArmed": "A model reads your first message and picks what this chat runs on. Every turn after that stays on it, and you can change it whenever you like.",
             "autoDescription": "Let a model choose from what's connected and still has allowance",
             "autoLabel": "Auto",
-            "keepConversationOnPicked": "Mantener esta conversación en el modelo elegido",
-            "myPickOnly": "Solo mi elección",
+            "chooseWhichModelReads": "Choose which model does the reading",
             "notAvailableHere": "No disponible aquí",
-            "simpleTurnsMayRun": "Los turnos sencillos pueden salir más baratos",
-            "turnOffEveryChat": "Desactivarlo para todos los chats",
             "whatIsntAvailableHere": "Qué no está disponible aquí"
         },
         "chatNotes": {
@@ -1267,6 +1261,7 @@
             "viewerPlaceholder": "Solo estás mirando: pide al propietario el rol de colaborador para dirigir agentes"
         },
         "composerModelPill": {
+            "auto": "Auto",
             "model": "Modelo: {modelLabelText}"
         },
         "composerMore": {
@@ -1290,10 +1285,6 @@
             "runnerOnComputer": "Runner en tu ordenador",
             "sandbox": "Este sandbox",
             "whereRuns": "Dónde se ejecuta"
-        },
-        "composerTierChip": {
-            "keptOn": "Mantenido en {pick}",
-            "undo": "Deshacer"
         },
         "effortMeter": {
             "reasoningEffort": "Esfuerzo de razonamiento",
@@ -1701,34 +1692,16 @@
             "reading": "Leyendo {memory_file}…"
         },
         "agentModels": {
-            "addModelAutomaticTier": "Añadir un modelo para la selección automática de nivel",
             "advanced": "Avanzado",
-            "auto": "Automático",
-            "autoChoosesPerChat": "The model picker gains an Auto row. Pick it, and a model reads a new chat's first message and chooses what that conversation runs on, from what is connected and still has allowance. Turns are no longer judged one by one.",
-            "automaticTier": "Nivel automático",
-            "balanced": "Equilibrado",
-            "cautious": "Cauteloso",
-            "cheaperModel": "Modelo más barato",
-            "cheaperTurns": "Turnos más baratos",
-            "cheapestChatsProvider": ": el más barato del proveedor del chat.",
             "clearModels": "Vaciar los modelos",
-            "eager": "Impaciente",
-            "howReadily": "Con cuánta facilidad",
             "howToShow": "Cómo mostrar {toLowerCase}",
-            "measure": "Medir",
-            "notJobSubstitutionMade": "No es una tarea: una sustitución hecha dentro de un turno que tú iniciaste.",
-            "nothingJudgedRecorded": "No se juzga ni se registra nada.",
             "nothingJudgingCommandsAt": "Ahora mismo nada está juzgando comandos, así que esto no está en uso.",
-            "off": "Desactivado",
-            "on": "Activado",
-            "runSimpleTurnsOn": "Ejecutar los turnos sencillos en un modelo más barato del mismo proveedor.",
             "safetyJudgeOffNot": "El juez de seguridad está desactivado, así que no es uno de estos y nada de aquí le escribe.",
             "selectEveryJobUnder": "Seleccionar todas las tareas bajo {toLowerCase}",
             "selectJobs": "Seleccionar tareas",
             "selected": "{count} seleccionadas",
             "setModelAll": "Poner un modelo para todas…",
             "simple": "Sencillo",
-            "simpleTurnsRunOn": "Los turnos sencillos van en el modelo más barato. Cada conversación puede vetarlo.",
             "turnJudgeOn": "Activar el juez",
             "underSafety": "en Seguridad.",
             "worthBetterModelThan": "Merece un modelo mejor que el resto de tareas automáticas: lee el comando como datos, y en un turno que ha absorbido algo de fuera, ese texto puede estar argumentando a favor de su propia aprobación."

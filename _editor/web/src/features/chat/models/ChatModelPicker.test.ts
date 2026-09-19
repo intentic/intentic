@@ -9,21 +9,21 @@ import { type App, computed, createApp, defineComponent, h, nextTick, ref } from
 import type { Conversation } from "../session/conversation";
 import { IconStub } from "@intentic/ui/testing";
 
-// ModelPicker is tested on its own; stubbed to its footer slot so only the footer mounts here.
+// ModelPicker is tested on its own; stubbed to its footer slot so only the footer mounts here. Its props are kept
+// because the lead row (Auto) is a prop, not footer markup, and this binding is what decides whether it exists.
+const pickerProps = ref<Record<string, unknown>>({});
 vi.mock(`./ModelPicker.vue`, () => ({
     default: defineComponent({
-        setup:
-            (_props, { slots }) =>
-            () =>
-                h(`div`, slots[`footer`]?.()),
+        inheritAttrs: false,
+        setup: (_props, { slots, attrs }) => {
+            pickerProps.value = attrs;
+            return () => h(`div`, slots[`footer`]?.());
+        },
     }),
 }));
 // Account catalogs live in the shared block; stubbed empty so the footer shows only the runtime's own rows.
 vi.mock(`../accounts/PickerAccounts.vue`, () => ({ default: defineComponent({ setup: () => () => h(`div`) }) }));
 vi.mock(`../accounts/pickerAccounts`, () => ({ usePickerAccounts: () => ({ hasContent: computed(() => false) }) }));
-// The sandbox-wide tier mode, off here so the footer holds exactly the rows under test.
-vi.mock(`../../sandbox/overview/useSandboxSettings`, () => ({ useSandboxSettings: () => ({ settings: ref({ autoTier: `off` }) }) }));
-
 const { default: ChatModelPicker } = await import("./ChatModelPicker.vue");
 const { providerModels } = await import("../accounts/providerCatalog");
 const { effortsFor } = await import("./run-settings/effortScale");
@@ -39,7 +39,7 @@ const limitsOf = (pair: { provider: AgentProvider; harness: AgentHarness }): str
 const MODEL = `a-model`;
 
 // The conversation as this panel reads it: just the refs it binds and the writes it makes, no transcript machinery.
-const conversationOf = (pair: { provider: AgentProvider; harness: AgentHarness }): Conversation =>
+const conversationOf = (pair: { provider: AgentProvider; harness: AgentHarness }, auto = false, sent = 0): Conversation =>
     ({
         provider: ref(pair.provider),
         harness: ref(pair.harness),
@@ -48,9 +48,9 @@ const conversationOf = (pair: { provider: AgentProvider; harness: AgentHarness }
         fast: ref(false),
         effort: computed(() => ``),
         fastMode: ref(undefined),
-        tierHold: ref(false),
-        tierAnswer: ref(undefined),
-        auto: ref(false),
+        auto: ref(auto),
+        messages: ref(Array.from({ length: sent }, () => ({}))),
+        box: ref(undefined),
         streaming: ref(false),
         generating: computed(() => false),
         account: ref(undefined),
@@ -61,18 +61,22 @@ const conversationOf = (pair: { provider: AgentProvider; harness: AgentHarness }
         setEffort: vi.fn(),
         setThinking: vi.fn(),
         setFast: vi.fn(),
-        setTierHold: vi.fn(),
         setAuto: vi.fn(),
     }) as unknown as Conversation;
 
 let app: App | undefined;
 // The conversation goes back with the element: the run-settings rows are asserted by the writes they make on it.
-const mount = (pair: { provider: AgentProvider; harness: AgentHarness } = ROUTED): { element: HTMLElement; conversation: Conversation } => {
+const mount = (
+    pair: { provider: AgentProvider; harness: AgentHarness } = ROUTED,
+    { auto = false, sent = 0 }: { auto?: boolean; sent?: number } = {},
+): { element: HTMLElement; conversation: Conversation } => {
     const element = document.createElement(`div`);
     document.body.append(element);
-    const held = conversationOf(pair);
+    const held = conversationOf(pair, auto, sent);
     app = createApp({ render: () => h(ChatModelPicker, { conversation: held }) });
     app.component(`Icon`, IconStub);
+    // The Auto footer links to the settings job; no router is mounted here, so the link renders as its words.
+    app.component(`RouterLink`, defineComponent({ setup: (_props, { slots }) => () => h(`a`, slots[`default`]?.()) }));
     app.directive(`tooltip`, {});
     app.mount(element);
     return { element, conversation: held };
@@ -189,4 +193,41 @@ it(`draws no footer at all when the withheld meter was the only row left`, () =>
 
     expect(effortsFor(BARE.provider, MODEL, conversation.thinking.value).length).toBeGreaterThan(1);
     expect(element.textContent).toBe(``);
+});
+
+/* AUTO IS A MODE, NOT A MODEL, and the two facts that make it one: it is always offered where it can act, and while
+   it is armed the footer answers nothing about the model underneath — that model is only the fallback. */
+
+const leadLabels = (): string[] => ((pickerProps.value[`lead-rows`] ?? []) as { label: string }[]).map((row) => row.label);
+
+it(`offers Auto on a chat with nothing sent, gated by no setting of the sandbox's`, () => {
+    mount(CEILING);
+
+    expect(leadLabels()).toEqual([`Auto`]);
+});
+
+// modelRoute.ts reads the OPENING message and never asks again, so on a chat already under way the row would arm a
+// question nothing will answer and disarm itself at the next send.
+it(`withdraws Auto once the chat has a turn behind it`, () => {
+    mount(CEILING, { sent: 1 });
+
+    expect(leadLabels()).toEqual([]);
+});
+
+it(`ticks Auto rather than a model row while it is armed`, () => {
+    mount(CEILING, { auto: true });
+
+    expect(pickerProps.value[`lead-selected`]).toBe(`auto:`);
+});
+
+// The whole bug this replaced: the footer went on offering accounts, thinking and this runtime's limits for a model
+// Auto had not chosen yet, so the panel answered questions about the wrong model.
+it(`says what Auto will do and withholds every control over the model underneath`, () => {
+    const { element } = mount(ROUTED, { auto: true });
+
+    expect(limitsOf(ROUTED).length).toBeGreaterThan(1);
+    expect(element.textContent).toContain(`reads your first message`);
+    expect(element.textContent).toContain(`Choose which model does the reading`);
+    expect(element.textContent).not.toContain(`Not available here`);
+    expect(chips(element)).toEqual({});
 });

@@ -125,6 +125,6 @@ test("reads the signature through wrappers, pipelines and subcommands", () => {
     // `run` is `npx vitest`'s argument, not a second subcommand; the verb is what a cleaner matches.
     expect(commandSignature("npx vitest run src/agent")).toBe("npx vitest");
     // Not a subcommand verb: the second word is this run's question, and folding it in would make every run its own gap.
-    expect(commandSignature("rg autoFastModels --glob '!*.test.ts'")).toBe("rg");
+    expect(commandSignature("rg autoPicked --glob '!*.test.ts'")).toBe("rg");
     expect(commandSignature("/usr/local/bin/node -e 'console.log(1)'")).toBe("node");
 });

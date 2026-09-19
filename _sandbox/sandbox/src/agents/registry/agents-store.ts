@@ -60,9 +60,6 @@ export const PersistedAgentSchema = z.object({
     fast: z.boolean().optional(),
     // What the complexity judge made of the last turn, feeding the next turn's `afterHardTurn` signal; may be read
     // tomorrow, from another device. The judgement itself, never what ran; absent means nothing judged yet.
-    tier: z.enum(["fast", "standard"]).optional(),
-    // Mirror the tier hold onto AgentSummary for the composer.
-    tierHold: z.boolean().optional(),
     account: z.string().optional(),
     sessionId: z.string().optional(),
     // Turn index the context window was last compacted under; absent means never compacted. The next turn after that

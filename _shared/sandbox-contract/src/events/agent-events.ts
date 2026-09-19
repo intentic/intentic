@@ -139,19 +139,6 @@ export const AgentEventSchema = z.discriminatedUnion("kind", [
         // Absent when nothing blocks fast mode, including `state: "on"`, and an `off` that was never asked for.
         reason: z.string().optional(),
     }),
-    // The complexity judge's verdict for this turn, emitted once at turn start on every judged turn. `model` is set
-    // only when a substitution applies; `routed` is what actually happened, never implied by the verdict alone.
-    z.object({
-        kind: z.literal("tier"),
-        tier: z.enum(["fast", "standard"]),
-        score: z.number(),
-        rules: z.array(z.string()),
-        // The cheaper model this turn ran on (`routed`) or would have run on (`held`); absent otherwise.
-        model: z.string().optional(),
-        routed: z.boolean(),
-        // The user pinned this turn to their own pick, so a fast verdict moved nothing.
-        held: z.boolean().optional(),
-    }),
     // The turn is alive but retrying a transient provider failure in this same turn; a status, not a failure, shown
     // where thinking goes. `attempt`/`maxAttempts`/`nextAttemptAt` are each optional, runtimes report different halves.
     z.object({
@@ -294,7 +281,6 @@ export const TURN_FACT_KINDS = [
     "usage",
     "rate_limit_info",
     "fast_mode",
-    "tier",
     "provider_retry",
     "account_usage",
     "context_usage",

@@ -201,23 +201,6 @@ describe("foldTurn", () => {
         });
     });
 
-    it("writes down a turn that ran on a cheaper model, and nothing for a verdict that moved nothing", () => {
-        const routed: AgentEvent[] = [
-            { kind: "tier", tier: "fast", score: 0.1, rules: ["easy-words"], model: "claude-haiku-4-5", routed: true },
-            { kind: "delta", text: "a closure is…" },
-        ];
-        expect(foldOf("what is a closure?", routed)).toEqual([
-            { role: "user", text: "what is a closure?", sentAt: SENT_AT },
-            { role: "notice", text: "This turn looked simple, so it ran on claude-haiku-4-5 instead of your pick.", noticeAction: "tierHold" },
-            { role: "assistant", text: "a closure is…" },
-        ]);
-        const held: AgentEvent[] = [
-            { kind: "tier", tier: "fast", score: 0.1, rules: ["easy-words"], model: "claude-haiku-4-5", routed: false, held: true },
-            { kind: "delta", text: "sure" },
-        ];
-        expect(foldOf("go", held).map((message) => message.role)).toEqual(["user", "assistant"]);
-    });
-
     it("writes the turn's own events down as notices", () => {
         const events: AgentEvent[] = [
             { kind: "worktree", branch: "agent/x", base: "abc1234", sync: { commits: 2, blocked: [] } },

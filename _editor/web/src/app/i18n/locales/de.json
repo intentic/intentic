@@ -901,9 +901,7 @@
             "hideCheck": "Die Prüfung ausblenden",
             "hideCommand": "Den Befehl ausblenden",
             "isntConnectedYet": "{name} ist noch nicht verbunden",
-            "keepChatOnMy": "Diesen Chat bei meiner Wahl halten",
             "keepFutureWorkOn": "Künftige Arbeit auf dem Branch halten",
-            "laterTurnsRunModel": "(spätere Züge laufen auf dem Modell, das Sie gewählt haben, auch wenn sie einfach aussehen)",
             "no": "Nein",
             "noKeepPlanning": "Nein, weiter planen",
             "notNow": "Jetzt nicht",
@@ -940,15 +938,11 @@
             "wroteInAgentsVoice": "Sie haben das in der Stimme des Agenten geschrieben: der Agent liest es als seine eigenen Worte"
         },
         "chatModelPicker": {
-            "allowed": "Erlaubt",
             "autoArmed": "A model reads your first message and picks what this chat runs on. Every turn after that stays on it, and you can change it whenever you like.",
             "autoDescription": "Let a model choose from what's connected and still has allowance",
             "autoLabel": "Auto",
-            "keepConversationOnPicked": "Diese Unterhaltung auf dem gewählten Modell halten",
-            "myPickOnly": "Nur meine Wahl",
+            "chooseWhichModelReads": "Choose which model does the reading",
             "notAvailableHere": "Hier nicht verfügbar",
-            "simpleTurnsMayRun": "Einfache Züge dürfen günstiger laufen",
-            "turnOffEveryChat": "Für jeden Chat ausschalten",
             "whatIsntAvailableHere": "Was hier nicht verfügbar ist"
         },
         "chatNotes": {
@@ -1267,6 +1261,7 @@
             "viewerPlaceholder": "Sie sehen nur zu: bitten Sie den Eigentümer um die Rolle „Mitarbeiter“, um Agenten zu steuern"
         },
         "composerModelPill": {
+            "auto": "Auto",
             "model": "Modell: {modelLabelText}"
         },
         "composerMore": {
@@ -1290,10 +1285,6 @@
             "runnerOnComputer": "Runner auf Ihrem Computer",
             "sandbox": "Diese Sandbox",
             "whereRuns": "Wo das läuft"
-        },
-        "composerTierChip": {
-            "keptOn": "Auf {pick} gehalten",
-            "undo": "Rückgängig"
         },
         "effortMeter": {
             "reasoningEffort": "Denkaufwand",
@@ -1701,34 +1692,16 @@
             "reading": "{memory_file} wird gelesen…"
         },
         "agentModels": {
-            "addModelAutomaticTier": "Ein Modell für die automatische Stufenwahl hinzufügen",
             "advanced": "Erweitert",
-            "auto": "Automatisch",
-            "autoChoosesPerChat": "The model picker gains an Auto row. Pick it, and a model reads a new chat's first message and chooses what that conversation runs on, from what is connected and still has allowance. Turns are no longer judged one by one.",
-            "automaticTier": "Automatische Stufe",
-            "balanced": "Ausgewogen",
-            "cautious": "Vorsichtig",
-            "cheaperModel": "Günstigeres Modell",
-            "cheaperTurns": "Günstigere Züge",
-            "cheapestChatsProvider": ": das günstigste vom Anbieter des Chats.",
             "clearModels": "Modelle leeren",
-            "eager": "Eifrig",
-            "howReadily": "Wie bereitwillig",
             "howToShow": "Wie {toLowerCase} gezeigt wird",
-            "measure": "Messen",
-            "notJobSubstitutionMade": "Kein Job: eine Ersetzung innerhalb eines Zugs, den Sie gestartet haben.",
-            "nothingJudgedRecorded": "Es wird nichts beurteilt oder aufgezeichnet.",
             "nothingJudgingCommandsAt": "Gerade beurteilt nichts Befehle, das hier ist also nicht in Gebrauch.",
-            "off": "Aus",
-            "on": "An",
-            "runSimpleTurnsOn": "Einfache Züge auf einem günstigeren Modell desselben Anbieters laufen lassen.",
             "safetyJudgeOffNot": "Der Sicherheitsrichter ist aus, das hier ist also keiner davon, und nichts hier schreibt darauf.",
             "selectEveryJobUnder": "Jeden Job unter {toLowerCase} auswählen",
             "selectJobs": "Jobs auswählen",
             "selected": "{count} ausgewählt",
             "setModelAll": "Ein Modell für alle setzen…",
             "simple": "Einfach",
-            "simpleTurnsRunOn": "Einfache Züge laufen auf dem günstigeren Modell. Jede Unterhaltung kann das ablehnen.",
             "turnJudgeOn": "Den Richter einschalten",
             "underSafety": "unter „Sicherheit“.",
             "worthBetterModelThan": "Ein besseres Modell wert als der Rest der automatischen Jobs: es liest den Befehl als Daten, und in einem Zug, der etwas von außen aufgenommen hat, argumentiert dieser Text womöglich für seine eigene Freigabe."

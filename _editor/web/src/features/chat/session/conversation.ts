@@ -273,8 +273,6 @@ export class Conversation {
     readonly thinking = ref<boolean>(true);
     // Ask for fast speed on this chat's turns; not seeded from turnDefaults, since fast mode costs more.
     readonly fast = ref<boolean>(false);
-    // Standing veto over automatic tier selection; sent as an explicit boolean every turn to clear an earlier hold.
-    readonly tierHold = ref<boolean>(false);
     // The chat is on Auto and its model is still to be chosen: a model reads the opening message and wears the answer
     // (modelRoute.ts), which clears this. `provider`/`model` keep their remembered values underneath, because that is
     // what the chat runs on if the reading never lands.
@@ -290,10 +288,10 @@ export class Conversation {
     readonly workflowId = ref<string | undefined>();
     // Saved loop the next message runs as, if any; not sticky, clears on send like `workflowId`.
     readonly loopId = ref<string | undefined>();
-    // Reasoning effort the user asked for; not always runnable, since the tier scale belongs to the model.
+    // Reasoning effort the user asked for; not always runnable, since the effort scale belongs to the model.
     readonly effortPick = ref<string>(``);
 
-    // Tier the next turn actually runs at: the pick clamped to what the current provider+model+thinking triple offers.
+    // Effort the next turn actually runs at: the pick clamped to what the current provider+model+thinking triple offers.
     readonly effort = computed<string>(() => clampEffort(this.effortPick.value, this.provider.value, this.model.value, this.thinking.value));
 
     // This conversation's composer draft: unsent text and staged attachments; per-tab, persisted per sandbox.
@@ -317,12 +315,6 @@ export class Conversation {
 
     // Speed the harness actually served the last turn at, with its reason if not the one asked for; kept across turns.
     readonly fastMode = ref<Extract<TurnFact, { kind: `fast_mode` }> | undefined>();
-
-    // What the complexity judge said about the last judged turn; kept across turns, replaced by the next verdict.
-    readonly tierAnswer = ref<Extract<TurnFact, { kind: `tier` }> | undefined>();
-
-    // Last tier verdict alone, outliving `tierAnswer`: seeded from the entry so a preview judges like the daemon.
-    readonly lastTier = ref<`fast` | `standard` | undefined>();
 
     // What this provider/harness pair can actually do (capabilitiesOf), the record the daemon plans the turn against.
     readonly capabilities = computed(() => capabilitiesOf(this.provider.value, this.harness.value));
@@ -575,12 +567,6 @@ export class Conversation {
         this.fastMode.value = undefined;
     }
 
-    // Not written to any global default (see `tierHold`); the last answer stays up, since it remains true of the turn
-    // it describes.
-    setTierHold(value: boolean): void {
-        this.tierHold.value = value;
-    }
-
     // Arm or disarm Auto for this chat, and for the next new one. Refused mid-stream like any other pick: a reading
     // taken now would name a model for a turn already running on another.
     setAuto(value: boolean): void {
@@ -754,9 +740,6 @@ export class Conversation {
         this.effortPick.value = source.effortPick.value;
         this.thinking.value = source.thinking.value;
         this.fast.value = source.fast.value;
-        // The veto and last verdict both carry: a fork's next turn is judged and held exactly as the source's would be.
-        this.tierHold.value = source.tierHold.value;
-        this.lastTier.value = source.lastTier.value;
         // The pick again, for the same reason: a fork inherits the chosen posture, not the source runtime's ceiling.
         this.modePick.value = source.modePick.value;
         // "Files as they were" is only sayable in the fork's own checkout, so that choice carries isolation with it.
@@ -1399,8 +1382,6 @@ export class Conversation {
             thinking: this.thinking.value,
             // The pick AND the offer: a toggle left on must not ride to a model that doesn't publish fast mode.
             fast: this.fast.value && this.fastOffered.value,
-            // Always the raw boolean: the daemon persists the hold, only an explicit false can clear one set earlier.
-            tierHold: this.tierHold.value,
             // Spent here, not merely read: the mark belongs to the turn the judge decided, and the next turn on the
             // same model is the user having let it stand rather than a second choice.
             ...(this.spendAutoPicked() ? { autoPicked: true } : {}),
@@ -1834,11 +1815,6 @@ export class Conversation {
             case `fast_mode`:
                 // Not cleared at the turn boundary (see the ref): the answer outlives the turn that reported it.
                 this.fastMode.value = fact;
-                return;
-            case `tier`:
-                // A judged turn's verdict, replacing both the picker notice's answer and the next preview's input.
-                this.tierAnswer.value = fact;
-                this.lastTier.value = fact.tier;
                 return;
             case `error`:
                 this.failures.apply(fact, turn);

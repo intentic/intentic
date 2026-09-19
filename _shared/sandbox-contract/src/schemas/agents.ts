@@ -241,17 +241,6 @@ export const AgentSummarySchema = z.object({
     effort: z.string().optional().describe("How hard that turn was told to think."),
     thinking: z.boolean().optional().describe("Whether that turn showed its reasoning."),
     fast: z.boolean().optional().describe("Whether that turn asked for higher speed. What was asked for, not what was served."),
-    // The judge's verdict on the last turn, not what actually ran: seeds tomorrow's composer preview, absent means
-    // nothing judged yet.
-    tier: z
-        .enum(["fast", "standard"])
-        .optional()
-        .describe("How hard its last turn looked to the complexity judge. What the next turn's preview needs, not what actually ran."),
-    // Standing per-conversation choice, restored into the composer on open and sent back every turn, like `fast` above.
-    tierHold: z
-        .boolean()
-        .optional()
-        .describe("Whether this conversation is pinned to the picked model, so a turn that looks simple is never moved to a cheaper one."),
     account: z.string().optional().describe("Which connected account paid for it."),
     // The worktree branch (agent/<id>); absent for a non-isolated (main-tree) conversation.
     branch: z.string().optional().describe("The branch its private copy works on. Absent for a conversation that works directly in the shared tree."),

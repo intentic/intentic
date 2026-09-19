@@ -29,14 +29,6 @@ vi.mock(`../../overview/useSandboxSettings`, () => ({
     useSandboxSettings: () => ({ settings, patch, dropped: ref(undefined), error: ref(undefined), isLoading: ref(false), save: { mutate: patch } }),
 }));
 
-// Fixture for the tier readout; what's tested is what the row says over a report, not the fetch behind it.
-const savings = ref<{
-    tier?: { judged: number; fast: number; atStakeUsd: number; routed: number; routedUsd: number; escalated: number; denied: number };
-}>({});
-vi.mock(`../../usage/useSavings`, () => ({
-    useSavings: () => ({ savings, isLoading: ref(false), refetch: vi.fn(), error: ref(undefined) }),
-}));
-
 // Two connected accounts, one not, since which one a click spends is exactly what these rows test.
 const CATALOGS: Record<string, readonly { value: string; label: string }[]> = {
     codex: [{ value: `gpt-5.6`, label: `GPT 5.6 Luna` }],
@@ -146,7 +138,6 @@ afterEach(() => {
     document.body.innerHTML = ``;
     settings.value = SandboxSettingsSchema.parse({});
     connected.value = [`codex`, `claude`];
-    savings.value = {};
     opened = undefined;
     answer = undefined;
     patch.mockClear();
@@ -177,15 +168,13 @@ const chips = (host: HTMLElement): Record<string, string> =>
 // model.
 const unsetChip = (kind: string): string => (kind === `helper` ? `off` : `chat default`);
 
-test("draws a row per declared role, plus the one setting that is not a role", async () => {
+test("draws a row per declared role", async () => {
     const host = await mountJobs();
 
     const named = chips(host);
     for (const role of MODEL_ROLES) {
         expect(Object.keys(named), role.id).toContain(role.label);
     }
-    // Not a job: no tick or chip, so it's found by page text rather than by chip title.
-    expect(host.textContent).toContain(`Automatic tier`);
     for (const role of MODEL_ROLES) {
         expect(adders(host), role.id).toContain(`Add a model for ${role.label.toLowerCase()}`);
     }
@@ -202,9 +191,8 @@ test("draws one group per declared block, in order, holding exactly that block's
         expect(adders(section as HTMLElement), block.id).toEqual(block.roles.map((role) => `Add a model for ${role.label.toLowerCase()}`));
     }
 
-    // The one setting that isn't a job gets its own trailing section.
-    expect(sections).toHaveLength(MODEL_ROLE_BLOCKS.length + 1);
-    expect(sections.at(-1)?.textContent).toContain(`Automatic tier`);
+    // Every section is a block: this page is jobs and nothing else.
+    expect(sections).toHaveLength(MODEL_ROLE_BLOCKS.length);
 });
 
 test("a job's glyph and its tick share one slot", async () => {
@@ -218,7 +206,7 @@ test("a job's glyph and its tick share one slot", async () => {
 });
 
 // Also checks that each block keeps the catalog's own order, so rows can't be silently re-sorted here.
-test("reads in order of reach: one-shots, then whole sessions, then the row that can override a live choice", async () => {
+test("reads in order of reach: one-shots first, then whole sessions", async () => {
     const host = await mountJobs();
 
     // Read off Add buttons, not headings: labels are already pinned above, and a title `div` has no stable selector.
@@ -229,13 +217,11 @@ test("reads in order of reach: one-shots, then whole sessions, then the row that
 
     const helpers = roleAt(`helper`);
     const runs = roleAt(`run`);
-    const automaticTier = at(`Add a model for automatic tier selection`);
 
     expect(helpers).not.toContain(-1);
     expect(runs).not.toContain(-1);
     expect(Math.max(...helpers)).toBeLessThan(Math.min(...runs));
-    expect(Math.max(...runs)).toBeLessThan(automaticTier);
-    expect(automaticTier).toBe(order.length - 1);
+    expect(runs).toContain(order.length - 1);
     expect([...helpers, ...runs]).toEqual([...helpers, ...runs].toSorted((left, right) => left - right));
 });
 
@@ -416,18 +402,6 @@ test("a one-shot row opens the picker with knobs, because its job now honours th
 
     expect(opened?.pin).toEqual({ provider: `codex`, model: `gpt-5.6` });
     expect(opened?.knobs).toBe(true);
-});
-
-test("the cheaper-tier row opens the picker without knobs: its substitution cannot honour one", async () => {
-    settings.value = { ...settings.value, autoFastModels: [`codex:gpt-5.6`] };
-    const host = mount();
-    await Promise.resolve();
-
-    rowButton(host, `Change CODEX · GPT 5.6 Luna`).click();
-    await flush();
-
-    expect(opened?.pin).toEqual({ provider: `codex`, model: `gpt-5.6` });
-    expect(opened?.knobs).toBe(false);
 });
 
 test("a knob moved in the picker lands on that entry alone", async () => {
@@ -611,7 +585,7 @@ test("one pick lands on every ticked job in that group, in one patch, and never 
     expect(patch.mock.calls.at(-1)?.[0]?.modelRoles?.[JUDGE]).toBeUndefined();
 });
 
-test("the tier chosen after the model reaches the same entry in every ticked job", async () => {
+test("the effort chosen after the model reaches the same entry in every ticked job", async () => {
     const host = await mountJobs();
 
     tick(host, `Select commit messages`);
@@ -673,8 +647,6 @@ test("a group's master box ticks that block's jobs, and only those", async () =>
 
     const written = patch.mock.calls.at(-1)?.[0]?.modelRoles ?? {};
     expect(Object.keys(written).toSorted()).toEqual(HELPERS.roles.map((role) => role.id).toSorted());
-    // Automatic tier isn't a role, so no master box may reach its list.
-    expect(patch.mock.calls.at(-1)?.[0]?.autoFastModels).toBeUndefined();
 });
 
 test("one group's master box does not tick another group's", async () => {
@@ -835,104 +807,4 @@ test("a switched-off job offers no tick, and the group's master box writes witho
             .filter((id) => id !== JUDGE)
             .toSorted(),
     );
-});
-
-// Three-way mode control, matched by its clicked label.
-const modeButton = (host: HTMLElement, label: string): HTMLButtonElement =>
-    [...host.querySelectorAll<HTMLButtonElement>(`[role="tablist"] button`)].find((button) => button.textContent?.trim() === label)!;
-
-test("defaults to measuring", async () => {
-    const host = mount();
-    await Promise.resolve();
-
-    expect(settings.value.autoTier).toBe(`shadow`);
-    expect(modeButton(host, `Measure`).getAttribute(`aria-selected`)).toBe(`true`);
-});
-
-test("switching the mode writes it, and the row then describes what it actually does", async () => {
-    const host = mount();
-    await Promise.resolve();
-    const before = host.textContent ?? ``;
-    modeButton(host, `On`).click();
-
-    expect(patch).toHaveBeenCalledWith({ autoTier: `on` });
-    await Promise.resolve();
-    expect(host.textContent).not.toBe(before);
-});
-
-test("off says the judgement stops too, not merely the routing", async () => {
-    const host = mount();
-    await Promise.resolve();
-    const measuring = host.textContent ?? ``;
-    modeButton(host, `Off`).click();
-    await Promise.resolve();
-
-    expect(host.textContent).not.toBe(measuring);
-    expect(patch).toHaveBeenCalledWith({ autoTier: `off` });
-});
-
-test("names the rule behind Auto, because which model it picks depends on a conversation this page cannot see", async () => {
-    const host = mount();
-    await Promise.resolve();
-
-    expect(host.textContent).toContain(`Auto`);
-    expect(orderOnScreen(host)).toEqual([]);
-});
-
-test("a pinned cheap model is drawn as written, in its own list", async () => {
-    settings.value = { ...settings.value, autoFastModels: [`claude:claude-haiku-4-5`] };
-    const host = mount();
-    await Promise.resolve();
-
-    expect(orderOnScreen(host)).toEqual([`CLAUDE · Claude Haiku 4.5`]);
-});
-
-test("the judge's record renders its three numbers once turns have been judged", async () => {
-    const tier = { judged: 40, fast: 10, atStakeUsd: 1.5, routed: 4, routedUsd: 0.25, escalated: 1, denied: 2 };
-    savings.value = { tier };
-    const host = mount();
-    await Promise.resolve();
-
-    // No space before `of`: the gap is layout (flex gap), not text; joined as one string so the count is checked
-    // against its own denominator.
-    expect(host.textContent).toContain(`${tier.fast}of ${tier.judged} turns judged simple`);
-    expect(host.textContent).toContain(String(tier.routed));
-    expect(host.textContent).not.toContain(`$1.50`);
-    expect(host.textContent).toContain(`${tier.escalated}/${tier.fast}`);
-    expect(host.textContent).toContain(String(tier.denied));
-});
-
-test("no judged turns means no numbers at all: absence, not a row of zeros", async () => {
-    const host = mount();
-    await Promise.resolve();
-
-    expect(host.textContent).not.toContain(`Last 30 days`);
-});
-
-test("the dial defaults to balanced and writes the stop that was clicked", async () => {
-    const host = mount();
-    await Promise.resolve();
-
-    expect(modeButton(host, `Balanced`).getAttribute(`aria-selected`)).toBe(`true`);
-    modeButton(host, `Eager`).click();
-
-    expect(patch).toHaveBeenCalledWith({ autoTierEagerness: `eager` });
-});
-
-test("the eagerness dial goes away with the feature, not just the mode control", async () => {
-    const host = mount();
-    await Promise.resolve();
-    modeButton(host, `Off`).click();
-    await Promise.resolve();
-
-    expect(host.textContent).not.toContain(`Cautious`);
-});
-
-test("the dial goes away with the feature, rather than adjusting a judge that never runs", async () => {
-    const host = mount();
-    await Promise.resolve();
-    modeButton(host, `Off`).click();
-    await Promise.resolve();
-
-    expect(host.textContent).not.toContain(`How readily`);
 });

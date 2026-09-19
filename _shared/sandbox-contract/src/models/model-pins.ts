@@ -22,10 +22,10 @@ export interface ModelChoice {
 }
 
 // A (provider, model) pair on the wire: `${provider}:${modelId}`, the same key shape the picker mints. Used to compare
-// entries, dedupe a role list, and store autoFastModels.
+// entries and dedupe a role list.
 export const modelPinKey = (choice: ModelChoice): string => `${choice.provider}:${choice.model}`;
 
-// Splits on the first colon only: a provider id never contains one, a model id might. Exported since autoFastModels
+// Splits on the first colon only: a provider id never contains one, a model id might. Exported since a stored key
 // stores these keys.
 export const parsePinned = (pinned: string): ModelChoice | undefined => {
     const separator = pinned.indexOf(`:`);

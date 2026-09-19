@@ -252,30 +252,21 @@ The decisions this daemon is built on and the traps that cost somebody a day —
   (the Claude harness's API error text, Codex's `turn.failed`, OpenCode's `session.error`) and read BEFORE the
   bad-model-pick branch in each: the sentence ends in "on this model", so the older branch would have thrown away
   a pinned model that was never at fault.
-- **Automatic tier selection is judged in one place, said out loud, and refusable.** Every turn passes a pure
-  keyword-and-weights judge before it is planned (`src/agent/run/turn/turn-tier.ts` over the contract's
-  `prompt-complexity.ts`), which costs no call and, in the default `shadow` mode, no I/O either: the verdict is
-  recorded and nothing is moved. It can only ever route DOWN, to a cheaper rung of the provider the turn is
-  already on, because the standard tier is not a setting, it is whatever the user picked. Three things follow
-  from that being invisible for as long as it was. The daemon emits a `tier` frame on every judged turn, so the
-  chat can say which model actually ran and why (silence is what made the mechanism unauditable). The user can
-  refuse: `AgentTurn.tierHold` is a per-conversation veto, persisted on the entry beside `fast`, honoured after
-  the cheaper model is resolved so the chat can still name what was declined. And the ledger's tier columns are
-  read back by `src/usage/tier-report.ts` into `SavingsReport.tier`, the fast share, what the fast-judged turns
-  that stayed on the pick actually cost (never a counterfactual: this log holds what turns cost, not what they
-  would have cost elsewhere), the realized routed spend, and the guardrail, how often the very next turn of the
-  same conversation asked for a dearer model. A mechanism that changes what the user's money buys owes them all
-  three: a warning, a veto, and the numbers.
+- **A model is chosen for a chat in exactly one place, once, and the user owns it from turn two.** The Auto row in
+  the model picker is the whole mechanism: on the first message a chat sends, `src/agent/prompt/model-router.ts`
+  asks the `model-router` job's model to pick a provider, model, effort and account from an offered list
+  (`src/agent/models/auto-offer.ts`), and the chat wears the answer like a hand-made pick. Nothing else in the
+  daemon substitutes a model the user asked for, and three properties make that safe to leave on. It is a
+  classification over an OFFERED list, so a reply naming a model no provider has is unusable and the role ladder
+  steps to its next rung rather than running an invented id. Allowances are a hard filter as well as context: a
+  model whose every connected account is at cap is dropped before the judge sees it, and an unmeasured account
+  counts as headroom rather than as spent. And nothing blocks a send — no offer, an unset role, a spent chain, a
+  deadline and a reply naming nothing all resolve to "nothing chosen", the chat runs on the pick it already had,
+  and the transcript notice says which of those happened, because a model call the owner cannot see is a bill
+  they cannot question. The one turn the judge decided carries `UsageTurn.autoPicked`, and that turn only: a later
+  row of the same conversation naming a different model is the user overruling the pick, which is the escalation
+  rate this feature has to be able to answer for.
 
-  Two consequences of taking that seriously. The warning is RECORDED, not merely drawn: the transcript fold turns
-  a routed `tier` frame into a notice row carrying its own one-press opt-out, because a line only the window that
-  watched it ever saw is not a record of anything, and the question a week later is "was THIS answer the cheap
-  one". And the cutoff is the owner's (`settings.autoTierEagerness`, three named stops over `FAST_CEILINGS`),
-  since measurement with no way to act on it is a report nobody can use. The dial moves the cutoff and nothing
-  else: a fast verdict additionally requires a positively-easy signal, enforced in the judge rather than left to
-  the weights summing past the ceiling, so no setting of it can downgrade a short vague request. That is also
-  why the ledger records the verdict and the ceiling beside the score, a bare 0.35 is standard on one stop and
-  fast on the next, and a refit reading the score column alone could not tell those rows apart.
 - **The conversation record is what was on screen, cards included, because both come from ONE fold.** A turn's
   frames are folded into transcript rows as they arrive, inside the run itself (`TurnRun` in src/agent/run/turn/turn-runs.ts,
   running the contract's `TranscriptFold`, `@intentic/sandbox-contract/transcript-fold`), and everything reads
@@ -285,7 +276,7 @@ The decisions this daemon is built on and the traps that cost somebody a day —
   class. The browser never folds a frame: it applies patches. What the daemon does to a turn is therefore what
   every reader sees, live and a week later alike: a card is raised `pending` and the reply that releases it
   settles its `status` on the row (`settledCards`, src/policy/card-status.ts in the contract); a stop cancels whatever
-  was pending and writes `Stopped.`; a refusal, a landing, a compaction, a repo sync and a routed tier each write
+  was pending and writes `Stopped.`; a refusal, a landing, a compaction and a repo sync each write
   their notice row. The daemon's own lines about a turn (`Plan approved.`, a rejection's feedback, a dismissed
   question) go in through `TurnRun.note`, so they reach every follower and the record alike. A card takes the open
   bubble and closes it, which keeps the row counts a fork copies a prefix of in agreement (`recordedRows` counts

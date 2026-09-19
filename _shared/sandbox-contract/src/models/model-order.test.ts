@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { compareCheapestFirst, compareModelIds, compareUnrankedModelIds, familyOf, namesThinking, releaseOf, tierRankOf } from "./model-order.js";
+import { compareModelIds, compareUnrankedModelIds, familyOf, namesThinking, releaseOf, tierRankOf } from "./model-order.js";
 
 // The order every provider's catalog is served and browsed in; only Anthropic's catalog arrives ranked, the rest hand
 // back sets, so their registry order is not a preference.
@@ -174,51 +174,6 @@ test("sorts an unversioned rolling alias under the releases that name their vers
     expect(["kimi-latest", "kimi-k2-0711-preview"].toSorted(compareModelIds)).toEqual(["kimi-k2-0711-preview", "kimi-latest"]);
 });
 
-// compareCheapestFirst: what the quick model's one-click helper resolves against, the same tier scale read
-// weakest-first.
-
-test("opens on the efficient rung and buries the frontier one: the exact inverse of the picker's order", () => {
-    const claude = ["claude-opus-5", "claude-sonnet-5", "claude-haiku-4-5-20251001"];
-
-    expect(claude.toSorted(compareCheapestFirst)).toEqual(["claude-haiku-4-5-20251001", "claude-sonnet-5", "claude-opus-5"]);
-    expect(claude.toSorted(compareModelIds)).toEqual(["claude-opus-5", "claude-sonnet-5", "claude-haiku-4-5-20251001"]);
-});
-
-test("keeps an UNRANKED family off the cheap end, where a plain reversal would have seated it first", () => {
-    // An id with no tier word is the provider's baseline, likelier the next flagship than a budget tier.
-    expect(["gpt-5.6", "gpt-5.4-mini"].toSorted(compareCheapestFirst)).toEqual(["gpt-5.4-mini", "gpt-5.6"]);
-    expect(["claude-mythos-1", "claude-haiku-4-5", "claude-sonnet-5"].toSorted(compareCheapestFirst).at(-1)).toBe("claude-mythos-1");
-});
-
-test("takes the NEWEST build of the cheap rung, not merely any of them", () => {
-    // Within one tier the release rule runs unchanged: cheap is a tier, not an excuse to serve a stale model.
-    expect(["claude-haiku-4-5-20251001", "claude-haiku-4-5-20260210"].toSorted(compareCheapestFirst)[0]).toBe("claude-haiku-4-5-20260210");
-    expect(["gemini-3-flash-lite", "gemini-2-flash-lite"].toSorted(compareCheapestFirst)[0]).toBe("gemini-3-flash-lite");
-});
-
-test("finds each vendor's own cheap rung, including a re-served open-weights row", () => {
-    expect(["gemini-3-pro", "gemini-3-flash", "gemini-3-flash-lite"].toSorted(compareCheapestFirst)[0]).toBe("gemini-3-flash-lite");
-    // gpt-oss is Google's cheap option; `oss` is its only tier signal, without it the id would sink instead of lead.
-    expect(["claude-opus-4-6-thinking", "gpt-oss-120b-medium"].toSorted(compareCheapestFirst)[0]).toBe("gpt-oss-120b-medium");
-    expect(["grok-4", "grok-4-fast"].toSorted(compareCheapestFirst)[0]).toBe("grok-4-fast");
-});
-
-test("reads a release-local tier ladder from the cheap end too", () => {
-    expect(["gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna"].toSorted(compareCheapestFirst)[0]).toBe("gpt-5.6-luna");
-});
-
-test("refuses the thinking variant of a model, however new it is", () => {
-    // A routed channel vends one row per thinking level; the cheapest model's top row must not win here.
-    expect(["gemini-3.6-flash-high", "gemini-3.5-flash-extra-low"].toSorted(compareCheapestFirst)[0]).toBe("gemini-3.5-flash-extra-low");
-    // …and it is the level that decides, not the release: same model, quieter row wins.
-    expect(["gemini-3.5-flash-high", "gemini-3.5-flash-minimal"].toSorted(compareCheapestFirst)[0]).toBe("gemini-3.5-flash-minimal");
-    // Tier still outranks thinking: a cheap thinking model beats a silent expensive one.
-    expect(["gemini-3-pro", "gemini-3.6-flash-high"].toSorted(compareCheapestFirst)[0]).toBe("gemini-3.6-flash-high");
-    // An unannotated id is neither accused of thinking nor credited with silence: it sits between the stated ends.
-    expect(["gemini-3-flash", "gemini-3.5-flash-low"].toSorted(compareCheapestFirst)[0]).toBe("gemini-3.5-flash-low");
-    expect(["gemini-3-flash", "gemini-3.6-flash-high"].toSorted(compareCheapestFirst)[0]).toBe("gemini-3-flash");
-});
-
 test("names the thinking rows, and only those", () => {
     // What a settings row shows beside a pin.
     expect(namesThinking("gemini-3.6-flash-high")).toBe(true);
@@ -230,9 +185,4 @@ test("names the thinking rows, and only those", () => {
     expect(namesThinking("gpt-oss-120b-medium")).toBe(true);
     expect(namesThinking("kimi-k2-thinking")).toBe(true);
     expect(namesThinking("kimi-k2")).toBe(false);
-});
-
-test("falls back on the newest release for a catalog that publishes no cheap tier at all", () => {
-    // Kimi names no tier word anywhere; with tier cancelled out, newest is the honest fallback.
-    expect(["kimi-k2-0711-preview", "kimi-k2-0905-preview"].toSorted(compareCheapestFirst)[0]).toBe("kimi-k2-0905-preview");
 });
