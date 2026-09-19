@@ -17,6 +17,14 @@ export const HISTORY_ROOT = "/history";
 // Daemon's own state folder; join through the state table's typed helpers instead, not by hand.
 export const STATE_DIR = ".intentic";
 
+// Reserved top-level shelf for reference material: consultation-only, so every part that walks the workspace — the
+// tree, search, dependency setup, file sync — skips it. A repository's own `refs/` deeper in is ordinary content, so
+// match it by first segment (@intentic/workspace-ignore's isReferencePath), never by name at any depth.
+export const REFERENCE_DIR = "refs";
+
+// Reserved top-level outbox: everything in it is served on the public internet, and its existence alone is the switch.
+export const PUBLIC_DIR = "public";
+
 // The owner's standing instructions, one filename for every runtime: the daemon reads it and composes it into each
 // turn's instructions itself, so no loop's own discovery decides which rules a turn ran under. One per folder, read
 // from the workspace root down to where the turn starts.

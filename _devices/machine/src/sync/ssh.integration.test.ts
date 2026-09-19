@@ -1,8 +1,9 @@
 import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { STATE_DIR, WORKSPACE_ROOT } from "@intentic/constants";
+import { REFERENCE_DIR, STATE_DIR, WORKSPACE_ROOT } from "@intentic/constants";
 import { describe, expect, it } from "vitest";
+
 import { convergePlan, mutagenCreateArgs, sessionMatchesSpec, sessionName, type SyncSessionSpec } from "./mutagen.js";
 import {
     BACKUP_IGNORES,
@@ -229,6 +230,21 @@ describe("mutagenCreateArgs", () => {
         expect(IGNORES).not.toContain("/.git");
     });
 
+    // The reference shelf is consultation material the rest of the product already skips, and it dwarfs the workspace:
+    // left in, file sync spends its scans and its uplink on repositories nobody is editing. Anchored like the state
+    // dir, since a repository's own `refs/` is ordinary content that must still travel.
+    it("excludes the top-level reference shelf, by the same name the tree and search use", () => {
+        expect(IGNORES).toContain(`/${REFERENCE_DIR}`);
+        expect(IGNORES).not.toContain(REFERENCE_DIR);
+    });
+
+    // The sandbox endpoint has no file watcher, so this interval is the whole latency of a sandbox-side change
+    // reaching the device. Beta is the sandbox for the workspace session; the backup below runs the other way.
+    it("polls the sandbox side faster than Mutagen's ten-second default", () => {
+        expect(args[args.indexOf("--watch-polling-interval-beta") + 1]).toBe("2");
+        expect(args).not.toContain("--watch-polling-interval-alpha");
+    });
+
     // WHAT BOTH SIDES GENERATE MUST NEVER BE SYNCED. A tree each end writes for itself is a create-vs-create
     // conflict on every file in it, two-way-safe refuses to pick, and a pairing with standing conflicts propagates
     // nothing at all — measured as 98 of them under one dogfooding machine's `.image-out`.
@@ -259,6 +275,13 @@ describe("mutagenCreateArgs: the state backup", () => {
         expect(args).toContain("/home/u/proj/.intentic");
     });
 
+    // The same unwatched endpoint as the workspace session, on the other side of this one: polling beta here would
+    // speed up the laptop, which already watches for real, and leave the sandbox on ten seconds.
+    it("polls the sandbox fast on whichever side of this session it is", () => {
+        expect(args[args.indexOf("--watch-polling-interval-alpha") + 1]).toBe("2");
+        expect(args).not.toContain("--watch-polling-interval-beta");
+    });
+
     it("carries the backup's own ignores, not the workspace session's", () => {
         for (const pattern of BACKUP_IGNORES) {
             expect(args[args.indexOf(pattern) - 1]).toBe("--ignore");
@@ -270,7 +293,12 @@ describe("mutagenCreateArgs: the state backup", () => {
     // Rebuildable bulk and credentials stay in the sandbox; everything a person wrote or that happened comes down.
     // Whole groups are excluded by folder, not an inventory of files.
     it("leaves credentials and rebuildable bulk behind, a folder at a time", () => {
-        expect([...BACKUP_IGNORES].toSorted()).toEqual(["/identity/control-tokens.json", "/local", "/secrets"]);
+        expect([...BACKUP_IGNORES].toSorted()).toEqual([
+            "/identity/control-tokens.json",
+            "/local",
+            "/records/artifacts/browser",
+            "/secrets",
+        ]);
     });
 
     // `identity` is split: ownership records come down, control tokens don't; collapsing it to a whole-folder
@@ -281,10 +309,14 @@ describe("mutagenCreateArgs: the state backup", () => {
     });
 
     it("copies down what the sandbox going away would otherwise take with it", () => {
-        // Nothing under the two authored/record folders may be excluded; those are the backup.
+        // Those two folders ARE the backup, so nothing in config may be excluded and nothing in records but the page
+        // captures that no longer have a reader; a whole-folder `/records` or `/config` would empty the backup itself.
         for (const pattern of BACKUP_IGNORES) {
-            expect([pattern, pattern.startsWith("/config") || pattern.startsWith("/records")]).toEqual([pattern, false]);
+            expect([pattern, pattern.startsWith("/config")]).toEqual([pattern, false]);
+            expect([pattern, pattern.startsWith("/records") && pattern !== "/records/artifacts/browser"]).toEqual([pattern, false]);
         }
+        // The exclusion is one subtree deep inside records, never the tree that holds the owner's own uploads.
+        expect(BACKUP_IGNORES).not.toContain("/records/artifacts");
     });
 });
 

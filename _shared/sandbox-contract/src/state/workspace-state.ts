@@ -323,6 +323,17 @@ const STATE_FILES = [
         why: "Durable outputs owned by conversations and extension runs: attachments, browser captures, generated images, acceptance reports, workflow step reports, voice transcripts, and loop ledgers.",
         portability: "carry",
     },
+    // Nested under the artifacts above for one difference: this is the only member of that tree with no reader once the
+    // turn that wrote it has ended, and it is most of its bytes. Still `carry` (an export takes the whole history), but
+    // the desktop backup declines it: measured on a dogfooding machine as 1.1 GB across 6,315 files, re-scanned on every
+    // poll of a one-way session whose siblings — attachments above all — are the owner's own uploads and do come down.
+    {
+        path: ".intentic/records/artifacts/browser/",
+        invalidates: [],
+        why: "Page snapshots, screenshots and console logs a turn's browser wrote while looking at a site; read back by that turn and by nothing after it.",
+        portability: "carry",
+        backup: false,
+    },
     {
         path: ".intentic/local/cache/",
         invalidates: [],

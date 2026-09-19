@@ -160,11 +160,20 @@ const backupSpec = (pairing: Pairing & { readonly localDir: string }): SyncSessi
     from: "sandbox",
 });
 
+// Seconds between the sandbox endpoint's own scans. Mutagen's default is 10, and that number is the whole latency of a
+// change made in the sandbox reaching the device: measured there, the agent holds no inotify handle at all (5 file
+// descriptors: stdio, epoll, eventfd), so nothing tells it a file moved and the poll is the only thing that notices.
+// The device's own end is left at the default, since Windows and macOS watch recursively for real.
+const SANDBOX_POLL_SECONDS = 2;
+
 // Two-way-safe is pinned explicitly, so a version bump or global config can't silently switch it to clobbering.
 // No --ignore-vcs: it misses the pointer-file .git this layout leaves; IGNORES' bare `.git` covers that instead.
 export const mutagenCreateArgs = (spec: SyncSessionSpec, paused: boolean): string[] => {
     const local = spec.localDir;
     const remote = `${spec.alias}:${spec.remoteDir}`;
+    // Which endpoint the SANDBOX is for this session, since the backup runs the other way round: polling the device
+    // faster instead would cost a rescan of the laptop's disk and still leave the unwatched side on 10 seconds.
+    const sandboxSide = spec.from === "local" ? "beta" : "alpha";
     return [
         "sync",
         "create",
@@ -174,6 +183,8 @@ export const mutagenCreateArgs = (spec: SyncSessionSpec, paused: boolean): strin
         spec.mode,
         ...(paused ? ["--paused"] : []),
         ...spec.ignores.flatMap((pattern) => ["--ignore", pattern]),
+        `--watch-polling-interval-${sandboxSide}`,
+        String(SANDBOX_POLL_SECONDS),
         "--stage-mode-beta",
         "neighboring",
         // `from` decides which endpoint is alpha, since direction is endpoint order for a one-way session.

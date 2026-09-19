@@ -1,4 +1,4 @@
-import { STATE_DIR } from "@intentic/constants";
+import { PUBLIC_DIR, REFERENCE_DIR, STATE_DIR } from "@intentic/constants";
 // Browser-safe ignore constants: no node imports, so the platform's browser bundle can import them via the
 // `@intentic/workspace-ignore/constants` subpath without pulling in node:fs/node:path. index.ts re-exports these for
 // the daemon and layers the node-based .gitignore scope on top.
@@ -26,11 +26,9 @@ export const IGNORED_DIRS = new Set([
     ".gradle",
 ]);
 
-// Reserved top-level shelf for reference material: grayed, lazy-loaded, excluded from search and history.
-export const REFERENCE_DIR = "refs";
-
-// The outbox: a reserved top-level dir served publicly; its existence alone is the publish switch.
-export const PUBLIC_DIR = "public";
+// The reserved top-level names themselves live in @intentic/constants beside STATE_DIR, so the parts that only need
+// the name (file sync's ignore list) don't take this package's matcher; what lives here is what to DO about them.
+export { PUBLIC_DIR, REFERENCE_DIR } from "@intentic/constants";
 
 // Root-relative paths only: both predicates match the first segment, so a repo's own refs/ or public/ subdir stays
 // ordinary content. Callers with an absolute path must relativize first (toRelPath).

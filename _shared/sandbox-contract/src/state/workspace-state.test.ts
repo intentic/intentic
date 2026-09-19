@@ -171,11 +171,14 @@ describe(`WORKSPACE_STATE_FILES`, () => {
     });
 
     it(`splits a nested entry from its parent for a reason the parent doesn't already carry`, () => {
-        // A nest agreeing with its parent is dead weight: stateFileFor resolves to the same answer either way.
+        // A nest agreeing with its parent is dead weight: stateFileFor resolves to the same answer either way. Three
+        // answers can differ, and a nest earns its place by moving any one of them.
         for (const file of WORKSPACE_STATE_FILES) {
             for (const parent of WORKSPACE_STATE_FILES.filter((other) => other !== file && file.path.startsWith(other.path))) {
                 expect(
-                    parent.portability === file.portability && parent.invalidates.join(",") === file.invalidates.join(","),
+                    parent.portability === file.portability &&
+                        parent.invalidates.join(",") === file.invalidates.join(",") &&
+                        (parent.backup ?? true) === (file.backup ?? true),
                     `${file.path} says nothing its parent ${parent.path} doesn't already say`,
                 ).toBe(false);
             }
@@ -499,9 +502,12 @@ describe(`BACKED_UP_STATE_PATHS`, () => {
         }
     });
 
-    it(`copies down everything a person wrote and everything that happened`, () => {
+    // Opting out is per entry and by hand: the class still decides for everything that says nothing, so a new record
+    // store is backed up until somebody writes down why it shouldn't be.
+    it(`copies down everything a person wrote and everything that happened, bar the entries that opt out`, () => {
         for (const path of [...stateGroupPaths(`config`), ...stateGroupPaths(`records`)]) {
-            expect([path, BACKED_UP_STATE_PATHS.includes(path)]).toEqual([path, true]);
+            const optedOut = WORKSPACE_STATE_FILES.find((file) => file.path === path)?.backup === false;
+            expect([path, BACKED_UP_STATE_PATHS.includes(path)]).toEqual([path, !optedOut]);
         }
     });
 
@@ -526,8 +532,10 @@ describe(`BACKED_UP_STATE_PATHS`, () => {
 
     it(`still withholds the tokens that authenticate against this sandbox`, () => {
         expect(BACKED_UP_STATE_PATHS).not.toContain(`.intentic/identity/control-tokens.json`);
-        // The only entry that opts out by hand; everything else follows from its class alone.
+        // The whole hand-written list, in declaration order: one credential that would admit its holder to the source
+        // sandbox, and one tree of page captures nothing reads after its own turn. Everything else follows from class.
         expect(WORKSPACE_STATE_FILES.filter((file) => file.backup === false).map((file) => file.path)).toEqual([
+            `.intentic/records/artifacts/browser/`,
             `.intentic/identity/control-tokens.json`,
         ]);
     });

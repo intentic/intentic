@@ -3,7 +3,7 @@ import { existsSync } from "node:fs";
 import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { homedir, hostname } from "node:os";
 import { join } from "node:path";
-import { STATE_DIR } from "@intentic/constants";
+import { REFERENCE_DIR, STATE_DIR } from "@intentic/constants";
 import type { Log } from "@intentic/local-agent";
 import { STATE_GROUPS, stateGroupPaths, UNBACKED_STATE_PATHS } from "@intentic/sandbox-contract";
 import { baseDir } from "../config.js";
@@ -35,6 +35,12 @@ export const IGNORES = [
     // reads as deleted in the clone for good: `intentic/.intentic/checks.json` sat in VS Code's Source Control as a
     // phantom `D` that no amount of syncing could clear.
     `/${STATE_DIR}`,
+    // The reference shelf, anchored for the same reason the state dir above is: the TOP-LEVEL `refs/` is consultation
+    // material — already excluded from workspace views, search and dependency setup by this same constant — while a
+    // repository's own `refs/` at any depth is ordinary content. Left in, it is the whole cost of syncing: measured on
+    // a dogfooding machine as 215,555 of the workspace's 222,000 entries, an 18 GB upload, and a full rescan of all of
+    // it every poll on an endpoint that has no file watcher.
+    `/${REFERENCE_DIR}`,
     ".git",
     ".pnpm-store",
     // The image build's staging tree, for the same reason as `.astro` above and measured on a dogfooding machine:
