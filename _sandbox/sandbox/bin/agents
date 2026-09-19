@@ -49,10 +49,11 @@ LOOK UP — reach for these instead of searching /history by hand
                                        add the record itself: the last <n> messages (default 20), or only
                                        the ones carrying a phrase
           [--no-diff] [--json]         skip the per-repo git counts, or answer as JSON
-  agents ls [--all] [--limit <n>] [--repo <name>] [--json]
+  agents ls [--all] [--limit <n>] [--repo <name>] [--owner <who>] [--json]
                                        the fleet, most recently active first. --all includes the archive;
-                                       --repo narrows to conversations spanning one repo
-  agents find '<text>' [--all] [--limit <n>] [--json]
+                                       --repo narrows to conversations spanning one repo; --owner to the
+                                       ones a member answers for (any part of their address)
+  agents find '<text>' [--all] [--limit <n>] [--owner <who>] [--json]
                                        which conversations said this, with the line that proves it
 
 SPAWN AND SUPERVISE
@@ -229,10 +230,22 @@ const read = async (path) => {
     return JSON.parse(text);
 };
 
+// Whose a conversation is, in one short word: the owner's address before the `@`, else the starter for an unowned
+// one (a token's label, a child's parent), else a dash for a wake nobody has claimed.
+const whoOf = (agent) => {
+    if (agent.owner !== undefined) {
+        return agent.owner.email.split("@")[0];
+    }
+    if (agent.startedBy === undefined) {
+        return "-";
+    }
+    return agent.startedBy.startsWith("agent:") ? `↳${agent.startedBy.slice("agent:".length)}` : agent.startedBy;
+};
+
 // One roster line. Running is marked on the status rather than in a column of its own: it is the same fact,
 // and a column that is empty for all but one row is a column nobody reads.
 const rosterLine = (agent) =>
-    `${pad(agent.id, 22)} ${pad(agent.running ? `${agent.status}*` : agent.status, 11)} ${pad(modelOf(agent), 24)} ${pad(`${agent.turns ?? 0}t`, 5)} ${pad(ago(agent.updatedAt), 5)} ${agent.title ?? "(untitled)"}`;
+    `${pad(agent.id, 22)} ${pad(agent.running ? `${agent.status}*` : agent.status, 11)} ${pad(whoOf(agent), 12)} ${pad(modelOf(agent), 24)} ${pad(`${agent.turns ?? 0}t`, 5)} ${pad(ago(agent.updatedAt), 5)} ${agent.title ?? "(untitled)"}`;
 
 const writeRoster = (agents) => {
     for (const agent of agents) {
@@ -244,8 +257,8 @@ const writeRoster = (agents) => {
 };
 
 const ls = async (argv) => {
-    const { flags } = parseFlags(argv, ["all", "limit", "repo", "json"], ["all", "json"]);
-    const answer = await read(`/fleet?${query({ all: flags.all, limit: flags.limit, repo: flags.repo })}`);
+    const { flags } = parseFlags(argv, ["all", "limit", "repo", "owner", "json"], ["all", "json"]);
+    const answer = await read(`/fleet?${query({ all: flags.all, limit: flags.limit, repo: flags.repo, owner: flags.owner })}`);
     if (flags.json === true) {
         process.stdout.write(`${JSON.stringify(answer, undefined, 2)}\n`);
     } else if (answer.agents.length === 0) {
@@ -258,12 +271,12 @@ const ls = async (argv) => {
 };
 
 const find = async (argv) => {
-    const { flags, positional } = parseFlags(argv, ["all", "limit", "repo", "json"], ["all", "json"]);
+    const { flags, positional } = parseFlags(argv, ["all", "limit", "repo", "owner", "json"], ["all", "json"]);
     const text = positional.join(" ").trim();
     if (text === "") {
         return die(`agents: find needs something to look for\n\n${USAGE}`);
     }
-    const answer = await read(`/fleet?${query({ q: text, all: flags.all, limit: flags.limit, repo: flags.repo })}`);
+    const answer = await read(`/fleet?${query({ q: text, all: flags.all, limit: flags.limit, repo: flags.repo, owner: flags.owner })}`);
     if (flags.json === true) {
         process.stdout.write(`${JSON.stringify(answer, undefined, 2)}\n`);
     } else if (answer.agents.length === 0) {
@@ -299,6 +312,14 @@ const writeRecall = (agent) => {
         `  ${settings.join(" ")} · ${agent.turns ?? 0} turns · ${agent.toolUses ?? 0} tool uses · ${compact(agent.inputTokens)} in / ${compact(agent.outputTokens)} out · $${(agent.costUsd ?? 0).toFixed(2)}\n`,
     );
     process.stdout.write(`  active ${stamp(agent.createdAt)} → ${stamp(agent.updatedAt)} (${ago(agent.updatedAt)} ago)${agent.archived ? " · archived" : ""}\n`);
+    /* Who answers for it and who asked for it, when either is known; a wake nobody claimed has neither line. */
+    const provenance = [
+        agent.owner === undefined ? undefined : `owner ${agent.owner.name === undefined ? agent.owner.email : `${agent.owner.name} <${agent.owner.email}>`} since ${stamp(agent.owner.since)}`,
+        agent.startedBy === undefined ? undefined : `started by ${agent.startedBy}`,
+    ].filter(Boolean);
+    if (provenance.length > 0) {
+        process.stdout.write(`  ${provenance.join(" · ")}\n`);
+    }
     if (agent.branch !== undefined) {
         process.stdout.write(`  branch ${agent.branch} · worktree ${agent.worktree}\n`);
     }

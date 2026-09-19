@@ -10,6 +10,7 @@ import { conversationTaintSource, markConversationTaint } from "../../guard/turn
 import { noteChildWork } from "./child-verification.js";
 import { type SpawnableProvider, spawnableProviders } from "./spawn-catalog.js";
 import { openSpawnedChild, noteSpawnedChild, settleSpawnedChild, type SubagentTurn } from "./subagents.js";
+import { childActor, type TurnInput } from "../run/turn/turn-actor.js";
 import { startTurnRun, turnRunOf } from "../run/turn/turn-runs.js";
 import { openingRows, openTurnTranscript, recordTurnTranscript } from "../../sessions/turn-transcript.js";
 import type { TurnFn } from "../../loops/loop-runner.js";
@@ -147,7 +148,7 @@ const runChildTurn = (
     services: Services,
     childId: string,
     parent: string,
-    turn: AgentTurn & { conversationId: string },
+    turn: TurnInput & { conversationId: string },
     turnFn: TurnFn,
 ): { readonly ok: true } | { readonly ok: false; readonly message: string } => {
     const opened = openTurnTranscript(services, turn);
@@ -408,10 +409,12 @@ export const spawnChild = async (services: Services, parent: ChildParent, spec: 
                   ).runner;
         const id = `sub-${newConversationId()}`;
         const description = (spec.description ?? spec.prompt).replaceAll(/\s+/gu, " ").trim().slice(0, 200);
-        const turn: AgentTurn & { conversationId: string } = {
+        const turn: TurnInput & { conversationId: string } = {
             prompt: spec.prompt,
             conversationId: id,
             title: description.slice(0, 80),
+            // Its starter is the parent, which is also how it inherits the parent's owner (agents-registry.ts).
+            actor: childActor(parent.conversationId),
             // Own worktree, so parallel children and the parent never edit the same files; it lands like any turn's
             // work.
             isolated: true,

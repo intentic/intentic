@@ -1,11 +1,14 @@
 <script setup lang="ts">
-import { Button, ui, Modal, ResponsiveOverlay, SegmentedControl, useDevice, useLoadingReveal } from "@intentic/ui";
+import { Avatar, Button, ui, Modal, ResponsiveOverlay, SegmentedControl, useDevice, useLoadingReveal } from "@intentic/ui";
 import { createInlineRename } from "@intentic/ui/inline-rename";
 import { computed, onUnmounted, ref, watch } from "vue";
 import { RouterLink, useRoute, useRouter } from "vue-router";
 import ChatPanel from "../../chat/panel/ChatPanel.vue";
 import { agentStatusMeta, unregistered, writingNow } from "../fleet/agentStatus";
-import { requestLandAgent, startAgent } from "../fleet/agentActions";
+import { assignAgent, requestLandAgent, startAgent } from "../fleet/agentActions";
+import { errorMessage } from "@intentic/ui/async";
+import { presenceOthers } from "../../../shell/presence/usePresence";
+import { identityHue } from "../../../lib/identityHue";
 import { mobileChatPath } from "../../../shell/tabRoots";
 import ChatSwitcherSheet from "../../chat/tabs/ChatSwitcherSheet.vue";
 import { boxNameOf, openInSandbox, otherFleet } from "../fleet/fleetScope";
@@ -310,6 +313,33 @@ const confirmDiscard = async (): Promise<void> => {
     pendingDiscard.value = false;
     await changes.discard();
 };
+// Hand-over: a member from the presence roster, or an address typed for somebody not connected. The daemon decides
+// whether the caller may and whether the address is a member's; a refusal is shown in its own words.
+const pendingHandOver = ref(false);
+const handOverTo = ref(``);
+const handOverError = ref<string | undefined>(undefined);
+const handOverBusy = ref(false);
+const openHandOver = (): void => {
+    handOverTo.value = ``;
+    handOverError.value = undefined;
+    pendingHandOver.value = true;
+};
+const confirmHandOver = async (): Promise<void> => {
+    const to = handOverTo.value.trim().toLowerCase();
+    if (to === `` || handOverBusy.value) {
+        return;
+    }
+    handOverBusy.value = true;
+    handOverError.value = undefined;
+    try {
+        await assignAgent(agentId.value, to, remoteBox.value);
+        pendingHandOver.value = false;
+    } catch (error) {
+        handOverError.value = errorMessage(error, t(`agents.agentDetail.handOverFailed`));
+    } finally {
+        handOverBusy.value = false;
+    }
+};
 </script>
 
 <template>
@@ -509,6 +539,7 @@ const confirmDiscard = async (): Promise<void> => {
                 @identity="identityOpen = true"
                 @discard="pendingDiscard = true"
                 @force-land="pendingForceLand = true"
+                @hand-over="openHandOver"
             />
         </ResponsiveOverlay>
 
@@ -552,6 +583,41 @@ const confirmDiscard = async (): Promise<void> => {
             <template #footer>
                 <Button size="small" severity="secondary" :text="true" :label="t(`ui.action.cancel`)" @click="pendingDiscard = false" />
                 <Button size="small" severity="danger" :label="words.discard" :disabled="changes.actionBusy.value" @click="confirmDiscard" />
+            </template>
+        </Modal>
+
+        <Modal :open="pendingHandOver" size="sm" :header="t(`agents.agentDetail.handOverHeader`)" @update:open="pendingHandOver = false">
+            <p class="text-xs text-content">{{ t(`agents.agentDetail.handOverBody`) }}</p>
+            <!-- Whoever is connected is one press; anyone else is an address. Both write the same field, so there is one confirm. -->
+            <div v-if="presenceOthers.length > 0" class="mt-3 flex flex-col gap-1">
+                <span class="text-2xs font-medium text-muted">{{ t(`agents.agentDetail.handOverConnected`) }}</span>
+                <button
+                    v-for="member in presenceOthers"
+                    :key="member.email"
+                    type="button"
+                    class="flex items-center gap-2 rounded-lg px-2 py-1.5 text-left text-xs transition-colors hover:bg-overlay"
+                    :class="handOverTo === member.email ? 'bg-overlay' : ''"
+                    :aria-pressed="handOverTo === member.email"
+                    @click="handOverTo = member.email"
+                >
+                    <Avatar :size="18" :name="member.name ?? member.email" :src="member.picture" :hue="identityHue(member.email)" />
+                    <span class="truncate text-content">{{ member.name ?? member.email }}</span>
+                    <span v-if="member.name !== undefined" class="truncate text-2xs text-subtle">{{ member.email }}</span>
+                </button>
+            </div>
+            <form class="mt-3 flex flex-col gap-1" @submit.prevent="confirmHandOver">
+                <label class="text-2xs font-medium text-muted" for="hand-over-address">{{ t(`agents.agentDetail.handOverAddress`) }}</label>
+                <input id="hand-over-address" v-model="handOverTo" type="email" autocomplete="off" placeholder="teammate@example.com" :class="ui.inputSm('min-w-0')" />
+            </form>
+            <p v-if="handOverError !== undefined" class="mt-2 text-xs text-danger">{{ handOverError }}</p>
+            <template #footer>
+                <Button size="small" severity="secondary" :text="true" :label="t(`ui.action.cancel`)" @click="pendingHandOver = false" />
+                <Button
+                    size="small"
+                    :label="t(`agents.agentDetail.handOverConfirm`)"
+                    :disabled="handOverBusy || handOverTo.trim() === ''"
+                    @click="confirmHandOver"
+                />
             </template>
         </Modal>
     </div>

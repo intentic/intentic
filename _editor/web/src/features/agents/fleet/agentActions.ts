@@ -108,6 +108,11 @@ export const landAgent = (
 export const requestLandAgent = (id: string, at: AgentReach = undefined): Promise<AgentSummary> =>
     agentJson<AgentSummary>(at, `/agents/${encodeURIComponent(id)}/request-land`, jsonBody(`POST`, {}));
 
+// Makes a member answerable for a conversation (claim, hand over, take over: one route, the daemon decides which the
+// caller may). `to` is an address; the daemon checks it against the members it knows.
+export const assignAgent = (id: string, to: string, at: AgentReach = undefined): Promise<AgentSummary> =>
+    agentJson<AgentSummary>(at, `/agents/${encodeURIComponent(id)}/assign`, jsonBody(`POST`, { to }));
+
 // Puts the caller's mark on a card, or takes it off; the daemon attributes it to the verified identity, so nothing here
 // says who. `on` states which, rather than flipping what's stored, so a double press lands where one did.
 export const reactToAgent = (id: string, emoji: string, on: boolean, at: AgentReach = undefined): Promise<AgentSummary> =>

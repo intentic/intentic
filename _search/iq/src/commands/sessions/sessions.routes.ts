@@ -61,10 +61,12 @@ const list = buildCommand({
             } else {
                 for (const session of sessions) {
                     // The conversation's id and title are what `agents show <id>` can act on; without it, a bare uuid.
+                    // Its owner rides along, so a recalled session says whose it was.
+                    const conversation = session.conversation;
                     const named =
-                        session.conversation === undefined
+                        conversation === undefined
                             ? (session.title ?? "(untitled)")
-                            : `${session.conversation.id}${session.conversation.title === undefined ? "" : ` · ${session.conversation.title}`}`;
+                            : [conversation.id, conversation.title, conversation.owner === undefined ? undefined : `@${conversation.owner}`].filter(Boolean).join(" · ");
                     this.process.stdout.write(`${session.sessionId}  ${dateOf(session.lastTs)}  ${session.promptCount} prompts  ${named}\n`);
                 }
                 // Printed here rather than as a standing prompt line, for a reader one step from wanting the

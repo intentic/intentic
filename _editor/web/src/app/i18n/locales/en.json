@@ -64,6 +64,12 @@
             "changes": "Changes",
             "chat": "Chat",
             "discardBody": "{lead} Its {count} changed file {tail} | {lead} Its {count} changed files {tail}",
+            "handOverAddress": "Or by address",
+            "handOverBody": "Its new owner answers its questions and is who a reviewer asks about its work. Nothing about the work itself changes.",
+            "handOverConfirm": "Hand over",
+            "handOverConnected": "Connected now",
+            "handOverFailed": "Could not hand it over.",
+            "handOverHeader": "Hand over this session",
             "nothingFinalArrivesUncommitted": "Nothing is final: this arrives as uncommitted changes for you to review, and the rest of the turn lands on top of it when the agent finishes.",
             "openIn": "Open in",
             "openingAgentsReview": "Opening this agent's review…",
@@ -133,9 +139,13 @@
             "appliesWhatAgentWritten": "Applies what the agent has written so far",
             "archive": "Archive",
             "branchDiffConversationKept": "The branch, diff and conversation are kept",
+            "claim": "Claim this session",
+            "claimHint": "Nobody answers for it yet; its questions and its review become yours",
             "discard": "Discard",
             "dropsAgentsBranchWorktree": "Drops this agent's branch and worktree",
             "finishedTurnsLandInto": "Finished turns land into your workspace by themselves. Hold keeps this agent's future work on its branch until you press Land now.",
+            "handOver": "Hand over…",
+            "handOverHint": "Make another member answerable for it",
             "holdWorkOnBranch": "Hold work on the branch",
             "holdingFinishedWorkWaits": "Holding: finished work waits on this agent's branch. Switch back to landing at turn completion.",
             "landAgain": "Land again",
@@ -151,6 +161,8 @@
             "spendsSecondAccountOn": "Spends a second account on this chat's behalf; with none that has room, it waits as the row above says.",
             "stopMovingToAnother": "Stop moving this to another account",
             "stopSendingAgainBy": "Stop sending this again by itself",
+            "takeOver": "Take over this session",
+            "takeOverHint": "Owned by {name}; a maintainer may make it theirs",
             "turnGoesAgainBy": "This turn goes again by itself at the reset. Stopping leaves it here to send by hand.",
             "waitAgentTurnTo": "Wait for the agent turn to finish"
         },
@@ -246,6 +258,9 @@
             "inArchive": "In the archive",
             "inEarlierChats": "In earlier chats",
             "keepOpen": "Keep Open",
+            "mine": "Mine",
+            "mineOff": "Everyone’s sessions",
+            "mineOnly": "Only the sessions you own, in every lane",
             "more": "more",
             "newAgent": "New agent",
             "noAgentMentions": "No agent mentions \"",
@@ -292,6 +307,15 @@
             "runNowExactlyWhat": "Run it now, with exactly what fired: the session lands on this board",
             "waiting": "waiting for you"
         },
+        "ownerMark": {
+            "child": "Child",
+            "ownedBy": "Owned by {name}",
+            "spawnedBy": "Spawned by conversation {parent}; opens it",
+            "startedByControlToken": "Started by the control token {tokenLabel}",
+            "startedByProgramHolding": "Started by a program holding the control token “{tokenLabel}”; nobody has claimed it",
+            "token": "Token",
+            "you": "you"
+        },
         "promptCache": {
             "promptCacheGoesCold": "Its prompt cache goes cold in {countdown}. Answer before then and {read} is served from the provider's cache; after, all of it is sent and paid for again."
         },
@@ -312,11 +336,6 @@
             "link": "Link",
             "pasteIdIntoQuick": "Paste the id into Quick Open to come back to this agent from anywhere.",
             "sessionId": "Session id"
-        },
-        "startedByMark": {
-            "startedByControlToken": "Started by the control token {tokenLabel}",
-            "startedByProgramHolding": "Started by a program holding the control token “{tokenLabel}”",
-            "token": "Token"
         },
         "suggestedSessionBox": {
             "ctrlEnter": "Ctrl+Enter",

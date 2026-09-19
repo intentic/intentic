@@ -64,6 +64,12 @@
             "changes": "Cambios",
             "chat": "Chat",
             "discardBody": "{lead} Su {count} archivo cambiado {tail} | {lead} Sus {count} archivos cambiados {tail}",
+            "handOverAddress": "O por dirección",
+            "handOverBody": "Su nuevo responsable contesta sus preguntas y es a quien un revisor pregunta por su trabajo. El trabajo en sí no cambia.",
+            "handOverConfirm": "Ceder",
+            "handOverConnected": "Conectados ahora",
+            "handOverFailed": "No se pudo ceder.",
+            "handOverHeader": "Ceder esta sesión",
             "nothingFinalArrivesUncommitted": "Nada es definitivo: esto llega como cambios sin commit para que los revises, y el resto del turno se integra encima cuando el agente termine.",
             "openIn": "Abrir en",
             "openingAgentsReview": "Abriendo la revisión de este agente…",
@@ -133,9 +139,13 @@
             "appliesWhatAgentWritten": "Aplica lo que el agente ha escrito hasta ahora",
             "archive": "Archivar",
             "branchDiffConversationKept": "La rama, el diff y la conversación se conservan",
+            "claim": "Reclamar esta sesión",
+            "claimHint": "Nadie responde por ella todavía; sus preguntas y su revisión pasan a ser tuyas",
             "discard": "Descartar",
             "dropsAgentsBranchWorktree": "Elimina la rama y el worktree de este agente",
             "finishedTurnsLandInto": "Los turnos terminados se integran solos en tu espacio de trabajo. «Retener» mantiene el trabajo futuro de este agente en su rama hasta que pulses «Integrar ahora».",
+            "handOver": "Ceder…",
+            "handOverHint": "Hacer que otro miembro responda por ella",
             "holdWorkOnBranch": "Retener el trabajo en la rama",
             "holdingFinishedWorkWaits": "Reteniendo: el trabajo terminado espera en la rama de este agente. Vuelve a integrar al terminar el turno.",
             "landAgain": "Integrar de nuevo",
@@ -151,6 +161,8 @@
             "spendsSecondAccountOn": "Gasta una segunda cuenta en nombre de este chat; si ninguna tiene sitio, espera como dice la fila de arriba.",
             "stopMovingToAnother": "Dejar de pasar esto a otra cuenta",
             "stopSendingAgainBy": "Dejar de enviar esto de nuevo por su cuenta",
+            "takeOver": "Asumir esta sesión",
+            "takeOverHint": "Pertenece a {name}; un mantenedor puede hacerla suya",
             "turnGoesAgainBy": "Este turno vuelve a salir solo cuando se reinicie. Al detenerlo se queda aquí, para enviarlo a mano.",
             "waitAgentTurnTo": "Esperar a que termine el turno del agente"
         },
@@ -246,6 +258,9 @@
             "inArchive": "En el archivo",
             "inEarlierChats": "En chats anteriores",
             "keepOpen": "Mantener abierto",
+            "mine": "Mías",
+            "mineOff": "Las sesiones de todos",
+            "mineOnly": "Solo las sesiones que te pertenecen, en cada carril",
             "more": "más",
             "newAgent": "Agente nuevo",
             "noAgentMentions": "Ningún agente menciona «",
@@ -292,6 +307,15 @@
             "runNowExactlyWhat": "Ejecútalo ahora, con exactamente lo que se disparó: la sesión aparece en este tablero",
             "waiting": "te espera"
         },
+        "ownerMark": {
+            "child": "Hija",
+            "ownedBy": "Pertenece a {name}",
+            "spawnedBy": "Iniciada por la conversación {parent}; la abre",
+            "startedByControlToken": "Iniciada por el token de control {tokenLabel}",
+            "startedByProgramHolding": "Iniciada por un programa que tiene el token de control «{tokenLabel}»; nadie la ha reclamado",
+            "token": "Token",
+            "you": "tú"
+        },
         "promptCache": {
             "promptCacheGoesCold": "Su caché de indicaciones se enfría en {countdown}. Responde antes y {read} se sirve desde la caché del proveedor; después, todo se envía y se paga otra vez."
         },
@@ -312,11 +336,6 @@
             "link": "Enlace",
             "pasteIdIntoQuick": "Pega el id en Apertura rápida para volver a este agente desde cualquier sitio.",
             "sessionId": "Id de la sesión"
-        },
-        "startedByMark": {
-            "startedByControlToken": "Iniciado por el token de control {tokenLabel}",
-            "startedByProgramHolding": "Iniciado por un programa que tiene el token de control «{tokenLabel}»",
-            "token": "Token"
         },
         "suggestedSessionBox": {
             "ctrlEnter": "Ctrl+Intro",

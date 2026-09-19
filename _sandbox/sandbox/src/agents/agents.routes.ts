@@ -27,6 +27,7 @@ import { type IsolatedAgent, isIsolated, type PersistedAgent } from "./registry/
 import { MAX_REACTION_KINDS } from "./registry/agents-registry.js";
 import { archivable, archiveAgents, purgeArchived } from "./registry/archive.js";
 import { landAgent, outstandingConflicts } from "./land/land.js";
+import { assignVerdict, isMemberAddress } from "./ownership.js";
 import { syncBeforeLand } from "./land/sync.js";
 import { verifyLandedTree } from "./land/verify-landed.js";
 import { settleLandingInBackground } from "./land/version-landed.js";
@@ -306,6 +307,28 @@ export const createAgentsRoutes = (services: Services) => {
                 { email: context.identity.email, ...(context.identity.name !== undefined ? { name: context.identity.name } : {}) },
                 Date.now(),
             );
+            if (summary === undefined) {
+                throw new ORPCError("NOT_FOUND", { message: "unknown agent" });
+            }
+            return summary;
+        }),
+        // Changes hands. Legal in every state, like a reaction: it says who answers for the work, not anything about it.
+        assign: i.assign.handler(async ({ input, context }) => {
+            const entry = entryOf(input.id);
+            if (context.identity === undefined) {
+                throw new ORPCError("UNAUTHORIZED", { message: "no verified identity to assign on behalf of" });
+            }
+            const verdict = assignVerdict(entry.owner, context.identity);
+            if (verdict.kind === "forbidden") {
+                throw new ORPCError("FORBIDDEN", { message: verdict.message });
+            }
+            if (!isMemberAddress(input.to, await services.ownerEmail(), await services.members.list())) {
+                throw new ORPCError("BAD_REQUEST", { message: `${input.to} is not a member of this sandbox` });
+            }
+            // A name is known only for the caller's own sign-in; a colleague named by address gets theirs from presence
+            // on the board.
+            const name = input.to === context.identity.email.toLowerCase() ? context.identity.name : undefined;
+            const summary = await services.agents.assign(input.id, { email: input.to, ...opt("name", name) }, Date.now());
             if (summary === undefined) {
                 throw new ORPCError("NOT_FOUND", { message: "unknown agent" });
             }

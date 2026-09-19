@@ -11,7 +11,7 @@ import { useAudience } from "../../../../app/useAudience";
 import { useVocabulary } from "../../../../core-views/vocabulary";
 import OriginMark from "../../../../components/OriginMark.vue";
 import AgentReactions from "./AgentReactions.vue";
-import StartedByMark from "../session/StartedByMark.vue";
+import OwnerMark from "../session/OwnerMark.vue";
 import UnsentMark from "../../../../components/UnsentMark.vue";
 import WorkflowMark from "../../../../components/WorkflowMark.vue";
 import { dropActionFor, type PendingAction } from "../laneDrop";
@@ -597,9 +597,9 @@ const grab = (event: PointerEvent): void => {
                 <span class="line-clamp-2 min-w-0 flex-1 leading-4">{{ agent.failure }}</span>
             </p>
 
-            <!-- Provenance, ahead of the model/branch line: for an agent the user didn't start, who asked for it outranks what it runs on. -->
+            <!-- Provenance, ahead of the model/branch line: for an agent the user didn't start, whose it is outranks what it runs on. -->
             <OriginMark :origin="agent.origin" />
-            <StartedByMark :started-by="agent.startedBy" />
+            <OwnerMark :owner="agent.owner" :started-by="agent.startedBy" />
             <WorkflowMark :workflow="agent.workflow" />
 
             <!-- WRAPS, which is what lets the unsent mark ride this line instead of taking one of its own. -->

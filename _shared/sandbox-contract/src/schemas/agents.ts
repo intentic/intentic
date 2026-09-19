@@ -162,6 +162,17 @@ export const ReactorSchema = z.object({
     at: z.number().describe("When they marked it, in milliseconds."),
 });
 export type Reactor = z.infer<typeof ReactorSchema>;
+// The member answerable for a conversation: whose questions its cards are, who a reviewer asks about its work. Derived
+// once from the starter, moved only by `agents.assign`; never a program, which is what `startedBy` is for.
+export const SessionOwnerSchema = z.object({
+    email: z.string().describe("Who answers for this conversation, as the sandbox verified them."),
+    name: z
+        .string()
+        .optional()
+        .describe("What to call them, when the sign-in that made them its owner carried a name. Absent leaves the address to stand for them."),
+    since: z.number().describe("When they became its owner, in milliseconds."),
+});
+export type SessionOwner = z.infer<typeof SessionOwnerSchema>;
 // Grouped by emoji on the wire, not as a flat list of presses: every surface draws one chip per emoji, and grouping
 // here is what stops three of them each grouping it differently.
 export const AgentReactionSchema = z.object({
@@ -291,7 +302,14 @@ export const AgentSummarySchema = z.object({
     startedBy: z
         .string()
         .optional()
-        .describe("Who asked for the first turn, as the sandbox verified it: a member's email, or token:<label> for a program's control token. Absent when nothing was verified (a wake, a loopback caller)."),
+        .describe(
+            "Who asked for the first turn, as the sandbox verified it: a member's email, token:<label> for a program's control token, or agent:<conversation id> for a child another conversation spawned. Absent when nothing was verified (a wake, a loopback caller).",
+        ),
+    // Responsibility, beside provenance: the starter says who asked, this says who answers for it now. Absent means
+    // nobody has claimed it, which is what a program's or an automation's conversation is until somebody does.
+    owner: SessionOwnerSchema.optional().describe(
+        "The member answerable for this conversation: set from whoever started it, inherited from the parent by a spawned child, moved by handing it over. Absent means nobody has claimed it yet.",
+    ),
     // Recorded once on the fork's first turn and never cleared; rides the summary so the link survives closing and
     // reopening either tab.
     forkedFrom: ForkedFromSchema.optional().describe(
@@ -564,6 +582,12 @@ export const AgentRenameSchema = z.object({
     id: z.string().min(1).describe("Which conversation."),
     title: z.string().trim().min(1).max(80).describe("What to call it from now on."),
 });
+// `to` is an address, not a name: authorization and membership both read emails, and a name is not unique.
+export const AgentAssignSchema = z.object({
+    id: z.string().min(1).describe("Which conversation."),
+    to: z.string().trim().toLowerCase().email().describe("Who should answer for it from now on, by the address they sign in with. Must be the sandbox owner or a member."),
+});
+export type AgentAssign = z.infer<typeof AgentAssignSchema>;
 // `on` states the intent rather than flipping whatever is stored: a double press, a retried request and two windows
 // racing must all settle the same way, which a toggle cannot promise.
 export const AgentReactSchema = z.object({

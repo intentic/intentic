@@ -64,6 +64,12 @@
             "changes": "Zmiany",
             "chat": "Czat",
             "discardBody": "{lead} Jego {count} zmieniony plik {tail} | {lead} Jego {count} zmienione pliki {tail} | {lead} Jego {count} zmienionych plików {tail}",
+            "handOverAddress": "Albo przez adres",
+            "handOverBody": "Nowy właściciel odpowiada na jej pytania i to jego recenzent pyta o tę pracę. Sama praca się nie zmienia.",
+            "handOverConfirm": "Przekaż",
+            "handOverConnected": "Połączeni teraz",
+            "handOverFailed": "Nie udało się przekazać.",
+            "handOverHeader": "Przekaż tę sesję",
             "nothingFinalArrivesUncommitted": "Nic nie jest ostateczne: to przychodzi jako niezacommitowane zmiany do Twojego przeglądu, a reszta tury ląduje na tym, gdy agent skończy.",
             "openIn": "Otwórz w",
             "openingAgentsReview": "Otwieranie przeglądu tego agenta…",
@@ -133,9 +139,13 @@
             "appliesWhatAgentWritten": "Stosuje to, co agent napisał do tej pory",
             "archive": "Zarchiwizuj",
             "branchDiffConversationKept": "Gałąź, diff i rozmowa zostają",
+            "claim": "Przejmij tę sesję",
+            "claimHint": "Nikt jeszcze za nią nie odpowiada; jej pytania i przegląd stają się twoje",
             "discard": "Odrzuć",
             "dropsAgentsBranchWorktree": "Kasuje gałąź i worktree tego agenta",
             "finishedTurnsLandInto": "Skończone tury same scalają się do Twojej przestrzeni roboczej. „Wstrzymaj” trzyma przyszłą pracę tego agenta na jego gałęzi, dopóki nie naciśniesz „Scal teraz”.",
+            "handOver": "Przekaż…",
+            "handOverHint": "Uczyń innego członka odpowiedzialnym za tę sesję",
             "holdWorkOnBranch": "Wstrzymaj pracę na gałęzi",
             "holdingFinishedWorkWaits": "Wstrzymane: skończona praca czeka na gałęzi tego agenta. Przełącz z powrotem na scalanie po zakończeniu tury.",
             "landAgain": "Scal ponownie",
@@ -151,6 +161,8 @@
             "spendsSecondAccountOn": "Wydaje drugie konto w imieniu tego czatu; jeśli żadne nie ma miejsca, czeka, jak mówi wiersz powyżej.",
             "stopMovingToAnother": "Przestań przenosić to na inne konto",
             "stopSendingAgainBy": "Przestań samo z siebie wysyłać to ponownie",
+            "takeOver": "Przejmij tę sesję od właściciela",
+            "takeOverHint": "Należy do: {name}; opiekun może ją sobie przypisać",
             "turnGoesAgainBy": "Ta tura pójdzie sama jeszcze raz po resecie. Zatrzymanie zostawia ją tutaj, do ręcznego wysłania.",
             "waitAgentTurnTo": "Poczekaj, aż tura agenta się skończy"
         },
@@ -246,6 +258,9 @@
             "inArchive": "W archiwum",
             "inEarlierChats": "We wcześniejszych czatach",
             "keepOpen": "Trzymaj otwarte",
+            "mine": "Moje",
+            "mineOff": "Sesje wszystkich",
+            "mineOnly": "Tylko sesje, które należą do ciebie, w każdej kolumnie",
             "more": "więcej",
             "newAgent": "Nowy agent",
             "noAgentMentions": "Żaden agent nie wspomina „",
@@ -292,6 +307,15 @@
             "runNowExactlyWhat": "Uruchom teraz, dokładnie z tym, co zadziałało: sesja ląduje na tej tablicy",
             "waiting": "czeka na Ciebie"
         },
+        "ownerMark": {
+            "child": "Potomna",
+            "ownedBy": "Należy do: {name}",
+            "spawnedBy": "Uruchomiona przez rozmowę {parent}; otwiera ją",
+            "startedByControlToken": "Uruchomiona przez token sterujący {tokenLabel}",
+            "startedByProgramHolding": "Uruchomiona przez program z tokenem sterującym „{tokenLabel}”; nikt jej nie przejął",
+            "token": "Token",
+            "you": "ty"
+        },
         "promptCache": {
             "promptCacheGoesCold": "Jego pamięć podręczna promptu wystygnie za {countdown}. Odpowiedz wcześniej, a {read} zostanie podane z pamięci dostawcy; później całość idzie i jest płacona jeszcze raz."
         },
@@ -312,11 +336,6 @@
             "link": "Link",
             "pasteIdIntoQuick": "Wklej id w Szybkim otwieraniu, żeby wrócić do tego agenta z dowolnego miejsca.",
             "sessionId": "Id sesji"
-        },
-        "startedByMark": {
-            "startedByControlToken": "Uruchomione przez token kontrolny {tokenLabel}",
-            "startedByProgramHolding": "Uruchomione przez program trzymający token kontrolny „{tokenLabel}”",
-            "token": "Token"
         },
         "suggestedSessionBox": {
             "ctrlEnter": "Ctrl+Enter",

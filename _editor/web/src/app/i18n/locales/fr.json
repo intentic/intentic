@@ -64,6 +64,12 @@
             "changes": "Changements",
             "chat": "Chat",
             "discardBody": "{lead} Son {count} fichier modifié {tail} | {lead} Ses {count} fichiers modifiés {tail}",
+            "handOverAddress": "Ou par adresse",
+            "handOverBody": "Son nouveau responsable répond à ses questions et est la personne qu’un relecteur interroge sur son travail. Le travail lui-même ne change pas.",
+            "handOverConfirm": "Transmettre",
+            "handOverConnected": "Connectés maintenant",
+            "handOverFailed": "Transmission impossible.",
+            "handOverHeader": "Transmettre cette session",
             "nothingFinalArrivesUncommitted": "Rien n'est définitif : cela arrive sous forme de changements non committés à relire, et le reste du tour s'intègre par-dessus quand l'agent a fini.",
             "openIn": "Ouvrir dans",
             "openingAgentsReview": "Ouverture de la revue de cet agent…",
@@ -133,9 +139,13 @@
             "appliesWhatAgentWritten": "Applique ce que l'agent a écrit jusqu'ici",
             "archive": "Archiver",
             "branchDiffConversationKept": "La branche, le diff et la conversation sont conservés",
+            "claim": "Prendre cette session en charge",
+            "claimHint": "Personne n’en répond encore ; ses questions et sa relecture deviennent les vôtres",
             "discard": "Jeter",
             "dropsAgentsBranchWorktree": "Supprime la branche et le worktree de cet agent",
             "finishedTurnsLandInto": "Les tours terminés s'intègrent tout seuls dans votre espace de travail. « Retenir » garde le travail futur de cet agent sur sa branche jusqu'à ce que vous appuyiez sur « Intégrer maintenant ».",
+            "handOver": "Transmettre…",
+            "handOverHint": "Rendre un autre membre responsable de cette session",
             "holdWorkOnBranch": "Retenir le travail sur la branche",
             "holdingFinishedWorkWaits": "Retenu : le travail terminé attend sur la branche de cet agent. Revenez à l'intégration en fin de tour.",
             "landAgain": "Intégrer à nouveau",
@@ -151,6 +161,8 @@
             "spendsSecondAccountOn": "Dépense un deuxième compte au nom de ce chat ; si aucun n'a de place, il attend comme l'indique la ligne au-dessus.",
             "stopMovingToAnother": "Ne plus faire passer ceci vers un autre compte",
             "stopSendingAgainBy": "Ne plus renvoyer ceci tout seul",
+            "takeOver": "Reprendre cette session",
+            "takeOverHint": "Appartient à {name} ; un mainteneur peut se l’attribuer",
             "turnGoesAgainBy": "Ce tour repart tout seul à la réinitialisation. L'arrêter le laisse ici, à envoyer à la main.",
             "waitAgentTurnTo": "Attendre la fin du tour de l'agent"
         },
@@ -246,6 +258,9 @@
             "inArchive": "Dans l'archive",
             "inEarlierChats": "Dans des chats antérieurs",
             "keepOpen": "Garder ouvert",
+            "mine": "Les miennes",
+            "mineOff": "Les sessions de tout le monde",
+            "mineOnly": "Seulement les sessions qui vous appartiennent, dans chaque colonne",
             "more": "de plus",
             "newAgent": "Nouvel agent",
             "noAgentMentions": "Aucun agent ne mentionne «",
@@ -292,6 +307,15 @@
             "runNowExactlyWhat": "Le lancer maintenant, avec exactement ce qui s'est déclenché : la session atterrit sur ce tableau",
             "waiting": "vous attend"
         },
+        "ownerMark": {
+            "child": "Enfant",
+            "ownedBy": "Appartient à {name}",
+            "spawnedBy": "Lancée par la conversation {parent} ; l’ouvre",
+            "startedByControlToken": "Lancée par le jeton de contrôle {tokenLabel}",
+            "startedByProgramHolding": "Lancée par un programme détenant le jeton de contrôle « {tokenLabel} » ; personne ne l’a prise en charge",
+            "token": "Jeton",
+            "you": "vous"
+        },
         "promptCache": {
             "promptCacheGoesCold": "Son cache de consignes refroidit dans {countdown}. Répondez avant et {read} est servi depuis le cache du fournisseur ; après, tout est renvoyé et repayé."
         },
@@ -312,11 +336,6 @@
             "link": "Lien",
             "pasteIdIntoQuick": "Collez l'identifiant dans l'Ouverture rapide pour revenir à cet agent depuis n'importe où.",
             "sessionId": "Identifiant de session"
-        },
-        "startedByMark": {
-            "startedByControlToken": "Lancé par le jeton de contrôle {tokenLabel}",
-            "startedByProgramHolding": "Lancé par un programme détenant le jeton de contrôle « {tokenLabel} »",
-            "token": "Jeton"
         },
         "suggestedSessionBox": {
             "ctrlEnter": "Ctrl+Entrée",

@@ -33,7 +33,9 @@ export const ActivityEventSchema = z.object({
     actor: z
         .string()
         .optional()
-        .describe("Who asked for the turn, as the sandbox verified it: a member's email, or token:<label> for a program's control token. Absent for a wake nothing asked for."),
+        .describe(
+            "Who asked for the turn, as the sandbox verified it: a member's email, token:<label> for a program's control token, or agent:<conversation id> for a parent conversation's child. Absent for a wake nothing asked for.",
+        ),
     // Full message text (inbound) or sent payload content (outbound).
     content: z.string().optional().describe("The message, in full, whichever direction it went."),
     // HTTP method and endpoint path of an outgoing call; credentials ride headers, never the URL.

@@ -6,6 +6,7 @@ import {
     ForkedFromSchema,
     LandConflictSchema,
     type LandedMessage,
+    SessionOwnerSchema,
     UnfinishedWorkSchema,
 } from "@intentic/sandbox-contract";
 import { z } from "zod";
@@ -71,6 +72,9 @@ export const PersistedAgentSchema = z.object({
     origin: AgentOriginSchema.optional(),
     // Who asked for the first turn, latched like `origin`; absent when the request carried no verified identity.
     startedBy: z.string().optional(),
+    // Who answers for it: the member who started it, the parent's owner for a spawned child, or whoever it was handed
+    // to since. Absent means unclaimed.
+    owner: SessionOwnerSchema.optional(),
     // Where the conversation opened and as whom, latched at the first turn like `origin`: what a project-scoped board
     // reads to decide whether this conversation is its own.
     startIn: z.string().optional(),

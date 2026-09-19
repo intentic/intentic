@@ -10,10 +10,11 @@ import {
     type LandedMessageDraft,
     planParts,
     type TodoItem,
-    type UnfinishedWork,
+    type UnfinishedWork,type SessionOwner
 } from "@intentic/sandbox-contract";
 import { isFailureSentence, isSelfIdentityAnswer, isToolCallStandIn } from "../../agent/providers/failure-sentences.js";
 import { opt } from "../../agent/run/opt.js";
+import { parentOfActor } from "../../agent/run/turn/turn-actor.js";
 import { subagentCountsOf } from "../../agent/subagents/subagents.js";
 import { MAX_NOTE_LENGTH, MAX_SUBJECT_LENGTH } from "../../git/ops/commit-message.js";
 import { watchProjection } from "../../agent/verification/watch-state.js";
@@ -397,11 +398,30 @@ export type AgentTurnIdentity = Pick<AgentTurn, "prompt"> &
         readonly harness: NonNullable<AgentTurn["harness"]>;
         // Who asked for this turn, as the daemon verified it; latched on the first one.
         readonly startedBy?: string;
+        // The member the conversation belongs to when this turn opens it; ignored once it has one.
+        readonly owner?: Pick<SessionOwner, "email" | "name">;
     };
 
 // Who asked for the conversation's first turn; an existing entry keeps its answer, latched the same way as `origin`.
 const startedByOf = (existing: PersistedAgent | undefined, turn: AgentTurnIdentity): { readonly startedBy?: string } =>
     opt("startedBy", existing?.startedBy ?? turn.startedBy);
+
+// Who answers for it: kept once set, else the opening turn's member, else the parent's owner for a child (`since` is
+// the child's own birth, not the parent's; a parent handed over later keeps its children where they were). A program's
+// or a wake's conversation gets none, and stays claimable.
+const ownerOf = (
+    existing: PersistedAgent | undefined,
+    turn: AgentTurnIdentity,
+    entryOf: (id: string) => PersistedAgent | undefined,
+    now: number,
+): { readonly owner?: SessionOwner } => {
+    if (existing?.owner !== undefined) {
+        return { owner: existing.owner };
+    }
+    const parentId = parentOfActor(existing?.startedBy ?? turn.startedBy);
+    const opener = turn.owner ?? (parentId === undefined ? undefined : entryOf(parentId)?.owner);
+    return opener === undefined ? {} : { owner: { email: opener.email, ...opt("name", opener.name), since: now } };
+};
 
 export interface AgentsRegistry {
     readonly init: () => Promise<void>;
@@ -471,6 +491,9 @@ export interface AgentsRegistry {
     // Stamps a collaborator's ask to land; leaves `updatedAt` alone. Re-asking re-stamps rather than queuing; the land
     // or discard that answers it clears the ask.
     readonly requestLand: (id: string, by: { email: string; name?: string }, at: number) => Promise<AgentSummary | undefined>;
+    // Makes a member answerable for the conversation; who may is the route's decision (agents/ownership.ts). Leaves
+    // `updatedAt` alone: changing hands is not the conversation doing something.
+    readonly assign: (id: string, to: { email: string; name?: string }, at: number) => Promise<AgentSummary | undefined>;
     // Adds or takes back one person's mark. `on` is the intent, not a flip, so a retried request settles where the
     // first one did. Leaves `updatedAt` alone: somebody reacting is not the conversation doing something.
     readonly react: (id: string, emoji: string, by: { email: string; name?: string }, on: boolean, at: number) => Promise<AgentSummary | undefined>;
@@ -603,6 +626,7 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
             ...reportedFailure(entry, status),
             ...(entry.origin !== undefined ? { origin: entry.origin } : {}),
             ...opt("startedBy", entry.startedBy),
+            ...opt("owner", entry.owner),
             ...(entry.forkedFrom !== undefined ? { forkedFrom: entry.forkedFrom } : {}),
             ...(entry.title !== undefined ? { title: entry.title } : {}),
             ...opt("titleAction", entry.titleAction),
@@ -875,6 +899,7 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
                 ...(account !== undefined ? { account } : {}),
                 ...(origin !== undefined ? { origin } : {}),
                 ...startedByOf(existing, turn),
+                ...ownerOf(existing, turn, entryOf, now),
                 // Where it opened and as whom: the first turn's answer, kept; a later turn's differing persona does not
                 // move the conversation to another project.
                 ...opt("startIn", existing?.startIn ?? turn.startIn),
@@ -1085,6 +1110,17 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
                 return undefined;
             }
             const next = { ...entry, landRequested: { email: by.email, ...(by.name !== undefined ? { name: by.name } : {}), at } };
+            replace(next);
+            await persist();
+            broadcast();
+            return summaryOf(next);
+        },
+        assign: async (id, to, at) => {
+            const entry = entryOf(id);
+            if (entry === undefined) {
+                return undefined;
+            }
+            const next = { ...entry, owner: { email: to.email, ...opt("name", to.name), since: at } };
             replace(next);
             await persist();
             broadcast();

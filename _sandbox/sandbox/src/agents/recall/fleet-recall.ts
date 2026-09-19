@@ -1,4 +1,4 @@
-import type { GitChange, MatchSnippet, TranscriptRow } from "@intentic/sandbox-contract";
+import type { GitChange, MatchSnippet, SessionOwner, TranscriptRow } from "@intentic/sandbox-contract";
 import type { Services } from "../../composition.js";
 import { agentRepoReview } from "../land/agent-changes.js";
 import { isIsolated, type PersistedAgent } from "../registry/agents-store.js";
@@ -94,6 +94,10 @@ export interface FleetRow {
     // True while a turn is in flight; `status` alone cannot say, it holds `interrupted` throughout a running turn.
     readonly running: boolean;
     readonly repos: readonly string[];
+    // Who answers for it, and who asked for its first turn (an email, `token:<label>`, `agent:<parent id>`); either
+    // may be absent, both for a wake nobody has claimed.
+    readonly owner?: SessionOwner;
+    readonly startedBy?: string;
     // Why this row matched a search; absent on a roster read, and when the title itself was the match.
     readonly snippet?: MatchSnippet;
 }
@@ -107,7 +111,7 @@ const rowOf = (deps: FleetRecallDeps, entry: PersistedAgent, snippet?: MatchSnip
     archived: entry.archivedAt !== undefined,
     running: deps.agents.running(entry.id),
     repos: entry.repos.map((repo) => repo.repo),
-    ...present({ title: entry.title, model: entry.model, branch: entry.branch, turns: entry.turns, snippet }),
+    ...present({ title: entry.title, model: entry.model, branch: entry.branch, turns: entry.turns, owner: entry.owner, startedBy: entry.startedBy, snippet }),
 });
 
 export interface RosterOptions {
@@ -116,14 +120,25 @@ export interface RosterOptions {
     readonly limit?: number;
     // Only conversations whose composition includes this repo.
     readonly repo?: string;
+    // Only conversations a member answers for, by any part of their address (`ania` finds ania@example.com).
+    readonly owner?: string;
 }
 
 const ROSTER_LIMIT = 30;
 
-// Entries for a roster or search, newest activity first: live only unless `all`, scoped to `repo` when given.
+const ownedBy = (entry: PersistedAgent, owner: string | undefined): boolean =>
+    owner === undefined || (entry.owner !== undefined && foldOf(entry.owner.email).includes(foldOf(owner)));
+
+// Entries for a roster or search, newest activity first: live only unless `all`, scoped to `repo` and `owner` when
+// given.
 const scopedEntries = (deps: FleetRecallDeps, options: RosterOptions): PersistedAgent[] =>
     allEntries(deps)
-        .filter((entry) => (options.all === true || entry.archivedAt === undefined) && (options.repo === undefined || entry.repos.some((repo) => repo.repo === options.repo)))
+        .filter(
+            (entry) =>
+                (options.all === true || entry.archivedAt === undefined) &&
+                (options.repo === undefined || entry.repos.some((repo) => repo.repo === options.repo)) &&
+                ownedBy(entry, options.owner),
+        )
         .sort((left, right) => right.updatedAt - left.updatedAt);
 
 export const fleetRoster = (deps: FleetRecallDeps, options: RosterOptions = {}): readonly FleetRow[] =>

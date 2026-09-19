@@ -345,6 +345,7 @@ const ROUTES: readonly (readonly [string, string, Handler])[] = [
     [`POST`, `/agents/{id}/rename`, renameAgent],
     [`POST`, `/agents/{id}/seen`, ({ param }) => agentResponse(patchAgent(param(`id`), { seenAt: Date.now() }))],
     [`POST`, `/agents/{id}/react`, reactToAgent],
+    [`POST`, `/agents/{id}/assign`, assignAgent],
     [`POST`, `/agents/{id}/auto-land`, ({ param }) => agentResponse(patchAgent(param(`id`), {}))],
     [`POST`, `/agents/{id}/land`, ({ param }) => land(param(`id`))],
     [`POST`, `/agents/{id}/discard`, () => refuse(`This is the demo workspace: there is no worktree to discard.`)],
@@ -783,6 +784,19 @@ function reactToAgent({ request, param }: RouteContext): Promise<Response> {
         });
         const reactions = marked.filter((chip) => chip.by.length > 0);
         return agentResponse(patchAgent(param(`id`), reactions.length > 0 ? { reactions } : { reactions: undefined }));
+    });
+}
+
+// Changes hands as the real route does: a name is known only for the reader's own address; anyone else is an address
+// until presence says otherwise.
+function assignAgent({ request, param }: RouteContext): Promise<Response> {
+    return request.json().then((body) => {
+        const to = (body as { to?: string }).to?.trim().toLowerCase();
+        if (to === undefined || to === ``) {
+            return refuse(`An address is required.`, 400);
+        }
+        const name = to === OWNER.email.toLowerCase() ? OWNER.name : undefined;
+        return agentResponse(patchAgent(param(`id`), { owner: { email: to, ...(name === undefined ? {} : { name }), since: Date.now() } }));
     });
 }
 

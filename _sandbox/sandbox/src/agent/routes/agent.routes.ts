@@ -56,7 +56,7 @@ import { nudgeUnverifiedWork } from "../verification/verify-nudge.js";
 import { commandRuleFindings, touchedRepos, workspaceRelative } from "../../rules/turn-ending.js";
 import { mentionsSpentAllowance } from "../providers/failure-sentences.js";
 import { conversationOf } from "../tools/agent-requests.js";
-import { actorOf, type TurnInput } from "../run/turn/turn-actor.js";
+import { actorOf, ownerOf, type TurnInput } from "../run/turn/turn-actor.js";
 import { opt } from "../run/opt.js";
 import { registerTurn, SteeringQueue, steerTurn, stopTurn } from "../anchors/agent-steering.js";
 import { OUTAGE_MAX_ATTEMPTS, recordProviderFailure, recordProviderSuccess } from "../providers/provider-health.js";
@@ -294,6 +294,7 @@ async function* runConversationTurn(
             ...(input.account !== undefined ? { account: input.account } : {}),
             ...(input.origin !== undefined ? { origin: input.origin } : {}),
             ...opt("startedBy", input.actor),
+            ...opt("owner", input.owner),
             ...opt("startIn", input.startIn),
             ...opt("actsAs", input.actsAs),
             // A fork names its source once; `keep` is the cut's index in the source's own record.
@@ -1518,7 +1519,7 @@ export const createAgentRoutes = (services: Services) => {
             // Who is asking, from what the middleware verified on this request, never from the body.
             const actor = actorOf(context.identity, context.principal);
             // Push rides the run's own lifecycle, not this request, since a tab may be asleep.
-            const run = await startConversationTurn(services, streamAgent, { ...input, conversationId, ...opt("actor", actor) });
+            const run = await startConversationTurn(services, streamAgent, { ...input, conversationId, ...opt("actor", actor), ...opt("owner", ownerOf(context.identity)) });
             if (run === undefined) {
                 throw new ORPCError("CONFLICT", { message: "a turn is already running for this conversation" });
             }

@@ -2,6 +2,7 @@ import { oc } from "@orpc/contract";
 import { AgentTranscriptSchema } from "../events/transcript.js";
 import {
     AgentArchiveSchema,
+    AgentAssignSchema,
     AgentAutoLandSchema,
     AgentFileDiffQuerySchema,
     AgentIdSchema,
@@ -225,6 +226,18 @@ export const agentsContract = {
                 "For a collaborator who is not allowed to merge: marks the conversation as waiting for review, with who asked. The request shows on every maintainer's board and clears when somebody merges or discards it.",
         })
         .input(AgentIdSchema)
+        .output(AgentSummarySchema),
+    // Sets `AgentSummarySchema.owner`. Who may: the current owner (handing over), a maintainer or the sandbox owner
+    // (taking over), and anyone at the driving tier when nobody owns it yet (claiming).
+    assign: oc
+        .route({
+            method: "POST",
+            path: "/agents/{id}/assign",
+            summary: "Make a member answerable for this conversation",
+            description:
+                "Hands a conversation to a member: its owner is who answers its questions and who a reviewer asks about its work. Its owner may hand it to anyone; a maintainer may reassign any conversation; one nobody owns may be claimed by anyone allowed to drive agents. Refused for an address that is not a member's. Nothing about the conversation's own work changes.",
+        })
+        .input(AgentAssignSchema)
         .output(AgentSummarySchema),
     // Floored at viewer (auth/role-floor.ts), unlike every other write here: marking a conversation is expression, not
     // operating authority.

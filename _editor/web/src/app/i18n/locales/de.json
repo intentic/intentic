@@ -64,6 +64,12 @@
             "changes": "Änderungen",
             "chat": "Chat",
             "discardBody": "{lead} Seine {count} geänderte Datei {tail} | {lead} Seine {count} geänderten Dateien {tail}",
+            "handOverAddress": "Oder per Adresse",
+            "handOverBody": "Wer sie übernimmt, beantwortet ihre Fragen und ist die Person, die ein Prüfer zu ihrer Arbeit fragt. An der Arbeit selbst ändert sich nichts.",
+            "handOverConfirm": "Übergeben",
+            "handOverConnected": "Gerade verbunden",
+            "handOverFailed": "Übergabe nicht möglich.",
+            "handOverHeader": "Diese Sitzung übergeben",
             "nothingFinalArrivesUncommitted": "Nichts ist endgültig: das kommt als nicht committete Änderungen zu Ihnen zur Durchsicht, und der Rest des Zugs landet darauf, wenn der Agent fertig ist.",
             "openIn": "Öffnen in",
             "openingAgentsReview": "Die Durchsicht dieses Agenten wird geöffnet…",
@@ -133,9 +139,13 @@
             "appliesWhatAgentWritten": "Wendet an, was der Agent bisher geschrieben hat",
             "archive": "Archivieren",
             "branchDiffConversationKept": "Branch, Diff und Unterhaltung bleiben erhalten",
+            "claim": "Diese Sitzung übernehmen",
+            "claimHint": "Noch niemand ist dafür zuständig; ihre Fragen und ihre Prüfung werden deine",
             "discard": "Verwerfen",
             "dropsAgentsBranchWorktree": "Löscht Branch und Worktree dieses Agenten",
             "finishedTurnsLandInto": "Fertige Züge landen von selbst in Ihrem Workspace. „Halten“ behält die künftige Arbeit dieses Agenten auf seinem Branch, bis Sie „Jetzt landen“ drücken.",
+            "handOver": "Übergeben…",
+            "handOverHint": "Ein anderes Mitglied dafür zuständig machen",
             "holdWorkOnBranch": "Arbeit auf dem Branch halten",
             "holdingFinishedWorkWaits": "Halten: fertige Arbeit wartet auf dem Branch dieses Agenten. Schalten Sie zurück auf Landen am Zugende.",
             "landAgain": "Erneut landen",
@@ -151,6 +161,8 @@
             "spendsSecondAccountOn": "Verbraucht ein zweites Konto im Namen dieses Chats; gibt es keines mit Platz, wartet er, wie die Zeile darüber sagt.",
             "stopMovingToAnother": "Nicht mehr zu einem anderen Konto wechseln",
             "stopSendingAgainBy": "Dies nicht mehr von selbst erneut senden",
+            "takeOver": "Diese Sitzung an dich nehmen",
+            "takeOverHint": "Gehört {name}; ein Maintainer darf sie sich zuweisen",
             "turnGoesAgainBy": "Dieser Zug geht beim Zurücksetzen von selbst erneut los. Ein Stopp lässt ihn hier, zum Senden von Hand.",
             "waitAgentTurnTo": "Warten, bis der Agentenzug fertig ist"
         },
@@ -246,6 +258,9 @@
             "inArchive": "Im Archiv",
             "inEarlierChats": "In früheren Chats",
             "keepOpen": "Offen halten",
+            "mine": "Meine",
+            "mineOff": "Die Sitzungen aller",
+            "mineOnly": "Nur die Sitzungen, die dir gehören, in jeder Spalte",
             "more": "weitere",
             "newAgent": "Neuer Agent",
             "noAgentMentions": "Kein Agent erwähnt „",
@@ -292,6 +307,15 @@
             "runNowExactlyWhat": "Jetzt ausführen, mit genau dem, was ausgelöst hat: die Session landet auf diesem Board",
             "waiting": "wartet auf Sie"
         },
+        "ownerMark": {
+            "child": "Kind",
+            "ownedBy": "Gehört {name}",
+            "spawnedBy": "Gestartet von Konversation {parent}; öffnet sie",
+            "startedByControlToken": "Gestartet vom Steuer-Token {tokenLabel}",
+            "startedByProgramHolding": "Gestartet von einem Programm mit dem Steuer-Token „{tokenLabel}“; niemand hat es übernommen",
+            "token": "Token",
+            "you": "du"
+        },
         "promptCache": {
             "promptCacheGoesCold": "Sein Prompt-Cache wird in {countdown} kalt. Antworten Sie vorher, dann wird {read} aus dem Cache des Anbieters bedient; danach wird alles erneut gesendet und bezahlt."
         },
@@ -312,11 +336,6 @@
             "link": "Link",
             "pasteIdIntoQuick": "Fügen Sie die ID in Quick Open ein, um von überall zu diesem Agenten zurückzukommen.",
             "sessionId": "Session-ID"
-        },
-        "startedByMark": {
-            "startedByControlToken": "Gestartet vom Control-Token {tokenLabel}",
-            "startedByProgramHolding": "Gestartet von einem Programm, das das Control-Token „{tokenLabel}“ hält",
-            "token": "Token"
         },
         "suggestedSessionBox": {
             "ctrlEnter": "Strg+Enter",

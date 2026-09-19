@@ -33,15 +33,17 @@ const flagQuery = (c: Context<AppEnv>, name: string): boolean | undefined => {
 const rosterOptionsOf = (c: Context<AppEnv>): RosterOptions => {
     const limit = numberQuery(c, "limit", MAX_LIMIT);
     const repo = c.req.query("repo");
+    const owner = c.req.query("owner");
     return {
         ...(flagQuery(c, "all") === true ? { all: true } : {}),
         ...(limit === undefined ? {} : { limit }),
         ...(repo === undefined || repo === "" ? {} : { repo }),
+        ...(owner === undefined || owner === "" ? {} : { owner }),
     };
 };
 
 export const createFleetRoutes = (services: FleetRoutesDeps) => ({
-    /** GET /fleet: paginated roster, newest first; `?q=` switches it to a phrase search. */
+    /** GET /fleet: paginated roster, newest first; `?q=` switches it to a phrase search, `?owner=` narrows to one member's. */
     list: async (c: Context<AppEnv>): Promise<Response> => {
         const query = c.req.query("q")?.trim();
         const options = rosterOptionsOf(c);

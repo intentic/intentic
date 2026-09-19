@@ -4,6 +4,9 @@ import { effectiveAutoLand, effectiveLimitMove, effectiveLimitResume, landedAway
 import type { useAgentChanges } from "../../review/useAgentChanges";
 import { useAgents } from "../../fleet/useAgents";
 import { useRole } from "../../../sandbox/secrets/useRole";
+import { useAuth } from "../../../auth/useAuth";
+import { assignAgent } from "../../fleet/agentActions";
+import { mayAssign, ownedBy } from "../ownership";
 import { landsByDefault } from "../../../sandbox/environment/rules";
 import { useSandboxSettings } from "../../../sandbox/overview/useSandboxSettings";
 import { useT } from "@intentic/ui/i18n";
@@ -29,10 +32,23 @@ const { changes, agentId, phone, renameable, sessionName } = defineProps<{
 }>();
 // Goes up like `discard`: the warning is a modal, and modals live on the page, not inside a closing menu. `rename`
 // and `identity` are the header's own presses, handed back to it.
-const emit = defineEmits<{ selected: []; discard: []; forceLand: []; rename: []; identity: [] }>();
+const emit = defineEmits<{ selected: []; discard: []; forceLand: []; rename: []; identity: []; handOver: [] }>();
 
 const { agentById, restore, busyIds, setResumeAfterLimit, setMoveAfterLimit } = useAgents();
 const archived = computed(() => agentById(agentId)?.archivedAt !== undefined);
+// Whose the session is, and what that lets this reader do about it. Claim and take over both make it the reader's
+// own; hand over goes up as a dialog, since it needs a name.
+const { user } = useAuth();
+const me = computed(() => user.value?.email);
+const owner = computed(() => agentById(agentId)?.owner);
+const ownedByMe = computed(() => ownedBy({ owner: owner.value }, me.value));
+const assignable = computed(() => me.value !== undefined && mayAssign(owner.value, me.value, canShip.value));
+const makeMine = (): void => {
+    const to = me.value;
+    if (to !== undefined) {
+        run(() => assignAgent(agentId, to, agentById(agentId)?.sandboxId));
+    }
+};
 // Work this session landed that the workspace no longer holds; the reason "Land now" stands down for it.
 // Read off the roster, not the diff: the diff is the agent's own branch, which is exactly what hasn't changed.
 const away = computed(() => {
@@ -144,6 +160,28 @@ const ITEM = `flex w-full items-start gap-2 rounded-lg px-2.5 py-1.5 text-left t
             <span class="flex min-w-0 flex-col">
                 <span class="text-sm text-content md:text-xs">{{ t(`agents.agentSessionMenu.landAgain`) }}</span>
                 <span class="text-2xs text-subtle">{{ writing ? t(`agents.agentSessionMenu.agentStillWritingYoull2`) : away.text }}</span>
+            </span>
+        </button>
+        <!-- Ownership: one of claim / take over, then hand over; none for a session that is the reader's own to keep, or that they may not touch. -->
+        <button v-if="assignable && owner === undefined" type="button" :class="ITEM" @click="makeMine">
+            <Icon name="user" class="mt-0.5 shrink-0 text-xs text-muted" />
+            <span class="flex min-w-0 flex-col">
+                <span class="text-sm text-content md:text-xs">{{ t(`agents.agentSessionMenu.claim`) }}</span>
+                <span class="text-2xs text-subtle">{{ t(`agents.agentSessionMenu.claimHint`) }}</span>
+            </span>
+        </button>
+        <button v-else-if="assignable && !ownedByMe && owner !== undefined" type="button" :class="ITEM" @click="makeMine">
+            <Icon name="user" class="mt-0.5 shrink-0 text-xs text-muted" />
+            <span class="flex min-w-0 flex-col">
+                <span class="text-sm text-content md:text-xs">{{ t(`agents.agentSessionMenu.takeOver`) }}</span>
+                <span class="text-2xs text-subtle">{{ t(`agents.agentSessionMenu.takeOverHint`, { name: owner.name ?? owner.email }) }}</span>
+            </span>
+        </button>
+        <button v-if="assignable" type="button" :class="ITEM" @click="run(() => emit(`handOver`))">
+            <Icon name="users" class="mt-0.5 shrink-0 text-xs text-muted" />
+            <span class="flex min-w-0 flex-col">
+                <span class="text-sm text-content md:text-xs">{{ t(`agents.agentSessionMenu.handOver`) }}</span>
+                <span class="text-2xs text-subtle">{{ t(`agents.agentSessionMenu.handOverHint`) }}</span>
             </span>
         </button>
         <button v-if="phone && renameable" type="button" :class="ITEM" @click="run(() => emit(`rename`))">

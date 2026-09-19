@@ -227,6 +227,8 @@ export const fleetRoster = (now: number): AgentSummary[] => [
     },
     {
         id: `cnv_release_notes`,
+        owner: { email: `ada@acme.dev`, name: `Ada Lovelace`, since: now - minutes(140) },
+        startedBy: `ada@acme.dev`,
         sessionId: `ses_01j9notes`,
         title: `Draft the release notes for 2.4`,
         status: `landed`,
@@ -250,6 +252,8 @@ export const fleetRoster = (now: number): AgentSummary[] => [
     },
     {
         id: `cnv_dep_audit`,
+        owner: { email: `grace@acme.dev`, name: `Grace Hopper`, since: now - minutes(95) },
+        startedBy: `ada@acme.dev`,
         sessionId: `ses_01j9audit`,
         title: `Nightly dependency audit, 3 advisories, 2 patched`,
         status: `idle`,

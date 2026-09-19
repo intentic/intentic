@@ -16,6 +16,8 @@ import { useAgentFilter } from "./useAgentFilter";
 import { projectScope, setProjectScope } from "../../../app/projectScope";
 import { usePersonas } from "../../sandbox/personas/usePersonas";
 import { agentInProject, heldWakeInProject, runInProject } from "./projectMembership";
+import { mineOnly, ownedBy } from "./ownership";
+import { useAuth } from "../../auth/useAuth";
 import { type FleetLane, reviewAction, unregistered, watching } from "../fleet/agentStatus";
 import { useAgents } from "../fleet/useAgents";
 import { agentSeed } from "../fleet/useAgents-actions";
@@ -166,12 +168,17 @@ const boxFleet = computed<FleetAgent[]>(() => (readingAcross.value ? [...fleet.v
 // it was opened under this project and has no record to say so yet. Held wakes and live runs narrow by the same
 // evidence. The archive stays the sandbox's: its Delete all empties the whole pile, so its count must say the whole pile.
 const { personas } = usePersonas();
+// Mine (ownership.ts) narrows the same way a project does: a draft not yet sent stays, since it is about to be the
+// reader's own; held wakes and runs are not narrowed, since nobody owns them yet.
+const { user } = useAuth();
 const scopedFleet = computed<FleetAgent[]>(() => {
     const project = projectScope.value;
-    if (project === undefined) {
-        return boxFleet.value;
-    }
-    return boxFleet.value.filter((agent) => unregistered(agent.status) || agentInProject(agent, project, personas.value));
+    const mine = mineOnly.value ? user.value?.email : undefined;
+    return boxFleet.value.filter(
+        (agent) =>
+            unregistered(agent.status) ||
+            ((project === undefined || agentInProject(agent, project, personas.value)) && (mine === undefined || ownedBy(agent, mine))),
+    );
 });
 const scopedHeld = computed<AutomationApproval[]>(() => {
     const project = projectScope.value;
@@ -222,7 +229,7 @@ const projectHidden = computed(() => {
     return agents + runs + heldWakes.value.length - scopedHeld.value.length;
 });
 const scopedLanes = computed<Record<FleetLane, FleetAgent[]>>(() =>
-    readingAcross.value || projectScope.value !== undefined ? laneGroups(scopedFleet.value) : lanes.value,
+    readingAcross.value || projectScope.value !== undefined || mineOnly.value ? laneGroups(scopedFleet.value) : lanes.value,
 );
 
 const boardLanes = computed<Record<FleetLane, FleetAgent[]>>(() => {
@@ -1121,6 +1128,17 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
             <div class="flex min-w-0 flex-1 basis-0 items-center gap-2">
                 <!-- Drawn only when more than one sandbox exists (scopeOffered): a switch whose two settings look identical teaches the reader to ignore controls. -->
                 <SegmentedControl v-if="scopeOffered" v-model="fleetScope" :options="SCOPE_OPTIONS" class="shrink-0" />
+                <!-- Only the reader's own sessions; drawn only for a signed-in member, since nobody else owns anything here. -->
+                <Button
+                    v-if="user !== null"
+                    size="small"
+                    :severity="mineOnly ? 'primary' : 'secondary'"
+                    :label="t(`agents.agentsView.mine`)"
+                    :aria-pressed="mineOnly"
+                    v-tooltip.bottom="mineOnly ? t(`agents.agentsView.mineOff`) : t(`agents.agentsView.mineOnly`)"
+                    class="shrink-0"
+                    @click="mineOnly = !mineOnly"
+                />
                 <!-- The open project, and the way out of it: the same scope the workspace chip clears, so both say the same thing. -->
                 <ProjectChip :project="projectScope" :hidden="projectHidden" noun="agents" @clear="setProjectScope(undefined)" />
             </div>

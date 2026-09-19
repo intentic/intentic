@@ -135,3 +135,20 @@ test("the transcript answers the last messages, and grep narrows before the limi
     // `at` is the message's absolute index in the full record.
     expect(grepped.messages.map((message) => message.at)).toEqual([0, 2]);
 });
+
+test("the roster carries owner and starter, and --owner narrows by any part of the address", () => {
+    const deps = depsOver([
+        agentOf({ id: "owned-1", owner: { email: "ania@example.com", name: "Ania", since: 5 }, startedBy: "ania@example.com", updatedAt: 300 }),
+        agentOf({ id: "owned-2", owner: { email: "bob@example.com", since: 6 }, startedBy: "agent:owned-1", updatedAt: 200 }),
+        agentOf({ id: "unowned", startedBy: "token:nightly", updatedAt: 100 }),
+    ]);
+    const all = fleetRoster(deps);
+    expect(all.map((agent) => [agent.id, agent.owner?.email, agent.startedBy])).toEqual([
+        ["owned-1", "ania@example.com", "ania@example.com"],
+        ["owned-2", "bob@example.com", "agent:owned-1"],
+        ["unowned", undefined, "token:nightly"],
+    ]);
+    expect(fleetRoster(deps, { owner: "ANIA" }).map((agent) => agent.id)).toEqual(["owned-1"]);
+    expect(fleetRoster(deps, { owner: "example.com" }).map((agent) => agent.id)).toEqual(["owned-1", "owned-2"]);
+    expect(fleetRoster(deps, { owner: "nobody" })).toEqual([]);
+});

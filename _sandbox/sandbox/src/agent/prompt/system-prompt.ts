@@ -242,7 +242,8 @@ const TERMINAL_GUIDANCE =
 const FLEET_GUIDANCE =
     "Another conversation in this workspace — what it was asked, where it got to, its branch, worktree, delta " +
     "and record — is one call: `agents show <handle>`, where the handle is its id, its branch, an id prefix, " +
-    "its session id, or words from its title (`agents ls` is the fleet, `agents find '<text>'` is who said a " +
+    "its session id, or words from its title (`agents ls` is the fleet, `agents ls --owner <who>` one member's " +
+    "sessions, `agents find '<text>'` is who said a " +
     `phrase, \`--transcript\` adds the messages). Reach for those instead of searching \`${HISTORY_ROOT}\` by hand: ` +
     "they answer from the daemon's own registry, per-conversation records and phrase index, which no directory " +
     "walk can join.";

@@ -1784,3 +1784,49 @@ describe("agents registry", () => {
         expect(await registry.react("nope", "👍", { email: "ada@example.com" }, true, 2_000)).toBeUndefined();
     });
 });
+
+// Whose a conversation is: derived once from the opening turn, inherited by a child from its parent, and moved only by
+// an explicit assignment. Ownership never follows a later turn's caller.
+describe("session ownership", () => {
+    it("latches the opening member as owner and keeps them through another member's turns", async () => {
+        const registry = createAgentsRegistry(memoryStore(), standings(), presences());
+        await registry.init();
+        await registry.begin(turn({ startedBy: "ania@example.com", owner: { email: "ania@example.com", name: "Ania" } }), 1_000);
+        expect(registry.get("c1")?.owner).toEqual({ email: "ania@example.com", name: "Ania", since: 1_000 });
+        expect(registry.get("c1")?.startedBy).toBe("ania@example.com");
+        await registry.finish("c1", 1_500);
+        await registry.begin(turn({ startedBy: "bob@example.com", owner: { email: "bob@example.com" } }), 2_000);
+        expect(registry.get("c1")?.owner).toEqual({ email: "ania@example.com", name: "Ania", since: 1_000 });
+        expect(registry.get("c1")?.startedBy).toBe("ania@example.com");
+    });
+
+    it("leaves a program's conversation unowned, and a child inherits its parent's owner as of its own birth", async () => {
+        const registry = createAgentsRegistry(memoryStore(), standings(), presences());
+        await registry.init();
+        await registry.begin(turn({ conversationId: "bot", startedBy: "token:nightly" }), 1_000);
+        expect(registry.get("bot")?.owner).toBeUndefined();
+        await registry.begin(turn({ conversationId: "parent", startedBy: "ania@example.com", owner: { email: "ania@example.com" } }), 1_000);
+        await registry.begin(turn({ conversationId: "sub-1", startedBy: "agent:parent" }), 3_000);
+        expect(registry.get("sub-1")?.owner).toEqual({ email: "ania@example.com", since: 3_000 });
+        expect(registry.get("sub-1")?.startedBy).toBe("agent:parent");
+        // A child of an unowned parent, or of a parent the registry has never seen, is unowned too.
+        await registry.begin(turn({ conversationId: "sub-2", startedBy: "agent:bot" }), 4_000);
+        expect(registry.get("sub-2")?.owner).toBeUndefined();
+    });
+
+    it("assign moves it without counting as activity, and the moved owner survives the next turn", async () => {
+        const store = memoryStore();
+        const registry = createAgentsRegistry(store, standings(), presences());
+        await registry.init();
+        await registry.begin(turn({ owner: { email: "ania@example.com" } }), 1_000);
+        await registry.finish("c1", 1_500);
+        const before = registry.get("c1")?.updatedAt;
+        const moved = await registry.assign("c1", { email: "bob@example.com", name: "Bob" }, 5_000);
+        expect(moved?.owner).toEqual({ email: "bob@example.com", name: "Bob", since: 5_000 });
+        expect(moved?.updatedAt).toBe(before);
+        expect(store.saved().find((entry) => entry.id === "c1")?.owner?.email).toBe("bob@example.com");
+        await registry.begin(turn({ owner: { email: "ania@example.com" } }), 6_000);
+        expect(registry.get("c1")?.owner?.email).toBe("bob@example.com");
+        expect(await registry.assign("missing", { email: "bob@example.com" }, 7_000)).toBeUndefined();
+    });
+});
