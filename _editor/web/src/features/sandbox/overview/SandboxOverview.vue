@@ -3,7 +3,7 @@ import { AnchoredOverlay, Card, InlineRename, StatusBadge, vAction } from "@inte
 import { errorMessage } from "@intentic/ui/async";
 import { computed, ref } from "vue";
 import { fileToSquareDataUrl } from "../../../lib/imageDataUrl";
-import { useSandboxVersion } from "./useSandboxVersion";
+import { useSandboxVersion } from "./version/useSandboxVersion";
 import { useSandbox } from "../client/useSandbox";
 import { useHostedPlan } from "../../settings/hosted-plan/useHostedPlan";
 import { useSandboxOutline } from "./useSandboxOutline";
@@ -11,9 +11,9 @@ import { sandboxAvailabilityVisual } from "./availability";
 import { useSandboxAvailability } from "./useSandboxAvailability";
 import { useSandboxPlacement } from "./useSandboxPlacement";
 import { useWorkspaceTree } from "../../workspace/explorer/useWorkspaceTree";
-import SandboxBehindCard from "./SandboxBehindCard.vue";
+import SandboxBehindCard from "./version/SandboxBehindCard.vue";
 import SandboxManifestCard from "./manifest/SandboxManifestCard.vue";
-import SandboxUpdateCard from "./SandboxUpdateCard.vue";
+import SandboxUpdateCard from "./version/SandboxUpdateCard.vue";
 import { useT } from "@intentic/ui/i18n";
 
 // Overview tab: sandbox identity (name, logo), self-reported image/version/URL relayed live via /info, and the

@@ -271,7 +271,7 @@ payload, and every "do it out there" button is gated on that answer — so a dae
 than the browser expects reads as a fleet holding nothing, and the buttons stop being drawn with no error anywhere.
 Fingerprinted, the same disagreement surfaces as drift on the Sandbox-behind card instead. That card's own reload is
 the one button that must survive it, so it falls back to the single connected device when nothing claims this sandbox
-([SandboxBehindCard.vue](../../_editor/web/src/features/sandbox/overview/SandboxBehindCard.vue)); the reload names this
+([SandboxBehindCard.vue](../../_editor/web/src/features/sandbox/overview/version/SandboxBehindCard.vue)); the reload names this
 sandbox's slug on the far side, so a machine that doesn't hold it refuses rather than restarting something else.
 
 Folding two readings into one row is where a name stops being enough. **WSL hands a distro the Windows machine's own

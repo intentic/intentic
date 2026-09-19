@@ -11,7 +11,7 @@ import {
     rebuildSeconds,
     useDevRebuild,
 } from "../environment/useDevRebuild";
-import { useSandboxVersion } from "../overview/useSandboxVersion";
+import { useSandboxVersion } from "../overview/version/useSandboxVersion";
 import { SANDBOX_DEFAULT_SECTION } from "../sandboxNav";
 import { useHostedBuild } from "../secrets/useHostedBuild";
 import { restartFinished } from "./sandboxRestart";

@@ -1,9 +1,9 @@
 import { InfoSchema } from "@intentic/sandbox-contract";
 import { computed } from "vue";
-import { sandboxJson } from "../client/sandboxClient";
-import { SANDBOX_INFO } from "../../../lib/queryKeys";
-import { useSandboxQuery } from "../client/useSandboxQuery";
-import { useEnvironment } from "../environment/useEnvironment";
+import { sandboxJson } from "../../client/sandboxClient";
+import { SANDBOX_INFO } from "../../../../lib/queryKeys";
+import { useSandboxQuery } from "../../client/useSandboxQuery";
+import { useEnvironment } from "../../environment/useEnvironment";
 
 // Sandbox daemon's self-report (/info): running `version`, and once checked, `latest` and `updateAvailable`. One shared
 // query feeds both the hub card and the chip's attention list. The update itself runs on the host (HostRecreate), never

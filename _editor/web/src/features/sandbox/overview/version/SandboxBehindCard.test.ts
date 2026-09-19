@@ -4,12 +4,12 @@
 import { type Device, SANDBOX_ROUTE_NAMES, SANDBOX_ROUTE_SHAPES } from "@intentic/sandbox-contract";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { type App, createApp, defineComponent, h, ref } from "vue";
-import { resetDaemonRoutes, setDaemonRoutes } from "./useDaemonRoutes";
+import { resetDaemonRoutes, setDaemonRoutes } from "../useDaemonRoutes";
 import { IconStub } from "@intentic/ui/testing";
 
 // Sandbox slug the printed reload command names, so it targets this machine's sandbox specifically, and the checkout
 // the dev image was built from, which is the folder the reload runs in.
-vi.mock(`../environment/useEnvironment`, () => ({
+vi.mock(`../../environment/useEnvironment`, () => ({
     useEnvironment: () => ({ slug: ref(`sandbox-abc123`), localImage: ref({ base: `intentic-sandbox:dev`, root: `/home/ada/intentic` }) }),
 }));
 
@@ -20,7 +20,7 @@ const severingCalls: string[] = [];
 // The daemon's device list, which the card's fallback reads to find a machine already talking to this sandbox:
 // empty stands for "nothing to offer", where only the command remains.
 const fleet = ref<Device[]>([]);
-vi.mock(`../devices/useDevices`, () => ({
+vi.mock(`../../devices/useDevices`, () => ({
     useHostHolding: () => hostId,
     useDevices: () => ({ devices: fleet, readAt: ref(0), error: ref(undefined), isLoading: ref(false), refetch: vi.fn() }),
     runSeveringDeviceCommand: (id: string, command: string) => {

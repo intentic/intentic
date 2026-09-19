@@ -7,7 +7,7 @@ import { accessKnown, providerReady } from "../../chat/session/access";
 import { useMissingSecretCount } from "../../capabilities/connect/useSecrets";
 import { useSyncHealth } from "../devices/useDevices";
 import { useEnvironment } from "../environment/useEnvironment";
-import { useSandboxVersion } from "./useSandboxVersion";
+import { useSandboxVersion } from "./version/useSandboxVersion";
 import { t } from "@intentic/ui/i18n";
 
 // What the active sandbox needs from its owner, versus what's merely true of it: one list, split by `kind`, read

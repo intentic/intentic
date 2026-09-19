@@ -96,7 +96,7 @@ vi.mock(`../client/useSandbox`, () => ({
 // The release this sandbox knows about; mocked like useDevices since the subject is what a row says, and
 // staleness is part of that.
 const latest = ref<string | undefined>(`1.183.0`);
-vi.mock(`../overview/useSandboxVersion`, () => ({ useSandboxVersion: () => ({ latest }) }));
+vi.mock(`../overview/version/useSandboxVersion`, () => ({ useSandboxVersion: () => ({ latest }) }));
 // The owner's per-device switches, so a row can say "Manage sandboxes is off" before a click; mocked since the
 // real hook needs vue-query's injected client.
 const capabilities = ref<{ id: string; kind: string; config: Record<string, string> }[]>([]);

@@ -11,7 +11,7 @@ import { machineRows } from "./deviceRows";
 import { useDevices } from "./useDevices";
 import { useSandbox } from "../client/useSandbox";
 import { useSandboxOutline } from "../overview/useSandboxOutline";
-import { useSandboxVersion } from "../overview/useSandboxVersion";
+import { useSandboxVersion } from "../overview/version/useSandboxVersion";
 import { useT } from "@intentic/ui/i18n";
 
 const t = useT();

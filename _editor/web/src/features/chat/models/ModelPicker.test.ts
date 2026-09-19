@@ -15,7 +15,7 @@ vi.mock(`./useChat-catalog`, () => ({
 }));
 vi.mock(`../accounts/useChat-accounts`, () => ({ refreshConnections: () => Promise.resolve() }));
 // The runtime-health probe is the daemon's; silent here, which is its own "not probed yet" state.
-vi.mock(`../../sandbox/overview/useSandboxVersion`, () => ({ useSandboxVersion: () => ({ runtimeIssue: () => undefined }) }));
+vi.mock(`../../sandbox/overview/version/useSandboxVersion`, () => ({ useSandboxVersion: () => ({ runtimeIssue: () => undefined }) }));
 vi.mock(import(`vue-router`), async (importOriginal) => ({
     ...(await importOriginal()),
     useRouter: () => ({ push: vi.fn() }) as never,

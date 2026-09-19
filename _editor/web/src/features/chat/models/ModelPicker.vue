@@ -18,7 +18,7 @@ import {
 } from "./modelPickerState";
 import { loadAllProviderModels, loadProviderModels } from "./useChat-catalog";
 import { refreshConnections } from "../accounts/useChat-accounts";
-import { useSandboxVersion } from "../../sandbox/overview/useSandboxVersion";
+import { useSandboxVersion } from "../../sandbox/overview/version/useSandboxVersion";
 import ProviderLogo from "../accounts/ProviderLogo.vue";
 import { useT } from "@intentic/ui/i18n";
 

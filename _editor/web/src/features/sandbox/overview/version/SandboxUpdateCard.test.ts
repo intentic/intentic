@@ -25,11 +25,11 @@ vi.mock(`./useSandboxVersion`, () => ({
         localImage,
     }),
 }));
-vi.mock(`../../agents/fleet/useAgents`, () => ({ useAgents: () => ({ fleet: ref([]) }) }));
-vi.mock(`../client/useSandbox`, () => ({ useSandbox: () => ({ active: ref({ id: `sb1`, role: `owner` }) }) }));
-vi.mock(`../../../lib/useApi`, () => ({ apiClient: { sandbox: { hostedRestart: async () => undefined } } }));
+vi.mock(`../../../agents/fleet/useAgents`, () => ({ useAgents: () => ({ fleet: ref([]) }) }));
+vi.mock(`../../client/useSandbox`, () => ({ useSandbox: () => ({ active: ref({ id: `sb1`, role: `owner` }) }) }));
+vi.mock(`../../../../lib/useApi`, () => ({ apiClient: { sandbox: { hostedRestart: async () => undefined } } }));
 // Marked, not mounted: which executor the card chose is the whole subject, and each reaches a device on its own.
-vi.mock(`../../capabilities/connect/HostRecreate.vue`, () => ({
+vi.mock(`../../../capabilities/connect/HostRecreate.vue`, () => ({
     default: defineComponent({
         props: { action: { type: String, default: `` } },
         render(): ReturnType<typeof h> {
@@ -37,7 +37,7 @@ vi.mock(`../../capabilities/connect/HostRecreate.vue`, () => ({
         },
     }),
 }));
-vi.mock(`../environment/DevRebuild.vue`, () => ({ default: defineComponent({ render: () => h(`div`, { "data-executor": `checkout` }) }) }));
+vi.mock(`../../environment/DevRebuild.vue`, () => ({ default: defineComponent({ render: () => h(`div`, { "data-executor": `checkout` }) }) }));
 
 const { default: SandboxUpdateCard } = await import("./SandboxUpdateCard.vue");
 

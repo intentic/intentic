@@ -12,7 +12,7 @@ import { acpProviders, endpointProviders, endpointsLoaded, trialStatus } from ".
 vi.mock(`../../capabilities/connect/useSecrets`, () => ({ useMissingSecretCount: () => ({ missingRequiredCount: { value: 0 } }) }));
 vi.mock(`../devices/useDevices`, () => ({ useSyncHealth: () => ({ stoppedOn: { value: [] }, heldPorts: { value: [] } }) }));
 vi.mock(`../environment/useEnvironment`, () => ({ useEnvironment: () => ({ pending: { value: undefined }, proposal: { value: undefined } }) }));
-vi.mock(`./useSandboxVersion`, () => ({ useSandboxVersion: () => ({ updateAvailable: { value: false }, updateStaged: { value: undefined } }) }));
+vi.mock(`./version/useSandboxVersion`, () => ({ useSandboxVersion: () => ({ updateAvailable: { value: false }, updateStaged: { value: undefined } }) }));
 
 const TRIAL_ENDPOINT = { id: TRIAL_PROVIDER, label: `Free trial`, kind: `endpoint` } as const;
 

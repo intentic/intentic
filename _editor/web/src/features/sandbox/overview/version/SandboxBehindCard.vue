@@ -2,11 +2,11 @@
 import { machinesOf } from "@intentic/sandbox-contract";
 import { Button, Code, CopyButton, Notice, RowGroup, RowNote } from "@intentic/ui";
 import { computed, ref } from "vue";
-import { daemonBehind, daemonDrifted, driftedRoutes, missingRoutes } from "./useDaemonRoutes";
-import { useEnvironment } from "../environment/useEnvironment";
-import { runSeveringDeviceCommand, useDevices, useHostHolding } from "../devices/useDevices";
-import { useHubWork } from "../../../shell/hub/hubWork";
-import ConnectDeviceHint from "../devices/ConnectDeviceHint.vue";
+import { daemonBehind, daemonDrifted, driftedRoutes, missingRoutes } from "../useDaemonRoutes";
+import { useEnvironment } from "../../environment/useEnvironment";
+import { runSeveringDeviceCommand, useDevices, useHostHolding } from "../../devices/useDevices";
+import { useHubWork } from "../../../../shell/hub/hubWork";
+import ConnectDeviceHint from "../../devices/ConnectDeviceHint.vue";
 import { useT } from "@intentic/ui/i18n";
 
 // Checks the daemon's route surface against this app's contract, not version strings (SandboxUpdateCard); catches

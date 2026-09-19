@@ -2,15 +2,15 @@
 import { Button, Code, commandLang, Notice, RowGroup, RowNote, StatusBadge, useOsPreference } from "@intentic/ui";
 import { useAsyncAction } from "@intentic/ui/async";
 import { computed, ref } from "vue";
-import DevRebuild from "../environment/DevRebuild.vue";
-import HostRecreate from "../../capabilities/connect/HostRecreate.vue";
-import { turnInFlight } from "../../agents/fleet/agentStatus";
-import { useAgents } from "../../agents/fleet/useAgents";
-import { useSandbox } from "../client/useSandbox";
-import { expectRestart, type RestartQuiet } from "../live/sandboxRestart";
+import DevRebuild from "../../environment/DevRebuild.vue";
+import HostRecreate from "../../../capabilities/connect/HostRecreate.vue";
+import { turnInFlight } from "../../../agents/fleet/agentStatus";
+import { useAgents } from "../../../agents/fleet/useAgents";
+import { useSandbox } from "../../client/useSandbox";
+import { expectRestart, type RestartQuiet } from "../../live/sandboxRestart";
 import { useSandboxVersion } from "./useSandboxVersion";
-import { apiClient } from "../../../lib/useApi";
-import { useHubWork } from "../../../shell/hub/hubWork";
+import { apiClient } from "../../../../lib/useApi";
+import { useHubWork } from "../../../../shell/hub/hubWork";
 import { useT } from "@intentic/ui/i18n";
 
 // Update prompt on the sandbox hub. Updates run on the host, not the sandbox (no host Docker socket; see
