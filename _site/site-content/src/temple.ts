@@ -1,6 +1,6 @@
 // The words of the home page's build plate, and there are deliberately few of them: the picture is the argument and
 // this file is its caption. Three stages — the stone you bring, the site where the work happens, the temple that goes
-// up — and the three things that never leave your hands.
+// up — and the three things intentic keeps in order at the site.
 //
 // NO MECHANISMS HERE. Branches, worktrees, terminals, sandboxes and diffs are all true and all named elsewhere on the
 // page; this band is the one telling of the shape of the deal, and a reader meeting the product for the first time
@@ -17,11 +17,11 @@ export interface TempleStage {
     line: string;
 }
 
-/** One thing you keep. Three of them, and each is a verb you do, not a feature the product has. */
+/** One thing intentic guarantees at the site. Three of them, each a benefit the yard delivers. */
 export interface TempleControl {
     label: string;
     /** Key into the figure's icon table. A key with no drawing renders no icon. */
-    icon: "direct" | "watch" | "approve";
+    icon: "tokens" | "safety" | "aligned";
 }
 
 export interface TempleScene {
@@ -31,7 +31,7 @@ export interface TempleScene {
     stone: TempleStage;
     site: TempleStage & { controls: TempleControl[] };
     temple: TempleStage;
-    /** Spoken equivalent of the whole picture; must carry the stone, the work, the temple and all three verbs. */
+    /** Spoken equivalent of the whole picture; must carry the stone, the work, the temple and all three site guarantees. */
     label: string;
 }
 
@@ -47,14 +47,14 @@ export const templeScene: TempleScene = {
         // something is keeping it from becoming a mess.
         line: "Agents do the work. intentic keeps the yard in order.",
         controls: [
-            { label: "You direct", icon: "direct" },
-            { label: "You watch", icon: "watch" },
-            { label: "You approve", icon: "approve" },
+            { label: "38% fewer tokens", icon: "tokens" },
+            { label: "Stay safe", icon: "safety" },
+            { label: "Agents stay aligned", icon: "aligned" },
         ],
     },
     temple: { label: "The temple", line: "Your software, standing." },
     label:
         "A building site. The stone is what you bring: your code, your documents, your words, each block carved with what it is. " +
         "Agents cut it, carry it and set it, each one marked with the AI model behind it, on a site intentic keeps in order, while you watch from the terrace. " +
-        "What goes up is your software. You direct the work, you can see all of it, and nothing is set in place until you approve it.",
+        "What goes up is your software. intentic saves thirty-eight percent on tokens, guards every turn, and keeps agents aligned.",
 };

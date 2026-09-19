@@ -133,10 +133,9 @@ const HEAD = { cy: -49, r: 7, box: 11 };
 const MARK_AT = `translate(${-HEAD.box / 2} ${HEAD.cy - HEAD.box / 2}) scale(${n(HEAD.box / 24)})`;
 
 const CONTROL_ICONS: Record<TempleControl["icon"], string> = {
-    // Controls describe what gets built and in what order.
-    direct: '<rect x="3.5" y="4.5" width="17" height="15" rx="2"/><path d="M7.5 9.5h9M7.5 13.5h5"/>',
-    watch: '<path d="M2.5 12S6 5.8 12 5.8 21.5 12 21.5 12 18 18.2 12 18.2 2.5 12 2.5 12Z"/><circle cx="12" cy="12" r="3.1"/>',
-    approve: '<path d="m4.5 12.6 4.8 4.8L19.5 7.2"/>',
+    tokens: '<path d="M4 15l4-5 3 3 5-7"/><path d="M4 19h16"/>',
+    safety: '<path d="M12 3L4.5 6.5V12c0 4.6 3.2 8.9 7.5 10 4.3-1.1 7.5-5.4 7.5-10V6.5L12 3z"/>',
+    aligned: '<circle cx="6" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="18" cy="12" r="2"/><path d="M8 12h2M14 12h2"/>',
 };
 
 const glyph = (paths: string) =>
@@ -545,7 +544,7 @@ const glyph = (paths: string) =>
         color: var(--color-muted);
     }
 
-    /* Kept controls render as a row of verbs. */
+    /* Site guarantees render as a row of benefits. */
     .tp-keeps {
         display: flex;
         flex-wrap: wrap;
