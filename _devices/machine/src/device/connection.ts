@@ -21,6 +21,10 @@ export interface Dial {
 const realDial: Dial = { resolveBase: resolveDaemonBase, socket: (url) => new WebSocket(url) };
 
 export const connect = (config: HostLink, version: string, log: Log, dial: Dial = realDial): PeerLink => {
+    // Every line this link writes names the sandbox it is about. One agent holds a link per sandbox and the dial
+    // loop's own complaints carry no address, so a machine with five links wrote "disconnected (1002); 7172 failed
+    // attempts" for two days without ever saying whose — and nothing in the log could tell the dead ones apart.
+    const linkLog: Log = (message) => log(`${config.sandboxUrl}: ${message}`);
     // The live grant, replaced by the sandbox's `setScopes` on every connect, so a scope turned off is enforced
     // from the new session's first call.
     let scopes: HostScopes = config.scopes;
@@ -47,8 +51,8 @@ export const connect = (config: HostLink, version: string, log: Log, dial: Dial 
             return {
                 socket: dial.socket(hostConnectUrl(base)),
                 // The loopback case is logged; it's the one fact about this connection the link's own address doesn't
-                // carry.
-                said: `connected to ${config.sandboxUrl}${local ? ` over loopback (${base})` : ""} as "${config.id}"`,
+                // carry. The address itself comes from the prefix above, which every line of this link's carries.
+                said: `connected${local ? ` over loopback (${base})` : ""} as "${config.id}"`,
             };
         },
         hello: () => ({ type: "hello", token: config.token, version }),
@@ -56,8 +60,10 @@ export const connect = (config: HostLink, version: string, log: Log, dial: Dial 
         backoff: createBackoff(PEER_LINK_BACKOFF),
 /* The deadline that makes a dead link NOTICEABLE, and on this door it is the one that matters most. */
         silenceMs: peerLinkSilenceMs(HOST_HEARTBEAT_MS),
-        log,
+        log: linkLog,
         revoked: () =>
-            log("the sandbox refused this device's enrollment: it was revoked there. Run `intentic-machine device uninstall` to clean up, or connect again from the sandbox."),
+            linkLog(
+                "the sandbox refused this device's enrollment: it was revoked there. Run `intentic-machine device uninstall` to clean up, or connect again from the sandbox.",
+            ),
     });
 };

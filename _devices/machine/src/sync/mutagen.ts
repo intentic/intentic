@@ -89,6 +89,17 @@ const listSessionNames = (mutagen: string, kind: "forward" | "sync"): string => 
 export const ourForwardSessions = (mutagen: string, sandboxId?: string): string[] =>
     parseForwardNames(listSessionNames(mutagen, "forward"), sandboxId);
 
+// The ports one sandbox's live forwards are bound to, read off their names. The per-tick reconcile works from the
+// persisted baseline, which cannot see a session that baseline lost; this is the only thing that can.
+export const parseForwardPorts = (listed: string, sandboxId: string): number[] =>
+    parseForwardNames(listed, sandboxId).flatMap((name) => {
+        const port = Number(FORWARD_NAME.exec(name)?.[2]);
+        return Number.isInteger(port) ? [port] : [];
+    });
+
+export const forwardedPorts = (mutagen: string, sandboxId: string): number[] =>
+    parseForwardPorts(listSessionNames(mutagen, "forward"), sandboxId);
+
 // Forward sessions no pairing in `keptSandboxIds` claims.
 const orphanForwardSessions = (mutagen: string, keptSandboxIds: readonly string[]): string[] =>
     parseOrphanForwardNames(listSessionNames(mutagen, "forward"), keptSandboxIds);

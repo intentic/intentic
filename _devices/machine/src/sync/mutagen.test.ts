@@ -5,10 +5,23 @@ import {
     conflictsFrom,
     forwardSessionName,
     parseForwardNames,
+    parseForwardPorts,
     parseOrphanForwardNames,
     parseOrphanSyncNames,
     sessionName,
 } from "./mutagen.js";
+
+// What the per-tick reconcile cannot learn from its own baseline: which ports this device is actually holding.
+describe("parseForwardPorts", () => {
+    it("reads one sandbox's bound ports off its session names, ignoring another's", () => {
+        const listed = [forwardSessionName("sandbox-a", 5173), forwardSessionName("sandbox-a", 38_043), forwardSessionName("sandbox-b", 6480)].join(" ");
+        expect(parseForwardPorts(listed, "sandbox-a")).toEqual([5173, 38_043]);
+    });
+
+    it("answers nothing for a sandbox holding none", () => {
+        expect(parseForwardPorts(forwardSessionName("sandbox-b", 6480), "sandbox-a")).toEqual([]);
+    });
+});
 
 // The line between retiring this agent's forwards and terminating the user's own Mutagen sessions. Names are
 // whitespace-free by construction, which is what makes splitting on whitespace safe.

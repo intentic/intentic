@@ -112,8 +112,28 @@ test(`the public address is the floor, dialled as it is and without a loopback c
     await vi.waitFor(() => expect(sockets).toHaveLength(1));
     expect(sockets[0]?.url).toBe(PUBLIC_SOCKET);
     sockets[0]?.opens();
-    expect(said.join(`\n`)).toContain(`connected to ${PUBLIC} as "my-pc"`);
+    // The sandbox is named by the prefix every line of this link's carries, not by the open's own words.
+    expect(said.join(`\n`)).toContain(`${PUBLIC}: connected as "my-pc"`);
     expect(said.join(`\n`)).not.toContain(`loopback`);
+
+    connection.stop();
+    await connection.done;
+});
+
+// One agent holds a link per sandbox and the dial loop's own complaints carry no address: unprefixed, a machine
+// with five links wrote "disconnected (1002); 7172 failed attempts" for two days without naming one of them, and
+// nothing in the log could tell the dead links from the live one.
+test(`a drop names the sandbox that went away, not just the close code`, async () => {
+    vi.useFakeTimers();
+    const { dial, sockets } = dialing([{ base: PUBLIC, local: false }]);
+    const said: string[] = [];
+    const connection = connect(link, `1.0.0`, (line) => void said.push(line), dial);
+
+    await vi.waitFor(() => expect(sockets).toHaveLength(1));
+    sockets[0]?.opens();
+    sockets[0]?.drops(1002);
+
+    expect(said.join(`\n`)).toContain(`${PUBLIC}: disconnected (1002)`);
 
     connection.stop();
     await connection.done;

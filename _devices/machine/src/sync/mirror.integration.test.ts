@@ -14,17 +14,65 @@ import type { ForwardExecutor } from "./mirror.js";
 process.env["HOME"] = mkdtempSync(join(tmpdir(), "machine-mirror-"));
 process.env["USERPROFILE"] = process.env["HOME"];
 const { runPidPath } = await import("../config.js");
-const { fetchWorkspacePorts, reconcileForwards, retireMirroredPort, retirePairingMirror, shouldAutoPauseFileSync, signalExitCode, SyncAuthError } =
-    await import("./mirror.js");
+const {
+    fetchWorkspacePorts,
+    pollBackoffMs,
+    pollDue,
+    reconcileForwards,
+    retireMirroredPort,
+    retirePairingMirror,
+    shouldAutoPauseFileSync,
+    signalExitCode,
+    strandedForwards,
+    SyncAuthError,
+} = await import("./mirror.js");
 const { readState, upsertPairing } = await import("./config.js");
 const { readResidentPid, runForeground, stopResident } = await import("../resident.js");
 const { forwardSessionName, mutagenForwardArgs } = await import("./mutagen.js");
 // setup() creates ~/.intentic/machine on write; the pidfile test writes there directly, so make it first.
 await mkdir(dirname(runPidPath), { recursive: true });
 
-it("auto-pauses only after an hour of uninterrupted failed polls", () => {
-    expect(shouldAutoPauseFileSync(719)).toBe(false);
-    expect(shouldAutoPauseFileSync(720)).toBe(true);
+it("auto-pauses only after an hour of uninterrupted failure", () => {
+    expect(shouldAutoPauseFileSync(60 * 60_000 - 1)).toBe(false);
+    expect(shouldAutoPauseFileSync(60 * 60_000)).toBe(true);
+});
+
+describe("failing-pairing backoff", () => {
+    // Measured in time, not polls: the ladder below stretches the gaps, so a poll count would put the hour hours away.
+    it("polls at full rate for the first minute, then slows, and caps at five", () => {
+        expect(pollBackoffMs(0)).toBe(0);
+        expect(pollBackoffMs(59_999)).toBe(0);
+        expect(pollBackoffMs(60_000)).toBe(30_000);
+        expect(pollBackoffMs(10 * 60_000)).toBe(5 * 60_000);
+        expect(pollBackoffMs(59 * 60 * 60_000)).toBe(5 * 60_000);
+    });
+
+    it("owes a healthy pairing a poll every tick, and a long-dead one one every five minutes", () => {
+        const now = 10_000_000;
+        expect(pollDue(undefined, now)).toBe(true);
+        // Failing for two minutes: on the 30s rung, and a tick 5s after the last try is not due.
+        expect(pollDue({ since: now - 120_000, lastTried: now - 5_000 }, now)).toBe(false);
+        expect(pollDue({ since: now - 120_000, lastTried: now - 31_000 }, now)).toBe(true);
+        // Failing for a day: still probed, but not 240 times an hour.
+        expect(pollDue({ since: now - 86_400_000, lastTried: now - 60_000 }, now)).toBe(false);
+        expect(pollDue({ since: now - 86_400_000, lastTried: now - 5 * 60_001 }, now)).toBe(true);
+    });
+});
+
+describe("strandedForwards", () => {
+    // The gap that cost a dogfooding machine 30 live forward sessions against one mirrored port: the reconcile works
+    // from the persisted baseline, which cannot see a session that baseline lost.
+    it("names every forward Mutagen holds that this pass did not mirror", () => {
+        expect(strandedForwards([5173, 35_373, 38_043], [{ port: 38_043, host: "127.0.0.1" }])).toEqual([5173, 35_373]);
+    });
+
+    it("leaves a mirrored port alone whichever address it dials", () => {
+        expect(strandedForwards([5173], [{ port: 5173, host: "::1" }])).toEqual([]);
+    });
+
+    it("has nothing to sweep when the device holds no forwards at all", () => {
+        expect(strandedForwards([], [{ port: 5173, host: "127.0.0.1" }])).toEqual([]);
+    });
 });
 
 afterEach(() => {
