@@ -170,6 +170,14 @@ const hasSpend = computed(() => current.value.length > 0);
     <div class="@container flex flex-col gap-6">
         <Notice v-if="usageNotice" :of="usageNotice" />
 
+        <p class="flex items-start gap-2 text-xs leading-relaxed text-muted">
+            <Icon name="info-circle" class="mt-0.5 shrink-0" aria-hidden="true" />
+            <span>
+                {{ t(`sandbox.sandboxUsage.apiPricingBasis`) }}
+                <span class="font-medium text-content">{{ t(`sandbox.sandboxUsage.noIntenticCharge`) }}</span>
+            </span>
+        </p>
+
         <!-- One filter row scoping everything below; date first, the control every reader reaches for. -->
         <div class="flex flex-wrap items-center gap-x-4 gap-y-2">
             <SegmentedControl v-model="preset" :options="rangePresets()" />
@@ -221,7 +229,7 @@ const hasSpend = computed(() => current.value.length > 0);
 
             <!-- `!isLoading`, not just the outline: a still-reading ledger hasn't earned the right to say "never run". -->
             <p v-else-if="!isLoading && rows.length === 0" :class="ui.emptyState(`py-8`)">
-                {{ t(`sandbox.sandboxUsage.noTurnsBilledOn`) }}
+                {{ t(`sandbox.sandboxUsage.noUsageYet`) }}
             </p>
 
             <template v-else-if="!isLoading">
@@ -287,19 +295,19 @@ const hasSpend = computed(() => current.value.length > 0);
                         <span class="text-sm tabular-nums text-muted">{{ formatUsd(totals.costUsd) }}</span>
                     </div>
                     <UsageColumnChart v-if="hasSpend" :series="series" :providers="seriesProviders" />
-                    <p v-else :class="ui.emptyState()">{{ t(`sandbox.sandboxUsage.nothingBilledInRange`) }}</p>
+                    <p v-else :class="ui.emptyState()">{{ t(`sandbox.sandboxUsage.noUsageInRange`) }}</p>
                 </Card>
 
                 <div class="grid gap-3 @2xl:grid-cols-2">
                     <Card>
                         <h3 class="mb-3 text-sm font-semibold text-content">{{ t(`sandbox.sandboxUsage.costByModel`) }}</h3>
                         <BarChart v-if="byModel.length > 0" :items="rankedBars(byModel)" :label-width="8" />
-                        <p v-else :class="ui.emptyState()">{{ t(`sandbox.sandboxUsage.nothingBilledInRange`) }}</p>
+                        <p v-else :class="ui.emptyState()">{{ t(`sandbox.sandboxUsage.noUsageInRange`) }}</p>
                     </Card>
                     <Card>
                         <h3 class="mb-3 text-sm font-semibold text-content">{{ t(`sandbox.sandboxUsage.costByAgent`) }}</h3>
                         <BarChart v-if="byAgent.length > 0" :items="rankedBars(byAgent)" :label-width="8" />
-                        <p v-else :class="ui.emptyState()">{{ t(`sandbox.sandboxUsage.nothingBilledInRange`) }}</p>
+                        <p v-else :class="ui.emptyState()">{{ t(`sandbox.sandboxUsage.noUsageInRange`) }}</p>
                     </Card>
                 </div>
 
