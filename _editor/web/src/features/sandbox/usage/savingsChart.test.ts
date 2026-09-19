@@ -1,6 +1,6 @@
 import type { InputSavings, TurnExperiment, TurnMetricReading } from "@intentic/sandbox-contract";
 import { describe, expect, it } from "vitest";
-import { compositionOf, meanLabel, savedByCleaner, stageLabel, verdictsOf } from "./savingsChart";
+import { compositionOf, meanUnit, savedByCleaner, stageLabel, verdictsOf } from "./savingsChart";
 
 // Composition segments must sum exactly to the raw output; everything else on the card is read against that
 // identity.
@@ -128,6 +128,9 @@ describe(`verdictsOf`, () => {
         const verdict = headlineOf([reading({ off: { turns: 31, mean: 6.4 }, marginPct: 35.1 })]);
         expect(verdict).toMatchObject({ value: `No effect`, unit: `measurable in searches per turn`, tone: `muted` });
         expect(verdict.detail).toBe(`±35.1pp (95%) · keep collecting`);
+        // `subject` is the metric alone: a surface that names the reading and then answers it would otherwise
+        // print "measurable in searches per turn — No effect".
+        expect(verdict.subject).toBe(`searches per turn`);
     });
 
     // Rounded to an order of magnitude (5_800 -> 5.8K): coarse, but distinguishes waiting from changing the holdout.
@@ -144,16 +147,16 @@ describe(`verdictsOf`, () => {
 });
 
 // Units are not interchangeable between experiments; mislabeling one as another's unit pictures the wrong quantity.
-describe(`meanLabel`, () => {
-    it(`prints searches to the tenth`, () => {
-        expect(meanLabel(reading(), 3.2)).toBe(`3.2 searches/turn`);
-        expect(meanLabel(reading({ metric: `openingSearches` }), 1.5)).toBe(`1.5 searches/turn`);
+describe(`meanUnit`, () => {
+    it(`counts the search experiment's arms in searches`, () => {
+        expect(meanUnit(reading())).toBe(`searches/turn`);
+        expect(meanUnit(reading({ metric: `openingSearches` }))).toBe(`searches/turn`);
     });
 
     // The map is judged on opening listings and calls before the target file, not searches.
-    it(`prints the map's own quantities`, () => {
-        expect(meanLabel(reading({ metric: `openingListings` }), 0.3)).toBe(`0.3 listings/turn`);
-        expect(meanLabel(reading({ metric: `callsBeforeTarget` }), 4)).toBe(`4 calls`);
+    it(`counts the map's arms in the map's own quantities`, () => {
+        expect(meanUnit(reading({ metric: `openingListings` }))).toBe(`listings/turn`);
+        expect(meanUnit(reading({ metric: `callsBeforeTarget` }))).toBe(`calls`);
     });
 });
 

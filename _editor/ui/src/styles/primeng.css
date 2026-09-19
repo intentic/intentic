@@ -325,6 +325,18 @@
         cursor: default;
     }
 
+/* A NUMBER IN A SHELL HAS NO ROOM FOR THE BROWSER'S SPINNERS — a frameless number field sits inside a box the caller
+   drew around it, two or three digits wide, and the arrows would take a third of it. The framed fields keep theirs. */
+    .field-bare[type="number"] {
+        appearance: textfield;
+    }
+
+    .field-bare[type="number"]::-webkit-inner-spin-button,
+    .field-bare[type="number"]::-webkit-outer-spin-button {
+        appearance: none;
+        margin: 0;
+    }
+
 /* THE FIELD THAT REPLACES A PIECE OF TEXT IN PLACE — a card's title while you rename it, a chat tab, a tree node, a terminal's label. */
     .ui-field-inline {
         border-color: transparent;

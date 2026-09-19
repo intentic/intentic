@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { formatTokens, Row, RowGroup, Verdict } from "@intentic/ui";
+import { formatTokens, InfoHint, Row, RowGroup, Verdict } from "@intentic/ui";
 import ToggleSwitch from "primevue/toggleswitch";
 import { computed } from "vue";
 import { relativeTime } from "../../../chat/models/catalog";
@@ -82,12 +82,15 @@ const cleanerReadings = computed<PanelReading[]>(() => {
             verdict: {
                 value: `${holdout.measuredSavedPct}%`,
                 unit: `of command output removed`,
+                subject: `command output removed`,
                 // Only the measured figure earns `success`; the estimate above it stays muted.
                 tone: holdout.measuredSavedPct > 0 ? `success` : `muted`,
                 detail: t(`sandbox.agentCommandOutput.cleanedCommandsAgainstRaw`),
             },
-            on: holdout.cleaned,
-            off: holdout.heldOut,
+            // No means to draw: this experiment compares shares of command output, not a per-turn rate, so the
+            // panel falls back to naming the two arms' sizes.
+            on: { turns: holdout.cleaned },
+            off: { turns: holdout.heldOut },
         },
     ];
 });
@@ -123,6 +126,13 @@ const savedTokens = computed(() => savedByCleaner(savings.value?.input));
 
 <template>
     <RowGroup :label="t(`sandbox.agentCommandOutput.commandOutput`)">
+        <!-- Same contract as the Code search group: the method sits with the group, the readings stay answers. -->
+        <template #info>
+            <InfoHint :label="t(`sandbox.agentCommandOutput.howThisIsMeasured`)">
+                <span class="block text-xs text-content">{{ t(`sandbox.agentCommandOutput.shareYouSetSkips`) }}</span>
+            </InfoHint>
+        </template>
+
         <Row
             spine
             icon="bolt"
@@ -166,7 +176,7 @@ const savedTokens = computed(() => savedByCleaner(savings.value?.input));
                         class="mt-3"
                         :percent="holdoutPercent"
                         :readings="cleanerReadings"
-                        :note="t(`sandbox.agentCommandOutput.leavesShareCommandsUncleaned`)"
+                        :note="t(`sandbox.agentCommandOutput.ofCommandsRunUncleaned`)"
                         on-label="cleaned"
                         off-label="raw"
                         @commit="(outputHoldout: number) => patch({ outputHoldout })"

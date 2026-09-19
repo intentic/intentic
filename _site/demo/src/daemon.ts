@@ -439,6 +439,26 @@ const ROUTES: readonly (readonly [string, string, Handler])[] = [
     [`GET`, `/settings/savings`, () => json(DEMO_SAVINGS)],
     // No rule has ever fired in a recorded demo; an empty table is the honest answer.
     [`GET`, `/settings/rule-firings`, () => json({})],
+    // Long enough to overflow its section, because that is the only state the policy's surface has a decision to make
+    // in: without it the demo drew "Loading…" here forever and the section could not be looked at at all.
+    [
+        `GET`,
+        `/safety/policy`,
+        () =>
+            json({
+                text: [
+                    `# Safety policy`,
+                    `How you should decide whether to stop and ask me before running something. You are judging one command at a time, and most of what reaches you is ordinary work a pattern match flagged by accident — a command that merely mentions a dangerous verb, a script being written to a file, a search whose pattern happens to look like a deletion. Allow those.`,
+                    `## In this sandbox`,
+                    `Everything under /work is a git worktree and everything in this container is disposable, so building, testing, editing, committing and deleting build output are all ordinary. Don't ask about them, however alarming the command looks in isolation.`,
+                    `Ask me before:`,
+                    `- publishing or releasing anything (npm publish, a GitHub release, a container push);\n- force-pushing or discarding commits that are not this turn's own work;\n- sending a credential anywhere outside this container.`,
+                    `## On my computers`,
+                    `A connected computer is not disposable and its files are not in any worktree. Ask before deleting anything there, before installing system packages, and before anything that touches a running service.`,
+                ].join(`\n\n`),
+                custom: false,
+            }),
+    ],
     // What the two repositories in this workspace declare for themselves, in the three states the group has to be able
     // to show: running, waiting on the owner, and held because the file changed under an adoption.
     [`GET`, `/settings/repo-checks`, () => json(DEMO_REPO_CHECKS)],
@@ -701,6 +721,13 @@ const DEMO_SETTINGS = {
     stableSystemPrompt: true,
     skills: [],
     modelRoles: { "commit-message": [{ provider: `gemini`, model: `gemini-3-1-pro` }] },
+    // The two measured mechanisms are on with a holdout running, since their readout is the only place the
+    // measurement block is drawn and an off switch hides it entirely.
+    iqSearch: true,
+    iqSearchHoldout: 0.1,
+    workspaceMap: true,
+    workspaceMapHoldout: 0.1,
+    sidecars: true,
 };
 
 /* The checks each repository declares for itself (`<repo>/.intentic/checks.json`), one repository per state the group can be in: `web` running. */
@@ -744,6 +771,32 @@ const DEMO_SAVINGS: SavingsReport = {
         gaps: [
             { command: `pnpm -C web build`, commands: 14, tokens: 41_200 },
             { command: `docker compose logs api`, commands: 6, tokens: 28_900 },
+        ],
+    },
+    // The search teaching, in the state most of the block's surface has to draw: both arms past the threshold, the
+    // margin measured, the effect still inside it. The second metric is the same subject read a second way.
+    search: {
+        minTurns: 60,
+        sampleUnit: `conversations`,
+        metrics: [
+            { metric: `searchCalls`, on: { turns: 356, mean: 2.4 }, off: { turns: 111, mean: 2.6 }, marginPct: 19.5, controlTurnsNeeded: 312 },
+            { metric: `openingSearches`, on: { turns: 356, mean: 1.1 }, off: { turns: 111, mean: 1.2 }, marginPct: 24.1 },
+        ],
+    },
+    // The map has resolved on its headline and not on its second reading, so both verdict states are on screen at once.
+    map: {
+        minTurns: 60,
+        sampleUnit: `conversations`,
+        metrics: [
+            {
+                metric: `openingListings`,
+                on: { turns: 355, mean: 0.6 },
+                off: { turns: 100, mean: 1.7 },
+                marginPct: 29.6,
+                deltaPct: -63.7,
+                saved: 388,
+            },
+            { metric: `callsBeforeTarget`, on: { turns: 355, mean: 5.2 }, off: { turns: 100, mean: 5.4 }, marginPct: 17.8, controlTurnsNeeded: 640 },
         ],
     },
     dependencies: {

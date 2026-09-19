@@ -1,13 +1,13 @@
 <script setup lang="ts">
 import type { TurnExperiment } from "@intentic/sandbox-contract";
-import { Row, RowGroup } from "@intentic/ui";
+import { InfoHint, Row, RowGroup } from "@intentic/ui";
 import ToggleSwitch from "primevue/toggleswitch";
 import { computed } from "vue";
 import { useSavings } from "../../usage/useSavings";
 import { useSandboxSettings } from "../../overview/useSandboxSettings";
 import { useSidecarStatus } from "../../../workspace/files/useSidecarStatus";
 import { asPercent } from "../models/numberInputs";
-import { verdictsOf } from "../../usage/savingsChart";
+import { meanUnit, verdictsOf } from "../../usage/savingsChart";
 import MeasurementPanel, { type PanelReading } from "../models/MeasurementPanel.vue";
 import { useT } from "@intentic/ui/i18n";
 
@@ -22,8 +22,8 @@ const { savings } = useSavings({});
 // Session state: the holdout flips whole conversations, never individual turns.
 const iqSearchHoldoutPercent = computed<number>(() => asPercent(settings.value?.iqSearchHoldout));
 
-// Mirrors how the Savings card reports the same experiment, via `verdictsOf` rather than treating each metric
-// as a peer: two readings of one subject would otherwise read as two findings.
+// Through `verdictsOf` rather than treating each metric as a peer: two readings of one subject would otherwise
+// read as two findings. This block is the only place these experiments are reported.
 const readingsOf = (experiment: TurnExperiment | undefined): PanelReading[] => {
     if (experiment === undefined) {
         return [];
@@ -31,7 +31,11 @@ const readingsOf = (experiment: TurnExperiment | undefined): PanelReading[] => {
     const { headline, also } = verdictsOf(experiment);
     return [headline, ...also].flatMap((verdict, index) => {
         const reading = experiment.metrics[index];
-        return reading === undefined ? [] : [{ verdict, on: reading.on.turns, off: reading.off.turns }];
+        if (reading === undefined) {
+            return [];
+        }
+        // Means travel with the arms: the panel draws them as the bars under the verdict they produced.
+        return [{ verdict, on: reading.on, off: reading.off, meanUnit: meanUnit(reading) }];
     });
 };
 
@@ -64,6 +68,13 @@ const shadowSummary = computed<string>(() => {
 
 <template>
     <RowGroup :label="t(`sandbox.agentCodeSearch.codeSearch`)">
+        <!-- Where the method behind the readings below lives, so each one can be the answer alone. -->
+        <template #info>
+            <InfoHint :label="t(`sandbox.agentCodeSearch.howTheseAreMeasured`)">
+                <span class="block text-xs text-content">{{ t(`sandbox.agentCodeSearch.eachSwitchRunsOwn`) }}</span>
+            </InfoHint>
+        </template>
+
         <!-- Loads the iq plugin so the assistant searches with the iq CLI instead of grep/find/glob. -->
         <!-- `spine` hangs the measurement block off this row's name rather than the group's edge. -->
         <Row spine icon="search" :title="t(`sandbox.agentCodeSearch.iqCodeSearch`)" :description="t(`sandbox.agentCodeSearch.useIqSearchCli`)">
@@ -79,7 +90,7 @@ const shadowSummary = computed<string>(() => {
                 <MeasurementPanel
                     :percent="iqSearchHoldoutPercent"
                     :readings="searchReadings"
-                    :note="t(`sandbox.agentCodeSearch.runsShareConversationsWithout`)"
+                    :note="t(`sandbox.agentCodeSearch.ofConversationsRunWithout`)"
                     on-label="taught"
                     off-label="cold"
                     @commit="(iqSearchHoldout: number) => patch({ iqSearchHoldout })"
@@ -101,12 +112,12 @@ const shadowSummary = computed<string>(() => {
                     @update:model-value="(value: boolean) => patch({ workspaceMap: value })"
                 />
             </template>
-            <!-- The map switches between list and document views. -->
+            <!-- Holdout flips whole conversations here too: the map is sent once, on the conversation's opening turn. -->
             <template v-if="settings?.workspaceMap === true" #below>
                 <MeasurementPanel
                     :percent="mapHoldoutPercent"
                     :readings="mapReadings"
-                    :note="t(`sandbox.agentCodeSearch.opensShareConversationsWithout`)"
+                    :note="t(`sandbox.agentCodeSearch.ofConversationsOpenWithout`)"
                     on-label="mapped"
                     off-label="unmapped"
                     @commit="(workspaceMapHoldout: number) => patch({ workspaceMapHoldout })"

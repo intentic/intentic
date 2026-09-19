@@ -260,8 +260,8 @@ grouped by the verb a cleaner would match on, and skips the verbs that hand back
   `git diff` prints what git decides to print, and what it decided was 36 KB of a lock file.
 
 The web renders `input` as one stacked bar (mechanisms + what reached the assistant) on the Usage tab, where the
-range window lives, and each experiment reading through one arms chart (`SavingsArmsChart.vue`, metric-aware).
-Each mechanism's figure is repeated next to its own switch on the Agent tab. Note the ledger
+range window lives. Every experiment reading is drawn beside the switch that runs it, on the Agent tab, through
+`MeasurementPanel.vue`: the verdict, the two arms as bars, and the holdout that split them. Note the ledger
 lives under `logsRoot` and is therefore pruned by `pruneLogFiles` (5 MB → newest 1 MB, 30-day idle): it is a
 window of recent commands, not a lifetime record like `usage.jsonl`.
 

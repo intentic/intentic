@@ -1607,12 +1607,14 @@
         "agentCodeSearch": {
             "codeSearch": "Code search",
             "documentShadows": "Document shadows",
+            "eachSwitchRunsOwn": "Each switch here is measured against itself: the share you set runs without the mechanism, everything else runs with it, and the two are compared over the same window. Whole conversations are flipped, never single turns, because both are sent once and stay in the conversation afterwards. A reading stays a word — Measuring, No effect — until its 95% interval clears zero; only then is it a figure.",
+            "howTheseAreMeasured": "How these are measured",
             "iqCodeSearch": "iq code search",
             "keepDocumentsImagesAudio": "Keep documents, images, audio and archives pre-rendered as text, updated as files change. Open any of them in Workspace to read what an agent reads.",
-            "opensShareConversationsWithout": "Opens this share of conversations without it, as a control.",
+            "ofConversationsOpenWithout": "of conversations open without the map, as a control.",
+            "ofConversationsRunWithout": "of conversations run without iq, as a control.",
             "projectMap": "Project map",
             "provideProjectStructureOverview": "Provide project structure overview to new conversations.",
-            "runsShareConversationsWithout": "Runs this share of conversations without it, as a control.",
             "useIqSearchCli": "Use iq search CLI instead of grep/find/glob."
         },
         "agentCommandOutput": {
@@ -1620,9 +1622,11 @@
             "cleanedCommandsAgainstRaw": "cleaned commands against the raw ones the holdout kept",
             "cleaners": "Cleaners",
             "commandOutput": "Command output",
-            "leavesShareCommandsUncleaned": "Leaves this share of commands uncleaned, as a control.",
+            "howThisIsMeasured": "How this is measured",
             "ledgerFillsAssistantRuns": "The ledger fills as the assistant runs shell commands, one row per command.",
+            "ofCommandsRunUncleaned": "of commands run uncleaned, as a control.",
             "outputSavings": "Output savings",
+            "shareYouSetSkips": "The share you set skips the filter entirely, so what is reported is measured against commands that really did run raw — not an estimate of what cleaning would have removed.",
             "tokensSavedAllTime": "tokens saved, all time",
             "tokensStillReachingAssistant": "tokens still reaching the assistant",
             "trimNoisyShellOutput": "Trim noisy shell output before it reaches the assistant.",
@@ -2427,7 +2431,7 @@
         },
         "measurementPanel": {
             "controlGroupPercentage": "Control group, as a percentage",
-            "measure": "Measure it"
+            "nothingMeasuredYet": "Nothing measured yet."
         },
         "modelGroupRow": {
             "addModelEveryJob": "Add a model for every {toLowerCase} job",

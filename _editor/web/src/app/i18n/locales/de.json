@@ -1607,12 +1607,14 @@
         "agentCodeSearch": {
             "codeSearch": "Codesuche",
             "documentShadows": "Dokumentschatten",
+            "eachSwitchRunsOwn": "Each switch here is measured against itself: the share you set runs without the mechanism, everything else runs with it, and the two are compared over the same window. Whole conversations are flipped, never single turns, because both are sent once and stay in the conversation afterwards. A reading stays a word — Measuring, No effect — until its 95% interval clears zero; only then is it a figure.",
+            "howTheseAreMeasured": "How these are measured",
             "iqCodeSearch": "iq-Codesuche",
             "keepDocumentsImagesAudio": "Dokumente, Bilder, Audio und Archive als Text vorgerendert halten, aktualisiert, während Dateien sich ändern. Öffnen Sie eines davon im Workspace, um zu lesen, was ein Agent liest.",
-            "opensShareConversationsWithout": "Öffnet diesen Anteil der Unterhaltungen ohne das, als Kontrollgruppe.",
+            "ofConversationsOpenWithout": "of conversations open without the map, as a control.",
+            "ofConversationsRunWithout": "of conversations run without iq, as a control.",
             "projectMap": "Projektkarte",
             "provideProjectStructureOverview": "Neuen Unterhaltungen einen Überblick über die Projektstruktur geben.",
-            "runsShareConversationsWithout": "Lässt diesen Anteil der Unterhaltungen ohne das laufen, als Kontrollgruppe.",
             "useIqSearchCli": "Die iq-Such-CLI statt grep/find/glob verwenden."
         },
         "agentCommandOutput": {
@@ -1620,9 +1622,11 @@
             "cleanedCommandsAgainstRaw": "gesäuberte Befehle gegenüber den rohen, die die Kontrollgruppe behalten hat",
             "cleaners": "Säuberer",
             "commandOutput": "Befehlsausgabe",
-            "leavesShareCommandsUncleaned": "Lässt diesen Anteil der Befehle ungesäubert, als Kontrollgruppe.",
+            "howThisIsMeasured": "How this is measured",
             "ledgerFillsAssistantRuns": "Das Register füllt sich, während der Assistent Shell-Befehle ausführt, eine Zeile pro Befehl.",
+            "ofCommandsRunUncleaned": "of commands run uncleaned, as a control.",
             "outputSavings": "Ausgabe-Ersparnis",
+            "shareYouSetSkips": "The share you set skips the filter entirely, so what is reported is measured against commands that really did run raw — not an estimate of what cleaning would have removed.",
             "tokensSavedAllTime": "Tokens gespart, insgesamt",
             "tokensStillReachingAssistant": "Tokens, die den Assistenten weiterhin erreichen",
             "trimNoisyShellOutput": "Lärmende Shell-Ausgabe kürzen, bevor sie den Assistenten erreicht.",
@@ -2427,7 +2431,7 @@
         },
         "measurementPanel": {
             "controlGroupPercentage": "Kontrollgruppe, in Prozent",
-            "measure": "Messen"
+            "nothingMeasuredYet": "Nothing measured yet."
         },
         "modelGroupRow": {
             "addModelEveryJob": "Ein Modell für jeden {toLowerCase}-Job hinzufügen",

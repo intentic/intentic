@@ -114,7 +114,9 @@ const METRICS = {
     callsBeforeTarget: { unit: `calls before the file it edits`, mean: `calls`, total: `calls` },
 } satisfies Record<TurnMetricReading["metric"], { unit: string; mean: string; total: string }>;
 
-export const meanLabel = (reading: TurnMetricReading, value: number): string => `${value} ${METRICS[reading.metric].mean}`;
+// What a reading's per-turn mean counts, for a surface drawing the two arms beside each other; the mean itself is
+// the arm's own number, so this is the unit alone, said once for the pair.
+export const meanUnit = (reading: TurnMetricReading): string => METRICS[reading.metric].mean;
 
 const savedLabel = (reading: TurnMetricReading): string => `${Math.round(reading.saved ?? 0)} ${METRICS[reading.metric].total}`;
 
@@ -123,6 +125,9 @@ const savedLabel = (reading: TurnMetricReading): string => `${Math.round(reading
 export interface ExperimentVerdict {
     readonly value: string;
     readonly unit: string;
+    // The metric alone, for a surface that NAMES a reading before answering it (the panel's footnote rows, where
+    // `unit` would read as "measurable in searches per turn — No effect"). `unit` still leads with the answer.
+    readonly subject: string;
     // Only a measured saving earns `success`; an increase is stated plainly, not alarmed about.
     readonly tone: "success" | "content" | "muted";
     // Qualifier the figure needs to mean anything (margin, payoff, or shortfall); never optional.
@@ -140,7 +145,13 @@ export const readingVerdict = (
     // Margin arrives once both arms clear minTurns; the delta waits for the margin to exclude zero.
     if (reading.marginPct === undefined) {
         const shortfall = Math.max(minTurns - reading.on.turns, minTurns - reading.off.turns);
-        return { value: `Measuring`, unit, tone: `muted`, detail: t(`sandbox.savingsChart.needsPerArmMore`, { minTurns, sampleUnit, shortfall }) };
+        return {
+            value: `Measuring`,
+            unit,
+            subject: unit,
+            tone: `muted`,
+            detail: t(`sandbox.savingsChart.needsPerArmMore`, { minTurns, sampleUnit, shortfall }),
+        };
     }
     // Distinct from "Measuring": the arms are big enough, the effect is just smaller than the noise, and the
     // reader's next move differs (wait vs. question the mechanism).
@@ -156,6 +167,7 @@ export const readingVerdict = (
         return {
             value: `No effect`,
             unit: `measurable in ${unit}`,
+            subject: unit,
             tone: `muted`,
             detail: t(`sandbox.savingsChart.pp95`, { marginPct: reading.marginPct, wait }),
         };
@@ -165,6 +177,7 @@ export const readingVerdict = (
         // Direction is spelled with an arrow AND a sign, so it never rests on colour.
         value: `${reading.deltaPct < 0 ? `↓` : `↑`}${Math.abs(reading.deltaPct)}%`,
         unit,
+        subject: unit,
         tone: reading.deltaPct < 0 ? `success` : `content`,
         detail: `±${reading.marginPct}pp (95%)${(reading.saved ?? 0) > 0 ? ` · ~${savedLabel(reading)} saved in this range` : ``}`,
     };
@@ -175,7 +188,7 @@ export const readingVerdict = (
 // shape.
 export const verdictsOf = (experiment: TurnExperiment | undefined): { headline: ExperimentVerdict; also: ExperimentVerdict[] } => {
     if (experiment === undefined) {
-        return { headline: { value: `Off`, unit: `not being measured`, tone: `muted`, detail: `` }, also: [] };
+        return { headline: { value: `Off`, unit: `not being measured`, subject: `not being measured`, tone: `muted`, detail: `` }, also: [] };
     }
     const [first, ...rest] = experiment.metrics;
     return {
