@@ -50,7 +50,8 @@
 
 /* Hero sizing uses the full viewport width. */
 .home .headline {
-    margin: 0;
+    /* The greeting is gone; keep its line and margin so the axis does not jump. */
+    margin: 2.4rem 0 0;
     font-family: var(--font-display);
     font-size: clamp(2.55rem, 5.6vw, 4.6rem);
     line-height: 1.24;
