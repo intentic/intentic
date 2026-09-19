@@ -78,11 +78,11 @@ vi.mock(`../../accounts/pickerAccounts`, () => ({ usePickerAccounts: () => ({ ha
 
 const { dismissModelPick, modelRequest, requestModelPick, settleModelPick } = await import("./hostModelPicker");
 const { modelLabelFor, providerModels } = await import("../../accounts/providerCatalog");
-const { DEFAULT_EFFORT, DEFAULT_THINKING, defaultRunSettings } = await import("../run-settings/pickerRunSettings");
+const { DEFAULT_EFFORT, DEFAULT_THINKING, defaultPinRunSettings } = await import("../run-settings/pickerRunSettings");
 const { default: HostPickerBody } = await import("./HostPickerBody.vue");
 
 /* WHAT A `chooseRun` ANSWER CARRIES BESIDES THE TIER THE TEST IS ABOUT. */
-const { effort: _seededEffort, ...SEEDED_KNOBS } = defaultRunSettings();
+const SEEDED_KNOBS = defaultPinRunSettings(`claude`, `native`);
 
 let app: App | undefined;
 const mount = (): HTMLElement => {
@@ -209,14 +209,14 @@ it(`opens a run's settings on the defaults and answers with them untouched`, asy
     const result = requestModelPick({ anchor, provider: `claude`, model: `claude-opus-4-6`, chooseRun: true, action: `Fix with agent` });
     const element = mount();
 
-    expect(modelRequest.value).toMatchObject(defaultRunSettings());
+    expect(modelRequest.value).toMatchObject(defaultPinRunSettings(`claude`, `native`));
 
     button(element, `Fix with agent`)!.click();
     await expect(result).resolves.toEqual({
         provider: `claude`,
         model: `claude-opus-4-6`,
         label: modelLabelFor(`claude`, `claude-opus-4-6`),
-        ...defaultRunSettings(),
+        ...defaultPinRunSettings(`claude`, `native`),
     });
 });
 
@@ -239,8 +239,8 @@ it(`offers the model's top tier to a run whose thinking the reader never switche
         provider: `claude`,
         model: `claude-opus-4-6`,
         label: modelLabelFor(`claude`, `claude-opus-4-6`),
-        effort: `max`,
         ...SEEDED_KNOBS,
+        effort: `max`,
     });
 });
 
@@ -272,7 +272,6 @@ it(`repairs a top-tier pick when thinking is switched off under it`, async () =>
         label: modelLabelFor(`claude`, `claude-opus-4-6`),
         effort: `high`,
         thinking: false,
-        fast: false,
     });
 });
 
@@ -302,7 +301,7 @@ it(`carries fast speed into the answer`, async () => {
         model: `claude-opus-4-6`,
         label: modelLabelFor(`claude`, `claude-opus-4-6`),
         harness: `claude-code`,
-        ...defaultRunSettings(),
+        ...defaultPinRunSettings(`claude`, `claude-code`),
         fast: true,
     });
 });
@@ -316,8 +315,9 @@ it(`answers with all three run settings even when the caller named none and the 
     button(element, `Fix with agent`)!.click();
 
     const answer = (await result)!;
-    expect(Object.keys(answer)).toEqual(expect.arrayContaining([`effort`, `thinking`, `fast`]));
-    expect([answer.effort, answer.thinking, answer.fast]).toEqual([DEFAULT_EFFORT, DEFAULT_THINKING, false]);
+    expect(Object.keys(answer)).toEqual(expect.arrayContaining([`effort`, `thinking`]));
+    expect([answer.effort, answer.thinking]).toEqual([DEFAULT_EFFORT, DEFAULT_THINKING]);
+    expect(answer.fast).toBeUndefined();
 });
 
 /* AND THERE IS NO WAY BACK TO "THE MODEL'S OWN DEFAULT" ON SCREEN EITHER, because the panel never offers that state in the first place. */

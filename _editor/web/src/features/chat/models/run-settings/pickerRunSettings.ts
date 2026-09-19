@@ -1,6 +1,12 @@
-import { type AgentHarness, type AgentProvider, capabilitiesOf, fastAllowed } from "@intentic/sandbox-contract";
+import {
+    type AgentHarness,
+    type AgentProvider,
+    type ModelPin,
+    capabilitiesOf,
+    fastAllowed,
+} from "@intentic/sandbox-contract";
 import { computed, type Ref } from "vue";
-import { clampEffort, effortsFor } from "./effortScale";
+import { clampEffort, effortLabelOf, effortsFor } from "./effortScale";
 import { providerModels } from "../../accounts/providerCatalog";
 
 /* HOW THE MODEL ITSELF IS RUN — the tier it thinks at, whether it reasons first, whether the work is bought at the faster rate. */
@@ -24,6 +30,69 @@ export const defaultRunSettings = (): { effort: string; thinking: boolean; fast:
     thinking: DEFAULT_THINKING,
     fast: false,
 });
+
+// Extended thinking is a Claude knob; nothing else publishes one to turn off.
+export const thinkingOfferedFor = (provider: AgentProvider): boolean => provider === `claude`;
+
+const badgesFor = (provider: AgentProvider, modelId: string | undefined) =>
+    (providerModels.value[provider] ?? []).find((option) => option.value === modelId)?.badges;
+
+// Defaults for a stored pin: only knobs the provider and harness would honor on a turn.
+export const defaultPinRunSettings = (
+    provider: AgentProvider,
+    harness: AgentHarness,
+): Partial<Pick<ModelPin, `effort` | `thinking` | `fast`>> => {
+    const capabilities = capabilitiesOf(provider, harness);
+    return {
+        ...(capabilities.effort ? { effort: DEFAULT_EFFORT } : {}),
+        ...(thinkingOfferedFor(provider) ? { thinking: DEFAULT_THINKING } : {}),
+    };
+};
+
+// Cross-provider re-point: carry only knobs the new provider can run.
+export const carryPinKnobs = (
+    from: ModelPin | undefined,
+    provider: AgentProvider,
+    harness: AgentHarness,
+): Partial<ModelPin> => {
+    if (from === undefined) {
+        return {};
+    }
+    const capabilities = capabilitiesOf(provider, harness);
+    return {
+        ...(capabilities.effort && from.effort !== undefined && from.effort !== `` ? { effort: from.effort } : {}),
+        ...(thinkingOfferedFor(provider) && from.thinking !== undefined ? { thinking: from.thinking } : {}),
+    };
+};
+
+// Drops stored knobs a runtime ignores so pins and summaries cannot lie about what will run.
+export const honoredPinKnobs = (pin: ModelPin): ModelPin => {
+    const harness = pin.harness ?? `native`;
+    const capabilities = capabilitiesOf(pin.provider, harness);
+    const badges = badgesFor(pin.provider, pin.model);
+    return {
+        provider: pin.provider,
+        model: pin.model,
+        ...(pin.harness !== undefined ? { harness: pin.harness } : {}),
+        ...(capabilities.effort && pin.effort !== undefined && pin.effort !== `` ? { effort: pin.effort } : {}),
+        ...(thinkingOfferedFor(pin.provider) && pin.thinking !== undefined ? { thinking: pin.thinking } : {}),
+        ...(pin.fast === true && fastAllowed(capabilities, pin.provider, badges) ? { fast: true } : {}),
+    };
+};
+
+// One-line summary beside a pin row; omits knobs the run would not read.
+export const pinKnobSummary = (pin: ModelPin): string | undefined => {
+    const honored = honoredPinKnobs(pin);
+    const effort = effortLabelOf(honored.effort, honored.provider, honored.model, honored.thinking);
+    return (
+        [
+            ...(effort === undefined ? [] : [effort]),
+            ...(honored.thinking === undefined ? [] : [honored.thinking ? `thinking` : `no thinking`]),
+            ...(honored.fast === true ? [`fast`] : []),
+            ...(honored.harness === `claude-code` ? [`Claude Code`] : []),
+        ].join(` · `) || undefined
+    );
+};
 
 /* READING a selection whose fields may still be absent — one made by a route, an extension or an older build, none of which came through a picker. */
 export const runSettingsOf = (settings: {
@@ -58,8 +127,7 @@ export const usePickerRunSettings = (
 /* CLAMPED FOR DISPLAY, NEVER WRITTEN BACK (effortScale.ts's own rule). */
     const level = computed(() => clampEffort(runSettingsOf({ effort: effort.value }).effort, provider.value, model.value, thinkingOn.value));
 
-    // Extended thinking is a Claude knob; nothing else publishes one to turn off.
-    const thinkingOffered = computed(() => provider.value === `claude`);
+    const thinkingOffered = computed(() => thinkingOfferedFor(provider.value));
 
     // Fast speed exists only where the runtime, the route AND the model's own catalog row allow it, so the
     // control appears and disappears with the model instead of sitting greyed under an explanation nobody reads.

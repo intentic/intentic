@@ -18,6 +18,7 @@ vi.mock(`../../../chat/models/ModelPicker.vue`, () => ({
                 h(`div`, [
                     h(`button`, { class: `pick-claude`, onClick: () => emit(`pick`, { provider: `claude`, value: `claude-opus-5` }) }, `Claude`),
                     h(`button`, { class: `pick-codex`, onClick: () => emit(`pick`, { provider: `codex`, value: `gpt-5.6` }) }, `Codex`),
+                    h(`button`, { class: `pick-gemini`, onClick: () => emit(`pick`, { provider: `gemini`, value: `gemini-3-flash-lite` }) }, `Gemini`),
                     slots[`footer`]?.(),
                 ]);
         },
@@ -35,8 +36,6 @@ vi.mock(`../../../chat/accounts/providerCatalog`, () => ({
 }));
 
 const { default: ModelPinPickerBody } = await import("./ModelPinPickerBody.vue");
-// The state a new entry is minted at, read from its source rather than transcribed.
-const { defaultRunSettings } = await import("../../../chat/models/run-settings/pickerRunSettings");
 
 let app: App | undefined;
 const written: unknown[] = [];
@@ -177,11 +176,19 @@ test("re-pointing within the provider keeps every knob; across providers it keep
     await nextTick();
 
     host.querySelector<HTMLButtonElement>(`.pick-codex`)!.click();
-    expect(picked).toEqual([{ ...defaultRunSettings(), provider: `codex`, model: `gpt-5.6`, effort: `high`, harness: `claude-code` }]);
+    expect(picked).toEqual([{ provider: `codex`, model: `gpt-5.6`, effort: `high`, harness: `claude-code` }]);
 
     picked.length = 0;
     host.querySelector<HTMLButtonElement>(`.pick-claude`)!.click();
-    expect(picked).toEqual([{ ...defaultRunSettings(), provider: `claude`, model: `claude-opus-5`, effort: `high` }]);
+    expect(picked).toEqual([{ provider: `claude`, model: `claude-opus-5`, effort: `high`, thinking: true }]);
+});
+
+test("a Google entry stores no effort or thinking knobs the channel cannot honor", async () => {
+    const host = mount({ pin: { provider: `claude`, model: `claude-haiku-4-5`, effort: `high`, thinking: false }, knobs: true });
+    await nextTick();
+
+    host.querySelector<HTMLButtonElement>(`.pick-gemini`)!.click();
+    expect(picked).toEqual([{ provider: `gemini`, model: `gemini-3-flash-lite` }]);
 });
 
 test("a model another entry already holds cannot be pinned twice, but the entry's own can be re-picked", async () => {

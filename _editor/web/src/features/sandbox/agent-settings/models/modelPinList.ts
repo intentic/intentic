@@ -1,7 +1,9 @@
 import { type ModelPin, modelPinKey } from "@intentic/sandbox-contract";
 import { computed, type ComputedRef } from "vue";
-import { effortLabelOf } from "../../../chat/models/run-settings/effortScale";
+import { pinKnobSummary } from "../../../chat/models/run-settings/pickerRunSettings";
 import { type DescribedPin, describePin } from "../../../chat/models/modelPins";
+
+export { pinKnobSummary };
 
 // One editor (add, re-point, promote, remove) over every pinned-model list; lists differ only in how an entry is stored
 // (a key string vs. a full ModelPin), each declaring its own encode/decode. Uses read/write rather than a settings key
@@ -71,16 +73,3 @@ export function pinnedList<T>(list: {
     };
 }
 
-// One-line summary of a pin's knobs, for lists whose pins carry them; only fields actually set are named. Clamped like
-// the composer's own effort (effortScale.ts), since a stored `max` may exceed this model's scale.
-export const pinKnobSummary = (pin: ModelPin): string | undefined => {
-    const effort = effortLabelOf(pin.effort, pin.provider, pin.model, pin.thinking);
-    return (
-        [
-            ...(effort === undefined ? [] : [effort]),
-            ...(pin.thinking === undefined ? [] : [pin.thinking ? `thinking` : `no thinking`]),
-            ...(pin.fast === true ? [`fast`] : []),
-            ...(pin.harness === `claude-code` ? [`Claude Code`] : []),
-        ].join(` · `) || undefined
-    );
-};

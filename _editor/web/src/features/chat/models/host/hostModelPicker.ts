@@ -1,6 +1,6 @@
 import { type AgentHarness, type AgentProvider, type FixResume, sendableEffort } from "@intentic/sandbox-contract";
 import { shallowRef } from "vue";
-import { defaultRunSettings, type RunSettingsPatch } from "../run-settings/pickerRunSettings";
+import { defaultPinRunSettings, type RunSettingsPatch } from "../run-settings/pickerRunSettings";
 import { modelLabelFor } from "../../accounts/providerCatalog";
 
 /* THE SHELL'S MODEL PICKER, OPENED BY SOMETHING THAT IS NOT THE COMPOSER: a run button about to start an agent (useAgentRunPick), an automation rung. */
@@ -115,12 +115,17 @@ export const requestModelPick = (
     }
     return new Promise((resolve) => {
 /* THE ONE PLACE THE HARNESS'S OWN ANSWERS ARE READ, and only for a panel that CARRIES run settings. */
-        const seeded = request.chooseRun === true ? defaultRunSettings() : undefined;
+        const seeded =
+            request.chooseRun === true ? defaultPinRunSettings(request.provider, request.harness ?? `native`) : undefined;
         modelRequest.value = {
             ...request,
             ...(seeded === undefined
                 ? {}
-                : { effort: request.effort ?? seeded.effort, thinking: request.thinking ?? seeded.thinking, fast: request.fast ?? seeded.fast }),
+                : {
+                      ...(seeded.effort !== undefined ? { effort: request.effort ?? seeded.effort } : {}),
+                      ...(seeded.thinking !== undefined ? { thinking: request.thinking ?? seeded.thinking } : {}),
+                      ...(request.fast !== undefined ? { fast: request.fast } : {}),
+                  }),
             action: request.action ?? `Use this model`,
             settle: resolve,
         };

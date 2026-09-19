@@ -14,7 +14,12 @@ import PickerRunSettings from "../../../chat/models/run-settings/PickerRunSettin
 import ProviderLogo from "../../../chat/accounts/ProviderLogo.vue";
 import type { PickerEntry } from "../../../chat/models/modelPickerState";
 import { providerDisplayLabel } from "../../../chat/accounts/providerCatalog";
-import { defaultRunSettings, usePickerRunSettings } from "../../../chat/models/run-settings/pickerRunSettings";
+import {
+    carryPinKnobs,
+    defaultPinRunSettings,
+    honoredPinKnobs,
+    usePickerRunSettings,
+} from "../../../chat/models/run-settings/pickerRunSettings";
 import { useChat } from "../../../chat/run/useChat";
 import { useT } from "@intentic/ui/i18n";
 
@@ -78,14 +83,23 @@ const pruned = (next: ModelPin): ModelPin =>
 
 const configure = (patch: Partial<ModelPin>): void => {
     if (pin !== undefined) {
-        emit(`configure`, pruned({ ...pin, ...patch }));
+        emit(`configure`, honoredPinKnobs(pruned({ ...pin, ...patch })));
     }
 };
 
 /* A pick answers and closes, like the composer; the controls below write through and stay open as entry settings. */
 const pick = (entry: PickerEntry): void => {
-    const kept = pin?.provider === entry.provider ? pin : { effort: pin?.effort };
-    emit(`pick`, pruned({ ...defaultRunSettings(), ...kept, provider: entry.provider, model: entry.value }));
+    const targetHarness = pin?.provider === entry.provider ? (pin.harness ?? `native`) : `native`;
+    const next =
+        pin?.provider === entry.provider && pin !== undefined
+            ? { ...pin, model: entry.value }
+            : {
+                  ...defaultPinRunSettings(entry.provider, targetHarness),
+                  ...carryPinKnobs(pin, entry.provider, targetHarness),
+                  provider: entry.provider,
+                  model: entry.value,
+              };
+    emit(`pick`, honoredPinKnobs(pruned(next)));
     emit(`close`);
 };
 
