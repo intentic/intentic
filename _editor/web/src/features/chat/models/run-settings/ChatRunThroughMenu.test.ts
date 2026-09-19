@@ -11,8 +11,8 @@ import { IconStub } from "@intentic/ui/testing";
 const loops = ref<LoopDesign[]>([]);
 const workflows = ref<Workflow[]>([]);
 
-vi.mock(`../../agents/fleet/useLoopDesigns`, () => ({ useLoopDesigns: () => ({ designs: loops }) }));
-vi.mock(`../../agents/fleet/useWorkflowRuns`, () => ({ useWorkflowRuns: () => ({ designs: workflows }) }));
+vi.mock(`../../../agents/fleet/useLoopDesigns`, () => ({ useLoopDesigns: () => ({ designs: loops }) }));
+vi.mock(`../../../agents/fleet/useWorkflowRuns`, () => ({ useWorkflowRuns: () => ({ designs: workflows }) }));
 
 const { default: ChatRunThroughMenu } = await import("./ChatRunThroughMenu.vue");
 

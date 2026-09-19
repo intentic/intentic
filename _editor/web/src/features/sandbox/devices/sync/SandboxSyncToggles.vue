@@ -2,7 +2,7 @@
 import { syncFolder } from "@intentic/sandbox-contract";
 import { Button, type DeviceSandboxGroup, ui } from "@intentic/ui";
 import { computed, ref } from "vue";
-import type { DeviceOps } from "../deviceOps";
+import type { DeviceOps } from "../runners/deviceOps";
 import { type DeviceRow, managerOf, type MachineRow } from "../deviceRows";
 import { environmentTitle } from "../machineEnvironments";
 import { useSandbox } from "../../client/useSandbox";

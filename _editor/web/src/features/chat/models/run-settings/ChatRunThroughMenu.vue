@@ -2,8 +2,8 @@
 import { Icon } from "@intentic/ui";
 import { type LoopDesign, type Workflow, loopDesignLine } from "@intentic/sandbox-contract";
 import { computed } from "vue";
-import { useLoopDesigns } from "../../agents/fleet/useLoopDesigns";
-import { useWorkflowRuns } from "../../agents/fleet/useWorkflowRuns";
+import { useLoopDesigns } from "../../../agents/fleet/useLoopDesigns";
+import { useWorkflowRuns } from "../../../agents/fleet/useWorkflowRuns";
 import { useT } from "@intentic/ui/i18n";
 
 // One control, one list, two headed sections: a loop and a workflow answer the same question (what happens to this

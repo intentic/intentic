@@ -1,6 +1,6 @@
 <!-- Root shell: router outlet, the session runtime, and app-global overlays not owned by any route (sign-in gate, model picker). -->
 <script setup lang="ts">
-import HostModelPicker from "./features/chat/models/HostModelPicker.vue";
+import HostModelPicker from "./features/chat/models/host/HostModelPicker.vue";
 import { watch } from "vue";
 import { useRouter } from "vue-router";
 import { useAuth } from "./features/auth/useAuth";

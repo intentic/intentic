@@ -3,9 +3,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import sharp from "sharp";
 import { expect, test } from "vitest";
+import { stateRelPath } from "../layout/state-paths.js";
 import { thumbnailable, workspaceThumbnail } from "./workspace-thumbnail.js";
 
-const CACHE = ".intentic/local/cache/thumbnails";
+// The same table entry the module under test builds its cache dir from, so the two cannot drift.
+const CACHE = stateRelPath(".intentic/local/cache/", "thumbnails");
 
 // A picture far larger than a tile, so the point of the exercise — that what comes back is not the original — is real.
 const writePicture = async (path: string, width: number, height: number): Promise<number> => {

@@ -18,10 +18,10 @@ import { useVocabulary } from "../../../core-views/vocabulary";
 import { useChat } from "../../chat/run/useChat";
 import AgentReviewPanel from "./AgentReviewPanel.vue";
 import AgentReviewOutline from "./AgentReviewOutline.vue";
-import AgentReactions from "../board/AgentReactions.vue";
-import AgentSessionMenu from "../board/AgentSessionMenu.vue";
-import SessionChip from "../board/SessionChip.vue";
-import SessionIdentity from "../board/SessionIdentity.vue";
+import AgentReactions from "../board/cards/AgentReactions.vue";
+import AgentSessionMenu from "../board/session/AgentSessionMenu.vue";
+import SessionChip from "../board/session/SessionChip.vue";
+import SessionIdentity from "../board/session/SessionIdentity.vue";
 import { useT } from "@intentic/ui/i18n";
 
 // Drill-in for one agent (/agents/:id): one canonical chat surface per form factor.

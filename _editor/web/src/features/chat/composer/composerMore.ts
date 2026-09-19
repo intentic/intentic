@@ -1,7 +1,7 @@
 import type { PermissionMode } from "@intentic/sandbox-contract";
 import type { IconName } from "@intentic/ui";
 import { modeMeta } from "../models/catalog";
-import type { RunThroughState } from "../models/useRunThrough";
+import type { RunThroughState } from "../models/run-settings/useRunThrough";
 import { t } from "@intentic/ui/i18n";
 
 // One rule for the composer row vs overflow: a control at its default is a named row in the overflow

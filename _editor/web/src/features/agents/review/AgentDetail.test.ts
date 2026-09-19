@@ -39,9 +39,9 @@ vi.mock("@intentic/ui", async () => {
 
 vi.mock("../../chat/panel/ChatPanel.vue", () => ({ default: { render: () => null } }));
 vi.mock("./AgentReviewPanel.vue", () => ({ default: { render: () => null } }));
-vi.mock("../board/AgentSessionMenu.vue", () => ({ default: { render: () => null } }));
-vi.mock("../board/SessionChip.vue", () => ({ default: { render: () => null } }));
-vi.mock("../board/SessionIdentity.vue", () => ({ default: { render: () => null } }));
+vi.mock("../board/session/AgentSessionMenu.vue", () => ({ default: { render: () => null } }));
+vi.mock("../board/session/SessionChip.vue", () => ({ default: { render: () => null } }));
+vi.mock("../board/session/SessionIdentity.vue", () => ({ default: { render: () => null } }));
 // The phone's chats sheet hangs off the title; a header test only cares that the title is its handle.
 vi.mock("../../chat/tabs/ChatSwitcherSheet.vue", () => ({ default: { render: () => null } }));
 

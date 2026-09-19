@@ -5,10 +5,7 @@
         "_editor/web/src/features/workspace/files": 31,
         "_editor/web/src/features/workspace/viewers": 42,
         "_extensions/viewers/src": 31,
-        "_sandbox/sandbox/src/capabilities": 35,
-        "_sandbox/sandbox/src/capabilities/handlers": 35,
-        "_shared/sandbox-contract/src/contracts": 42,
-        "_shared/sandbox-contract/src/schemas": 42
+        "_sandbox/sandbox/src/capabilities": 35
     },
     "collisions": {
         "_deploy/cli": 2,

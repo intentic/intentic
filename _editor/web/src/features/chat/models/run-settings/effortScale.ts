@@ -1,5 +1,5 @@
 import { type AgentProvider, type CatalogOption, effortAllowed, EFFORT_TIERS, NATIVE_PROVIDERS, type NativeProvider } from "@intentic/sandbox-contract";
-import { providerModels } from "../accounts/providerCatalog";
+import { providerModels } from "../../accounts/providerCatalog";
 
 // Which reasoning tiers a model offers, and what a pick runs at: a scale is a property of the model, not the provider
 // (Kimi K2.7 stops at 'high', K3 at 'max'). Read at every use (composer segments, Conversation.effort) rather than

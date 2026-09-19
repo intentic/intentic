@@ -102,7 +102,7 @@ vi.mock(`../overview/useSandboxVersion`, () => ({ useSandboxVersion: () => ({ la
 const capabilities = ref<{ id: string; kind: string; config: Record<string, string> }[]>([]);
 vi.mock(`../../capabilities/connect/useCapabilities`, () => ({ useCapabilities: () => ({ capabilities }) }));
 // ContainerHealthCard needs the active sandbox's boot report, which this file's useSandbox stub omits.
-vi.mock(`./ContainerHealthCard.vue`, () => ({ default: defineComponent({ render: () => null }) }));
+vi.mock(`./health/ContainerHealthCard.vue`, () => ({ default: defineComponent({ render: () => null }) }));
 vi.mock(`./sync/DesktopSyncCard.vue`, () => ({ default: defineComponent({ render: () => null }) }));
 vi.mock(`../access/ControlTokensSection.vue`, () => ({ default: defineComponent({ render: () => null }) }));
 // Which machine is on screen lives in the URL, so the harness carries a real (reactive) one: the tab reads
@@ -139,7 +139,7 @@ vi.mock(import(`@intentic/sandbox-contract`), async (importOriginal) => {
 const runnersList = ref<{ id: string; host?: string; online: boolean; parity?: string; facts?: { cpus: number; memoryMb: number; load: number } }[]>(
     [],
 );
-vi.mock(`./useRunners`, () => ({
+vi.mock(`./runners/useRunners`, () => ({
     useRunners: () => ({ runners: runnersList, ready: runnersList, isLoading: ref(false), refetch: () => {} }),
     createRunner: () => Promise.resolve(`made`),
     removeRunner: () => Promise.resolve(`removed`),

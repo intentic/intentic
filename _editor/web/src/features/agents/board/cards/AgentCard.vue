@@ -4,17 +4,17 @@ import { createInlineRename } from "@intentic/ui/inline-rename";
 import { errorMessage, useNow } from "@intentic/ui/async";
 import { computed, ref, useTemplateRef } from "vue";
 import { RouterLink } from "vue-router";
-import { requestLandAgent } from "../fleet/agentActions";
-import { refreshAcross } from "../../sandbox/live/fleetAcross";
-import { useRole } from "../../sandbox/secrets/useRole";
-import { useAudience } from "../../../app/useAudience";
-import { useVocabulary } from "../../../core-views/vocabulary";
-import OriginMark from "../../../components/OriginMark.vue";
+import { requestLandAgent } from "../../fleet/agentActions";
+import { refreshAcross } from "../../../sandbox/live/fleetAcross";
+import { useRole } from "../../../sandbox/secrets/useRole";
+import { useAudience } from "../../../../app/useAudience";
+import { useVocabulary } from "../../../../core-views/vocabulary";
+import OriginMark from "../../../../components/OriginMark.vue";
 import AgentReactions from "./AgentReactions.vue";
-import StartedByMark from "./StartedByMark.vue";
-import UnsentMark from "../../../components/UnsentMark.vue";
-import WorkflowMark from "../../../components/WorkflowMark.vue";
-import { dropActionFor, type PendingAction } from "./laneDrop";
+import StartedByMark from "../session/StartedByMark.vue";
+import UnsentMark from "../../../../components/UnsentMark.vue";
+import WorkflowMark from "../../../../components/WorkflowMark.vue";
+import { dropActionFor, type PendingAction } from "../laneDrop";
 import {
     activityIcon,
     activityLine,
@@ -37,24 +37,24 @@ import {
     unregistered,
     watching,
     watchLine,
-} from "../fleet/agentStatus";
-import { cacheCooling, cacheWarm } from "../fleet/promptCache";
+} from "../../fleet/agentStatus";
+import { cacheCooling, cacheWarm } from "../../fleet/promptCache";
 // Not an emit: the destination is the same for every host this card has, and the review panel's own ladder sends the
 // user to exactly this place for exactly this refusal.
-import { openChanges } from "../../workspace/changes/openChanges";
+import { openChanges } from "../../../workspace/changes/openChanges";
 import { type MatchSnippet, providerLabel } from "@intentic/sandbox-contract";
-import { sessionCategory } from "../../../app/sessionCategory";
-import IdentityTile from "../../capabilities/connect/IdentityTile.vue";
-import MatchLine from "../../../components/MatchLine.vue";
-import SessionChip from "./SessionChip.vue";
-import { boxImageOf, boxNameOf } from "../fleet/fleetScope";
-import { accountBadge } from "./accountChip";
-import { providerAccounts } from "../../chat/accounts/providerAccounts";
-import { markSegments } from "../review/markSegments";
-import { useAgents } from "../fleet/useAgents";
-import { canArchive, type FleetAgent } from "../fleet/useAgents-fleet";
-import { relativeTime } from "../../chat/models/catalog";
-import { modelLabelFor } from "../../chat/accounts/providerCatalog";
+import { sessionCategory } from "../../../../app/sessionCategory";
+import IdentityTile from "../../../capabilities/connect/IdentityTile.vue";
+import MatchLine from "../../../../components/MatchLine.vue";
+import SessionChip from "../session/SessionChip.vue";
+import { boxImageOf, boxNameOf } from "../../fleet/fleetScope";
+import { accountBadge } from "../session/accountChip";
+import { providerAccounts } from "../../../chat/accounts/providerAccounts";
+import { markSegments } from "../../review/markSegments";
+import { useAgents } from "../../fleet/useAgents";
+import { canArchive, type FleetAgent } from "../../fleet/useAgents-fleet";
+import { relativeTime } from "../../../chat/models/catalog";
+import { modelLabelFor } from "../../../chat/accounts/providerCatalog";
 import { useT } from "@intentic/ui/i18n";
 
 // One fleet agent: identity tile + title + status chip, a model/session line, and a closing summary line (stats,

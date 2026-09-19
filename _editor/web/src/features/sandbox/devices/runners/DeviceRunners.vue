@@ -6,7 +6,7 @@ import { noticeFrom } from "@intentic/ui/async";
 import DeviceOpFailure from "./DeviceOpFailure.vue";
 import { runnerFallback } from "./deviceFallback";
 import { createRunner, removeRunner, syncRunnerSettings, updateRunner, useRunners } from "./useRunners";
-import { useHubWork } from "../../../shell/hub/hubWork";
+import { useHubWork } from "../../../../shell/hub/hubWork";
 import { useT } from "@intentic/ui/i18n";
 
 // This sandbox's runners on one device: containers it keeps there to run agents (docs/remote-runners-plan.md),

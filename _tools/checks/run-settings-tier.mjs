@@ -11,11 +11,11 @@
 import { at, blank, finishFindings, tags, templateSource, templatesUnder, waiverList } from "./lib/templates.mjs";
 
 /** The controls themselves, and the meter one of them mounts: between them they own every word below. */
-const OWNERS = new Set([`_editor/web/src/features/chat/models/PickerRunSettings.vue`, `_editor/web/src/features/chat/composer/EffortMeter.vue`]);
+const OWNERS = new Set([`_editor/web/src/features/chat/models/run-settings/PickerRunSettings.vue`, `_editor/web/src/features/chat/composer/EffortMeter.vue`]);
 
 /* The two bindings of the meter, and the reason there are two: the composer keeps one beside its model pill. */
 const METER_MOUNTS = new Set([
-    `_editor/web/src/features/chat/models/PickerRunSettings.vue`,
+    `_editor/web/src/features/chat/models/run-settings/PickerRunSettings.vue`,
     `_editor/web/src/features/chat/composer/ComposerEffort.vue`,
 ]);
 

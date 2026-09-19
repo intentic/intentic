@@ -4,10 +4,10 @@ import { sandboxVerbPrompt, VERB_LABEL } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
 import { computed, type ComputedRef, type Ref, ref, watch } from "vue";
 import { agentFallback, sandboxFallback, syncFallback } from "./deviceFallback";
-import { type DeviceRow, isSelfMachine, type MachineRow, managerOf } from "./deviceRows";
-import { manageDeviceSandbox, revokeSyncDevice, runDeviceAgentFlow, runDeviceCommand } from "./useDevices";
-import { useSandbox } from "../client/useSandbox";
-import { type HubWork, useHubWork } from "../../../shell/hub/hubWork";
+import { type DeviceRow, isSelfMachine, type MachineRow, managerOf } from "../deviceRows";
+import { manageDeviceSandbox, revokeSyncDevice, runDeviceAgentFlow, runDeviceCommand } from "../useDevices";
+import { useSandbox } from "../../client/useSandbox";
+import { type HubWork, useHubWork } from "../../../../shell/hub/hubWork";
 import { t } from "@intentic/ui/i18n";
 
 // Everything one device page does TO its machine: the container verbs, the two sync switches, the agent's

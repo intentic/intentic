@@ -22,12 +22,12 @@ import {
 } from "@intentic/ui";
 import { computed, ref } from "vue";
 import { type RouteLocationRaw, RouterLink } from "vue-router";
-import DeviceConcern from "./DeviceConcern.vue";
-import DeviceOpFailure from "./DeviceOpFailure.vue";
-import DeviceRunners from "./DeviceRunners.vue";
+import DeviceConcern from "./health/DeviceConcern.vue";
+import DeviceOpFailure from "./runners/DeviceOpFailure.vue";
+import DeviceRunners from "./runners/DeviceRunners.vue";
 import { boardRoute } from "./deviceLinks";
 import { deviceAgentPanel } from "./deviceAgent";
-import { blockAttention, type DeviceCardFix, deviceAttention } from "./deviceAttention";
+import { blockAttention, type DeviceCardFix, deviceAttention } from "./health/deviceAttention";
 import {
     commandable,
     type DeviceRow,
@@ -45,7 +45,7 @@ import {
     pausable,
     selfGroup,
 } from "./deviceRows";
-import { useDeviceOps } from "./deviceOps";
+import { useDeviceOps } from "./runners/deviceOps";
 import { environmentFacts, environmentTitle, wslDistroRows } from "./machineEnvironments";
 import { type ConflictAsk, conflictAsk } from "./sync/conflictAsk";
 import SandboxSyncToggles from "./sync/SandboxSyncToggles.vue";

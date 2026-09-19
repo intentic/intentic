@@ -1,6 +1,6 @@
 import { type ModelPin, modelPinKey } from "@intentic/sandbox-contract";
 import { computed, type ComputedRef } from "vue";
-import { effortLabelOf } from "../../../chat/models/effortScale";
+import { effortLabelOf } from "../../../chat/models/run-settings/effortScale";
 import { type DescribedPin, describePin } from "../../../chat/models/modelPins";
 
 // One editor (add, re-point, promote, remove) over every pinned-model list; lists differ only in how an entry is stored

@@ -1,10 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { Conversation } from "../session/conversation";
+import { Conversation } from "../../session/conversation";
 import { clampEffort, effortsFor } from "./effortScale";
-import { providerModels } from "../accounts/providerCatalog";
+import { providerModels } from "../../accounts/providerCatalog";
 
 // Nothing here sends a turn; stubbed only so importing Conversation doesn't pull in the daemon client.
-vi.mock("../../sandbox/client/sandboxClient", () => ({ sandboxRequest: vi.fn() }));
+vi.mock("../../../sandbox/client/sandboxClient", () => ({ sandboxRequest: vi.fn() }));
 
 // Effort scale is a property of the model, not the provider (Kimi K2.7 stops at 'high', K3 at 'max'), so a pick carried
 // across models is routinely off-scale. Every read goes through the clamp.

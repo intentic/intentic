@@ -19,7 +19,7 @@ import ChatTabList from "./ChatTabList.vue";
 import { IconStub } from "@intentic/ui/testing";
 
 // The board's card reads browser globals through its import chain, so it's pulled in once the environment is up.
-const { default: AgentCard } = await import("../../agents/board/AgentCard.vue");
+const { default: AgentCard } = await import("../../agents/board/cards/AgentCard.vue");
 
 vi.hoisted(() => {
     globalThis.Element.prototype.scrollIntoView = function scrollIntoView(): void {};

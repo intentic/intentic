@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { Button } from "@intentic/ui";
 import { ref } from "vue";
-import { requestModelPick } from "./hostModelPicker";
+import { requestModelPick } from "./host/hostModelPicker";
 import { usePaneView } from "../panel/useChat-view";
 import { useT } from "@intentic/ui/i18n";
 

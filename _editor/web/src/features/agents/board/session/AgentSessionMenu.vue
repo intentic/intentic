@@ -1,11 +1,11 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import { effectiveAutoLand, effectiveLimitMove, effectiveLimitResume, landedAway, limited, writingNow } from "../fleet/agentStatus";
-import type { useAgentChanges } from "../review/useAgentChanges";
-import { useAgents } from "../fleet/useAgents";
-import { useRole } from "../../sandbox/secrets/useRole";
-import { landsByDefault } from "../../sandbox/environment/rules";
-import { useSandboxSettings } from "../../sandbox/overview/useSandboxSettings";
+import { effectiveAutoLand, effectiveLimitMove, effectiveLimitResume, landedAway, limited, writingNow } from "../../fleet/agentStatus";
+import type { useAgentChanges } from "../../review/useAgentChanges";
+import { useAgents } from "../../fleet/useAgents";
+import { useRole } from "../../../sandbox/secrets/useRole";
+import { landsByDefault } from "../../../sandbox/environment/rules";
+import { useSandboxSettings } from "../../../sandbox/overview/useSandboxSettings";
 import { useT } from "@intentic/ui/i18n";
 
 // Session-level actions (refresh, land, hold, archive, discard), as opposed to diff actions; once-per-session decisions

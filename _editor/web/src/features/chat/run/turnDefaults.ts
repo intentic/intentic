@@ -1,7 +1,7 @@
 import { type AgentHarness, type AgentProvider, NATIVE_PROVIDERS, type NativeProvider, type PermissionMode } from "@intentic/sandbox-contract";
 import { definePreference } from "@intentic/ui/preference";
 import { accessKnown, providerReady } from "../session/access";
-import { DEFAULT_EFFORT, DEFAULT_THINKING } from "../models/pickerRunSettings";
+import { DEFAULT_EFFORT, DEFAULT_THINKING } from "../models/run-settings/pickerRunSettings";
 import { defaultModelFor, perProvider, providerModels, providerModelsState } from "../accounts/providerCatalog";
 
 // What a new conversation starts on: the composer's last deliberate pick (model, provider, effort), never a fallback or

@@ -738,11 +738,21 @@ jobs:
   # where nobody can act teaches everyone reading it that red means nothing, which is this repository's own
   # finding about a different gate (docs/audits/ci-failure-audit.md).
   #
-  # Two moments upstream now refuse the part that HAS an author, so what reaches this job is the part that does
-  # not: the edit moment runs every scoped check on the one file just written (.intentic/checks.json), and the
-  # turn refuses the problem lines its own diff added, measured against a HEAD worktree. A red here should now
-  # mean a standing cost nobody caused — a directory the tree grew into, a link a rename broke — which is what
-  # this job was always for and could not be while it was also the only net under every new line.
+  # THREE moments upstream now refuse the part that HAS an author, so what reaches this job is the part that does
+  # not: the edit moment runs every scoped check on the one file just written (.intentic/checks.json); the turn
+  # refuses the problem lines its own diff added, measured against a HEAD worktree; and the PUSH refuses the lines
+  # its range added, measured against the merge-base.
+  #
+  # The third was the missing one, and its absence is most of this job's history. A turn measures one worktree
+  # against its own HEAD — a tree that never becomes main — so a rule that COUNTS composes wrongly across
+  # conversations: two turns that each add one file to a directory of thirty are both green on their own and over
+  # the limit once they land together, and neither could have seen it. That is 13 of this job's 14 failures
+  # (docs/audits/tidy-job.md). The push is the first tree that becomes main and the last one with somebody
+  # standing next to it, which is why the refusal now sits there too.
+  #
+  # A red here should now mean a standing cost nobody caused — a directory the tree grew into, a link a rename
+  # broke, a package that went private — which is what this job was always for and could not be while it was also
+  # the only net under every new line.
   #
   # A FRESH CHECKOUT IS THE POINT. Half of what these rules measure is invisible on a persistent workspace (the
   # layout check's ghost directories are build output a rename left on a runner that never cleans) and half is

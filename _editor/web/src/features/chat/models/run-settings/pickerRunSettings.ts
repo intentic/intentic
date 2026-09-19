@@ -1,7 +1,7 @@
 import { type AgentHarness, type AgentProvider, capabilitiesOf, fastAllowed } from "@intentic/sandbox-contract";
 import { computed, type Ref } from "vue";
 import { clampEffort, effortsFor } from "./effortScale";
-import { providerModels } from "../accounts/providerCatalog";
+import { providerModels } from "../../accounts/providerCatalog";
 
 /* HOW THE MODEL ITSELF IS RUN — the tier it thinks at, whether it reasons first, whether the work is bought at the faster rate. */
 

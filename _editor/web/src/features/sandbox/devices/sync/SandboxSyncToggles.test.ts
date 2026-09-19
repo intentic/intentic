@@ -8,7 +8,7 @@ import { IconStub } from "@intentic/ui/testing";
 import PrimeVue from "primevue/config";
 import { afterEach, expect, it, vi } from "vitest";
 import { type App, createApp, h, nextTick } from "vue";
-import type { DeviceOps } from "../deviceOps";
+import type { DeviceOps } from "../runners/deviceOps";
 import type { DeviceRow, MachineRow } from "../deviceRows";
 
 vi.mock(`../../client/useSandbox`, () => ({

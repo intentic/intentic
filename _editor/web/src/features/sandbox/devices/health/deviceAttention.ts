@@ -2,8 +2,8 @@ import type { Device } from "@intentic/sandbox-contract";
 import type { IconName } from "@intentic/ui";
 import type { NoticeTone } from "@intentic/ui/notice";
 import { timeAgo } from "@intentic/ui/format";
-import { deviceQuiet, deviceReconnecting, type ManageBlock } from "./deviceFacts";
-import type { DeviceRow } from "./deviceRows";
+import { deviceQuiet, deviceReconnecting, type ManageBlock } from "../deviceFacts";
+import type { DeviceRow } from "../deviceRows";
 import { t } from "@intentic/ui/i18n";
 
 // Everything a device wants from the reader, as one ordered list: the gap that stops it answering, the age

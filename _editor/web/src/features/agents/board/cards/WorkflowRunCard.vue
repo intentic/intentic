@@ -2,8 +2,8 @@
 import { Icon, timeAgo, ui } from "@intentic/ui";
 import type { WorkflowRun } from "@intentic/sandbox-contract";
 import { computed } from "vue";
-import { laneOfRun, runningTitles, spentOn } from "../fleet/useWorkflowRuns";
-import { liveSessions } from "../../chat/run/chatRun";
+import { laneOfRun, runningTitles, spentOn } from "../../fleet/useWorkflowRuns";
+import { liveSessions } from "../../../chat/run/chatRun";
 import { useT } from "@intentic/ui/i18n";
 
 // A workflow run's row on the board, an agent card's sibling, not one: same shell (radius, border, lane bar, hover)

@@ -1,10 +1,10 @@
 <script setup lang="ts">
 import { Button, CodeField, ResponsiveOverlay, useDevice } from "@intentic/ui";
 import { computed, nextTick, onMounted, ref } from "vue";
-import ChatModelPicker from "../../chat/models/ChatModelPicker.vue";
-import ComposerEffort from "../../chat/composer/ComposerEffort.vue";
-import ComposerModelPill from "../../chat/composer/ComposerModelPill.vue";
-import type { Conversation } from "../../chat/session/conversation";
+import ChatModelPicker from "../../../chat/models/ChatModelPicker.vue";
+import ComposerEffort from "../../../chat/composer/ComposerEffort.vue";
+import ComposerModelPill from "../../../chat/composer/ComposerModelPill.vue";
+import type { Conversation } from "../../../chat/session/conversation";
 import { useT } from "@intentic/ui/i18n";
 
 // The chat composer's own controls (model picker, effort, fill ramp, composer-* classes) reused exactly over a

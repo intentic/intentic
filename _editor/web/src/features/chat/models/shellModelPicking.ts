@@ -1,9 +1,9 @@
 import { type AgentHarness, type AgentProvider, type FixResume, type ModelRole, sendableEffort } from "@intentic/sandbox-contract";
 import type { AgentRunChoice, ModelPicking } from "@intentic/ui";
 import { effectScope } from "vue";
-import { effortLabelOf } from "./effortScale";
+import { effortLabelOf } from "./run-settings/effortScale";
 import { type RoleModel, useRoleModel } from "../accounts/roleModel";
-import { requestModelPick } from "./hostModelPicker";
+import { requestModelPick } from "./host/hostModelPicker";
 import { modelLabelFor } from "../accounts/providerCatalog";
 import { useChat } from "../run/useChat";
 

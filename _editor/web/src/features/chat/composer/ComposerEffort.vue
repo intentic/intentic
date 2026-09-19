@@ -2,7 +2,7 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import type { Conversation } from "../session/conversation";
-import { effortsFor } from "../models/effortScale";
+import { effortsFor } from "../models/run-settings/effortScale";
 import EffortMeter from "./EffortMeter.vue";
 
 const {

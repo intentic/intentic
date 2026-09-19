@@ -2,13 +2,13 @@ import type { IconName } from "@intentic/ui";
 import { type LoopDesign, loopFromDesign, type Workflow } from "@intentic/sandbox-contract";
 import { computed, type ComputedRef, type Ref, ref } from "vue";
 import { useRouter } from "vue-router";
-import { useAgents } from "../../agents/fleet/useAgents";
-import { useLoopDesigns } from "../../agents/fleet/useLoopDesigns";
-import { startLoop, stopLoop } from "../../agents/fleet/useLoops";
-import { useWorkflowRuns } from "../../agents/fleet/useWorkflowRuns";
-import { navigateInApp } from "../../../shell/window/mainWindow";
-import type { Conversation } from "../session/conversation";
-import { openRunInChat } from "../run/openRun";
+import { useAgents } from "../../../agents/fleet/useAgents";
+import { useLoopDesigns } from "../../../agents/fleet/useLoopDesigns";
+import { startLoop, stopLoop } from "../../../agents/fleet/useLoops";
+import { useWorkflowRuns } from "../../../agents/fleet/useWorkflowRuns";
+import { navigateInApp } from "../../../../shell/window/mainWindow";
+import type { Conversation } from "../../session/conversation";
+import { openRunInChat } from "../../run/openRun";
 
 // The one control for what the next message runs through, mutually exclusive states, in this precedence:
 //

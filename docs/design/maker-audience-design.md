@@ -23,7 +23,7 @@ What that person meets today, by surface:
 | Workspace sidebar | Files / Changes, the second being VSCode's SCM: repos, staged and unstaged sides, Stage, Unstage, Commit with a message box, Discard, Publish, Sync, Push, ahead and behind counts, Fetch every repo | `features/workspace/changes/ReviewPanel.vue`, `push/outgoingWork.ts` |
 | Row actions | personas, checks, and the cog onto a repository's management panel (git history, docs, codebase health, apps, dependencies as its tabs) | `features/workspace/explorer/rowActions.ts`, `directory-ui/directoryTabs.ts` |
 | Empty workspace | "Clone a repository. Paste a Git address" | `features/workspace/explorer/WorkspaceEmptyState.vue` |
-| Agents board | a card names its branch `agent/…`, its runner and model, and offers Land now, Land again, Request land, Discard | `features/agents/board/AgentCard.vue` |
+| Agents board | a card names its branch `agent/…`, its runner and model, and offers Land now, Land again, Request land, Discard | `features/agents/board/cards/AgentCard.vue` |
 | Agent review | a file list with diffs, mark as reviewed, a conflict report naming paths that refused | `features/agents/review/` |
 | Terminal | a shell | the shell's own panel |
 

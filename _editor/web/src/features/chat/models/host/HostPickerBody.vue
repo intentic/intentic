@@ -2,14 +2,14 @@
 import { Button } from "@intentic/ui";
 import { computed } from "vue";
 import { commitModelPick, dismissModelPick, modelRequest, stageModelPick } from "./hostModelPicker";
-import { effortLabelOf } from "./effortScale";
-import { modelLabelFor } from "../accounts/providerCatalog";
-import type { PickerEntry } from "./modelPickerState";
-import { usePickerAccounts } from "../accounts/pickerAccounts";
-import { usePickerRunSettings } from "./pickerRunSettings";
-import ModelPicker from "./ModelPicker.vue";
-import PickerAccounts from "../accounts/PickerAccounts.vue";
-import PickerRunSettings from "./PickerRunSettings.vue";
+import { effortLabelOf } from "../run-settings/effortScale";
+import { modelLabelFor } from "../../accounts/providerCatalog";
+import type { PickerEntry } from "../modelPickerState";
+import { usePickerAccounts } from "../../accounts/pickerAccounts";
+import { usePickerRunSettings } from "../run-settings/pickerRunSettings";
+import ModelPicker from "../ModelPicker.vue";
+import PickerAccounts from "../../accounts/PickerAccounts.vue";
+import PickerRunSettings from "../run-settings/PickerRunSettings.vue";
 import { useT } from "@intentic/ui/i18n";
 
 const t = useT();

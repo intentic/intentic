@@ -7,10 +7,10 @@ import { AUTO_KEY, autoEntry, type PickerEntry } from "./modelPickerState";
 import { usePickerAccounts } from "../accounts/pickerAccounts";
 import { modelLabelFor } from "../accounts/providerCatalog";
 import { useSandboxSettings } from "../../sandbox/overview/useSandboxSettings";
-import { type RunSettingsPatch, usePickerRunSettings } from "./pickerRunSettings";
+import { type RunSettingsPatch, usePickerRunSettings } from "./run-settings/pickerRunSettings";
 import ModelPicker from "./ModelPicker.vue";
 import PickerAccounts from "../accounts/PickerAccounts.vue";
-import PickerRunSettings from "./PickerRunSettings.vue";
+import PickerRunSettings from "./run-settings/PickerRunSettings.vue";
 import { useT } from "@intentic/ui/i18n";
 
 // Chat's binding of the shared model picker: the list, the who-serves-the-turn block, and per-conversation footer

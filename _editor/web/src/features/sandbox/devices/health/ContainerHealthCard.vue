@@ -3,12 +3,12 @@ import type { Device } from "@intentic/sandbox-contract";
 import { Button, Code, Icon } from "@intentic/ui";
 import { computed, ref } from "vue";
 import { RouterLink } from "vue-router";
-import { apiClient } from "../../../lib/useApi";
-import { containerNotices } from "../overview/containerHealth";
-import { manageDeviceSandbox, useDevices, useHostRunning } from "./useDevices";
-import { useSandbox } from "../client/useSandbox";
-import { useRole } from "../secrets/useRole";
-import { useHubWork } from "../../../shell/hub/hubWork";
+import { apiClient } from "../../../../lib/useApi";
+import { containerNotices } from "../../overview/containerHealth";
+import { manageDeviceSandbox, useDevices, useHostRunning } from "../useDevices";
+import { useSandbox } from "../../client/useSandbox";
+import { useRole } from "../../secrets/useRole";
+import { useHubWork } from "../../../../shell/hub/hubWork";
 import { useT } from "@intentic/ui/i18n";
 
 const t = useT();

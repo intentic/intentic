@@ -32,7 +32,7 @@ import { jsonBody } from "../../sandbox/client/jsonBody";
 import { invalidateAgentTranscript, olderTranscriptPage } from "../transcript/agentTranscript";
 import { AUTO_CONTINUE_TRIES, autoContinueDelay } from "../run/autoContinue";
 import type { PickUp } from "../run/pickUp";
-import { clampEffort } from "../models/effortScale";
+import { clampEffort } from "../models/run-settings/effortScale";
 import { isAutoPick } from "../models/modelPickerState";
 import { rememberedAccountFor, selectedAccountId, setAccountUsage } from "../accounts/providerAccounts";
 import { modelLabelFor, providerModels, providerTabs } from "../accounts/providerCatalog";

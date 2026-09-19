@@ -26,7 +26,7 @@ vi.mock(`../../sandbox/overview/useSandboxSettings`, () => ({ useSandboxSettings
 
 const { default: ChatModelPicker } = await import("./ChatModelPicker.vue");
 const { providerModels } = await import("../accounts/providerCatalog");
-const { effortsFor } = await import("./effortScale");
+const { effortsFor } = await import("./run-settings/effortScale");
 
 // Grok native, the weakest runtime (something to disclose); Claude Code, the ceiling; both from the contract.
 const ROUTED = { provider: `grok`, harness: `native` } as const satisfies { provider: AgentProvider; harness: AgentHarness };

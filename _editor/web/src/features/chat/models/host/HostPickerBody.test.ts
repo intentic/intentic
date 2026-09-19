@@ -13,7 +13,7 @@ import { type App, computed, createApp, defineComponent, h, nextTick } from "vue
 import { IconStub } from "@intentic/ui/testing";
 
 /* The model list itself is the app's own panel and has its own suite. */
-vi.mock(`./ModelPicker.vue`, () => ({
+vi.mock(`../ModelPicker.vue`, () => ({
     default: defineComponent({
         setup:
             (_props, { emit, slots }) =>
@@ -38,7 +38,7 @@ vi.mock(`./ModelPicker.vue`, () => ({
                 ]),
     }),
 }));
-vi.mock(`../accounts/PickerAccounts.vue`, () => ({
+vi.mock(`../../accounts/PickerAccounts.vue`, () => ({
     default: defineComponent({
         setup:
             (_props, { emit }) =>
@@ -47,7 +47,7 @@ vi.mock(`../accounts/PickerAccounts.vue`, () => ({
     }),
 }));
 // The meter itself is tested elsewhere; this stub checks which rungs the panel hands it and what it emits.
-vi.mock(`../composer/EffortMeter.vue`, () => ({
+vi.mock(`../../composer/EffortMeter.vue`, () => ({
     default: defineComponent({
         props: { efforts: { type: Array, default: () => [] } },
         emits: [`pick`],
@@ -74,11 +74,11 @@ vi.mock(`@intentic/ui`, async (importOriginal) => ({
                 h(`button`, { disabled: props.disabled, onClick: attrs[`onClick`] }, props.label),
     }),
 }));
-vi.mock(`../accounts/pickerAccounts`, () => ({ usePickerAccounts: () => ({ hasContent: computed(() => true) }) }));
+vi.mock(`../../accounts/pickerAccounts`, () => ({ usePickerAccounts: () => ({ hasContent: computed(() => true) }) }));
 
 const { dismissModelPick, modelRequest, requestModelPick, settleModelPick } = await import("./hostModelPicker");
-const { modelLabelFor, providerModels } = await import("../accounts/providerCatalog");
-const { DEFAULT_EFFORT, DEFAULT_THINKING, defaultRunSettings } = await import("./pickerRunSettings");
+const { modelLabelFor, providerModels } = await import("../../accounts/providerCatalog");
+const { DEFAULT_EFFORT, DEFAULT_THINKING, defaultRunSettings } = await import("../run-settings/pickerRunSettings");
 const { default: HostPickerBody } = await import("./HostPickerBody.vue");
 
 /* WHAT A `chooseRun` ANSWER CARRIES BESIDES THE TIER THE TEST IS ABOUT. */

@@ -5,16 +5,16 @@
 import type { AgentSummary } from "@intentic/sandbox-contract";
 import { afterEach, expect, it, vi } from "vitest";
 import { type App, createApp, h, nextTick } from "vue";
-import type { PendingAction } from "./laneDrop";
-import type { FleetAgent } from "../fleet/useAgents-fleet";
+import type { PendingAction } from "../laneDrop";
+import type { FleetAgent } from "../../fleet/useAgents-fleet";
 import { IconStub } from "@intentic/ui/testing";
 
 // Import chain reads browser globals at import time; setup keeps the device desktop for the drill-in affordance.
 
 const { default: AgentCard } = await import("./AgentCard.vue");
-const { router } = await import("../../../router");
+const { router } = await import("../../../../router/index");
 // Connected accounts module state; the card reads it to turn a session's account id into a name.
-const { providerAccounts } = await import("../../chat/accounts/providerAccounts");
+const { providerAccounts } = await import("../../../chat/accounts/providerAccounts");
 const NO_ACCOUNTS = providerAccounts.value;
 
 const NO_ATTENTION: AgentSummary[`attention`] = {

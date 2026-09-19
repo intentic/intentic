@@ -3,7 +3,7 @@ import type { NoticeModel } from "@intentic/ui";
 import { computed, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import AddDeviceDialog from "./AddDeviceDialog.vue";
-import ContainerHealthCard from "./ContainerHealthCard.vue";
+import ContainerHealthCard from "./health/ContainerHealthCard.vue";
 import DeviceBoard from "./DeviceBoard.vue";
 import DevicePage from "./DevicePage.vue";
 import { boardRoute, deviceRoute, selectedKey } from "./deviceLinks";

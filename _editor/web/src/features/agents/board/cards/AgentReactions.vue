@@ -12,10 +12,10 @@ import type { AgentReaction } from "@intentic/sandbox-contract";
 import { ResponsiveOverlay, ui } from "@intentic/ui";
 import { errorMessage } from "@intentic/ui/async";
 import { useT } from "@intentic/ui/i18n";
-import { reactToAgent } from "../fleet/agentActions";
-import { refreshAcross } from "../../sandbox/live/fleetAcross";
-import { useAgents } from "../fleet/useAgents";
-import { useSandboxSession } from "../../sandbox/client/sandboxSession";
+import { reactToAgent } from "../../fleet/agentActions";
+import { refreshAcross } from "../../../sandbox/live/fleetAcross";
+import { useAgents } from "../../fleet/useAgents";
+import { useSandboxSession } from "../../../sandbox/client/sandboxSession";
 import { PICKER_EMOJI, QUICK_EMOJI, reactionChips } from "./reactions";
 
 const t = useT();

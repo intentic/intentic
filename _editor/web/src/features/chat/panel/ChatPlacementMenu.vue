@@ -3,7 +3,7 @@ import { computed, onUnmounted } from "vue";
 import { boxNameOf } from "../../agents/fleet/fleetScope";
 import type { Conversation } from "../session/conversation";
 import { type BoxFleet, otherBoxes, subscribe as watchOtherBoxes } from "../../sandbox/live/fleetAcross";
-import { useRunners } from "../../sandbox/devices/useRunners";
+import { useRunners } from "../../sandbox/devices/runners/useRunners";
 import { useT } from "@intentic/ui/i18n";
 
 // Where this conversation runs — three answers to one question:

@@ -36,7 +36,7 @@ vi.mock(`../../../chat/accounts/providerCatalog`, () => ({
 
 const { default: ModelPinPickerBody } = await import("./ModelPinPickerBody.vue");
 // The state a new entry is minted at, read from its source rather than transcribed.
-const { defaultRunSettings } = await import("../../../chat/models/pickerRunSettings");
+const { defaultRunSettings } = await import("../../../chat/models/run-settings/pickerRunSettings");
 
 let app: App | undefined;
 const written: unknown[] = [];

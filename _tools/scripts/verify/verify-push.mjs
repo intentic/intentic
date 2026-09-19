@@ -4,6 +4,11 @@
 // (typecheck, build, test) is then REPLAYED from a verdict the land's `pnpm verify` or an earlier push check recorded
 // for this tree, and otherwise left to CI: a tree nobody measured is not measured here on the pusher's clock unless
 // `--suite` asks for it. Measures the working tree and every pushed commit's own tree.
+//
+// THE ONE THING ONLY THIS GATE CAN SEE is the tree that becomes main. A turn measures one worktree against its own HEAD
+// and a nightly measures main a day later with nobody attached; the push is the only moment at which the combined tree
+// exists AND somebody is standing there. That is why tidiness is judged here against the range (the checkout-gates block
+// below), and it is the finding docs/audits/tidy-job.md was written from.
 import { spawnSync } from "node:child_process";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join, relative } from "node:path";
@@ -12,6 +17,8 @@ import { isLinkedWorktree } from "../../checks/lib/repo.mjs";
 import { changedPaths as treeChangedPaths, git as gitIn } from "../lib/git.mjs";
 import { createSteps } from "../lib/steps.mjs";
 import { ago, commitTree, freshVerdicts, treeHash, writeVerdict } from "../lib/tree-verdict.mjs";
+import { checkVerdicts, reportsAt } from "./check-snapshot.mjs";
+import { judgeAgainstBase } from "./turn-findings.mjs";
 
 const root = repoRoot(import.meta.url);
 const hook = process.argv.includes("--hook");
@@ -149,9 +156,76 @@ const lockfileRewriteOnly = () => {
     );
 };
 
-// `--tidy=warn`: only a `code`-class check failure refuses a push (manifest.mjs splits checks by what failure means);
-// tidiness is enforced in nightly.yml's `tidy` job instead, which blocks nobody.
-step("checkout gates", process.execPath, [join(root, "_tools/checks/run.mjs"), "--tidy=warn"]);
+// THE CHECKS, WITH TIDINESS JUDGED AGAINST THE COMMIT THIS PUSH IS BUILT ON.
+//
+// A `code` failure refuses outright: the tree does not work, and it does not matter who made it so. A `tidy` failure is
+// a real cost with a measurement behind it (manifest.mjs splits the two by what a failure MEANS), and it used to refuse
+// nowhere anybody could act — `--tidy=warn` waved every one of them through here, and nightly.yml's `tidy` job read them
+// the next morning on a commit with no author attached. That job then failed on 14 of its 24 runs, 13 of them for
+// `layout` or `paths`, every finding traceable to one line in one commit a day or two old (docs/audits/tidy-job.md).
+//
+// THIS IS THE ONLY MOMENT THAT HAS BOTH HALVES. verify-turn asks the same question of a turn, but a turn measures its own
+// worktree against its own HEAD — a tree that never becomes main. What becomes main is this push, and the difference
+// between the two is every other conversation's work, which is exactly where a counting rule breaks: two turns that each
+// add one file to a directory of thirty are each innocent in their own worktree and over the limit together. The push is
+// where they meet, and it is still early enough for the person pushing to fix it.
+//
+// Judged against the merge-base rather than refused wholesale, for the reason the tidy job's own comment gives: a gate
+// that refuses a pusher for state nobody in this push produced teaches everyone that red means nothing. What refuses is
+// the lines the range ADDED (turn-findings.mjs); what was already standing is named and charged to no one.
+{
+    const verdicts = checkVerdicts(root);
+    if (verdicts === undefined) {
+        fail("checkout gates", "could not be measured · node _tools/checks/run.mjs");
+    } else {
+        const unmeasured = verdicts.filter((verdict) => !verdict.measured);
+        if (unmeasured.length > 0) {
+            say(`${unmeasured.map(({ id }) => id).join(", ")}: could not measure, so nothing there is vouched for — the check needs a look, the tree is not accused`);
+        }
+        const failed = verdicts.filter((verdict) => !verdict.ok && verdict.measured);
+        const show = (mark, verdict, body) => process.stderr.write(`\n${mark} ${verdict.id} (${verdict.file})\n${body}\n`);
+        const broken = failed.filter((verdict) => verdict.gate === "code");
+        for (const verdict of broken) {
+            show("✗", verdict, `${verdict.stderr}${verdict.stdout}`.trimEnd());
+        }
+        if (broken.length > 0) {
+            const ids = broken.map(({ id }) => id);
+            fail("checkout gates", `${ids.length} check(s) the tree fails: ${ids.join(", ")} · node _tools/checks/run.mjs --only ${ids.join(",")}`);
+        }
+        const untidy = failed.filter((verdict) => verdict.gate === "tidy");
+        // One base for the whole question: the tidy rules read the tree, not a ref, so the oldest point this push departs
+        // from is what "already standing" means. Absent an upstream there is no before, and a finding cannot be told from
+        // one the tree arrived with — reported, and left to the nightly that reads the tree it lands in.
+        const base = ranges()[0]?.[0];
+        if (untidy.length > 0 && base === undefined) {
+            for (const verdict of untidy) {
+                show("?", verdict, `${verdict.stderr}${verdict.stdout}`.trimEnd());
+            }
+            say(`${untidy.map(({ id }) => id).join(", ")}: no upstream to measure the range against, so these are reported and not refused`);
+        } else if (untidy.length > 0) {
+            const judged = judgeAgainstBase(untidy, reportsAt(root, base, untidy.map(({ id }) => id)));
+            const mine = judged.filter(({ added }) => added.length > 0);
+            const unsure = judged.filter(({ added, unsure: lines }) => added.length === 0 && lines.length > 0);
+            const theirs = judged.filter(({ added, unsure: lines }) => added.length === 0 && lines.length === 0);
+            if (theirs.length > 0) {
+                say(`${theirs.map(({ verdict }) => verdict.id).join(", ")}: already failing at ${base.slice(0, 9)} and no worse for this push, so not this push's to fix`);
+            }
+            for (const { verdict, unsure: lines } of unsure) {
+                show("?", verdict, `${lines.length} problem(s) ${base.slice(0, 9)} could not be asked about — reported, not laid at this push's door\n${lines.join("\n")}`);
+            }
+            for (const { verdict, added } of mine) {
+                show("✗", verdict, `${added.length} problem(s) this push introduces\n${added.join("\n")}`);
+            }
+            if (mine.length > 0) {
+                const ids = mine.map(({ verdict }) => verdict.id);
+                fail("tidiness", `${ids.length} tidy check(s) this push breaks: ${ids.join(", ")} · node _tools/checks/run.mjs --only ${ids.join(",")}`);
+            }
+        }
+        if (broken.length === 0 && untidy.length === 0) {
+            say(`checkout gates: ${verdicts.filter(({ ok }) => ok).length} passed`);
+        }
+    }
+}
 {
     const measured = ranges();
     if (measured.length === 0) {

@@ -6,7 +6,7 @@ import { type AgentHarness, type AgentProvider, type ExtensionSummary, sandboxRe
 import { watch } from "vue";
 import { projectScope, setProjectScope, withinScope } from "../app/projectScope";
 import { useAudience } from "../app/useAudience";
-import { effortLabelOf } from "../features/chat/models/effortScale";
+import { effortLabelOf } from "../features/chat/models/run-settings/effortScale";
 import { modelLabelFor } from "../features/chat/accounts/providerCatalog";
 import { agentRunChoice, shellModelPicking } from "../features/chat/models/shellModelPicking";
 import { summonChat } from "../features/chat/run/summon";

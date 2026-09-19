@@ -1,6 +1,6 @@
 import type { Device } from "@intentic/sandbox-contract";
 import { expect, test } from "vitest";
-import { deviceAttention } from "./deviceAttention";
+import { deviceAttention } from "./health/deviceAttention";
 import {
     boardBody,
     type DeviceRow,

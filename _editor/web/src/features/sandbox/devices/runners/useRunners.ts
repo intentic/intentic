@@ -2,9 +2,9 @@ import { useQuery } from "@tanstack/vue-query";
 import { RunnerSummarySchema, runnerSlug } from "@intentic/sandbox-contract";
 import { computed } from "vue";
 import { z } from "zod";
-import { RUNNERS } from "../../../lib/queryKeys";
-import { sandboxJson, sandboxRequest } from "../client/sandboxClient";
-import { manageDeviceSandbox } from "./useDevices";
+import { RUNNERS } from "../../../../lib/queryKeys";
+import { sandboxJson, sandboxRequest } from "../../client/sandboxClient";
+import { manageDeviceSandbox } from "../useDevices";
 
 // This sandbox's runners (docs/remote-runners-plan.md): one list read by the Devices view and the
 // composer's placement picker. Polled slowly, since online/busy status rarely needs finer resolution.

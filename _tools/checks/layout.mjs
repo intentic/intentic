@@ -18,6 +18,25 @@ const allow = process.argv.includes("--allow") ? (process.argv[process.argv.inde
 const prune = process.argv.includes("--prune");
 const MAX_FILES_PER_DIR = 30;
 
+// AN INDEX, NOT A PAGE. The fan-out rule measures SCROLLING: thirty modules whose roles you cannot guess is a listing a
+// reader has to read before it can act. These directories hold one file per member of a set named somewhere else, and
+// the file NAME is the whole address — an agent that wants the secrets contract opens `secrets.contract.ts` and never
+// lists the directory. Their size tracks how many surfaces the product has, not what a reader pays for one.
+//
+// Recorded by NAME rather than by a number, because a number here is a treadmill nobody can get off. These three sat in
+// the fan-out baseline and tripped the nightly tidy job on nine of its last eleven layout failures, always by one or two
+// files, always for a surface somebody legitimately added: `schemas` was split from 52 entries to 41 across four commits
+// in eleven days (bf01472822, 32e3663459, a7dff2bb68) and was back over on the twelfth. Splitting an index by domain
+// invents a taxonomy the wire does not have, and the next contract lands at the top level anyway.
+//
+// An entry is retired the moment its directory drops under the limit, and refused outright if the directory is gone, so
+// a rename cannot leave an exemption standing over nothing.
+const INDEX_DIRS = new Map([
+    ["_shared/sandbox-contract/src/contracts", "one *.contract.ts per wire group; the group list IS this directory"],
+    ["_shared/sandbox-contract/src/schemas", "one module per wire group, named after it"],
+    ["_sandbox/sandbox/src/capabilities/handlers", "one *.handler.ts per CapabilityKind; registry.ts is the total map, so a missing one is a compile error"],
+]);
+
 // A file nobody reads to find their way around: an image, a font, a media clip. Both rules below exempt these, for one
 // reason stated once — the cost they are about is a READING cost. Thirty modules in a directory is a page an agent
 // scrolls before it can act; thirty PNGs is a directory nobody opens, that no search returns, and whose names are often
@@ -118,11 +137,16 @@ const fanOut = new Map();
 for (const { name } of packages) {
     for (const dir of srcDirs(name)) {
         const count = filesIn.get(dir) ?? 0;
-        if (count > MAX_FILES_PER_DIR) {
+        if (count > MAX_FILES_PER_DIR && !INDEX_DIRS.has(dir)) {
             fanOut.set(dir, count);
         }
     }
 }
+// An exemption that has stopped paying for itself. Gone is a failure (the entry now covers nothing, and would go on
+// covering nothing silently through the rename that replaces it); merely under the limit is a notice, since a directory
+// that has shrunk may well grow back before anyone edits this file.
+const indexGone = [...INDEX_DIRS.keys()].filter((dir) => !existsSync(join(root, dir))).map((dir) => `${dir}: no such directory`);
+const indexRetired = [...INDEX_DIRS.keys()].filter((dir) => existsSync(join(root, dir)) && (filesIn.get(dir) ?? 0) <= MAX_FILES_PER_DIR);
 
 // Twins. Wire groups are discovered from contract files rather than hardcoded, so a moved contract package doesn't
 // break this.
@@ -305,6 +329,9 @@ const twinsRetired = [...TOLERATED_TWINS.keys()].filter((key) => !seenTwins.has(
 if (twinsRetired.length > 0) {
     console.log(`layout: TOLERATED_TWINS names ${twinsRetired.join(", ")}, no longer a pair: drop the entry when you next edit _tools/checks/layout.mjs`);
 }
+if (indexRetired.length > 0) {
+    console.log(`layout: INDEX_DIRS names ${indexRetired.join(", ")}, now under the limit on its own: drop the entry when you next edit _tools/checks/layout.mjs`);
+}
 
 finish(
     [
@@ -330,11 +357,17 @@ finish(
                 "  point them at the real path (see DEAD_NAME_OK in _tools/checks/layout.mjs for the mentions that are about somebody else's tree)",
             deadNames,
         ],
+        [
+            "INDEX_DIRS exempts a directory that is not there, so the rule it relaxes is relaxed over nothing\n" +
+                "  point the entry at the directory's new name, or drop it, in _tools/checks/layout.mjs",
+            indexGone,
+        ],
     ],
     [
         `${ghostCandidates.length} directories at part, package and module level: no ghosts${swept.length > 0 ? ` (${swept.length} swept)` : ""}${
             mirroredGhosts.length > 0 ? ` (${mirroredGhosts.length} unjudgeable here: mirror mounts of a tree this worktree cannot fix)` : ""}`,
         `${packages.length} packages: every directory named after its package, no new over-full directory, no new colliding basename, no twin siblings outside the wire's own vocabulary`,
+        `${INDEX_DIRS.size} index directories exempt from fan-out by name, every one of them present and still over the limit`,
         `${tracked.length} tracked files: no dead directory name`,
     ],
 );

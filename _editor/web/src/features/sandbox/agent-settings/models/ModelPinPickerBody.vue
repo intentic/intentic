@@ -10,11 +10,11 @@ import {
 } from "@intentic/sandbox-contract";
 import { InfoHint } from "@intentic/ui";
 import ModelPicker from "../../../chat/models/ModelPicker.vue";
-import PickerRunSettings from "../../../chat/models/PickerRunSettings.vue";
+import PickerRunSettings from "../../../chat/models/run-settings/PickerRunSettings.vue";
 import ProviderLogo from "../../../chat/accounts/ProviderLogo.vue";
 import type { PickerEntry } from "../../../chat/models/modelPickerState";
 import { providerDisplayLabel } from "../../../chat/accounts/providerCatalog";
-import { defaultRunSettings, usePickerRunSettings } from "../../../chat/models/pickerRunSettings";
+import { defaultRunSettings, usePickerRunSettings } from "../../../chat/models/run-settings/pickerRunSettings";
 import { useChat } from "../../../chat/run/useChat";
 import { useT } from "@intentic/ui/i18n";
 

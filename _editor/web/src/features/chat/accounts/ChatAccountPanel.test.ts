@@ -64,7 +64,7 @@ vi.mock(import(`vue-router`), async (importOriginal) => ({
     RouterLink: (await import(`../../../testing/routerLinkStub`)).RouterLinkStub as never,
 }));
 
-const { modelRequest, settleModelPick } = await import("../models/hostModelPicker");
+const { modelRequest, settleModelPick } = await import("../models/host/hostModelPicker");
 const { trialStatus } = await import("./providerCatalog");
 const { default: ChatAccountPanel } = await import("./ChatAccountPanel.vue");
 

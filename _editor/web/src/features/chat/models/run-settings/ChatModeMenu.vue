@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import { modeOptions } from "./catalog";
-import { usePaneView } from "../panel/useChat-view";
+import { modeOptions } from "../catalog";
+import { usePaneView } from "../../panel/useChat-view";
 
 /* The permission-mode picker body: width-agnostic (Popover on desktop, BottomSheet on mobile). */
 
