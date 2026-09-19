@@ -29,6 +29,18 @@ describe(`inside a project`, () => {
         setProjectScope(undefined);
         expect(withinScope(`api`)).toBe(true);
     });
+
+    // A repository can be discovered several levels down (repo-discovery walks until it finds one), so the project id
+    // can be a path. A walk that pruned by `withinScope` alone would stop at `apps` and never reach the project itself.
+    it(`descends a folder the project lives under, which is not itself in scope`, async () => {
+        const { reachesScope, withinScope, setProjectScope } = await load();
+        setProjectScope(`apps/web`);
+        expect(withinScope(`apps`)).toBe(false);
+        expect(reachesScope(`apps`)).toBe(true);
+        expect(reachesScope(`apps/web/src`)).toBe(true);
+        expect(reachesScope(`apps/admin`)).toBe(false);
+        expect(reachesScope(`libs`)).toBe(false);
+    });
 });
 
 describe(`the selection`, () => {

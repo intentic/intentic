@@ -623,9 +623,11 @@ export const sessions = (now: number): SessionSummary[] => {
 // scope can't rank by meaning, so it answers with the same matcher and a note.
 // Searches files with a real body, ignored paths excluded — the same two limits the daemon's search has, so a hit here
 // is a hit there too.
-const searchablePaths = (include: string): string[] => {
+const searchablePaths = (include: string, dir: string): string[] => {
     const admits = includeFilter(include);
-    return [...FILES].flatMap(([path, entry]) => (typeof entry === `string` && !isIgnored(path) && admits(path) ? [path] : []));
+    // The open project narrows the search the way the daemon's `dir` does: a prefix, applied before the include globs.
+    const inside = (path: string): boolean => dir === `` || path.startsWith(`${dir}/`);
+    return [...FILES].flatMap(([path, entry]) => (typeof entry === `string` && !isIgnored(path) && inside(path) && admits(path) ? [path] : []));
 };
 
 // Panel's include field, parsed by the same `includeGlobs` the daemon uses; only matching those globs is local here,
@@ -677,13 +679,15 @@ interface SearchOptions {
     readonly caseSensitive: boolean;
     // Files-to-include field; empty means the whole recording.
     readonly include: string;
+    // The open project's folder, root-relative; empty means the whole recording.
+    readonly dir: string;
 }
 
 export const searchWorkspace = (query: string, options: SearchOptions): WorkspaceSearchResult => {
     const { regex, note } = matcher(query, options);
     const groups: WorkspaceSearchGroup[] = [];
     let total = 0;
-    for (const path of searchablePaths(options.include)) {
+    for (const path of searchablePaths(options.include, options.dir)) {
         const hits = (fileBody(path) ?? ``)
             .split(`\n`)
             .map((text, index) => {

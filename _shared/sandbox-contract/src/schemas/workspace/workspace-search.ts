@@ -11,6 +11,13 @@ export const WorkspaceSearchQuerySchema = z.object({
             "Narrow the search to one kind: plain text, filenames, definitions, references, symbols, or code structure. Leave it out to blend them, which also answers a question asked in words.",
         ),
     includeIgnored: z.stringbool().optional().describe("Search inside installed packages and other ignored folders too."),
+    // One subtree, root-relative, no trailing slash: the caller's own scope (a UI narrowed to one project) rather than a
+    // pattern. Unlike `include` it is a prefix, so it composes with whatever globs the user typed.
+    dir: z
+        .string()
+        .max(512)
+        .optional()
+        .describe("Only look inside this folder, given as a path from the workspace root. Leave it out to search everything."),
     // The three switches every search box has; caseSensitive off means case-insensitive, not ripgrep's smart case.
     literal: z.stringbool().optional().describe("Treat the query as fixed text rather than a pattern."),
     word: z.stringbool().optional().describe("Match whole words only."),

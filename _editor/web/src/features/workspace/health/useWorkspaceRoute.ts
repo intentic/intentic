@@ -2,6 +2,7 @@ import { useDevice } from "@intentic/ui";
 import { computed, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useWorkspaceTabs } from "../tabs/useWorkspaceTabs";
+import { setProjectScope, withinScope } from "../../../app/projectScope";
 import { workspaceAgent } from "./workspaceScope";
 
 // Two-way syncs the open file (and `?agent` scope) between the URL and the tabs singleton, so reload and
@@ -36,12 +37,22 @@ export function useWorkspaceRoute(): void {
     });
     const activeFilePath = computed(() => (activeTab.value?.kind === `file` ? activeTab.value.path : ``));
 
+    // The deep link wins over the stored project scope as well as over the singleton: a path outside the open project
+    // names a file no scoped tree or desk can show, so following one widens to the whole workspace, as a clicked
+    // reference does (openFileRef). Called before the tab opens, since the desk follows the tab.
+    const reach = (path: string): void => {
+        if (!withinScope(path)) {
+            setProjectScope(undefined);
+        }
+    };
+
     // Reconcile once at mount: a deep link wins; otherwise the singleton's open file is asserted into the URL.
     // Not on a phone, where the URL is the state: a bare /workspace there is the list or the Review tab's Changes
     // panel, and a file tab restored from storage on a cold load would put the viewer over whichever was asked for.
     const { mobile } = useDevice();
     if (urlPath.value !== ``) {
         if (urlPath.value !== activeFilePath.value) {
+            reach(urlPath.value);
             openFile(urlPath.value);
         }
     } else if (activeFilePath.value !== ``) {
@@ -71,6 +82,7 @@ export function useWorkspaceRoute(): void {
             }
             return;
         }
+        reach(path);
         openFile(path);
     });
 }

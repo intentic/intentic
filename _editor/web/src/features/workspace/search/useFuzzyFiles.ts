@@ -6,10 +6,13 @@ import { rankPaths } from "./fuzzyPaths";
 import { type SearchScope, useWorkspaceSearch } from "./useWorkspaceSearch";
 import { useSearchOptions } from "./useSearchOptions";
 import { useWorkspaceTree } from "../explorer/useWorkspaceTree";
+import { reachesScope, withinScope } from "../../../app/projectScope";
 
 // Ranked filename matching for quick-open surfaces (Ctrl/Cmd+P palette, chat @-mention picker). Client-ranked by
 // default: the tree already holds every visible path and scores fast enough for no debounce. Falls back to the
 // daemon's `files` search only for include-ignored or a tree truncated past its 5k cap (daemon sweeps to 100k).
+// Both paths answer within the open project (app/projectScope.ts): here by skipping what is outside it, and on the
+// daemon by the `dir` the search route takes.
 
 const LIMIT = 100;
 // The fallback is already rare and server-bound, a tight debounce just coalesces a keystroke burst.
@@ -30,8 +33,19 @@ export function useFuzzyFiles(query: Ref<string>, active: Ref<boolean>) {
                     continue;
                 }
                 if (node.type === `file`) {
-                    paths.push(node.path);
-                } else if (node.children === undefined) {
+                    // The open project's files only (app/projectScope.ts): a file the tree beside this palette cannot
+                    // show is not something to offer opening.
+                    if (withinScope(node.path)) {
+                        paths.push(node.path);
+                    }
+                    continue;
+                }
+                // A folder outside the project, and not on the way down to it, is skipped whole — and not counted as a
+                // gap either, or one unlisted folder in another project would push every keystroke onto the daemon.
+                if (!reachesScope(node.path)) {
+                    continue;
+                }
+                if (node.children === undefined) {
                     cut = true;
                 } else {
                     walk(node.children);

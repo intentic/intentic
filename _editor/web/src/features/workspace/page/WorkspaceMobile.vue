@@ -48,8 +48,10 @@ import HistoryPanel from "../changes/history/HistoryPanel.vue";
 import ReviewPanel from "../changes/ReviewPanel.vue";
 import SaveActions from "../changes/save/SaveActions.vue";
 import SavePanel from "../changes/save/SavePanel.vue";
+import WorkspaceDirChip from "../explorer/WorkspaceDirChip.vue";
 import WorkspaceScopeChip from "../explorer/WorkspaceScopeChip.vue";
-import { workspaceAgent } from "../health/workspaceScope";
+import { workspaceAgent, workspaceDir } from "../health/workspaceScope";
+import { withinScope } from "../../../app/projectScope";
 import WorkspaceSearchResults from "../search/WorkspaceSearchResults.vue";
 import { parentDir } from "@intentic/ui/path";
 import { useT } from "@intentic/ui/i18n";
@@ -99,15 +101,26 @@ const { say } = useNotifications();
 const { tabs, activeId, activeTab, openLine, openFile, openAtLine, openDiff } = useWorkspaceTabs();
 useWorkspaceRoute();
 
-// Route-driven navigation.
-const dir = computed(() => (typeof route.query[`dir`] === `string` ? route.query[`dir`] : ``));
+// Route-driven navigation. The browser's floor is the open project when there is one (workspaceDir), the way the
+// desktop tree roots at it: a `?dir=` outside it names nothing this screen may show, so it reads as the root instead.
+const dir = computed(() => {
+    const asked = route.query[`dir`];
+    return typeof asked === `string` && withinScope(asked) ? asked : workspaceDir.value;
+});
 const openPath = computed(() => (activeTab.value?.kind === `file` ? activeTab.value.path : undefined));
 const diffId = computed(() => (typeof route.query[`diff`] === `string` ? route.query[`diff`] : undefined));
 
 const openDir = (path: string): void => {
-    // Browsing a folder leaves any open file; clear the path segment along with the query.
-    void router.push({ name: `workspace`, params: { path: [] }, query: path === `` ? {} : { dir: path } });
+    // Browsing a folder leaves any open file; clear the path segment along with the query. The root carries no `?dir=`,
+    // whatever it is called, so the address of "where this screen starts" doesn't change when the project does.
+    void router.push({ name: `workspace`, params: { path: [] }, query: path === workspaceDir.value ? {} : { dir: path } });
 };
+// A folder path means nothing under a different project root, so opening or clearing a project starts at its floor.
+watch(workspaceDir, () => {
+    if (typeof route.query[`dir`] === `string`) {
+        void router.replace({ name: `workspace`, params: { path: [] }, query: {} });
+    }
+});
 const openDiffNav = (payload: DiffPayload, mode: OpenMode): void => {
     openDiff(payload, mode);
     void router.push({ name: `workspace`, params: { path: [] }, query: { ...route.query, diff: activeId.value ?? undefined } });
@@ -532,9 +545,16 @@ const onPick = (event: Event): void => {
                     </button>
                 </div>
 
-                <!-- Drill-down header: where we are, plus one-tap up; the OS back gesture also goes up. -->
-                <div v-if="dir !== '' && !contentMode" class="flex h-11 shrink-0 items-center gap-1 border-b border-line px-1">
+                <!-- Where we are, plus one-tap up; the OS back gesture also goes up. Up is absent at this screen's own
+                     floor, since there is nothing above it to go to — but under a project the row stays, because the
+                     chip naming the project and clearing it belongs on a bar with room for the name rather than in the
+                     crowded row above, where a phone has no hover to read a truncated one from. -->
+                <div
+                    v-if="(dir !== workspaceDir || workspaceDir !== '') && !contentMode"
+                    class="flex h-11 shrink-0 items-center gap-1 border-b border-line px-1 pr-2"
+                >
                     <button
+                        v-if="dir !== workspaceDir"
                         type="button"
                         :class="ui.iconButton(`h-10 w-10 rounded-lg active:bg-overlay`)"
                         :aria-label="t(`workspace.workspaceMobile.upOneDirectory`)"
@@ -542,7 +562,9 @@ const onPick = (event: Event): void => {
                     >
                         <Icon name="arrow-left" class="text-base" />
                     </button>
-                    <span class="min-w-0 flex-1 truncate text-sm font-medium">{{ dir }}</span>
+                    <span class="min-w-0 flex-1 truncate px-1 text-sm font-medium">{{ dir === workspaceDir ? "" : dir }}</span>
+                    <!-- Which project this screen is rooted at, and the way back to everything; absent on the whole tree. -->
+                    <WorkspaceDirChip :compact="false" />
                 </div>
 
                 <!-- The match list scrolls itself; pulling it would refetch the tree, so pull-to-refresh stays on the listing. -->

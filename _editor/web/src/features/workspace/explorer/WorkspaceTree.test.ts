@@ -106,6 +106,8 @@ const restoreFrom = (expanded: readonly string[]): void => {
 
 const mount = async (props: {
     tree: WorkspaceTreeEntry[];
+    // The folder `tree` is the contents of: "" for the whole workspace, a project's dir when one is open.
+    rootDir?: string;
     // Every folder holding only empty folders (daemon's `barren`); separate from tree, which has an entry budget.
     barren?: readonly string[];
     selectedPath?: string;
@@ -920,5 +922,64 @@ describe(`rows with a special role`, () => {
         expect(memory?.querySelector(`span.ui-status-pill`)?.getAttribute(`data-tooltip`)).toContain(
             `every turn that starts in this folder or deeper`,
         );
+    });
+});
+
+/* With a project open the tree is rooted at it (WorkspaceDesktop passes `workspaceDir` as `rootDir`), and the project's
+   own folder draws no row. Every gesture with no row under it therefore has to resolve to that folder, not to /work: a
+   New File aimed at the workspace root while the chip says "app" writes into somebody else's project. */
+describe(`a tree rooted at one project`, () => {
+    const PROJECT = `app`;
+    // What the daemon answers for /workspace/children?path=app: the project's own entries, full paths and all.
+    const PROJECT_TREE: WorkspaceTreeEntry[] = [dir(`${PROJECT}/src`, [file(`${PROJECT}/src/main.ts`)]), file(`${PROJECT}/README.md`)];
+
+    // Right-clicks the tree's empty space, the one gesture that names no row, and runs the menu row with this label.
+    const runBackgroundVerb = async (el: HTMLElement, label: string): Promise<void> => {
+        const tree = el.querySelector(`[role="tree"]`) as HTMLElement;
+        // `.self` on the handler: the event must come from the tree element itself, as a click below the last row does.
+        tree.dispatchEvent(new MouseEvent(`contextmenu`, { bubbles: true, cancelable: true }));
+        await nextTick();
+        await nextTick();
+        const row = [...document.querySelectorAll(`a`)].find((link) => (link.textContent ?? ``).includes(label));
+        row?.dispatchEvent(new MouseEvent(`click`, { bubbles: true, cancelable: true }));
+        await nextTick();
+    };
+    const typeName = async (el: HTMLElement, name: string): Promise<void> => {
+        const input = el.querySelector(`input`) as HTMLInputElement;
+        input.value = name;
+        input.dispatchEvent(new Event(`input`));
+        input.dispatchEvent(new KeyboardEvent(`keydown`, { key: `Enter`, bubbles: true }));
+        await nextTick();
+    };
+
+    beforeEach(() => {
+        daemon.calls.length = 0;
+    });
+    afterEach(() => {
+        resetProvisional();
+    });
+
+    it(`writes a new file into the project, not into the workspace root`, async () => {
+        const el = await mount({ tree: PROJECT_TREE, rootDir: PROJECT });
+
+        await runBackgroundVerb(el, `New File`);
+        // The project's folder draws no row, so the phantom field can only sit above the first one; without it the verb
+        // opens nothing at all and the write below never happens.
+        expect(el.querySelector(`input`)?.getAttribute(`aria-label`)).toBe(`New file name`);
+        await typeName(el, `notes.md`);
+
+        const uploads = daemon.calls.filter((call) => call.path.startsWith(`/workspace/upload`));
+        expect(uploads.map((call) => call.path)).toEqual([`/workspace/upload?path=${encodeURIComponent(`${PROJECT}/notes.md`)}`]);
+    });
+
+    it(`creates a new folder in the project, and stands its row up there`, async () => {
+        const el = await mount({ tree: PROJECT_TREE, rootDir: PROJECT });
+
+        await runBackgroundVerb(el, `New Folder`);
+        await typeName(el, `drafts`);
+
+        const created = daemon.calls.filter((call) => call.path === `/workspace/dir`).map((call) => JSON.parse(String(call.init?.body)));
+        expect(created).toEqual([{ path: `${PROJECT}/drafts` }]);
+        expect(rows(el)).toContain(`drafts`);
     });
 });

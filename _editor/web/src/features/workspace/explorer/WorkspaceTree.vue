@@ -633,7 +633,8 @@ const beginCreate = (dir: string, type: "file" | "dir"): void => {
         return;
     }
     renamingPath.value = undefined;
-    if (dir !== `` && !expanded.value.has(dir)) {
+    // The tree's own root draws no row, so there is nothing to expand: its phantom row sits in the preamble instead.
+    if (dir !== rootDir && !expanded.value.has(dir)) {
         toggleExpand(dir);
     }
     creating.value = { dir, type };
@@ -837,7 +838,8 @@ const stage = (mode: "copy" | "cut", system: "async" | "event"): readonly string
 
 // Names already in the target dir; an unlisted dir is fetched first, so the check isn't made against a placeholder.
 const namesIn = async (dir: string): Promise<ReadonlySet<string>> => {
-    const target = dir === `` ? undefined : byPath.value.get(dir);
+    // The tree's own root is not one of its rows, so its listing is `tree` itself, whatever the root is called.
+    const target = dir === rootDir ? undefined : byPath.value.get(dir);
     if (target !== undefined && isUnlisted(target)) {
         await loadChildren(dir);
     }
@@ -847,7 +849,7 @@ const namesIn = async (dir: string): Promise<ReadonlySet<string>> => {
 
 // Expands the target dir and selects landed entries, so a paste into a collapsed folder isn't invisible.
 const revealPasted = (dir: string, paths: readonly string[]): void => {
-    if (dir !== `` && !expanded.value.has(dir)) {
+    if (dir !== rootDir && !expanded.value.has(dir)) {
         toggleExpand(dir);
     }
     selection.value = new Set(paths);
@@ -912,7 +914,7 @@ const onPasteEvent = (event: ClipboardEvent): void => {
     const files = event.clipboardData?.files;
     if (files !== undefined && files.length > 0) {
         event.preventDefault();
-        if (dir !== `` && !expanded.value.has(dir)) {
+        if (dir !== rootDir && !expanded.value.has(dir)) {
             toggleExpand(dir);
         }
         void enqueue(dir, filesToEntries(files));
@@ -1087,7 +1089,7 @@ const onRowDrop = (event: DragEvent, row: Row): void => {
     }
     // Opened before the files are read, so the placeholder rows appear inside the folder that took the drop rather than
     // inside a closed one.
-    if (dir !== `` && !expanded.value.has(dir)) {
+    if (dir !== rootDir && !expanded.value.has(dir)) {
         toggleExpand(dir);
     }
     // Runs synchronously, since webkitGetAsEntry must fire while the drag items are still alive.
@@ -1105,7 +1107,9 @@ const dirActionItems = (target: WorkspaceTreeEntry | undefined, multi: boolean):
 const menuItems = computed<MenuItem[]>(() => {
     const target = menuEntry.value;
     const multi = target !== undefined && selection.value.size > 1 && selection.value.has(target.path);
-    const dir = target === undefined ? `` : target.type === `dir` ? target.path : parentDir(target.path);
+    // A right-click on empty space acts in the tree's OWN root, which is the open project when one is (rootDir); `` would
+    // aim every verb at /work from inside a project.
+    const dir = target === undefined ? rootDir : target.type === `dir` ? target.path : parentDir(target.path);
     return entryMenuItems({
         target,
         locked: target !== undefined && locked(target.path),
@@ -1182,8 +1186,9 @@ const openMenu = (event: MouseEvent, entry: WorkspaceTreeEntry | undefined): voi
             <!-- Everything above the first row, in one element the window measures so it knows where the rows start. -->
             <div ref="preamble">
                 <div class="h-1"></div>
-                <!-- Phantom create row at the root (also covers an empty workspace). -->
-                <div v-if="creating !== undefined && creating.dir === ''" class="flex flex-col" style="padding-left: 0.5rem">
+                <!-- Phantom create row at the tree's own root, the open project's folder when one is (also covers an empty
+                     workspace). The root draws no row of its own, so this is the only place its input can sit. -->
+                <div v-if="creating !== undefined && creating.dir === rootDir" class="flex flex-col" style="padding-left: 0.5rem">
                     <div class="flex items-center gap-1.5 py-1 pr-2">
                     <span class="w-[0.7rem] shrink-0"></span>
                     <Icon class="shrink-0 text-2xs text-muted" :name="creating.type === 'dir' ? 'folder' : 'file'" />

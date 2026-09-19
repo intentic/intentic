@@ -34,8 +34,10 @@ const sourceFiles = async (dir: string): Promise<string[]> => {
 const RAW_JOIN = /join\(\s*([A-Za-z_.]+)\s*,\s*(?:"\.intentic"|STATE_DIR)\s*((?:,\s*(?:"[^"]+"|[A-Za-z_][\w.]*)\s*)+)(?=[,)])/g;
 // Matches `${STATE_DIR}/<segment>` template composition; bare `${STATE_DIR}` with nothing appended stays legal.
 const RAW_TEMPLATE = /\$\{STATE_DIR\}\/[\w.-]/g;
-// Matches the declared spellings `statePath(<root>, ".intentic/…")` and `stateRelPath(".intentic/…")`.
-const STATE_PATH = /statePath\(\s*[A-Za-z_.]+\s*,\s*"(\.intentic\/[^"]+)"|stateRelPath\(\s*"(\.intentic\/[^"]+)"/g;
+// Matches the declared spellings `statePath(<root>, ".intentic/…", …tail)` and `stateRelPath(".intentic/…", …tail)`,
+// keeping the literal tail segments both helpers append: `stateRelPath(".intentic/records/artifacts/", "browser")`
+// builds the declared `.intentic/records/artifacts/browser/`, and a scan blind to the tail reads that entry as dead.
+const STATE_PATH = /(?:statePath\(\s*[A-Za-z_.]+\s*,|stateRelPath\()\s*"(\.intentic\/[^"]+)"((?:\s*,\s*"[^"]+")*)/g;
 
 const scanSources = async (): Promise<{ rawJoins: string[]; statePaths: string[] }> => {
     const files = await sourceFiles(SOURCE_ROOT);
@@ -55,8 +57,11 @@ const scanSources = async (): Promise<{ rawJoins: string[]; statePaths: string[]
         for (const [template] of source === EXEMPT ? [] : text.matchAll(RAW_TEMPLATE)) {
             rawJoins.push(`${template}… (${source})`);
         }
-        for (const [, joined, relative] of text.matchAll(STATE_PATH)) {
-            statePaths.push(joined ?? relative ?? "");
+        for (const [, declared = "", tail = ""] of text.matchAll(STATE_PATH)) {
+            const segments = [...tail.matchAll(/"([^"]+)"/g)].map(([, segment]) => segment ?? "");
+            // The path the call actually builds, joined exactly as stateRelPath joins it (declared entry, trailing
+            // slash dropped, then the tail), so what is compared below is what the daemon writes.
+            statePaths.push([declared.replace(/\/$/, ""), ...segments].join("/"));
         }
     }
     return { rawJoins, statePaths };
@@ -77,9 +82,12 @@ test("every declared entry is actually built somewhere in the daemon", async () 
     // Catches an entry left behind after its store was deleted; entries with `outsideWriter` are exempt since the
     // daemon itself never builds them.
     const { statePaths } = await scanSources();
-    const unused = WORKSPACE_STATE_FILES.filter(
-        (file) => file.outsideWriter === undefined && !statePaths.some((path) => path === file.path || path.startsWith(file.path)),
-    ).map((file) => file.path);
+    // A directory entry is declared with a trailing slash and built without one, so both sides drop it; the prefix then
+    // has to break on a separator, or `.intentic/records/x` would count as built by anything named `.intentic/records/xy`.
+    const unused = WORKSPACE_STATE_FILES.filter((file) => {
+        const declared = file.path.replace(/\/$/, "");
+        return file.outsideWriter === undefined && !statePaths.some((path) => path === declared || path.startsWith(`${declared}/`));
+    }).map((file) => file.path);
 
     expect(unused.toSorted(), "These are declared but no daemon source builds them — drop them or fix the path.").toEqual([]);
 });

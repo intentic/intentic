@@ -2,6 +2,7 @@ import type { WorkspaceSearchGroup } from "@intentic/api-contract";
 import { parentDir } from "@intentic/ui/path";
 import { type InjectionKey, type Ref, ref, watch } from "vue";
 import type { RowAction } from "../explorer/rowActions";
+import { withinScope } from "../../../app/projectScope";
 import { workspaceDir } from "../health/workspaceScope";
 import type { SearchScope } from "../search/useWorkspaceSearch";
 
@@ -32,9 +33,6 @@ const deskDir = ref<string>(workspaceDir.value);
 // The current entry: what the last click, in the tree or on the desk, landed on. Undefined after entering a folder.
 const selected = ref<string | undefined>(undefined);
 
-// Whether `dir` lies at or under the scope root; a path outside it names nothing this desk can show.
-const withinScope = (dir: string, root: string): boolean => root === `` || dir === root || dir.startsWith(`${root}/`);
-
 // Re-roots when the scope moves: a folder path means nothing under a different project root.
 watch(workspaceDir, (root) => {
     deskDir.value = root;
@@ -47,8 +45,9 @@ export const resetDesk = (): void => {
     selected.value = undefined;
 };
 
+// A path outside the open project names nothing this desk can show, so it opens at the project's own floor instead.
 const openDir = (dir: string): void => {
-    deskDir.value = withinScope(dir, workspaceDir.value) ? dir : workspaceDir.value;
+    deskDir.value = withinScope(dir) ? dir : workspaceDir.value;
 };
 
 // A click in the tree, or a file opening anywhere: a folder opens on the desk and is the current entry (the tree

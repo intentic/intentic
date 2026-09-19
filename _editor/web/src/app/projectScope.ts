@@ -33,6 +33,11 @@ export const inProject = (path: string, project: string): boolean => path === pr
 // The predicate every scoped source applies: everything when nothing is open, else what is inside the project.
 export const withinScope = (path: string): boolean => projectScope.value === undefined || inProject(path, projectScope.value);
 
+// Whether a DIRECTORY is worth descending for the open project: inside it, or on the way down to it, since a project id
+// can be nested (`apps` has to be walked to reach the project `apps/web`). For a file this is `withinScope`.
+export const reachesScope = (dir: string): boolean =>
+    projectScope.value === undefined || inProject(dir, projectScope.value) || inProject(projectScope.value, dir);
+
 watch(activeSandboxId, (id, previous) => {
     if (id !== previous) {
         projectScope.value = read(id);

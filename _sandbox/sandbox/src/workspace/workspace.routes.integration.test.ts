@@ -8,7 +8,7 @@ import { promisify } from "node:util";
 import { STATE_DIR, WORKSPACE_ROOT } from "@intentic/constants";
 import { createResidentEngine, type HealthRequest, type QueryRequest } from "@intentic/iq-engine";
 
-import { HEALTH_LIMIT } from "@intentic/sandbox-contract";
+import { HEALTH_LIMIT, includeGlobs } from "@intentic/sandbox-contract";
 import { shellQuote } from "@intentic/sandbox-run/quote";
 
 import { DEFAULT_TEMPLATE_REF, DEFAULT_TEMPLATE_SOURCE } from "@intentic/scaffold";
@@ -106,6 +106,45 @@ test("workspace.search runs the resident engine in-process, mapping the wire que
             echo: 'find "createWidget" --ignored --literal --case',
         },
     ]);
+});
+
+// The editor narrows every view to the open project; a search that answered from the whole workspace would name files
+// the tree beside it cannot show. `dir` is a prefix, not a glob, so a caller's own `include` still applies on top of it.
+test("workspace.search confines the engine to one subtree, and says so in the echo the cursor is keyed by", async () => {
+    const requests: QueryRequest[] = [];
+    const client = clientFor(
+        createApp(
+            services({
+                iq: {
+                    run: async (request) => {
+                        requests.push(request);
+                        return {
+                            result: { mode: request.verb, total: 0, files: 0, shown: 0, groups: [], freshness: { state: "fresh" }, truncated: false },
+                            text: "",
+                            exitCode: 0,
+                        };
+                    },
+                    health: async () => ({
+                        totals: { files: 0, symbols: 0, complexity: 0, hotspots: 0 },
+                        hotspots: [],
+                        modules: [],
+                        freshness: { state: "fresh" },
+                    }),
+                    markDirty: () => {},
+                    warm: async () => ({ files: 0, symbols: 0, chunks: 0, embedded: 0, generation: 0, freshness: { state: "fresh", ageMs: 0 } }),
+                    close: async () => {},
+                },
+            }),
+        ),
+    );
+    // Trailing slash and `./` are the shapes a caller joins paths into; the engine's own prefix filter drops both, so
+    // the scope and the echo have to agree on one spelling or two identical searches would page separately.
+    await client.workspace.search({ query: "createWidget", dir: "./apps/web/", include: "*.ts" });
+
+    // Read from the same expansion the route runs, so this pins the composition rather than one release's glob spelling.
+    const { globs } = includeGlobs("*.ts");
+    expect(requests[0]?.scope).toEqual({ paths: ["apps/web"], globs });
+    expect(requests[0]?.echo).toBe(`"createWidget" --in 'apps/web' ${globs.map((glob) => `--glob '${glob}'`).join(" ")}`);
 });
 
 test("workspace.search asks for a LIST page, capped at the GUI file limit whatever the caller asks for", async () => {

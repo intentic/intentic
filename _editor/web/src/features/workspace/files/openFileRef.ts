@@ -3,6 +3,7 @@ import { router } from "../../../router";
 import { handOffToMainWindow } from "../../../shell/window/mainWindow";
 import { resolveWorkspaceRef } from "./resolveFileRef";
 import { useWorkspaceTabs } from "../tabs/useWorkspaceTabs";
+import { setProjectScope, withinScope } from "../../../app/projectScope";
 import { workspaceAgent } from "../health/workspaceScope";
 
 // `.intentic` is bind-mounted into every isolated namespace, so a path under it is shared regardless of scope.
@@ -26,6 +27,12 @@ export const openWorkspaceRef = async (path: string, line?: number, asked?: { re
         workspaceAgent.value = scope.agent;
     }
     const target = (await resolveWorkspaceRef(path)) ?? path;
+    // A reference outside the open project (another project's file, or the state dir, which is outside every project)
+    // names a file no scoped tree or desk can show. Widening to the whole workspace is the same move the agent scope
+    // above makes: what is being opened is what has to be on screen, so the folder it lives in has to be reachable.
+    if (!withinScope(target)) {
+        setProjectScope(undefined);
+    }
     const { openFile, openAtLine } = useWorkspaceTabs();
     if (line !== undefined) {
         openAtLine(target, line);

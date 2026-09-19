@@ -29,6 +29,26 @@ const GUI_SEARCH_FILES = 300;
 // Token budget for the paths named in a zero-hit hint; nothing else reads it.
 const GUI_SEARCH_BUDGET = 2_000;
 
+// The literal `iq` command a GUI search stands for. It mirrors the CLI's own flag order (echoOf in iq/lib/flags) and
+// seeds the cursor id, so it must stay byte-stable for the same query + mode + scope: two searches that echo alike page
+// as one.
+const searchEcho = (
+    verb: string,
+    query: string,
+    scope: { readonly dir: string; readonly ignored: boolean; readonly globs: readonly string[]; readonly notGlobs: readonly string[] },
+    options: { readonly literal?: boolean; readonly word?: boolean; readonly caseSensitive?: boolean },
+): string =>
+    [
+        `${verb === "q" ? "" : `${verb} `}"${query}"`,
+        ...(scope.dir === "" ? [] : [`--in '${scope.dir}'`]),
+        ...(scope.ignored ? ["--ignored"] : []),
+        ...(options.literal === true ? ["--literal"] : []),
+        ...(options.word === true ? ["--word"] : []),
+        ...(options.caseSensitive === true ? ["--case"] : []),
+        ...scope.globs.map((glob) => `--glob '${glob}'`),
+        ...scope.notGlobs.map((glob) => `--not-glob '${glob}'`),
+    ].join(" ");
+
 // Routes for the full /work view and extra-repo cloning. The binary /workspace/raw preview is a plain Hono route in
 // app.ts; a streamed body doesn't fit oRPC.
 export const createWorkspaceRoutes = (services: Services) => {
@@ -136,12 +156,16 @@ export const createWorkspaceRoutes = (services: Services) => {
             };
             // Parses the include field the same way the editor does, then hands the globs to the engine's scope.
             const { globs, notGlobs } = includeGlobs(input.include);
+            // One subtree, normalized here the way the engine's own prefix filter normalizes it, so the scope and the
+            // echo below can't disagree about the same folder.
+            const dir = (input.dir ?? "").replace(/^\.\//, "").replace(/\/+$/, "");
             const outcome = await services.iq.run(
                 {
                     verb,
                     query: input.query,
                     scope: {
                         ...(ignored ? { ignored: true } : {}),
+                        ...(dir !== "" ? { paths: [dir] } : {}),
                         ...(globs.length > 0 ? { globs } : {}),
                         ...(notGlobs.length > 0 ? { notGlobs } : {}),
                     },
@@ -151,9 +175,7 @@ export const createWorkspaceRoutes = (services: Services) => {
                         ...(input.after !== undefined ? { after: input.after } : {}),
                     },
                     options,
-                    // Echo mirrors the CLI form and seeds the cursor id; must stay stable for the same
-                    // query+mode+scope+globs.
-                    echo: `${verb === "q" ? "" : `${verb} `}"${input.query}"${ignored ? " --ignored" : ""}${input.literal === true ? " --literal" : ""}${input.word === true ? " --word" : ""}${input.caseSensitive === true ? " --case" : ""}${globs.map((glob) => ` --glob '${glob}'`).join("")}${notGlobs.map((glob) => ` --not-glob '${glob}'`).join("")}`,
+                    echo: searchEcho(verb, input.query, { dir, ignored, globs, notGlobs }, options),
                 },
                 signal,
             );

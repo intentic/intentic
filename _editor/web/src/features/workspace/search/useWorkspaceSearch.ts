@@ -4,7 +4,7 @@ import type { Ref } from "vue";
 import { computed, onScopeDispose, ref, watch } from "vue";
 import { sandboxJson } from "../../sandbox/client/sandboxClient";
 import { useSearchOptions } from "./useSearchOptions";
-import { workspaceAgent } from "../health/workspaceScope";
+import { workspaceAgent, workspaceDir } from "../health/workspaceScope";
 import { useSandbox } from "../../sandbox/client/useSandbox";
 import { WORKSPACE_SEARCH } from "../../../lib/queryKeys";
 
@@ -15,6 +15,8 @@ import { WORKSPACE_SEARCH } from "../../../lib/queryKeys";
 // files → iq's `files`: fuzzy over paths only, the quick-open fallback (useFuzzyFiles).
 // An `include` field carries VSCode's files-to-include glob straight to the daemon for either scope. Results are
 // grouped by file, paginated (`loadMore`), debounced, abort-cancelled, and keep previous data on screen mid-refinement.
+// Every search is confined to the open project, when one is (app/projectScope.ts), so the counts and the pages describe
+// the same body of files the tree beside them lists.
 export type SearchScope = "text" | "smart" | "files";
 
 const VERB: Record<SearchScope, NonNullable<WorkspaceSearchMode>> = { text: `find`, smart: `q`, files: `files` };
@@ -45,6 +47,12 @@ export function useWorkspaceSearch(filter: Ref<string>, scope: Ref<SearchScope>,
     // Only `text` reads the match switches, `smart` has no pattern to apply them to.
     const params = computed(() => {
         const search = new URLSearchParams({ query: debounced.value, mode: VERB[scope.value] });
+        // The open project narrows this the way it narrows the tree beside it (app/projectScope.ts): a hit the reader
+        // cannot reach from the tree they are looking at is not an answer. A prefix, not a glob, so a typed `include`
+        // still applies on top of it.
+        if (workspaceDir.value !== ``) {
+            search.set(`dir`, workspaceDir.value);
+        }
         if (includeIgnored.value) {
             search.set(`includeIgnored`, `true`);
         }
