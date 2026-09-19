@@ -267,7 +267,7 @@ html[data-variant="desk"] {
         font-family: var(--font-display);
 /* Pinned, not on the UI weight scale: the display face ships exactly one weight, so asking for anything else
            just resolves back to this file and says something untrue about what is available. */
-        font-weight: 600;
+        font-weight: 300;
         color: var(--role-display-ink);
 /* Normal, not the positive tracking Playfair needed: Spectral is drawn for screens and already sets open, so
            tracking it out only loosened the words. */
