@@ -76,6 +76,7 @@ const below = computed(() => stoppedSync.value !== undefined || concerns.length 
         :icon="masthead ? undefined : `desktop`"
         :flush="masthead"
         :heading="masthead ? 2 : undefined"
+        :density="masthead ? `comfortable` : undefined"
         :spine="!masthead"
         :title="masthead ? undefined : environmentTitle(environment)"
     >

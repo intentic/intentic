@@ -78,15 +78,22 @@ test(`states the build the loop is serving, its pid, and that it is running`, ()
 // under every environment of every machine and asked nothing of anybody; what Update is for on an agent wanting
 // nothing lives on Update's own hint, where a reader reaching for the button already is.
 test(`says nothing at all about an agent with nothing to ask for`, () => {
+    expect(said({}, {}, `1.2.0`)).toBe(``);
+    expect(hints({}, {}, `1.2.0`)).toBe(``);
     expect(panelOf({}, {}, `1.2.0`)?.notes).toEqual([]);
+    expect(panelOf({}, {}, `1.2.0`)?.state).toEqual({ word: `running`, variant: `success` });
     expect(verbs({}, {}, `1.2.0`)).toEqual([`Update agent`, `Restart agent`]);
 });
 
 // Whether this sandbox knows the newest release is a fact about this sandbox, not about the machine on screen,
 // and a device page is no place to confess it: silent here too.
 test(`stays silent when this sandbox knows no release to judge the build against`, () => {
+    expect(said()).toBe(``);
+    expect(hints()).toBe(``);
     expect(panelOf()?.notes).toEqual([]);
+    expect(panelOf()?.version).toBe(`1.2.0`);
     expect(panelOf({ hostId: undefined, online: undefined })?.notes).toEqual([]);
+    expect(verbs()).toEqual([`Update agent`, `Restart agent`]);
 });
 
 test(`names the published release, and what this device holds, when it is behind`, () => {
@@ -143,6 +150,8 @@ test(`drops the verbs and names the missing door on a sync-only enrollment`, () 
 test(`drops the verbs on a connected device that is not answering, and says nothing about it`, () => {
     expect(verbs({ online: false })).toEqual([]);
     expect(panelOf({ online: false })?.blocked).toBeUndefined();
+    expect(said({ online: false })).toBe(``);
+    expect(panelOf({ online: false })?.version).toBe(`1.2.0`);
 });
 
 // Both verbs above end this machine's socket on purpose, and so does any CLI action that reloads its config: a
@@ -161,6 +170,7 @@ test(`hands the silence back to the concerns strip once the drop is older than t
     const away = { online: false, gap: `offline`, lastSeen: NOW - 60_000, report: undefined } as const;
     expect(panelOf(away)?.state).toEqual({ word: `not reported`, variant: `neutral` });
     expect(panelOf(away)?.blocked).toBeUndefined();
+    expect(said(away)).toBe(``);
 });
 
 // Every gap already has a sentence of its own in the concerns strip (deviceAttention.ts), each naming its own
@@ -169,6 +179,7 @@ test(`leaves every gap to the concerns strip rather than restating it under the 
     for (const gap of [`scope-off`, `no-agent`, `offline`] as const) {
         expect(verbs({ gap })).toEqual([]);
         expect(panelOf({ gap })?.blocked).toBeUndefined();
+        expect(said({ gap })).toBe(``);
     }
 });
 
