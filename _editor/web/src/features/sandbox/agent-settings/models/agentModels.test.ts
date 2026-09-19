@@ -731,6 +731,41 @@ test("collapsed over jobs that differ, it shows only what every one of them hold
     expect(chips(host)[`One list for all ${HELPERS.roles.length} jobs`]).toBe(`jobs differ`);
 });
 
+// Knobs no runtime outside Claude reads: `thinking` is a Claude control and `fast` needs the Claude Code loop, so a
+// stored one is a field the turn never looks at. Blocks must be compared as the run reads them, not as written.
+test("jobs differing only by a knob this provider cannot run still open as one list", async () => {
+    settings.value = {
+        ...settings.value,
+        modelRoles: {
+            ...allOf(HELPERS, [entry(`codex`, `gpt-5.6`, { effort: `low` })]),
+            [COMMIT]: [entry(`codex`, `gpt-5.6`, { effort: `low`, thinking: true, fast: false })],
+        },
+    };
+    const host = mount();
+    await Promise.resolve();
+
+    expect(adders(group(host, HELPERS.label))).toEqual([groupAdder(HELPERS)]);
+    expect(orderOnScreen(host)).toEqual([`CODEX · GPT 5.6 Luna`]);
+    expect(group(host, HELPERS.label).textContent).not.toContain(`jobs differ`);
+});
+
+test("a collapsed edit writes those jobs the pin the run reads, not the knobs it ignores", async () => {
+    settings.value = {
+        ...settings.value,
+        modelRoles: allOf(HELPERS, [entry(`codex`, `gpt-5.6`, { effort: `low`, thinking: true, fast: false })]),
+    };
+    const host = mount();
+    await Promise.resolve();
+
+    addButton(host, groupAdder(HELPERS)).click();
+    await flush();
+    answer?.pick({ provider: `claude`, model: `claude-haiku-4-5` });
+
+    expect(patch).toHaveBeenCalledWith({
+        modelRoles: allOf(HELPERS, [entry(`codex`, `gpt-5.6`, { effort: `low` }), entry(`claude`, `claude-haiku-4-5`)]),
+    });
+});
+
 test("collapsing a group takes its ticks with it, and leaves the other groups as they were", async () => {
     const host = await mountJobs();
 

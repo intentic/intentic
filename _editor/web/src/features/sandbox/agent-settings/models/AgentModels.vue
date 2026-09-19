@@ -11,6 +11,7 @@ import { Button, RowGroup, SegmentedControl } from "@intentic/ui";
 import Checkbox from "primevue/checkbox";
 import { computed, ref, shallowRef, watch } from "vue";
 import { RouterLink } from "vue-router";
+import { honoredPinKnobs } from "../../../chat/models/run-settings/pickerRunSettings";
 import { useSandboxSettings } from "../../overview/useSandboxSettings";
 import ModelGroupRow from "./ModelGroupRow.vue";
 import { type PinnedList, pinKnobSummary, pinnedList } from "./modelPinList";
@@ -62,7 +63,13 @@ const liveRoles = (roles: readonly ModelRoleSpec[]): readonly ModelRoleSpec[] =>
 
 // Nothing is stored per block: its list is derived from jobs and fanned back out, so Advanced later shows exactly what
 // was written. Identity needs every field to match, not just the model, or a re-point could silently hit a lookalike.
-const pinIdentity = (pin: ModelPin): string => [modelPinKey(pin), pin.effort ?? ``, pin.thinking ?? ``, pin.fast ?? ``, pin.harness ?? ``].join(`|`);
+// Compared as the run would read it (honoredPinKnobs), never as stored: a knob this provider has no control for —
+// `thinking` outside Claude, `fast` outside the Claude Code loop — changes nothing about the turn, so it may not be the
+// reason two jobs read as split or a shared model drops out of the collapsed list.
+const pinIdentity = (pin: ModelPin): string => {
+    const honored = honoredPinKnobs(pin);
+    return [modelPinKey(honored), honored.effort ?? ``, honored.thinking ?? ``, honored.fast ?? ``, honored.harness ?? ``].join(`|`);
+};
 
 // Intersection, not union: a union would show a model on jobs that don't actually have it, the one lie a collapsed view
 // could tell.
@@ -72,7 +79,9 @@ const sharedPins = (ids: readonly ModelRole[]): readonly ModelPin[] => {
         return [];
     }
     const others = rest.map((held) => new Set(held.map(pinIdentity)));
-    return first.filter((pin) => others.every((held) => held.has(pinIdentity(pin))));
+    // Handed back honored, since this list is also what a collapsed edit writes to every job: a knob the run ignores
+    // must not be copied onto jobs that never had it.
+    return first.filter((pin) => others.every((held) => held.has(pinIdentity(pin)))).map(honoredPinKnobs);
 };
 
 // Same entries, same order, across the live jobs only; an inert job may not be the reason a block reads as split.
