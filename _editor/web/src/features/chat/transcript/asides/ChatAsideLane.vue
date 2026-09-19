@@ -28,7 +28,9 @@ const said = computed(() => slots[`default`] !== undefined);
 </script>
 
 <template>
-    <div v-if="marks.length" class="flex w-full flex-col">
+    <!-- `chat-mark-open` is what makes the bar stick to its own material: the chip that opened a long run has to stay
+         pressable at the end of it (chat.css). -->
+    <div v-if="marks.length" class="flex w-full flex-col" :class="opened !== undefined && `chat-mark-open`">
         <!-- Out of flow past the column once there is margin to hold it; a right-aligned row of chips before that. -->
         <div class="chat-mark-bar relative flex w-full items-center justify-end gap-2" :class="opened !== undefined && !said && `chat-mark-bar-open`">
             <slot />

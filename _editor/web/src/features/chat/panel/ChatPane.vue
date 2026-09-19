@@ -1233,7 +1233,8 @@ watch(
                             >
                                 {{ dayMarks.get(turn.id) }}
                             </div>
-                            <section class="chat-stack group/turn relative flex flex-col">
+                            <!-- `chat-pin-host` carries `--chat-pin`: this turn's prompt writes its pinned height there, and anything sticky inside the turn reads it. -->
+                            <section class="chat-pin-host chat-stack group/turn relative flex flex-col">
                                 <!-- v-memo keys rendered inputs so streaming updates only the active row. -->
                                 <!-- `doomed` is part of the memo key because struck rows render differently. -->
                                 <!-- The checklist view is a fresh object per rebuild, so only the few rows that carry a

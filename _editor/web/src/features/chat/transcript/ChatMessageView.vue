@@ -329,6 +329,11 @@ watch(
         if (scroller === null) {
             return;
         }
+        // What this row covers while pinned, published to the turn as `--chat-pin` so anything else that sticks inside
+        // it (an open mark bar) parks below the prompt instead of under it. One prompt pins per turn, so one writer.
+        const host = element.closest<HTMLElement>(`.chat-pin-host`);
+        // `top: -1px` is the pin's own offset: the row's last pixel sits that far above the scroller's edge.
+        const publish = (): void => host?.style.setProperty(`--chat-pin`, `${element.offsetHeight - 1}px`);
         // Compares against the midpoint of the row's 1px sticky offset, robust to fractional scroll position or display
         // scaling.
         const sync = (): void => {
@@ -367,22 +372,27 @@ watch(
         // window resizes it, the wrapper inside it (ChatPane's `content`, which the transcript's insets live on)
         // changes when the turn grows, and neither implies the other.
         const resizer = new ResizeObserver(() => {
+            publish();
             if (listening) {
                 sync();
             }
         });
+        // The row itself, for `--chat-pin`: its height changes when the reader opens a clamped prompt.
+        resizer.observe(element);
         resizer.observe(scroller);
         // Guarded, not asserted: a scroller with nothing in it yet is a transcript with no row to pin either.
         if (scroller.firstElementChild !== null) {
             resizer.observe(scroller.firstElementChild);
         }
         // Syncs and listens immediately, so an already-stuck row (transcript restored at the bottom) starts out pinned.
+        publish();
         sync();
         listen(true);
         onCleanup(() => {
             observer.disconnect();
             resizer.disconnect();
             listen(false);
+            host?.style.removeProperty(`--chat-pin`);
         });
     },
     { immediate: true, flush: `post` },

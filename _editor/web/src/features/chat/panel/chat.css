@@ -233,6 +233,28 @@
         padding-right: var(--chat-lane-reserve);
     }
 }
+/* AN OPEN MARK FOLLOWS ITS OWN MATERIAL DOWN: the chip that opened a run of tool calls is the only way to shut it, so
+   it may not be left at the top of a screenful the reader has scrolled past. The bar is sticky for exactly the range of
+   what it opened — its parent box in ChatAsideLane is the bar plus that material, and nothing else. */
+.chat-mark-open .chat-mark-bar {
+    position: sticky;
+/* Parks under the prompt pinned above it (--chat-pin is that row's height, published by ChatMessageView). The step is
+   what clears the pinned band out in the lane, where the open bar is a zero-height box and its mark hangs half its own
+   height above it (.chat-mark-bar-open below). */
+    top: calc(var(--chat-pin, 0px) + 0.5rem);
+/* Under the pinned prompt (z-index 5), never over it: a stale height then clips the chip instead of covering the row. */
+    z-index: 4;
+}
+/* PAINT CONTAINMENT MAKES A ROW ITS OWN SCROLLPORT, and a bar sticky inside one never moves. */
+.chat-message:has(.chat-mark-open) {
+    content-visibility: visible;
+}
+/* Stuck in the column the marks float over their own text and need the turn's fill behind them; out in the lane that
+   fill is what is already there. */
+.chat-mark-open .chat-mark-lane {
+    border-radius: 9999px;
+    background-color: var(--color-card);
+}
 /* HOW WHAT A MARK STANDS FOR ARRIVES (the Transition in ChatAsideLane). */
 .chat-mark-reveal-enter-active,
 .chat-mark-reveal-leave-active {
