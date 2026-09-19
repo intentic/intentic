@@ -182,11 +182,13 @@ html[data-variant="desk"] {
     --role-plate-art: url("/assets/angkor/temple-1600.avif");
     /* How much of the photograph survives, and the flat tint laid over whatever does. */
     --role-plate-dim: 1;
-    --role-plate-tint: 0.12;
+    --role-plate-tint: 0.05;
     /* ONE KNOB OVER EVERY SCRIM STOP BELOW. The dark skin needs the full weight: it is darkening a photograph far
        enough that cream type can sit on it. A skin whose art is already pale needs a fraction of it, and without a
        multiplier each of those fourteen alphas would have to be tokenised on its own. */
     --role-plate-veil: 1;
+    /* The hero plate's well only — `.plate::after`'s three gradients. Kept separate so inner pages can stay heavy. */
+    --role-plate-well-veil: 0.4;
 
     /* The home page's own furniture: the stage's frame shadow, the veil over the demo figure that lifts its play
        button, the hero's subtitle, the ember rule under a live tab, and the plate's foot. */
@@ -1136,19 +1138,23 @@ html[data-variant="desk"] {
     background:
         radial-gradient(
             58% 46% at 50% 30%,
-            rgb(var(--role-scrim-well) / calc(0.74 * var(--role-plate-veil))) 0%,
-            rgb(var(--role-scrim-well) / calc(0.6 * var(--role-plate-veil))) 42%,
-            rgb(var(--role-scrim-well) / calc(0.28 * var(--role-plate-veil))) 72%,
+            rgb(var(--role-scrim-well) / calc(0.74 * var(--role-plate-well-veil, var(--role-plate-veil)))) 0%,
+            rgb(var(--role-scrim-well) / calc(0.6 * var(--role-plate-well-veil, var(--role-plate-veil)))) 42%,
+            rgb(var(--role-scrim-well) / calc(0.28 * var(--role-plate-well-veil, var(--role-plate-veil)))) 72%,
             transparent 100%
         ),
         linear-gradient(
             0deg,
-            rgb(var(--role-scrim-well) / calc(0.72 * var(--role-plate-veil))) 0%,
-            rgb(var(--role-scrim-well) / calc(0.42 * var(--role-plate-veil))) 18%,
-            rgb(var(--role-scrim-well) / calc(0.12 * var(--role-plate-veil))) 38%,
+            rgb(var(--role-scrim-well) / calc(0.72 * var(--role-plate-well-veil, var(--role-plate-veil)))) 0%,
+            rgb(var(--role-scrim-well) / calc(0.42 * var(--role-plate-well-veil, var(--role-plate-veil)))) 18%,
+            rgb(var(--role-scrim-well) / calc(0.12 * var(--role-plate-well-veil, var(--role-plate-veil)))) 38%,
             transparent 58%
         ),
-        radial-gradient(128% 108% at 50% 40%, transparent 46%, rgb(var(--role-scrim-well) / calc(0.52 * var(--role-plate-veil))) 100%),
+        radial-gradient(
+            128% 108% at 50% 40%,
+            transparent 46%,
+            rgb(var(--role-scrim-well) / calc(0.52 * var(--role-plate-well-veil, var(--role-plate-veil)))) 100%
+        ),
         rgb(var(--role-scrim) / var(--plate-scrim));
 }
 /* THE BAND EVERY PAGE OPENS ON. */
@@ -1206,10 +1212,10 @@ html[data-variant="desk"] {
         background:
             linear-gradient(
                 180deg,
-                rgb(var(--role-scrim-crop) / calc(0.62 * var(--role-plate-veil))) 0%,
-                rgb(var(--role-scrim-crop) / calc(0.5 * var(--role-plate-veil))) 40%,
-                rgb(var(--role-scrim-crop) / calc(0.52 * var(--role-plate-veil))) 66%,
-                rgb(var(--role-scrim-crop) / calc(0.86 * var(--role-plate-veil))) 100%
+                rgb(var(--role-scrim-crop) / calc(0.62 * var(--role-plate-well-veil, var(--role-plate-veil)))) 0%,
+                rgb(var(--role-scrim-crop) / calc(0.5 * var(--role-plate-well-veil, var(--role-plate-veil)))) 40%,
+                rgb(var(--role-scrim-crop) / calc(0.52 * var(--role-plate-well-veil, var(--role-plate-veil)))) 66%,
+                rgb(var(--role-scrim-crop) / calc(0.86 * var(--role-plate-well-veil, var(--role-plate-veil)))) 100%
             ),
             rgb(var(--role-scrim) / var(--plate-scrim));
     }
