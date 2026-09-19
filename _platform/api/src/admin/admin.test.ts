@@ -248,6 +248,41 @@ describe(`adminAttention`, () => {
         expect(pastDue?.detail).toContain(`2026-08-20`);
     });
 
+    it(`ages event-shaped rows off the feed, so a row nothing can ever clear stops nagging every morning`, async () => {
+        const prisma = emptyPrisma();
+        const inside = new Date(`2026-08-25T08:00:00Z`);
+        // Claimed, announced or refused weeks ago: only a daemon that boots again would clear these, and it never will.
+        const dead = new Date(`2026-07-10T10:30:00Z`);
+        const boundOf = (where: Record<string, unknown>, key: string): Date | undefined => {
+            const filter = where[key];
+            return typeof filter === `object` && filter !== null && `gt` in filter ? (filter as { gt: Date }).gt : undefined;
+        };
+        // Filters like the database would, so the window is proved rather than just passed along.
+        (prisma.sandbox as { findMany: unknown }).findMany = async (args: { where: Record<string, unknown> }) => {
+            const field = [`setupCodeClaimedAt`, `lastSeenAt`, `updatedAt`].find((key) => boundOf(args.where, key) !== undefined);
+            const gt = field === undefined ? undefined : boundOf(args.where, field);
+            if (field === undefined || gt === undefined) {
+                return [];
+            }
+            return [inside, dead]
+                .filter((date) => date > gt)
+                .map((date) => ({
+                    id: `sb-${field}`,
+                    name: `box`,
+                    owner: { email: `alice@example.com` },
+                    bootReport: null,
+                    setupReport: null,
+                    announceRefusal: { announced: `elsewhere`, expected: `here` },
+                    [field]: date,
+                }));
+        };
+
+        const attention = await adminAttention(prisma, () => NOW);
+        expect(attention.items.map((item) => item.kind)).toEqual([`unreachable-sandbox`, `announce-refusal`, `stuck-setup`]);
+        // One survivor each: the July rows are gone, and with them the daily email they were re-sending.
+        expect(attention.items.map((item) => item.at)).toEqual([inside, inside, inside].map((date) => date.toISOString()));
+    });
+
     it(`says truncated when any category hits its cap, so a bounded feed never reads as complete`, async () => {
         const prisma = emptyPrisma();
         (prisma.hostedPlan as { findMany: unknown }).findMany = async () =>

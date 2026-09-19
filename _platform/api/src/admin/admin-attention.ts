@@ -3,7 +3,7 @@ import { Prisma, type PrismaClient } from "@intentic/prisma";
 import { DAY_MS } from "../durations.js";
 
 // Every row that is a person's setup, plan, or machine waiting on a human, composed into sentences here. Each category
-// is capped (`truncated` says so); ordered severity first, then newest.
+// is capped (`truncated` says so) and the event-shaped ones are windowed; ordered severity first, then newest.
 
 const TAKE = 20;
 
@@ -15,6 +15,8 @@ const CLAIM_LINGER_MS = 15 * MINUTE_MS;
 const BUILD_STALE_MS = 2 * 60 * MINUTE_MS;
 // How far back the abuse watch's strikes stay on the feed; the account page keeps the rest.
 const STRIKE_WINDOW_MS = 7 * DAY_MS;
+// Setup, reach and announce rows record one moment that nothing ever clears, so they age off the feed like a strike does; must exceed the digest's day, or a row landing between two sends is announced by neither.
+const EVENT_WINDOW_MS = 3 * DAY_MS;
 const dateWord = (at: Date): string => at.toISOString().slice(0, 10);
 
 // What the watch measured, in the operator's units.
@@ -25,24 +27,25 @@ const strikeWords = (strike: { kind: string; measure: number; windowMinutes: num
 
 export const adminAttention = async (prisma: PrismaClient, now: () => Date = () => new Date()): Promise<AdminAttention> => {
     const at = now();
+    const since = new Date(at.getTime() - EVENT_WINDOW_MS);
     const [stuckSetups, unreachable, refusals, pastDue, lingeringClaims, staleBuilds, strikes, suspended] = await Promise.all([
             // Claimed by a machine, never announced: the setup that started and died somewhere in between.
             prisma.sandbox.findMany({
-                where: { setupCodeClaimedAt: { not: null }, lastSeenAt: null },
+                where: { setupCodeClaimedAt: { gt: since }, lastSeenAt: null },
                 orderBy: { setupCodeClaimedAt: `desc` },
                 take: TAKE,
                 select: { id: true, name: true, setupCodeClaimedAt: true, setupReport: true, owner: { select: { email: true } } },
             }),
             // Announcing but unreachable from outside: up, and usable by nobody.
             prisma.sandbox.findMany({
-                where: { lastSeenAt: { not: null }, bootReport: { path: [`reach`], equals: `unreachable` } },
+                where: { lastSeenAt: { gt: since }, bootReport: { path: [`reach`], equals: `unreachable` } },
                 orderBy: { lastSeenAt: `desc` },
                 take: TAKE,
                 select: { id: true, name: true, lastSeenAt: true, bootReport: true, owner: { select: { email: true } } },
             }),
             // A live disagreement about where a sandbox lives, invisible to its owner by construction.
             prisma.sandbox.findMany({
-                where: { announceRefusal: { not: Prisma.DbNull } },
+                where: { announceRefusal: { not: Prisma.DbNull }, updatedAt: { gt: since } },
                 orderBy: { updatedAt: `desc` },
                 take: TAKE,
                 select: { id: true, name: true, updatedAt: true, announceRefusal: true, owner: { select: { email: true } } },
