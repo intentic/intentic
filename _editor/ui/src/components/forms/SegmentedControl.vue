@@ -17,11 +17,14 @@ const {
     // - markSpin: turns that icon, for a mark that stands for work happening right now rather than one waiting
     // - title/markTitle: hover label via v-tooltip, always on the pill, never the chip; markTitle wins with a mark
     // - icon: glyph before the label, for options with a glyph vocabulary defined elsewhere; never replaces it
+    // - hue: identity accent as a dot before the label, for an option that stands for a PERSON rather than a view;
+    //   the caller passes the number so the hue stays one rule in the app (identityHue) rather than two
     // - readonly: lets a shared preset (`as const`) spread straight into `options` without copying
     options: readonly {
         label: string;
         value: T;
         icon?: IconName;
+        hue?: number;
         title?: string;
         badge?: number;
         mark?: IconName;
@@ -127,6 +130,13 @@ const underlineTab = (active: boolean): string =>
             @click="model = option.value"
         >
             <Icon v-if="option.icon !== undefined" :name="option.icon" class="mr-1.5 text-sm" /><!--
+            The same fill Avatar gives a person, shrunk to what a pill can carry: no face, just enough colour to tie
+            this option to the marks it filters to.
+         --><span
+                v-else-if="option.hue !== undefined"
+                class="mr-1.5 inline-block h-1.5 w-1.5 rounded-full align-middle"
+                :style="{ backgroundColor: `hsl(${option.hue} 55% 52%)` }"
+            /><!--
             -->{{ option.label }}<!--
             The same plate the rail and the phone tab bar draw a count on (countBadge.ts), minus their ring: those
             overlap the glyph they badge and need separating from it, where this one sits beside a label.

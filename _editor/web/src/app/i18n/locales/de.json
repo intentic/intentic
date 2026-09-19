@@ -245,6 +245,7 @@
             "deleteEveryArchivedAgent": "Jeden archivierten Agenten löschen?",
             "discard": "Verwerfen",
             "earlier": "{hiddenFinished} frühere",
+            "everyone": "Everyone",
             "explainCodebase": "Diese Codebasis erklären",
             "explainCodebaseWhatDoes": "Erkläre diese Codebasis, was sie tut, wo die Einstiegspunkte sind und welche Dateien ich zuerst lesen sollte.",
             "filter": "Filtern…",
@@ -271,6 +272,7 @@
             "nothingNeedsRightNow": "Gerade braucht Sie nichts.",
             "nothingOnBoardStart": "Nichts auf dem Board. Starten Sie hier oder im Workspace eine Unterhaltung; beide erscheinen auf diesem Board, und isolierte Arbeit bleibt auf ihrem eigenen Branch durchsehbar.",
             "nothingWrittenToWorkspace": "Nichts wird in Ihren Workspace geschrieben, wenn es nicht gelingt. Sie können den Zug jederzeit stoppen.",
+            "onlyOwnedBy": "Only the sessions {name} owns, in every lane",
             "openArchive": "Archiv öffnen ({archiveSize})",
             "restore": "Wiederherstellen",
             "reviewMyChanges": "Meine Änderungen durchsehen",
@@ -308,13 +310,10 @@
             "waiting": "wartet auf Sie"
         },
         "ownerMark": {
-            "child": "Kind",
             "ownedBy": "Gehört {name}",
             "spawnedBy": "Gestartet von Konversation {parent}; öffnet sie",
             "startedByControlToken": "Gestartet vom Steuer-Token {tokenLabel}",
-            "startedByProgramHolding": "Gestartet von einem Programm mit dem Steuer-Token „{tokenLabel}“; niemand hat es übernommen",
-            "token": "Token",
-            "you": "du"
+            "startedByProgramHolding": "Gestartet von einem Programm mit dem Steuer-Token „{tokenLabel}“; niemand hat es übernommen"
         },
         "promptCache": {
             "promptCacheGoesCold": "Sein Prompt-Cache wird in {countdown} kalt. Antworten Sie vorher, dann wird {read} aus dem Cache des Anbieters bedient; danach wird alles erneut gesendet und bezahlt."

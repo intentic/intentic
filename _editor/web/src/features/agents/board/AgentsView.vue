@@ -16,8 +16,9 @@ import { useAgentFilter } from "./useAgentFilter";
 import { projectScope, setProjectScope } from "../../../app/projectScope";
 import { usePersonas } from "../../sandbox/personas/usePersonas";
 import { agentInProject, heldWakeInProject, runInProject } from "./projectMembership";
-import { mineOnly, ownedBy } from "./ownership";
+import { boardOwners, ownedBy, ownerFilter, sameAddress } from "./ownership";
 import { useAuth } from "../../auth/useAuth";
+import { presenceOthers } from "../../../shell/presence/usePresence";
 import { type FleetLane, reviewAction, unregistered, watching } from "../fleet/agentStatus";
 import { useAgents } from "../fleet/useAgents";
 import { agentSeed } from "../fleet/useAgents-actions";
@@ -168,16 +169,18 @@ const boxFleet = computed<FleetAgent[]>(() => (readingAcross.value ? [...fleet.v
 // it was opened under this project and has no record to say so yet. Held wakes and live runs narrow by the same
 // evidence. The archive stays the sandbox's: its Delete all empties the whole pile, so its count must say the whole pile.
 const { personas } = usePersonas();
-// Mine (ownership.ts) narrows the same way a project does: a draft not yet sent stays, since it is about to be the
-// reader's own; held wakes and runs are not narrowed, since nobody owns them yet.
+// The owner filter (ownership.ts) narrows the same way a project does; held wakes and runs are not narrowed, since
+// nobody owns them yet. A draft not yet sent has no owner on record and is about to be the reader's own, so it
+// survives Mine and everybody's, and goes under a colleague's chip, where it would never belong.
 const { user } = useAuth();
 const scopedFleet = computed<FleetAgent[]>(() => {
     const project = projectScope.value;
-    const mine = mineOnly.value ? user.value?.email : undefined;
+    const owner = ownerFilter.value;
+    const keepsDrafts = owner === undefined || sameAddress(owner, user.value?.email);
     return boxFleet.value.filter(
         (agent) =>
-            unregistered(agent.status) ||
-            ((project === undefined || agentInProject(agent, project, personas.value)) && (mine === undefined || ownedBy(agent, mine))),
+            (unregistered(agent.status) && keepsDrafts) ||
+            ((project === undefined || agentInProject(agent, project, personas.value)) && (owner === undefined || ownedBy(agent, owner))),
     );
 });
 const scopedHeld = computed<AutomationApproval[]>(() => {
@@ -229,7 +232,7 @@ const projectHidden = computed(() => {
     return agents + runs + heldWakes.value.length - scopedHeld.value.length;
 });
 const scopedLanes = computed<Record<FleetLane, FleetAgent[]>>(() =>
-    readingAcross.value || projectScope.value !== undefined || mineOnly.value ? laneGroups(scopedFleet.value) : lanes.value,
+    readingAcross.value || projectScope.value !== undefined || ownerFilter.value !== undefined ? laneGroups(scopedFleet.value) : lanes.value,
 );
 
 const boardLanes = computed<Record<FleetLane, FleetAgent[]>>(() => {
@@ -286,6 +289,31 @@ const SCOPE_OPTIONS = computed(() => [
     { label: t(`agents.agentsView.sandbox`), value: `box` as const },
     { label: t(`agents.agentsView.allSandboxes`), value: `all` as const },
 ]);
+
+// Ownership as one exclusive choice rather than a lone toggle whose state had to be remembered: the lit segment names
+// whose board this is, and everybody else holding a conversation on it is one press away. Cards draw nothing for the
+// reader's own work, so this row is the one place "mine" is spelled out.
+const EVERYONE = `everyone`;
+const OWNER_OPTIONS = computed(() => {
+    const me = user.value?.email;
+    return [
+        { label: t(`agents.agentsView.everyone`), value: EVERYONE, title: t(`agents.agentsView.mineOff`) },
+        ...(me === undefined ? [] : [{ label: t(`agents.agentsView.mine`), value: me, title: t(`agents.agentsView.mineOnly`) }]),
+        // The board's own roster, not the sandbox's member list: a colleague with nothing here has nothing to filter to.
+        ...boardOwners(boxFleet.value, me, presenceOthers.value, ownerFilter.value).map((look) => ({
+            label: look.short,
+            value: look.email,
+            hue: look.hue,
+            title: t(`agents.agentsView.onlyOwnedBy`, { name: look.name }),
+        })),
+    ];
+});
+const ownerScope = computed<string>({
+    get: () => ownerFilter.value ?? EVERYONE,
+    set: (value) => {
+        ownerFilter.value = value === EVERYONE ? undefined : value;
+    },
+});
 // Excludes a run's steps, which are filed away with the run itself, or the archive would show one run row plus its five
 // conversations.
 const archivedCards = computed(() => archived.value.filter((agent) => !insideRun(agent, ledgerRunIds.value)));
@@ -1128,17 +1156,8 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
             <div class="flex min-w-0 flex-1 basis-0 items-center gap-2">
                 <!-- Drawn only when more than one sandbox exists (scopeOffered): a switch whose two settings look identical teaches the reader to ignore controls. -->
                 <SegmentedControl v-if="scopeOffered" v-model="fleetScope" :options="SCOPE_OPTIONS" class="shrink-0" />
-                <!-- Only the reader's own sessions; drawn only for a signed-in member, since nobody else owns anything here. -->
-                <Button
-                    v-if="user !== null"
-                    size="small"
-                    :severity="mineOnly ? 'primary' : 'secondary'"
-                    :label="t(`agents.agentsView.mine`)"
-                    :aria-pressed="mineOnly"
-                    v-tooltip.bottom="mineOnly ? t(`agents.agentsView.mineOff`) : t(`agents.agentsView.mineOnly`)"
-                    class="shrink-0"
-                    @click="mineOnly = !mineOnly"
-                />
+                <!-- Whose sessions the board shows; drawn only for a signed-in member, since nobody else owns anything here. -->
+                <SegmentedControl v-if="user !== null" v-model="ownerScope" :options="OWNER_OPTIONS" size="xs" wrap class="shrink-0" />
                 <!-- The open project, and the way out of it: the same scope the workspace chip clears, so both say the same thing. -->
                 <ProjectChip :project="projectScope" :hidden="projectHidden" noun="agents" @clear="setProjectScope(undefined)" />
             </div>

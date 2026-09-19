@@ -245,6 +245,7 @@
             "deleteEveryArchivedAgent": "Supprimer tous les agents archivés ?",
             "discard": "Jeter",
             "earlier": "{hiddenFinished} plus anciens",
+            "everyone": "Everyone",
             "explainCodebase": "Explique cette base de code",
             "explainCodebaseWhatDoes": "Explique cette base de code, ce qu'elle fait, où sont les points d'entrée et quels fichiers je devrais lire en premier.",
             "filter": "Filtrer…",
@@ -271,6 +272,7 @@
             "nothingNeedsRightNow": "Rien n'a besoin de vous en ce moment.",
             "nothingOnBoardStart": "Rien sur le tableau. Lancez une conversation ici ou dans l'espace de travail ; les deux apparaissent sur ce tableau, et le travail isolé reste relisable sur sa propre branche.",
             "nothingWrittenToWorkspace": "Rien n'est écrit dans votre espace de travail sauf si cela réussit. Vous pouvez arrêter le tour à tout moment.",
+            "onlyOwnedBy": "Only the sessions {name} owns, in every lane",
             "openArchive": "Ouvrir l'archive ({archiveSize})",
             "restore": "Restaurer",
             "reviewMyChanges": "Relis mes changements",
@@ -308,13 +310,10 @@
             "waiting": "vous attend"
         },
         "ownerMark": {
-            "child": "Enfant",
             "ownedBy": "Appartient à {name}",
             "spawnedBy": "Lancée par la conversation {parent} ; l’ouvre",
             "startedByControlToken": "Lancée par le jeton de contrôle {tokenLabel}",
-            "startedByProgramHolding": "Lancée par un programme détenant le jeton de contrôle « {tokenLabel} » ; personne ne l’a prise en charge",
-            "token": "Jeton",
-            "you": "vous"
+            "startedByProgramHolding": "Lancée par un programme détenant le jeton de contrôle « {tokenLabel} » ; personne ne l’a prise en charge"
         },
         "promptCache": {
             "promptCacheGoesCold": "Son cache de consignes refroidit dans {countdown}. Répondez avant et {read} est servi depuis le cache du fournisseur ; après, tout est renvoyé et repayé."

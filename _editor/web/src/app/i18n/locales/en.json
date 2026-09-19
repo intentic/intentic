@@ -245,6 +245,7 @@
             "deleteEveryArchivedAgent": "Delete every archived agent?",
             "discard": "Discard",
             "earlier": "{hiddenFinished} earlier",
+            "everyone": "Everyone",
             "explainCodebase": "Explain this codebase",
             "explainCodebaseWhatDoes": "Explain this codebase, what it does, where the entry points are, and which files I should read first.",
             "filter": "Filter…",
@@ -271,6 +272,7 @@
             "nothingNeedsRightNow": "Nothing needs you right now.",
             "nothingOnBoardStart": "Nothing on the board. Start a conversation here or in the workspace; both appear on this board, and isolated work remains reviewable on its own branch.",
             "nothingWrittenToWorkspace": "Nothing is written to your workspace unless it succeeds. You can stop the turn at any point.",
+            "onlyOwnedBy": "Only the sessions {name} owns, in every lane",
             "openArchive": "Open the archive ({archiveSize})",
             "restore": "Restore",
             "reviewMyChanges": "Review my changes",
@@ -308,13 +310,10 @@
             "waiting": "waiting for you"
         },
         "ownerMark": {
-            "child": "Child",
             "ownedBy": "Owned by {name}",
             "spawnedBy": "Spawned by conversation {parent}; opens it",
             "startedByControlToken": "Started by the control token {tokenLabel}",
-            "startedByProgramHolding": "Started by a program holding the control token “{tokenLabel}”; nobody has claimed it",
-            "token": "Token",
-            "you": "you"
+            "startedByProgramHolding": "Started by a program holding the control token “{tokenLabel}”; nobody has claimed it"
         },
         "promptCache": {
             "promptCacheGoesCold": "Its prompt cache goes cold in {countdown}. Answer before then and {read} is served from the provider's cache; after, all of it is sent and paid for again."

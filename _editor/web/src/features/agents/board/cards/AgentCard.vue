@@ -12,6 +12,9 @@ import { useVocabulary } from "../../../../core-views/vocabulary";
 import OriginMark from "../../../../components/OriginMark.vue";
 import AgentReactions from "./AgentReactions.vue";
 import OwnerMark from "../session/OwnerMark.vue";
+import { sessionMark } from "../ownership";
+import { useAuth } from "../../../auth/useAuth";
+import { presenceOthers } from "../../../../shell/presence/usePresence";
 import UnsentMark from "../../../../components/UnsentMark.vue";
 import WorkflowMark from "../../../../components/WorkflowMark.vue";
 import { dropActionFor, type PendingAction } from "../laneDrop";
@@ -103,6 +106,10 @@ const emit = defineEmits<{
 }>();
 
 const { mobile } = useDevice();
+const { user } = useAuth();
+// Whose it is, decided here rather than inside the mark, since the line the mark rides must know whether it has
+// anything at all to draw: a card of the reader's own says nothing about ownership and spends no row on it.
+const provenance = computed(() => sessionMark(props.agent, user.value?.email, presenceOthers.value));
 const meta = computed(() => agentStatusMeta(props.agent.status));
 // Identity tile's category, undefined for an unreadable title; read here too since the tooltip is this card's.
 const category = computed(() => sessionCategory(props.agent.title, props.agent.titleAction));
@@ -599,12 +606,11 @@ const grab = (event: PointerEvent): void => {
 
             <!-- Provenance, ahead of the model/branch line: for an agent the user didn't start, whose it is outranks what it runs on. -->
             <OriginMark :origin="agent.origin" />
-            <OwnerMark :owner="agent.owner" :started-by="agent.startedBy" />
             <WorkflowMark :workflow="agent.workflow" />
 
             <!-- WRAPS, which is what lets the unsent mark ride this line instead of taking one of its own. -->
             <div
-                v-if="agent.unsent || box !== undefined || model !== undefined || agent.branch !== undefined || account !== undefined"
+                v-if="agent.unsent || box !== undefined || provenance !== undefined || model !== undefined || agent.branch !== undefined || account !== undefined"
                 class="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-2xs text-subtle"
             >
                 <!-- Shape, wording and hover live in UnsentMark, shared with the rail row. -->
@@ -619,7 +625,12 @@ const grab = (event: PointerEvent): void => {
                     <Icon v-else name="server" class="shrink-0 text-2xs" />
                     <span class="truncate">{{ box.name }}</span>
                 </span>
-                <span v-if="model !== undefined" class="truncate">{{ model }}</span>
+                <!-- Whose it is leads what it runs on: for a card that isn't the reader's own, that outranks the model. -->
+                <OwnerMark v-if="provenance !== undefined" :mark="provenance" />
+                <span v-if="model !== undefined" class="inline-flex min-w-0 items-center gap-1.5">
+                    <span v-if="provenance !== undefined">·</span>
+                    <span class="truncate">{{ model }}</span>
+                </span>
                 <!-- Where it's running, shown only when that's somewhere other than here: the fleet spreads work across machines without a per-agent choice. -->
                 <span
                     v-if="agent.runner !== undefined && !maker"
@@ -632,11 +643,11 @@ const grab = (event: PointerEvent): void => {
                 <!-- Abbreviated on the card, full string on hover; a label, not a control (copy is on the right-click menu). -->
                 <!-- Clipped on the card, full identity on hover; nothing renders if the sandbox can't name the account. -->
                 <span v-if="agent.branch !== undefined && !maker" class="inline-flex min-w-0 items-center gap-1.5">
-                    <span v-if="model !== undefined">·</span>
+                    <span v-if="model !== undefined || provenance !== undefined">·</span>
                     <SessionChip :branch="agent.branch" />
                 </span>
                 <span v-if="account !== undefined" class="inline-flex min-w-0 shrink items-center gap-1">
-                    <span v-if="model !== undefined || (agent.branch !== undefined && !maker)">·</span>
+                    <span v-if="model !== undefined || provenance !== undefined || (agent.branch !== undefined && !maker)">·</span>
                     <span v-tooltip.top="account.hint" class="inline-flex min-w-0 shrink items-center gap-1">
                         <Icon name="user" class="shrink-0 text-2xs" />
                         <span class="truncate">{{ account.label }}</span>

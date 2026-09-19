@@ -245,6 +245,7 @@
             "deleteEveryArchivedAgent": "Usunąć każdego zarchiwizowanego agenta?",
             "discard": "Odrzuć",
             "earlier": "wcześniejsze: {hiddenFinished}",
+            "everyone": "Everyone",
             "explainCodebase": "Wyjaśnij tę bazę kodu",
             "explainCodebaseWhatDoes": "Wyjaśnij tę bazę kodu, co robi, gdzie są punkty wejścia i które pliki powinienem przeczytać najpierw.",
             "filter": "Filtruj…",
@@ -271,6 +272,7 @@
             "nothingNeedsRightNow": "W tej chwili nic Cię nie potrzebuje.",
             "nothingOnBoardStart": "Nic na tablicy. Zacznij rozmowę tutaj albo w przestrzeni roboczej; obie pojawią się na tej tablicy, a odizolowana praca zostaje do przejrzenia na własnej gałęzi.",
             "nothingWrittenToWorkspace": "Nic nie zostaje zapisane do Twojej przestrzeni roboczej, jeśli się nie uda. Turę możesz zatrzymać w dowolnym momencie.",
+            "onlyOwnedBy": "Only the sessions {name} owns, in every lane",
             "openArchive": "Otwórz archiwum ({archiveSize})",
             "restore": "Przywróć",
             "reviewMyChanges": "Przejrzyj moje zmiany",
@@ -308,13 +310,10 @@
             "waiting": "czeka na Ciebie"
         },
         "ownerMark": {
-            "child": "Potomna",
             "ownedBy": "Należy do: {name}",
             "spawnedBy": "Uruchomiona przez rozmowę {parent}; otwiera ją",
             "startedByControlToken": "Uruchomiona przez token sterujący {tokenLabel}",
-            "startedByProgramHolding": "Uruchomiona przez program z tokenem sterującym „{tokenLabel}”; nikt jej nie przejął",
-            "token": "Token",
-            "you": "ty"
+            "startedByProgramHolding": "Uruchomiona przez program z tokenem sterującym „{tokenLabel}”; nikt jej nie przejął"
         },
         "promptCache": {
             "promptCacheGoesCold": "Jego pamięć podręczna promptu wystygnie za {countdown}. Odpowiedz wcześniej, a {read} zostanie podane z pamięci dostawcy; później całość idzie i jest płacona jeszcze raz."

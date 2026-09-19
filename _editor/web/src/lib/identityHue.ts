@@ -6,7 +6,8 @@
 const HUES = [210, 350, 160, 40, 280, 20, 130, 320];
 export const identityHue = (seed: string): number => {
     let hash = 0;
-    for (const char of seed) {
+    // Folded, since an address is the seed and the same person reaches this with either casing.
+    for (const char of seed.toLowerCase()) {
         hash = (hash * 31 + char.charCodeAt(0)) | 0;
     }
     return HUES[Math.abs(hash) % HUES.length]!;

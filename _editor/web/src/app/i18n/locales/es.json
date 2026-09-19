@@ -245,6 +245,7 @@
             "deleteEveryArchivedAgent": "¿Eliminar todos los agentes archivados?",
             "discard": "Descartar",
             "earlier": "{hiddenFinished} anteriores",
+            "everyone": "Everyone",
             "explainCodebase": "Explica esta base de código",
             "explainCodebaseWhatDoes": "Explica esta base de código, qué hace, dónde están los puntos de entrada y qué archivos debería leer primero.",
             "filter": "Filtrar…",
@@ -271,6 +272,7 @@
             "nothingNeedsRightNow": "Ahora mismo no te necesita nada.",
             "nothingOnBoardStart": "Nada en el tablero. Empieza una conversación aquí o en el espacio de trabajo; ambas aparecen en este tablero, y el trabajo aislado sigue siendo revisable en su propia rama.",
             "nothingWrittenToWorkspace": "No se escribe nada en tu espacio de trabajo si no sale bien. Puedes detener el turno en cualquier momento.",
+            "onlyOwnedBy": "Only the sessions {name} owns, in every lane",
             "openArchive": "Abrir el archivo ({archiveSize})",
             "restore": "Restaurar",
             "reviewMyChanges": "Revisa mis cambios",
@@ -308,13 +310,10 @@
             "waiting": "te espera"
         },
         "ownerMark": {
-            "child": "Hija",
             "ownedBy": "Pertenece a {name}",
             "spawnedBy": "Iniciada por la conversación {parent}; la abre",
             "startedByControlToken": "Iniciada por el token de control {tokenLabel}",
-            "startedByProgramHolding": "Iniciada por un programa que tiene el token de control «{tokenLabel}»; nadie la ha reclamado",
-            "token": "Token",
-            "you": "tú"
+            "startedByProgramHolding": "Iniciada por un programa que tiene el token de control «{tokenLabel}»; nadie la ha reclamado"
         },
         "promptCache": {
             "promptCacheGoesCold": "Su caché de indicaciones se enfría en {countdown}. Responde antes y {read} se sirve desde la caché del proveedor; después, todo se envía y se paga otra vez."

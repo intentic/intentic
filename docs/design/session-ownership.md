@@ -78,9 +78,13 @@ as today; ownership is a label with one press, and the phases below say when it 
 
 ## Surfaces
 
-- **Board card**: an `OwnerMark` in the provenance slot. A member owner draws as avatar and name ("you" for the
-  reader's own), a token starter as key and label, a child as "child of <parent>" linking to the parent. The
-  toolbar gains a **Mine** toggle beside the fleet scope, which narrows every lane to the reader's own sessions.
+- **Board card**: an `OwnerMark` riding the model/branch line, never a row of its own — card height is what decides
+  how many cards a lane holds before it scrolls. The reader's own sessions draw NOTHING: on most boards that is
+  nearly every card, and a mark carried by nearly every card tells no two of them apart. Someone else's draws as
+  that person's hue in a dot plus their given name, a token starter as key and label, a child as the parent's name
+  linking to it. The full name stays in the hover, and what may be done about it in the session menu.
+  The toolbar gains one exclusive owner filter beside the fleet scope — Everyone / Mine / a chip per other member
+  holding a session here, each wearing the same dot its cards do — so ownership is a press rather than a legend.
 - **Session menu**: Claim / Take over (to me) and Hand over… (a member picker fed by the presence roster, with a
   free address for someone not connected), offered only when the policy above would say yes.
 - **`agents ls`**: a `who` column, the owner's address before the `@`, or the starter for an unowned one.
@@ -121,4 +125,5 @@ as today; ownership is a label with one press, and the phases below say when it 
 - Routes: claim, hand-over and take-over each succeed for the tier that may make them and are FORBIDDEN for the one
   that may not; an outsider's address is BAD_REQUEST; the floor is collaborator.
 - Recall: `--owner` narrows the roster; the row and the recall carry both fields.
-- Board: the mark draws each of the three forms; Mine hides every card the reader does not own.
+- Board: the mark draws each of the three forms and nothing at all for the reader's own; the filter offers a chip
+  per other owner, once each, and narrows every lane to whoever is lit.
