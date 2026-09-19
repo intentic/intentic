@@ -12,6 +12,7 @@ import { installI18n } from "./i18n/index.js";
 import { Theme } from "./styles/theme.js";
 import { vAction } from "./lib/pressAction.js";
 import { vLongpress } from "./lib/longPress.js";
+import { vMiddleclick } from "./lib/middleClick.js";
 import { stabilizeStyleWrites } from "./lib/styleStability.js";
 import { vTooltip } from "./lib/tooltip.js";
 
@@ -72,6 +73,8 @@ export function installUi(app: App): void {
     // `v-action` gives hand-styled controls (non-`<Button>`) Button's press-to-lock-and-wait behavior; global since
     // call sites are spread across every view.
     app.directive(`action`, vAction);
+    // `v-middleclick` is the close gesture every tab strip shares; global so extension views inherit it too.
+    app.directive(`middleclick`, vMiddleclick);
     // Register the icon primitive globally so every `<Icon name="…">` resolves without a per-file import.
     app.component(`Icon`, Icon);
 }

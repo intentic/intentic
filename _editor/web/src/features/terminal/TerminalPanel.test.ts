@@ -154,6 +154,35 @@ test(`the strip says what a busy terminal is running`, async () => {
     expect(closeButton(host, `Kill terminal, running pnpm build`)).toEqual(expect.any(Object));
 });
 
+// The pill around a given ×: a shell's label is its strip number, so the kill button's own wording is what tells
+// two pills apart here, the same string the cases above assert on.
+const pillAround = (host: HTMLElement, killLabel: string): HTMLElement => {
+    const kill = [...host.querySelectorAll(`[data-term-tab] [aria-label]`)].find((el) => el.getAttribute(`aria-label`) === killLabel);
+    expect(kill, `no pill whose × reads "${killLabel}"`).toEqual(expect.any(Object));
+    return (kill as HTMLElement).parentElement as HTMLElement;
+};
+const middlePress = (el: HTMLElement): void => {
+    el.dispatchEvent(new MouseEvent(`auxclick`, { bubbles: true, cancelable: true, button: 1 }));
+};
+
+// Middle-click is the pill's × pressed: the same kill, aimed at the pill under the pointer rather than the focused one.
+test(`a middle-click kills the pill it landed on`, async () => {
+    const { killed, host } = await openPanel([busy(`web-aaa`, `pnpm build`), idle(`web-bbb`)]);
+    middlePress(pillAround(host, `Kill terminal`));
+    await nextTick();
+    expect(killed).toEqual([`web-bbb`]);
+    expect(dialogText()).not.toContain(`Kill anyway`);
+});
+
+// Including the question: a gesture with no × under the pointer to aim at must not skip the confirmation.
+test(`a middle-click on a busy pill asks first, and names the command`, async () => {
+    const { killed, host } = await openPanel([busy(`web-aaa`, `pnpm build`)]);
+    middlePress(pillAround(host, `Kill terminal, running pnpm build`));
+    await nextTick();
+    expect(killed).toEqual([]);
+    expect(dialogText()).toContain(`Kill the terminal running pnpm build?`);
+});
+
 // Selection logic has its own cases in terminalSweep.test.ts; this is the panel enacting it through the dialog.
 test(`the sweep takes the quiet and the finished without asking`, async () => {
     const { killed } = await openPanel([

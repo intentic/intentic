@@ -1,5 +1,18 @@
 <script setup lang="ts">
-import { Button, clipboardOf, ui, ConfirmDialog, ContextMenu, Icon, type IconName, Modal, ResizeSeam, useDevice, vAction } from "@intentic/ui";
+import {
+    Button,
+    clipboardOf,
+    ui,
+    ConfirmDialog,
+    ContextMenu,
+    Icon,
+    type IconName,
+    Modal,
+    ResizeSeam,
+    useDevice,
+    vAction,
+    vMiddleclick,
+} from "@intentic/ui";
 import type { Disposable } from "@intentic/extension-api";
 import type { TerminalScrollback } from "@intentic/sandbox-contract";
 import type { MenuItem } from "primevue/menuitem";
@@ -276,6 +289,13 @@ const commitRename = (): void => {
 };
 const cancelRename = (): void => {
     renamingName.value = undefined;
+};
+// Middle-click on a segment is its × pressed: the same confirmation for a busy session, nothing at all where the
+// host gave the strip no kill (a read-only panel draws no × either) or while that segment is being renamed.
+const middleKill = (name: string): void => {
+    if (killTabs !== undefined && renamingName.value !== name) {
+        requestKill([name]);
+    }
 };
 // Focuses and selects the field the moment it mounts (the @vue:mounted trick).
 const focusRename = (vnode: VNode): void => {
@@ -1050,6 +1070,7 @@ const maxHeight = computed(() => Math.round(window.innerHeight * 0.8));
                             class="flex h-full items-center gap-1.5 pl-2 pr-1.5 text-2xs"
                             :class="[vertical ? 'min-w-0 flex-1' : '', { 'opacity-60': tabByName.get(name)?.running === false }]"
                             v-tooltip.top="renamingName === name ? undefined : segmentTooltip(name)"
+                            v-middleclick="() => middleKill(name)"
                             @click="onSegmentClick($event, gi, name)"
                             @dblclick.prevent.stop="beginRename(name)"
                             @contextmenu.prevent.stop="openTabMenu($event, gi, name)"

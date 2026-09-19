@@ -145,6 +145,9 @@ export { default as MermaidDiagram } from "./components/charts/MermaidDiagram.vu
 // Centred modal wrapping PrimeVue's Dialog, with a named width and a viewport clamp built in. <ConfirmDialog> and
 // <InfoDialog> build on it.
 export { default as Modal } from "./components/overlays/Modal.vue";
+// `v-middleclick` closes what was pressed (a tab, a pill, a card standing for an open thing); import it where it's
+// used, since an unresolved directive silently does nothing.
+export { vMiddleclick } from "./lib/middleClick.js";
 // Index-column chrome (filter, pinned rows, grouped selection, footnote); the row itself stays the caller's.
 export { default as NavRail } from "./components/layout/NavRail.vue";
 export { type NavGroup } from "./components/layout/navRail.js";

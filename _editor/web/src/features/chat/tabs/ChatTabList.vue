@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Button, ui, ContextMenu, type IconName, SearchBar, SegmentedControl } from "@intentic/ui";
+import { Button, ui, ContextMenu, type IconName, SearchBar, SegmentedControl, vMiddleclick } from "@intentic/ui";
 import { createInlineRename } from "@intentic/ui/inline-rename";
 import { useNow } from "@intentic/ui/async";
 import type { MenuItem } from "primevue/menuitem";
@@ -561,6 +561,15 @@ const closeTab = (event: Event, id: string): void => {
     emit(`close`, new Set([id]));
 };
 
+// Middle-click closes the card under the pointer, the tab gesture these cards stand in for. Held to the same rule
+// as the ×: the last open chat keeps no close affordance, so the press has nothing to act on either. A peeked card
+// closes too — its × is missing because the pin took that slot, not because it can't be closed.
+const middleCloseTab = (id: string): void => {
+    if (conversations.value.length > 1) {
+        emit(`close`, new Set([id]));
+    }
+};
+
 // Keeps a peeked chat open (Conversation.peek); local only, since other windows read the peek mark off the
 // published strip.
 const keepTab = (event: Event, id: string): void => {
@@ -673,6 +682,7 @@ const keepTab = (event: Event, id: string): void => {
                             :peek="c.peek.value"
                             :attention="lane.key === 'attention'"
                             :snippet="agent === undefined ? undefined : snippetOf(agent)"
+                            v-middleclick="() => middleCloseTab(c.conversationId)"
                             @click="onRowClick($event, c.conversationId)"
                             @dblclick.prevent.stop="beginRename(c.conversationId)"
                             @contextmenu.prevent.stop="openTabMenu(c.conversationId, $event)"

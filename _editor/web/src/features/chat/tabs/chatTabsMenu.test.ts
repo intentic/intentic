@@ -130,6 +130,34 @@ it(`closes a tab from the × it wears, without selecting it on the way`, async (
     expect(chat.activeId.value).toBe(ids[0]);
 });
 
+// Same close as the ×, from the press a browser tab answers to; the card's own click gestures (select, split)
+// must not fire with it.
+it(`closes the card a middle-click lands on, leaving the focus where it was`, async () => {
+    const chat = useChat();
+    const ids = openTabs(3);
+    chat.setActive(ids[0]!);
+    await nextTick();
+
+    tabs()[2]!.dispatchEvent(new MouseEvent(`auxclick`, { bubbles: true, cancelable: true, button: 1 }));
+    await flush();
+
+    expect(chat.conversations.value.map((c) => c.conversationId)).toEqual([ids[0], ids[1]]);
+    expect(chat.activeId.value).toBe(ids[0]);
+});
+
+// The last card wears no × (there would be no chat left to show), so the gesture standing in for it does nothing
+// either.
+it(`leaves the last open chat alone`, async () => {
+    const chat = useChat();
+    const ids = openTabs(1);
+    await nextTick();
+
+    tabs()[0]!.dispatchEvent(new MouseEvent(`auxclick`, { bubbles: true, cancelable: true, button: 1 }));
+    await flush();
+
+    expect(chat.conversations.value.map((c) => c.conversationId)).toEqual(ids);
+});
+
 it(`closes the set the RIGHT-CLICKED tab names, not the active tab's`, async () => {
     const chat = useChat();
     const ids = openTabs(4); // The last tab is active; every close below is aimed elsewhere.

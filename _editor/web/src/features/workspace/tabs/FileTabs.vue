@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { isLockedWorkspacePath } from "@intentic/sandbox-contract";
-import { type IconName, useExplorerStyle, ChangeStatusMark, explorerColorClass, iconForEntry, ui } from "@intentic/ui";
+import { type IconName, useExplorerStyle, ChangeStatusMark, explorerColorClass, iconForEntry, ui, vMiddleclick } from "@intentic/ui";
 import { nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useEditBuffers } from "../files/useEditBuffers";
 import type { WorkspaceTab } from "./workspaceTabs";
@@ -174,6 +174,7 @@ watch(
                 class="group flex shrink-0 items-center gap-1.5 border-r border-r-line px-3 py-1.5 text-xs"
                 :class="ui.tab(tab.id === active, tab.id === active ? `bg-canvas` : `hover:bg-content/6`)"
                 v-tooltip.bottom="tabHint(tab)"
+                v-middleclick="() => emit('close', tab.id)"
                 @click="emit('select', tab.id)"
                 @dblclick="emit('keep', tab.id)"
                 @contextmenu.prevent.stop="emit('contextmenu', tab.id, $event)"

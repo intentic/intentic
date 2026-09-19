@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { BrowserPage, BrowserSession } from "@intentic/sandbox-contract";
-import { Button, AnchoredOverlay, CopyButton, Icon, ui, vAction } from "@intentic/ui";
+import { Button, AnchoredOverlay, CopyButton, Icon, ui, vAction, vMiddleclick } from "@intentic/ui";
 import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue";
 import { RouterLink, useRoute } from "vue-router";
 import { activePageOf } from "./activePage";
@@ -171,6 +171,14 @@ const COMMANDS: Record<BrowserCommand, () => void> = {
     find: view.find,
 };
 const onCommand = (command: BrowserCommand): void => COMMANDS[command]();
+
+// Middle-click on a tab closes that page, like the browser this frame is showing. Only while the browser runs:
+// a stopped session's pages are a last-known list, and its tabs wear no × either.
+const middleCloseTab = (pageId: string): void => {
+    if (current.value?.running === true) {
+        view.closeTab(pageId);
+    }
+};
 
 const close = (name: string): void => void closeBrowser(name);
 
@@ -361,7 +369,14 @@ watch(
                     <!-- The tab strip: the browser's open pages, the selected one in front, each closable, plus one to open. -->
                     <div ref="stripEl" class="scrollbar-none flex min-w-0 flex-1 items-center gap-0.5 overflow-x-auto">
                         <!-- The tab and its close are siblings, not nested (a button cannot hold one); the close shows on the selected tab and on hover. -->
-                        <div v-for="page in current?.pages ?? []" :key="page.id" :data-selected="page.id === activePage?.id" class="group/tab flex shrink-0 items-center">
+                        <!-- Middle-click anywhere on the pair closes the page, the gesture the browser inside this frame answers to as well. -->
+                        <div
+                            v-for="page in current?.pages ?? []"
+                            :key="page.id"
+                            :data-selected="page.id === activePage?.id"
+                            class="group/tab flex shrink-0 items-center"
+                            v-middleclick="() => middleCloseTab(page.id)"
+                        >
                             <button
                                 type="button"
                                 class="ui-chip min-w-0 shrink-0 rounded-md px-1.5 py-1"
