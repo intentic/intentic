@@ -282,7 +282,6 @@ const pushToCi = async (): Promise<void> => {
                 <RowGroup
                     v-if="groupVisible(visibleCredentials)"
                     :label="t(`sandbox.sandboxSecrets.capabilityCredentials`)"
-                    :count="credentials.length"
                 >
                     <template #actions>
                         <Button

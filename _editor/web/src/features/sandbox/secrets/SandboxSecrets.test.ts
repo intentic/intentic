@@ -135,7 +135,6 @@ afterEach(() => {
 it(`truncates capability credentials once they would bury the secrets that are work`, () => {
     const el = mount();
     expect(text(el)).toContain(`Capability credentials`);
-    expect(text(el)).toContain(`19`);
     expect(text(el)).toContain(`Show 16 more accounts`);
     expect(text(el)).toContain(`github`);
     expect(text(el)).not.toContain(`radarsuspam8`);
