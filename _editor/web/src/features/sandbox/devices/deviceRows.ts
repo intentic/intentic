@@ -73,6 +73,38 @@ export const deviceState = (device: Device, readAt: number): string => {
 // environments ranks by its best one, since that is the door that works.
 const RANK: Record<string, number> = { live: 0, "needs attention": 1, "gone quiet": 2, reconnecting: 3, offline: 4 };
 
+// One word for the whole PC, so the masthead carries a verdict instead of restating the environment names that
+// are the section under it. Environments that agree collapse to their shared word; ones that don't are counted,
+// worst first, because "1 of 2 offline" is the only honest summary of a machine half of which is asleep.
+export const machineState = (machine: MachineRow, readAt: number): { word: string; variant: StatusVariant } => {
+    const states = machine.environments.map((environment) => ({
+        word: deviceState(environment.device, readAt),
+        variant: deviceTone(environment.device, readAt),
+        rank: RANK[deviceState(environment.device, readAt)] ?? 9,
+    }));
+    const worst = states.toSorted((a, b) => b.rank - a.rank)[0];
+    if (worst === undefined) {
+        return { word: `offline`, variant: `neutral` };
+    }
+    const sharing = states.filter((state) => state.word === worst.word).length;
+    const word = sharing === states.length ? worst.word : `${sharing} of ${states.length} ${worst.word}`;
+    return { word, variant: worst.variant };
+};
+
+// What the machine IS, in the quietest ink the masthead has: read once, mostly to tell two identically-named PCs
+// apart. Every environment reports the same hardware, so it is taken from the first that describes itself; the
+// hostname joins only when it differs from the name already above it.
+export const machineHardware = (machine: MachineRow): string => {
+    const described = machine.environments.find((environment) => environment.device.facts !== undefined)?.device;
+    if (described === undefined) {
+        return ``;
+    }
+    const hostname = described.report?.hostname;
+    return [described.facts?.arch, hostname !== undefined && hostname.toLowerCase() !== machine.label.toLowerCase() ? hostname : undefined]
+        .filter((part) => part !== undefined && part !== ``)
+        .join(` · `);
+};
+
 const machineRank = (machine: MachineRow, readAt: number): number =>
     Math.min(...machine.environments.map((environment) => RANK[deviceState(environment.device, readAt)] ?? 9));
 

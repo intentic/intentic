@@ -2068,10 +2068,7 @@
             "waitingFirstLineDevice": "Es wird auf die erste Zeile von diesem Gerät gewartet…"
         },
         "deviceAgent": {
-            "capabilityCardHandsOut": "Seine Fähigkeitskarte gibt den Befehl aus, der einen installiert.",
             "fetchesNewestAgentOnto": "Holt den neuesten Agenten auf dieses Gerät, installiert ihn und startet seine Schleife neu — den einen Prozess, über den diese Sandbox das Gerät erreicht. Unbedenklich bei einem Agenten, der schon aktuell ist; seine Ordner, Kopplungen und gespiegelten Ports bleiben so oder so unangetastet.",
-            "nothingHereKnowsWhat": "Hier weiß nichts, was der Agent dieses Geräts ist.",
-            "runningAnythingOnDevice": "Irgendetwas auf diesem Gerät auszuführen braucht „Befehle ausführen“ auf seiner Fähigkeitskarte, und dieser Schalter ist aus.",
             "socketDroppedMomentAgo": "Sein Socket ist gerade abgerissen, was genau das ist, was ein Agenten-Neustart tut. Eine frische Schleife wählt sich von selbst wieder ein, und bis dahin lässt sich auf der Maschine nichts ausführen.",
             "updateAgent": "Agent aktualisieren",
             "updateAgentFetchesInstalls": "„Agent aktualisieren“ holt ihn, installiert ihn und startet die Schleife auf diesem Gerät neu.",
@@ -2112,16 +2109,14 @@
             "refreshTryAgainKeeps": "Laden Sie neu und versuchen Sie es erneut. Wenn es weiter passiert, ist sein Agent zu alt, um einen Anteil zu melden — „Agent aktualisieren“ oben behebt das von hier aus."
         },
         "devicePage": {
-            "agent": "Agent {version}",
             "allDevices": "Alle Geräte",
             "clearBuildOutput": "Build-Ausgaben löschen",
             "connect": "Verbinden",
-            "connected": "verbunden als",
             "dangerZone": "Gefahrenbereich",
             "deleteBuildOutputDevice": "Die Build-Ausgaben löschen, die dieses Gerät in Verzeichnissen hinterlassen hat, die die Sandbox gelöscht hat, damit diese Löschungen landen können. Es entfernt nichts, was synchronisiert wird, und ein Build legt sie wieder an.",
             "deviceAloneLosesAccess": "Nur dieses eine Gerät verliert den Zugriff — jedes andere gekoppelte Gerät synchronisiert weiter. Seine Dateisynchronisierung hört auf, und seine gespiegelten Ports fallen innerhalb einer Minute von seinem localhost.",
             "dontMirrorPort": "Nicht spiegeln",
-            "environmentsOnDevice": "Umgebungen auf diesem Gerät",
+            "environments": "Environments",
             "fetchesNewestAgentOnto": "Holt den neuesten Agenten der Reihe nach auf jede Umgebung dieses Computers — Windows und jede Distro führen ihre eigene Installation aus, und das ist es, was sie auf dieselbe Version bringt. Unbedenklich auf einer Seite, die schon aktuell ist.",
             "fixAgent": "Mit Agent reparieren",
             "leavePortOffLocalhost": "Diesen Port vom localhost dieses Geräts weglassen. Jeder andere Port, den diese Sandbox bedient, wird weiter gespiegelt.",
@@ -2143,7 +2138,7 @@
             "runningOnDeviceKeeps": "Läuft auf diesem Gerät. Es macht weiter, auch wenn Sie diese Seite verlassen.",
             "runsOnDeviceKeeps": "Läuft auf diesem Gerät und macht weiter, wenn Sie diese Seite verlassen oder die Verbindung abbricht.",
             "sandboxUsingRightNow": "Das ist die Sandbox, die Sie gerade benutzen — diese Seite verliert sie.",
-            "sandboxesOnDevice": "Sandboxes auf diesem Gerät",
+            "sandboxes": "Sandboxes",
             "startMirroring": "Spiegelung starten",
             "startMovingFilesBetween": "Dateien wieder zwischen diesem Gerät und der Sandbox bewegen",
             "startingOnDevice": "Wird auf diesem Gerät gestartet…",
@@ -2155,8 +2150,7 @@
             "thisSandbox": "diese Sandbox",
             "unpair": "Entkoppeln",
             "unpairHeader": "{sandbox} entkoppeln?",
-            "updateAllAgents": "Alle Agenten aktualisieren",
-            "wslDistrosOnPc": "WSL-Distros auf diesem PC"
+            "updateAgents": "Update agents"
         },
         "deviceRows": {
             "fileSyncing": "Dateisynchronisierung",
@@ -2176,7 +2170,7 @@
             "offline": "offline",
             "outdated": "veraltet",
             "runnerComesOffWork": "Der Runner kommt von {label} herunter. Seine Arbeit lebt im Git dieser Sandbox, es geht also nichts mit ihm verloren — und Sie können hier jederzeit einen neuen anlegen.",
-            "runnersOnDevice": "Runner auf diesem Gerät",
+            "runners": "Runners",
             "runningOnDeviceKeeps": "Läuft auf diesem Gerät. Es macht weiter, auch wenn Sie diese Seite verlassen.",
             "sandboxKeepsNoRunner": "Diese Sandbox hält auf {label} keinen Runner. Fügen Sie einen hinzu, um ihm Unterhaltungen zum Ausführen zu übergeben.",
             "startingOnDevice": "Wird auf diesem Gerät gestartet…",

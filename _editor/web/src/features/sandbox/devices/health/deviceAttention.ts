@@ -38,7 +38,10 @@ export interface DeviceConcern {
     // The subject in one glyph, not the tone's own exclamation mark: what a reader sorts these by is sleep from
     // permissions from age, which the rank alone cannot tell them.
     readonly icon: IconName;
+    /** The errand alone: the state word is the badge's, and repeating it here is how this strip grew to four lines. */
     readonly text: string;
+    /** Why, for a reader who wants it; never something they must read to act. */
+    readonly hint?: string;
     /** A command to type on that device, where the fix is one rather than a click; kept unwrapped. */
     readonly command?: string;
     readonly fix?: DeviceFix;
@@ -49,12 +52,20 @@ export interface DeviceConcern {
 const GAP_TEXT: Record<NonNullable<Device[`gap`]>, string> = {
     // The only gap with nothing on the other end to ask, so it names both ways back in: the machine's own agent
     // command for one that is merely awake with its loop down, and, on the button, a fresh pairing.
-    offline: `Asleep or offline. A machine that wakes dials back in by itself; one that is already awake needs its agent started.`,
+    offline: `A machine that wakes dials back in by itself.`,
     // Its containers are listed regardless (they answer to "Manage sandboxes on this device"), so this names what is
     // actually missing rather than claiming the machine is unreadable.
-    "scope-off": `"Run commands" is off in this device's capability card, so it won't describe itself: no folders, no mirrored ports, and no word on whether its agent is alive. Turn it on to see those.`,
-    "no-agent": `Reachable, but it has no agent, so nothing here knows its folders or ports.`,
-    unreported: `Enrolled, but it hasn't reported yet. An agent from before machine reports never will. Re-run its install to update it.`,
+    "scope-off": `Turn on "Run commands" in its capability card to see its folders, ports and agent.`,
+    "no-agent": `Reachable, but no agent is installed.`,
+    unreported: `Enrolled, but it has never reported. Re-run its install.`,
+};
+
+// The clause each sentence above was cut down from, on hover: what nobody has to read to act.
+const GAP_HINT: Record<NonNullable<Device[`gap`]>, string> = {
+    offline: `Asleep, off the network, or its agent isn't running. Reconnect mints a fresh pairing command, for a machine whose agent is gone rather than merely stopped.`,
+    "scope-off": `Without it the machine won't describe itself: no folders, no mirrored ports, and no word on whether its agent is alive. Its containers are listed regardless — those answer to a different switch.`,
+    "no-agent": `Nothing here knows its folders or ports until one is installed. Its capability card hands out the command.`,
+    unreported: `An agent from before machine reports never will report. Re-running the install replaces it with one that does.`,
 };
 
 // An asleep laptop is a state, not a fault; the other three are something the reader can close.
@@ -75,11 +86,17 @@ const GAP_ICON: Record<NonNullable<Device[`gap`]>, IconName> = {
 
 // Each block is a different errand, so each gets its own sentence.
 const BLOCK_TEXT: Record<ManageBlock[`kind`], string> = {
-    connect: `Desktop sync carries folders and ports, never containers, so its sandboxes can't be started, updated or removed from here. Connect it as a device for the same buttons the desktop app's own window has.`,
+    connect: `Connect it as a device to start, update and remove its sandboxes from here.`,
     // Every button on this page needs the device's own outbound socket; a machine can sync files flawlessly
     // with that socket down.
-    offline: `This device is connected but isn't reachable right now — asleep, off the network, or its agent isn't running — so its sandboxes can't be started, updated or removed from here.`,
+    offline: `Not reachable, so its sandboxes can't be started, updated or removed from here.`,
     "sandboxes-off": `Turn on "Manage sandboxes on this device" in this device's capability card to use the buttons below.`,
+};
+
+const BLOCK_HINT: Record<ManageBlock[`kind`], string> = {
+    connect: `Desktop sync carries folders and ports, never containers. Connecting it as a device gives the same buttons the desktop app's own window has.`,
+    offline: `Asleep, off the network, or its agent isn't running. Every button here travels over the device's own outbound connection, which a machine can have down while its files sync flawlessly.`,
+    "sandboxes-off": `Every button under the sandbox list is refused until it is on.`,
 };
 
 // Same vocabulary as the gaps above: a machine to connect, a machine asleep, a switch that is off.
@@ -146,6 +163,7 @@ const gapConcern = (device: Device, reconnectable: boolean): DeviceConcern | und
         tone: GAP_TONE[device.gap],
         icon: GAP_ICON[device.gap],
         text: GAP_TEXT[device.gap],
+        hint: GAP_HINT[device.gap],
         ...(command === undefined ? {} : { command }),
         ...(device.gap === `offline` && reconnectable ? { fix: reconnect() } : {}),
     };
@@ -161,6 +179,7 @@ const blockConcern = (block: ManageBlock, reconnectable: boolean): DeviceConcern
         tone: `info`,
         icon: BLOCK_ICON[block.kind],
         text: BLOCK_TEXT[block.kind],
+        hint: BLOCK_HINT[block.kind],
         ...(command === undefined ? {} : { command }),
         ...(fix === undefined ? {} : { fix }),
     };
@@ -207,7 +226,8 @@ export const deviceAttention = (
             tone: `warning`,
             icon: `clock`,
             // `deviceQuiet` is false without a report, so the timestamp is there whenever this line is.
-            text: `Last heard from ${timeAgo(device.report?.capturedAt ?? readAt, { now: readAt })}. What follows is what it looked like then.`,
+            text: `Last heard from ${timeAgo(device.report?.capturedAt ?? readAt, { now: readAt })}.`,
+            hint: `Everything below is what the machine looked like then, not now.`,
         });
     }
     // Last, and quietest: nothing here is broken, it only explains an absence of buttons.

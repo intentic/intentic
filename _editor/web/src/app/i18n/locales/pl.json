@@ -2068,10 +2068,7 @@
             "waitingFirstLineDevice": "Czekamy na pierwszą linię z tamtego urządzenia…"
         },
         "deviceAgent": {
-            "capabilityCardHandsOut": "Jego karta możliwości wydaje polecenie, które go instaluje.",
             "fetchesNewestAgentOnto": "Pobiera najnowszego agenta na to urządzenie, instaluje go i restartuje jego pętlę — jedyny proces, przez który ten sandbox sięga do urządzenia. Bezpieczne dla agenta, który jest już aktualny; jego foldery, sparowania i odbite porty tak czy owak zostają nietknięte.",
-            "nothingHereKnowsWhat": "Nic tutaj nie wie, czym jest agent tego urządzenia.",
-            "runningAnythingOnDevice": "Uruchomienie czegokolwiek na tym urządzeniu wymaga „Uruchamiania poleceń” na jego karcie możliwości, a ten przełącznik jest wyłączony.",
             "socketDroppedMomentAgo": "Jego gniazdo zerwało się przed chwilą, a to właśnie robi restart agenta. Świeża pętla sama się wdzwoni, a do tego czasu nic na maszynie nie da się uruchomić.",
             "updateAgent": "Zaktualizuj agenta",
             "updateAgentFetchesInstalls": "„Zaktualizuj agenta” pobiera go, instaluje i restartuje pętlę na tamtym urządzeniu.",
@@ -2112,16 +2109,14 @@
             "refreshTryAgainKeeps": "Odśwież i spróbuj ponownie. Jeśli to się powtarza, jego agent jest za stary, żeby zgłosić przydział — „Zaktualizuj agenta” powyżej naprawia to stąd."
         },
         "devicePage": {
-            "agent": "agent {version}",
             "allDevices": "Wszystkie urządzenia",
             "clearBuildOutput": "Wyczyść wyniki budowania",
             "connect": "Podłącz",
-            "connected": "podłączone jako",
             "dangerZone": "Strefa zagrożenia",
             "deleteBuildOutputDevice": "Usuń wyniki budowania, które to urządzenie zostawiło w katalogach usuniętych przez sandbox, żeby te usunięcia mogły dojść do skutku. Nie usuwa niczego, co się synchronizuje, a budowanie odtworzy je z powrotem.",
             "deviceAloneLosesAccess": "Dostęp traci tylko to jedno urządzenie — każde inne sparowane urządzenie synchronizuje dalej. Jego synchronizacja plików się zatrzymuje, a odbite porty znikają z jego localhosta w ciągu minuty.",
             "dontMirrorPort": "Nie odbijaj go",
-            "environmentsOnDevice": "Środowiska na tym urządzeniu",
+            "environments": "Environments",
             "fetchesNewestAgentOnto": "Pobiera najnowszego agenta kolejno do każdego środowiska tego komputera — Windows i każda distro uruchamiają własną instalację, i to właśnie sprowadza je do tej samej wersji. Bezpieczne dla strony, która jest już aktualna.",
             "fixAgent": "Napraw agentem",
             "leavePortOffLocalhost": "Zostaw ten port poza localhostem tego urządzenia. Każdy inny port, który ten sandbox serwuje, jest dalej odbijany.",
@@ -2143,7 +2138,7 @@
             "runningOnDeviceKeeps": "Działa na tamtym urządzeniu. Idzie dalej, nawet jeśli opuścisz tę stronę.",
             "runsOnDeviceKeeps": "Działa na tamtym urządzeniu i idzie dalej, jeśli opuścisz tę stronę albo połączenie padnie.",
             "sandboxUsingRightNow": "To jest sandbox, którego właśnie używasz — ta strona go straci.",
-            "sandboxesOnDevice": "Sandboxy na tym urządzeniu",
+            "sandboxes": "Sandboxes",
             "startMirroring": "Zacznij odbijać",
             "startMovingFilesBetween": "Znowu przenoś pliki między tym urządzeniem a sandboxem",
             "startingOnDevice": "Uruchamianie na tamtym urządzeniu…",
@@ -2155,8 +2150,7 @@
             "thisSandbox": "ten sandbox",
             "unpair": "Rozparuj",
             "unpairHeader": "Rozparować {sandbox}?",
-            "updateAllAgents": "Zaktualizuj wszystkich agentów",
-            "wslDistrosOnPc": "Distro WSL na tym komputerze"
+            "updateAgents": "Update agents"
         },
         "deviceRows": {
             "fileSyncing": "Synchronizacja plików",
@@ -2176,7 +2170,7 @@
             "offline": "offline",
             "outdated": "nieaktualny",
             "runnerComesOffWork": "Runner schodzi z {label}. Jego praca żyje w gicie tego sandboxa, więc nic z nim nie przepada — a nowego możesz tu zrobić w każdej chwili.",
-            "runnersOnDevice": "Runnery na tym urządzeniu",
+            "runners": "Runners",
             "runningOnDeviceKeeps": "Działa na tamtym urządzeniu. Idzie dalej, nawet jeśli opuścisz tę stronę.",
             "sandboxKeepsNoRunner": "Ten sandbox nie trzyma żadnego runnera na {label}. Dodaj jednego, żeby przekazywać mu rozmowy do uruchomienia tam.",
             "startingOnDevice": "Uruchamianie na tamtym urządzeniu…",

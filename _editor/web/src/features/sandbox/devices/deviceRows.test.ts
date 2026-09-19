@@ -11,8 +11,10 @@ import {
     deviceTone,
     folderOwner,
     isSelf,
+    machineHardware,
     machineRow,
     machineRows,
+    machineState,
     managerOf,
     rowMatches,
     showFilter,
@@ -192,6 +194,30 @@ test(`sends container verbs through the first open door and file-sync verbs thro
     expect(managerOf(asleep[0]!)?.device.key).toBe(`rog-wsl`);
 });
 
+// The masthead's own line. It used to list the environment names, which are the section directly under it, so a
+// two-sided PC named both of its sides twice before the reader reached either row.
+test(`gives the whole PC one verdict, counting the sides that disagree`, () => {
+    expect(machineState(pc()[0]!, NOW)).toEqual({ word: `live`, variant: `success` });
+    const halfAsleep = machineRows(
+        [
+            device({ key: `rog-wsl`, hostId: `rog-wsl`, facts: ARCH, report: report({ os: `linux`, wsl: { distro: `Arch` } }) }),
+            device({ key: `rog`, hostId: `rog`, online: false, facts: WINDOWS, gap: `offline`, report: undefined }),
+        ],
+        undefined,
+        NOW,
+    );
+    expect(machineState(halfAsleep[0]!, NOW)).toEqual({ word: `1 of 2 offline`, variant: `neutral` });
+});
+
+// Every environment of a PC reports the same hardware, so the masthead reads it once; the hostname joins only
+// where it is not already the name above it.
+test(`reads the machine's hardware once, from whichever side described itself`, () => {
+    expect(machineHardware(pc()[0]!)).toBe(`x64`);
+    const named = machineRows([device({ key: `box`, label: `box`, facts: ARCH, report: report({ hostname: `rog` }) })], undefined, NOW);
+    expect(machineHardware(named[0]!)).toBe(`x64 · rog`);
+    expect(machineHardware(machineRow([], { key: `bare`, label: `bare` }))).toBe(``);
+});
+
 test(`finds a many-sided machine by either of its doors`, () => {
     const machine = pc()[0]!;
     expect(rowMatches(machine, `rog-wsl`)).toBe(true);
@@ -351,8 +377,11 @@ test(`leads with whether the machine answers, then how old the reading is`, () =
     // Granted, like every case here that isn't about permissions: an ungranted switch is a third concern of its own.
     const concerns = concernsOf({ gap: `no-agent` }, { capturedAt: NOW - 61_000 }, undefined, GRANTED);
     expect(concerns.map((concern) => concern.key)).toEqual([`gap`, `stale`]);
-    expect(concerns[0]?.text).toContain(`it has no agent`);
-    expect(concerns[1]?.text).toContain(`What follows is what it looked like then.`);
+    expect(concerns[0]?.text).toBe(`Reachable, but no agent is installed.`);
+    // The errand is on the page; why it matters is one hover away, so the strip stays one line per want.
+    expect(concerns[0]?.hint).toContain(`Nothing here knows its folders or ports`);
+    expect(concerns[1]?.text).toContain(`Last heard from`);
+    expect(concerns[1]?.hint).toContain(`what the machine looked like then`);
 });
 
 // The agent is an object with a home of its own now (deviceAgent.ts), so nothing about its state, its build
@@ -384,7 +413,10 @@ test(`names the command, not a card, where the fix is a command on that machine`
 test(`offers a machine that stopped answering a fresh pairing, since nothing else here can reach it`, () => {
     const concerns = concernsOf({ online: false, report: undefined, gap: `offline` });
     const gap = concerns.find((concern) => concern.key === `gap`);
-    expect(gap?.text).toContain(`Asleep or offline.`);
+    // The errand alone: `offline` is the badge's word, and this strip repeating it is what made one silence
+    // read as four separate problems.
+    expect(gap?.text).toBe(`A machine that wakes dials back in by itself.`);
+    expect(gap?.hint).toContain(`Asleep, off the network, or its agent isn't running.`);
     // The cheaper of the two, for a machine that is awake with only its loop down.
     expect(gap?.command).toBe(`intentic-machine run`);
     expect(gap?.fix).toMatchObject({ kind: `connect`, label: `Reconnect` });
@@ -397,7 +429,7 @@ test(`says nothing at all while a machine that dropped seconds ago is coming bac
     // Past the window the machine really is away, and every remedy is offered again.
     const away = concernsOf({ online: false, report: undefined, gap: `offline`, lastSeen: NOW - 60_000 });
     expect(away.map((concern) => concern.key)).toEqual([`gap`]);
-    expect(away[0]?.text).toContain(`Asleep or offline.`);
+    expect(away[0]?.text).toBe(`A machine that wakes dials back in by itself.`);
 });
 
 test(`keeps the sentence and drops the pairing for a reader the daemon would refuse`, () => {

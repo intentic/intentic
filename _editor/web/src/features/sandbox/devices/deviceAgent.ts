@@ -48,20 +48,6 @@ const ACTIONS: readonly AgentAction<DeviceAgentOp>[] = [upgrade(), restartAgent(
 const reachable = (device: Device): boolean =>
     device.hostId !== undefined && device.online === true && (device.gap === undefined || device.gap === `unreported`);
 
-// Why this machine has no buttons, as the shortest true clause plus the long form on hover. Each gap the
-// concerns strip also covers is named here in a few words rather than restated in full.
-const gapBlocked = (): Record<NonNullable<Device[`gap`]>, AgentNote> => ({
-    offline: { text: `Not answering — nothing can run on it.`, icon: `moon` },
-    "scope-off": {
-        text: `"Run commands" is off.`,
-        icon: `lock`,
-        hint: t(`sandbox.deviceAgent.runningAnythingOnDevice`),
-    },
-    "no-agent": { text: `No agent to update.`, icon: `lock`, hint: t(`sandbox.deviceAgent.capabilityCardHandsOut`) },
-    // Never reached: an unreported device keeps its buttons (see `reachable`). Present so the map stays total.
-    unreported: { text: `Hasn't reported yet.`, icon: `moon`, hint: t(`sandbox.deviceAgent.nothingHereKnowsWhat`) },
-});
-
 const syncOnly = (): AgentNote => ({
     text: `Enrolled for syncing only.`,
     icon: `lock`,
@@ -76,6 +62,10 @@ const reconnecting = (): AgentNote => ({
     hint: t(`sandbox.deviceAgent.socketDroppedMomentAgo`),
 });
 
+// Only what the concerns strip does NOT already say. Every gap has a sentence there, and a machine holding no
+// socket wears `offline` on its badge, so naming either again is how one silence came to be stated four times.
+// The two left are the two nothing else covers: an enrollment that was never a device, and a socket young enough
+// that the strip deliberately stands down (deviceAttention.ts).
 const blockedWhy = (device: Device, readAt: number): AgentNote | undefined => {
     if (reachable(device)) {
         return undefined;
@@ -83,10 +73,7 @@ const blockedWhy = (device: Device, readAt: number): AgentNote | undefined => {
     if (device.hostId === undefined) {
         return syncOnly();
     }
-    if (deviceReconnecting(device, readAt)) {
-        return reconnecting();
-    }
-    return device.gap === undefined ? gapBlocked().offline : gapBlocked()[device.gap];
+    return deviceReconnecting(device, readAt) ? reconnecting() : undefined;
 };
 
 // Two states only a registry can be in, ahead of the loop's own three (agentLoopState).
@@ -115,30 +102,16 @@ const publishedNote = (row: DeviceRow, latest: string): AgentNote => {
     };
 };
 
-// The quiet line that makes an always-present Update button legible: what that button is for on a device
-// asking for nothing. Never carries a tone — there is no errand in it. The hint's clause naming the button
-// is dropped where there is no button, rather than pointing at a control this machine doesn't get.
-const standingNote = (latest: string | undefined, offered: boolean): AgentNote => {
-    if (latest !== undefined) {
-        return { text: `Newest agent this sandbox knows of.`, icon: `check-circle` };
-    }
-    const cannotTell = `This sandbox doesn't know which agent release is newest, so it can't tell you whether this one is behind.`;
-    return {
-        text: `Newest release unknown.`,
-        icon: `question-circle`,
-        hint: offered ? `${cannotTell} Update fetches the newest there is.` : cannotTell,
-    };
-};
-
 // One sentence per distinct errand, worst first; a stale loop and a published release can both be true at
-// once (replaced but not restarted, and something newer out since), so neither hides the other. A settled
-// agent still gets one line, so the buttons beside it are never unexplained.
-const notesOf = (row: DeviceRow, latest: string | undefined, offered: boolean): AgentNote[] => {
+// once (replaced but not restarted, and something newer out since), so neither hides the other. A settled agent
+// says nothing: whether this sandbox knows the newest release is a fact about this sandbox, not about the
+// machine, and printing it under every environment was the page's most-repeated line. What Update is for on an
+// agent asking for nothing lives on Update's own hint.
+const notesOf = (row: DeviceRow, latest: string | undefined): AgentNote[] => {
     const behind = latest !== undefined && agentBehind(row.device, latest);
-    const notes = [agentLoopNote(row.agent), agentSkewNote(row.agent?.staleBuild), behind ? publishedNote(row, latest) : undefined].filter(
+    return [agentLoopNote(row.agent), agentSkewNote(row.agent?.staleBuild), behind ? publishedNote(row, latest) : undefined].filter(
         (note) => note !== undefined,
     );
-    return notes.length === 0 ? [standingNote(latest, offered)] : notes;
 };
 
 // Nothing to say and nothing to do: a machine with no version from either door and no command door is one
@@ -155,7 +128,7 @@ export const deviceAgentPanel = (row: DeviceRow, latest: string | undefined, rea
         version,
         state: stateOf(row, readAt),
         facts: pid === undefined ? [] : [`pid ${pid}`],
-        notes: notesOf(row, latest, offered),
+        notes: notesOf(row, latest),
         actions: offered ? ACTIONS : [],
         blocked: blockedWhy(device, readAt),
     };

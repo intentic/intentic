@@ -1,24 +1,46 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
-import type { Device } from "@intentic/sandbox-contract";
 import { Button, ConfirmDialog, DeviceRunLog, type NoticeModel, RowGroup, RowNote, StatusBadge, ui } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
 import DeviceOpFailure from "./DeviceOpFailure.vue";
 import { runnerFallback } from "./deviceFallback";
 import { createRunner, removeRunner, syncRunnerSettings, updateRunner, useRunners } from "./useRunners";
+import { type DeviceRow, type MachineRow, managerOf } from "../deviceRows";
+import { environmentTitle } from "../machineEnvironments";
 import { useHubWork } from "../../../../shell/hub/hubWork";
 import { useT } from "@intentic/ui/i18n";
 
-// This sandbox's runners on one device: containers it keeps there to run agents (docs/remote-runners-plan.md),
+// This sandbox's runners on one MACHINE: containers it keeps there to run agents (docs/remote-runners-plan.md),
 // separate from the sandbox list above (workspaces belonging to a person). Only runners this sandbox asked for
 // appear under a machine; one started by hand has no host recorded and no row here.
+//
+// One group per PC, not per door. A machine drawn once per environment drew this heading twice, with two
+// near-identical empty states under it — and there was never a second list to show: one Docker engine serves every
+// door on a PC, so a runner reached through the Windows side and one reached through a distro are the same
+// container. Which door created a runner is a fact about the runner, said on its row when there is more than one.
 
 const t = useT();
 
-const { device } = defineProps<{ device: Device }>();
+const { machine } = defineProps<{ machine: MachineRow }>();
+
+// Where a new runner is built: the door the container verbs already go through. A machine with none has nothing
+// to press, which is what disables the button below.
+const door = computed(() => managerOf(machine));
+
+// Every environment's own door, so a runner created through either side is listed once under the PC.
+const doors = computed(
+    () => new Map(machine.environments.flatMap((row): [string, DeviceRow][] => (row.device.hostId === undefined ? [] : [[row.device.hostId, row]]))),
+);
 
 const { runners, refetch } = useRunners();
-const mine = computed(() => runners.value.filter((runner) => runner.host !== undefined && runner.host === device.hostId));
+const mine = computed(() => runners.value.filter((runner) => runner.host !== undefined && doors.value.has(runner.host)));
+
+// Which side of a many-sided PC a runner was built through; silent on a machine with one door, where it would
+// name the only thing it could.
+const builtOn = (host: string | undefined): string | undefined => {
+    const row = host === undefined ? undefined : doors.value.get(host);
+    return machine.environments.length > 1 && row !== undefined ? environmentTitle(row) : undefined;
+};
 
 // Building or updating a container on somebody's laptop, so the Devices row carries it while the reader is
 // elsewhere in the hub.
@@ -79,7 +101,7 @@ const confirmingRemove = ref<string | undefined>();
 const removeHeader = computed(() => `Remove runner "${confirmingRemove.value ?? ``}"?`);
 
 const run = async (op: "create" | "remove" | "update", name: string): Promise<void> => {
-    if (device.hostId === undefined || busy.value !== undefined) {
+    if (door.value?.device.hostId === undefined || busy.value !== undefined) {
         return;
     }
     if (op === "remove") {
@@ -98,7 +120,8 @@ const removeConfirmed = async (): Promise<void> => {
 };
 
 const execute = async (op: "create" | "remove" | "update", name: string): Promise<void> => {
-    if (device.hostId === undefined || busy.value !== undefined) {
+    const host = door.value?.device.hostId;
+    if (host === undefined || busy.value !== undefined) {
         return;
     }
     busy.value = name;
@@ -109,7 +132,7 @@ const execute = async (op: "create" | "remove" | "update", name: string): Promis
     try {
         const onLine = (line: string): void => void (lines.value = [...lines.value, line]);
         const flow = { create: createRunner, remove: removeRunner, update: updateRunner }[op];
-        done.value = await flow(device.hostId, name, onLine);
+        done.value = await flow(host, name, onLine);
     } catch (error) {
         failure.value = { notice: noticeFrom(error, `That didn't work on this device.`), command: runnerFallback(op, name) };
     } finally {
@@ -137,8 +160,8 @@ const add = async (): Promise<void> => {
 </script>
 
 <template>
-    <!-- "on this device", not "for this sandbox": this list sits under the machine's own sandbox list. -->
-    <RowGroup v-if="device.hostId !== undefined" :label="t(`sandbox.deviceRunners.runnersOnDevice`)">
+    <!-- The page is the machine, so the heading is the noun alone: this list sits under its own sandbox list. -->
+    <RowGroup v-if="door" :label="t(`sandbox.deviceRunners.runners`)" :count="mine.length > 0 ? mine.length : undefined">
         <template #actions>
             <Button
                 v-if="!adding"
@@ -146,7 +169,7 @@ const add = async (): Promise<void> => {
                 severity="secondary"
                 :text="true"
                 :label="t(`sandbox.deviceRunners.addRunner`)"
-                :disabled="busy !== undefined || device.online !== true"
+                :disabled="busy !== undefined || door.device.online !== true"
                 @click="adding = true"
             >
                 <template #icon><Icon name="plus" /></template>
@@ -173,7 +196,10 @@ const add = async (): Promise<void> => {
                 <Icon name="desktop" class="text-xs" :class="runner.online ? 'text-primary-500' : 'text-subtle'" />
                 <span class="flex min-w-0 flex-col">
                     <span class="truncate text-xs text-content">{{ runner.id }}</span>
-                    <span class="text-2xs text-subtle">{{ facts(runner) }}</span>
+                    <!-- Which side it was built through, only where a PC has more than one. -->
+                    <span class="text-2xs text-subtle"
+                        >{{ facts(runner) }}<template v-if="builtOn(runner.host)"> · {{ builtOn(runner.host) }}</template></span
+                    >
                     <!-- Detail rides the tooltip so the row stays one glance. -->
                     <span v-if="driftSummary(runner)" class="truncate text-2xs text-warning" :title="driftDetail(runner)">
                         {{ driftSummary(runner) }}
@@ -189,7 +215,7 @@ const add = async (): Promise<void> => {
                         size="small"
                         severity="secondary"
                         :label="t(`ui.action.update`)"
-                        :disabled="busy !== undefined || device.online !== true"
+                        :disabled="busy !== undefined || door.device.online !== true"
                         @click="run(`update`, runner.id)"
                     />
                     <Button
@@ -206,7 +232,7 @@ const add = async (): Promise<void> => {
                         severity="secondary"
                         :text="true"
                         :label="t(`ui.action.remove`)"
-                        :disabled="busy !== undefined || device.online !== true"
+                        :disabled="busy !== undefined || door.device.online !== true"
                         @click="run(`remove`, runner.id)"
                     />
                 </span>
@@ -215,7 +241,7 @@ const add = async (): Promise<void> => {
 
         <!-- Said where the list would be, since an empty surface with a heading reads as a failure to load. -->
         <RowNote v-if="mine.length === 0 && !adding" variant="empty">{{
-            t(`sandbox.deviceRunners.sandboxKeepsNoRunner`, { label: device.label })
+            t(`sandbox.deviceRunners.sandboxKeepsNoRunner`, { label: machine.label })
         }}</RowNote>
 
         <!-- The machine's own output while `ic` works, and whatever it said at the end. -->
@@ -227,7 +253,7 @@ const add = async (): Promise<void> => {
                 :empty="t(`sandbox.deviceRunners.startingOnDevice`)"
                 :note="t(`sandbox.deviceRunners.runningOnDeviceKeeps`)"
             />
-            <DeviceOpFailure v-if="failure" :of="failure.notice" :command="failure.command" :machine="device.label" />
+            <DeviceOpFailure v-if="failure" :of="failure.notice" :command="failure.command" :machine="machine.label" />
             <p v-else-if="done" class="text-xs text-muted">{{ done }}</p>
         </RowNote>
 
@@ -239,7 +265,7 @@ const add = async (): Promise<void> => {
             @cancel="confirmingRemove = undefined"
             @confirm="removeConfirmed"
         >
-            <p>{{ t(`sandbox.deviceRunners.runnerComesOffWork`, { label: device.label }) }}</p>
+            <p>{{ t(`sandbox.deviceRunners.runnerComesOffWork`, { label: machine.label }) }}</p>
         </ConfirmDialog>
     </RowGroup>
 </template>

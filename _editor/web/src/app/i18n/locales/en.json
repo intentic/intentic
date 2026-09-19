@@ -2068,10 +2068,7 @@
             "waitingFirstLineDevice": "Waiting for the first line from that device…"
         },
         "deviceAgent": {
-            "capabilityCardHandsOut": "Its capability card hands out the command that installs one.",
             "fetchesNewestAgentOnto": "Fetches the newest agent onto this device, installs it, and restarts its loop — the one process this sandbox reaches the device through. Safe on an agent that is already current; its folders, pairings and mirrored ports are untouched either way.",
-            "nothingHereKnowsWhat": "Nothing here knows what this device's agent is.",
-            "runningAnythingOnDevice": "Running anything on this device needs \"Run commands\" on its capability card, and that switch is off.",
             "socketDroppedMomentAgo": "Its socket dropped a moment ago, which is what restarting an agent does. A fresh loop dials back in by itself, and nothing can be run on the machine until it has.",
             "updateAgent": "Update agent",
             "updateAgentFetchesInstalls": "Update agent fetches it, installs it, and restarts the loop on that device.",
@@ -2112,16 +2109,14 @@
             "refreshTryAgainKeeps": "Refresh and try again. If it keeps happening, its agent is too old to report a share — Update agent, above, fixes that from here."
         },
         "devicePage": {
-            "agent": "agent {version}",
             "allDevices": "All devices",
             "clearBuildOutput": "Clear build output",
-            "connect": "Connect it",
-            "connected": "connected as",
+            "connect": "Connect",
             "dangerZone": "Danger zone",
             "deleteBuildOutputDevice": "Delete the build output this device left in directories the sandbox deleted, so those deletions can land. It removes nothing that syncs, and a build puts it back.",
             "deviceAloneLosesAccess": "This device alone loses access — every other paired device keeps syncing. Its file sync stops and its mirrored ports drop off its localhost within a minute.",
             "dontMirrorPort": "Don't mirror it",
-            "environmentsOnDevice": "Environments on this device",
+            "environments": "Environments",
             "fetchesNewestAgentOnto": "Fetches the newest agent onto every environment of this computer in turn — Windows and each distro run their own install, and this is what brings them to the same version. Safe on a side that is already current.",
             "fixAgent": "Fix with agent",
             "leavePortOffLocalhost": "Leave this port off this device's localhost. Every other port this sandbox serves keeps being mirrored.",
@@ -2143,7 +2138,7 @@
             "runningOnDeviceKeeps": "Running on that device. It keeps going even if you leave this page.",
             "runsOnDeviceKeeps": "Runs on that device, and keeps going if you leave this page or the connection drops.",
             "sandboxUsingRightNow": "This is the sandbox you are using right now — this page will lose it.",
-            "sandboxesOnDevice": "Sandboxes on this device",
+            "sandboxes": "Sandboxes",
             "startMirroring": "Start mirroring",
             "startMovingFilesBetween": "Start moving files between this device and the sandbox again",
             "startingOnDevice": "Starting on that device…",
@@ -2155,8 +2150,7 @@
             "thisSandbox": "this sandbox",
             "unpair": "Unpair",
             "unpairHeader": "Unpair {sandbox}?",
-            "updateAllAgents": "Update all agents",
-            "wslDistrosOnPc": "WSL distros on this PC"
+            "updateAgents": "Update agents"
         },
         "deviceRows": {
             "fileSyncing": "File syncing",
@@ -2176,7 +2170,7 @@
             "offline": "offline",
             "outdated": "outdated",
             "runnerComesOffWork": "The runner comes off {label}. Its work lives in this sandbox's git, so nothing is lost with it — and you can make a new one here any time.",
-            "runnersOnDevice": "Runners on this device",
+            "runners": "Runners",
             "runningOnDeviceKeeps": "Running on that device. It keeps going even if you leave this page.",
             "sandboxKeepsNoRunner": "This sandbox keeps no runner on {label}. Add one to hand it conversations to run there.",
             "startingOnDevice": "Starting on that device…",

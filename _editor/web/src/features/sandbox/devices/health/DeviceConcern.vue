@@ -40,7 +40,8 @@ const GLYPH: Record<DeviceConcern[`tone`], string> = { info: `text-muted`, warni
     >
         <Icon :name="concern.icon" class="shrink-0 text-sm" :class="GLYPH[concern.tone]" aria-hidden="true" />
         <!-- `basis-64`: the control drops to a line of its own below that width instead of squeezing the sentence. -->
-        <p class="min-w-0 grow basis-64 text-xs text-muted">
+        <!-- The sentence states the errand; `hint` carries the why, on hover, so the strip stays one line per want. -->
+        <p v-tooltip.top="concern.hint" class="min-w-0 grow basis-64 text-xs text-muted">
             {{ concern.text }}
             <!-- Kept on one line and in the content ink: a command broken across a wrap can't be copied by eye. -->
             <template v-if="concern.command">

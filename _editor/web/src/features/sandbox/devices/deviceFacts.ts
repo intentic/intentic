@@ -36,23 +36,9 @@ export const osLabel = (device: Device): string | undefined => {
     return named === undefined ? `WSL` : `${named} on WSL`;
 };
 
-// The full string, when there is more to it than the label shows. Compared against the OS alone, so the WSL suffix
-// never makes a machine look like it has more to say than it does.
+// The full string, when there is more to it than the label shows (a Windows build number, a kernel). Compared
+// against the OS alone, so the WSL suffix never makes a machine look like it has more to say than it does.
 export const osTitle = (device: Device): string | undefined => (device.facts?.os === describedOs(device) ? undefined : device.facts?.os);
-
-// What the machine is, as wrapping parts: arch, shell, then hostname — shown only when it differs from the
-// row's own label.
-export const deviceHardware = (device: Device): string[] => {
-    const parts: string[] = [];
-    if (device.facts !== undefined) {
-        parts.push(device.facts.arch, device.facts.shell);
-    }
-    const hostname = device.report?.hostname;
-    if (hostname !== undefined && hostname.toLowerCase() !== device.label.toLowerCase()) {
-        parts.push(hostname);
-    }
-    return parts;
-};
 
 // How this sandbox reaches the device, one tag per open door, with no agent version on either: the version
 // belongs to agentChip below, since both doors can share one running binary.

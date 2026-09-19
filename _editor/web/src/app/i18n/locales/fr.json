@@ -2068,10 +2068,7 @@
             "waitingFirstLineDevice": "En attente de la première ligne de cet appareil…"
         },
         "deviceAgent": {
-            "capabilityCardHandsOut": "Sa carte de capacité fournit la commande qui en installe un.",
             "fetchesNewestAgentOnto": "Récupère le tout dernier agent sur cet appareil, l'installe, et redémarre sa boucle — le seul processus par lequel ce sandbox atteint l'appareil. Sans risque sur un agent déjà à jour ; ses dossiers, appairages et ports reflétés restent intacts dans tous les cas.",
-            "nothingHereKnowsWhat": "Rien ici ne sait quel est l'agent de cet appareil.",
-            "runningAnythingOnDevice": "Lancer quoi que ce soit sur cet appareil demande « Exécuter des commandes » sur sa carte de capacité, et cet interrupteur est éteint.",
             "socketDroppedMomentAgo": "Son socket est tombé il y a un instant, ce qui est exactement ce que fait le redémarrage d'un agent. Une nouvelle boucle rappelle d'elle-même, et rien ne peut tourner sur la machine tant que ce n'est pas fait.",
             "updateAgent": "Mettre à jour l'agent",
             "updateAgentFetchesInstalls": "« Mettre à jour l'agent » le récupère, l'installe, et redémarre la boucle sur cet appareil.",
@@ -2112,16 +2109,14 @@
             "refreshTryAgainKeeps": "Rechargez et réessayez. Si cela se répète, son agent est trop ancien pour indiquer une part — « Mettre à jour l'agent », ci-dessus, règle cela d'ici."
         },
         "devicePage": {
-            "agent": "agent {version}",
             "allDevices": "Tous les appareils",
             "clearBuildOutput": "Effacer les sorties de compilation",
             "connect": "Le connecter",
-            "connected": "connecté en tant que",
             "dangerZone": "Zone dangereuse",
             "deleteBuildOutputDevice": "Supprimer les sorties de compilation que cet appareil a laissées dans des répertoires que le sandbox a supprimés, pour que ces suppressions puissent aboutir. Cela n'enlève rien de ce qui se synchronise, et une compilation les remet.",
             "deviceAloneLosesAccess": "Cet appareil seul perd l'accès — tous les autres appareils appairés continuent de se synchroniser. Sa synchronisation de fichiers s'arrête et ses ports reflétés disparaissent de son localhost en une minute.",
             "dontMirrorPort": "Ne pas le refléter",
-            "environmentsOnDevice": "Environnements sur cet appareil",
+            "environments": "Environments",
             "fetchesNewestAgentOnto": "Récupère le tout dernier agent sur chaque environnement de cet ordinateur à tour de rôle — Windows et chaque distro lancent leur propre installation, et c'est ce qui les met à la même version. Sans risque sur un côté déjà à jour.",
             "fixAgent": "Réparer avec un agent",
             "leavePortOffLocalhost": "Laisser ce port hors du localhost de cet appareil. Tous les autres ports servis par ce sandbox continuent d'être reflétés.",
@@ -2143,7 +2138,7 @@
             "runningOnDeviceKeeps": "En cours sur cet appareil. Cela continue même si vous quittez cette page.",
             "runsOnDeviceKeeps": "Tourne sur cet appareil, et continue si vous quittez cette page ou si la connexion tombe.",
             "sandboxUsingRightNow": "C'est le sandbox que vous utilisez en ce moment — cette page le perdra.",
-            "sandboxesOnDevice": "Sandboxes sur cet appareil",
+            "sandboxes": "Sandboxes",
             "startMirroring": "Commencer à refléter",
             "startMovingFilesBetween": "Recommencer à déplacer des fichiers entre cet appareil et le sandbox",
             "startingOnDevice": "Démarrage sur cet appareil…",
@@ -2155,8 +2150,7 @@
             "thisSandbox": "ce sandbox",
             "unpair": "Désappairer",
             "unpairHeader": "Désappairer {sandbox} ?",
-            "updateAllAgents": "Mettre à jour tous les agents",
-            "wslDistrosOnPc": "Distros WSL sur ce PC"
+            "updateAgents": "Update agents"
         },
         "deviceRows": {
             "fileSyncing": "Synchronisation de fichiers",
@@ -2176,7 +2170,7 @@
             "offline": "hors ligne",
             "outdated": "obsolète",
             "runnerComesOffWork": "Le runner quitte {label}. Son travail vit dans le git de ce sandbox : rien n'est perdu avec lui — et vous pouvez en créer un nouveau ici à tout moment.",
-            "runnersOnDevice": "Runners sur cet appareil",
+            "runners": "Runners",
             "runningOnDeviceKeeps": "En cours sur cet appareil. Cela continue même si vous quittez cette page.",
             "sandboxKeepsNoRunner": "Ce sandbox ne garde aucun runner sur {label}. Ajoutez-en un pour lui confier des conversations à exécuter là-bas.",
             "startingOnDevice": "Démarrage sur cet appareil…",

@@ -1,11 +1,8 @@
 <script setup lang="ts">
 import { hostCardOf } from "@intentic/sandbox-contract";
 import {
-    agentLines,
     Button,
     ConfirmDialog,
-    DeviceAgentGroup,
-    DeviceAgentNotes,
     DeviceDetail,
     DeviceRunLog,
     type DeviceSandboxGroup,
@@ -21,24 +18,25 @@ import {
     ui,
 } from "@intentic/ui";
 import { computed, ref } from "vue";
-import { type RouteLocationRaw, RouterLink } from "vue-router";
+import { RouterLink } from "vue-router";
 import DeviceConcern from "./health/DeviceConcern.vue";
+import DeviceEnvironment from "./DeviceEnvironment.vue";
 import DeviceOpFailure from "./runners/DeviceOpFailure.vue";
 import DeviceRunners from "./runners/DeviceRunners.vue";
-import { boardRoute } from "./deviceLinks";
+import { boardRoute, cardRoute } from "./deviceLinks";
 import { deviceAgentPanel } from "./deviceAgent";
-import { blockAttention, type DeviceCardFix, deviceAttention } from "./health/deviceAttention";
+import { blockAttention, deviceAttention } from "./health/deviceAttention";
 import {
     commandable,
     type DeviceRow,
-    deviceState,
     deviceSwitches,
     clearable,
-    deviceTone,
     fixable,
     folderOwner,
+    machineHardware,
     type MachineRow,
     machineLists,
+    machineState,
     manageable,
     managerOf,
     manySided,
@@ -46,10 +44,10 @@ import {
     selfGroup,
 } from "./deviceRows";
 import { useDeviceOps } from "./runners/deviceOps";
-import { environmentFacts, environmentTitle, wslDistroRows } from "./machineEnvironments";
+import { environmentTitle, wslDistroRows } from "./machineEnvironments";
 import { type ConflictAsk, conflictAsk } from "./sync/conflictAsk";
 import SandboxSyncToggles from "./sync/SandboxSyncToggles.vue";
-import { type DeviceScopes, deviceDoors, deviceHardware, lastSeenNote, manageBlock, osLabel, osTitle, syncNote, syncStopped } from "./deviceFacts";
+import { type DeviceScopes, manageBlock } from "./deviceFacts";
 import { startAgent } from "../../agents/fleet/agentActions";
 import HostConnectDialog from "../../capabilities/connect/HostConnectDialog.vue";
 import { useCapabilities } from "../../capabilities/connect/useCapabilities";
@@ -62,6 +60,12 @@ import { useT } from "@intentic/ui/i18n";
 // machine, so one op at a time is the whole page's rule (see deviceOps.ts). A PC connected through several
 // environments (Windows and the distros on it) is still one page: its environments are rows of their own, each
 // with its agent and its concerns, and its sandboxes are listed once, since one engine serves every door.
+//
+// THE PAGE STATES A FACT ONCE. A machine whose Windows side was asleep used to say so four times — a badge, a
+// last-seen, a paragraph and an agent note — and name its own environments three times over. So: the badge owns
+// the state word, one line owns the errand, and a section is drawn for the MACHINE rather than once per door.
+// <DeviceEnvironment> is that rule made structural: a lone machine's masthead and a many-sided one's rows are the
+// same component, which is why they can no longer drift.
 
 const t = useT();
 
@@ -114,39 +118,17 @@ const agentOf = (row: DeviceRow) => deviceAgentPanel(row, latest, readAt);
 // machine-wide control offers exactly what those buttons would.
 const updatable = computed(() => environments.value.filter((environment) => (agentOf(environment)?.actions.length ?? 0) > 0));
 
-// A many-sided machine draws its environments' notes itself, outside any group of their own.
-const agentLinesOf = (row: DeviceRow) => {
-    const panel = agentOf(row);
-    return panel === undefined ? [] : agentLines(panel);
-};
+// One verdict for the whole PC, so the masthead of a many-sided machine carries a state instead of listing the
+// environment names that are the section directly beneath it.
+const state = computed(() => machineState(machine, readAt));
+const hardware = computed(() => machineHardware(machine));
 
-// Whether an environment's agent block has anything to show: an op in flight, its log, or its answer.
-const agentActivity = (row: DeviceRow): boolean =>
-    ops.agentWaiting(row) !== undefined ||
-    ops.agentBusy(row) ||
-    ops.agentLines(row).length > 0 ||
-    ops.agentFailure(row) !== undefined ||
-    ops.agentOutcome(row) !== undefined;
-
-const cardRoute = (fix: DeviceCardFix): RouteLocationRaw => {
-    const card = { name: `capabilities`, params: { card: fix.card } };
-    return fix.connection === undefined ? card : { ...card, query: { edit: fix.connection } };
-};
-
-// The machine's own facts, in the quietest ink: read once per device, mostly to tell two identically-named
-// ones apart. The enrollment's own line joins them, since it is a fact about the machine too.
-const hardware = computed(() =>
-    lone.value === undefined ? `` : [...deviceHardware(lone.value.device), ...deviceDoors(lone.value.device).map((door) => door.name)].join(` · `),
-);
-
-// What the masthead says beside the name: a lone device's OS, or every environment of a many-sided machine.
-const masthead = computed(() =>
-    lone.value === undefined ? environments.value.map((environment) => environmentTitle(environment)).join(` · `) : osLabel(lone.value.device),
-);
-
-// The Windows side's distros, with the door this sandbox already holds into each; the way a second environment
-// is connected from the page of the machine it belongs to.
+// The Windows side's distros this sandbox holds NO door into: the connected ones are rows of their own, and
+// listing them again was this page's third telling of its own environments.
 const distros = computed(() => wslDistroRows(machine));
+
+// Enrollments this reader may cut off. One list, so the page has one Danger zone however many doors the PC has.
+const revocable = computed(() => (isOwner.value ? environments.value.filter((environment) => environment.device.sync !== undefined) : []));
 
 // The machine's three lists as the detail kit takes them, merged across environments.
 const lists = computed(() => machineLists(environments.value));
@@ -196,8 +178,22 @@ const applyReshape = (ask: ResourcesAsk): void => ops.applyReshape(ask);
                 {{ t(`sandbox.devicePage.allDevices`) }}
             </RouterLink>
 
-            <!-- The masthead tier, outside any group: this row outranks every list under it. -->
-            <Row :flush="true" :heading="2" density="comfortable">
+            <!-- A LONE machine's masthead IS its environment row: the name, the agent it runs and that agent's two
+                 verbs, rather than a title here and a whole Agent section restating it below. -->
+            <DeviceEnvironment
+                v-if="lone"
+                :environment="lone"
+                :panel="agentOf(lone)"
+                :concerns="concernsOf(lone)"
+                :read-at="readAt"
+                :ops="ops"
+                :masthead="true"
+                :hardware="hardware"
+                @connect="reconnecting = lone.device.key"
+            />
+
+            <!-- A many-sided machine's masthead carries one verdict for the PC; its sides are the section below. -->
+            <Row v-else :flush="true" :heading="2">
                 <template #lead="{ mark }">
                     <span
                         class="flex shrink-0 items-center justify-center rounded-md bg-content/10 text-content"
@@ -206,88 +202,19 @@ const applyReshape = (ask: ResourcesAsk): void => ops.applyReshape(ask);
                         <Icon name="desktop" class="text-sm" />
                     </span>
                 </template>
-                <template #title>
-                    <span class="flex min-w-0 flex-wrap items-baseline gap-x-2.5 gap-y-1">
-                        <span class="min-w-0 truncate">{{ machine.label }}</span>
-                        <span
-                            v-if="masthead"
-                            class="shrink-0 truncate text-sm font-normal text-muted"
-                            :title="lone ? osTitle(lone.device) : undefined"
-                        >
-                            {{ masthead }}
-                        </span>
-                    </span>
-                </template>
+                <template #title>{{ machine.label }}</template>
                 <template v-if="hardware !== ``" #description>{{ hardware }}</template>
-                <!-- A lone device's state rides its name; a many-sided machine's rides each environment's row. -->
-                <template v-if="lone" #meta>
-                    <!-- Noise on a live machine, the most useful fact on one that isn't. -->
-                    <span v-if="lastSeenNote(lone.device)" class="shrink-0">{{ lastSeenNote(lone.device) }}</span>
-                    <StatusBadge
-                        :variant="deviceTone(lone.device, readAt)"
-                        size="xs"
-                        :dot="true"
-                        :label="deviceState(lone.device, readAt)"
-                        class="shrink-0"
-                    />
+                <template #meta>
+                    <StatusBadge :variant="state.variant" size="xs" :dot="true" :label="state.word" class="shrink-0" />
                 </template>
             </Row>
-
-            <!-- What this device is doing for the sandbox: the one thing anybody opened the machine to read. -->
-            <p
-                v-if="lone && syncNote(lone.device, readAt)"
-                class="min-w-0 text-xs"
-                :class="syncStopped(lone.device, readAt) ? `text-warning` : `text-muted`"
-            >
-                {{ syncNote(lone.device, readAt) }}
-            </p>
-
-            <!-- Everything the machine wants, in one place and one visual language, each sentence beside its own remedy. -->
-            <template v-if="lone">
-                <DeviceConcern
-                    v-for="concern in concernsOf(lone)"
-                    :key="concern.key"
-                    :concern="concern"
-                    :route="concern.fix?.kind === `card` ? cardRoute(concern.fix) : undefined"
-                    @connect="reconnecting = lone.device.key"
-                />
-            </template>
         </div>
-
-        <!-- The kit's agent group, the same block the desktop app's manager window draws for the device it runs on. -->
-        <DeviceAgentGroup
-            v-if="lone && agentOf(lone)"
-            :panel="agentOf(lone)!"
-            :subject="lone.device.label"
-            :busy="ops.working.value"
-            :running="ops.agentOp(lone)"
-            :activity="agentActivity(lone)"
-            @run="(op) => void ops.runAgent(lone!, op)"
-        >
-            <template #activity>
-                <p v-if="ops.agentWaiting(lone)" class="text-xs text-muted">{{ ops.agentWaiting(lone) }}</p>
-                <DeviceRunLog
-                    v-if="ops.agentBusy(lone) || ops.agentLines(lone).length > 0"
-                    :lines="ops.agentLines(lone)"
-                    :running="ops.agentBusy(lone)"
-                    :empty="t(`sandbox.devicePage.startingOnDevice`)"
-                    :note="t(`sandbox.devicePage.runsOnDeviceKeeps`)"
-                />
-                <DeviceOpFailure
-                    v-if="ops.agentFailure(lone)"
-                    :of="ops.agentFailure(lone)!.notice"
-                    :command="ops.agentFailure(lone)!.command"
-                    :machine="lone.device.label"
-                />
-                <p v-else-if="ops.agentOutcome(lone)" class="text-xs text-muted">{{ ops.agentOutcome(lone) }}</p>
-            </template>
-        </DeviceAgentGroup>
 
         <!--
             A many-sided machine: one row per environment, each its own door with its own agent, permissions and
             concerns, since Windows and a distro on it are separate installs that happen to share the hardware.
         -->
-        <RowGroup v-if="many" :label="t(`sandbox.devicePage.environmentsOnDevice`)">
+        <RowGroup v-if="many" :label="t(`sandbox.devicePage.environments`)" :count="environments.length">
             <!-- One press for the computer, because one card is one computer: each side holds its own agent binary and
                  is updated in turn, its own log under its own row. Offered only where there is more than one side to
                  bring level; a single reachable environment has its row's own button and needs no wider word. -->
@@ -295,7 +222,7 @@ const applyReshape = (ask: ResourcesAsk): void => ops.applyReshape(ask);
                 <Button
                     size="small"
                     severity="secondary"
-                    :label="t(`sandbox.devicePage.updateAllAgents`)"
+                    :label="t(`sandbox.devicePage.updateAgents`)"
                     :loading="ops.agentEveryOp.value === `upgrade`"
                     :disabled="ops.working.value"
                     v-tooltip.top="t(`sandbox.devicePage.fetchesNewestAgentOnto`)"
@@ -303,105 +230,39 @@ const applyReshape = (ask: ResourcesAsk): void => ops.applyReshape(ask);
                 />
             </template>
 
-            <template v-for="environment in environments" :key="environment.device.key">
-                <Row icon="desktop" :title="environmentTitle(environment)">
-                    <template #description>
-                        <span class="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5 text-2xs">
-                            <template v-for="(fact, index) in environmentFacts(environment)" :key="fact">
-                                <span v-if="index > 0" class="text-subtle" aria-hidden="true">·</span>
-                                <span :class="index === 0 && environment.device.hostId !== undefined ? `font-mono` : ``">{{ fact }}</span>
-                            </template>
-                        </span>
-                    </template>
-                    <template #meta>
-                        <span v-if="lastSeenNote(environment.device)" class="shrink-0">{{ lastSeenNote(environment.device) }}</span>
-                        <span v-if="agentOf(environment)?.version" class="font-mono">{{
-                            t(`sandbox.devicePage.agent`, { version: agentOf(environment)?.version })
-                        }}</span>
-                        <StatusBadge
-                            :variant="deviceTone(environment.device, readAt)"
-                            size="xs"
-                            :dot="true"
-                            :label="deviceState(environment.device, readAt)"
-                            class="shrink-0"
-                        />
-                    </template>
-                    <!-- The agent's two verbs, per environment: each runs its own process. -->
-                    <template v-if="(agentOf(environment)?.actions.length ?? 0) > 0" #control>
-                        <Button
-                            v-for="action in agentOf(environment)?.actions"
-                            :key="action.op"
-                            size="small"
-                            severity="secondary"
-                            :label="action.label"
-                            :loading="ops.agentOp(environment) === action.op"
-                            :disabled="ops.working.value"
-                            v-tooltip.top="action.hint"
-                            @click="void ops.runAgent(environment, action.op)"
-                        />
-                    </template>
-                </Row>
+            <DeviceEnvironment
+                v-for="environment in environments"
+                :key="environment.device.key"
+                :environment="environment"
+                :panel="agentOf(environment)"
+                :concerns="concernsOf(environment)"
+                :read-at="readAt"
+                :ops="ops"
+                @connect="reconnecting = environment.device.key"
+            />
 
-                <!-- What this environment is doing for the sandbox, what it wants, and what its agent wants. -->
-                <RowNote variant="block">
-                    <div class="flex flex-col gap-2">
-                        <p
-                            v-if="syncNote(environment.device, readAt)"
-                            class="min-w-0 text-xs"
-                            :class="syncStopped(environment.device, readAt) ? `text-warning` : `text-muted`"
-                        >
-                            {{ syncNote(environment.device, readAt) }}
-                        </p>
-                        <DeviceConcern
-                            v-for="concern in concernsOf(environment)"
-                            :key="concern.key"
-                            :concern="concern"
-                            :route="concern.fix?.kind === `card` ? cardRoute(concern.fix) : undefined"
-                            @connect="reconnecting = environment.device.key"
-                        />
-                        <DeviceAgentNotes :notes="agentLinesOf(environment)" />
-                        <template v-if="agentActivity(environment)">
-                            <p v-if="ops.agentWaiting(environment)" class="text-xs text-muted">{{ ops.agentWaiting(environment) }}</p>
-                            <DeviceRunLog
-                                v-if="ops.agentBusy(environment) || ops.agentLines(environment).length > 0"
-                                :lines="ops.agentLines(environment)"
-                                :running="ops.agentBusy(environment)"
-                                :empty="t(`sandbox.devicePage.startingOnDevice`)"
-                                :note="t(`sandbox.devicePage.runsOnDeviceKeeps`)"
-                            />
-                            <DeviceOpFailure
-                                v-if="ops.agentFailure(environment)"
-                                :of="ops.agentFailure(environment)!.notice"
-                                :command="ops.agentFailure(environment)!.command"
-                                :machine="environment.device.label"
-                            />
-                            <p v-else-if="ops.agentOutcome(environment)" class="text-xs text-muted">{{ ops.agentOutcome(environment) }}</p>
-                        </template>
-                    </div>
-                </RowNote>
-            </template>
-
-            <!-- The Windows side's distros, each with the door this sandbox holds into it or the way to open one. -->
-            <RowNote v-if="distros.length > 0" variant="block">
-                <div class="flex flex-col gap-1">
-                    <p class="text-xs font-medium text-content">{{ t(`sandbox.devicePage.wslDistrosOnPc`) }}</p>
-                    <p v-for="distro in distros" :key="distro.name" class="flex min-w-0 flex-wrap items-center gap-x-2 text-xs text-muted">
-                        <span class="font-mono text-content">{{ distro.name }}</span>
-                        <span v-if="distro.connectedAs"
-                            >{{ t(`sandbox.devicePage.connected`) }} <span class="font-mono">{{ distro.connectedAs }}</span></span
-                        >
-                        <template v-else>
-                            <span>{{ t(`sandbox.devicePage.notConnected`) }}</span>
-                            <RouterLink :to="distro.connect" class="text-link hover:underline">{{ t(`sandbox.devicePage.connect`) }}</RouterLink>
-                        </template>
-                    </p>
-                </div>
-            </RowNote>
+            <!-- The rest of this PC, as rows in the same list: a distro that is here but holds no door yet. A
+                 connected one is already a row above, and saying so twice is what made this a second list. -->
+            <Row v-for="distro in distros" :key="distro.name" icon="desktop" :description="t(`sandbox.devicePage.notConnected`)">
+                <template #title><span class="font-mono">{{ distro.name }}</span></template>
+                <template #control>
+                    <Button
+                        :as="RouterLink"
+                        :to="distro.connect"
+                        size="small"
+                        severity="secondary"
+                        :text="true"
+                        :label="t(`sandbox.devicePage.connect`)"
+                    >
+                        <template #icon><Icon name="arrow-up-right" /></template>
+                    </Button>
+                </template>
+            </Row>
         </RowGroup>
 
         <!-- One row per sandbox, the page's only disclosure: a row is a summary and its folder, ports, image and share are the evidence. -->
         <!-- Either answer draws rows: a card granting sandbox management alone lists containers and describes no folders. -->
-        <RowGroup v-if="described" :label="t(`sandbox.devicePage.sandboxesOnDevice`)">
+        <RowGroup v-if="described" :label="t(`sandbox.devicePage.sandboxes`)" :count="lists.sandboxes.length || undefined">
             <!-- On a many-sided machine the door's block is about this list, so it is said here rather than under a row. -->
             <RowNote v-if="listBlock" variant="block">
                 <DeviceConcern
@@ -628,14 +489,15 @@ const applyReshape = (ask: ResourcesAsk): void => ops.applyReshape(ask);
             </RowNote>
         </RowGroup>
 
-        <!-- What this sandbox keeps here, as opposed to what the person does: runners it can hand a conversation to, per door. -->
-        <template v-for="environment in environments" :key="`runners:${environment.device.key}`">
-            <DeviceRunners v-if="!many || environment.device.hostId !== undefined" :device="environment.device" />
-        </template>
+        <!-- What this sandbox keeps here, as opposed to what the person does: runners it can hand a conversation to.
+             One group for the PC, not one per door — one Docker engine serves every door, and drawing it per
+             environment printed the same heading twice with two empty states under it. -->
+        <DeviceRunners :machine="machine" />
 
-        <!-- Cutting an enrollment off entirely, in a group of its own at the bottom: it ends everything above it at once. -->
-        <template v-for="environment in environments" :key="`revoke:${environment.device.key}`">
-            <RowGroup v-if="environment.device.sync && isOwner" :label="t(`sandbox.devicePage.dangerZone`)">
+        <!-- Cutting an enrollment off entirely, in one group at the bottom: it ends everything above it at once.
+             One row per enrollment, since each side of a PC pairs on its own and is revoked on its own. -->
+        <RowGroup v-if="revocable.length > 0" :label="t(`sandbox.devicePage.dangerZone`)">
+            <template v-for="environment in revocable" :key="`revoke:${environment.device.key}`">
                 <Row
                     icon="times"
                     tone="danger"
@@ -664,8 +526,8 @@ const applyReshape = (ask: ResourcesAsk): void => ops.applyReshape(ask);
                     <DeviceOpFailure :of="ops.failure.value.notice" :command="ops.failure.value.command" :machine="environment.device.label" />
                 </RowNote>
                 <RowNote v-else-if="ops.outcome.value?.key === ops.accessKey(environment)">{{ ops.outcome.value.message }}</RowNote>
-            </RowGroup>
-        </template>
+            </template>
+        </RowGroup>
 
         <!-- Each environment's own pairing dialog, the one its capability card opens, mounted where its silence is read: a fresh single-use command to run out there. -->
         <template v-for="environment in environments" :key="`connect:${environment.device.key}`">

@@ -164,12 +164,18 @@ const mount = (rows: Device[], at: Record<string, string> = {}): HTMLElement => 
     document.body.append(el);
     app = createApp({ render: () => h(SandboxDevices) });
     app.component(`Icon`, IconStub);
-    app.directive(`tooltip`, {});
+    // Records what each tooltip holds instead of dropping it: this page keeps the long form of a sentence on
+    // hover (a shell and home directory, why a machine is silent), so what is NOT on screen is testable too.
+    const tip = (node: HTMLElement, binding: { value: unknown }): void => node.setAttribute(`data-n`, String(binding.value ?? ``));
+    app.directive(`tooltip`, { mounted: tip, updated: tip });
     // The confirmation dialogs are PrimeVue Dialogs and read the plugin's config while rendering.
     app.use(PrimeVue);
     app.mount(el);
     return el;
 };
+
+/** Everything the page keeps on hover, which is where its explanations live now that its lines carry errands. */
+const hovers = (el: HTMLElement): string => [...el.querySelectorAll(`[data-n]`)].map((node) => node.getAttribute(`data-n`) ?? ``).join(` ¶ `);
 
 // A sandbox row is the one thing left that discloses; a machine is selected, not expanded.
 const disclosures = (el: HTMLElement): HTMLButtonElement[] => [...el.querySelectorAll<HTMLButtonElement>(`button[aria-expanded]`)];
@@ -237,9 +243,30 @@ it(`says what a device is when it has no report to show`, () => {
     const text = el.textContent ?? ``;
     expect(text).toContain(`Windows 11 Pro`);
     expect(text).toContain(`x64`);
-    expect(text).toContain(`PowerShell 7`);
+    // The shell and the home directory are read once, by somebody about to type into this machine, so they ride
+    // the name's tooltip rather than a fact line every visit has to scan past.
+    expect(text).not.toContain(`PowerShell 7`);
+    // The build number the title strips off joins them there, rather than being lost with the line it rode.
+    expect(hovers(el)).toContain(`Windows 11 Pro (build 10.0.26100) · PowerShell 7 · C:\\Users\\ada`);
     // The OS doesn't answer the gap: this machine still has no agent.
     expect(text).toContain(`no agent`);
+});
+
+// A machine is usually addressed by its own name, so the masthead would otherwise print `radarsu-rog` as the
+// title and `radarsu-rog` again as the door id directly under it.
+/** The masthead's own two lines — its name and what sits under it — with the rest of the page left out. */
+const headline = (el: HTMLElement): string => el.querySelector(`h2`)?.parentElement?.textContent ?? ``;
+
+// A machine is usually addressed by its own name, so the masthead would otherwise print `rog` as the title and
+// `rog` again as the door id directly under it.
+it(`drops a lone machine's door id when its name already is it`, () => {
+    const el = mount([{ key: `rog`, label: `rog`, hostId: `rog`, online: true, platform: `linux`, facts: { os: `Arch Linux`, arch: `x64`, shell: `/bin/zsh`, home: `/home/ada`, roots: [] } }]);
+    expect(headline(el)).toBe(`rogArch Linuxx64`);
+    // Dropping the line must not drop the hover it carried: the shell is still one reach away.
+    expect(hovers(el)).toContain(`/bin/zsh · /home/ada`);
+    // A door id that is NOT the name is the one thing two environments never share, so it stays.
+    const other = mount([{ key: `rog`, label: `rog`, hostId: `rog::wsl:Arch`, online: true, platform: `linux` }]);
+    expect(headline(other)).toContain(`rog::wsl:Arch`);
 });
 
 it(`falls back to the platform, and ages a device that is not here`, () => {
@@ -267,7 +294,11 @@ const asleep = (): Device => ({ key: `rog`, label: `rog`, hostId: `host-rog`, on
 it(`hands an offline machine a fresh pairing command without leaving its page`, async () => {
     const el = mount([asleep()]);
     const text = el.textContent ?? ``;
-    expect(text).toContain(`Asleep or offline.`);
+    // The badge already reads `offline`, so the sentence beside it is the errand alone; the state it was cut
+    // from is one hover away. Said four times over, one asleep laptop used to read as four separate problems.
+    expect(text).toContain(`A machine that wakes dials back in by itself.`);
+    expect(text).not.toContain(`Asleep or offline.`);
+    expect(hovers(el)).toContain(`Asleep, off the network, or its agent isn't running.`);
     // The cheaper of the two ways back, for a machine that is awake with only its agent down.
     expect(text).toContain(`intentic-machine run`);
 
@@ -492,14 +523,16 @@ const syncOnly = (): Device => ({
 it(`explains why a sync-only device has no sandbox buttons, and offers the fix`, () => {
     const el = mount([syncOnly()]);
     const text = el.textContent ?? ``;
-    expect(text).toContain(`Desktop sync carries folders and ports, never containers`);
+    // The errand on the page, the reason it exists on hover.
+    expect(text).toContain(`Connect it as a device to start, update and remove its sandboxes from here.`);
+    expect(hovers(el)).toContain(`Desktop sync carries folders and ports, never containers`);
     expect(labels(el)).toContain(`Connect this device`);
     expect(labels(el)).not.toContain(`Restart`);
 });
 
 it(`explains the gap without a button when there is no card to connect the machine`, () => {
     const el = mount([{ ...syncOnly(), platform: `macos` }]);
-    expect(el.textContent ?? ``).toContain(`Desktop sync carries folders and ports, never containers`);
+    expect(el.textContent ?? ``).toContain(`Connect it as a device to start, update and remove its sandboxes from here.`);
     expect(labels(el)).not.toContain(`Connect this device`);
 });
 
@@ -821,55 +854,39 @@ it(`names the loop, not a download, when only the running build is behind the in
     expect(text).not.toContain(`intentic-machine run --stop`);
 });
 
-// The whole point of giving the agent its own group: an update this sandbox has to sanction first is no
-// update at all on a dev build, or on a release published since it last looked at the registry.
-it(`offers the update on a connected device whose agent needs nothing`, () => {
+// The whole point of the standing verbs: an update this sandbox has to sanction first is no update at all on a
+// dev build, or on a release published since it last looked at the registry. What the button is FOR is on the
+// button, which is where a reader reaching for it already is — never a line under every environment.
+const settled = () => {
     const row = behind();
-    const current = {
-        ...row,
-        hostId: `host-1`,
-        online: true,
-        report: { ...row.report!, agent: { running: true, pid: 4242, build: `1.183.0`, installed: `1.183.0` } },
-    };
-    const el = mount([current]);
-    expect(el.textContent ?? ``).toContain(`Newest agent this sandbox knows of.`);
+    return { ...row, hostId: `host-1`, online: true, report: { ...row.report!, agent: { running: true, pid: 4242, build: `1.183.0`, installed: `1.183.0` } } };
+};
+
+it(`offers the verbs on a connected device whose agent needs nothing, and says nothing beside them`, () => {
+    const el = mount([settled()]);
+    const text = el.textContent ?? ``;
     expect(labels(el)).toContain(`Update agent`);
     expect(labels(el)).toContain(`Restart agent`);
+    expect(text).not.toContain(`Newest agent this sandbox knows of.`);
+    expect(hovers(el)).toContain(`Fetches the newest agent onto this device`);
 });
 
-// What the agent carries used to be a sentence under its name. It is three glyphs now, and the sentence is
-// the hover; the rest of what an update means lives on the button that does it.
-it(`names what the agent carries in glyphs, not in a sentence under its name`, () => {
-    const row = behind();
-    const el = mount([
-        {
-            ...row,
-            hostId: `host-1`,
-            online: true,
-            report: { ...row.report!, agent: { running: true, pid: 4242, build: `1.183.0`, installed: `1.183.0` } },
-        },
-    ]);
-    // The row's description sits next to its title, which is the one place a reader looks for what this is.
-    const title = [...el.querySelectorAll(`div`)].find((node) => node.textContent?.trim() === `Agent 1.183.0`);
-    const strip = title?.nextElementSibling;
-    expect([...(strip?.querySelectorAll(`span > span`) ?? [])].map((duty) => duty.textContent)).toEqual([`Folders`, `Ports`, `Commands`]);
-    // A word each, and a glyph each: the strip is not three bare labels.
-    expect(strip?.querySelectorAll(`svg`)).toHaveLength(3);
-    expect(el.textContent ?? ``).not.toContain(`every button below`);
+// The agent is the row's own meta now — a build and a state badge beside the environment it runs on — rather
+// than a section of its own with a duty strip under a second copy of the machine's name.
+it(`states the agent as the environment row's own build, with no group of its own`, () => {
+    const el = mount([settled()]);
+    const text = el.textContent ?? ``;
+    expect(text).toContain(`1.183.0`);
+    expect(text).not.toContain(`Agent on this device`);
+    expect(text).not.toContain(`Folders`);
+    expect(text).not.toContain(`every button below`);
 });
 
-it(`offers the update even when this sandbox cannot say what is newest, and admits it on the row`, () => {
+it(`offers the update even when this sandbox cannot say what is newest, without admitting it on the row`, () => {
     latest.value = undefined;
-    const row = behind();
-    const el = mount([
-        {
-            ...row,
-            hostId: `host-1`,
-            online: true,
-            report: { ...row.report!, agent: { running: true, pid: 4242, build: `1.183.0`, installed: `1.183.0` } },
-        },
-    ]);
-    expect(el.textContent ?? ``).toContain(`Newest release unknown.`);
+    const el = mount([settled()]);
+    // Whether this sandbox reached the registry is a fact about this sandbox, not about the machine on screen.
+    expect(el.textContent ?? ``).not.toContain(`Newest release unknown.`);
     expect(labels(el)).toContain(`Update agent`);
 });
 
@@ -930,7 +947,7 @@ it(`lists this sandbox's runners under the device holding them, with what that m
     const el = mount([managed(true)]);
     await nextTick();
     const text = el.textContent ?? ``;
-    expect(text).toContain(`Runners on this device`);
+    expect(text).toContain(`Runners`);
     expect(text).toContain(`rig`);
     expect(text).toContain(`16 cores`);
     expect(text).not.toContain(`elsewhere`);
@@ -947,7 +964,7 @@ it(`shows the runners section and add control on a machine that has none`, async
     const el = mount([managed(true)]);
     await nextTick();
     const text = el.textContent ?? ``;
-    expect(text).toContain(`Runners on this device`);
+    expect(text).toContain(`Runners`);
     expect(text).toContain(`Add runner`);
 });
 
@@ -1122,11 +1139,14 @@ it(`says which half of desktop sync each device holds`, async () => {
     expect(board).toContain(`desktop sync`);
     expect(board).toContain(`ports only`);
 
-    // On a machine's own page it is the sentence, since that is what anyone opened the machine to read.
+    // On the machine's own page a WORKING enrollment says nothing: the folder and the mirrored ports in its
+    // Sandboxes section are the same fact in the machine's own numbers, and the sentence was printed regardless.
     await select(`laptop`);
-    expect(el.textContent ?? ``).toContain(`syncing files and ports`);
+    expect(el.textContent ?? ``).not.toContain(`syncing files and ports`);
+    expect(hovers(el)).toContain(`desktop sync`);
     await select(`colleague`);
-    expect(el.textContent ?? ``).toContain(`mirroring ports`);
+    expect(el.textContent ?? ``).not.toContain(`mirroring ports`);
+    expect(hovers(el)).toContain(`ports only`);
 });
 
 // An unused enrollment used to read as healthy everywhere: the record exists, so every surface called it fine.
@@ -1450,23 +1470,29 @@ it(`opens the PC as one page: an environment row per side, the sandbox once, and
     const el = mount([distroSide(), windowsSide()]);
     await nextTick();
     const text = el.textContent ?? ``;
-    expect(text).toContain(`Environments on this device`);
+    // The page IS the device, so the heading is the noun: "on this device" was said by all four of them.
+    expect(text).toContain(`Environments`);
     expect(text).toContain(`Microsoft Windows 11 Home`);
     expect(text).toContain(`Arch Linux on WSL`);
-    // Each side's door, shell and home, so the id every command is addressed to is on the page.
+    // Each side's door, which is what every command is addressed to; its shell and home are one hover away.
     expect(text).toContain(`rog::wsl:Arch`);
-    expect(text).toContain(`PowerShell 7`);
-    expect(text).toContain(`/usr/bin/zsh`);
+    expect(text).not.toContain(`PowerShell 7`);
+    expect(hovers(el)).toContain(`PowerShell 7`);
+    expect(hovers(el)).toContain(`/usr/bin/zsh`);
     // The sandbox list is the machine's, drawn once, with the distro's folder under it.
-    expect(text).toContain(`Sandboxes on this device`);
+    expect(text).toContain(`Sandboxes`);
     expect(disclosures(el)).toHaveLength(1);
-    // The Windows side's distros: one already connected as a door, one offered.
-    expect(text).toContain(`WSL distros on this PC`);
-    expect(text).toContain(`connected as rog::wsl:Arch`);
+    // The distro already connected is the row above; only the one with no door yet is offered, as a row of the
+    // same list rather than a second list restating the first.
+    expect(text).not.toContain(`WSL distros on this PC`);
+    expect(text).not.toContain(`connected as rog::wsl:Arch`);
     expect(text).toContain(`Ubuntu`);
-    expect(labels(el)).toContain(`Connect it`);
+    expect(labels(el)).toContain(`Connect`);
     // Two agents, two Update buttons: each side runs its own process.
     expect(labels(el).filter((label) => label === `Update agent`)).toHaveLength(2);
+    // One Runners section and one Danger zone for the PC, not one of each per door.
+    expect((text.match(/Runners/g) ?? []).length).toBe(1);
+    expect((text.match(/Danger zone/g) ?? []).length).toBe(1);
 });
 
 it(`sends a container verb through the Windows door and a folder verb through the distro's`, async () => {
@@ -1490,7 +1516,7 @@ it(`updates every environment of one computer from a single press, native side f
     bothDoors();
     const el = mount([distroSide(), windowsSide()]);
     await nextTick();
-    [...el.querySelectorAll(`button`)].find((button) => button.textContent?.trim() === `Update all agents`)?.click();
+    [...el.querySelectorAll(`button`)].find((button) => button.textContent?.trim() === `Update agents`)?.click();
     await vi.waitFor(() => expect(agentCalls).toHaveLength(2));
     expect(agentCalls).toEqual([
         { hostId: `rog`, op: `upgrade` },
@@ -1510,7 +1536,7 @@ it(`states each side's own refusal when a machine-wide update is turned down twi
     agentAnswer = (hostId) => Promise.reject(new Error(`"Run commands" is off for ${hostId}.`));
     const el = mount([distroSide(), windowsSide()]);
     await nextTick();
-    [...el.querySelectorAll(`button`)].find((button) => button.textContent?.trim() === `Update all agents`)?.click();
+    [...el.querySelectorAll(`button`)].find((button) => button.textContent?.trim() === `Update agents`)?.click();
     await vi.waitFor(() => expect(agentCalls).toHaveLength(2));
     await vi.waitFor(() => expect(el.textContent ?? ``).toContain(`"Run commands" is off for rog::wsl:Arch.`));
     expect(el.textContent ?? ``).toContain(`"Run commands" is off for rog.`);
@@ -1525,7 +1551,7 @@ it(`offers no machine-wide update when only one side can be asked`, async () => 
     await nextTick();
     // The group itself is on screen, so the absence below is a control that was not offered rather than a page that
     // did not draw.
-    expect(el.textContent ?? ``).toContain(`Environments on this device`);
+    expect(el.textContent ?? ``).toContain(`Environments`);
     expect(labels(el).filter((label) => label === `Update agent`)).toHaveLength(1);
-    expect(labels(el)).not.toContain(`Update all agents`);
+    expect(labels(el)).not.toContain(`Update agents`);
 });

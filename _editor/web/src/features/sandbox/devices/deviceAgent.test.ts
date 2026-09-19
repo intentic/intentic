@@ -74,21 +74,19 @@ test(`states the build the loop is serving, its pid, and that it is running`, ()
     expect(panel?.state).toEqual({ word: `running`, variant: `success` });
 });
 
-// A settled agent still gets a line, or the two buttons beside it stand unexplained.
-test(`says the agent is the newest it knows of when it has nothing to ask for`, () => {
-    expect(said({}, {}, `1.2.0`)).toBe(`Newest agent this sandbox knows of.`);
-    expect(panelOf({}, {}, `1.2.0`)?.notes[0]?.tone).toBeUndefined();
-    expect(panelOf({}, {}, `1.2.0`)?.notes[0]?.icon).toBe(`check-circle`);
+// A settled agent says NOTHING. The line it used to carry ("Newest agent this sandbox knows of.") was printed
+// under every environment of every machine and asked nothing of anybody; what Update is for on an agent wanting
+// nothing lives on Update's own hint, where a reader reaching for the button already is.
+test(`says nothing at all about an agent with nothing to ask for`, () => {
+    expect(panelOf({}, {}, `1.2.0`)?.notes).toEqual([]);
+    expect(verbs({}, {}, `1.2.0`)).toEqual([`Update agent`, `Restart agent`]);
 });
 
-// The case that made the standing button necessary, said plainly rather than left as silence. The long form
-// is the hover, and its clause about the button is dropped on a machine that doesn't get one.
-test(`admits it cannot judge the build when this sandbox knows no release`, () => {
-    expect(said()).toBe(`Newest release unknown.`);
-    expect(hints()).toContain(`doesn't know which agent release is newest`);
-    expect(hints()).toContain(`Update fetches the newest there is`);
-    expect(hints({ hostId: undefined, online: undefined })).toContain(`doesn't know which agent release is newest`);
-    expect(hints({ hostId: undefined, online: undefined })).not.toContain(`Update fetches`);
+// Whether this sandbox knows the newest release is a fact about this sandbox, not about the machine on screen,
+// and a device page is no place to confess it: silent here too.
+test(`stays silent when this sandbox knows no release to judge the build against`, () => {
+    expect(panelOf()?.notes).toEqual([]);
+    expect(panelOf({ hostId: undefined, online: undefined })?.notes).toEqual([]);
 });
 
 test(`names the published release, and what this device holds, when it is behind`, () => {
@@ -140,9 +138,11 @@ test(`drops the verbs and names the missing door on a sync-only enrollment`, () 
     expect(panelOf(syncOnly)?.version).toBe(`1.2.0`);
 });
 
-test(`drops the verbs on a connected device that is not answering`, () => {
+// The badge reads `offline` and the concerns strip carries the errand; saying it a third time here is how one
+// silence came to be stated four times on one page.
+test(`drops the verbs on a connected device that is not answering, and says nothing about it`, () => {
     expect(verbs({ online: false })).toEqual([]);
-    expect(panelOf({ online: false })?.blocked?.text).toBe(`Not answering — nothing can run on it.`);
+    expect(panelOf({ online: false })?.blocked).toBeUndefined();
 });
 
 // Both verbs above end this machine's socket on purpose, and so does any CLI action that reloads its config: a
@@ -155,21 +155,21 @@ test(`reads a socket dropped seconds ago as a reconnection, not as silence`, () 
     expect(verbs(dropped)).toEqual([]);
 });
 
-// The window is what makes the quiet line honest: past it, a machine that hasn't come back is away.
-test(`goes back to naming the silence once the drop is older than the window`, () => {
+// The window is what makes the reconnecting line honest: past it the machine is away, the badge says so, and
+// this panel hands the sentence back to the concerns strip that owns it.
+test(`hands the silence back to the concerns strip once the drop is older than the window`, () => {
     const away = { online: false, gap: `offline`, lastSeen: NOW - 60_000, report: undefined } as const;
     expect(panelOf(away)?.state).toEqual({ word: `not reported`, variant: `neutral` });
-    expect(panelOf(away)?.blocked?.text).toBe(`Not answering — nothing can run on it.`);
+    expect(panelOf(away)?.blocked).toBeUndefined();
 });
 
-// Each shut door gets its own line: a switch nobody turned on is a different errand from a laptop asleep,
-// and from a machine that has no agent to update at all.
-test(`names the shut door rather than calling every one of them silence`, () => {
-    expect(verbs({ gap: `scope-off` })).toEqual([]);
-    expect(panelOf({ gap: `scope-off` })?.blocked?.text).toBe(`"Run commands" is off.`);
-    expect(panelOf({ gap: `scope-off` })?.blocked?.hint).toContain(`its capability card`);
-    expect(verbs({ gap: `no-agent` })).toEqual([]);
-    expect(panelOf({ gap: `no-agent` })?.blocked?.text).toBe(`No agent to update.`);
+// Every gap already has a sentence of its own in the concerns strip (deviceAttention.ts), each naming its own
+// errand. This panel used to restate all four in a few words each, directly beneath them.
+test(`leaves every gap to the concerns strip rather than restating it under the buttons it removed`, () => {
+    for (const gap of [`scope-off`, `no-agent`, `offline`] as const) {
+        expect(verbs({ gap })).toEqual([]);
+        expect(panelOf({ gap })?.blocked).toBeUndefined();
+    }
 });
 
 // Nothing to state and nothing to press: a heading over an empty card.

@@ -9,7 +9,6 @@ import {
     deviceReconnecting,
     hostCard,
     lastSeenNote,
-    deviceHardware,
     machineWarnings,
     manageBlock,
     osLabel,
@@ -105,7 +104,6 @@ test(`separates what the device is, how it is reached, and which agent it runs`,
             capturedAt: 1_700_000_000_000,
         },
     });
-    expect(deviceHardware(row)).toEqual([`x64`, `PowerShell 7`, `ADA-LAPTOP`]);
     expect(deviceDoors(row)).toEqual([{ name: `desktop sync` }, { name: `commands` }]);
     expect(agentChip(row)).toEqual({ version: `0.5.1` });
 });
@@ -158,10 +156,7 @@ test(`a working-tree agent is never called behind`, () => {
     expect(agentBehind(dev, `1.243.0`)).toBe(false);
 });
 
-test(`repeats the hostname only when the row is called something else`, () => {
-    const report = reportWith({ running: true });
-    expect(deviceHardware(device({ sync: enrolled(), report }))).toEqual([]);
-    expect(deviceHardware(device({ label: `ada's box`, sync: enrolled(), report }))).toEqual([`MY-PC`]);
+test(`names the doors this sandbox holds, and what each half of desktop sync is called`, () => {
     expect(deviceDoors(device({ sync: enrolled() }))).toEqual([{ name: `desktop sync` }]);
     // A mirror-only device must say "ports only", never "desktop sync" — it syncs no files.
     expect(deviceDoors(device({ sync: enrolled(`mirror`) }))).toEqual([{ name: `ports only` }]);
