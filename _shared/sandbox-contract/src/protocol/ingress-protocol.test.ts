@@ -49,6 +49,11 @@ const firstChunk = gate();
 const secondSent = gate();
 const uploadStarted = gate();
 
+const floodReleased = gate();
+
+// One entry per live /flood response, opened once that response's write queue is non-empty.
+const floodPressure: Promise<void>[] = [];
+
 // 64KB per write, keeping node's write queue non-empty so a reset lands on an unfinished write.
 const FLOOD_CHUNK = Buffer.alloc(64 * 1024, 7);
 
@@ -95,14 +100,19 @@ const routes: Record<string, Route> = {
         response.on("close", () => cancelled.open(response.writableEnded ? "ended" : "aborted"));
     },
     // Large enough that writes are still pending when the client resets mid-stream.
-    "/flood": (_request, response) => {
+    "/flood": async (_request, response) => {
+        const pressured = gate();
+        floodPressure.push(pressured.opened);
         response.writeHead(200, { "content-type": "application/octet-stream" });
+        // One byte now, the flood only once every stream has had its byte: a stream's DATA head-of-line blocks a later
+        // stream's HEADERS on the one h2 session, which starves the last of eight for seconds on a loaded machine.
+        response.write(FLOOD_CHUNK.subarray(0, 1));
+        await floodReleased.opened;
         const pump = (): void => {
-            while (response.write(FLOOD_CHUNK)) {
-                if (response.writableEnded) {
-                    return;
-                }
+            while (response.write(FLOOD_CHUNK) && !response.writableEnded) {
+                // Writes until the queue backs up; `pressured` then says the shutdown has something to land on.
             }
+            pressured.open();
         };
         response.on("drain", pump);
         pump();
@@ -391,16 +401,20 @@ test("a shutdown landing on top of pending writes neither crashes nor wedges the
     const ownPort = await listen(own.server);
 
     // All eight stay live: resetting some first would drain the pending-write pressure the shutdown needs to land on.
-    const flooding = Array.from({ length: 8 }, () =>
-        new Promise<void>((resolve) => {
-            const request = h1Request({ host: "127.0.0.1", port: ownPort, path: "/flood", headers: { host: HOST } }, (response) => {
-                response.once("data", () => resolve());
-            });
-            request.on("error", () => resolve());
-            request.end();
-        }),
-    );
+    const flooding = Array.from({ length: 8 }, () => {
+        const opened = gate();
+        const request = h1Request({ host: "127.0.0.1", port: ownPort, path: "/flood", headers: { host: HOST } }, (response) => {
+            response.once("data", () => opened.open());
+        });
+        request.on("error", () => opened.open());
+        request.end();
+        return opened.opened;
+    });
+
+    // Every stream open before any of them floods, and every one of them backed up before the shutdown lands.
     await Promise.all(flooding);
+    floodReleased.open();
+    await Promise.all(floodPressure);
 
     own.close();
     await new Promise((resolve) => setTimeout(resolve, 400));
