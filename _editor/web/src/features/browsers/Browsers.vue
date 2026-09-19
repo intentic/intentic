@@ -135,12 +135,12 @@ const revertAddress = (): void => {
 // Two picture surfaces: a video canvas with a still canvas over it, or an img for frames when there's no display to
 // grab. Pointer coordinates measure against whichever is painting (viewportCoords), not the stage around it; all
 // use `object-contain`.
-const frameEl = ref<HTMLElement | undefined>();
-const canvasEl = ref<HTMLCanvasElement | undefined>();
-const stillEl = ref<HTMLCanvasElement | undefined>();
-const stageEl = ref<HTMLElement | undefined>();
+const frameEl = ref<HTMLElement | null>(null);
+const canvasEl = ref<HTMLCanvasElement | null>(null);
+const stillEl = ref<HTMLCanvasElement | null>(null);
+const stageEl = ref<HTMLElement | null>(null);
 // Whichever of the two is painting; every pointer handler measures against this instead of its own copy.
-const pictureEl = computed<HTMLElement | undefined>(() => canvasEl.value ?? frameEl.value);
+const pictureEl = computed<HTMLElement | undefined>(() => canvasEl.value ?? frameEl.value ?? undefined);
 // The canvases mount/unmount with the picture kind; the decoder outlives them, so they're connected here.
 watch([canvasEl, stillEl], ([canvas, still]) => view.attachCanvases(canvas, still));
 
@@ -255,7 +255,9 @@ let observer: ResizeObserver | undefined;
 watch(stageEl, (stage) => {
     observer?.disconnect();
     observer = undefined;
-    if (stage === undefined) {
+    // Null, not undefined: the stage lives under `v-if="current?.running"`, and Vue writes null into the ref the
+    // moment that element goes. `observe(null)` throws where the picture stops rather than where it is read.
+    if (stage === null) {
         return;
     }
     observer = new ResizeObserver((entries) => {

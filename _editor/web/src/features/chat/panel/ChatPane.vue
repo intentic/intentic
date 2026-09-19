@@ -205,11 +205,11 @@ const onTrial = computed(() => isTrialProvider(provider.value));
 // Neither pill carries a hover label: the model pill's said the provider name its logo already shows, the mode
 // pill's repeated the menu's own description. A turn running a different model than selected has lost that home;
 // it belongs on the turn, not a hover about the next one.
-const scroller = ref<HTMLElement>();
-const content = ref<HTMLElement>();
-const input = ref<HTMLTextAreaElement>();
+const scroller = ref<HTMLElement | null>(null);
+const content = ref<HTMLElement | null>(null);
+const input = ref<HTMLTextAreaElement | null>(null);
 // The sticky footer, textarea included: its chrome's height is what's left for the box to grow into.
-const footer = ref<HTMLElement>();
+const footer = ref<HTMLElement | null>(null);
 // One open flag per picker menu (desktop panel or mobile sheet, via ResponsiveOverlay), not one per surface — they
 // drifted apart once already. The pill anchors the panel, so a popped-out window's overlay still lands correctly.
 const modelOpen = ref(false);
@@ -355,8 +355,9 @@ const measureCap = (): void => {
     const box = scroller.value;
     const shell = footer.value;
     const field = input.value;
-    // Nothing laid out yet measures nothing; the last good cap stands until there's a real measurement.
-    if (box === undefined || shell === undefined || field === undefined || shell.offsetHeight <= 0) {
+    // Nothing laid out yet measures nothing; the last good cap stands until there's a real measurement. Null, not
+    // undefined: this runs off `nextTick`, by which point the composer may have gone and Vue has nulled the refs.
+    if (box === null || shell === null || field === null || shell.offsetHeight <= 0) {
         return;
     }
     const chrome = shell.offsetHeight - field.offsetHeight;
@@ -373,10 +374,10 @@ const paneSize = typeof ResizeObserver === `undefined` ? undefined : new ResizeO
 watch(
     scroller,
     (now, before) => {
-        if (before !== undefined) {
+        if (before !== null && before !== undefined) {
             paneSize?.unobserve(before);
         }
-        if (now !== undefined) {
+        if (now !== null) {
             paneSize?.observe(now);
         }
     },
@@ -397,7 +398,7 @@ const remoteName = computed(() =>
 // Files staged for the next turn (useChatAttachments); bytes go to the conversation's own box and path.
 const staging = useChatAttachments({ attachments, reachable, connected, at: conversationBox });
 // The picker behind the paperclip: on a phone there is nothing to drop or paste, so this is the only road for a photo.
-const filePicker = ref<HTMLInputElement>();
+const filePicker = ref<HTMLInputElement | null>(null);
 const pickFiles = (event: Event): void => {
     const picker = event.target as HTMLInputElement;
     for (const file of picker.files ?? []) {
@@ -990,7 +991,7 @@ const recallInto = (text: string): void => {
 const recallKeydown = (event: KeyboardEvent): boolean => {
     const past = history.value;
     const el = input.value;
-    if (past === undefined || el === undefined || el.selectionStart !== el.selectionEnd) {
+    if (past === undefined || el === null || el.selectionStart !== el.selectionEnd) {
         return false;
     }
     const step = recallStep(past, event.key, draft.value, el.selectionStart);

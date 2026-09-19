@@ -46,8 +46,9 @@ export interface BrowserView {
     readonly viewHeight: Ref<number>;
     // Display pixels per CSS pixel of the picture: shown at width/scale CSS px, the page is 1:1.
     readonly viewScale: Ref<number>;
-    // Where the video and its still paint; the pane hands its canvases over on mount, nothing else uses them.
-    readonly attachCanvases: (video: HTMLCanvasElement | undefined, still: HTMLCanvasElement | undefined) => void;
+    // Where the video and its still paint; the pane hands its canvases over on mount, nothing else uses them. Null is
+    // the pane's canvases going away, which is how a template ref reads once unmounted.
+    readonly attachCanvases: (video: HTMLCanvasElement | null, still: HTMLCanvasElement | null) => void;
     // The current frame as an object URL, frames path only; undefined until the first lands, always undefined on video.
     readonly frame: Ref<string | undefined>;
     // What to say while there's no picture: connecting, reconnecting, or why there never will be one.

@@ -702,6 +702,10 @@
     width: 0.25rem;
     box-sizing: content-box;
     background-clip: content-box; /* keep the visible bar thin; the padding-right gap stays transparent */
+    /* The press target is the bar plus this, 22px tall against a 12px rung: a 4px-wide button is a miss at the rate
+       replays show (two rage-clicks in twenty-two presses). Padding, since content-box and the clip above already
+       keep paint off it, so the meter still draws as a meter. */
+    padding-block: 0.3125rem;
     border-radius: var(--radius-sm);
     cursor: pointer;
     background-color: color-mix(in srgb, var(--color-content) 10%, transparent);
@@ -734,6 +738,8 @@
     display: inline-block;
     cursor: default;
     pointer-events: none;
+    /* Nothing to press here: the sheet's rows are the target, so the drawn ladder keeps the rung's own height. */
+    padding-block: 0;
 }
 .composer-effort-seg-static:hover {
     background-color: color-mix(in srgb, var(--color-content) 10%, transparent);

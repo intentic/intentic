@@ -49,8 +49,8 @@ const geometry = (element: HTMLElement, scrollHeight: number, clientHeight: numb
 
 // The panel, reduced to what the composable touches: the scroller and the content wrapper it measures.
 const mountPanel = (): { scroller: HTMLElement; pin: () => void; follow: () => void } => {
-    const scroller = ref<HTMLElement>();
-    const content = ref<HTMLElement>();
+    const scroller = ref<HTMLElement | null>(null);
+    const content = ref<HTMLElement | null>(null);
     let pin: () => void = () => {};
     let follow: () => void = () => {};
     const app = createApp({
@@ -121,8 +121,8 @@ it(`follows a transcript that changed without the observer reporting it`, async 
 
 it(`stops observing when the panel unmounts`, async () => {
     const observers = installObserver(window);
-    const scroller = ref<HTMLElement>();
-    const content = ref<HTMLElement>();
+    const scroller = ref<HTMLElement | null>(null);
+    const content = ref<HTMLElement | null>(null);
     const app = createApp({
         setup() {
             useStickToBottom(scroller, content);

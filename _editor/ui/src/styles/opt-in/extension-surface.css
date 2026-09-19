@@ -120,7 +120,7 @@
 @source inline("{group,peer}{,/item,/row,/card,/bar,/tile,/cell,/a,/b}");
 
 /* States Aimed, not exhaustive — see the note at the top. */
-@source inline("{hover:,focus:,focus-visible:,focus-within:,disabled:,group-hover:,aria-selected:,data-active:,placeholder:}{text,bg,border,ring}-{content,muted,subtle,canvas,card,overlay,line,line-strong,link,danger,warning,success,info,transparent}");
+@source inline("{hover:,focus:,focus-visible:,focus-within:,disabled:,group-hover:,aria-selected:,data-active:,placeholder:}{text,bg,border,ring,outline}-{content,muted,subtle,canvas,card,overlay,line,line-strong,link,danger,warning,success,info,transparent}");
 /* A TINT under a state is the app's hover language — a row lifting a few percent off the canvas — so it is promised on the property that carries it. */
 @source inline("{hover:,group-hover:,aria-selected:}bg-{content,muted,subtle,canvas,card,overlay,line,link,danger,warning,success,info}/{2,3,4,5,10,15,20,30,50}");
 @source inline("{hover:,focus:,focus-visible:,focus-within:,active:,disabled:,group-hover:,group-focus-within:,peer-checked:,aria-selected:,data-active:}opacity-{0,10,20,25,30,40,50,60,70,75,80,90,100}");

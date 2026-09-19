@@ -46,7 +46,7 @@ const surface = ref<HTMLElement>();
 const canvasEl = ref<HTMLCanvasElement | null>(null);
 const stillEl = ref<HTMLCanvasElement | null>(null);
 // Canvases mount with the dialog; the decoder outlives them, so the two are wired together here.
-watch([canvasEl, stillEl], ([canvas, still]) => video.attach(canvas ?? undefined, still ?? undefined));
+watch([canvasEl, stillEl], ([canvas, still]) => video.attach(canvas, still));
 let socket: WebSocket | undefined;
 let lastMove = 0;
 // Ctrl+C in flight, waiting on the page's answer; one at a time.

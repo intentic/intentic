@@ -6,21 +6,23 @@ import { onMounted, onUnmounted, type Ref } from "vue";
 // How close to the bottom still counts as parked; absorbs stray wheel notches and sub-pixel rounding.
 const THRESHOLD = 80;
 
+// Both refs are template refs: null is what Vue writes into one once its element is gone, and every read here can
+// land after that (a resize observation, a post-flush follow, an unmounting pane).
 export const useStickToBottom = (
-    scroller: Ref<HTMLElement | undefined>,
-    content: Ref<HTMLElement | undefined>,
+    scroller: Ref<HTMLElement | null>,
+    content: Ref<HTMLElement | null>,
 ): { pin: () => void; follow: () => void } => {
     // Closure state, not refs: reads happen inside DOM callbacks where reactivity buys nothing.
     let pinned = true;
     let lastTop = 0;
     let observer: ResizeObserver | undefined;
     // Element the scroll listener attached to; the template ref is already cleared by unmount.
-    let listening: HTMLElement | undefined;
+    let listening: HTMLElement | null = null;
 
     const pin = (): void => {
         pinned = true;
         const element = scroller.value;
-        if (element === undefined) {
+        if (element === null) {
             return;
         }
         element.scrollTop = element.scrollHeight;
@@ -38,7 +40,7 @@ export const useStickToBottom = (
 
     const onScroll = (): void => {
         const element = scroller.value;
-        if (element === undefined) {
+        if (element === null) {
             return;
         }
         const top = element.scrollTop;
@@ -60,7 +62,7 @@ export const useStickToBottom = (
         observer = undefined;
         const element = scroller.value;
         const wrapper = content.value;
-        if (element === undefined || wrapper === undefined) {
+        if (element === null || wrapper === null) {
             return;
         }
         observer = new ResizeObserver(follow);
@@ -70,7 +72,7 @@ export const useStickToBottom = (
 
     onMounted(() => {
         const element = scroller.value;
-        if (element === undefined) {
+        if (element === null) {
             return;
         }
         lastTop = element.scrollTop;
@@ -83,7 +85,7 @@ export const useStickToBottom = (
         observer?.disconnect();
         observer = undefined;
         listening?.removeEventListener(`scroll`, onScroll);
-        listening = undefined;
+        listening = null;
     });
 
     return { pin, follow };
