@@ -5,6 +5,8 @@ import { reapOrphanDnsRecords } from "./sandbox/cloudflare.js";
 import { reapHostedOrphans } from "./sandbox/hosted/hosted.js";
 import { sweepHostedBuilds } from "./sandbox/hosted/build/hosted-build.js";
 import { reapIdleHosted } from "./sandbox/hosted/hosted-idle.js";
+import { kickHostedCleanup } from "./sandbox/hosted/hosted-cleanup.js";
+import { sweepSandboxTrash } from "./sandbox/sandbox-trash.js";
 import type { Config } from "./config.js";
 import type { Logger } from "pino";
 import type { PrismaClient } from "@intentic/prisma";
@@ -44,22 +46,27 @@ const runRetention = async (prisma: PrismaClient): Promise<{ sessions: number; v
     return { sessions: sessions.count, verifications: verifications.count, handoffs: handoffs.count, invites: invites.count, provisions: provisions.count };
 };
 
+/* One sweep, isolated: a failure here must not crash the API or stop the sweeps after it, and the next daily run
+ * retries it. A step returning an object has it logged as that line's fields. */
+const step = async (logger: Logger, what: string, run: () => Promise<Record<string, unknown> | void>): Promise<void> => {
+    try {
+        logger.info(await run(), `${what} completed`);
+    } catch (error) {
+        logger.error({ err: error }, `${what} failed`);
+    }
+};
+
 export const startRetention = (prisma: PrismaClient, config: Config, logger: Logger): void => {
     const { apiToken, zone, reap, reapDryRun } = config.intenticCloudflare;
     const sweep = async (): Promise<void> => {
-        // A failed sweep must not crash the API; the next daily run retries.
-        try {
-            logger.info(await runRetention(prisma), `retention sweep completed`);
-        } catch (error) {
-            logger.error({ err: error }, `retention sweep failed`);
-        }
+        await step(logger, `retention sweep`, () => runRetention(prisma));
         // Cloudflare is DNS-only now; the one thing still worth sweeping is loopback-certificate residue.
         if (apiToken === `` || zone === ``) {
             return;
         }
         // Deleting is opt-in: verdicts use this deployment's database, invisible to a token shared by another one.
         const deleting = reap && !reapDryRun;
-        try {
+        await step(logger, `DNS record sweep`, async () => {
             // The row's own id, read rather than re-derived from `tokenDigest` by hand in the one place that deletes.
             const rows = await prisma.sandbox.findMany({ select: { tunnelId: true } });
             const liveSandboxIds = new Set(rows.map((row) => row.tunnelId));
@@ -71,36 +78,27 @@ export const startRetention = (prisma: PrismaClient, config: Config, logger: Log
                 log: (record) => logger.info({ ...record, deleting }, `orphan DNS record`),
                 onError: (record, error) => logger.error({ ...record, err: error }, `orphan DNS record delete failed`),
             });
-            logger.info({ ...records, deleting, sandboxes: liveSandboxIds.size }, `DNS record sweep completed`);
-        } catch (error) {
-            logger.error({ err: error }, `DNS record sweep failed`);
-        }
+            return { ...records, deleting, sandboxes: liveSandboxIds.size };
+        });
         // Destroys our-prefix Fly apps whose HostedMachine row is gone; self-gated on the hosted config.
-        try {
-            await reapHostedOrphans(prisma, config, logger);
-        } catch (error) {
-            logger.error({ err: error }, `hosted reap sweep failed`);
-        }
+        await step(logger, `hosted reap sweep`, () => reapHostedOrphans(prisma, config, logger));
         // Collects free machines unopened for weeks (one warning email first); plan and running machines are untouched.
-        try {
-            logger.info(await reapIdleHosted(prisma, config, logger), `hosted idle sweep completed`);
-        } catch (error) {
-            logger.error({ err: error }, `hosted idle sweep failed`);
-        }
+        await step(logger, `hosted idle sweep`, () => reapIdleHosted(prisma, config, logger));
         // Old environment build rows, keeping the one each machine currently runs.
-        try {
-            logger.info({ dropped: await sweepHostedBuilds(prisma) }, `hosted build sweep completed`);
-        } catch (error) {
-            logger.error({ err: error }, `hosted build sweep failed`);
-        }
+        await step(logger, `hosted build sweep`, async () => ({ dropped: await sweepHostedBuilds(prisma) }));
+        // Deleted sandboxes past the owner's recovery window: the row goes and its app joins the teardown queue.
+        // After the reaper above, so the apps it hands over are not read as orphans on the same pass.
+        await step(logger, `sandbox trash sweep`, async () => {
+            const purged = await sweepSandboxTrash(prisma);
+            kickHostedCleanup(prisma, config, logger);
+            return purged;
+        });
         // Last, so the day it rolls up reflects the sweeps above; the digest latches to once per day on that row.
-        try {
+        await step(logger, `admin rollup/digest`, async () => {
             const rollup = await rollupAdminDaily(prisma);
-            logger.info(rollup, `admin daily rollup completed`);
             await sendAdminDigest(prisma, config, logger, rollup.day);
-        } catch (error) {
-            logger.error({ err: error }, `admin rollup/digest failed`);
-        }
+            return rollup;
+        });
     };
     const tick = (): void => {
         // Only one replica sweeps per tick (advisory lock); a failed lock connection defers to the next run.

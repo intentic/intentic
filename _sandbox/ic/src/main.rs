@@ -151,7 +151,7 @@ enum SandboxCommand {
     },
     /// List the sandboxes on this machine
     List,
-    /// Remove sandboxes: containers, named /work volumes, networks — asks which, confirms, deletes data
+    /// Remove sandboxes — asks which, confirms; their data stays recoverable for a week
     Remove {
         /// Which sandboxes to remove; none = pick interactively
         slugs: Vec<String>,
@@ -164,6 +164,28 @@ enum SandboxCommand {
         /// Also remove the shared dev agent-auth volume (AI logins for ALL dev sandboxes)
         #[arg(long = "agent-auth")]
         agent_auth: bool,
+        /// Delete the data now instead of keeping it recoverable for a week
+        #[arg(long)]
+        now: bool,
+    },
+    /// Bring a removed sandbox back, with its /work and /history as they were
+    Restore {
+        /// The sandbox to bring back (omit to pick from what is recoverable)
+        slug: Option<String>,
+        /// Skip confirmation prompts (scripts/CI)
+        #[arg(short = 'y', long = "yes")]
+        yes: bool,
+    },
+    /// Delete a removed sandbox's data now, before its recovery window runs out
+    Purge {
+        /// Which removed sandboxes to delete; none = pick with --all
+        slugs: Vec<String>,
+        /// Delete everything in the trash
+        #[arg(short = 'a', long)]
+        all: bool,
+        /// Skip confirmation prompts (scripts/CI)
+        #[arg(short = 'y', long = "yes")]
+        yes: bool,
     },
 }
 
@@ -291,12 +313,20 @@ fn main() {
                 all,
                 yes,
                 agent_auth,
+                now,
             } => sandbox::remove::run(sandbox::remove::Args {
                 slugs,
                 all,
                 yes,
                 agent_auth,
+                now,
             }),
+            SandboxCommand::Restore { slug, yes } => {
+                sandbox::restore::run(sandbox::restore::Args { slug, yes })
+            }
+            SandboxCommand::Purge { slugs, all, yes } => {
+                sandbox::restore::purge(sandbox::restore::PurgeArgs { slugs, all, yes })
+            }
         },
         Command::Machine(command) => run_machine(command),
         Command::Runner(command) => match command {
@@ -513,6 +543,7 @@ mod tests {
                     all,
                     yes,
                     agent_auth,
+                    now,
                 }),
         }) = parse(&["sandbox", "remove", "a", "b", "--agent-auth", "-y"])
         else {
@@ -520,6 +551,8 @@ mod tests {
         };
         assert_eq!(slugs, vec!["a", "b"]);
         assert!(yes && agent_auth);
+        // The week of recovery is what a removal gives by default; only --now takes it away.
+        assert!(!now, "--now must never be implied");
         // Naming slugs must never widen into --all: that is the difference between removing two sandboxes
         // and removing every sandbox on the machine.
         assert!(!all);
@@ -541,6 +574,49 @@ mod tests {
         assert!(!yes, "-y must never be implied");
         // A bare `remove` is the interactive picker, not an error.
         assert!(parse(&["sandbox", "remove"]).is_ok());
+        let Ok(Cli {
+            command: Command::Sandbox(SandboxCommand::Remove { now, .. }),
+        }) = parse(&["sandbox", "remove", "a", "--now"])
+        else {
+            panic!("remove --now did not parse")
+        };
+        assert!(now);
+    }
+
+    #[test]
+    fn restore_and_purge_are_separate_verbs() {
+        let Ok(Cli {
+            command: Command::Sandbox(SandboxCommand::Restore { slug, yes }),
+        }) = parse(&["sandbox", "restore", "abc", "-y"])
+        else {
+            panic!("restore did not parse")
+        };
+        assert_eq!(slug.as_deref(), Some("abc"));
+        assert!(yes);
+        // A bare `restore` is the picker over what is still recoverable.
+        let Ok(Cli {
+            command: Command::Sandbox(SandboxCommand::Restore { slug, yes }),
+        }) = parse(&["sandbox", "restore"])
+        else {
+            panic!("bare restore did not parse")
+        };
+        assert!(slug.is_none() && !yes);
+        // Purge ends the window early, and like every other data deletion it is never implied.
+        let Ok(Cli {
+            command: Command::Sandbox(SandboxCommand::Purge { slugs, all, yes }),
+        }) = parse(&["sandbox", "purge", "abc"])
+        else {
+            panic!("purge did not parse")
+        };
+        assert_eq!(slugs, vec!["abc"]);
+        assert!(!all && !yes);
+        let Ok(Cli {
+            command: Command::Sandbox(SandboxCommand::Purge { all, .. }),
+        }) = parse(&["sandbox", "purge", "-a"])
+        else {
+            panic!("purge -a did not parse")
+        };
+        assert!(all);
     }
 
     #[test]

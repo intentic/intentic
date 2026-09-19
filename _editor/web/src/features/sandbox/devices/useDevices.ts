@@ -263,7 +263,12 @@ export function useHostHolding(slug: () => string | undefined, path: () => strin
 // Reads /system/sync, not /system/devices, to avoid polling every laptop just to draw a badge.
 const HEALTH_POLL_MS = 60_000;
 
-export function useSyncHealth(): { stoppedOn: ComputedRef<string[]>; heldPorts: ComputedRef<number[]> } {
+export function useSyncHealth(): {
+    stoppedOn: ComputedRef<string[]>;
+    heldPorts: ComputedRef<number[]>;
+    syncOffered: ComputedRef<boolean>;
+    filesUnsynced: ComputedRef<boolean>;
+} {
     const { query } = useSandboxQuery({
         queryKey: SYNC_HEALTH.of(),
         queryFn: async () => SyncStatusSchema.parse(await sandboxJson(`/system/sync`)),
@@ -271,6 +276,11 @@ export function useSyncHealth(): { stoppedOn: ComputedRef<string[]>; heldPorts: 
     });
     const machines = computed(() => query.data.value?.machines ?? []);
     return {
+        // Whether offering desktop sync is honest here at all; a daemon that cannot say is taken as "no offer".
+        syncOffered: computed(() => query.data.value?.available === true),
+        // No machine holds a copy of this sandbox's files. Read strictly off `false`: an unread status and a daemon
+        // that cannot answer both mean "do not claim there is no copy".
+        filesUnsynced: computed(() => query.data.value?.syncing === false),
         // Machines whose sync watcher has stopped, though other signals still read healthy.
         stoppedOn: computed(() => machines.value.filter((report) => !report.agent.running).map((report) => report.hostname)),
         // ONLY the ports another paired sandbox took, and deliberately not every port that missed localhost. The

@@ -237,7 +237,8 @@ pub fn list() -> Result<()> {
 
 /// Removal IS sandbox removal — a runner is a sandbox container, and the flow that removes those already
 /// handles containers, named volumes and networks, with the confirmation this one inherits. Its work lives
-/// in the parent's git, so nothing user-owned dies with it.
+/// in the parent's git, so nothing user-owned dies with it — which is also why it skips the week of recovery
+/// a sandbox gets: there is nothing here to recover, only disk to hold.
 pub fn remove(name: String, yes: bool) -> Result<()> {
     let slug = slug_of(&name)?;
     sandbox::remove::run(sandbox::remove::Args {
@@ -245,6 +246,7 @@ pub fn remove(name: String, yes: bool) -> Result<()> {
         all: false,
         yes,
         agent_auth: false,
+        now: true,
     })
 }
 

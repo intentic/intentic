@@ -73,7 +73,7 @@ export const slotsMessage = (used: number): string =>
     `you already have ${used === 1 ? `a hosted sandbox` : `${used} hosted sandboxes`}; remove one first, or add a slot to your plan`;
 
 /* WRITE THE MACHINE ROW UNDER THE OWNER'S SLOT COUNT, atomically. */
-const withHostedSlot = async <T>(
+export const withHostedSlot = async <T>(
     prisma: PrismaClient,
     config: Config,
     args: HostedProvisionArgs,
@@ -524,12 +524,17 @@ export const reapHostedOrphans = async (prisma: PrismaClient, config: Config, lo
     if (names.length === 0) {
         return;
     }
-    const [machines, pooled, pending] = await Promise.all([
+    const [machines, pooled, pending, trashed] = await Promise.all([
         prisma.hostedMachine.findMany({ select: { appName: true } }),
         prisma.hostedPoolMachine.findMany({ select: { appName: true } }),
         prisma.hostedCleanup.findMany({ select: { appName: true } }),
+        // A deleted sandbox's app has no machine row by design — it is held for the owner's recovery window, and
+        // without this the reaper would read that absence as litter and destroy the disk inside the hour.
+        prisma.sandboxTrash.findMany({ where: { appName: { not: null } }, select: { appName: true } }),
     ]);
-    const known = new Set([...machines, ...pooled, ...pending].map((row) => row.appName));
+    const known = new Set(
+        [...machines, ...pooled, ...pending, ...trashed].map((row) => row.appName).filter((name): name is string => name !== null),
+    );
     const { doomed, skipped } = await sortUnknownApps(
         config,
         names.filter((candidate) => !known.has(candidate)),

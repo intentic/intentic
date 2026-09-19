@@ -2,7 +2,9 @@ pub mod connect;
 pub mod doctor;
 pub mod recreate;
 pub mod remove;
+pub mod restore;
 pub mod staged;
+pub mod trash;
 
 use crate::docker;
 use crate::util::{bail, Result};
@@ -52,10 +54,26 @@ pub fn list() -> Result<()> {
     let slugs = list_slugs();
     if slugs.is_empty() {
         println!("intentic: no sandboxes on this machine.");
+        print_recoverable();
         return Ok(());
     }
     for slug in slugs {
         println!("{:<9} {slug}", container_status(&slug));
     }
+    print_recoverable();
     Ok(())
+}
+
+/// The trash, under the live listing rather than in it: these are not sandboxes you can open, only ones you can
+/// still get back. Silent when empty, so the ordinary listing is unchanged.
+pub fn print_recoverable() {
+    let recoverable = trash::list();
+    if recoverable.is_empty() {
+        return;
+    }
+    let now = trash::now_secs();
+    println!("\nremoved, still recoverable ('ic sandbox restore <slug>'):");
+    for entry in &recoverable {
+        println!("{:<9} {} ({} day(s) left)", "removed", entry.slug, entry.days_left(now));
+    }
 }

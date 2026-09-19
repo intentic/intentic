@@ -153,6 +153,11 @@ export const verifySyncToken = async (historyRoot: string, presented: string, ch
 // Whether any machine is enrolled; the UI's desktop sync/mirror active signal.
 export const isKeyEnrolled = async (historyRoot: string): Promise<boolean> => (await readEnrollments(historyRoot)).length > 0;
 
+// Whether any machine carries this sandbox's FILES, as opposed to only mirroring its ports. The difference is the
+// whole of "is there a copy of this work anywhere else", which a plain enrollment count cannot answer.
+export const isFileSyncEnrolled = async (historyRoot: string): Promise<boolean> =>
+    (await readEnrollments(historyRoot)).some((enrollment) => enrollment.mode === "sync");
+
 // One row per enrolled machine, present whether or not it has ever reported (a never-polled machine is a real case to
 // show). Excludes the key and token digest; those have no business reaching a browser.
 export type SyncEnrollmentRow = Pick<SyncEnrollment, "machine" | "mode"> & { readonly seenAt?: number };

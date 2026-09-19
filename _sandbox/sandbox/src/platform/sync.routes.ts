@@ -7,6 +7,7 @@ import type { AppEnv } from "../app-env.js";
 import {
     deviceReports,
     enrollSyncKey,
+    isFileSyncEnrolled,
     isKeyEnrolled,
     isValidAuthorizedKey,
     recordDeviceReport,
@@ -68,6 +69,8 @@ export const createSyncRoutes = (services: Services) => ({
         // lives on /system/devices; `machines` is each device's self-report and may be empty.
         return c.json({
             enrolled: await isKeyEnrolled(services.config.historyRoot),
+            // Separate from `enrolled`: a ports-only mirror is an enrollment that holds none of this sandbox's files.
+            syncing: await isFileSyncEnrolled(services.config.historyRoot),
             available: true,
             machines: (await deviceReports(services.config.historyRoot)).map((entry) => entry.report),
         });

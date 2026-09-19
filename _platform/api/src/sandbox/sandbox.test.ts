@@ -5,6 +5,7 @@ import { call, ORPCError } from "@orpc/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { OrpcContext } from "../context.js";
 import { INGRESS_TEST_PUBLIC_KEY, testIngressConfig } from "../testing.js";
+import { RECOVERY_WINDOW_MS } from "../durations.js";
 import { sandboxRoutes } from "./sandbox.routes.js";
 
 const user = { id: `u1`, email: `owner@example.com`, name: `Owner`, image: null };
@@ -35,6 +36,7 @@ const fakePrisma = (overrides: Record<string, Record<string, ReturnType<typeof v
             ...overrides[`sandbox`],
         },
         hostedCleanup: { upsert: vi.fn().mockResolvedValue({}), findMany: vi.fn().mockResolvedValue([]) },
+        sandboxTrash: { create: vi.fn().mockResolvedValue({}), ...overrides[`sandboxTrash`] },
     };
     return prisma as unknown as OrpcContext[`prisma`];
 };
@@ -287,15 +289,27 @@ describe(`sandbox routes`, () => {
 
     it(`delete drops the row and calls nothing: the row's absence IS the revocation`, async () => {
         const deleteRow = vi.fn().mockResolvedValue({});
+        const trash = vi.fn().mockResolvedValue({});
         vi.stubGlobal(`fetch`, () => {
             throw new Error(`delete must call no provider — revocation is the row going away`);
         });
         const prisma = fakePrisma({
             sandbox: { findFirst: vi.fn().mockResolvedValue(sandboxRow), delete: deleteRow },
             hostedMachine: { findUnique: vi.fn().mockResolvedValue(null) },
+            sandboxTrash: { create: trash },
         });
+        const before = Date.now();
         await call(sandboxRoutes.delete, { sandboxId: `s1` }, { context: context({ prisma }) });
+        const after = Date.now();
         expect(deleteRow).toHaveBeenCalledExactlyOnceWith({ where: { id: `s1` } });
+        // The identity goes at once; what the owner can still ask for back is this row, and only until it expires.
+        expect(trash).toHaveBeenCalledOnce();
+        const { data } = trash.mock.calls[0]![0] as { data: { name: string; ownerId: string; appName: string | null; purgeAfter: Date } };
+        expect(data).toMatchObject({ name: sandboxRow.name, ownerId: sandboxRow.ownerId });
+        // Nothing to hold on the provider's side for a sandbox that ran on the owner's own computer.
+        expect(data.appName).toBeNull();
+        expect(data.purgeAfter.getTime()).toBeGreaterThanOrEqual(before + RECOVERY_WINDOW_MS);
+        expect(data.purgeAfter.getTime()).toBeLessThanOrEqual(after + RECOVERY_WINDOW_MS);
     });
 
     it(`creates a second sandbox for an owner who already has one: there is no cap`, async () => {
@@ -510,6 +524,18 @@ describe(`sandbox.delete on a hosted sandbox`, () => {
         hosted: { flyApiToken: `fly`, flyOrg: `org`, monthlyHours: 40, perUser: 1 },
     } as OrpcContext[`config`];
 
+    // A hosted machine as the trash has to record it: everything a restore needs to land on the same disk.
+    const hostedMachineRow = {
+        id: `h1`,
+        appName: `intentic-sbx-a`,
+        machineId: `m1`,
+        volumeId: `vol1`,
+        region: `iad`,
+        image: `registry/overlay:1`,
+        baseImage: `registry/base:1`,
+        environmentHash: `abc123`,
+    };
+
     it(`charges the owner's month for the open stretch before the row goes`, async () => {
         const wokeAt = new Date(Date.now() - 90 * 60_000);
         const month = wokeAt.toISOString().slice(0, 7);
@@ -519,11 +545,11 @@ describe(`sandbox.delete on a hosted sandbox`, () => {
         const prisma = fakePrisma({
             sandbox: {
                 findFirst: vi.fn().mockResolvedValue(sandboxRow),
-                findUniqueOrThrow: vi.fn().mockResolvedValue({ ...sandboxRow, hosted: { id: `h1`, appName: `intentic-sbx-a`, wokeAt } }),
+                findUniqueOrThrow: vi.fn().mockResolvedValue({ ...sandboxRow, hosted: { ...hostedMachineRow, wokeAt } }),
                 delete: deleteRow,
             },
             hostedMachine: {
-                findUnique: vi.fn().mockResolvedValue({ id: `h1`, appName: `intentic-sbx-a`, machineId: `m1`, wokeAt }),
+                findUnique: vi.fn().mockResolvedValue({ ...hostedMachineRow, wokeAt }),
                 update: vi.fn().mockResolvedValue({}),
                 delete: vi.fn().mockResolvedValue({}),
             },
@@ -537,5 +563,38 @@ describe(`sandbox.delete on a hosted sandbox`, () => {
         });
         // Charged BEFORE the cascade: after it there is no row left to hold the minutes.
         expect(upsert.mock.invocationCallOrder[0]).toBeLessThan(deleteRow.mock.invocationCallOrder[0]!);
+    });
+
+    it(`stops a deleted sandbox's machine and keeps its app, so the disk is there to restore onto`, async () => {
+        const calls: { method: string; url: string }[] = [];
+        vi.stubGlobal(`fetch`, (url: string, init?: RequestInit) => {
+            calls.push({ method: init?.method ?? `GET`, url });
+            return Promise.resolve(new Response(``, { status: 200 }));
+        });
+        const trash = vi.fn().mockResolvedValue({});
+        const prisma = fakePrisma({
+            sandbox: {
+                findFirst: vi.fn().mockResolvedValue(sandboxRow),
+                findUniqueOrThrow: vi.fn().mockResolvedValue({ ...sandboxRow, hosted: { ...hostedMachineRow, wokeAt: null } }),
+                delete: vi.fn().mockResolvedValue({}),
+            },
+            hostedMachine: { findUnique: vi.fn().mockResolvedValue(hostedMachineRow), delete: vi.fn().mockResolvedValue({}) },
+            sandboxTrash: { create: trash },
+        });
+        await call(sandboxRoutes.delete, { sandboxId: `s1` }, { context: context({ prisma, config: hostedConfig }) });
+        // Stopped, so it bills nothing; NOT deleted, which on Fly takes the volume with the app.
+        expect(calls.filter((entry) => entry.method === `DELETE`)).toHaveLength(0);
+        expect(calls.some((entry) => entry.method === `POST` && entry.url.endsWith(`/machines/m1/stop`))).toBe(true);
+        const { data } = trash.mock.calls[0]![0] as { data: Record<string, unknown> };
+        // The app, machine, volume and overlay are what a restore needs; the sandbox's own `image` is its logo.
+        expect(data).toMatchObject({
+            appName: hostedMachineRow.appName,
+            machineId: hostedMachineRow.machineId,
+            volumeId: hostedMachineRow.volumeId,
+            region: hostedMachineRow.region,
+            flyImage: hostedMachineRow.image,
+            baseImage: hostedMachineRow.baseImage,
+            environmentHash: hostedMachineRow.environmentHash,
+        });
     });
 });

@@ -1,15 +1,18 @@
 use crate::docker;
-use crate::sandbox::{container_status, list_slugs, CONTAINER_PREFIX, DIND_PREFIX, TUNNEL_PREFIX};
+use crate::sandbox::trash;
+use crate::sandbox::{container_status, list_slugs, CONTAINER_PREFIX};
 use crate::tty;
 use crate::util::{bail, plural, Result};
 
-/* Remove sandboxes' Docker footprint on THIS machine, INCLUDING the named /work volumes — cleanup.sh's flow. */
+/* Remove sandboxes from THIS machine — cleanup.sh's flow, except that the data outlives the removal by a week. */
 
 pub struct Args {
     pub slugs: Vec<String>,
     pub all: bool,
     pub yes: bool,
     pub agent_auth: bool,
+    /// Skip the grace period and delete the data now. The only path in this file that destroys a /work volume.
+    pub now: bool,
 }
 
 pub fn run(args: Args) -> Result<()> {
@@ -17,26 +20,52 @@ pub fn run(args: Args) -> Result<()> {
         bail!("docker is not installed — nothing to clean up.");
     }
 
+    // Overdue trash goes before anything else asks for disk, so a machine that keeps removing sandboxes keeps
+    // collecting the week-old ones without anybody running a second verb.
+    let swept = trash::sweep();
+    if !swept.is_empty() {
+        println!(
+            "intentic: deleted {} past the {}-day recovery window: {}",
+            plural(swept.len(), "sandbox"),
+            GRACE_DAYS,
+            swept.join(" ")
+        );
+    }
+
     if args.all {
-        let all = list_slugs();
-        if all.is_empty() {
+        let live = list_slugs();
+        // "ALL sandboxes on this machine" has to mean the recoverable ones too, or `--all --now` would leave
+        // behind exactly the volumes it was run to reclaim. Without `--now` they are already removed, and
+        // re-trashing them would restart a clock that is meant to run down.
+        let trashed: Vec<String> = if args.now {
+            trash::list().into_iter().map(|entry| entry.slug).collect()
+        } else {
+            Vec::new()
+        };
+        if live.is_empty() && trashed.is_empty() {
             println!("intentic: no sandboxes found on this machine.");
             maybe_remove_agent_auth(&args);
             return Ok(());
         }
-        println!("intentic: about to PERMANENTLY DELETE ALL sandboxes on this machine and their data (/work + /history):");
-        for slug in &all {
+        println!("{}", headline(live.len() + trashed.len(), args.now));
+        for slug in &live {
             println!("    {slug}");
         }
-        println!("This cannot be undone.");
+        for slug in &trashed {
+            println!("    {slug} (already removed, still recoverable)");
+        }
+        println!("{}", aftermath(args.now));
         if !tty::confirm("Remove all of them?", args.yes) {
             println!("intentic: cancelled — nothing removed.");
             return Ok(());
         }
-        remove_all();
-        remove_sync_state();
-        maybe_remove_agent_auth(&args);
-        println!("intentic: all sandboxes removed. Re-run connect to start fresh.");
+        for slug in live.iter().chain(trashed.iter()) {
+            remove_slug(slug, args.now);
+        }
+        if args.now {
+            sweep_orphans();
+        }
+        finish(&args);
         return Ok(());
     }
 
@@ -86,36 +115,74 @@ pub fn run(args: Args) -> Result<()> {
 
     // The count is spelled out at the one prompt where a person has to read carefully: "these sandbox(es)" is not
     // a number, and the difference between one and all of them is the whole decision.
-    println!(
-        "intentic: about to PERMANENTLY DELETE {} and their data (/work + /history):",
-        plural(selected.len(), "sandbox")
-    );
+    println!("{}", headline(selected.len(), args.now));
     for slug in &selected {
         println!("    {slug}");
     }
-    println!("This cannot be undone.");
+    println!("{}", aftermath(args.now));
     if !tty::confirm("Proceed?", args.yes) {
         println!("intentic: cancelled — nothing removed.");
         return Ok(());
     }
     for slug in &selected {
-        remove_slug(slug);
+        remove_slug(slug, args.now);
     }
+    finish(&args);
+    Ok(())
+}
 
-    // Desktop sync and the agent-auth volume are host-wide, not per-slug (and the volume stays docker-locked
-    // while any sandbox container references it): tear them down only once every sandbox is gone.
+/// Whole days of grace, for the sentences that quote it.
+const GRACE_DAYS: u64 = trash::GRACE_SECS / (24 * 60 * 60);
+
+/// What the prompt claims is about to happen. The two readings are not degrees of the same thing — one is
+/// reversible for a week and the other is not — so they share no wording.
+fn headline(count: usize, now: bool) -> String {
+    if now {
+        return format!(
+            "intentic: about to PERMANENTLY DELETE {} and their data (/work + /history):",
+            plural(count, "sandbox")
+        );
+    }
+    format!("intentic: about to remove {}:", plural(count, "sandbox"))
+}
+
+fn aftermath(now: bool) -> String {
+    if now {
+        return "This cannot be undone.".to_string();
+    }
+    format!("Their data (/work + /history) is kept for {GRACE_DAYS} days — 'ic sandbox restore <slug>' brings one back. Add --now to delete it instead.")
+}
+
+/// Host-wide teardown, run once the machine holds nothing this flow could still be asked to bring back. Desktop
+/// sync and the agent-auth volume are not per-slug, and the volume stays docker-locked while any container
+/// references it — which a trashed sandbox's container still does.
+fn finish(args: &Args) {
     let remaining = list_slugs();
-    if remaining.is_empty() {
+    let recoverable = trash::list();
+    if remaining.is_empty() && recoverable.is_empty() {
         remove_sync_state();
-        maybe_remove_agent_auth(&args);
+        maybe_remove_agent_auth(args);
     } else if args.agent_auth {
-        eprintln!("intentic: kept shared dev agent-auth volume '{}' — other sandboxes still reference it.", auth_volume());
+        eprintln!(
+            "intentic: kept shared dev agent-auth volume '{}' — other sandboxes still reference it.",
+            auth_volume()
+        );
     }
     println!(
         "intentic: done. Remaining sandboxes: {}",
         remaining.join(" ")
     );
-    Ok(())
+    if !recoverable.is_empty() {
+        let now = trash::now_secs();
+        println!("intentic: recoverable with 'ic sandbox restore <slug>':");
+        for entry in &recoverable {
+            println!(
+                "    {:<24} {} day(s) left",
+                entry.slug,
+                entry.days_left(now)
+            );
+        }
+    }
 }
 
 /// Tells the platform this sandbox is being deleted, BEFORE anything is deleted — the container's env is where
@@ -135,42 +202,22 @@ fn announce_removal(slug: &str) {
 
 /// One sandbox by slug: its 3 containers, 4 named volumes, and network. Idempotent (missing = no-op). The
 /// dind pair is the Windows self-host deploy target connect.ps1 stands up beside the sandbox.
-pub fn remove_slug(slug: &str) {
-    println!("intentic: removing sandbox '{slug}' (containers + named volumes + network)…");
+pub fn remove_slug(slug: &str, now: bool) {
     announce_removal(slug);
-    for container in [
-        format!("{CONTAINER_PREFIX}{slug}"),
-        format!("{TUNNEL_PREFIX}{slug}"),
-        format!("{DIND_PREFIX}{slug}"),
-    ] {
-        docker::quiet(&["rm", "-f", &container]);
+    if now {
+        println!("intentic: deleting sandbox '{slug}' (containers + named volumes + network)…");
+        trash::purge(slug);
+        return;
     }
-    for volume in [
-        format!("intentic-workspace-{slug}"),
-        format!("intentic-history-{slug}"),
-        format!("intentic-docker-{slug}"),
-        format!("intentic-dind-docker-{slug}"),
-    ] {
-        docker::quiet(&["volume", "rm", &volume]);
-    }
-    docker::quiet(&["network", "rm", &format!("intentic-workspace-{slug}")]);
+    println!("intentic: removing sandbox '{slug}' — its data stays recoverable for {GRACE_DAYS} days…");
+    trash::stash(slug);
 }
 
-/// EVERY sandbox by name prefix — also sweeps orphaned volumes/networks a per-slug pass would miss. The
-/// prefixes never overlap the platform's intentic-app-* resources.
-fn remove_all() {
-    // Before the sweep, not inside it: `ps_names` matches the tunnel containers too, and each sandbox's token is
-    // read from its primary container, which the first `rm -f` of the loop below would already have taken.
-    for slug in list_slugs() {
-        announce_removal(&slug);
-    }
-    println!("intentic: removing sandbox containers…");
-    for filter in [CONTAINER_PREFIX, DIND_PREFIX] {
-        for name in docker::ps_names(true, filter) {
-            docker::quiet(&["rm", "-f", &name]);
-        }
-    }
-    println!("intentic: removing named volumes (the persistent /work)…");
+/// Volumes and networks no per-slug pass would reach, because no container names them any more. Only ever
+/// reached under `--now`: the same prefixes carry the data a trashed sandbox is waiting to be restored from.
+/// The prefixes never overlap the platform's intentic-app-* resources.
+fn sweep_orphans() {
+    println!("intentic: sweeping orphaned volumes and networks…");
     for prefix in [
         "intentic-workspace-",
         "intentic-history-",
@@ -181,7 +228,6 @@ fn remove_all() {
             docker::quiet(&["volume", "rm", &volume]);
         }
     }
-    println!("intentic: removing sandbox networks…");
     if let Some(networks) = docker::try_capture(&[
         "network",
         "ls",

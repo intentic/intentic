@@ -527,8 +527,9 @@ export const reconnectSandbox = async (
     return `Reconnected sandbox "${slug}". Its files and its history were kept, and it now has what it was missing.`;
 };
 
-// Rides `sandboxes` like every other verb: a fleet nobody may delete from is one the owner can't clean up. Nothing
-// here is undoable, so the confirmation is the caller's job.
+// Rides `sandboxes` like every other verb: a fleet nobody may delete from is one the owner can't clean up. The
+// data outlives this by a week (`ic sandbox restore`), but the interruption does not, so the confirmation is
+// still the caller's job.
 export const removeSandbox = async (slug: string, scopes: HostScopes, onLine: (line: string) => void): Promise<string> => {
     assertScope(scopes, "sandboxes");
     await find(slug);
@@ -542,7 +543,7 @@ export const removeSandbox = async (slug: string, scopes: HostScopes, onLine: (l
     if (run.code !== 0) {
         throw new Error(`That removal failed on this device.\n\n${run.output}`);
     }
-    return `Removed sandbox "${slug}" and everything in it.`;
+    return `Removed sandbox "${slug}". Its files and its history are kept for a week — 'ic sandbox restore ${slug}' on this device brings it back.`;
 };
 
 // How many lines of a container's log to answer with by default, and the ceiling. A log is read to find out why

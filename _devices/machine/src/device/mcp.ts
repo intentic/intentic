@@ -304,7 +304,7 @@ const TOOLS: readonly McpTool<HostScopes>[] = [
     tool({
         name: "remove_sandbox",
         description:
-            "Delete one Intentic sandbox from this device: its container, its network, and the volumes holding its files and its history. THIS CANNOT BE UNDONE and is not what stopping it does, confirm with the user before calling it. Requires the 'Manage sandboxes on this device' permission, which is OFF unless the user turned it on.",
+            "Remove one Intentic sandbox from this device: its container stops and leaves the listing. Its files and its history are kept for a week, so `ic sandbox restore <slug>` on the device brings it back whole; after that week they are deleted for good. This is not what stopping it does, so confirm with the user before calling it. Requires the 'Manage sandboxes on this device' permission, which is OFF unless the user turned it on.",
         input: z.object({ slug: required.describe("The sandbox's slug, from list_sandboxes.") }),
         run: async ({ slug }, scopes) => textResult(await removeSandbox(slug, scopes, () => {})),
     }),

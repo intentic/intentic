@@ -220,6 +220,7 @@ fn connect(
                             all: false,
                             yes: false,
                             agent_auth: false,
+                            now: false,
                         });
                         println!("intentic: continuing with this sandbox…");
                     }

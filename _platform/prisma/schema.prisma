@@ -33,6 +33,7 @@ model User {
     sessions         Session[]
     accounts         Account[]
     sandboxes        Sandbox[]
+    sandboxTrash     SandboxTrash[]
     trialUsage       TrialUsage[]
     hostedUsage      HostedUsage[]
     hostedPlan       HostedPlan?
@@ -252,8 +253,39 @@ model HostedMachine {
 model HostedCleanup {
     appName   String   @id
     createdAt DateTime @default(now())
+    /* Nothing is destroyed before this. Defaults to now, which is what a failed provision's litter wants; a
+     * release dates it a week out so the volume outlives the machine it was on. */
+    deleteAfter DateTime @default(now())
 
     @@map("hosted_cleanup")
+}
+
+/* A deleted sandbox for as long as the delete can still be taken back: the identity is gone with the Sandbox row,
+ * the disk is not. The machine is STOPPED rather than destroyed, so the app, its volume and the environment it was
+ * built on are all still there to restore onto; the sweep hands `appName` to HostedCleanup once the window closes.
+ * Nothing here is a credential — the connect token died with the row, and a restore mints a new one. */
+model SandboxTrash {
+    id      String  @id @default(cuid())
+    ownerId String
+    owner   User    @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+    name    String
+    image   String?
+    /* The provider resources held back from teardown; all null for a sandbox that ran on the owner's own computer. */
+    appName   String? @unique
+    machineId String?
+    volumeId  String?
+    region    String?
+    // The overlay the machine last ran, so a restore comes back on the environment it had rather than the base image.
+    flyImage        String?
+    baseImage       String?
+    environmentHash String?
+    deletedAt       DateTime @default(now())
+    /* Past this the row is litter: the sweep deletes it and the app goes to HostedCleanup. */
+    purgeAfter DateTime
+
+    @@index([ownerId])
+    @@index([purgeAfter])
+    @@map("sandbox_trash")
 }
 
 /* Stores one approved hosted-machine overlay build and its resulting status. */

@@ -10,6 +10,7 @@ import { HostedAlreadyProvisioned } from "./hosted-cleanup.js";
 import { AT_CAPACITY_MESSAGE, forgetProviderCapacity, HostedAtCapacity } from "./hosted-capacity.js";
 import { forgetHostedImage } from "./build/hosted-image.js";
 import { testIngressConfig } from "../../testing.js";
+import { RECOVERY_WINDOW_MS } from "../../durations.js";
 
 vi.mock(`./hosted-app-lock.js`, async () => ({ withHostedAppLock: (await import(`../../testing.js`)).fakeHostedAppLock }));
 
@@ -80,6 +81,11 @@ const fakePrisma = (overrides: Record<string, Record<string, ReturnType<typeof v
             upsert: vi.fn().mockResolvedValue({}),
             findMany: vi.fn().mockResolvedValue([]),
             ...overrides[`hostedCleanup`],
+        },
+        // The reaper reads this for apps held back from a deleted sandbox; empty unless a test is about one.
+        sandboxTrash: {
+            findMany: vi.fn().mockResolvedValue([]),
+            ...overrides[`sandboxTrash`],
         },
         // Empty pool by default so tests not about the pool exercise the cold path.
         hostedPoolMachine: {
@@ -727,6 +733,19 @@ describe(`reapHostedOrphans`, () => {
         expect(calls.some((entry) => entry.url.includes(`unrelated-app`))).toBe(false);
     });
 
+    it(`spares the app of a deleted sandbox still inside its recovery window`, async () => {
+        const calls = stubFetch([
+            appList(`intentic-sbx-deleted`),
+            // Stamped ours and holding no machine row: without the trash read this is the reaper's clearest orphan,
+            // and destroying it would take the volume the owner can still restore from.
+            machinesOf({ "intentic-sbx-deleted": [flyMachine({ platform: INSTANCE })] }),
+            deleteRoute,
+        ]);
+        const held = fakePrisma({ sandboxTrash: { findMany: vi.fn().mockResolvedValue([{ appName: `intentic-sbx-deleted` }]) } });
+        await reapHostedOrphans(held as never, config(), logger);
+        expect(deletedApps(calls)).toHaveLength(0);
+    });
+
     it(`reads an app holding only a builder as its own: a build stamp proves ownership like any other`, async () => {
         const calls = stubFetch([
             appList(`intentic-sbx-leftover-builder`),
@@ -1024,11 +1043,20 @@ describe(`sandbox routes: the hosted lane's gates`, () => {
             hostedCleanup: { upsert },
             hostedMachine: { findUnique: vi.fn().mockResolvedValue({ appName: `intentic-sbx-a` }), delete: machineDelete },
         });
+        const before = Date.now();
         const summary = await call(sandboxRoutes.hostedRelease, { sandboxId: `s1` }, { context: routeContext({ prisma }) });
+        const after = Date.now();
         expect(summary.hosted).toBeNull();
         expect(fetch).not.toHaveBeenCalled();
-        expect(upsert).toHaveBeenCalledExactlyOnceWith({ where: { appName: `intentic-sbx-a` }, create: { appName: `intentic-sbx-a` }, update: {} });
         expect(machineDelete).toHaveBeenCalledExactlyOnceWith({ where: { id: `h1` } });
+        expect(upsert).toHaveBeenCalledOnce();
+        // Releasing a machine destroys the volume under it, so the teardown is DATED rather than queued for now:
+        // the disk outlives the machine by the recovery window.
+        const [[queued]] = upsert.mock.calls as [[{ where: unknown; create: { deleteAfter: Date }; update: { deleteAfter: Date } }]];
+        expect(queued.where).toEqual({ appName: `intentic-sbx-a` });
+        expect(queued.update.deleteAfter).toEqual(queued.create.deleteAfter);
+        expect(queued.create.deleteAfter.getTime()).toBeGreaterThanOrEqual(before + RECOVERY_WINDOW_MS);
+        expect(queued.create.deleteAfter.getTime()).toBeLessThanOrEqual(after + RECOVERY_WINDOW_MS);
     });
 
     it(`hostedRestart refreshes the current image onto the existing volume before starting`, async () => {

@@ -643,6 +643,26 @@ export const SandboxSummarySchema = z.object({
 });
 export type SandboxSummary = z.infer<typeof SandboxSummarySchema>;
 
+/* How long a deleted sandbox stays recoverable. Shared so the platform's sweep and the sentence the browser shows
+ * before a delete cannot disagree — a promise made in one place and kept in another. */
+export const SANDBOX_RECOVERY_DAYS = 7;
+
+/* A sandbox the owner deleted, for as long as the delete can still be taken back. Carries no address, token or
+ * role: a row here is not a sandbox anyone can reach, only one they can have again. */
+export const TrashedSandboxSchema = z.object({
+    /** The trash row's own id — NOT the deleted sandbox's, which died with it and is never reissued. */
+    id: z.string(),
+    name: z.string(),
+    image: z.string().nullable(),
+    deletedAt: z.string(),
+    /** When the data behind this goes for good. */
+    purgeAfter: z.string(),
+    /** Whether restoring brings a machine and its disk back, or only the name and a setup to re-run. */
+    hosted: z.boolean(),
+});
+
+export type TrashedSandbox = z.infer<typeof TrashedSandboxSchema>;
+
 /* THE OWNER'S SPENDING CAPS on the platform's wallet signer (api wallet/), written over a SESSION and nowhere else. */
 export const WalletPolicySchema = z.object({
     network: WalletNetworkSchema,

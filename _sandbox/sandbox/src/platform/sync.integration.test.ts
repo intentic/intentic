@@ -7,6 +7,7 @@ import { pairings } from "../store/enrollment.js";
 import {
     enrolledFleet,
     enrollSyncKey,
+    isFileSyncEnrolled,
     isKeyEnrolled,
     restoreAuthorizedKeys,
     revokeEnrollmentByMachine,
@@ -113,6 +114,22 @@ describe("enrollment store", () => {
         const authKeys = await readFile(join(process.env["HOME"]!, ".ssh", "authorized_keys"), "utf8");
         expect(authKeys.trim().split("\n")).toHaveLength(3);
         expect(await holderOf(history)).toBeUndefined();
+    });
+
+    it("tells a fleet that mirrors ports from one that holds the files", async () => {
+        // The backup nudge turns on this difference: mirroring machines are enrolled and hold none of the work.
+        expect(await isKeyEnrolled(history)).toBe(false);
+        expect(await isFileSyncEnrolled(history)).toBe(false);
+        await enrollSyncKey({ historyRoot: history, key: key("laptop-a"), mode: "mirror", takeover: false });
+        await enrollSyncKey({ historyRoot: history, key: key("laptop-b"), mode: "mirror", takeover: false });
+        expect(await isKeyEnrolled(history)).toBe(true);
+        expect(await isFileSyncEnrolled(history)).toBe(false);
+        await enrollSyncKey({ historyRoot: history, key: key("laptop-c"), mode: "sync", takeover: false });
+        expect(await isFileSyncEnrolled(history)).toBe(true);
+        // Revoking the holder leaves the mirrors enrolled, and the files unheld again.
+        expect(await revokeEnrollmentByMachine(history, "laptop-c")).toBe(true);
+        expect(await isKeyEnrolled(history)).toBe(true);
+        expect(await isFileSyncEnrolled(history)).toBe(false);
     });
 
     it("file sync is single-holder: a second sync enroll is refused, a takeover replaces it", async () => {

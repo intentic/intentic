@@ -36,6 +36,8 @@ export const HISTORY_SNAPSHOTS = family(`history`, `snapshots`);
 export const GIT_CHANGES = family(`git`, `changes`);
 export const GIT_LOG = family(`git`, `log`);
 export const GIT_REPOS = family(`git`, `repos`);
+// The same repos matched to their remotes; its own family because it costs a lookup per repo.
+export const GIT_REMOTE_REPOS = family(`git`, `remote-repos`);
 
 // ---- agents ----
 
@@ -63,6 +65,8 @@ export const LOOP_DESIGNS = family(`loop-designs`);
 // The hosted plan belongs to the person, not the sandbox; keyed under `.every` since scoping it would cache a
 // disagreeing copy per sandbox.
 export const HOSTED_PLAN = family(`hosted-plan`);
+// Deleted sandboxes still inside their recovery window. Account-wide like the sandbox list, never one box's data.
+export const SANDBOX_TRASH = family(`sandbox-trash`);
 
 // ---- sandbox surfaces ----
 

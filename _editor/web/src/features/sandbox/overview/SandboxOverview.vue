@@ -11,6 +11,7 @@ import { sandboxAvailabilityVisual } from "./availability";
 import { useSandboxAvailability } from "./useSandboxAvailability";
 import { useSandboxPlacement } from "./useSandboxPlacement";
 import { useWorkspaceTree } from "../../workspace/explorer/useWorkspaceTree";
+import SandboxBackupCard from "./backup/SandboxBackupCard.vue";
 import SandboxBehindCard from "./version/SandboxBehindCard.vue";
 import SandboxManifestCard from "./manifest/SandboxManifestCard.vue";
 import SandboxUpdateCard from "./version/SandboxUpdateCard.vue";
@@ -306,6 +307,9 @@ const removeLogo = async (): Promise<void> => {
             </p>
             <RouterLink to="/setup" class="text-xs text-link hover:underline">{{ t(`sandbox.sandboxOverview.setUp`) }}</RouterLink>
         </Card>
+
+        <!-- The files here exist nowhere else and the reader is at a computer that could change that; self-hides otherwise. -->
+        <SandboxBackupCard />
 
         <!-- A newer sandbox image has shipped; this prompt self-hides otherwise. -->
         <SandboxUpdateCard />

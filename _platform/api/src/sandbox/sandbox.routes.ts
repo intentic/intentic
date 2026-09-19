@@ -44,6 +44,7 @@ import { assertHostedStanding, HostedSuspended, hostedSuspensionOf } from "./hos
 import { hostedBudgetOf, openHostedStretch, settleHostedStretch } from "./hosted/hosted-usage.js";
 import { hostedRegionFor } from "./hosted/region.js";
 import { mintSandbox } from "./mint-sandbox.js";
+import { listTrash, restoreSandbox, trashSandbox, TrashedSandboxGone } from "./sandbox-trash.js";
 import { definitionSeedFor, ENV_DEFINITION_SEED } from "./profiles/profiles.js";
 import { sendSetupLinkEmail } from "./setup-email.js";
 import { ENV_INGRESS_URL, ENV_SANDBOX_GRANT } from "@intentic/sandbox-contract/ingress-contract";
@@ -275,13 +276,38 @@ export const sandboxRoutes = {
         });
         return toSummary(sandbox, `owner`, context);
     }),
-    // Provider cleanup must survive the sandbox row's cascade.
+    // The identity goes now; the disk under it is held for the recovery window (sandbox-trash.ts), which is also
+    // why no cleanup is kicked here — there is nothing yet to tear down.
     delete: os.sandbox.delete.handler(async ({ context, input }) => {
         await requireOwnedSandbox(context, input.sandboxId);
-        await releaseHosted(context.prisma, context.config, input.sandboxId);
-        await context.prisma.sandbox.delete({ where: { id: input.sandboxId } });
-        kickHostedCleanup(context.prisma, context.config, context.logger);
+        await trashSandbox(context.prisma, context.config, context.logger, input.sandboxId);
         return { ok: true };
+    }),
+    trash: os.sandbox.trash.handler(async ({ context }) => {
+        const user = requireUser(context);
+        const sandboxes = await listTrash(context.prisma, user.id);
+        return {
+            sandboxes: sandboxes.map((row) => ({
+                ...row,
+                deletedAt: row.deletedAt.toISOString(),
+                purgeAfter: row.purgeAfter.toISOString(),
+            })),
+        };
+    }),
+    restore: os.sandbox.restore.handler(async ({ context, input }) => {
+        const user = requireUser(context);
+        try {
+            const { sandbox } = await restoreSandbox(context.prisma, context.config, user.id, input.trashId);
+            return toSummary(sandbox, `owner`, context);
+        } catch (error) {
+            if (error instanceof TrashedSandboxGone) {
+                throw new ORPCError(`NOT_FOUND`, { message: error.message });
+            }
+            if (error instanceof HostedSlotsExhausted) {
+                throw new ORPCError(`CONFLICT`, { message: error.message });
+            }
+            throw error;
+        }
     }),
     // Drops the caller's own membership; sandbox, owner and daemon are untouched, idempotent.
     leave: os.sandbox.leave.handler(async ({ context, input }) => {

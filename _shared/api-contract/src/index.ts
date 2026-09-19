@@ -32,6 +32,7 @@ import {
     PushSendSchema,
     PushSentSchema,
     SandboxSummarySchema,
+    TrashedSandboxSchema,
     SetupCodeSchema,
     UserSchema,
     WalletPolicySchema,
@@ -68,6 +69,14 @@ export const sandboxContract = {
         .route({ method: "POST", path: "/sandbox/delete" })
         .input(sandboxIdInput)
         .output(z.object({ ok: z.boolean() })),
+    // What a delete can still be taken back from, newest first; owner's own rows only.
+    trash: oc.route({ method: "GET", path: "/sandbox/trash" }).output(z.object({ sandboxes: z.array(TrashedSandboxSchema) })),
+    // Takes one delete back. The sandbox comes back on its old disk under a NEW identity, so every setup link and
+    // bookmark from before the delete is dead — which is why the summary is returned rather than an ok.
+    restore: oc
+        .route({ method: "POST", path: "/sandbox/restore" })
+        .input(z.object({ trashId: z.string() }))
+        .output(SandboxSummarySchema),
     // Zones a pasted Cloudflare token can see, for the in-app capability; the token is used once and discarded.
     zones: oc.route({ method: "POST", path: "/sandbox/zones" }).input(CfTokenSchema).output(CfZonesSchema),
     // Provision requests are bound to the identity that release revokes.

@@ -3,6 +3,7 @@ import { sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
 import type { Logger } from "pino";
 import type { Config } from "../../config.js";
 import { encryptSecret } from "../../crypto.js";
+import { RECOVERY_WINDOW_MS } from "../../durations.js";
 import { connectTokenIdentity, mintConnectToken } from "../mint-sandbox.js";
 import { appExists, deleteApp } from "./fly/fly.js";
 import { withHostedAppLock } from "./hosted-app-lock.js";
@@ -81,7 +82,14 @@ export const releaseHosted = async (prisma: PrismaClient, config: Config, sandbo
         await lockHostedSandbox(tx, sandboxId);
         const sandbox = await tx.sandbox.findUniqueOrThrow({ where: { id: sandboxId }, include: { hosted: true } });
         if (sandbox.hosted !== null) {
-            await tx.hostedCleanup.upsert({ where: { appName: sandbox.hosted.appName }, create: { appName: sandbox.hosted.appName }, update: {} });
+            // Dated a week out: releasing a machine also destroys the volume under it, and that disk is the one
+            // thing here nobody can rebuild.
+            const deleteAfter = new Date(Date.now() + RECOVERY_WINDOW_MS);
+            await tx.hostedCleanup.upsert({
+                where: { appName: sandbox.hosted.appName },
+                create: { appName: sandbox.hosted.appName, deleteAfter },
+                update: { deleteAfter },
+            });
             await closeHostedStretch(tx, sandbox.hosted, sandbox.ownerId);
             await tx.hostedMachine.delete({ where: { id: sandbox.hosted.id } });
         }
@@ -106,7 +114,9 @@ export const releaseHosted = async (prisma: PrismaClient, config: Config, sandbo
 };
 
 export const reconcileHostedCleanup = async (prisma: PrismaClient, config: Config, logger: Logger): Promise<void> => {
-    const pending = await prisma.hostedCleanup.findMany({ orderBy: { createdAt: `asc` } });
+    // `deleteAfter` is the row's own hold: a failed provision's litter is due immediately, a released machine's
+    // app is due once its volume has outlived the machine by the grace period.
+    const pending = await prisma.hostedCleanup.findMany({ where: { deleteAfter: { lte: new Date() } }, orderBy: { createdAt: `asc` } });
     for (const { appName } of pending) {
         // oxlint-disable-next-line eslint/no-await-in-loop -- provider teardowns are sequential and skip active provisions
         await withHostedAppLock(config, appName, false, () => cleanupApp(prisma, config, appName)).catch((error: unknown) =>

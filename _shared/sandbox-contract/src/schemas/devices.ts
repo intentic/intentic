@@ -580,6 +580,10 @@ export const hostHoldingPath = (devices: readonly Device[], slug: string | undef
 // reports. Cheap: the sidebar badge reads this and must never fan out to a device.
 export const SyncStatusSchema = z.object({
     enrolled: z.boolean(),
+    // Whether any machine holds this sandbox's FILES, as opposed to only mirroring its ports — the difference
+    // between "a copy of this work exists elsewhere" and "it does not". Absent means the daemon cannot say, which
+    // readers must take as "do not claim there is no copy", the same way `available` is read.
+    syncing: z.boolean().optional(),
     // Whether this sandbox can do desktop sync at all; absent means a daemon too old to say, so don't offer it.
     available: z.boolean().optional(),
     machines: z.array(DeviceReportSchema).optional(),

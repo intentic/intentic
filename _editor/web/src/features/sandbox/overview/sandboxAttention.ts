@@ -8,6 +8,8 @@ import { useMissingSecretCount } from "../../capabilities/connect/useSecrets";
 import { useSyncHealth } from "../devices/useDevices";
 import { useEnvironment } from "../environment/useEnvironment";
 import { useSandboxVersion } from "./version/useSandboxVersion";
+import { useSandboxBackup } from "./backup/useSandboxBackup";
+import { useUnbackedWork } from "./backup/useUnbackedWork";
 import { t } from "@intentic/ui/i18n";
 
 // What the active sandbox needs from its owner, versus what's merely true of it: one list, split by `kind`, read
@@ -75,88 +77,118 @@ export function useSandboxAttention() {
     const { updateAvailable, updateStaged } = useSandboxVersion();
     const { missingRequiredCount } = useMissingSecretCount();
     const { stoppedOn, heldPorts } = useSyncHealth();
+    // The two ways this sandbox's work can exist in exactly one place: no copy on a computer of the owner's, and no
+    // repository it could be pushed to. Both are standing conditions with a tab that resolves them, which is what
+    // makes them rows here rather than events.
+    const { unbacked: noCopyOffBox } = useSandboxBackup();
+    const { unbacked: noRepoRemote } = useUnbackedWork();
 
-    // Declared worst-first: the head sets the badge, the rest fills the popover. No-account is about the sandbox as a
-    // whole, not one conversation's missing provider (composer's connect gate).
-    const items = computed<readonly SandboxAttentionItem[]>(() => [
-        ...(noAccountConnected.value
-            ? [
-                  {
-                      icon: `sparkles` as const,
-                      tone: `warning` as const,
-                      message: t(`sandbox.sandboxAttention.noAiAccountConnected`),
-                      to: `/sandbox/agent`,
-                      kind: `needs` as const,
-                  },
-              ]
-            : []),
-        ...(pending.value === undefined
-            ? []
-            : [
-                  {
-                      icon: `exclamation-triangle` as const,
-                      tone: `warning` as const,
-                      message: t(`sandbox.sandboxAttention.rebuildNeededToFinish`),
-                      to: `/sandbox/environment`,
-                      kind: `needs` as const,
-                  },
-              ]),
-        ...(proposal.value === undefined
-            ? []
-            : [
-                  {
-                      icon: `exclamation-triangle` as const,
-                      tone: `warning` as const,
-                      message: t(`sandbox.sandboxAttention.agentProposedChangeTo`),
-                      to: `/sandbox/environment`,
-                      kind: `needs` as const,
-                  },
-              ]),
-        // Outranks secrets below since it fails silently: the card still reads "Enabled" while edits simply stop
-        // syncing.
-        ...(stoppedOn.value.length === 0
-            ? []
-            : [
-                  {
-                      icon: `desktop` as const,
-                      tone: `warning` as const,
-                      message: `Desktop sync stopped on ${stoppedOn.value.join(`, `)}, its folder isn't syncing`,
-                      to: `/sandbox/devices`,
-                      kind: `needs` as const,
-                  },
-              ]),
-        ...(missingRequiredCount.value === 0
-            ? []
-            : [
-                  {
-                      icon: `key` as const,
-                      tone: `warning` as const,
-                      message: `${missingRequiredCount.value} required secret${missingRequiredCount.value === 1 ? `` : `s`} missing`,
-                      to: `/sandbox/secrets`,
-                      count: missingRequiredCount.value,
-                      kind: `needs` as const,
-                  },
-              ]),
-        // Neither is a debt: a port one of your own sandboxes took has a remedy on Devices whenever you want it; a
-        // new version is nothing wrong until wanted, and the Overview card is the whole errand.
-        // THIS USED TO COUNT EVERY PORT THAT MISSED LOCALHOST, which made a standing, correct outcome — a database
-        // already running on that number here — a note and a badge that never went away. Only the ports another
-        // paired sandbox took are counted now (`heldPorts`), which is the one case something can be done about.
-        ...(heldPorts.value.length === 0
-            ? []
-            : [
-                  {
-                      icon: `desktop` as const,
-                      tone: `info` as const,
-                      message: `${heldPorts.value.length} port${heldPorts.value.length === 1 ? `` : `s`} taken by another sandbox on your machine`,
-                      to: `/sandbox/devices`,
-                      count: heldPorts.value.length,
-                      kind: `note` as const,
-                  },
-              ]),
-        // Split by whether the update is already downloaded; see updateItems.
-        ...updateItems(updateAvailable.value, updateStaged.value),
-    ]);
+    // Declared worst-first: the head sets the badge, the rest fills the popover. A row is its condition and its
+    // item side by side rather than a spread ternary, so adding one is a line and reading the order is a column.
+    // No-account is about the sandbox as a whole, not one conversation's missing provider (composer's connect gate).
+    const items = computed<readonly SandboxAttentionItem[]>(() => {
+        const rows: { when: boolean; item: SandboxAttentionItem }[] = [
+            {
+                when: noAccountConnected.value,
+                item: {
+                    icon: `sparkles`,
+                    tone: `warning`,
+                    message: t(`sandbox.sandboxAttention.noAiAccountConnected`),
+                    to: `/sandbox/agent`,
+                    kind: `needs`,
+                },
+            },
+            {
+                when: pending.value !== undefined,
+                item: {
+                    icon: `exclamation-triangle`,
+                    tone: `warning`,
+                    message: t(`sandbox.sandboxAttention.rebuildNeededToFinish`),
+                    to: `/sandbox/environment`,
+                    kind: `needs`,
+                },
+            },
+            {
+                when: proposal.value !== undefined,
+                item: {
+                    icon: `exclamation-triangle`,
+                    tone: `warning`,
+                    message: t(`sandbox.sandboxAttention.agentProposedChangeTo`),
+                    to: `/sandbox/environment`,
+                    kind: `needs`,
+                },
+            },
+            // Outranks secrets below since it fails silently: the card still reads "Enabled" while edits simply stop
+            // syncing.
+            {
+                when: stoppedOn.value.length > 0,
+                item: {
+                    icon: `desktop`,
+                    tone: `warning`,
+                    message: `Desktop sync stopped on ${stoppedOn.value.join(`, `)}, its folder isn't syncing`,
+                    to: `/sandbox/devices`,
+                    kind: `needs`,
+                },
+            },
+            {
+                when: missingRequiredCount.value > 0,
+                item: {
+                    icon: `key`,
+                    tone: `warning`,
+                    message: `${missingRequiredCount.value} required secret${missingRequiredCount.value === 1 ? `` : `s`} missing`,
+                    to: `/sandbox/secrets`,
+                    count: missingRequiredCount.value,
+                    kind: `needs`,
+                },
+            },
+            // Work that exists in one place only. Both are `needs`: nothing is broken, but each is a debt that bites
+            // exactly once and takes everything with it. The copy comes before the remote — turning sync on is a
+            // toggle, connecting a repository is a decision — and both stay listed until the condition is untrue.
+            {
+                when: noCopyOffBox.value,
+                item: {
+                    icon: `desktop`,
+                    tone: `warning`,
+                    message: t(`sandbox.sandboxAttention.filesOnlyOnCloudMachine`),
+                    to: `/sandbox/devices`,
+                    kind: `needs`,
+                },
+            },
+            {
+                when: noRepoRemote.value,
+                item: {
+                    icon: `code`,
+                    tone: `warning`,
+                    message: t(`sandbox.sandboxAttention.noRepositoryToPushTo`),
+                    to: `/sandbox/environment`,
+                    kind: `needs`,
+                },
+            },
+            // Neither is a debt: a port one of your own sandboxes took has a remedy on Devices whenever you want it; a
+            // new version is nothing wrong until wanted, and the Overview card is the whole errand.
+            // THIS USED TO COUNT EVERY PORT THAT MISSED LOCALHOST, which made a standing, correct outcome — a database
+            // already running on that number here — a note and a badge that never went away. Only the ports another
+            // paired sandbox took are counted now (`heldPorts`), which is the one case something can be done about.
+            {
+                when: heldPorts.value.length > 0,
+                item: {
+                    icon: `desktop`,
+                    tone: `info`,
+                    message: `${heldPorts.value.length} port${heldPorts.value.length === 1 ? `` : `s`} taken by another sandbox on your machine`,
+                    to: `/sandbox/devices`,
+                    count: heldPorts.value.length,
+                    kind: `note`,
+                },
+            },
+        ];
+        return (
+            rows
+                .filter((row) => row.when)
+                .map((row) => row.item)
+                // Split by whether the update is already downloaded; see updateItems.
+                .concat(updateItems(updateAvailable.value, updateStaged.value))
+        );
+    });
 
     // The two halves surfaces actually render; filed by `kind` rather than a second array to remember.
     const needs = computed<readonly SandboxAttentionItem[]>(() => items.value.filter((item) => item.kind === `needs`));
