@@ -11,6 +11,8 @@
 // 4. no workflow triggers on `push: tags`, since semantic-release pushes tags with GITHUB_TOKEN and GitHub starts
 //    nothing from that token's events; dispatch it instead (delete this rule if the release ever tags with a different
 //    token)
+// 5. no job bootstraps pnpm with corepack: ci-base installs pnpm natively and pnpm 12 honours `packageManager` itself,
+//    so corepack only adds one unretried registry fetch that the whole job's success then hangs on
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { finish } from "./lib/report.mjs";
@@ -142,17 +144,39 @@ for (const file of workflowFiles()) {
     }
 }
 
+// The bootstrap that fetches its own package manager.
+// Matched by invocation, not by the word: a job's `env:` is inside its step block, and a line's `#` comment is prose.
+const COREPACK_CALL = /^[^#\n]*\bcorepack\s+(?:enable|prepare|use|install)\b/m;
+
+const corepacked = [];
+for (const file of workflowFiles()) {
+    const text = workflowText(file);
+    const steps = stepsOf(text);
+    for (const job of jobsOf(text).values()) {
+        if (COREPACK_CALL.test(steps.get(job.name) ?? "")) {
+            corepacked.push(
+                `.github/workflows/${file}: job \`${job.name}\` bootstraps pnpm with corepack, which resolves ` +
+                    `\`packageManager\` by fetching the tarball from the registry once, with no retry, so one reset ends ` +
+                    `the job before it runs a line; take pnpm from \`pnpm/action-setup\` on a GitHub-hosted runner, and ` +
+                    `from ci-base, which installs it natively, on the fleet`,
+            );
+        }
+    }
+}
+
 finish(
     [
         ["Self-hosted CI is reachable from a fork's pull request (docs/ci-runner.md, 'The fork boundary')", exposed],
         ["A called workflow asks for more than its caller grants: Actions fails this before any job starts", overreach],
         ["A publish with provenance is on a runner npm's registry will not attest", unattestable],
         ["A workflow is triggered by a tag push GitHub will never deliver (dispatch it instead)", tagTriggered],
+        ["A job bootstraps pnpm with corepack rather than taking it from the action or the image", corepacked],
     ],
     [
         "fork boundary: no self-hosted job is reachable from a fork's pull request",
         "workflow permissions: every reusable-workflow call grants what the workflow it calls asks for",
         "npm provenance: no job publishes an attested tarball from the self-hosted fleet",
         "publish triggers: no workflow waits on a tag push GITHUB_TOKEN can never deliver",
+        "pnpm bootstrap: no job's success hangs on corepack's unretried fetch of the `packageManager` tarball",
     ],
 );

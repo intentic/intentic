@@ -69,11 +69,14 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      # Ahead of setup-node, which needs a pnpm on PATH to resolve the store path `cache: pnpm` keys on. Never
+      # `corepack enable`: corepack fetches the `packageManager` tarball on first use, once and unretried, so a
+      # single reset from the registry ends this job before it runs a line.
+      - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4.4.0
       - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:
           node-version-file: package.json
-      - name: Enable pnpm
-        run: corepack enable
+          cache: pnpm
 
       # THROUGH THE ENVIRONMENT, never interpolated into the script: `${{ }}` inside a `run:` is textual substitution
       # before the shell sees the line, and `version` here is a free-text dispatch input.

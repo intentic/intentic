@@ -69,7 +69,6 @@ jobs:
     # same). PNPM_STORE is gone with the pnpm-setup composite that was its only reader; pnpm's store rides
     # setup-node's cache instead.
     env:
-      COREPACK_ENABLE_DOWNLOAD_PROMPT: "0"
       TURBO_CACHE_DIR: ${{ github.workspace }}/.turbo-cache
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
