@@ -4,7 +4,7 @@ import { CREATOR_NAME, creatorBio, creatorRole } from "@intentic/site-content/ab
 import { faqGroups } from "@intentic/site-content/faq";
 import { landingContent } from "@intentic/site-content/landing";
 import { templeScene } from "@intentic/site-content/temple";
-import { APP_URL, DEMO_PATH, githubUrl, ORG_NAME } from "@intentic/site-content/site";
+import { APP_URL, DEMO_PATH, githubUrl } from "@intentic/site-content/site";
 import { buildSoftwareAppSchema } from "@intentic/site-content/structured-data";
 // Provider marks match the session icons used by the app.
 import { PROVIDER_BRAND_PATHS, providerFillRule } from "@intentic/constants";
@@ -78,13 +78,6 @@ const machineStep = content.connect.steps.at(-1)!;
 
                 <div class="hero-grid">
                     <div class="hero-copy">
-                        {/* The greeting is flanked because the hero axis is centered. */}
-                        <p class="hero-eyebrow">
-                            <Bullet mark="lozenge" />
-                            <span>Welcome to {ORG_NAME}</span>
-                            <Bullet mark="lozenge" />
-                        </p>
-
                         {/* Beat spans need spaces for assistive text and crawlers. */}
                         <h1 class="headline">
                             {

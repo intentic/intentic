@@ -314,7 +314,6 @@ export interface DeskFaqItem {
 export interface DeskLandingContent {
     meta: { title: string; description: string };
     hero: {
-        eyebrow: string;
         headlineLines: string[];
         subhead: string;
         screens: { app: (DeskShot & { frameLabel: string })[]; plan: DeskShot; chat: DeskShot & { frameLabel: string } };
@@ -345,7 +344,6 @@ export const deskLanding: DeskLandingContent = {
             "An assistant that writes, edits and files your documents on your own computer. Every change is saved, so you can always go back. Free.",
     },
     hero: {
-        eyebrow: "Welcome to intentic desk",
         // The same three beats as the developer page's, with "delegate" and "agents" gone: this reader asks, and something works.
         headlineLines: ["You ask. It does the work.", "You approve."],
         subhead: "An assistant for your documents, on your own computer.",
