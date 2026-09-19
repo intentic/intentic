@@ -9,7 +9,7 @@ const state = vi.hoisted(() => ({
     rejected: [] as string[],
 }));
 
-vi.mock("./sandboxSession", () => ({
+vi.mock("../session/sandboxSession", () => ({
     useSandboxSession: () => ({
         getSessionToken: async () => {
             const token = state.bearers.shift();

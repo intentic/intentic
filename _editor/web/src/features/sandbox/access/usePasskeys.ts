@@ -2,9 +2,9 @@ import { type PasskeysList, PasskeysListSchema, type RegistrationOptionsJSON } f
 import { noticeFrom, useAsyncAction } from "@intentic/ui/async";
 import { ref, watch } from "vue";
 import { jsonBody } from "../client/jsonBody";
-import { browserSupportsPasskeys, createPasskey, type PasskeyRegistered } from "../client/passkeySignIn";
+import { browserSupportsPasskeys, createPasskey, type PasskeyRegistered } from "../session/passkeySignIn";
 import { sandboxJson } from "../client/sandboxClient";
-import { useSandboxSession } from "../client/sandboxSession";
+import { useSandboxSession } from "../session/sandboxSession";
 import { useSandbox } from "../client/useSandbox";
 
 // The passkeys registered with the active sandbox, as the Access tab manages them: one's own (everyone's, for the

@@ -1,6 +1,6 @@
 import type { DaemonSession } from "@intentic/sandbox-contract";
 import { shallowRef } from "vue";
-import type { SandboxTarget } from "./sandboxTarget";
+import type { SandboxTarget } from "../client/sandboxTarget";
 
 // The one sign-in question the gate can be asked, and the answer the session module waits for. Its own module, with
 // nothing heavy behind it, so the gate and its tests can read the state without loading Google's script or storage.

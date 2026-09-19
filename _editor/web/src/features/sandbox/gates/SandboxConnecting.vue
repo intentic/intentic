@@ -4,7 +4,7 @@ import { useNow } from "@intentic/ui/async";
 import GateCard from "./GateCard.vue";
 import { computed } from "vue";
 import { RouterLink } from "vue-router";
-import { useSandboxSession } from "../client/sandboxSession";
+import { useSandboxSession } from "../session/sandboxSession";
 import { useSandbox } from "../client/useSandbox";
 import { useGoogleIdentity } from "../../auth/useGoogleIdentity";
 import { restartExpected } from "../live/sandboxRestart";

@@ -64,7 +64,7 @@ vi.mock("../../sandbox/client/useSandbox", () => ({
     }),
     sandboxKey: (...parts: unknown[]) => parts,
 }));
-vi.mock("../../sandbox/client/sandboxSession", () => ({
+vi.mock("../../sandbox/session/sandboxSession", () => ({
     useSandboxSession: () => ({ getSessionToken: async () => ({ token: `session-token`, kind: `session` }) }),
 }));
 

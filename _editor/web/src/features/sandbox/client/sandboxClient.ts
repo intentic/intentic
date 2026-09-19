@@ -2,7 +2,7 @@ import { driftedRouteReason, staleDaemonReason } from "../overview/useDaemonRout
 import { trackPerf } from "../../../app/perf";
 import { CHUNK_BYTES } from "../../workspace/files/upload/uploadChunking";
 import { sandboxAuthenticatedFetch, uploadsBody } from "./sandboxAuthFetch";
-import { useSandboxSession } from "./sandboxSession";
+import { useSandboxSession } from "../session/sandboxSession";
 import { currentSandboxTarget, type SandboxTarget, targetFor } from "./sandboxTarget";
 
 // Calls the active sandbox's daemon directly (or its loopback shortcut), authenticated by a daemon-session

@@ -26,7 +26,7 @@ import { jsonBody } from "../client/jsonBody";
 import { apiClient } from "../../../lib/useApi";
 import { useAuth } from "../../auth/useAuth";
 import { useSandbox } from "../client/useSandbox";
-import { useSandboxSession } from "../client/sandboxSession";
+import { useSandboxSession } from "../session/sandboxSession";
 import { useSandboxOutline } from "../overview/useSandboxOutline";
 import { identityHue } from "../../../lib/identityHue";
 import { presenceActivity, presenceOthers } from "../../../shell/presence/usePresence";

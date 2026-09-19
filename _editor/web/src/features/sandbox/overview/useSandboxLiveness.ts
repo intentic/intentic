@@ -8,7 +8,7 @@ import { markWorkspaceChanged } from "../../workspace/changes/live/useWorkspaceL
 import { classifyFailure, type ConnectionFailure, watchdogRecoveryDelay } from "../live/connection";
 import { forgetEdgeVerdict, lastEdgeVerdict } from "../client/edgeVerdict";
 import { daemonErrorMessage, daemonErrorStatus, sandboxRpc, SandboxUnaddressedError } from "../client/sandboxRpc";
-import { useSandboxSession } from "../client/sandboxSession";
+import { useSandboxSession } from "../session/sandboxSession";
 import { acquireStreamSlot } from "../client/streamBudget";
 import { applySystemEvent } from "../live/systemEvents";
 import { sandboxQueryPredicate } from "../live/systemEventRouting";

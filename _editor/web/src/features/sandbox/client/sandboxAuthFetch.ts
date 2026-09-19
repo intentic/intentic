@@ -1,5 +1,5 @@
 import { noteEdgeVerdict } from "./edgeVerdict";
-import { type SandboxBearer, useSandboxSession } from "./sandboxSession";
+import { type SandboxBearer, useSandboxSession } from "../session/sandboxSession";
 import { currentSandboxTarget, type SandboxTarget } from "./sandboxTarget";
 import { useEndpoint } from "../secrets/useEndpoint";
 import { useSandbox } from "./useSandbox";

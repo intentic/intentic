@@ -23,7 +23,7 @@ import { RUNNING_MARK_CLASS } from "../../../core-views/viewBadge";
 import TileMark from "../../../shell/rail/TileMark.vue";
 import { restartRunning } from "../live/sandboxRestart";
 import { type SandboxAttentionItem, useSandboxAttention } from "../overview/sandboxAttention";
-import { sandboxIdFromToken } from "../client/sandboxIdFromToken";
+import { sandboxIdFromToken } from "../session/sandboxIdFromToken";
 import { sandboxAvailabilityVisual } from "../overview/availability";
 import { placementOf, type SandboxPlacement } from "../overview/placement";
 import { useSandboxPlacement } from "../overview/useSandboxPlacement";

@@ -209,7 +209,9 @@ pub fn remove_slug(slug: &str, now: bool) {
         trash::purge(slug);
         return;
     }
-    println!("intentic: removing sandbox '{slug}' — its data stays recoverable for {GRACE_DAYS} days…");
+    println!(
+        "intentic: removing sandbox '{slug}' — its data stays recoverable for {GRACE_DAYS} days…"
+    );
     trash::stash(slug);
 }
 

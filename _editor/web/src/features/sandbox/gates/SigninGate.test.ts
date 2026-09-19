@@ -38,7 +38,7 @@ const supportsPasskeys = vi.fn(() => true);
 const signInWithPasskey = vi.fn<() => Promise<DaemonSession>>();
 const registerPasskey = vi.fn<() => Promise<{ passkey: unknown; session?: DaemonSession }>>();
 const recoverWithCode = vi.fn<() => Promise<DaemonSession & { remaining: number }>>();
-vi.mock(`../client/passkeySignIn`, () => ({
+vi.mock(`../session/passkeySignIn`, () => ({
     browserSupportsPasskeys: () => supportsPasskeys(),
     signInWithPasskey: (...args: unknown[]) => signInWithPasskey(...(args as [])),
     registerPasskey: (...args: unknown[]) => registerPasskey(...(args as [])),
@@ -46,7 +46,7 @@ vi.mock(`../client/passkeySignIn`, () => ({
 }));
 
 const { default: SigninGate } = await import("./SigninGate.vue");
-const { dismissSignIn, offerPasskey, raiseSignIn } = await import("../client/signInPrompt");
+const { dismissSignIn, offerPasskey, raiseSignIn } = await import("../session/signInPrompt");
 
 const TARGET = { sandboxId: `sb-1`, base: `https://daemon.test`, connectToken: `connect` };
 

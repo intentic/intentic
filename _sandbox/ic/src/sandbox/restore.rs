@@ -113,7 +113,13 @@ pub fn purge(args: PurgeArgs) -> Result<()> {
         args.slugs.clone()
     };
     if selected.is_empty() {
-        bail!("name a sandbox to purge, or pass --all. In the trash now:\n{}", recoverable.iter().map(|entry| format!("  {}\n", entry.slug)).collect::<String>());
+        bail!(
+            "name a sandbox to purge, or pass --all. In the trash now:\n{}",
+            recoverable
+                .iter()
+                .map(|entry| format!("  {}\n", entry.slug))
+                .collect::<String>()
+        );
     }
     for slug in &selected {
         if !recoverable.iter().any(|entry| &entry.slug == slug) {

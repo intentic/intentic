@@ -6,7 +6,7 @@ import { FRAME_WEBP, videoTag } from "../../browsers/frameUrls";
 import { keyIntent, type BrowserCommand, type KeyFrame } from "../../browsers/keyIntent";
 import { pointerFrame, type PointerAction } from "../../browsers/pointerFrame";
 import { videoSink } from "../../browsers/videoSink";
-import { socketUrl as wsSocketUrl } from "../../sandbox/client/wsTicket";
+import { socketUrl as wsSocketUrl } from "../../sandbox/session/wsTicket";
 import { useT } from "@intentic/ui/i18n";
 
 // One connected account's Chromium, driven live over /system/browser-profile (video of the page's viewport in, input

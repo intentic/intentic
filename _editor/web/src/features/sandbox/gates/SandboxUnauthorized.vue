@@ -4,7 +4,7 @@ import GateCard from "./GateCard.vue";
 import { computed } from "vue";
 import { useAuth } from "../../auth/useAuth";
 import { useGoogleIdentity } from "../../auth/useGoogleIdentity";
-import { useSandboxSession } from "../client/sandboxSession";
+import { useSandboxSession } from "../session/sandboxSession";
 import { useSandbox } from "../client/useSandbox";
 import { useT } from "@intentic/ui/i18n";
 

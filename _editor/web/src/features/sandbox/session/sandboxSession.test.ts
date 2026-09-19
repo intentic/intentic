@@ -63,7 +63,7 @@ vi.mock("../secrets/endpoint", async () => ({
     sandboxIdOf: async () => `sb-1`,
 }));
 // A real ref, not a getter, since the module watches the active sandbox to settle a parked mint on a switch.
-vi.mock("./useSandbox", async () => {
+vi.mock("../client/useSandbox", async () => {
     const { computed, ref } = await vi.importActual<typeof import("vue")>(`vue`);
     const activeSandboxId = ref(state.sandboxId);
     state.select = (id) => {

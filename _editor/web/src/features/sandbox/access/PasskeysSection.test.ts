@@ -37,11 +37,11 @@ vi.mock(`../client/sandboxClient`, () => ({
         return { ok: true };
     },
 }));
-vi.mock(`../client/passkeySignIn`, () => ({
+vi.mock(`../session/passkeySignIn`, () => ({
     browserSupportsPasskeys: () => state.supported,
     createPasskey: async (options: { challenge: string }) => ({ id: `new`, rawId: `new`, type: `public-key`, response: { clientDataJSON: options.challenge, attestationObject: `AA` } }),
 }));
-vi.mock(`../client/sandboxSession`, () => ({ useSandboxSession: () => ({ adoptSession: (...args: unknown[]) => state.adopted.push(args) }) }));
+vi.mock(`../session/sandboxSession`, () => ({ useSandboxSession: () => ({ adoptSession: (...args: unknown[]) => state.adopted.push(args) }) }));
 vi.mock(`../../auth/useAuth`, () => ({ useAuth: () => ({ user: ref({ email: `owner@example.com` }) }) }));
 const role = ref<`owner` | `viewer`>(`owner`);
 vi.mock(`../client/useSandbox`, () => ({ useSandbox: () => ({ active: computed(() => ({ id: `s1`, name: `work`, role: role.value })) }) }));

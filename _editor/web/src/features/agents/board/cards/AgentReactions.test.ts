@@ -29,7 +29,7 @@ vi.mock("@intentic/ui", async () => {
 vi.mock("../../fleet/agentActions", () => ({ reactToAgent: reacted }));
 vi.mock("../../fleet/useAgents", () => ({ useAgents: () => ({ refresh, notice: ref(undefined) }) }));
 vi.mock("../../../sandbox/live/fleetAcross", () => ({ refreshAcross: vi.fn() }));
-vi.mock("../../../sandbox/client/sandboxSession", () => ({ useSandboxSession: () => ({ presentedEmail: me }) }));
+vi.mock("../../../sandbox/session/sandboxSession", () => ({ useSandboxSession: () => ({ presentedEmail: me }) }));
 
 const { default: AgentReactions } = await import("./AgentReactions.vue");
 

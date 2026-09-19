@@ -1,5 +1,5 @@
 import { useSandboxSession } from "./sandboxSession";
-import { currentSandboxTarget, type SandboxTarget } from "./sandboxTarget";
+import { currentSandboxTarget, type SandboxTarget } from "../client/sandboxTarget";
 
 // Mints the query string for a WebSocket upgrade to this daemon. Browsers can't set an Authorization header on
 // a WebSocket, so credentials are spent over HTTP first (POST /system/ws-ticket) for a short-lived ticket; a

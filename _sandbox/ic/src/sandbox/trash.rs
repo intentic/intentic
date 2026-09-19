@@ -36,9 +36,7 @@ impl Trashed {
     /// Whole days still on the clock, rounded up — 0 only once the sandbox is due for purging.
     pub fn days_left(&self, now: u64) -> u64 {
         let spent = now.saturating_sub(self.removed_at);
-        GRACE_SECS
-            .saturating_sub(spent)
-            .div_ceil(24 * 60 * 60)
+        GRACE_SECS.saturating_sub(spent).div_ceil(24 * 60 * 60)
     }
 
     pub fn expired(&self, now: u64) -> bool {

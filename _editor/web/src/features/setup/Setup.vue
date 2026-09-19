@@ -31,7 +31,7 @@ import { useAuth } from "../auth/useAuth";
 import { useGoogleIdentity } from "../auth/useGoogleIdentity";
 import CloudflareTokenField from "../capabilities/connect/CloudflareTokenField.vue";
 import { useCloudflareZones } from "../extensions/useCloudflareZones";
-import { sandboxIdFromToken } from "../sandbox/client/sandboxIdFromToken";
+import { sandboxIdFromToken } from "../sandbox/session/sandboxIdFromToken";
 import { useSandbox } from "../sandbox/client/useSandbox";
 import { desktopSetupLink, desktopVersion, openDesktopLink } from "../../app/environments/desktop";
 import { desktopInstaller } from "../../app/environments/desktopDownloads";

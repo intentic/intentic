@@ -6,7 +6,7 @@ import type {
     RegistrationOptionsJSON,
     RegistrationResponse,
 } from "@intentic/sandbox-contract";
-import type { SandboxTarget } from "./sandboxTarget";
+import type { SandboxTarget } from "../client/sandboxTarget";
 
 // The browser half of a passkey ceremony against the sandbox daemon, which is the relying party. Raw fetches on
 // purpose: these calls are how a session is minted (or upgraded), so they cannot ride the client that would try to

@@ -74,6 +74,11 @@ pub fn print_recoverable() {
     let now = trash::now_secs();
     println!("\nremoved, still recoverable ('ic sandbox restore <slug>'):");
     for entry in &recoverable {
-        println!("{:<9} {} ({} day(s) left)", "removed", entry.slug, entry.days_left(now));
+        println!(
+            "{:<9} {} ({} day(s) left)",
+            "removed",
+            entry.slug,
+            entry.days_left(now)
+        );
     }
 }

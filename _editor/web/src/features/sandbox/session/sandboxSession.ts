@@ -7,8 +7,8 @@ import { useGoogleIdentity } from "../../auth/useGoogleIdentity";
 import { healthAnswers, sandboxIdOf } from "../secrets/endpoint";
 import { passkeyOffered } from "./passkeySignIn";
 import { dismissSignIn, offerPasskey, raiseSignIn } from "./signInPrompt";
-import { useSandbox } from "./useSandbox";
-import { currentSandboxTarget, type SandboxTarget } from "./sandboxTarget";
+import { useSandbox } from "../client/useSandbox";
+import { currentSandboxTarget, type SandboxTarget } from "../client/sandboxTarget";
 
 // The credential every daemon call presents, a daemon-minted session, with the Google ID token (or a passkey) demoted
 // to the proof that establishes it: steady state no longer means an hourly Google reauth. Sessions are per sandbox,

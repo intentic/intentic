@@ -3,7 +3,7 @@ import { afterEach, expect, it, vi } from "vitest";
 import { resetDaemonRoutes, setDaemonRoutes } from "../overview/useDaemonRoutes";
 
 const authState = vi.hoisted(() => ({ token: `session-token`, rejected: [] as string[] }));
-vi.mock("./sandboxSession", () => ({
+vi.mock("../session/sandboxSession", () => ({
     useSandboxSession: () => ({
         // A bearer names which credential it is, so a 401 can be attributed without re-reading storage.
         getSessionToken: async () => ({ token: authState.token, kind: `session` }),

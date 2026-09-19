@@ -6,7 +6,7 @@ import { expect, test, vi } from "vitest";
 import { effectScope, ref } from "vue";
 
 // The ticket mint is an HTTP round trip; only the socket's URL matters to this suite.
-vi.mock(`../sandbox/client/wsTicket`, () => ({ socketUrl: async () => `wss://sandbox.test/system/browser-view` }));
+vi.mock(`../sandbox/session/wsTicket`, () => ({ socketUrl: async () => `wss://sandbox.test/system/browser-view` }));
 
 const { useBrowserView } = await import(`./useBrowserView`);
 

@@ -25,7 +25,7 @@ import { landsByDefault } from "../../sandbox/environment/rules";
 import { useSandboxSettings } from "../../sandbox/overview/useSandboxSettings";
 import { openWorkTerminal, useWorkTerminals } from "../../terminal/useWorkTerminals";
 import { useTerminalPanel } from "../../terminal/useTerminalPanel";
-import { useSandboxSession } from "../../sandbox/client/sandboxSession";
+import { useSandboxSession } from "../../sandbox/session/sandboxSession";
 import ChatAttachmentStrip from "../composer/ChatAttachmentStrip.vue";
 import ChatCard from "./cards/ChatCard.vue";
 import ChatCommandBlock from "../tools/ChatCommandBlock.vue";

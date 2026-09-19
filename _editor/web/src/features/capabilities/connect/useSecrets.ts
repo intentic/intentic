@@ -13,7 +13,7 @@ import { sandboxJson } from "../../sandbox/client/sandboxClient";
 import { jsonBody } from "../../sandbox/client/jsonBody";
 import { SANDBOX_MEMBERS, SECRET_GATES, SECRETS, SECRETS_INVENTORY } from "../../../lib/queryKeys";
 import { useSandboxQuery } from "../../sandbox/client/useSandboxQuery";
-import { useSandboxSession } from "../../sandbox/client/sandboxSession";
+import { useSandboxSession } from "../../sandbox/session/sandboxSession";
 
 // User-supplied env-var secrets, written straight to the daemon's /secrets routes, split by consumer so each
 // surface only observes the server state it reads (an observer mount refetches its query). `reveal` is owner-only

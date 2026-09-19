@@ -4,7 +4,7 @@ import { FRAME_WEBP, frameUrls, videoTag } from "./frameUrls";
 import { keyIntent, type BrowserCommand, type KeyFrame } from "./keyIntent";
 import { pointerFrame, type PointerAction } from "./pointerFrame";
 import { canDecodeVideo, videoSink } from "./videoSink";
-import { socketUrl as wsSocketUrl } from "../sandbox/client/wsTicket";
+import { socketUrl as wsSocketUrl } from "../sandbox/session/wsTicket";
 
 // One live view of the agent's browser over /system/browser-view, with clicks/keys going back. `ready` picks video
 // (H.264 of the page's viewport off the browser's own X display into a canvas, with a sharp still laid over it once

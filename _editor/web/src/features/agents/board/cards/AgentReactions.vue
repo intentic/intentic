@@ -15,7 +15,7 @@ import { useT } from "@intentic/ui/i18n";
 import { reactToAgent } from "../../fleet/agentActions";
 import { refreshAcross } from "../../../sandbox/live/fleetAcross";
 import { useAgents } from "../../fleet/useAgents";
-import { useSandboxSession } from "../../../sandbox/client/sandboxSession";
+import { useSandboxSession } from "../../../sandbox/session/sandboxSession";
 import { PICKER_EMOJI, QUICK_EMOJI, reactionChips } from "./reactions";
 
 const t = useT();

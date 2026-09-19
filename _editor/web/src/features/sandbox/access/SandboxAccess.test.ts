@@ -28,7 +28,7 @@ vi.mock(`../overview/useSandboxOutline`, () => ({ useSandboxOutline: () => false
 vi.mock(`../../../shell/presence/usePresence`, () => ({ presenceOthers: [], presenceActivity: () => `` }));
 // Session module touches GIS/localStorage at eval; needs only its expiry. Fixed date avoids timezone drift.
 const sessionExpiresAt = ref<number | undefined>(Date.parse(`2026-09-24T12:00:00.000Z`));
-vi.mock(`../client/sandboxSession`, () => ({ useSandboxSession: () => ({ sessionExpiresAt }) }));
+vi.mock(`../session/sandboxSession`, () => ({ useSandboxSession: () => ({ sessionExpiresAt }) }));
 
 const { default: SandboxAccess } = await import("./SandboxAccess.vue");
 

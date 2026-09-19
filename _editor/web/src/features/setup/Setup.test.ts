@@ -79,7 +79,7 @@ const hostedRestart = vi.fn().mockResolvedValue({ ok: true });
 // The wait's own recovery: the platform is asked to start a machine the provider reports down.
 const wake = vi.fn().mockResolvedValue({ ok: true });
 vi.mock(`../../lib/useApi`, () => ({ apiClient: { sandbox: { setupCode, hostedOffer, addressOffer, hostedStatus, hostedRestart, wake } } }));
-vi.mock(`../sandbox/client/sandboxIdFromToken`, () => ({ sandboxIdFromToken: vi.fn().mockResolvedValue(`0f310c3c4db4`) }));
+vi.mock(`../sandbox/session/sandboxIdFromToken`, () => ({ sandboxIdFromToken: vi.fn().mockResolvedValue(`0f310c3c4db4`) }));
 vi.mock(`../../app/analytics`, () => ({ track: vi.fn() }));
 vi.mock(`../auth/useAuth`, () => ({ useAuth: () => ({ user: ref({ email: `owner@example.com` }) }) }));
 vi.mock(`../auth/useGoogleIdentity`, () => ({

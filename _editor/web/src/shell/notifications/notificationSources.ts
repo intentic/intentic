@@ -13,7 +13,7 @@ import { useSandbox } from "../../features/sandbox/client/useSandbox";
 import { useSandboxAvailability } from "../../features/sandbox/overview/useSandboxAvailability";
 import { useAuth } from "../../features/auth/useAuth";
 import { useGoogleIdentity } from "../../features/auth/useGoogleIdentity";
-import { useSandboxSession } from "../../features/sandbox/client/sandboxSession";
+import { useSandboxSession } from "../../features/sandbox/session/sandboxSession";
 import { usePushFlow } from "../../features/workspace/push/usePushFlow";
 import { useUploadQueue } from "../../features/workspace/files/upload/useUploadQueue";
 import { useWorkspaceTree } from "../../features/workspace/explorer/useWorkspaceTree";

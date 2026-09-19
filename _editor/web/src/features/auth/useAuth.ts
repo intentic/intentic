@@ -3,7 +3,7 @@ import { createAuthClient } from "better-auth/client";
 import { ref } from "vue";
 import { environment } from "../../app/environments/environment";
 import { clearPersistedQueries } from "../../lib/queryPersistence";
-import { useSandboxSession } from "../sandbox/client/sandboxSession";
+import { useSandboxSession } from "../sandbox/session/sandboxSession";
 import { useGoogleIdentity } from "./useGoogleIdentity";
 import { invalidatePlatformAuth, onPlatformAuthInvalidated } from "./authLifecycle";
 

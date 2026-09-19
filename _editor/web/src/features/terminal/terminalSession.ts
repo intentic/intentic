@@ -8,7 +8,7 @@ import { boundCommand } from "../../shell/commands/useCommands";
 import { isApplePlatform } from "../../shell/commands/keybindings";
 import { toScreenPx } from "../../shell/window/uiScale";
 import { acquireStreamSlot } from "../sandbox/client/streamBudget";
-import { socketUrl as wsSocketUrl } from "../sandbox/client/wsTicket";
+import { socketUrl as wsSocketUrl } from "../sandbox/session/wsTicket";
 import { editKeyBytes } from "./terminalEditKeys";
 import { registerFilePathLinks } from "./terminalFileLinks";
 import { registerUrlLinks } from "./terminalUrlLinks";
