@@ -25,6 +25,8 @@ import { restartRunning } from "../live/sandboxRestart";
 import { type SandboxAttentionItem, useSandboxAttention } from "../overview/sandboxAttention";
 import { sandboxIdFromToken } from "../client/sandboxIdFromToken";
 import { sandboxAvailabilityVisual } from "../overview/availability";
+import { placementOf, type SandboxPlacement } from "../overview/placement";
+import { useSandboxPlacement } from "../overview/useSandboxPlacement";
 import { attentionByBox, subscribe as watchOtherBoxes } from "../live/fleetAcross";
 import { connectedSandboxes, unfinishedSandboxes } from "../live/roster";
 import { useSandboxAvailability } from "../overview/useSandboxAvailability";
@@ -55,13 +57,18 @@ const { cmdOs } = useOsPreference();
 // that something is moving. What it will do is said when it does it, by the lane.
 const restarting = computed(() => restartRunning(sandbox.activeSandboxId.value));
 
+// WHERE THIS SANDBOX RUNS: Intentic's cloud, a machine of the owner's, or somebody else's. A standing fact, never an
+// errand, so it takes the tile's one free corner as a quiet mark rather than a plated badge — and its sentence rides
+// the control's own label, because a glyph alone cannot be the only place a reader can learn this.
+const placement = useSandboxPlacement();
+
 // One label for the whole control, badge included, since a tooltip on the badge would nest inside this one.
 const switcherLabel = computed(() => {
     const name = sandbox.active.value?.name ?? `Sandboxes`;
     const tooltip = attentionBadge.value?.tooltip;
     const status =
         availability.value === `live` || availability.value === `stale` ? undefined : `Sandbox ${availabilityVisual.value.label.toLowerCase()}`;
-    return [name, status, restarting.value, tooltip].filter((part) => part !== undefined).join(` · `);
+    return [name, placement.value?.detail, status, restarting.value, tooltip].filter((part) => part !== undefined).join(` · `);
 });
 
 // A short retry keeps the healthy dot; changing colour is itself the alarm being avoided.
@@ -105,6 +112,11 @@ const attentionFor = (option: SandboxSummary): number | undefined =>
 
 // Whether this row has ever answered, separating "0" from "-"; a single number can't carry both.
 const answered = (option: SandboxSummary): boolean => attentionFor(option) !== undefined;
+
+// The same fact per row, and the ACTIVE row borrows the refined one above rather than deriving its own: the tile and
+// the row it opens onto are the same sandbox, and a glyph that changed between them would read as two answers.
+const placementFor = (option: SandboxSummary): SandboxPlacement =>
+    option.id === sandbox.activeSandboxId.value && placement.value !== undefined ? placement.value : placementOf(option);
 
 const pick = (option: SandboxSummary): void => {
     open.value = false;
@@ -273,6 +285,20 @@ const confirmRemove = async (): Promise<void> => {
             }}</span>
             <Icon name="server" v-else class="text-lg" />
         </button>
+        <!-- WHERE IT RUNS, in the tile's one remaining corner. A plate, where the running mark below is a bare glyph:
+             this one sits over whatever picture the owner uploaded, and a glyph alone on a photo is unreadable. The
+             plate is the tile's own ground, so it reads as a notch cut into the logo rather than a second badge. Ink
+             is `text-subtle` on purpose — a fact that is always true must never carry the weight of an errand.
+             aria-hidden: the sentence is already in the button's label above, and a second voice would say it twice. -->
+        <span
+            v-if="placement"
+            class="sandbox-switcher-mark pointer-events-none absolute left-0.5 top-0.5 inline-flex h-[1.6em] w-[1.6em] items-center justify-center rounded-full bg-[color:var(--ui-tile-ground)] leading-none text-subtle"
+            aria-hidden="true"
+        >
+            <!-- The badge's own plate and glyph measures across the tile, so the two top corners weigh the same; only
+                 the ink differs, which is the whole difference between an errand and a standing fact. -->
+            <Icon :name="placement.icon" class="text-[0.9em]" />
+        </span>
         <!-- One corner badge: a count when the amount is the message, a glyph otherwise; aria-hidden as redundant. -->
         <!-- Inside the tile, on the same corner and at the same size as every badge on the rail below it: this is
              the same object saying the same kind of thing, and hanging it outside made it look like a different one. -->
@@ -352,6 +378,16 @@ const confirmRemove = async (): Promise<void> => {
                 <span class="min-w-0 flex-1 truncate" :class="option.id === sandbox.activeSandboxId.value ? 'text-link' : 'text-content'">{{
                     option.name
                 }}</span>
+                <!-- Where that one runs, beside its name: the reason to switch to a box is often which machine it is
+                     on. Not on a row that already carries the "Shared" pill, where the two would say one thing twice
+                     and the second of them costs the name the width it truncates at. -->
+                <Icon
+                    v-if="placementFor(option).kind !== 'shared'"
+                    :name="placementFor(option).icon"
+                    class="shrink-0 text-2xs text-subtle"
+                    v-tooltip.top="placementFor(option).detail"
+                    :aria-label="placementFor(option).detail"
+                />
                 <span
                     v-if="option.id === sandbox.activeSandboxId.value"
                     class="shrink-0 h-1.5 w-1.5 rounded-full"

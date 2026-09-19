@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { SandboxSummary } from "@intentic/api-contract";
 import type { ViewBadge } from "@intentic/extension-api";
 import { Avatar, type IconName, vAction } from "@intentic/ui";
 import { computed, onMounted } from "vue";
@@ -25,6 +26,8 @@ import { presenceActivity, presenceOthers } from "./presence/usePresence";
 import { useSandbox } from "../features/sandbox/client/useSandbox";
 import { connectedSandboxes, unfinishedSandboxes } from "../features/sandbox/live/roster";
 import { sandboxAvailabilityVisual } from "../features/sandbox/overview/availability";
+import { placementOf, type SandboxPlacement } from "../features/sandbox/overview/placement";
+import { useSandboxPlacement } from "../features/sandbox/overview/useSandboxPlacement";
 import { useSandboxAvailability } from "../features/sandbox/overview/useSandboxAvailability";
 import { useWorkspaceTree } from "../features/workspace/explorer/useWorkspaceTree";
 import { environment } from "../app/environments/environment";
@@ -111,6 +114,12 @@ const sandboxRows = computed<readonly AreaRow[]>(() => [
 const switchable = computed(() => connectedSandboxes(sandbox.sandboxes.value));
 const unfinished = computed(() => unfinishedSandboxes(sandbox.sandboxes.value));
 
+// Where each box runs. The active row borrows the refined answer (a named device, this very computer); the others
+// have only what the platform lists, which still separates Intentic's cloud from hardware of the owner's own.
+const placement = useSandboxPlacement();
+const placementFor = (option: SandboxSummary): SandboxPlacement =>
+    option.id === sandbox.activeSandboxId.value && placement.value !== undefined ? placement.value : placementOf(option);
+
 // A place, so a link; switching sandboxes re-points the daemon, so that stays a button.
 const resumeSetup = (id: string) => ({ path: `/setup`, query: { sandbox: id } });
 
@@ -193,6 +202,14 @@ const logout = async (): Promise<void> => {
                 <span class="min-w-0 flex-1 truncate" :class="option.id === sandbox.activeSandboxId.value ? 'text-link' : 'text-content'">{{
                     option.name
                 }}</span>
+                <!-- Same mark, same meaning as the desktop rail's tile: which machine this box is on. No tooltip on a
+                     phone, so the sentence is the icon's own label and the row reads it out in full. -->
+                <Icon
+                    v-if="placementFor(option).kind !== 'shared'"
+                    :name="placementFor(option).icon"
+                    class="shrink-0 text-xs text-subtle"
+                    :aria-label="placementFor(option).detail"
+                />
                 <span v-if="option.role !== 'owner'" class="ui-status-pill shrink-0 bg-content/10 text-2xs font-medium text-subtle">{{
                     t(`shell.mobileMenu.shared`)
                 }}</span>

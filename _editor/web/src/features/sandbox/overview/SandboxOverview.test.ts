@@ -18,6 +18,10 @@ vi.mock(`./useSandboxVersion`, () => ({
 vi.mock(`../../workspace/explorer/useWorkspaceTree`, () => ({ useWorkspaceTree: () => ({ hasSnapshot: ref(true) }) }));
 const availability = ref<`live` | `warming` | `busy`>(`live`);
 vi.mock(`./useSandboxAvailability`, () => ({ useSandboxAvailability: () => availability }));
+// Where the sandbox runs is read off the fleet and the transport; stubbed for the same reason as the rest, so this
+// suite mounts the identity block alone rather than the devices query behind it.
+const placement = ref<{ kind: string; icon: string; label: string; detail: string } | undefined>(undefined);
+vi.mock(`./useSandboxPlacement`, () => ({ useSandboxPlacement: () => placement }));
 // Hosted plan standing is a plain ref here, not a query; the sentence itself lives in hostedHours.ts.
 const machineStanding = ref<string | undefined>(undefined);
 const planOffered = ref(false);

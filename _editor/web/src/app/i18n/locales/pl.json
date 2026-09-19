@@ -923,6 +923,9 @@
         },
         "chatModelPicker": {
             "allowed": "Dozwolone",
+            "autoArmed": "A model reads your first message and picks what this chat runs on. Every turn after that stays on it, and you can change it whenever you like.",
+            "autoDescription": "Let a model choose from what's connected and still has allowance",
+            "autoLabel": "Auto",
             "keepConversationOnPicked": "Trzymaj tę rozmowę na wybranym modelu",
             "myPickOnly": "Tylko mój wybór",
             "notAvailableHere": "Tutaj niedostępne",
@@ -1683,6 +1686,7 @@
             "addModelAutomaticTier": "Dodaj model do automatycznego wyboru poziomu",
             "advanced": "Zaawansowane",
             "auto": "Automatycznie",
+            "autoChoosesPerChat": "The model picker gains an Auto row. Pick it, and a model reads a new chat's first message and chooses what that conversation runs on, from what is connected and still has allowance. Turns are no longer judged one by one.",
             "automaticTier": "Poziom automatyczny",
             "balanced": "Zrównoważony",
             "cautious": "Ostrożny",
@@ -2611,6 +2615,19 @@
             "shellTestsBuildsEvery": "Powłoka, testy, budowania i każde CLI w obrazie.",
             "spawnSubAgentsRun": "Uruchamiać podagenty i workflow.",
             "with": "Z"
+        },
+        "placement": {
+            "cloudDetail": "Runs on Intentic's cloud",
+            "cloudDetailRegion": "Runs on Intentic's cloud, in {region}",
+            "cloudLabel": "Intentic cloud",
+            "deviceDetail": "Runs on {device}, a machine of your own",
+            "ownDetail": "Runs on a machine of your own, not Intentic's cloud",
+            "ownDetailHost": "Runs on a machine of your own, reached at {host}",
+            "ownLabel": "Your own machine",
+            "sharedDetail": "Runs on someone else's machine, shared with you",
+            "sharedLabel": "Someone else's machine",
+            "thisComputerDetail": "Runs on this computer",
+            "thisComputerLabel": "This computer"
         },
         "planLimitsPanel": {
             "account": "Konto",

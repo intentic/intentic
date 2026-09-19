@@ -9,6 +9,7 @@ import { useHostedPlan } from "../../settings/hosted-plan/useHostedPlan";
 import { useSandboxOutline } from "./useSandboxOutline";
 import { sandboxAvailabilityVisual } from "./availability";
 import { useSandboxAvailability } from "./useSandboxAvailability";
+import { useSandboxPlacement } from "./useSandboxPlacement";
 import { useWorkspaceTree } from "../../workspace/explorer/useWorkspaceTree";
 import SandboxBehindCard from "./SandboxBehindCard.vue";
 import SandboxManifestCard from "./manifest/SandboxManifestCard.vue";
@@ -34,6 +35,8 @@ const isOwner = computed(() => sandbox.active.value?.role === `owner`);
 const agentUrl = computed(() => sandbox.daemonUrl.value ?? undefined);
 // Platform-hosted (starter) sandbox; the upgrade card below keys on this.
 const hosted = computed(() => (sandbox.active.value?.hosted ?? null) !== null);
+// Which machine this sandbox stands on, said in words beside its name.
+const placement = useSandboxPlacement();
 // Same standing sentence Billing and the avatar row use, kept in sync by sharing the source.
 const { machineStanding, offered: planOffered } = useHostedPlan();
 
@@ -211,6 +214,17 @@ const removeLogo = async (): Promise<void> => {
                                 :label="availabilityBadge.label"
                                 dot
                             />
+                            <!-- The rail's corner mark, in words. The glyph up there is a glance; this is the page a
+                                 reader opens to find out what it meant, so it spells the machine out and the tooltip
+                                 carries the whole sentence. Not a StatusBadge: that one lowercases, and this says a
+                                 brand and a hostname. -->
+                            <span
+                                v-if="placement"
+                                class="ui-status-pill inline-flex shrink-0 items-center gap-1 bg-content/5 text-2xs font-medium text-muted"
+                                v-tooltip.top="placement.detail"
+                            >
+                                <Icon :name="placement.icon" class="text-2xs text-subtle" />{{ placement.label }}
+                            </span>
                         </div>
                         <p v-if="subline.text" class="h-4 truncate px-1 text-xs leading-4" :class="subline.tone">{{ subline.text }}</p>
                     </div>
