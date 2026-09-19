@@ -188,6 +188,36 @@
     }
 }
 
+/* A MARKDOWN DOCUMENT STANDING AS A SECTION'S BODY (<MarkdownDocument frame="section">) — the one surface in the kit
+   that is a page rather than a control, so it wears no field frame: it takes the card's ground, and the only rule
+   drawn is the one over its footer. */
+@layer components {
+    .ui-doc-section {
+/* Set here rather than at each call site, so every document in the app is read at the same line length. */
+        --prose-measure: 72ch;
+    }
+
+    .ui-doc-body {
+/* A floor, not a reserved void: enough empty document to aim a caret at, and nothing like the 192px of black an
+   empty memory used to hold open. */
+        --ui-doc-min: 5rem;
+/* Far enough down that a long policy scrolls inside its section instead of swallowing the page it's a row of. */
+        --ui-doc-max: 70dvh;
+        min-height: var(--ui-doc-min);
+        max-height: var(--ui-doc-max);
+        overflow: auto;
+        transition: background-color 0.12s ease-out;
+    }
+
+/* A BORDERLESS SURFACE LIGHTS ITS GROUND, because it has no edge to move — `ui-field-lit`'s rule, applied to the one
+   surface that has no edge by design. A ring here would put back the box this frame exists to remove, and its bottom
+   would land on the footer's rule and draw it twice. Weaker than the search row's 8%: this is a whole page of text,
+   not a bar. */
+    .ui-doc-body:focus-within {
+        background: color-mix(in srgb, var(--color-primary-500) 5%, transparent);
+    }
+}
+
 /* Search rows share the filter-field layout. */
 @layer components {
     .ui-search-row {

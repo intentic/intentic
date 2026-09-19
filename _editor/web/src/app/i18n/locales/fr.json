@@ -1687,6 +1687,7 @@
             "copyPromptIntoChat": "Copier cette consigne dans un chat avec votre autre fournisseur d'IA",
             "memory": "Mémoire",
             "nothingHereYetWhat": "Rien ici pour l'instant. Ce que chaque tour dans cet espace de travail devrait savoir.",
+            "openFile": "Open file",
             "pasteMemoryDetailsHere": "Collez ici les détails de votre mémoire",
             "pasteResultBelowTo": "Collez le résultat ci-dessous pour le fusionner dans les deux fichiers",
             "reading": "Lecture de {memory_file}…"

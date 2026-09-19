@@ -1687,6 +1687,7 @@
             "copyPromptIntoChat": "Skopiuj ten prompt do czatu ze swoim innym dostawcą AI",
             "memory": "Pamięć",
             "nothingHereYetWhat": "Nic tu jeszcze nie ma. To, co każda tura w tej przestrzeni roboczej powinna wiedzieć.",
+            "openFile": "Open file",
             "pasteMemoryDetailsHere": "Wklej tutaj zawartość swojej pamięci",
             "pasteResultBelowTo": "Wklej wynik poniżej, żeby scalić go z oboma plikami",
             "reading": "Odczytywanie {memory_file}…"

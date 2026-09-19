@@ -1687,6 +1687,7 @@
             "copyPromptIntoChat": "Diesen Prompt in einen Chat mit Ihrem anderen KI-Anbieter kopieren",
             "memory": "Gedächtnis",
             "nothingHereYetWhat": "Noch nichts hier. Was jeder Zug in diesem Workspace wissen sollte.",
+            "openFile": "Open file",
             "pasteMemoryDetailsHere": "Fügen Sie Ihre Gedächtnisinhalte hier ein",
             "pasteResultBelowTo": "Fügen Sie das Ergebnis unten ein, um es in beide Dateien einzuarbeiten",
             "reading": "{memory_file} wird gelesen…"

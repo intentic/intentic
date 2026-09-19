@@ -1687,6 +1687,7 @@
             "copyPromptIntoChat": "Copy this prompt into a chat with your other AI provider",
             "memory": "Memory",
             "nothingHereYetWhat": "Nothing here yet. What every turn in this workspace should know.",
+            "openFile": "Open file",
             "pasteMemoryDetailsHere": "Paste your memory details here",
             "pasteResultBelowTo": "Paste the result below to merge it into both files",
             "reading": "Reading {memory_file}…"

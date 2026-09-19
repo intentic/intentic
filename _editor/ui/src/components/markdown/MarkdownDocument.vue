@@ -6,6 +6,7 @@ import type { MarkdownDecorator } from "../../markdown/render.js";
 import Button from "../primitives/Button.vue";
 import { useT } from "../../i18n/index.js";
 import CodeField from "../forms/CodeField.vue";
+import { ROW_BLOCK_PAD, ROW_TIERS, useRowDensity } from "../rows/row.js";
 import Markdown from "./Markdown.vue";
 import MarkdownDocumentSurface from "./MarkdownDocumentSurface.vue";
 import { type SavePolicy, useSaveDraft } from "./markdownDocument.js";
@@ -17,6 +18,7 @@ const {
     save: policy = `auto`,
     saving = false,
     placeholder = ``,
+    frame = `none`,
     label,
     stored,
     maxChars,
@@ -30,6 +32,13 @@ const {
     save?: SavePolicy;
     /** The write is in flight. Drives the status line; the caller owns the request. */
     saving?: boolean;
+    /**
+     * Where this document's edge comes from. `none`: the caller's box draws it, or nothing does — a field shell
+     * around a form's document, a dialog's reading pane. `section`: the document IS a <RowGroup>'s body, so it
+     * takes the card's own ground and the only rule drawn is the one over its footer. A document is never a
+     * field: a second frame inside the card it already sits on reads as a hole punched in the section.
+     */
+    frame?: `none` | `section`;
     /** The document on disk; what "unsaved" and a no-op save are measured against. Omit only if unknown. */
     stored?: string;
     /** Longest the document may be, if enforced downstream; shown near the ceiling, never a hard `maxlength`. */
@@ -91,6 +100,11 @@ const foot = computed(
         (status.value !== `` || count.value !== undefined || policy === `explicit` || slots[`note`] !== undefined || slots[`actions`] !== undefined),
 );
 
+// A section-framed document is a region on a list's surface, so it reads the group's tier the way <RowNote> does
+// rather than picking a padding of its own.
+const tier = useRowDensity(() => undefined);
+const section = computed(() => frame === `section`);
+
 const surface = ref<InstanceType<typeof MarkdownDocumentSurface>>();
 /** The text as the surface currently holds it, which is ahead of the model only mid-keystroke. */
 const text = (): string => surface.value?.text() ?? doc.value;
@@ -99,41 +113,50 @@ defineExpose({ text, commit, focus: (): void => surface.value?.focus(), dirty, s
 </script>
 
 <template>
-    <div class="flex min-w-0 flex-col">
-        <!-- Same document, twice over, in the same type rules, so switching between reading and writing moves nothing and neither sets its own measure. -->
-        <!-- `flex-1` on all three branches, so a caller's minimum height goes to the document, not the column holding it. -->
-        <MarkdownDocumentSurface
-            v-if="writing"
-            ref="surface"
-            class="min-w-0 flex-1"
-            :source="doc"
-            :caret-at="caretAt"
-            :placeholder="placeholder"
-            :aria-label="label ?? t(`ui.markdownDocument.document`)"
-            @change="onChange"
-            @save="commit"
-        />
-        <!-- Phones use the source textarea for reliable touch editing. -->
-        <CodeField
-            v-else-if="editable"
-            :model-value="doc"
-            lang="markdown"
-            :placeholder="placeholder"
-            :aria-label="label ?? t(`ui.markdownDocument.document`)"
-            class="min-w-0 flex-1"
-            @update:model-value="onChange"
-            @keydown.ctrl.s.prevent="commit"
-            @keydown.meta.s.prevent="commit"
-        />
-        <!-- Nothing to type into: the document, or a sentence rather than an empty pane. -->
-        <Markdown v-else-if="doc.trim() !== ``" :source="doc" :decorate="decorate" class="min-w-0 flex-1" />
-        <p v-else class="flex-1 py-2 text-xs text-subtle">{{ placeholder }}</p>
+    <div class="flex min-w-0 flex-col" :class="{ 'ui-doc-section': section }">
+        <!-- `display: contents` without a section frame: the branches keep the root as their flex parent, so a caller's
+             own height still lands on the document rather than on a box wrapped round it. -->
+        <div :class="section ? [`ui-doc-body ui-softscroll flex min-w-0 flex-col`, ROW_BLOCK_PAD[tier]] : `contents`">
+            <!-- Same document, twice over, in the same type rules, so switching between reading and writing moves nothing and neither sets its own measure. -->
+            <!-- `flex-1` on all three branches, so a caller's minimum height goes to the document, not the column holding it. -->
+            <MarkdownDocumentSurface
+                v-if="writing"
+                ref="surface"
+                class="min-w-0 flex-1"
+                :source="doc"
+                :caret-at="caretAt"
+                :placeholder="placeholder"
+                :aria-label="label ?? t(`ui.markdownDocument.document`)"
+                @change="onChange"
+                @save="commit"
+            />
+            <!-- Phones use the source textarea for reliable touch editing. -->
+            <CodeField
+                v-else-if="editable"
+                :model-value="doc"
+                lang="markdown"
+                :placeholder="placeholder"
+                :aria-label="label ?? t(`ui.markdownDocument.document`)"
+                class="min-w-0 flex-1"
+                @update:model-value="onChange"
+                @keydown.ctrl.s.prevent="commit"
+                @keydown.meta.s.prevent="commit"
+            />
+            <!-- Nothing to type into: the document, or a sentence rather than an empty pane. -->
+            <Markdown v-else-if="doc.trim() !== ``" :source="doc" :decorate="decorate" class="min-w-0 flex-1" />
+            <p v-else class="flex-1 py-2 text-xs text-subtle">{{ placeholder }}</p>
 
-        <!-- Why you cannot write here, said where somebody would try it; absent when the answer is obvious. -->
-        <p v-if="readOnlyReason !== undefined && !editable" class="mt-2 text-2xs text-subtle">{{ readOnlyReason }}</p>
+            <!-- Why you cannot write here, said where somebody would try it; absent when the answer is obvious. -->
+            <p v-if="readOnlyReason !== undefined && !editable" class="mt-2 text-2xs text-subtle">{{ readOnlyReason }}</p>
+        </div>
 
         <!-- Caller's note on the left, the app's draft status on the right, one row for every surface; absent entirely when there's nothing to say. -->
-        <div v-if="foot" class="mt-2 flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+        <!-- Under a section frame this is the card's own action bar: outside the scroller, so Save never leaves with the text. -->
+        <div
+            v-if="foot"
+            class="flex flex-wrap items-center justify-between gap-x-3 gap-y-1"
+            :class="section ? [`border-t border-line-subtle`, ROW_TIERS[tier].pad] : `mt-2`"
+        >
             <span class="min-w-0 text-2xs text-subtle"><slot name="note" /></span>
             <span class="flex shrink-0 items-center gap-2">
                 <span v-if="count !== undefined" class="text-2xs tabular-nums" :class="over ? `text-danger` : `text-muted`">{{ count }}</span>

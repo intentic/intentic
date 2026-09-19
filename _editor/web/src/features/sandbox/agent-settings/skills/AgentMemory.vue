@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { MEMORY_FILE } from "@intentic/constants";
-import { MarkdownDocument, Notice, RowGroup, RowNote } from "@intentic/ui";
+import { Button, MarkdownDocument, Notice, RowGroup, RowNote } from "@intentic/ui";
 import { onMounted } from "vue";
+import { RouterLink } from "vue-router";
 import { useAgentMemory } from "./useAgentMemory";
 import { useT } from "@intentic/ui/i18n";
 
@@ -17,31 +18,42 @@ onMounted(() => void load());
 
 <template>
     <RowGroup :label="t(`sandbox.agentMemory.memory`)">
-        <RowNote variant="block">
-            <Notice v-if="editorError" :of="editorError" />
+        <!-- The group's card IS the page: a document wrapped in a field shell reads as a hole punched in the section. -->
+        <template #actions>
+            <!-- Where a long edit goes: the same file, in the editor that gives it the whole pane. -->
+            <Button
+                :as="RouterLink"
+                :to="`/workspace/${MEMORY_FILE}`"
+                :label="t(`sandbox.agentMemory.openFile`)"
+                size="small"
+                severity="secondary"
+                :text="true"
+            >
+                <template #icon><Icon name="arrow-up-right" /></template>
+            </Button>
+        </template>
 
-            <div class="ui-field-shell mt-3 max-h-[60dvh] overflow-auto p-3" style="--prose-measure: 72ch">
-                <MarkdownDocument
-                    v-model="draft"
-                    :editable="onDisk !== undefined"
-                    :stored="onDisk"
-                    :saving="saving"
-                    save="explicit"
-                    :label="MEMORY_FILE"
-                    :placeholder="
-                        onDisk === undefined
-                            ? t(`sandbox.agentMemory.reading`, { memory_file: MEMORY_FILE })
-                            : t(`sandbox.agentMemory.nothingHereYetWhat`)
-                    "
-                    class="min-h-48"
-                    @save="commit"
-                >
-                    <template #note
-                        ><code>{{ MEMORY_FILE }}</code
-                        >{{ t(`sandbox.agentMemory.atWorkspaceRoot`) }}</template
-                    >
-                </MarkdownDocument>
-            </div>
-        </RowNote>
+        <RowNote v-if="editorError" variant="block"><Notice :of="editorError" /></RowNote>
+
+        <MarkdownDocument
+            v-model="draft"
+            frame="section"
+            :editable="onDisk !== undefined"
+            :stored="onDisk"
+            :saving="saving"
+            save="explicit"
+            :label="MEMORY_FILE"
+            :placeholder="
+                onDisk === undefined
+                    ? t(`sandbox.agentMemory.reading`, { memory_file: MEMORY_FILE })
+                    : t(`sandbox.agentMemory.nothingHereYetWhat`)
+            "
+            @save="commit"
+        >
+            <template #note
+                ><code>{{ MEMORY_FILE }}</code
+                >{{ t(`sandbox.agentMemory.atWorkspaceRoot`) }}</template
+            >
+        </MarkdownDocument>
     </RowGroup>
 </template>

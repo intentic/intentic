@@ -766,30 +766,30 @@ const pickedTier = ref(`collaborator`);
                     <Code :code="source" lang="typescript" />
                 </div>
                 <!-- Not a code field or a prose field: a markdown document is neither source nor a plain paragraph. -->
+                <!-- The two frames, side by side, because the wrong one is the mistake this component keeps inviting:
+                     a document dropped into a field shell inside a card is a hole punched in the section. -->
                 <div class="grid max-w-read-lg gap-6 md:grid-cols-2">
                     <div class="flex flex-col gap-1">
-                        <span class="ui-field-label">MarkdownDocument · save="auto"</span>
+                        <span class="ui-field-label">MarkdownDocument · frame="none"</span>
                         <div class="ui-field-shell p-3">
                             <MarkdownDocument v-model="note" editable :stored="noteOnDisk" save="auto" label="A note" @save="noteOnDisk = $event">
                                 <template #note>Written as you type, like the file it is.</template>
                             </MarkdownDocument>
                         </div>
                     </div>
-                    <div class="flex flex-col gap-1">
-                        <span class="ui-field-label">MarkdownDocument · save="explicit"</span>
-                        <div class="ui-field-shell p-3">
-                            <MarkdownDocument
-                                v-model="policy"
-                                editable
-                                :stored="policyOnDisk"
-                                save="explicit"
-                                label="A policy"
-                                @save="policyOnDisk = $event"
-                            >
-                                <template #note>Every turn reads this, so it waits to be told.</template>
-                            </MarkdownDocument>
-                        </div>
-                    </div>
+                    <RowGroup label="MarkdownDocument · frame=&quot;section&quot;">
+                        <MarkdownDocument
+                            v-model="policy"
+                            frame="section"
+                            editable
+                            :stored="policyOnDisk"
+                            save="explicit"
+                            label="A policy"
+                            @save="policyOnDisk = $event"
+                        >
+                            <template #note>Every turn reads this, so it waits to be told.</template>
+                        </MarkdownDocument>
+                    </RowGroup>
                 </div>
             </section>
 

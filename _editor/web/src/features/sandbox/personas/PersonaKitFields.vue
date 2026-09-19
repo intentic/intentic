@@ -154,10 +154,12 @@ watch(
                 <SegmentedControl :model-value="picked" :options="MODES" @update:model-value="setMode" />
             </label>
 
-            <!-- Same surface as the sandbox's own prompt: same three bases, same runtime, same kind of document. -->
-            <div v-if="picked === `custom`" class="ui-field-shell max-h-[60dvh] overflow-auto p-3" style="--prose-measure: 72ch">
+            <!-- Same surface as the sandbox's own prompt: same three bases, same runtime, same kind of document. The
+                 unlabelled group is the one surface it stands on — a document never wears a field frame. -->
+            <RowGroup v-if="picked === `custom`">
                 <MarkdownDocument
                     v-model="prompt"
+                    frame="section"
                     :editable="!isLoading"
                     :stored="isLoading ? undefined : kit.prompt"
                     :saving="savePrompt.isPending.value"
@@ -165,7 +167,6 @@ watch(
                     :label="t(`sandbox.personaKitFields.personasSystemPrompt`)"
                     :max-chars="PROMPT_MAX"
                     :placeholder="t(`sandbox.personaKitFields.writeWhatPersonaWho`)"
-                    class="min-h-48"
                     @save="commitPrompt"
                 >
                     <!-- Custom mode removes the app's built-in briefing for this persona. -->
@@ -173,7 +174,7 @@ watch(
                         {{ t(`sandbox.personaKitFields.replacesWholePromptOn`) }}
                     </template>
                 </MarkdownDocument>
-            </div>
+            </RowGroup>
         </div>
 
         <!-- Shown regardless of the prompt setting, since a persona's checklist is independent of which prompt it runs. -->

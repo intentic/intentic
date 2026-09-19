@@ -18,28 +18,24 @@ const draft = useDraft(() => (isLoading.value ? undefined : text.value));
 
 <template>
     <RowGroup :label="t(`sandbox.agentSafetyPolicy.safetyPolicy`)">
-        <RowNote variant="block">
-            <!-- The frame scrolls long policies without moving Save. -->
-            <div class="ui-field-shell max-h-[60dvh] overflow-auto p-3" style="--prose-measure: 72ch">
-                <MarkdownDocument
-                    v-model="draft"
-                    :editable="!isLoading"
-                    :stored="isLoading ? undefined : text"
-                    :saving="isSaving"
-                    save="explicit"
-                    :label="t(`sandbox.agentSafetyPolicy.safetyPolicy`)"
-                    :placeholder="isLoading ? t(`sandbox.agentSafetyPolicy.loading`) : t(`sandbox.agentSafetyPolicy.whatAssistantShouldStop`)"
-                    class="min-h-64"
-                    @save="save"
-                >
-                    <template #note>
-                        <template v-if="custom">{{ t(`sandbox.agentSafetyPolicy.ownTextIn`) }} <code>.intentic/config/safety.md</code>.</template>
-                        <template v-else>{{ t(`sandbox.agentSafetyPolicy.textProductShipsDescribes`) }}</template>
-                    </template>
-                </MarkdownDocument>
-            </div>
+        <!-- The group's card IS the page. Only the document scrolls, so a long policy never carries Save off the screen. -->
+        <MarkdownDocument
+            v-model="draft"
+            frame="section"
+            :editable="!isLoading"
+            :stored="isLoading ? undefined : text"
+            :saving="isSaving"
+            save="explicit"
+            :label="t(`sandbox.agentSafetyPolicy.safetyPolicy`)"
+            :placeholder="isLoading ? t(`sandbox.agentSafetyPolicy.loading`) : t(`sandbox.agentSafetyPolicy.whatAssistantShouldStop`)"
+            @save="save"
+        >
+            <template #note>
+                <template v-if="custom">{{ t(`sandbox.agentSafetyPolicy.ownTextIn`) }} <code>.intentic/config/safety.md</code>.</template>
+                <template v-else>{{ t(`sandbox.agentSafetyPolicy.textProductShipsDescribes`) }}</template>
+            </template>
+        </MarkdownDocument>
 
-            <Notice v-if="error !== undefined" tone="danger" class="mt-2 text-2xs">{{ error }}</Notice>
-        </RowNote>
+        <RowNote v-if="error !== undefined" variant="block"><Notice tone="danger" class="text-2xs">{{ error }}</Notice></RowNote>
     </RowGroup>
 </template>

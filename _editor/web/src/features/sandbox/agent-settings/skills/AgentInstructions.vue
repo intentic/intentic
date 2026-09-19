@@ -96,24 +96,10 @@ const reachLine =
                     <p class="mt-2 text-2xs text-subtle">{{ reachLine }}</p>
                 </template>
 
+                <!-- What the choice costs and where to start from belong to the row that makes it; the document itself
+                     is a region of this same card, below. -->
                 <template v-else>
-                    <!-- A PROMPT IS A DOCUMENT, and it was the worst-served one in the app: five monospace rows with no structure visible. -->
-                    <div class="ui-field-shell max-h-[60dvh] overflow-auto p-3" style="--prose-measure: 72ch">
-                        <MarkdownDocument
-                            v-model="prompt"
-                            :editable="settings !== undefined"
-                            :stored="stored"
-                            :saving="save.isPending.value"
-                            save="explicit"
-                            :label="t(`sandbox.agentInstructions.systemPrompt`)"
-                            :max-chars="PROMPT_MAX"
-                            :placeholder="t(`sandbox.agentInstructions.writeAssistantsSystemPrompt`)"
-                            class="min-h-64"
-                            @save="savePrompt"
-                        />
-                    </div>
-
-                    <Notice tone="warning" class="mt-2 text-2xs">
+                    <Notice tone="warning" class="text-2xs">
                         {{ t(`sandbox.agentInstructions.textBecomesWholePrompt`) }} {{ spokenList(reach.replaces)
                         }}{{ t(`sandbox.agentInstructions.includingWhatAppTells`) }}
                         <template v-if="reach.adds.length > 0">{{
@@ -141,6 +127,22 @@ const reachLine =
                 <Notice v-if="builtinError !== undefined" :of="builtinError" class="mt-2" />
             </template>
         </Row>
+
+        <!-- A PROMPT IS A DOCUMENT, and it was the worst-served one in the app: five monospace rows with no structure
+             visible. It takes the card it is already on rather than a field shell inside a row's drawer. -->
+        <MarkdownDocument
+            v-if="promptMode === `custom`"
+            v-model="prompt"
+            frame="section"
+            :editable="settings !== undefined"
+            :stored="stored"
+            :saving="save.isPending.value"
+            save="explicit"
+            :label="t(`sandbox.agentInstructions.systemPrompt`)"
+            :max-chars="PROMPT_MAX"
+            :placeholder="t(`sandbox.agentInstructions.writeAssistantsSystemPrompt`)"
+            @save="savePrompt"
+        />
     </RowGroup>
 
     <Modal
@@ -173,8 +175,9 @@ const reachLine =
                 </template>
                 {{ t(`sandbox.agentInstructions.eitherWayAppsOwn`) }}
             </p>
-            <!-- READ IT AS THE THING YOU WOULD BE FORKING. -->
-            <div class="mt-2 max-h-[55dvh] overflow-auto rounded-lg border border-line bg-canvas p-3" style="--prose-measure: 76ch">
+            <!-- READ IT AS THE THING YOU WOULD BE FORKING. Two rules rather than a box: the dialog is already the
+                 frame, and they say where the passage clips without sinking it into a well. -->
+            <div class="ui-softscroll mt-3 max-h-[55dvh] overflow-auto border-y border-line-subtle py-3" style="--prose-measure: 76ch">
                 <MarkdownDocument
                     :model-value="builtinPrompts[viewingBase]?.text ?? ``"
                     :label="t(`sandbox.agentInstructions.builtInSystemPrompt`)"
