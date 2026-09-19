@@ -1,6 +1,6 @@
 # @intentic/house-css
 
-The metals the company's surfaces are cut from, stated once: cast bronze, the cartouche frame kit and the
+The metals the company's surfaces are cut from, stated once: engraved gold, the cartouche frame kit and the
 three ember glows. One stylesheet, no selectors, nothing but `--house-*` custom properties on `:root`.
 
 ## Who paints these
@@ -14,6 +14,17 @@ three ember glows. One stylesheet, no selectors, nothing but `--house-*` custom 
 All three carried their own copy until this package existed. The bronze plaque was written out three times,
 the cartouche frame kit twice; 2.4 KB of inline SVG alone sat in triplicate, and `entry.css`'s header said
 the quiet part out loud — _"when a recipe moves there it moves here."_ It moved here instead.
+
+## Gold actions
+
+The `--house-bronze-*` properties define a warm amber-gold face with fine grain and directional light.
+Its frame carries two inset rails, interrupted by diamond engravings in opposite corners. All three
+consumers use that frame; the app scales its cuts and engraving down for compact controls.
+
+A reflection crosses the face once on hover or keyboard focus. There is no idle animation. Pressing
+recesses the edge, reduced motion removes the sweep, and focus uses a dark inset ring that cannot be
+clipped away. Disabled controls return to a neutral surface; loading retains the gold and its geometry.
+The light site and entry screens deepen only the gold body, keeping the shared engraving and highlights.
 
 ## The rules
 

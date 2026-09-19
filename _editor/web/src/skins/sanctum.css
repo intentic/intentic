@@ -440,32 +440,94 @@
         --ui-button-off-content: #9c9182;
     }
 
-    /* Loud buttons use the site's gold plate. */
-    [data-skin="sanctum"] .p-button.ui-button-loud,
-    [data-skin="sanctum"] .p-button.ui-button-loud:enabled:hover,
-    [data-skin="sanctum"] .p-button.ui-button-loud:enabled:active {
+    /* The gold frame's slice and cut must scale together. */
+    [data-skin="sanctum"] .p-button.ui-button-loud {
+        --cut: 5.6px;
+        position: relative;
+        z-index: 0;
+        border-radius: 0;
+        border-image-slice: 13;
+        border-image-width: 10px;
+        border-image-repeat: stretch;
+        clip-path: polygon(
+            var(--cut) 0, calc(100% - var(--cut)) 0,
+            100% var(--cut), 100% calc(100% - var(--cut)),
+            calc(100% - var(--cut)) 100%, var(--cut) 100%,
+            0 calc(100% - var(--cut)), 0 var(--cut)
+        );
+    }
+    [data-skin="sanctum"] .p-button.ui-button-loud.p-button-sm {
+        --cut: 4.5px;
+        border-image-width: 8px;
+    }
+    /* Disabled controls cannot inherit the lit metal. */
+    [data-skin="sanctum"] .p-button.ui-button-loud:where(:not(:disabled), .p-button-loading),
+    [data-skin="sanctum"] .p-button.ui-button-loud:not(:disabled):hover,
+    [data-skin="sanctum"] .p-button.ui-button-loud:not(:disabled):active {
         color: var(--house-bronze-ink);
         font-weight: var(--font-weight-semibold);
         letter-spacing: 0.015em;
         text-shadow: var(--house-bronze-ink-lip);
         background-color: var(--house-bronze-fill);
-        background-image: var(--house-bronze-sweep), var(--house-brushed), var(--house-bronze-body);
+        background-image: var(--house-bronze-sweep), var(--house-bronze-grain), var(--house-bronze-body);
         background-size: 100% 100%;
         background-repeat: no-repeat;
-/* THE CARTOUCHE'S PALE RULE, WITHOUT THE CARTOUCHE. */
-        border-color: rgba(255, 240, 205, 0.5);
+        border-color: transparent;
+        border-image-source: var(--house-cartouche-bronze);
         box-shadow: var(--house-bronze-bevel);
     }
-
-/* Under the pointer the plate catches more of the same light rather than changing colour, and the engraving does NOT lighten. */
-    [data-skin="sanctum"] .p-button.ui-button-loud:enabled:hover {
-        background-color: #e4bd78;
-        background-image:
-            linear-gradient(100deg, transparent 24%, rgba(255, 252, 242, 0.52) 44%, rgba(255, 250, 236, 0.12) 56%, transparent 70%),
-            var(--house-brushed),
-            linear-gradient(180deg, #f8e2b3 0%, #e8c281 40%, #d4a75c 74%, #bd8f45 100%);
-        border-color: rgba(255, 244, 216, 0.62);
+    [data-skin="sanctum"] .p-button.ui-button-loud::before,
+    [data-skin="sanctum"] .p-button.ui-button-loud::after {
+        content: "";
+        position: absolute;
+        pointer-events: none;
+        opacity: 0;
+        z-index: -1;
+    }
+    [data-skin="sanctum"] .p-button.ui-button-loud::before {
+        inset: -1px;
+        border: 1px solid transparent;
+        border-image-source: var(--house-cartouche-bronze-lit);
+        border-image-slice: inherit;
+        border-image-width: inherit;
+        border-image-repeat: stretch;
+        clip-path: inherit;
+        transition: opacity 0.2s ease;
+    }
+    [data-skin="sanctum"] .p-button.ui-button-loud::after {
+        inset: 0;
+        background: var(--house-bronze-sheen);
+        background-size: 220% 100%;
+        background-position: 100% 0;
+        transition: background-position 0.65s ease, opacity 0.2s ease;
+    }
+    [data-skin="sanctum"] .p-button.ui-button-loud:not(:disabled):hover,
+    [data-skin="sanctum"] .p-button.ui-button-loud:focus-visible {
         box-shadow: var(--house-bronze-bevel-lit);
+    }
+    [data-skin="sanctum"] .p-button.ui-button-loud:not(:disabled):hover::before,
+    [data-skin="sanctum"] .p-button.ui-button-loud:focus-visible::before,
+    [data-skin="sanctum"] .p-button.ui-button-loud:not(:disabled):hover::after,
+    [data-skin="sanctum"] .p-button.ui-button-loud:focus-visible::after {
+        opacity: 1;
+        background-position: 0% 0;
+    }
+    [data-skin="sanctum"] .p-button.ui-button-loud:focus-visible {
+        outline: 2px solid var(--house-bronze-ink);
+        outline-offset: -3px;
+    }
+    [data-skin="sanctum"] .p-button.ui-button-loud:not(:disabled):active {
+        box-shadow: var(--house-bronze-bevel-pressed);
+    }
+    [data-skin="sanctum"] .p-button.ui-button-loud:not(:disabled):active::after {
+        opacity: 0;
+    }
+    @media (prefers-reduced-motion: reduce) {
+        [data-skin="sanctum"] .p-button.ui-button-loud,
+        [data-skin="sanctum"] .p-button.ui-button-loud::before,
+        [data-skin="sanctum"] .p-button.ui-button-loud::after {
+            transition: none;
+        }
     }
 
 /* Solid accent controls — checkbox, radio, switch — read as inlay: the unticked box is cut down into the plate like a field. */

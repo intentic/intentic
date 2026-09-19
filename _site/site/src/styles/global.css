@@ -403,29 +403,48 @@ html[data-variant="desk"] {
         opacity: 0.85;
     }
 
-    /* THE PRIMARY IS CAST BRONZE It was a panel of dark wood with an ember label, and as an object it was lovely. */
+    /* Gold actions keep their engraving inside the cut corners. */
     .btn-primary {
         color: var(--house-bronze-ink);
         font-weight: var(--font-weight-semibold);
         text-shadow: var(--house-bronze-ink-lip);
         background-color: var(--house-bronze-fill);
-        background-image: var(--house-bronze-sweep), var(--house-brushed), var(--house-bronze-body);
+        background-image: var(--house-bronze-sweep), var(--house-bronze-grain), var(--house-bronze-body);
         background-size: 100% 100%;
         background-repeat: no-repeat;
         border-image-source: var(--house-cartouche-bronze);
         box-shadow: var(--house-bronze-bevel);
+        transition: box-shadow 0.2s ease;
     }
     .btn-primary::before {
         border-image-source: var(--house-cartouche-bronze-lit);
     }
-    /* Under the pointer the plate catches more of the same light rather than changing colour: one warm. */
+    /* The reflection moves only while the control is being targeted. */
     .btn-primary::after {
         background: var(--house-bronze-sheen);
+        background-size: 220% 100%;
+        background-position: 100% 0;
+        transition: background-position 0.65s ease, opacity 0.2s ease;
     }
-    /* The label does not lighten on hover — it is cut into metal, and metal that brightens does not turn. */
     .btn-primary:hover,
     .btn-primary:focus-visible {
         color: var(--house-bronze-ink);
+        box-shadow: var(--house-bronze-bevel-lit);
+    }
+    .btn-primary:hover::after,
+    .btn-primary:focus-visible::after {
+        background-position: 0% 0;
+    }
+    /* Clipping cannot hide keyboard focus. */
+    .btn-primary:focus-visible {
+        outline: 2px solid var(--house-bronze-ink);
+        outline-offset: -4px;
+    }
+    .btn-primary:active {
+        box-shadow: var(--house-bronze-bevel-pressed);
+    }
+    .btn-primary:active::after {
+        opacity: 0;
     }
 
     /* The plain cartouche is already the secondary, so this only names it — every call site that says. */

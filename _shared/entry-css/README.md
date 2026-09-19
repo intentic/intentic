@@ -20,7 +20,7 @@ wearers; the third is in another package, so the material moved to where both ca
 
 ## What it is made of, and what it is not
 
-**Material from `house.css`, composition here.** Cast bronze, the cartouche frame kit and the ember glows are
+**Material from `house.css`, composition here.** Engraved gold, the cartouche frame kit and the ember glows are
 `--house-*` properties on `:root` and belong to [`@intentic/house-css`](../house-css/README.md). This sheet
 decides what is made of them: which surface is a plate, which rule is gold, how big a corner is, what a
 primary button looks like on this ground. The display face's flat ink lives here as `--display-ink`.

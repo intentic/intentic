@@ -1,38 +1,32 @@
 /* Shared house materials for the site, entry screens, and Sanctum skin. */
 
 :root {
-    /* CAST BRONZE The committing action, and the only light-on-dark object on any of these surfaces. */
-    --house-bronze-fill: #d9b169;
-    --house-bronze-body: linear-gradient(180deg, #f2d69f 0%, #ddb571 40%, #c99a4f 74%, #b3823c 100%);
-    /* The specular sweep, raking at the angle the page's own light comes from. */
-    --house-bronze-sweep: linear-gradient(100deg, transparent 26%, rgba(255, 250, 236, 0.42) 44%, rgba(255, 250, 236, 0.08) 55%, transparent 68%);
-/* THE DRAG MARKS OF A WIRE BRUSH, generated rather than drawn as striped gradients: a repeating gradient off-axis has to step a pixel row every so often. */
-    --house-brushed: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='320' height='64'%3E%3Cfilter id='b' color-interpolation-filters='sRGB'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.006 0.9' numOctaves='3' seed='7'/%3E%3CfeColorMatrix values='0 0 0 0 0.35 0 0 0 0 0.23 0 0 0 0 0.07 0.5 0 0 0 -0.16'/%3E%3C/filter%3E%3Crect width='320' height='64' filter='url(%23b)'/%3E%3C/svg%3E");
-/* The label is CUT INTO the plate: a warm near-black at ~11:1 on the metal. */
-    --house-bronze-ink: #21140a;
-    --house-bronze-ink-lip: 0 1px 0 rgba(255, 248, 232, 0.42);
-/* A lit hairline along the top edge and a shade along the foot is the whole of a bevel at this size. */
+    /* Gold labels keep dark ink through hover, focus and press. */
+    --house-bronze-fill: #ce9c50;
+    --house-bronze-body: linear-gradient(180deg, #dfb773 0%, #cf9e52 52%, #bd873c 100%);
+    --house-bronze-sweep: linear-gradient(115deg, transparent 4%, rgb(255 238 190 / 0.2) 24%, rgb(255 238 190 / 0.04) 44%, transparent 62%);
+    --house-bronze-grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='80'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.8' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3CfeComponentTransfer%3E%3CfeFuncA type='linear' slope='.055'/%3E%3C/feComponentTransfer%3E%3C/filter%3E%3Crect width='100%25' height='100%25' opacity='.6' filter='url(%23g)'/%3E%3C/svg%3E");
+    --house-bronze-ink: #241507;
+    --house-bronze-ink-lip: 0 1px 0 rgb(255 237 191 / 0.22);
+    /* Broad halos cannot replace the metal's edge lighting. */
     --house-bronze-bevel:
-        inset 0 1px 0 rgba(255, 252, 242, 0.8),
-        inset 0 -1px 0 rgba(88, 56, 18, 0.5),
-        inset 0 0 16px rgba(140, 94, 36, 0.25),
-        0 0 30px rgba(226, 168, 78, 0.3),
-        0 6px 18px -6px rgba(0, 0, 0, 0.75);
-    /* Under the pointer the halo opens and the drop lengthens; nothing changes colour. */
+        inset 0 1px 0 rgb(255 232 181 / 0.65),
+        inset 0 -2px 0 rgb(79 43 9 / 0.34),
+        inset 1px 0 0 rgb(255 226 165 / 0.2),
+        inset -1px 0 0 rgb(79 43 9 / 0.18);
     --house-bronze-bevel-lit:
-        inset 0 1px 0 rgba(255, 252, 242, 0.8),
-        inset 0 -1px 0 rgba(88, 56, 18, 0.5),
-        inset 0 0 16px rgba(140, 94, 36, 0.25),
-        0 0 38px rgba(226, 168, 78, 0.42),
-        0 8px 22px -6px rgba(0, 0, 0, 0.78);
-    /* The hover sheen, faded in over the plate from 0 to 1 so the lift arrives as a single movement. */
-    --house-bronze-sheen: linear-gradient(180deg, rgba(255, 250, 236, 0.42) 0%, rgba(255, 244, 220, 0.12) 55%, transparent 100%);
+        inset 0 1px 0 rgb(255 239 206 / 0.85),
+        inset 0 -2px 0 rgb(79 43 9 / 0.38),
+        inset 1px 0 0 rgb(255 226 165 / 0.3),
+        inset -1px 0 0 rgb(79 43 9 / 0.2);
+    --house-bronze-bevel-pressed: inset 0 2px 3px rgb(79 43 9 / 0.32), inset 0 -1px 0 rgb(255 232 181 / 0.4);
+    --house-bronze-sheen: linear-gradient(110deg, transparent 36%, rgb(255 244 209 / 0.28) 49%, rgb(255 244 209 / 0.08) 54%, transparent 66%);
 
     /* Cartouche frames use two concentric rules with notched corners. */
     --house-cartouche: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='40' viewBox='0 0 40 40'%3E%3Cpath d='M6.7 0.6H33.3M39.4 6.7V33.3M33.3 39.4H6.7M0.6 33.3V6.7' fill='none' stroke='rgba(201,160,92,0.5)' stroke-width='1.2'/%3E%3Cpath d='M33.3 0.6L39.4 6.7M39.4 33.3L33.3 39.4M6.7 39.4L0.6 33.3M0.6 6.7L6.7 0.6' fill='none' stroke='rgba(201,160,92,0.5)' stroke-width='2.34'/%3E%3Cpath d='M8.6 4.5H31.4M35.5 8.6V31.4M31.4 35.5H8.6M4.5 31.4V8.6' fill='none' stroke='rgba(201,160,92,0.24)' stroke-width='1.15'/%3E%3Cpath d='M31.4 4.5L35.5 8.6M35.5 31.4L31.4 35.5M8.6 35.5L4.5 31.4M4.5 8.6L8.6 4.5' fill='none' stroke='rgba(201,160,92,0.24)' stroke-width='2.24'/%3E%3C/svg%3E");
     --house-cartouche-lit: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='40' viewBox='0 0 40 40'%3E%3Cpath d='M6.7 0.6H33.3M39.4 6.7V33.3M33.3 39.4H6.7M0.6 33.3V6.7' fill='none' stroke='rgba(222,188,126,0.92)' stroke-width='1.2'/%3E%3Cpath d='M33.3 0.6L39.4 6.7M39.4 33.3L33.3 39.4M6.7 39.4L0.6 33.3M0.6 6.7L6.7 0.6' fill='none' stroke='rgba(222,188,126,0.92)' stroke-width='2.34'/%3E%3Cpath d='M8.6 4.5H31.4M35.5 8.6V31.4M31.4 35.5H8.6M4.5 31.4V8.6' fill='none' stroke='rgba(222,188,126,0.45)' stroke-width='1.15'/%3E%3Cpath d='M31.4 4.5L35.5 8.6M35.5 31.4L31.4 35.5M8.6 35.5L4.5 31.4M4.5 8.6L8.6 4.5' fill='none' stroke='rgba(222,188,126,0.45)' stroke-width='2.24'/%3E%3C/svg%3E");
-    --house-cartouche-bronze: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='40' viewBox='0 0 40 40'%3E%3Cpath d='M6.7 0.6H33.3M39.4 6.7V33.3M33.3 39.4H6.7M0.6 33.3V6.7' fill='none' stroke='rgba(255,239,203,0.92)' stroke-width='1.2'/%3E%3Cpath d='M33.3 0.6L39.4 6.7M39.4 33.3L33.3 39.4M6.7 39.4L0.6 33.3M0.6 6.7L6.7 0.6' fill='none' stroke='rgba(255,239,203,0.92)' stroke-width='2.34'/%3E%3Cpath d='M8.6 4.5H31.4M35.5 8.6V31.4M31.4 35.5H8.6M4.5 31.4V8.6' fill='none' stroke='rgba(120,80,32,0.45)' stroke-width='1.15'/%3E%3Cpath d='M31.4 4.5L35.5 8.6M35.5 31.4L31.4 35.5M8.6 35.5L4.5 31.4M4.5 8.6L8.6 4.5' fill='none' stroke='rgba(120,80,32,0.45)' stroke-width='2.24'/%3E%3C/svg%3E");
-    --house-cartouche-bronze-lit: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='40' viewBox='0 0 40 40'%3E%3Cpath d='M6.7 0.6H33.3M39.4 6.7V33.3M33.3 39.4H6.7M0.6 33.3V6.7' fill='none' stroke='rgba(255,251,240,1)' stroke-width='1.2'/%3E%3Cpath d='M33.3 0.6L39.4 6.7M39.4 33.3L33.3 39.4M6.7 39.4L0.6 33.3M0.6 6.7L6.7 0.6' fill='none' stroke='rgba(255,251,240,1)' stroke-width='2.34'/%3E%3Cpath d='M8.6 4.5H31.4M35.5 8.6V31.4M31.4 35.5H8.6M4.5 31.4V8.6' fill='none' stroke='rgba(140,96,40,0.5)' stroke-width='1.15'/%3E%3Cpath d='M31.4 4.5L35.5 8.6M35.5 31.4L31.4 35.5M8.6 35.5L4.5 31.4M4.5 8.6L8.6 4.5' fill='none' stroke='rgba(140,96,40,0.5)' stroke-width='2.24'/%3E%3C/svg%3E");
+    --house-cartouche-bronze: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='40' viewBox='0 0 40 40'%3E%3Cpath d='M7 .65H33L39.35 7V33L33 39.35H7L.65 33V7Z' fill='none' stroke='rgba(75,41,9,.65)' stroke-width='1.3'/%3E%3Cpath d='M1.5 13V7.5L7.5 1.5H32.5L38.5 7.5V13' fill='none' stroke='rgba(255,235,190,.55)' stroke-width='.8'/%3E%3Cpath d='M12 4.5H31L35.5 9V28M28 35.5H9L4.5 31V12' fill='none' stroke='rgba(78,43,10,.5)' stroke-width='.8'/%3E%3Cpath d='M12 5.4H30.6L34.6 9.4V28M28 36.4H8.6L3.6 31.4V12' fill='none' stroke='rgba(255,232,175,.55)' stroke-width='.65'/%3E%3Cpath d='M7.5 4.5L10.5 7.5L7.5 10.5L4.5 7.5ZM32.5 29.5L35.5 32.5L32.5 35.5L29.5 32.5Z' fill='rgba(89,49,10,.5)'/%3E%3Cpath d='M7.5 6L9 7.5L7.5 9L6 7.5ZM32.5 31L34 32.5L32.5 34L31 32.5Z' fill='rgba(255,232,175,.55)'/%3E%3C/svg%3E");
+    --house-cartouche-bronze-lit: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='40' viewBox='0 0 40 40'%3E%3Cpath d='M7 .65H33L39.35 7V33L33 39.35H7L.65 33V7Z' fill='none' stroke='rgba(75,41,9,.65)' stroke-width='1.3'/%3E%3Cpath d='M1.5 13V7.5L7.5 1.5H32.5L38.5 7.5V13' fill='none' stroke='rgba(255,235,190,.9)' stroke-width='.8'/%3E%3Cpath d='M12 4.5H31L35.5 9V28M28 35.5H9L4.5 31V12' fill='none' stroke='rgba(78,43,10,.65)' stroke-width='.8'/%3E%3Cpath d='M12 5.4H30.6L34.6 9.4V28M28 36.4H8.6L3.6 31.4V12' fill='none' stroke='rgba(255,232,175,.9)' stroke-width='.65'/%3E%3Cpath d='M7.5 4.5L10.5 7.5L7.5 10.5L4.5 7.5ZM32.5 29.5L35.5 32.5L32.5 35.5L29.5 32.5Z' fill='rgba(89,49,10,.65)'/%3E%3Cpath d='M7.5 6L9 7.5L7.5 9L6 7.5ZM32.5 31L34 32.5L32.5 34L31 32.5Z' fill='rgba(255,232,175,.9)'/%3E%3C/svg%3E");
 /* Unlit: what a plaque nobody may press wears. */
     --house-cartouche-dim: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='40' viewBox='0 0 40 40'%3E%3Cpath d='M6.7 0.6H33.3M39.4 6.7V33.3M33.3 39.4H6.7M0.6 33.3V6.7' fill='none' stroke='rgba(201,160,92,0.34)' stroke-width='1.2'/%3E%3Cpath d='M33.3 0.6L39.4 6.7M39.4 33.3L33.3 39.4M6.7 39.4L0.6 33.3M0.6 6.7L6.7 0.6' fill='none' stroke='rgba(201,160,92,0.34)' stroke-width='2.34'/%3E%3Cpath d='M8.6 4.5H31.4M35.5 8.6V31.4M31.4 35.5H8.6M4.5 31.4V8.6' fill='none' stroke='rgba(201,160,92,0.16)' stroke-width='1.15'/%3E%3Cpath d='M31.4 4.5L35.5 8.6M35.5 31.4L31.4 35.5M8.6 35.5L4.5 31.4M4.5 8.6L8.6 4.5' fill='none' stroke='rgba(201,160,92,0.16)' stroke-width='2.24'/%3E%3C/svg%3E");
 

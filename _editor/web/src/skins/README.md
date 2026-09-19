@@ -10,7 +10,7 @@ There is one:
   materials, same ornament kit as `_site/site/src/styles/global.css`: a near-colourless warm ash ground with
   calm non-uniform stone tooth, one gold rule round everything, and cream ink — in the app's own face. The rail
   wears a dense, warm, rough-dressed stone relief in shadow while overlays remain unlit; the two filled button
-  tiers are plaques with their labels cut into them, one carved stone and one cast bronze. A distant temple
+  tiers are carved stone and engraved gold, both with dark labels. A distant temple
   stands on the floor of the window where the app has put nothing in front of it.
 
 **Its structure is FIXED GOLD, and that is the decision worth reading.** `#c9a05c`, the site's own, whatever the
@@ -93,12 +93,11 @@ Sanctum has paid for that rule and seventeen others, and the notes are kept at t
   did not share, so a screen had nothing on it that looked pressable: and the only honest report of it was the
   user's, that the buttons had not meaningfully changed. The eye finds differences of *lightness* first.
   Both filled tiers invert now: the committing button is a **carved stone plaque** cut from the wall's own
-  rock, `ui-button-loud` is a **cast bronze** one a clear step brighter, and both have their label cut INTO
-  them. Two materials, one hierarchy, no colour spent and no second shape: which is the only kind of hierarchy
-  that survives being repeated on three hundred screens. The site reached the same conclusion about its own
-  hero (see the note over `.btn-primary` in `global.css`), but its plaque is *polished*, and a specular
-  highlight that is right for ninety seconds on a page is a lamp in the corner of the eye for nine hours in a
-  window: same three layers, a third of the sweep, no outer halo.
+  rock, `ui-button-loud` is an **engraved gold plaque**. Its richer gold face, cut corners, inset rails and
+  opposite diamond engravings come from the same house materials as the site and entry screens. Compact
+  controls scale the frame down. A reflection crosses the surface on hover, with no idle animation or broad
+  halo; pressing recesses the edge. Reduced motion removes the sweep. Keyboard focus stays inside the frame,
+  disabled controls lose the gold, and loading controls keep their geometry and material.
 - **The emboss is what reads as "1990s", not the colour.** The stone plaque's first cut had a forty-level
   light-to-dark ramp down the body, a near-white hairline on top, a hard dark one at the foot and an inner
   vignette: the exact set every OS toolkit of that era shipped, and the eye has thirty years of practice
