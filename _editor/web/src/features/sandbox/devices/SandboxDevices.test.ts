@@ -1432,13 +1432,12 @@ it(`draws a Windows PC and its distro as one card, with the container once and e
     const el = mount([distroSide(), windowsSide(), loneMachine]);
     await showBoard();
     const text = el.textContent ?? ``;
-    expect(text).toContain(`2 environments`);
     expect(text).toContain(`Microsoft Windows 11 Home`);
     expect(text).toContain(`Arch Linux on WSL`);
     // One card, not two: two machines on the board, and the PC's card names its container once.
     const cards = [...el.querySelectorAll(`a`)];
     expect(cards).toHaveLength(2);
-    const pc = cards.find((card) => card.textContent?.includes(`2 environments`));
+    const pc = cards.find((card) => card.textContent?.includes(`Microsoft Windows 11 Home`));
     expect(pc?.textContent?.match(/work/g)).toHaveLength(1);
     // A machine with no sub-items has no #below block, leaving no stray padding.
     const lone = cards.find((card) => card.textContent?.includes(`radarsu-omen`));

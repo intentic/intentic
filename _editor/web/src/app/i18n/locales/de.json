@@ -2089,7 +2089,6 @@
             "readingDevices": "Ihre Geräte werden gelesen…"
         },
         "deviceBoardCard": {
-            "environments": "{count} Umgebungen",
             "more": "… und {more} weitere",
             "notRunningHere": "läuft hier nicht",
             "oneYoureUsing": "das, das Sie gerade benutzen",

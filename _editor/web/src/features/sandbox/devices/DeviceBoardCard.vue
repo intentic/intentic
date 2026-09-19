@@ -52,10 +52,6 @@ const lone = computed(() => (manySided(machine) ? undefined : machine.environmen
                     <span v-if="lone && osLabel(lone)" class="shrink-0 truncate text-xs font-normal text-muted" :title="osTitle(lone)">
                         {{ osLabel(lone) }}
                     </span>
-                    <!-- A many-sided machine says how many sides it has; each is a line below. -->
-                    <span v-else-if="!lone" class="shrink-0 truncate text-xs font-normal text-muted">{{
-                        t(`sandbox.deviceBoardCard.environments`, { count: machine.environments.length })
-                    }}</span>
                 </span>
             </template>
 
