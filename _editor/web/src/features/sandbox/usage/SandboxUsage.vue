@@ -170,13 +170,15 @@ const hasSpend = computed(() => current.value.length > 0);
     <div class="@container flex flex-col gap-6">
         <Notice v-if="usageNotice" :of="usageNotice" />
 
-        <p class="flex items-start gap-2 text-xs leading-relaxed text-muted">
-            <Icon name="info-circle" class="mt-0.5 shrink-0" aria-hidden="true" />
-            <span>
-                {{ t(`sandbox.sandboxUsage.apiPricingBasis`) }}
-                <span class="font-medium text-content">{{ t(`sandbox.sandboxUsage.noIntenticCharge`) }}</span>
+        <div class="flex items-center gap-3 rounded-xl border border-line-subtle bg-card px-4 py-3">
+            <span class="grid size-10 shrink-0 place-items-center rounded-xl bg-primary-600/10 text-link" aria-hidden="true">
+                <Icon name="usage" class="text-xl" />
             </span>
-        </p>
+            <div class="min-w-0">
+                <p class="text-xs font-medium leading-relaxed text-content">{{ t(`sandbox.sandboxUsage.noIntenticCharge`) }}</p>
+                <p class="mt-0.5 text-xs leading-relaxed text-muted">{{ t(`sandbox.sandboxUsage.apiPricingBasis`) }}</p>
+            </div>
+        </div>
 
         <!-- One filter row scoping everything below; date first, the control every reader reaches for. -->
         <div class="flex flex-wrap items-center gap-x-4 gap-y-2">
