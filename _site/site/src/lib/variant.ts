@@ -1,21 +1,32 @@
-import { DEFAULT_PROFILE, PROFILE_PARAM, type Profile } from "@intentic/constants";
-import { APP_URL } from "@intentic/site-content/site";
+import { DEFAULT_PROFILE, PROFILE_COOKIE, PROFILE_PARAM, type Profile, sharedCookieDomain } from "@intentic/constants";
+import { APP_URL, DESK_PATH as DESK_PAGE, SITE_URL } from "@intentic/site-content/site";
 
-// The site ships one set of pages in two skins. The dark carved-stone design is the default; `desk` is the light one,
-// for readers who were sent a link and are not here to look at a terminal. Which one a visitor gets is decided in the
-// browser before first paint (BaseLayout's inline script), never at the edge — one HTML document per URL stays
-// cacheable, and only the `data-variant` attribute on <html> differs.
+// Two products share one site. The developer's pages are the dark carved-stone design; intentic desk, the product
+// for readers who do not write code, has its own page at /desk/ (DeskLanding.astro) and wears the light skin. What
+// the skin decides is the LOOK of the shared pages (docs, pricing, features) for a reader who came in through the
+// desk; the words of the two product pages are each page's own, by URL, never switched here. Which skin a visitor
+// gets is decided in the browser before first paint (BaseLayout's inline script), never at the edge — one HTML
+// document per URL stays cacheable, and only the `data-variant` attribute on <html> differs.
 //
 // A reader who has chosen neither gets the one their system asks for: `prefers-color-scheme: light` paints the desk
 // skin. That is a preference, not a choice — it is never written to the cookie, so it is re-read on every page and
 // follows the system when the system changes, and it hands the app nothing.
 //
-// The same script hands the choice on to the app, since the reader crosses to another origin the cookie below cannot
-// reach. A variant is which design THIS site wears; a profile is who is arriving, which the app answers in more than
-// paint (@intentic/constants profile.ts). They share their names, and this is the only place that maps one to the other.
+// The same script hands the choice on to the app twice over. Once on every link into it, since the reader crosses to
+// another origin; and once through the cookie itself, which is set on the domain both origins share so the app reads
+// it on any arrival the links could not have carried — the desktop app's sign-in page opening in this browser after
+// an installer taken from here. A variant is which design THIS site wears; a profile is who is arriving, which the app
+// answers in more than paint (@intentic/constants profile.ts). They share their names, and this is the only place
+// that maps one to the other.
 
-/** Written by the pre-paint script, read by it on every later page. */
-export const VARIANT_COOKIE = "variant";
+/** Written by the pre-paint script, read by it on every later page, and by the app's on the same domain. */
+export const VARIANT_COOKIE = PROFILE_COOKIE;
+
+// The domain the cookie is written on, so the app's origin reads it too. Decided in the browser rather than baked
+// in: the same built script runs on localhost and on a preview host, where a cookie naming intentic.dev is refused
+// outright and the skin would be lost between pages — there a host-only cookie already reaches the app (ports do not
+// scope cookies), so the attribute is left off.
+const COOKIE_DOMAIN = sharedCookieDomain(SITE_URL, APP_URL) ?? "";
 
 /** The light skin's name, and the value of `<html data-variant>` when it is on. Any other value means the default. */
 export const DESK_VARIANT = "desk" satisfies Profile;
@@ -23,8 +34,8 @@ export const DESK_VARIANT = "desk" satisfies Profile;
 /** Consulted only when nothing was chosen; a match paints the desk skin. */
 export const LIGHT_QUERY = "(prefers-color-scheme: light)";
 
-/** Landing anywhere under this path turns the light skin on and remembers it. */
-export const DESK_PATH = "/desk";
+/** Landing on the desk product's page, or anywhere under it, turns the light skin on and remembers it. */
+export const DESK_PATH = DESK_PAGE.replace(/\/$/u, "");
 
 /** Overrides both the path and the cookie, so a link can put a reader into either skin. */
 export const VARIANT_PARAM = "variant";
@@ -61,8 +72,10 @@ export const variantScript = (): string => `(function () {
         var jar = new RegExp("(?:^|; )" + ${q(VARIANT_COOKIE)} + "=([^;]*)").exec(document.cookie);
         chosen = jar === null ? "" : decodeURIComponent(jar[1]);
     } else {
+        var domain = ${q(COOKIE_DOMAIN)};
+        var scoped = domain !== "" && (location.hostname === domain || location.hostname.endsWith("." + domain)) ? ";domain=" + domain : "";
         document.cookie = ${q(`${VARIANT_COOKIE}=`)} + encodeURIComponent(chosen) +
-            ";path=/;max-age=${VARIANT_COOKIE_MAX_AGE};samesite=lax";
+            ";path=/;max-age=${VARIANT_COOKIE_MAX_AGE};samesite=lax" + scoped;
         url.searchParams.delete(${q(VARIANT_PARAM)});
         window.history.replaceState(null, "", url.pathname + url.search + url.hash);
     }
@@ -108,6 +121,14 @@ export const variantScript = (): string => `(function () {
             // string would take the rung with it.
             target.searchParams.set(${q(PROFILE_PARAM)}, profile);
             links[i].setAttribute("href", target.toString());
+        }
+        // A desk reader's way home is the desk's page: the mark on a shared page leads there rather than to the
+        // developer's. The desk page's own mark already does (Nav.astro), so this is only ever a change on shared ones.
+        if (profile === ${q(DESK_VARIANT)}) {
+            var marks = document.querySelectorAll("a[data-brand]");
+            for (var m = 0; m < marks.length; m++) {
+                marks[m].setAttribute("href", ${q(DESK_PAGE)});
+            }
         }
     };
     if (document.readyState === "loading") {

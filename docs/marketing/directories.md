@@ -12,19 +12,19 @@ a link and making the name resolvable.
 
 ## The URL we submit
 
-**`https://intentic.dev/`. Not `/desk`.** Decided 2026-09-16, and worth writing down because `/desk` is the
-link we hand out everywhere else and the instinct is to reuse it.
+**`https://intentic.dev/` for developer-tool listings; `https://intentic.dev/desk/` for anything aimed at people
+who do not write code.** Decided 2026-09-16 for `/`, revised 2026-09-19 when `/desk/` became a page of its own.
 
-`/desk` is the light skin's front door and is deliberately `noindex` (`_site/site/src/pages/desk.astro`).
-Verified live on 2026-09-16: `/desk` serves a 307 to `/desk/`, which returns `robots: noindex,follow` and a
-canonical pointing at itself. A page carrying that pair is the worst available target for an inbound link.
-It cannot rank, and because Google settles on `noindex,nofollow` for a page that stays `noindex`, the equity
-does not reach `/` either. Directory links to it would buy referral traffic and a brand mention, and nothing
-that compounds.
+Until then `/desk` was the light skin's front door: the home page word for word, `noindex`, the worst available
+target for an inbound link (it could not rank, and the equity did not reach `/` either). It is now the product
+page of **intentic desk** (`_site/site/src/pages/desk.astro`, `DeskLanding.astro`): its own title, description,
+copy, screenshots, FAQ and `SoftwareApplication`, indexed, in the sitemap, canonical to itself. The two pages
+share the shell and nothing search would read as a duplicate. Every directory in this file is a developer-tool
+directory, so the URL for all of them stays `/`; a general-software or productivity listing, if one is ever worth
+having, takes `/desk/` and the desk copy, not this file's.
 
-Leave `desk.astro` alone. If a listing audience ever justifies the light skin, the URL that costs nothing is
-`https://intentic.dev/?variant=desk`: the pre-paint script honours `?variant=`, and `/` is indexable with a
-canonical of `https://intentic.dev/`, so the link still lands on the page we want to rank. Verified live.
+`https://intentic.dev/?variant=desk` still works (the pre-paint script honours `?variant=`), but it now only
+changes the skin: the words on `/` are the developer's whichever way it is lit. Do not hand it out.
 
 ## Canonical listing copy
 

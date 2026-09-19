@@ -6,6 +6,9 @@ gains one preference, `audience`, that decides which of those mechanisms the scr
 behind a default, and what the home view is. This records the reasoning and the plan, and section 11 records what
 changed when it was built.
 
+How a maker *arrives* on these screens without being asked, from intentic.dev/desk through the installer and the
+desktop app's sign-in, is [desk-edition.md](desk-edition.md).
+
 ## 1. The gap
 
 The product is sold to developers (`docs/marketing/positioning.md`, "Who it's for"), and every user story in

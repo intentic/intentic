@@ -1,21 +1,31 @@
 ---
 /* The bar starts transparent and lifts after the page scrolls. */
 import { navEntries } from "@intentic/site-content/nav";
-import { APP_URL, discordUrl, githubUrl } from "@intentic/site-content/site";
+import { APP_URL, DESK_PATH, discordUrl, githubUrl } from "@intentic/site-content/site";
 import { GITHUB_MARK } from "../lib/marks";
 import { isCurrentRow, isCurrentSection } from "../lib/navCurrent";
 import { NAV_ICONS } from "../lib/navIcons";
 import DiscordIcon from "./DiscordIcon.astro";
 import Bullet from "./Bullet.astro";
+import DownloadCta from "./DownloadCta.astro";
 import Lotus from "./Lotus.astro";
 import MobileNav from "./MobileNav.astro";
 
+// Which product's page this bar sits on. The mark leads home to that product, and the bar's one action is that
+// product's door: the workspace for a developer, the app for the desk. A shared page (docs, pricing) is the
+// developer's by default; the pre-paint script (lib/variant.ts) points a desk reader's mark at /desk/ instead.
+interface Props {
+    product?: "default" | "desk";
+}
+
+const { product = "default" } = Astro.props;
+const home = product === "desk" ? DESK_PATH : "/";
 const currentPath = Astro.url.pathname;
 ---
 
 <header class="bar" id="site-bar">
     <div class="bar-inner">
-        <a href="/" class="brand lockup" aria-label="intentic">
+        <a href={home} class="brand lockup" aria-label="intentic" data-brand>
             <Lotus size="lg" class="brand-mark" />
             <span class="wordmark">intentic</span>
         </a>
@@ -125,7 +135,15 @@ const currentPath = Astro.url.pathname;
             <a href={discordUrl} target="_blank" rel="noopener" class="bar-icon" aria-label="Discord community" title="Discord community">
                 <DiscordIcon size={17} />
             </a>
-            <a href={APP_URL} class="btn btn-primary btn-sm bar-cta">Create your workspace</a>
+            {
+                product === "desk" ? (
+                    <DownloadCta primary class="btn-sm bar-cta" icon={false} />
+                ) : (
+                    <a href={APP_URL} class="btn btn-primary btn-sm bar-cta">
+                        Create your workspace
+                    </a>
+                )
+            }
 
             <button class="hamburger" id="mobile-nav-open" aria-label="Toggle navigation" aria-expanded="false">
                 <span></span><span></span><span></span>
@@ -134,7 +152,7 @@ const currentPath = Astro.url.pathname;
     </div>
 </header>
 
-<MobileNav />
+<MobileNav product={product} />
 
 <script>
     /* The navigation remains usable when this enhancement script is unavailable. */

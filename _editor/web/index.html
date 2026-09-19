@@ -46,6 +46,15 @@
                 var owns = Object.prototype.hasOwnProperty;
                 var url = new URL(window.location.href);
                 var asked = url.searchParams.get("profile");
+                var linked = asked !== null;
+                // A reader who came by no link at all — the address typed, or the desktop app's sign-in page opening
+                // in this browser after an installer taken from intentic.dev — is still one the site has met: its
+                // edition cookie is set on the domain both origins share. `desk` is that profile; any other value is
+                // the site's way out, which is the default one; no cookie is no opinion.
+                if (!linked) {
+                    var jar = /(?:^|; )variant=([^;]*)/.exec(document.cookie);
+                    if (jar !== null) asked = decodeURIComponent(jar[1]) === "desk" ? "desk" : "default";
+                }
                 if (asked !== null && owns.call(PROFILES, asked)) {
                     var next = PROFILES[asked];
                     var last = localStorage.getItem("ui-profile");
@@ -63,8 +72,10 @@
                     localStorage.setItem("ui-profile", asked);
                     // Consumed here so the router never sees it and a reload can't re-apply it over a later choice;
                     // any other query the app was given (?machine=) is left where it was.
-                    url.searchParams.delete("profile");
-                    window.history.replaceState(null, "", url.pathname + url.search + url.hash);
+                    if (linked) {
+                        url.searchParams.delete("profile");
+                        window.history.replaceState(null, "", url.pathname + url.search + url.hash);
+                    }
                 }
                 var accentVars = localStorage.getItem("ui-accent-vars");
                 if (accentVars) document.documentElement.setAttribute("style", accentVars);

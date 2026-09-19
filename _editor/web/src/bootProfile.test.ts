@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { PROFILE_KEYS, PROFILE_PARAM, PROFILE_STORAGE_KEY, PROFILES, type Profile, type ProfileLook } from "@intentic/constants";
+import { PROFILE_COOKIE, PROFILE_KEYS, PROFILE_PARAM, PROFILE_STORAGE_KEY, PROFILES, type Profile, type ProfileLook } from "@intentic/constants";
 import { describe, expect, it } from "vitest";
 
 // index.html's pre-paint script adopts an arriving profile before any module loads, so it cannot import the table it
@@ -44,6 +44,12 @@ describe(`the pre-paint profile script`, () => {
         expect(html).toContain(`localStorage.setItem("${PROFILE_STORAGE_KEY}", asked)`);
     });
 
+    // The site writes this cookie (_site/site/src/lib/variant.ts) on the domain both origins share; a renamed cookie
+    // on either side is a reader who took the installer from /desk and opened the app as a developer.
+    it(`reads the site's edition cookie by the name the site writes it under`, () => {
+        expect(html).toContain(`(?:^|; )${PROFILE_COOKIE}=([^;]*)`);
+    });
+
     // The tag cannot spell the default look any more: it is the reader's OS's answer, and markup served from a CDN
     // does not know it. So the tag must carry NEITHER attribute — both spell their off state by being absent, which
     // makes a bare tag the fallback the script only has to correct upward.
@@ -76,8 +82,14 @@ interface BootResult {
 /** What the reader's OS says. `silent` is a browser with no `matchMedia` at all, the far end of "will not say". */
 type Os = "light" | "dark" | "silent";
 
-const boot = (href: string, stored: Record<string, string> = {}, os: Os = `light`): BootResult => {
-    const store = { ...stored };
+/** What the browser holds for this origin: what the app stored, and what the site's cookie says, if anything. */
+interface Browser {
+    readonly stored?: Record<string, string>;
+    readonly cookie?: string;
+}
+
+const boot = (href: string, browser: Browser = {}, os: Os = `light`): BootResult => {
+    const store = { ...browser.stored };
     const attributes = tagAttributes();
     let url: string | undefined;
     const localStorage = {
@@ -92,6 +104,7 @@ const boot = (href: string, stored: Record<string, string> = {}, os: Os = `light
         },
         // The theme-color tag the script repoints; nothing here reads it back, so a miss is the whole stub.
         querySelector: (): null => null,
+        cookie: browser.cookie ?? ``,
     };
     const window = {
         location: { href },
@@ -141,7 +154,7 @@ describe(`arriving with a profile`, () => {
     // OS, not a look of its own, so the attributes here are the reader's system setting rather than the profile's.
     it(`hands an untouched browser back to the app's own look`, () => {
         const desk = boot(`https://app.intentic.dev/login?profile=desk`).stored;
-        const { stored, attributes } = boot(`https://app.intentic.dev/login?profile=default`, desk, `dark`);
+        const { stored, attributes } = boot(`https://app.intentic.dev/login?profile=default`, { stored: desk }, `dark`);
         expect(stored).toEqual({ [PROFILE_KEYS.scheme]: `system`, [PROFILE_KEYS.skin]: `system`, [PROFILE_STORAGE_KEY]: `default` });
         expect(attributes.get(`data-mode`)).toBe(`dark`);
         expect(attributes.get(`data-skin`)).toBe(`sanctum`);
@@ -150,10 +163,53 @@ describe(`arriving with a profile`, () => {
     // The rule that makes the link safe to click twice: what someone chose in Settings is theirs, not the link's.
     it(`leaves a look the reader chose for themselves, however they got here`, () => {
         const chosen = { ...boot(`https://app.intentic.dev/login?profile=desk`).stored, [PROFILE_KEYS.skin]: `sanctum`, [PROFILE_KEYS.scheme]: `dark` };
-        const { stored, attributes } = boot(`https://app.intentic.dev/login?profile=desk`, chosen);
+        const { stored, attributes } = boot(`https://app.intentic.dev/login?profile=desk`, { stored: chosen });
         expect(stored[PROFILE_KEYS.skin]).toBe(`sanctum`);
         expect(stored[PROFILE_KEYS.scheme]).toBe(`dark`);
         expect(attributes.get(`data-skin`)).toBe(`sanctum`);
+    });
+});
+
+// THE INSTALLER LEG. A reader on intentic.dev/desk who takes the desktop app never clicks a link into this origin; the
+// first page of it they meet is the sign-in the app opens in their browser, with no ?profile= on it. The site's cookie
+// is on the domain both origins share, and the script reads it as the link that was never followed.
+describe(`arriving with the site's cookie and no link`, () => {
+    const cookie = (value: string): string => `_ga=GA1.1.1; ${PROFILE_COOKIE}=${value}; other=1`;
+
+    it(`adopts the desk profile from the cookie, and leaves the URL alone since there is nothing to consume`, () => {
+        const { stored, attributes, url } = boot(`https://app.intentic.dev/desktop-auth?state=n&challenge=c`, { cookie: cookie(`desk`) });
+        expect(stored).toEqual({
+            [PROFILE_KEYS.scheme]: `light`,
+            [PROFILE_KEYS.skin]: `none`,
+            [PROFILE_KEYS.audience]: `maker`,
+            [PROFILE_STORAGE_KEY]: `desk`,
+        });
+        expect(attributes.has(`data-mode`)).toBe(false);
+        expect(url).toBeUndefined();
+    });
+
+    // The footer's way out writes any non-desk value; the site itself reads all of those as the default design.
+    it(`reads any other value as the site's way out, which is the default profile`, () => {
+        const desk = boot(`https://app.intentic.dev/login?profile=desk`).stored;
+        const { stored } = boot(`https://app.intentic.dev/login`, { stored: desk, cookie: cookie(`default`) });
+        expect(stored).toEqual({ [PROFILE_KEYS.scheme]: `system`, [PROFILE_KEYS.skin]: `system`, [PROFILE_STORAGE_KEY]: `default` });
+    });
+
+    it(`lets a link outrank the cookie, since the link is the newer opinion`, () => {
+        const { stored, url } = boot(`https://app.intentic.dev/login?profile=default`, { cookie: cookie(`desk`) });
+        expect(stored[PROFILE_STORAGE_KEY]).toBe(`default`);
+        expect(url).toBe(`/login`);
+    });
+
+    it(`is the same non-overriding adoption a link gets: a choice made in Settings stays`, () => {
+        const chosen = { ...boot(`https://app.intentic.dev/login?profile=desk`).stored, [PROFILE_KEYS.audience]: `developer` };
+        const { stored } = boot(`https://app.intentic.dev/login`, { stored: chosen, cookie: cookie(`desk`) });
+        expect(stored[PROFILE_KEYS.audience]).toBe(`developer`);
+        expect(stored[PROFILE_KEYS.scheme]).toBe(`light`);
+    });
+
+    it(`stores nothing for a browser the site never met`, () => {
+        expect(boot(`https://app.intentic.dev/login`, { cookie: `_ga=GA1.1.1` }).stored).toEqual({});
     });
 });
 
@@ -179,14 +235,14 @@ describe(`the light the first frame is painted in`, () => {
     });
 
     it(`obeys a pinned scheme over the system's`, () => {
-        expect(looks(boot(`https://app.intentic.dev/login`, { [PROFILE_KEYS.scheme]: `light` }, `dark`))).toEqual({ mode: undefined, skin: undefined });
-        expect(looks(boot(`https://app.intentic.dev/login`, { [PROFILE_KEYS.scheme]: `dark` }, `light`))).toEqual({ mode: `dark`, skin: `sanctum` });
+        expect(looks(boot(`https://app.intentic.dev/login`, { stored: { [PROFILE_KEYS.scheme]: `light` } }, `dark`))).toEqual({ mode: undefined, skin: undefined });
+        expect(looks(boot(`https://app.intentic.dev/login`, { stored: { [PROFILE_KEYS.scheme]: `dark` } }, `light`))).toEqual({ mode: `dark`, skin: `sanctum` });
     });
 
     // Sanctum is the app's DARK look and has no daylight dress, so a pinned skin and a pinned scheme are one choice
     // made twice; a pinned `none` is the way to have the dark scheme without the stone.
     it(`obeys a pinned skin over what the scheme would have asked for`, () => {
-        expect(looks(boot(`https://app.intentic.dev/login`, { [PROFILE_KEYS.skin]: `none` }, `dark`))).toEqual({ mode: `dark`, skin: undefined });
-        expect(looks(boot(`https://app.intentic.dev/login`, { [PROFILE_KEYS.skin]: `sanctum` }, `light`))).toEqual({ mode: undefined, skin: `sanctum` });
+        expect(looks(boot(`https://app.intentic.dev/login`, { stored: { [PROFILE_KEYS.skin]: `none` } }, `dark`))).toEqual({ mode: `dark`, skin: undefined });
+        expect(looks(boot(`https://app.intentic.dev/login`, { stored: { [PROFILE_KEYS.skin]: `sanctum` } }, `light`))).toEqual({ mode: undefined, skin: `sanctum` });
     });
 });

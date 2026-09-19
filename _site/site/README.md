@@ -65,6 +65,12 @@ The public website at intentic.dev: an Astro build, all copy imported rather tha
   parser for the "What's new" section `_tools/scripts/release/publish-github.sh` writes into each release body.
 - [src/lib/desktop-downloads.ts](src/lib/desktop-downloads.ts): the desktop builds, named once, so the download
   page and the landing page's download button can never point at different files.
+- [src/lib/variant.ts](src/lib/variant.ts): the site's two skins, dark and `desk`, decided in the browser before
+  first paint and carried into the app on every link and on a domain cookie. The skin is the LOOK of the shared
+  pages for a reader who came in through intentic desk; it never switches words. The two products each have a page
+  of their own: `/` ([src/components/Landing.astro](src/components/Landing.astro)) and `/desk/`
+  ([src/components/DeskLanding.astro](src/components/DeskLanding.astro)), sharing the shell and nothing search
+  would read twice. `docs/design/desk-edition.md` has the whole of it.
 - [src/components/DownloadCta.astro](src/components/DownloadCta.astro): the download button, which names the
   reader's own platform. It renders the general case and narrows it in the browser; see the file for why that
   order matters.

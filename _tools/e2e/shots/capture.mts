@@ -3,13 +3,18 @@ import { closeSync, createReadStream, existsSync, mkdirSync, openSync, readSync,
 import { createServer, type Server } from "node:http";
 import { extname, join, normalize, resolve } from "node:path";
 import { repoRoot } from "@intentic/constants/node";
-import { chromium, type Browser, type Page } from "@playwright/test";
+import { chromium, type Browser, type BrowserContext, type Page } from "@playwright/test";
 
 const DEMO_DIR = join(repoRoot(import.meta.url), "_site/site/public/demo");
 
 // The site ships two skins, so it needs two sets of these. `--light` drives the app in its light scheme and writes
 // the twin set; the site pairs them by filename (see _site/site/src/lib/shots.ts).
-const LIGHT = process.argv.includes("--light");
+//
+// `--desk` is a third run over the light set: the desk recording (_site/demo/src/fixture/desk.ts, documents rather
+// than code, read as a maker) shot for the desk edition of the landing page. Those shots have no dark twin — the desk
+// edition is only ever light — so they frame themselves, and are named `desk-*` in the same directory.
+const DESK = process.argv.includes("--desk");
+const LIGHT = process.argv.includes("--light") || DESK;
 const OUT_DIR = join(repoRoot(import.meta.url), `_site/site/src/assets/${LIGHT ? "product-light" : "product"}`);
 const PORT = 47_147;
 const ORIGIN = `http://localhost:${PORT}`;
@@ -44,6 +49,10 @@ const COMPOSER = 'textarea[name="draft"]';
 /* Match the platform-independent start of the chat popout label. */
 const POPOUT_BUTTON = 'button[aria-label^="Move chat into new window"]';
 
+// The desk recording's two special conversations (_site/demo/src/fixture/desk.ts): the scripted run, and the finished draft.
+const DESK_FEATURED = "cnv_desk_newsletter";
+const DESK_REVIEW = "cnv_desk_september";
+
 /* Keep popped-out chat readable within the landing frame. */
 const POPOUT_WINDOW = { width: 800, height: 660 } as const;
 
@@ -69,8 +78,8 @@ interface Shot {
     clip?: "area" | "chat";
     /* Stop trimming at this content-specific editorial floor. */
     stopAt?: number;
-    /* Select the demo fixture density used for this shot. */
-    mode?: "minimal" | "default" | "full";
+    /* Select the demo fixture density used for this shot; `desk` is the documents recording rather than a density. */
+    mode?: "minimal" | "default" | "full" | "desk";
     /**
      * Which extensions are switched on, overriding the density's own list.
      *
@@ -352,6 +361,85 @@ const SHOTS: Shot[] = [
     },
 ];
 
+// THE DESK EDITION'S SHOTS: the same surfaces the landing page shows a developer, on the desk recording. Every one
+// runs in `desk` mode, whose own two extensions (the Projects home and the viewers) stay on: a maker's rail is those and
+// the core, and the shot should be of what they see.
+const DESK_SHOTS: Shot[] = [
+    // The board, as the hero's first frame: one assistant working on the newsletter, one waiting on a question about a
+    // letter, one finished draft to read, one sorting job already accepted.
+    {
+        name: "desk-hero-agents",
+        path: "/agents",
+        openFirst: `/agents/${DESK_FEATURED}`,
+        waitFor: "text=ATTENTION",
+        settleMs: 1400,
+        clip: "area",
+        viewport: HERO_WINDOW,
+        fullHeight: true,
+        mode: "desk",
+    },
+    // The desk's files with the newsletter folder open: the drafts, the template, the list and the pictures. Exact
+    // matches, since the open chat's title carries the word "newsletter" too and a substring match lands on it first.
+    {
+        name: "desk-hero-files",
+        path: "/workspace",
+        openFirst: `/agents/${DESK_FEATURED}`,
+        waitFor: 'text="newsletter"',
+        click: ['text="newsletter"'],
+        settleMs: 1400,
+        clip: "area",
+        viewport: HERO_WINDOW,
+        fullHeight: true,
+        mode: "desk",
+    },
+    // The docked chat on the plan card, cropped to the chat: the hero's left wing.
+    {
+        name: "desk-hero-plan",
+        path: "/workspace",
+        openFirst: `/agents/${DESK_FEATURED}`,
+        waitFor: "text=No, keep planning",
+        settleMs: 3200,
+        clip: "chat",
+        dpr: DENSE_DPR,
+        stopAt: 640,
+        mode: "desk",
+    },
+    // The chat in its own window, on the plan the assistant wrote for the newsletter, Approve under it. The plan card
+    // lands three seconds into the run and the popped-out window starts its own copy of it, so it waits longer than
+    // the code demo's twin.
+    {
+        name: "desk-hero-chat",
+        path: `/agents/${DESK_FEATURED}`,
+        openFirst: `/agents/${DESK_FEATURED}`,
+        waitFor: POPOUT_BUTTON,
+        settleMs: 3200,
+        popout: { ...POPOUT_WINDOW, settleMs: 4_500 },
+        dpr: DENSE_DPR,
+        mode: "desk",
+    },
+    {
+        name: "desk-stage-run",
+        path: "/agents",
+        openFirst: `/agents/${DESK_FEATURED}`,
+        waitFor: "text=ATTENTION",
+        settleMs: 3200,
+        viewport: SHOWCASE,
+        dpr: SHOWCASE_DPR,
+        mode: "desk",
+    },
+    // A finished draft, read as what changed in the document: the September newsletter moved into the template.
+    {
+        name: "desk-stage-review",
+        path: `/agents/${DESK_REVIEW}`,
+        openFirst: `/agents/${DESK_FEATURED}`,
+        waitFor: "text=september.md",
+        settleMs: 3200,
+        viewport: SHOWCASE,
+        dpr: SHOWCASE_DPR,
+        mode: "desk",
+    },
+];
+
 const TYPES: Record<string, string> = {
     ".html": "text/html; charset=utf-8",
     ".js": "text/javascript; charset=utf-8",
@@ -552,8 +640,7 @@ const contentFrame = async (page: Page, band: { left: number; floorY: number; fl
             // 1px of slack either side: a cut that grazes a box's own edge is landing in the gap, not through it.
             // Only boxes short enough to sit wholly inside the frame get a say; a panel or a lane is scenery the cut
             // is necessarily within, and letting those vote means no line is ever clear.
-            const crossed = (y: number): boolean =>
-                boxes.some((box) => box.height < height * scenery && box.top < y - 1 && box.bottom > y + 1);
+            const crossed = (y: number): boolean => boxes.some((box) => box.height < height * scenery && box.top < y - 1 && box.bottom > y + 1);
             // Walks up from the asked-for cut to the first line that crosses nothing, giving up — and keeping the
             // asked-for cut — once it has travelled further than tidying a frame could justify.
             const walkBack = (asked: number): number => {
@@ -592,7 +679,16 @@ const contentFrame = async (page: Page, band: { left: number; floorY: number; fl
                 right: Math.min(floorX, inked((box) => box.right) + pad),
             };
         },
-        { left: band.left, floorY: band.floorY, floorX: band.floorX, pad: TRIM_PAD, limit: SNAP_LIMIT, scenery: SCENERY, widow: WIDOW_BAND, label: LABEL_HEIGHT },
+        {
+            left: band.left,
+            floorY: band.floorY,
+            floorX: band.floorX,
+            pad: TRIM_PAD,
+            limit: SNAP_LIMIT,
+            scenery: SCENERY,
+            widow: WIDOW_BAND,
+            label: LABEL_HEIGHT,
+        },
     );
 
 /**
@@ -717,14 +813,25 @@ const scrollPane = async (page: Page, shot: Shot, by: number): Promise<void> => 
     );
 };
 
-const shoot = async (browser: Browser, shot: Shot): Promise<boolean> => {
-    const context = await browser.newContext({
-        viewport: shot.viewport ?? (shot.mobile === true ? MOBILE : DESKTOP),
-        deviceScaleFactor: shot.dpr ?? DEFAULT_DPR,
-        isMobile: shot.mobile ?? false,
-        hasTouch: shot.mobile ?? false,
-        colorScheme: LIGHT ? "light" : "dark",
-    });
+/** The window a shot is taken in: its size, density and the scheme the browser reports. */
+const contextOptions = (shot: Shot): Parameters<Browser["newContext"]>[0] => ({
+    viewport: shot.viewport ?? (shot.mobile === true ? MOBILE : DESKTOP),
+    deviceScaleFactor: shot.dpr ?? DEFAULT_DPR,
+    isMobile: shot.mobile ?? false,
+    hasTouch: shot.mobile ?? false,
+    colorScheme: LIGHT ? "light" : "dark",
+});
+
+// A bare rail unless the shot asks otherwise. `full` is only ever chosen because the extensions ARE the subject — the
+// capability catalogue is built from them — and `desk` because its two are the maker's home and viewers; those keep the
+// mode's own list. Everything else is a shot of some other surface, and the extension icons beside it are chrome the
+// reader has to look past.
+const pinnedExtensions = (shot: Shot): readonly string[] | undefined =>
+    shot.extensions ?? (shot.mode === "full" || shot.mode === "desk" ? undefined : []);
+
+/** A browser context with everything the app reads before it boots already in place: look, audience, mode, rail. */
+const openContext = async (browser: Browser, shot: Shot): Promise<BrowserContext> => {
+    const context = await browser.newContext(contextOptions(shot));
     // TWO preferences decide how the app looks, and the light set needs both.
     //
     // `ui-skin` is the bigger of the two. Sanctum is the site's own carved design worn by the app, and it is DARK BY
@@ -744,6 +851,10 @@ const shoot = async (browser: Browser, shot: Shot): Promise<boolean> => {
         },
         LIGHT ? { scheme: `light`, skin: `none` } : { scheme: `dark`, skin: `sanctum` },
     );
+    // The desk is read as a maker: the third key the desk profile seeds, and the one that changes the words on screen.
+    if (shot.mode === "desk") {
+        await context.addInitScript(() => window.localStorage.setItem(`ui-audience`, `maker`));
+    }
     // Before first paint, and in every window the context opens. `raw` shots get it too: the visitor page carries
     // neither selector, so the rule is inert there rather than conditional here.
     await context.addInitScript((css: string) => {
@@ -760,39 +871,46 @@ const shoot = async (browser: Browser, shot: Shot): Promise<boolean> => {
     if (shot.mode !== undefined) {
         await context.addInitScript((mode) => window.sessionStorage.setItem(`intentic.demo.mode`, mode), shot.mode);
     }
-    // A bare rail unless the shot asks otherwise. `full` is only ever chosen because the extensions ARE the subject —
-    // the capability catalogue is built from them — so those keep the density's own list; everything else is a shot of
-    // some other surface, and the extension icons beside it are chrome the reader has to look past.
-    const pinned = shot.extensions ?? (shot.mode === "full" ? undefined : []);
+    const pinned = pinnedExtensions(shot);
     if (pinned !== undefined) {
         await context.addInitScript((ids) => window.sessionStorage.setItem(`intentic.demo.extensions`, JSON.stringify(ids)), pinned);
     }
+    return context;
+};
+
+/** Bring the page to the surface the shot is of: the route, then everything the shot asked to have pressed or typed. */
+const surface = async (page: Page, shot: Shot): Promise<void> => {
+    if (shot.openFirst !== undefined) {
+        await page.goto(demoUrl(shot.openFirst), { waitUntil: "domcontentloaded" });
+        await page.waitForTimeout(2_400);
+    }
+    await page.goto(shot.raw === true ? `${ORIGIN}${shot.path}` : demoUrl(shot.path), { waitUntil: "domcontentloaded" });
+    if (shot.waitFor !== undefined) {
+        await page.waitForSelector(shot.waitFor, { timeout: 20_000 }).catch(() => console.warn(`  [no waitFor ${shot.name}] ${shot.waitFor}`));
+    }
+    for (const target of shot.click ?? []) {
+        await page.click(target, { timeout: 20_000 });
+        await page.waitForTimeout(600);
+    }
+    if (shot.type !== undefined) {
+        await page.fill(shot.type.target, shot.type.text);
+        await page.press(shot.type.target, "Enter");
+        // The reply streams, so the wait is for it to finish arriving rather than for a layout to settle.
+        await page.waitForTimeout(shot.type.settleMs ?? 2_000);
+    }
+    await page.waitForTimeout(shot.settleMs ?? 800);
+    if (shot.scrollTo !== undefined) {
+        await scrollPane(page, shot, shot.scrollTo);
+        await page.waitForTimeout(600);
+    }
+};
+
+const shoot = async (browser: Browser, shot: Shot): Promise<boolean> => {
+    const context = await openContext(browser, shot);
     const page = await context.newPage();
     page.on("pageerror", (error) => console.warn(`  [pageerror ${shot.name}] ${error.message.split("\n")[0]}`));
     try {
-        if (shot.openFirst !== undefined) {
-            await page.goto(demoUrl(shot.openFirst), { waitUntil: "domcontentloaded" });
-            await page.waitForTimeout(2_400);
-        }
-        await page.goto(shot.raw === true ? `${ORIGIN}${shot.path}` : demoUrl(shot.path), { waitUntil: "domcontentloaded" });
-        if (shot.waitFor !== undefined) {
-            await page.waitForSelector(shot.waitFor, { timeout: 20_000 }).catch(() => console.warn(`  [no waitFor ${shot.name}] ${shot.waitFor}`));
-        }
-        for (const target of shot.click ?? []) {
-            await page.click(target, { timeout: 20_000 });
-            await page.waitForTimeout(600);
-        }
-        if (shot.type !== undefined) {
-            await page.fill(shot.type.target, shot.type.text);
-            await page.press(shot.type.target, "Enter");
-            // The reply streams, so the wait is for it to finish arriving rather than for a layout to settle.
-            await page.waitForTimeout(shot.type.settleMs ?? 2_000);
-        }
-        await page.waitForTimeout(shot.settleMs ?? 800);
-        if (shot.scrollTo !== undefined) {
-            await scrollPane(page, shot, shot.scrollTo);
-            await page.waitForTimeout(600);
-        }
+        await surface(page, shot);
         if (shot.popout !== undefined) {
             await shootPopout(page, shot, shot.popout);
             console.log(`  ✓ ${shot.name} → ${shot.path} (popped out)`);
@@ -812,9 +930,10 @@ const shoot = async (browser: Browser, shot: Shot): Promise<boolean> => {
 
 const run = async (): Promise<void> => {
     const only = process.argv.slice(2).filter((argument) => !argument.startsWith(`--`));
-    const wanted = only.length === 0 ? SHOTS : SHOTS.filter((shot) => only.includes(shot.name));
+    const catalogue = DESK ? DESK_SHOTS : SHOTS;
+    const wanted = only.length === 0 ? catalogue : catalogue.filter((shot) => only.includes(shot.name));
     if (wanted.length === 0) {
-        throw new Error(`No shot matches ${only.join(", ")} — known: ${SHOTS.map((shot) => shot.name).join(", ")}`);
+        throw new Error(`No shot matches ${only.join(", ")} — known: ${catalogue.map((shot) => shot.name).join(", ")}`);
     }
     // Only the app shots need the demo build; a `raw` one brings its own world, so re-shooting just the
     // Front Desk shouldn't cost a full SPA build.
@@ -837,7 +956,7 @@ const run = async (): Promise<void> => {
         await browser.close();
         server.close();
     }
-    console.log(`${wanted.length - failed}/${wanted.length} ${LIGHT ? `light` : `dark`} shots written to ${OUT_DIR}`);
+    console.log(`${wanted.length - failed}/${wanted.length} ${DESK ? `desk` : LIGHT ? `light` : `dark`} shots written to ${OUT_DIR}`);
 };
 
 await run();

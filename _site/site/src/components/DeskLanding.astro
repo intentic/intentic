@@ -1,15 +1,16 @@
 ---
-/* Landing page composition for the Intentic site. */
+/* INTENTIC DESK, the product page at /desk/: the same assistant for the reader who does not write code. Its own
+   words and pictures from the first line to the last question (site-content landing.ts `deskLanding`); the shell,
+   the frames, the marks, the cost band's account list and the trust band are the parts it shares with the developer
+   page (Landing.astro). Never a paragraph of that page's copy, so search never meets the same page twice. */
 import { CREATOR_NAME, creatorBio, creatorRole } from "@intentic/site-content/about";
-import { faqGroups } from "@intentic/site-content/faq";
-import { landingContent } from "@intentic/site-content/landing";
-import { templeScene } from "@intentic/site-content/temple";
-import { APP_URL, DEMO_PATH, githubUrl, ORG_NAME } from "@intentic/site-content/site";
-import { buildSoftwareAppSchema } from "@intentic/site-content/structured-data";
+import { deskLanding, landingContent } from "@intentic/site-content/landing";
+import { APP_URL, githubUrl } from "@intentic/site-content/site";
+import { buildDeskAppSchema } from "@intentic/site-content/structured-data";
 // Provider marks match the session icons used by the app.
 import { PROVIDER_BRAND_PATHS, providerFillRule } from "@intentic/constants";
 import BaseLayout from "../layouts/BaseLayout.astro";
-import ProductShot from "./ProductShot.astro";
+import DeskShot from "./DeskShot.astro";
 import AutomateFigure from "./figures/AutomateFigure.astro";
 import Bullet from "./Bullet.astro";
 import Corners from "./Corners.astro";
@@ -19,21 +20,15 @@ import Footer from "./Footer.astro";
 import Lotus from "./Lotus.astro";
 import Nav from "./Nav.astro";
 import Point from "./Point.astro";
-import TempleFigure from "./figures/TempleFigure.astro";
 import TrustCards from "./TrustCards.astro";
 import Window from "./Window.astro";
 import "../styles/home.css";
 
-/* THE DEVELOPER PAGE. intentic desk, the other product, is DeskLanding.astro at /desk/: its own words and pictures
-   over the same shell, never a second edition of this document. */
-interface Props {
-    noindex?: boolean;
-}
+const content = deskLanding;
+// The plans are the same plans: one list, the developer page's, drawn under this page's own heading.
+const accounts = landingContent.economics.accounts;
 
-const content = landingContent;
-
-// FAQPage data stays flat; topic bands belong only to the page layout.
-const faq = faqGroups.flatMap((group) => group.items).map((item) => ({ question: item.question, answer: item.answer.join(" ") }));
+const faq = content.faq.items.map((item) => ({ question: item.question, answer: item.answer.join(" ") }));
 
 /* Headline text is split into sentence beats. */
 const beats = content.hero.headlineLines
@@ -41,8 +36,6 @@ const beats = content.hero.headlineLines
     .map((beat) => beat.replace(/\.\s*$/u, ""))
     .filter((beat) => beat.length > 0);
 
-/* Side frames hold still images. */
-const chatStillName = content.hero.screens.chat[0]!.name;
 /* Hero frames share a viewport axis, so their sizes use `vw`. */
 const appSizes = "(min-width: 64rem) 70vw, (min-width: 48rem) 78vw, 205vw";
 const chatSizes = "(min-width: 64rem) 47vw, (min-width: 48rem) 56vw, 60vw";
@@ -50,26 +43,13 @@ const planSizes = "(min-width: 64rem) 29vw, (min-width: 48rem) 35vw, 40vw";
 
 /* Stage screenshots size from the shell and viewport bleed. */
 const STAGE_SIZES = "(min-width: 102rem) 1440px, (min-width: 84rem) calc(50vw + 624px), (min-width: 48rem) calc(100vw - 3rem), 275vw";
-
-/* Getting-started steps are grouped by execution location. */
-const browserSteps = content.connect.steps.slice(0, -1);
-const machineStep = content.connect.steps.at(-1)!;
 ---
 
-<BaseLayout
-    title={content.meta.title}
-    description={content.meta.description}
-    faq={faq}
-    extraJsonLd={[buildSoftwareAppSchema()]}
-    backdrop={false}
-    noindex={Astro.props.noindex}
->
+<BaseLayout faq={faq} extraJsonLd={[buildDeskAppSchema()]} backdrop={false}>
     <div class="home flex flex-1 flex-col">
-        {/* The home bar overlays the plate; other pages use PageBackdrop. */}
-        <Nav />
+        <Nav product="desk" />
 
         <main class="flex-1">
-            <!-- The first screen remains symmetric with its plate. -->
             <section class="hero" id="hero">
                 <div class="plate" aria-hidden="true">
                     <div class="plate-img"></div>
@@ -78,10 +58,9 @@ const machineStep = content.connect.steps.at(-1)!;
 
                 <div class="hero-grid">
                     <div class="hero-copy">
-                        {/* The greeting is flanked because the hero axis is centered. */}
                         <p class="hero-eyebrow">
                             <Bullet mark="lozenge" />
-                            <span>Welcome to {ORG_NAME}</span>
+                            <span>{content.hero.eyebrow}</span>
                             <Bullet mark="lozenge" />
                         </p>
 
@@ -102,34 +81,32 @@ const machineStep = content.connect.steps.at(-1)!;
 
                         <p class="hero-sub">{content.hero.subhead}</p>
 
-                        {/* Hero shows two start actions; the bar hides its duplicate while they are visible. */}
-                        <div class="hero-actions">
-                            <a class="btn btn-primary" href={APP_URL} data-hero-cta>Create your workspace</a>
-                            <DownloadCta />
+                        {/* The app leads: for this reader the download is the door. The bar hides its duplicate while this row is visible. */}
+                        <div class="hero-actions" data-hero-cta>
+                            <DownloadCta primary label={content.hero.actions.download} />
+                            <a class="btn btn-secondary" href={APP_URL}>{content.hero.actions.browser}</a>
                         </div>
 
-                        {/* The other product, for the reader who is in the wrong place: /desk/ is its own page. */}
+                        {/* The other product, for the reader who is in the wrong place. */}
                         <p class="hero-cross">
                             {content.crossLink.lead}{" "}
                             <a href={content.crossLink.href} class="link">{content.crossLink.label} →</a>
                         </p>
                     </div>
 
-<!-- Product frames share one visual axis. -->
                     <figure class="hero-visual">
                         <div class="hero-stack">
                             <Window class="window-plan" aria-hidden="true">
                                 <div class="window-crop window-crop-plan">
-                                    <ProductShot name="chat-plan" alt="" sizes={planSizes} class="screen screen-plan" />
+                                    <DeskShot name={content.hero.screens.plan.name} alt="" sizes={planSizes} class="screen screen-plan" />
                                 </div>
                             </Window>
 
-                            {/* The hero ledge stays empty because its image is the argument. */}
                             <Window class="window-app" finial>
                                 <div class="window-crop window-crop-app">
                                     {
                                         content.hero.screens.app.map((screen, index) => (
-                                            <ProductShot
+                                            <DeskShot
                                                 name={screen.name}
                                                 alt={screen.alt}
                                                 sizes={appSizes}
@@ -142,18 +119,18 @@ const machineStep = content.connect.steps.at(-1)!;
                                     }
                                 </div>
 
-                                {/* The demo control stays available to pointer, keyboard, and touch users. */}
-                                <a class="play" href={DEMO_PATH}>
+                                {/* The press opens the desk recording: the same app on documents, not the code one. */}
+                                <a class="play" href={content.hero.demoHref}>
                                     <span class="btn btn-sm">
                                         <svg viewBox="0 0 24 24" class="btn-icon" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"></path></svg>
-                                        <span>{content.hero.demo.playLabel}</span>
+                                        <span>{landingContent.hero.demo.playLabel}</span>
                                     </span>
                                 </a>
                             </Window>
 
                             <Window class="window-chat" aria-hidden="true">
                                 <div class="window-crop window-crop-chat">
-                                    <ProductShot name={chatStillName} alt="" sizes={chatSizes} class="screen screen-chat" />
+                                    <DeskShot name={content.hero.screens.chat.name} alt="" sizes={chatSizes} class="screen screen-chat" />
                                 </div>
                             </Window>
                         </div>
@@ -161,73 +138,50 @@ const machineStep = content.connect.steps.at(-1)!;
                 </div>
             </section>
 
-            <!-- The build section follows the hero. -->
-            <section class="band" id="build">
-                <div class="wall" aria-hidden="true"></div>
-                <div class="shell build-open fade-in">
-                    <div class="eyebrow">{templeScene.eyebrow}</div>
-                    <h2 class="h2 display">{templeScene.heading}</h2>
-                    <p class="lede">{templeScene.sub}</p>
-                </div>
-
-                {/* Build stage width matches the screenshots below it. */}
-                <div class="stage build-stage fade-in">
-                    <div class="card build-plate">
-                        <Corners />
-                        <TempleFigure />
-                    </div>
-                </div>
-            </section>
-
-            <!-- Rows render as one screenful per showcase stage. -->
+            <!-- The tour: one screenful per row, the same five feature pages the developer page links, in this reader's words. -->
             <section class="band" id="verbs">
                 <div class="wall" aria-hidden="true"></div>
 
                 <div class="shell verbs-open fade-in">
-                    <div class="eyebrow">{content.verbs.eyebrow}</div>
-                    {content.verbs.heading !== undefined && <h2 class="h2 display">{content.verbs.heading}</h2>}
+                    <div class="eyebrow">{content.tour.eyebrow}</div>
                 </div>
 
                 {
-                    content.verbs.items.map((item) => {
-                        return (
-                            <div class="stage fade-in">
-                                <div class="stage-head">
-                                    <h3 class="stage-verb">
-                                        <Bullet size="md" />
-                                        {item.label}
-                                    </h3>
-                                    <p class="stage-line">{item.line}</p>
-                                    <a href={item.href} class="link see">See it →</a>
-                                </div>
-
-                                {item.shot !== undefined && (
-/* Each showcase frame gets its own finial. */
-                                    <Window class="stage-frame" finial label={item.shot.label}>
-                                        <div class="stage-crop">
-                                            <ProductShot name={item.shot.name} alt={item.shot.alt} sizes={STAGE_SIZES} class="stage-shot" />
-                                        </div>
-                                    </Window>
-                                )}
-
-                                {item.figure === "automate" && (
-/* Automate uses its machine figure instead of a screenshot. */
-                                    <div class="card stage-machine">
-                                        <Corners />
-                                        <AutomateFigure />
-                                    </div>
-                                )}
+                    content.tour.items.map((item) => (
+                        <div class="stage fade-in">
+                            <div class="stage-head">
+                                <h3 class="stage-verb">
+                                    <Bullet size="md" />
+                                    {item.label}
+                                </h3>
+                                <p class="stage-line">{item.line}</p>
+                                <a href={item.href} class="link see">See it →</a>
                             </div>
-                        );
-                    })
+
+                            {item.shot !== undefined && (
+                                <Window class="stage-frame" finial label={item.shot.label}>
+                                    <div class="stage-crop">
+                                        <DeskShot name={item.shot.name} alt={item.shot.alt} sizes={STAGE_SIZES} class="stage-shot" />
+                                    </div>
+                                </Window>
+                            )}
+
+                            {item.figure === "automate" && (
+                                <div class="card stage-machine">
+                                    <Corners />
+                                    <AutomateFigure />
+                                </div>
+                            )}
+                        </div>
+                    ))
                 }
 
                 <div class="shell verbs-close">
-                    <a href="/features/" class="link band-cta">{content.verbs.cta} →</a>
+                    <a href="/features/" class="link band-cta">{content.tour.cta} →</a>
                 </div>
             </section>
 
-            <!-- Compare the two working environments side by side. -->
+            <!-- What you get to look at, against a chat box. -->
             <section class="band" id="workspace">
                 <div class="wall" aria-hidden="true"></div>
                 <div class="shell fade-in">
@@ -243,9 +197,7 @@ const machineStep = content.connect.steps.at(-1)!;
                                 <span>{content.workspace.comparison.ours.note}</span>
                             </div>
                             <ul>
-                                {
-                                    content.workspace.comparison.ours.items.map((item) => <Point>{item}</Point>)
-                                }
+                                {content.workspace.comparison.ours.items.map((item) => <Point>{item}</Point>)}
                             </ul>
                         </div>
 
@@ -269,12 +221,12 @@ const machineStep = content.connect.steps.at(-1)!;
 
                     <div class="compare-foot">
                         <p>{content.workspace.comparison.footnote}</p>
-                        <a href="/features/review/" class="link">How reviewing agent work works →</a>
+                        <a href={content.workspace.cta.href} class="link">{content.workspace.cta.label} →</a>
                     </div>
                 </div>
             </section>
 
-            <!-- Explain the cost model. -->
+            <!-- The cost model: this page's words over the shared account list. -->
             <section class="band" id="economics">
                 <div class="wall" aria-hidden="true"></div>
                 <div class="shell fade-in">
@@ -285,10 +237,10 @@ const machineStep = content.connect.steps.at(-1)!;
                     <div class="econ">
                         <div class="card accounts">
                             <Corners set="diag" />
-                            <div class="accounts-head"><span class="eyebrow">Your agent accounts</span></div>
+                            <div class="accounts-head"><span class="eyebrow">Your AI accounts</span></div>
                             <ul>
                                 {
-                                    content.economics.accounts.map((account) => (
+                                    accounts.map((account) => (
                                         <li>
                                             <Bullet>
                                                 <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true">
@@ -306,37 +258,33 @@ const machineStep = content.connect.steps.at(-1)!;
 
                         <div class="card flat">
                             <Corners set="diag" />
-                            <div class="eyebrow">Flat, not metered</div>
+                            <div class="eyebrow">{content.economics.flatLabel}</div>
                             <ul>
-                                {
-                                    content.economics.points.map((point) => <Point>{point}</Point>)
-                                }
+                                {content.economics.points.map((point) => <Point>{point}</Point>)}
                             </ul>
                         </div>
                     </div>
                 </div>
             </section>
 
-            <!-- Identify who builds it. -->
+            <!-- Who builds it: shared with the developer page and /about/. -->
             <section class="band" id="trust">
                 <div class="wall" aria-hidden="true"></div>
                 <div class="shell fade-in">
                     <div class="trust">
                         <div>
-                            <div class="eyebrow">{content.trust.eyebrow}</div>
+                            <div class="eyebrow">{landingContent.trust.eyebrow}</div>
                             <h2 class="h2 display">{CREATOR_NAME}</h2>
                             <p class="lede">{creatorRole}</p>
                             <p class="trust-bio">{creatorBio}</p>
-                            <a href="/about/" class="link band-cta">{content.trust.cta} →</a>
+                            <a href="/about/" class="link band-cta">{landingContent.trust.cta} →</a>
                         </div>
-
-                        {/* Trust claims share the about module and build-time commit count. */}
                         <TrustCards />
                     </div>
                 </div>
             </section>
 
-            <!-- Show how to get started. -->
+            <!-- Getting started: the download first, and no command anywhere. -->
             <section class="band" id="connect">
                 <div class="wall" aria-hidden="true"></div>
                 <div class="shell fade-in">
@@ -344,12 +292,27 @@ const machineStep = content.connect.steps.at(-1)!;
                     <h2 class="h2 display">{content.connect.heading}</h2>
                     <p class="lede">{content.connect.sub}</p>
 
-                    {/* Steps are grouped by location: browser first, then terminal. */}
                     <div class="flow">
                         <div class="flow-zone">
-                            <div class="flow-where">in your browser</div>
+                            <div class="flow-where">{content.connect.zones.computer}</div>
+                            <div class="station">
+                                <h3>
+                                    <Bullet />
+                                    {content.connect.computerStep.title}
+                                </h3>
+                                <p>{content.connect.computerStep.body}</p>
+                            </div>
+                            <div class="hero-actions flow-actions">
+                                <DownloadCta primary label={content.hero.actions.download} />
+                            </div>
+                        </div>
+
+                        <div class="flow-seam" aria-hidden="true"></div>
+
+                        <div class="flow-zone">
+                            <div class="flow-where">{content.connect.zones.app}</div>
                             {
-                                browserSteps.map((step) => (
+                                content.connect.appSteps.map((step) => (
                                     <div class="station">
                                         <h3>
                                             <Bullet />
@@ -360,84 +323,52 @@ const machineStep = content.connect.steps.at(-1)!;
                                 ))
                             }
                         </div>
-
-                        <div class="flow-seam" aria-hidden="true"></div>
-
-                        <div class="flow-zone">
-                            <div class="flow-where">on your machine</div>
-                            <div class="station">
-                                <h3>
-                                    <Bullet />
-                                    {machineStep.title}
-                                </h3>
-                                <p>{machineStep.body}</p>
-                            </div>
-
-                            <div class="frame command">
-                                <Corners />
-                                <div class="command-head"><span class="command-where">your terminal</span></div>
-                                <pre><code><span class="prompt">$ </span>curl -fsSL https://intentic.dev/connect | sh</code></pre>
-                            </div>
-                            <p class="command-note">{content.connect.commandNote}</p>
-                            {/* Supporting links stay below the terminal command. */}
-                            <p class="command-note">
-                                {content.connect.commandChoice.lead}{" "}
-                                <a href="/where-it-runs/" class="text-link hover:underline">{content.connect.commandChoice.cta}</a>
-                            </p>
-                        </div>
                     </div>
 
                     <div class="card desktop">
                         <Corners set="diag" />
                         <div>
-                            <p class="desktop-lead">{content.connect.desktop.lead}</p>
-                            <p class="desktop-note">{content.connect.desktop.note}</p>
+                            <p class="desktop-lead">{content.connect.browser.lead}</p>
+                            <p class="desktop-note">{content.connect.browser.note}</p>
                         </div>
-                        {/* The download sits beside the terminal command for non-terminal users. */}
-                        <DownloadCta class="btn-sm" label={content.connect.desktop.cta} icon={false} />
+                        <a class="btn btn-secondary btn-sm" href={APP_URL}>{content.connect.browser.cta}</a>
                     </div>
                 </div>
             </section>
 
-            <!-- FAQ uses native details for keyboard and screen-reader behavior. -->
+            <!-- This page's own questions; native details for keyboard and screen-reader behavior. -->
             <section class="band" id="faq">
                 <div class="wall" aria-hidden="true"></div>
                 <div class="shell fade-in">
-                    <div class="eyebrow">FAQ</div>
-                    <h2 class="h2 display">Before you install it.</h2>
-                    <p class="lede">What it costs, where your code sits, and what is not built yet.</p>
+                    <div class="eyebrow">{content.faq.eyebrow}</div>
+                    <h2 class="h2 display">{content.faq.heading}</h2>
+                    <p class="lede">{content.faq.lede}</p>
 
-                    <div class="faq">
-                        {
-                            faqGroups.map((group) => (
-                                <div class="faq-group" id={group.id}>
-                                    <div class="faq-group-head">
-                                        <h3>{group.label}</h3>
-                                        <p>{group.blurb}</p>
-                                    </div>
-                                    <div class="faq-list">
-                                        {group.items.map((item) => (
-                                            <details id={item.id} name={group.id} class="faq-item scroll-mt-28">
-                                                <summary>
-                                                    <Bullet mark="lozenge" markClass="faq-mark" />
-                                                    <span>{item.question}</span>
-                                                </summary>
-                                                <div class="faq-answer">
-                                                    {item.answer.map((paragraph) => (
-                                                        <p>{paragraph}</p>
-                                                    ))}
-                                                    {item.more && (
-                                                        <a href={item.more.href} class="link">
-                                                            {item.more.label} →
-                                                        </a>
-                                                    )}
-                                                </div>
-                                            </details>
-                                        ))}
-                                    </div>
-                                </div>
-                            ))
-                        }
+                    <div class="faq faq-single">
+                        <div class="faq-group" id="desk-questions">
+                            <div class="faq-list">
+                                {
+                                    content.faq.items.map((item) => (
+                                        <details id={item.id} name="desk-questions" class="faq-item scroll-mt-28">
+                                            <summary>
+                                                <Bullet mark="lozenge" markClass="faq-mark" />
+                                                <span>{item.question}</span>
+                                            </summary>
+                                            <div class="faq-answer">
+                                                {item.answer.map((paragraph) => (
+                                                    <p>{paragraph}</p>
+                                                ))}
+                                                {item.more && (
+                                                    <a href={item.more.href} class="link">
+                                                        {item.more.label} →
+                                                    </a>
+                                                )}
+                                            </div>
+                                        </details>
+                                    ))
+                                }
+                            </div>
+                        </div>
                     </div>
                 </div>
             </section>
@@ -447,21 +378,19 @@ const machineStep = content.connect.steps.at(-1)!;
                 <div class="plate plate-foot" aria-hidden="true">
                     <div class="plate-img"></div>
                 </div>
-                {/* The closing band is the only page-authored copy; other copy comes from landing.ts. */}
                 <div class="shell fade-in final-inner">
                     <Lotus size="lg" />
                     <h2 class="h2 display final-heading">
                         <span>Open-source and free</span>
-                        {/* The underline is a separate gold element below the heading text. */}
                         {" "}
                         <span class="final-forever">forever</span>
                     </h2>
                     <p class="lede final-sub">
-                        Contribute to our code, extend workspace<br />or offer services for others.
+                        Yours to keep, on your own computer,<br />with nothing to pay us.
                     </p>
                     <Divider class="final-divider" />
                     <div class="hero-actions">
-                        <a class="btn btn-primary" href={APP_URL}>Create your workspace</a>
+                        <DownloadCta primary label={content.hero.actions.download} />
                         <a class="btn" href={githubUrl} target="_blank" rel="noopener">See the source</a>
                     </div>
                 </div>
@@ -472,10 +401,8 @@ const machineStep = content.connect.steps.at(-1)!;
     </div>
 
     <script>
-/* The page remains usable when these enhancements are unavailable. */
+        /* The bar CTA hides while the hero CTA is visible. */
         const bar = document.getElementById("site-bar");
-
-/* The bar CTA hides while the hero CTA is visible. */
         const heroCta = document.querySelector("[data-hero-cta]");
         if (bar && heroCta && "IntersectionObserver" in window) {
             bar.setAttribute("data-cta-managed", "");
@@ -490,18 +417,14 @@ const machineStep = content.connect.steps.at(-1)!;
             ctaObserver.observe(heroCta);
         }
 
-/* One app frame is visible at a time. */
-        // Every shot is in the page twice, once per skin (ProductShot.astro); only the visible set rotates.
-        const screens = [...document.querySelectorAll<HTMLElement>('[data-screen="app"]')].filter(
-            (screen) => getComputedStyle(screen).display !== "none",
-        );
+        /* One app frame is visible at a time. */
+        const screens = [...document.querySelectorAll<HTMLElement>('[data-screen="app"]')];
         if (screens.length > 1) {
             let shown = 0;
             setInterval(() => {
                 shown = (shown + 1) % screens.length;
                 screens.forEach((screen, index) => {
                     screen.classList.toggle("is-on", index === shown);
-                    // Only the visible frame is exposed to screen readers.
                     screen.setAttribute("aria-hidden", index === shown ? "false" : "true");
                 });
             }, 4000);

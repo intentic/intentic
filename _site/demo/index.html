@@ -15,6 +15,15 @@
              step with _editor/web/index.html is what stops the demo painting one look and useTheme correcting it. -->
         <script>
             try {
+                // THE DESK RECORDING IS READ IN THE DESK PROFILE'S LOOK (src/mode.ts DESK_LOOK, the same three keys
+                // @intentic/constants profile.ts seeds): light, unskinned, a maker. Written here so the first frame is
+                // already in it; a `?mode=desk` link is this page's own, and the stored mode is what a reload serves.
+                var demoMode = new URL(window.location.href).searchParams.get("mode") || sessionStorage.getItem("intentic.demo.mode");
+                if (demoMode === "desk") {
+                    localStorage.setItem("ui-color-scheme", "light");
+                    localStorage.setItem("ui-skin", "none");
+                    localStorage.setItem("ui-audience", "maker");
+                }
                 var uiScheme = localStorage.getItem("ui-color-scheme");
                 var dark = uiScheme === "dark" || (uiScheme !== "light" && !!window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches);
                 if (dark) document.documentElement.setAttribute("data-mode", "dark");

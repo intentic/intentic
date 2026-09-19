@@ -1,4 +1,6 @@
 import type { StoredTab, TabSnapshot } from "@intentic/web/chat-tabs";
+import { deskEdition } from "../mode";
+import { DESK_FEATURED_ID, DESK_FEATURED_SESSION, DESK_FEATURED_TITLE } from "./desk";
 import { FEATURED_AGENT_ID } from "./fleet";
 
 // Tabs the recording opens holding: the featured run focused, plus one chat per persona so the Personas rail isn't
@@ -37,9 +39,11 @@ const OPEN_TABS: readonly StoredTab[] = [
     tab(PRIYA_CHAT_ID, `August payouts reconciliation`, `ses_01j9priya`, `priya-ops`),
 ];
 
+// The desk opens holding one chat: a person with an assistant, not a team with personas.
+const DESK_TABS: readonly StoredTab[] = [tab(DESK_FEATURED_ID, DESK_FEATURED_TITLE, DESK_FEATURED_SESSION)];
+
 // Strip opens with four tabs, the featured run focused, in the app's ordinary single-column layout.
-export const openTabSnapshot = (): TabSnapshot => ({
-    active: FEATURED_AGENT_ID,
-    panes: [FEATURED_AGENT_ID],
-    tabs: OPEN_TABS,
-});
+export const openTabSnapshot = (): TabSnapshot => {
+    const featured = deskEdition ? DESK_FEATURED_ID : FEATURED_AGENT_ID;
+    return { active: featured, panes: [featured], tabs: deskEdition ? DESK_TABS : OPEN_TABS };
+};

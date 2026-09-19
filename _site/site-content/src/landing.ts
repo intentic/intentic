@@ -1,6 +1,7 @@
 import type { ProviderBrand } from "@intentic/constants";
 
 import { productHref } from "./product";
+import { DEMO_PATH, DESK_PATH } from "./site";
 
 export interface LandingFact {
     title: string;
@@ -82,6 +83,14 @@ export interface LandingContent {
         commandChoice: { lead: string; cta: string };
         desktop: { lead: string; cta: string; note: string };
     };
+    /** The other product, named under the hero: the one line a reader in the wrong place needs. */
+    crossLink: CrossLink;
+}
+
+export interface CrossLink {
+    lead: string;
+    label: string;
+    href: string;
 }
 
 // One claim shown once: agents keep running, resumable anywhere; the tour shows it, bands answer objections.
@@ -270,4 +279,270 @@ export const landingContent: LandingContent = {
             note: "It runs the same command for you: Docker if the machine needs it, then the sandbox, then your workspace.",
         },
     },
+    crossLink: { lead: "Not a programmer?", label: "intentic desk, the same assistant for your documents", href: DESK_PATH },
+};
+
+/** A picture in the light set: a shot of the desk recording (`capture.mts --desk`), or a default shot's light twin. */
+export interface DeskShot {
+    name: string;
+    alt: string;
+}
+
+/** One row of the desk page's tour. Links to the shared feature page; a row with no shot draws the Automations figure. */
+export interface DeskTourItem {
+    label: string;
+    href: string;
+    line: string;
+    shot?: DeskShot & { label: string };
+    figure?: "automate";
+}
+
+export interface DeskFaqItem {
+    /** Anchor id, its own namespace so it can never collide with the developer page's questions. */
+    id: string;
+    question: string;
+    answer: string[];
+    more?: { label: string; href: string };
+}
+
+// INTENTIC DESK: the same assistant sold to the reader who does not write code, as a product page of its own at
+// /desk/ (site pages/desk.astro, DeskLanding.astro). Its own words from the first line to the last question, its
+// own pictures (the desk recording, _site/demo/src/fixture/desk.ts), its own title and description, its own place in
+// the sitemap. What it shares with the developer page is the shell and the parts that are true of both products —
+// the nav and footer, the cost band's account list, the trust band — never a paragraph of copy, so search never
+// meets the same page twice under two addresses. Nothing here names git, a repository or a terminal.
+export interface DeskLandingContent {
+    meta: { title: string; description: string };
+    hero: {
+        eyebrow: string;
+        headlineLines: string[];
+        subhead: string;
+        screens: { app: (DeskShot & { frameLabel: string })[]; plan: DeskShot; chat: DeskShot & { frameLabel: string } };
+        /** Where the frame's press goes: the desk recording, not the code one. */
+        demoHref: string;
+        /** The two doors, the app first: the download is the one this reader takes. */
+        actions: { download: string; browser: string };
+    };
+    tour: { eyebrow: string; items: DeskTourItem[]; cta: string };
+    workspace: LandingSectionIntro & { comparison: WorkspaceComparison; cta: { label: string; href: string } };
+    /** The account list is shared with the developer page (landingContent.economics.accounts): the plans are the same plans. */
+    economics: LandingSectionIntro & { flatLabel: string; points: string[] };
+    // Download first: for this reader the app is the way in, and the command is the thing they would rather not meet.
+    connect: LandingSectionIntro & {
+        zones: { computer: string; app: string };
+        computerStep: LandingFact;
+        appSteps: LandingFact[];
+        browser: { lead: string; note: string; cta: string };
+    };
+    faq: { eyebrow: string; heading: string; lede: string; items: DeskFaqItem[] };
+    crossLink: CrossLink;
+}
+
+export const deskLanding: DeskLandingContent = {
+    meta: {
+        title: "intentic desk · An assistant for your documents",
+        description:
+            "An assistant that writes, edits and files your documents on your own computer. Every change is saved, so you can always go back. Free.",
+    },
+    hero: {
+        eyebrow: "Welcome to intentic desk",
+        // The same three beats as the developer page's, with "delegate" and "agents" gone: this reader asks, and something works.
+        headlineLines: ["You ask. It does the work.", "You approve."],
+        subhead: "An assistant for your documents, on your own computer.",
+        screens: {
+            app: [
+                {
+                    name: "desk-hero-agents",
+                    alt: "The intentic board on a desk of documents: an Attention lane holding an assistant waiting on a question about a supplier letter, an Active lane where one is rewriting the October newsletter, and a Finished lane with a draft of the September newsletter to read and a receipts sort already accepted.",
+                    frameLabel: "my-desk · Assistants",
+                },
+                {
+                    name: "desk-hero-files",
+                    alt: "The desk's files with the newsletter folder open: August's, September's and October's drafts, the template, the subscriber list and a folder of pictures, drawn as documents rather than as a code tree.",
+                    frameLabel: "my-desk · Files",
+                },
+            ],
+            plan: {
+                name: "desk-hero-plan",
+                alt: "The chat beside the desk, holding the plan the assistant wrote for rewriting the October newsletter around the sale, with Approve and No, keep planning under it.",
+            },
+            chat: {
+                name: "desk-hero-chat",
+                alt: "The chat in its own window: the plan the assistant wrote for rewriting the October newsletter around the sale, with Approve and No, keep planning under it.",
+                frameLabel: "Chat · Newsletter",
+            },
+        },
+        demoHref: `${DEMO_PATH}agents?mode=desk`,
+        actions: { download: "Download the app", browser: "Use it in the browser" },
+    },
+    tour: {
+        eyebrow: "What you do",
+        items: [
+            {
+                label: "Your assistant",
+                href: productHref("run"),
+                line: "One board shows everything you have asked for, and puts the one that needs you first.",
+                shot: {
+                    name: "desk-stage-run",
+                    alt: "The intentic workspace on the board: one assistant rewriting the October newsletter, one waiting on a question about a letter to the supplier, a finished draft of the September newsletter, and the docked chat holding the plan with Approve under it.",
+                    label: "my-desk · Assistants",
+                },
+            },
+            {
+                label: "Connections",
+                href: productHref("connect"),
+                line: "Give it your mail, your calendar, your files or your shop. Your passwords stay on your computer.",
+                shot: {
+                    name: "stage-connect",
+                    alt: "The connections catalogue, grouped by what each one is for: GitHub, a database, Discord, Stripe, Obsidian, Outline and a server among them, seven already connected, and a row at the foot for anything of your own.",
+                    label: "my-desk · Connections",
+                },
+            },
+            {
+                label: "On a schedule",
+                href: productHref("automate"),
+                line: "Have it read your inbox every morning, or answer a message the moment one arrives. Every run shows up on your board.",
+                figure: "automate",
+            },
+            {
+                label: "Your say",
+                href: productHref("review"),
+                line: "It writes a plan first and waits for your yes. Every change is saved as a version, so you can always go back.",
+                shot: {
+                    name: "desk-stage-review",
+                    alt: "A finished draft, read as what changed: the September newsletter moved into the new template, with the assistant's own account of the work beside it.",
+                    label: "my-desk · What changed",
+                },
+            },
+            {
+                label: "Anywhere",
+                href: productHref("host"),
+                line: "Keep it on your computer, or move it to a server so it works while your laptop is closed.",
+                shot: {
+                    name: "stage-host",
+                    alt: "The workspace's Access page: the owner, a field to invite someone by email, the browsers currently signed in, and under Here now a collaborator looking at the board.",
+                    label: "my-desk · Access",
+                },
+            },
+        ],
+        cta: "Every feature, in detail",
+    },
+    workspace: {
+        eyebrow: "Why a workspace",
+        heading: "You can see exactly what it changed.",
+        sub: "An assistant that edits your files has to show you what it did. Here, every change is on screen before you accept it.",
+        comparison: {
+            ours: {
+                label: "Here",
+                note: "What you get to look at.",
+                items: [
+                    "What changed in every document, before you accept it",
+                    "Your files, in folders you can open any time",
+                    "The work as it happens, stoppable at any moment",
+                    "A saved version of every accepted change, to go back to",
+                    "What every task cost",
+                ],
+            },
+            chat: {
+                label: "In a chat box",
+                note: "What you get instead.",
+                items: ["A wall of text", "An assurance that it worked"],
+                missing: "Nothing to open, and nothing to check.",
+            },
+            footnote: "Every task works on its own copy, so nothing touches the file you have open until you say so.",
+        },
+        cta: { label: "How accepting a change works", href: productHref("review") },
+    },
+    economics: {
+        eyebrow: "What it costs",
+        heading: "intentic is free. It uses the AI plan you already pay for.",
+        sub: "Bring your Claude, ChatGPT or Google account. Your computer does the work, and there is nothing to pay us.",
+        flatLabel: "Flat, not metered",
+        points: [
+            "We never meter what it uses or add a markup.",
+            "Nothing to rent. The assistant runs on the computer you start it on.",
+            "Everything is included. No tiers, no limits, no card.",
+        ],
+    },
+    connect: {
+        eyebrow: "Getting started",
+        heading: "Three steps to your first task.",
+        sub: "Download the app, sign in, and ask for something.",
+        zones: { computer: "on your computer", app: "in the app" },
+        computerStep: {
+            title: "Download the app",
+            body: "Windows and Linux. It installs what it needs, asks before it does, and opens your workspace when it is done.",
+        },
+        appSteps: [
+            {
+                title: "Sign in with Google",
+                body: "No forms and no card. We keep your email address and your workspace's address, and nothing else.",
+            },
+            {
+                title: "Ask for something",
+                body: "Type what you want done, in your own words. The plan comes back first, and nothing changes until you say yes.",
+            },
+        ],
+        browser: {
+            lead: "Rather not install anything?",
+            note: "Sign in from your browser and it walks you through the same setup, one command included.",
+            cta: "Use it in the browser",
+        },
+    },
+    faq: {
+        eyebrow: "FAQ",
+        heading: "Before you install it.",
+        lede: "What it costs, where your files stay, and what is not built yet.",
+        items: [
+            {
+                id: "desk-what-do-i-need",
+                question: "What do I need to run it?",
+                answer: [
+                    "A Windows or Linux computer and a Google account to sign in with. The app installs everything else it needs, and asks before it does.",
+                    "It works with the AI plan you already have: Claude, ChatGPT, or a free Google sign-in.",
+                ],
+                more: { label: "Download the app", href: "/download/" },
+            },
+            {
+                id: "desk-where-are-my-files",
+                question: "Where do my files live?",
+                answer: [
+                    "On your own computer, in an ordinary folder you can open with anything else. Nothing is uploaded to us.",
+                    "The assistant works on a copy of its own, and nothing touches your file until you accept the change. Every accepted change is saved as a version, so you can always go back.",
+                ],
+            },
+            {
+                id: "desk-what-does-it-cost",
+                question: "What does it cost?",
+                answer: [
+                    "Nothing. intentic is free and open source. The assistant runs on the AI plan you bring, and we never meter or mark up what it uses.",
+                ],
+            },
+            {
+                id: "desk-can-it-read-my-mail",
+                question: "Can it read my mail or my calendar?",
+                answer: [
+                    "Only if you connect them, and you can disconnect them at any time. Your passwords stay on your computer; the assistant is handed what it needs for one task at a time, and every connection is listed where you can see it.",
+                ],
+                more: { label: "What it can connect to", href: productHref("connect") },
+            },
+            {
+                id: "desk-do-i-need-to-learn-anything",
+                question: "Do I need to learn anything technical?",
+                answer: [
+                    "No. You type what you want in your own words, read the plan it writes back, and say yes or no. The words on screen are plain ones: a draft, a version, what changed.",
+                    "If you do write code, the same product has a developer edition, with the file tree and every panel.",
+                ],
+                more: { label: "The developer edition", href: "/?variant=default" },
+            },
+            {
+                id: "desk-is-there-a-mac-version",
+                question: "Is there a Mac version?",
+                answer: [
+                    "Not yet. On a Mac, use it in the browser: sign in at app.intentic.dev and it walks you through the setup, one command included.",
+                ],
+            },
+        ],
+    },
+    crossLink: { lead: "Write code?", label: "The developer edition of intentic", href: "/?variant=default" },
 };

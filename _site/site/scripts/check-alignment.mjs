@@ -6,8 +6,8 @@ import { resolve } from "node:path";
 
 const root = resolve(import.meta.dirname, "..");
 
-// Pages with marks (landing, pricing, about, a feature page); a route with none at any width fails outright.
-const ROUTES = ["/", "/pricing/", "/about/", "/features/review/"];
+// Pages with marks (both product pages, pricing, about, a feature page); a route with none at any width fails outright.
+const ROUTES = ["/", "/desk/", "/pricing/", "/about/", "/features/review/"];
 // Wide (two-column layouts) and phone; the bar redraws its wordmark at a second size below 30rem.
 const VIEWPORTS = [
     { label: "wide", width: 1280, height: 900 },
@@ -137,7 +137,10 @@ const origin = `http://localhost:${server.address.port}`;
 const visit = async (page, route, viewport) => {
     const response = await page.goto(`${origin}${route}`, { waitUntil: "load" });
     if (response === null || !response.ok()) {
-        return { measured: 0, problems: [`${route} (${viewport.label}): did not render \u2014 ${response === null ? "no response" : response.status()}`] };
+        return {
+            measured: 0,
+            problems: [`${route} (${viewport.label}): did not render \u2014 ${response === null ? "no response" : response.status()}`],
+        };
     }
     const rows = await page.evaluate(audit);
     return { measured: rows.length, problems: faults(rows, route, viewport) };
@@ -172,8 +175,12 @@ if (problems.length > 0) {
     for (const problem of problems) {
         console.error(problem);
     }
-    console.error(`\n${problems.length} misaligned mark(s) of ${measured} measured. The rule that places them is \`.mark\` in src/styles/global.css.`);
+    console.error(
+        `\n${problems.length} misaligned mark(s) of ${measured} measured. The rule that places them is \`.mark\` in src/styles/global.css.`,
+    );
     process.exit(1);
 }
 
-console.log(`mark alignment: ${measured} marks across ${ROUTES.length} routes at ${VIEWPORTS.length} widths, every one within ${TOLERANCE}px of its line`);
+console.log(
+    `mark alignment: ${measured} marks across ${ROUTES.length} routes at ${VIEWPORTS.length} widths, every one within ${TOLERANCE}px of its line`,
+);

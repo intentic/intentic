@@ -1048,13 +1048,19 @@ html[data-variant="desk"] {
         text-decoration: none;
     }
 
-    /* The way back out of the desk skin. It sits in the footer of every page, in the markup either way so that one
-       cached document can serve both skins, and is only shown where it means something. */
+    /* The other product's door, in the footer of every page. Both links are in the markup so one cached document
+       serves both editions, and each is shown only where it leads somewhere else. */
     .variant-exit {
         display: none;
     }
     html[data-variant="desk"] .variant-exit {
         display: inline-flex;
+    }
+    .variant-enter {
+        display: inline-flex;
+    }
+    html[data-variant="desk"] .variant-enter {
+        display: none;
     }
 
     /* Keyboard keys named in prose ("press /"). */

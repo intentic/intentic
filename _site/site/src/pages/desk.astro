@@ -1,8 +1,8 @@
 ---
-/* The light skin's front door. Same landing page as /, and landing here is what turns the skin on: BaseLayout's
-   pre-paint script reads this path, sets the cookie, and every page the reader opens afterwards stays light.
-   `noindex` because the words are identical to / — this route is a link to hand out, not a page to rank. */
-import Landing from "../components/Landing.astro";
+/* INTENTIC DESK's page: the product for readers who do not write code, its own words and pictures over the shared
+   shell (DeskLanding.astro). Indexed, in the sitemap, canonical to itself; landing here is also what turns the
+   site's light skin on for the shared pages (lib/variant.ts). The developer product's page is / (Landing.astro). */
+import DeskLanding from "../components/DeskLanding.astro";
 ---
 
-<Landing noindex />
+<DeskLanding />

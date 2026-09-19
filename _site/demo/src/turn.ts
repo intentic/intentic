@@ -1,6 +1,7 @@
 import type { AgentEvent, AgentReply, AttachFrame, TranscriptRow } from "@intentic/sandbox-contract";
 import { isTurnFact } from "@intentic/sandbox-contract";
 import { TranscriptFold, userRow } from "@intentic/sandbox-contract/transcript-fold";
+import { DESK_FEATURED_ID, OCTOBER_AFTER, OCTOBER_BEFORE } from "./fixture/desk";
 import { CHECKOUT_LIB_AFTER, CHECKOUT_LIB_BEFORE, CHECKOUT_ROUTE } from "./fixture/workspace";
 import type { StreamSink } from "./sse";
 
@@ -183,6 +184,120 @@ Prices come from the existing \`STRIPE_PRICE_*\` env vars, so nothing new needs 
     { after: 200, event: { kind: `done` } },
 ];
 
+const DESK_TODOS = [`Read the October draft`, `Put the sale first and cut the opening`, `Keep the hours and the workshops`, `Check the length`];
+
+const deskTodos = (done: number, running: number): AgentEvent => ({
+    kind: `todos`,
+    items: DESK_TODOS.map((content, index) =>
+        index === running ? { content, status: `in_progress`, activeForm: content } : { content, status: index < done ? `completed` : `pending` },
+    ),
+});
+
+// The desk's featured run: the same shape as the code one (a plan card, work through the list, a question at the end),
+// on a newsletter rather than a checkout, in the words a maker reads. No terminal beat: nothing here is run.
+const DESK_FEATURED: Beat[] = [
+    { after: 300, event: { kind: `init`, model: `claude-sonnet-5` } },
+    { after: 200, event: { kind: `mode`, mode: `plan` } },
+    {
+        after: 400,
+        event: {
+            kind: `thinking`,
+            text: `The sale is the news and it is buried under a long opening. Let me read the draft before deciding what moves.`,
+        },
+    },
+    {
+        after: 700,
+        event: {
+            kind: `tool_call`,
+            id: `tc_read_october`,
+            name: `Read`,
+            category: `read`,
+            status: `in_progress`,
+            target: `newsletter/october.md`,
+            locations: [{ path: `newsletter/october.md`, line: 1 }],
+        },
+    },
+    {
+        after: 900,
+        event: {
+            kind: `tool_call_update`,
+            id: `tc_read_october`,
+            status: `completed`,
+            content: [{ type: `text`, text: `19 lines · a long opening, then the sale, the November hours and the workshops.` }],
+        },
+    },
+    {
+        after: 600,
+        event: {
+            kind: `plan`,
+            requestId: `req_plan_october`,
+            text: `## Rewrite October around the sale
+
+1. **Open with the offer.** One bold line: 20% off until the 31st, and the code. The "grab a cup of tea" opening goes.
+2. **What is in the sale**, as its own short item: the ceramics, the aprons, the last prints.
+3. **Keep the November hours and the workshops**, each cut to two sentences.
+4. **Same sign-off** as every month.
+
+It comes out about half the length. Nothing you wanted said is dropped.`,
+        },
+        park: `req_plan_october`,
+    },
+    { after: 200, event: { kind: `mode`, mode: `bypassPermissions` } },
+    { after: 300, event: deskTodos(1, 1) },
+    { after: 500, event: { kind: `delta`, text: `Rewriting it now, sale first.` } },
+    { after: 400, event: { kind: `text_end` } },
+    {
+        after: 500,
+        event: {
+            kind: `tool_call`,
+            id: `tc_edit_october`,
+            name: `Edit`,
+            category: `edit`,
+            status: `in_progress`,
+            target: `newsletter/october.md`,
+            locations: [{ path: `newsletter/october.md`, line: 1 }],
+        },
+    },
+    {
+        after: 1_100,
+        event: {
+            kind: `tool_call_update`,
+            id: `tc_edit_october`,
+            status: `completed`,
+            content: [{ type: `diff`, path: `newsletter/october.md`, oldText: OCTOBER_BEFORE, newText: OCTOBER_AFTER }],
+        },
+    },
+    { after: 300, event: { kind: `context_usage`, tokens: 9_800, contextWindow: 200_000 } },
+    { after: 400, event: deskTodos(3, 3) },
+    { after: 400, event: { kind: `delta`, text: `It is 11 lines now, down from 19. One thing to decide before I call it done.` } },
+    { after: 300, event: { kind: `text_end` } },
+    {
+        after: 500,
+        event: {
+            kind: `question`,
+            requestId: `req_question_subject`,
+            questions: [
+                {
+                    question: `Should the subject line carry the offer too?`,
+                    header: `Subject line`,
+                    multiSelect: false,
+                    options: [
+                        { label: `Yes, "20% off until the 31st" (Recommended)`, description: `Says the news before the email is opened.` },
+                        { label: `Keep "Studio news · October"`, description: `The same subject as every month; the offer waits inside.` },
+                    ],
+                },
+            ],
+        },
+        park: `req_question_subject`,
+    },
+    { after: 400, event: deskTodos(4, -1) },
+    { after: 300, event: { kind: `delta`, text: `Done. The subject line carries the offer, and the draft is ready to send.` } },
+    { after: 300, event: { kind: `text_end` } },
+    { after: 300, event: { kind: `usage`, account: `ada@acme.dev`, costUsd: 0.09, inputTokens: 12_400, outputTokens: 1_640 } },
+    { after: 200, event: { kind: `worktree`, branch: `agent/october-sale`, base: `2c7e91a` } },
+    { after: 200, event: { kind: `done` } },
+];
+
 // Reply to anything the visitor sends; kept short, since a long canned monologue would read as an advert.
 const replyScript = (prompt: string): Beat[] => [
     { after: 250, event: { kind: `init`, model: `claude-sonnet-5` } },
@@ -357,7 +472,10 @@ const createRun = (conversationId: string, prompt: string, beats: Beat[], now: n
     };
 };
 
+// Which script a featured conversation plays is the conversation's own: the desk's id names the desk's run.
 export const featuredRun = (conversationId: string, now: number): Run =>
-    createRun(conversationId, `Add Stripe checkout to the pricing page: the CTA is already there, it just throws.`, FEATURED, now);
+    conversationId === DESK_FEATURED_ID
+        ? createRun(conversationId, `Rewrite the October newsletter for the autumn sale. Shorter, and the 20% off has to be the first thing people read.`, DESK_FEATURED, now)
+        : createRun(conversationId, `Add Stripe checkout to the pricing page: the CTA is already there, it just throws.`, FEATURED, now);
 
 export const visitorRun = (conversationId: string, prompt: string, now: number): Run => createRun(conversationId, prompt, replyScript(prompt), now);

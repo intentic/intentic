@@ -32,6 +32,7 @@ import { demoLoops } from "./fixture/loops";
 import { demoRuns, demoWorkflows } from "./fixture/workflows";
 import { choresReport, writeLedger } from "./fixture/chores";
 import { ciJobs, ciRunsResponse } from "./fixture/ci";
+import { DESK_AWAITING_ID, DESK_FEATURED_ID, DESK_SANDBOX_NAME, deskRoster, SUPPLIER_LETTER_DOCX, SUPPLIER_LETTER_PATH } from "./fixture/desk";
 import { AWAITING_AGENT_ID, FEATURED_AGENT_ID, fleetRoster } from "./fixture/fleet";
 import {
     deleteKnowledgeNote,
@@ -73,7 +74,7 @@ import {
     workspaceTree,
     writeFile,
 } from "./fixture/workspace";
-import { demoMode } from "./mode";
+import { demoMode, deskEdition } from "./mode";
 import { eventStream } from "./sse";
 import { featuredRun, type Run, visitorRun } from "./turn";
 import { json, refuse } from "./transport";
@@ -84,8 +85,18 @@ import { json, refuse } from "./transport";
 
 const STARTED_AT = Date.now();
 
+// Which recording's two special cards this page serves: the run with a script behind it, and the one parked on a question.
+const FEATURED_ID = deskEdition ? DESK_FEATURED_ID : FEATURED_AGENT_ID;
+const AWAITING_ID = deskEdition ? DESK_AWAITING_ID : AWAITING_AGENT_ID;
+
 // Live state; every write bumps `rev` and re-broadcasts (snapshot-not-diff, newest rev wins).
-const roster = { agents: fleetRoster(STARTED_AT).filter((agent) => demoMode.agents?.includes(agent.id) ?? true), rev: 1 };
+const roster = {
+    agents: deskEdition ? deskRoster(STARTED_AT) : fleetRoster(STARTED_AT).filter((agent) => demoMode.agents?.includes(agent.id) ?? true),
+    rev: 1,
+};
+
+// Held automation approvals project onto the board's attention lane; a desk runs no automations.
+const heldApprovals = () => (deskEdition ? [] : automationApprovals(Date.now()));
 const listeners = new Set<(event: SystemEvent) => void>();
 const runs = new Map<string, Run>();
 
@@ -161,7 +172,7 @@ const runFor = (conversationId: string): Run | undefined => {
     if (existing !== undefined) {
         return existing;
     }
-    if (conversationId !== FEATURED_AGENT_ID) {
+    if (conversationId !== FEATURED_ID) {
         return undefined;
     }
     const run = featuredRun(conversationId, Date.now());
@@ -221,7 +232,7 @@ const EXTENSION_RUN_PREFIXES = [`xt-`, `dg-`, `mt-`];
 
 const startTurn = async (request: Request): Promise<Response> => {
     const body = (await request.json()) as { conversationId?: string; prompt?: string };
-    const conversationId = body.conversationId ?? FEATURED_AGENT_ID;
+    const conversationId = body.conversationId ?? FEATURED_ID;
     if (EXTENSION_RUN_PREFIXES.some((prefix) => conversationId.startsWith(prefix))) {
         return refuse(`This is the demo workspace: a run needs your repositories and a sandbox to walk them in. Start one and this button works.`);
     }
@@ -241,7 +252,7 @@ const reply = async (request: Request): Promise<Response> => {
         run.resolve(parsed.data.requestId, parsed.data);
     }
     // The card that was parked belongs to the agent whose attention flag raised it: answering clears it.
-    patchAgent(AWAITING_AGENT_ID, {
+    patchAgent(AWAITING_ID, {
         attention: { plan: false, question: false, permission: false, capability: false, credential: false, conflict: false },
     });
     return json({ ok: true });
@@ -271,7 +282,7 @@ const land = (id: string): Response => {
     return json(result);
 };
 
-const info: Info = { name: `acme-shop`, version: `demo`, latest: `demo`, updateAvailable: false };
+const info: Info = { name: deskEdition ? DESK_SANDBOX_NAME : `acme-shop`, version: `demo`, latest: `demo`, updateAvailable: false };
 
 // The handshake `state` a routed sign-in issues; ConnectFlow only accepts a pasted address carrying this one.
 const DEMO_CONNECT_STATE = `demo-connect-state`;
@@ -323,10 +334,10 @@ const ROUTES: readonly (readonly [string, string, Handler])[] = [
     [`GET`, `/system/subagents`, () => json({ sessions: [] } satisfies SubagentsList)],
 
     // `held` mirrors /automations/pending's approval queue, projected onto the board.
-    [`GET`, `/agents`, () => json({ agents: roster.agents, rev: roster.rev, held: automationApprovals(Date.now()) } satisfies AgentsList)],
+    [`GET`, `/agents`, () => json({ agents: roster.agents, rev: roster.rev, held: heldApprovals() } satisfies AgentsList)],
     [`GET`, `/agents/archived`, () => json({ agents: [], rev: roster.rev, held: [] } satisfies AgentsList)],
     [`GET`, `/agents/search`, ({ url }) => json(searchAgents(url.searchParams.get(`query`) ?? ``, url.searchParams.get(`caseSensitive`) === `true`))],
-    [`POST`, `/agents/seen`, () => json({ agents: roster.agents, rev: roster.rev, held: automationApprovals(Date.now()) } satisfies AgentsList)],
+    [`POST`, `/agents/seen`, () => json({ agents: roster.agents, rev: roster.rev, held: heldApprovals() } satisfies AgentsList)],
     [`GET`, `/agents/{id}/diff`, ({ param }) => json(agentChanges(param(`id`)))],
     // A card that is not mid-turn reads its transcript instead of attaching.
     [`GET`, `/agents/{id}/transcript`, ({ param }) => json(transcriptFor(param(`id`)))],
@@ -849,6 +860,9 @@ const derivedSide = (content: string): object => ({ present: true, content, deri
 // Report screenshots (svg keeps them a few kilobytes and sharp at any size) and the one document, which is the only
 // path here whose bytes are bytes: a viewer parses it, so text would not do.
 const workspaceRaw = (path: string): Response => {
+    if (path === SUPPLIER_LETTER_PATH) {
+        return documentBytes(SUPPLIER_LETTER_DOCX);
+    }
     if (path === HANDOVER_PATH || path === HANDOVER_CHANGE_PATH) {
         return documentBytes(HANDOVER_DOCX);
     }

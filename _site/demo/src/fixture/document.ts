@@ -37,8 +37,8 @@ const paragraph = (text: string, style?: string): string =>
 // would show a shape no word processor would have made.
 const SECTION = `<w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440"/></w:sectPr>`;
 
-const documentXml = (paragraphs: readonly string[]): string => `<?xml version="1.0" encoding="UTF-8"?>
-<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>${paragraph(HEADING, `Heading1`)}${paragraphs
+const documentXml = (heading: string, paragraphs: readonly string[]): string => `<?xml version="1.0" encoding="UTF-8"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>${paragraph(heading, `Heading1`)}${paragraphs
     .map((text) => paragraph(text))
     .join(``)}${SECTION}</w:body></w:document>`;
 
@@ -70,21 +70,22 @@ const DOCUMENT_RELS = `<?xml version="1.0" encoding="UTF-8"?>
 </Relationships>`;
 
 // Copied into a plain ArrayBuffer, which is the only backing a Response body takes.
-const build = (paragraphs: readonly string[]): Uint8Array<ArrayBuffer> =>
+/** A one-heading Word document, as the bytes a viewer parses; the desk recording builds its letters with this too. */
+export const buildDocx = (heading: string, paragraphs: readonly string[]): Uint8Array<ArrayBuffer> =>
     new Uint8Array(
         zipSync({
             "[Content_Types].xml": strToU8(CONTENT_TYPES),
             "_rels/.rels": strToU8(PACKAGE_RELS),
-            "word/document.xml": strToU8(documentXml(paragraphs)),
+            "word/document.xml": strToU8(documentXml(heading, paragraphs)),
             "word/_rels/document.xml.rels": strToU8(DOCUMENT_RELS),
             "word/styles.xml": strToU8(STYLES),
         }),
     );
 
 /** The document as the bytes a viewer parses; `/workspace/raw` hands these over unchanged. */
-export const HANDOVER_DOCX: Uint8Array<ArrayBuffer> = build(PARAGRAPHS);
+export const HANDOVER_DOCX: Uint8Array<ArrayBuffer> = buildDocx(HEADING, PARAGRAPHS);
 /** The version before the rewrite, the before side of its diff. */
-export const HANDOVER_DOCX_BEFORE: Uint8Array<ArrayBuffer> = build(PARAGRAPHS_BEFORE);
+export const HANDOVER_DOCX_BEFORE: Uint8Array<ArrayBuffer> = buildDocx(HEADING, PARAGRAPHS_BEFORE);
 
 // The text a daemon would render from each version (fileq's docx reading), for the diff's Text reading.
 const markdown = (paragraphs: readonly string[]): string => [`# ${HEADING}`, ...paragraphs].join(`

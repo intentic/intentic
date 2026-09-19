@@ -1,5 +1,6 @@
 import type { AgentHarness, AgentProvider, TranscriptRow } from "@intentic/sandbox-contract";
 import { SUPPORT_SWEEP_PATH } from "./browserShots";
+import { DESK_REVIEW_ID, SEPTEMBER_AFTER, SEPTEMBER_BEFORE } from "./desk";
 import { REVIEW_AGENT_ID } from "./fleet";
 import { MAYA_CHAT_ID, OWEN_CHAT_ID, PRIYA_CHAT_ID } from "./openChats";
 
@@ -231,8 +232,64 @@ const PRIYA_PAYOUTS: AgentTranscript = {
     ],
 };
 
+// The desk recording's finished draft: a document moved into a template, the same edit the review page draws as
+// tracked changes. Reads the template first, so the plan is the template's and not the assistant's.
+const SEPTEMBER_TEMPLATE: AgentTranscript = {
+    sessionId: `ses_desk_september`,
+    provider: `claude`,
+    harness: `claude-code`,
+    account: `acc_claude_demo`,
+    messages: [
+        {
+            role: `user`,
+            text: `Move the September newsletter into the new template: a short opening, three items with headings, the usual sign-off. Keep everything that was in it.`,
+        },
+        {
+            role: `assistant`,
+            text: `The template wants two lines up top and three headed items. September has three things in it already, the ceramics, the market and the pottery evenings, so nothing has to be cut, only shaped.`,
+            thinking: `The one line worth keeping whole is the golden afternoon light: it is the only sentence in there that sounds like her. Everything else can be tightened.`,
+            tools: [
+                {
+                    id: `tc_desk_template`,
+                    name: `Read`,
+                    category: `read`,
+                    status: `completed`,
+                    target: `newsletter/template.md`,
+                    locations: [{ path: `newsletter/template.md`, line: 1 }],
+                    content: [{ type: `text`, text: `19 lines · a greeting, one or two lines of opening, three headed items, the sign-off.` }],
+                },
+                {
+                    id: `tc_desk_september`,
+                    name: `Read`,
+                    category: `read`,
+                    status: `completed`,
+                    target: `newsletter/september.md`,
+                    locations: [{ path: `newsletter/september.md`, line: 1 }],
+                    content: [{ type: `text`, text: `17 lines · five paragraphs, no headings; the ceramics, the Harbour Market, the pottery evenings.` }],
+                },
+            ],
+        },
+        {
+            role: `assistant`,
+            text: `Done. The opening is the one line about the light, the three items have the template's headings, and the sign-off is the studio's usual one. Nothing that was in it is gone.`,
+            tools: [
+                {
+                    id: `tc_desk_edit`,
+                    name: `Edit`,
+                    category: `edit`,
+                    status: `completed`,
+                    target: `newsletter/september.md`,
+                    locations: [{ path: `newsletter/september.md`, line: 1 }],
+                    content: [{ type: `diff`, path: `newsletter/september.md`, oldText: SEPTEMBER_BEFORE, newText: SEPTEMBER_AFTER }],
+                },
+            ],
+        },
+    ],
+};
+
 const TRANSCRIPTS: Record<string, AgentTranscript> = {
     [REVIEW_AGENT_ID]: SOFT_DELETES,
+    [DESK_REVIEW_ID]: SEPTEMBER_TEMPLATE,
     [MAYA_CHAT_ID]: MAYA_SUPPORT,
     [OWEN_CHAT_ID]: OWEN_LAUNCH,
     [PRIYA_CHAT_ID]: PRIYA_PAYOUTS,

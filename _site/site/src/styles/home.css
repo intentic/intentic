@@ -106,6 +106,14 @@
     margin-top: 2.1rem;
 }
 
+/* THE OTHER PRODUCT, one line under the actions, for the reader who is in the wrong place. */
+.home .hero-cross {
+    margin: 1.2rem 0 0;
+    font-size: 0.8125rem;
+    line-height: 1.6;
+    color: var(--color-subtle);
+}
+
 /* The product uses three frames on one horizontal axis. */
 .home .hero-visual {
     position: relative;

@@ -17,14 +17,22 @@ export function shotAsset(name: string): ImageMetadata {
 
 /** Both skins' copies of one shot. Every shot needs both; a missing twin is a capture run that did not finish. */
 export function shotPair(name: string): { dark: ImageMetadata; light: ImageMetadata } {
+    return { dark: shotAsset(name), light: lightShot(name) };
+}
+
+/**
+ * One picture from the light set alone: a default shot's light twin, or a shot of the desk recording (`desk-*`,
+ * `capture.mts --desk`), which has no dark twin because the desk product's page is only ever light.
+ */
+export function lightShot(name: string): ImageMetadata {
     const light = lightFiles[`../assets/product-light/${name}.png`];
     if (light === undefined) {
         throw new Error(
             `No light screenshot named "${name}". Write it with:\n` +
-                `  node --experimental-strip-types _tools/e2e/shots/capture.mts --light ${name}`,
+                `  node --experimental-strip-types _tools/e2e/shots/capture.mts ${name.startsWith(`desk-`) ? `--desk` : `--light`} ${name}`,
         );
     }
-    return { dark: shotAsset(name), light: light.default };
+    return light.default;
 }
 
 // Srcset rungs, spaced to avoid wasted variants; top rung matches capture.mts's own max width, never upscaled.

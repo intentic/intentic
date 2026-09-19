@@ -88,3 +88,28 @@ describe(`sandbox-scoped terminal open state`, () => {
         expect(layout.terminalOpen.value).toBe(true);
     });
 });
+
+// What the desk profile's first boot lands on: the profile seeds the audience and nothing else, and the technical
+// filter follows it until a press records an override — so a maker who arrives by link, cookie or installer opens on a
+// tree with the tooling out of the way, and one who later says "I write code" gets it back without a second switch.
+describe(`technical files follow the audience until a press says otherwise`, () => {
+    it(`hides them for a maker with nothing pressed, and shows them for a developer`, async () => {
+        const { useAudience } = await import("../../app/useAudience");
+        useAudience().setAudience(`maker`);
+        expect(useLayout().hideTechnical.value).toBe(true);
+        useAudience().setAudience(`developer`);
+        expect(useLayout().hideTechnical.value).toBe(false);
+    });
+
+    it(`keeps a press over the audience changing under it`, async () => {
+        const { useAudience } = await import("../../app/useAudience");
+        useAudience().setAudience(`maker`);
+        const layout = useLayout();
+        layout.toggleHideTechnical();
+        expect(layout.hideTechnical.value).toBe(false);
+        useAudience().setAudience(`developer`);
+        expect(layout.hideTechnical.value).toBe(false);
+        layout.toggleHideTechnical();
+        expect(layout.hideTechnical.value).toBe(true);
+    });
+});

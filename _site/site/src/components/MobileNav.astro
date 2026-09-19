@@ -1,12 +1,19 @@
 ---
 import { navEntries } from "@intentic/site-content/nav";
 import { APP_URL, discordUrl, githubUrl } from "@intentic/site-content/site";
+import DownloadCta from "./DownloadCta.astro";
 import { GITHUB_MARK } from "../lib/marks";
 import { isCurrentRow, isCurrentSection } from "../lib/navCurrent";
 import { NAV_ICONS } from "../lib/navIcons";
 import DiscordIcon from "./DiscordIcon.astro";
 import ExternalIcon from "./ExternalIcon.astro";
 
+// Which product's page this is on (Nav.astro decides and passes it): the sheet's one action is that product's door.
+interface Props {
+    product?: "default" | "desk";
+}
+
+const { product = "default" } = Astro.props;
 const currentPath = Astro.url.pathname;
 ---
 
@@ -130,7 +137,15 @@ const currentPath = Astro.url.pathname;
             </li>
         </ul>
 
-        <a class="btn btn-primary mobile-cta" href={APP_URL}>Create your workspace</a>
+        {
+            product === "desk" ? (
+                <DownloadCta primary class="mobile-cta" icon={false} />
+            ) : (
+                <a class="btn btn-primary mobile-cta" href={APP_URL}>
+                    Create your workspace
+                </a>
+            )
+        }
     </div>
 </div>
 
