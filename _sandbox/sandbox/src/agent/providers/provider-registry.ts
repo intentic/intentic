@@ -1,4 +1,4 @@
-import { type Model, NATIVE_PROVIDERS, type NativeProvider, type SecretInventoryEntry } from "@intentic/sandbox-contract";
+import { type Model, NATIVE_PROVIDERS, type NativeProvider, type OauthAccount, type SecretInventoryEntry } from "@intentic/sandbox-contract";
 import type { Logger } from "pino";
 import { claudeProvider } from "../../runtimes/claude/claude-provider.js";
 import { codexProvider } from "../../runtimes/codex/codex-provider.js";
@@ -87,6 +87,19 @@ export const startProviderBoot = (services: Services, role: BootRole, logger: Lo
 // Pack names connected providers want baked in, in module order.
 export const providerPackWants = async (services: Services): Promise<string[]> =>
     (await Promise.all(PROVIDER_MODULES.map((module) => module.packs?.(services) ?? []))).flat();
+
+// Every provider's own connected accounts, in module order; a provider with no door answers with an empty list, which
+// is a real state (a plain key, a container credential) and not an error. `list(false)` reads what is on file rather
+// than re-measuring: a caller wanting fresh plan limits asks the headroom service, not this.
+export const providerAccountLists = async (services: Services): Promise<Record<NativeProvider, readonly OauthAccount[]>> => {
+    const entries = await Promise.all(
+        PROVIDER_MODULES.map(async (module) => {
+            const accounts: readonly OauthAccount[] = await (module.accounts?.(services).list(false) ?? []);
+            return [module.id, accounts] as const;
+        }),
+    );
+    return Object.fromEntries(entries) as Record<NativeProvider, readonly OauthAccount[]>;
+};
 
 // Every provider's connected-account rows for the secrets inventory, in module order; derived, not hand-kept.
 export const providerSecretEntries = async (services: Services): Promise<SecretInventoryEntry[]> => {

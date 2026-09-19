@@ -15,8 +15,9 @@ import { splitAttachments } from "../../prompt/attachment-note.js";
 // model (prompt-complexity.ts, fast-tier.ts); this file supplies settings, catalog and the previous turn's verdict.
 // Costs no I/O unless routing is on and the turn is judged cheap.
 
-// The three states of settings.autoTier; "shadow" judges and records but never routes.
-const JUDGING = new Set(["shadow", "on"]);
+// Which states of settings.autoTier run the judge at all; only "on" routes. "judge" keeps scoring so Auto mode doesn't
+// blind the ledger the cutoff is fitted from, and its rows stay one population with every other mode's.
+const JUDGING = new Set(["shadow", "on", "judge"]);
 
 export interface TurnTier {
     readonly verdict: ComplexityVerdict;

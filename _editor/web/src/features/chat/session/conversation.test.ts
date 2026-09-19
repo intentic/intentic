@@ -18,6 +18,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Conversation } from "./conversation";
 import { providerAccounts, selectedAccountId, usageByAccount } from "../accounts/providerAccounts";
 import { turnDefaults } from "../run/turnDefaults";
+import { AUTO_PROVIDER } from "../models/modelPickerState";
 import { resolvePrompt } from "../../agents/review/conflictResolution";
 import {
     type ChatMessage,
@@ -485,6 +486,47 @@ describe(`Conversation`, () => {
         // No turn sent yet, so no cost exists for a divider to report.
         conversation.selectModel({ provider: `claude`, value: `haiku` });
         expect(conversation.messages.value).toEqual([]);
+    });
+
+    it(`arms Auto without routing anywhere: the chat keeps somewhere to run if the reading never lands`, () => {
+        const conversation = new Conversation(`c1`);
+        conversation.selectModel({ provider: `claude`, value: `haiku` });
+
+        conversation.selectModel({ provider: AUTO_PROVIDER, value: `` });
+
+        expect(conversation.auto.value).toBe(true);
+        // The mode is not a route: provider and model stand exactly as they were.
+        expect(conversation.provider.value).toBe(`claude`);
+        expect(conversation.model.value).toBe(`haiku`);
+    });
+
+    it(`treats naming a model as the answer to the question Auto was armed to ask`, () => {
+        const conversation = new Conversation(`c1`);
+        conversation.selectModel({ provider: AUTO_PROVIDER, value: `` });
+
+        conversation.selectModel({ provider: `claude`, value: `haiku` });
+
+        expect(conversation.auto.value).toBe(false);
+        // And for the next new chat too: the owner just answered it by hand.
+        expect(turnDefaults.auto.value).toBe(false);
+    });
+
+    it(`disarms Auto when a model is worn, whoever named it`, () => {
+        const conversation = new Conversation(`c1`);
+        conversation.selectModel({ provider: AUTO_PROVIDER, value: `` });
+
+        // What a persona's card and Auto's own answer both do; either way the model is now named.
+        conversation.wearModel({ provider: `claude`, model: `claude-opus-5`, effort: `high` });
+
+        expect(conversation.auto.value).toBe(false);
+        expect(conversation.model.value).toBe(`claude-opus-5`);
+        expect(conversation.effortPick.value).toBe(`high`);
+    });
+
+    it(`opens a new chat on Auto when that was the last pick`, () => {
+        new Conversation(`c1`).selectModel({ provider: AUTO_PROVIDER, value: `` });
+
+        expect(new Conversation(`c2`).auto.value).toBe(true);
     });
 
     it(`retracts the model divider once the pick goes back to what the last turn ran on`, async () => {

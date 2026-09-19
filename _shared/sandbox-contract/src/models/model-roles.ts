@@ -66,6 +66,15 @@ export const MODEL_ROLES = [
         icon: "users",
     },
     {
+        // Picks one offered `provider:model` line, an effort and an account from a fixed list; a classification, not
+        // free text. Prompt carries live account headroom, so it must not be a model whose own allowance it is reading.
+        id: "model-router",
+        label: "Auto model choice",
+        blurb: "Which model reads a new chat's first message and picks the model, effort and account it runs on.",
+        kind: "helper",
+        icon: "sparkles",
+    },
+    {
         id: "pipeline-fix",
         label: "Pipeline fixes",
         blurb: "The agent started by Fix on a red pipeline.",

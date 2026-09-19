@@ -171,6 +171,36 @@ export const restoreComposer = (conversation: Conversation, tab: StoredTab): voi
 };
 
 // One persisted tab, back as a live conversation.
+// How the next turn runs, restored per tab: these describe THIS chat, never picks made in another tab since. Kept
+// apart from the tab's identity above because that is the axis they share — every one is a setting of the next send.
+const restoreTurnPicks = (conversation: Conversation, tab: StoredTab): void => {
+    if (tab.thinking !== undefined) {
+        conversation.thinking.value = tab.thinking;
+    }
+    if (tab.fast !== undefined) {
+        conversation.fast.value = tab.fast;
+    }
+    // Auto is this chat's unanswered question; tierHold is a pick like the others; tier is the judge's own verdict,
+    // not re-derivable from a draft.
+    if (tab.auto !== undefined) {
+        conversation.auto.value = tab.auto;
+    }
+    if (tab.tierHold !== undefined) {
+        conversation.tierHold.value = tab.tierHold;
+    }
+    if (tab.tier !== undefined) {
+        conversation.lastTier.value = tab.tier;
+    }
+    // Restored because it governs unattended runs; a reload must not quietly disarm one still in progress.
+    if (tab.autoContinue !== undefined) {
+        conversation.autoContinue.value = tab.autoContinue;
+    }
+    // The stopped-turn offer itself doesn't restore here; only the daemon knows if it's still held (see adoptEnding).
+    if (tab.effort !== undefined) {
+        conversation.effortPick.value = tab.effort;
+    }
+};
+
 export const restoreTab = (tab: StoredTab): Conversation => {
     const conversation = new Conversation(tab.conversationId);
     conversation.isolated.value = tab.isolated;
@@ -201,28 +231,7 @@ export const restoreTab = (tab: StoredTab): Conversation => {
         // Same for a model a thin catalog moved it off: the debt outlives the window that took it on.
         conversation.displacedModel.value = tab.displacedModel;
     }
-    // Turn settings restore per tab: they describe this chat, not picks made in some other tab since.
-    if (tab.thinking !== undefined) {
-        conversation.thinking.value = tab.thinking;
-    }
-    if (tab.fast !== undefined) {
-        conversation.fast.value = tab.fast;
-    }
-    // tierHold is a pick like the others; tier is the judge's verdict, not re-derivable from a draft.
-    if (tab.tierHold !== undefined) {
-        conversation.tierHold.value = tab.tierHold;
-    }
-    if (tab.tier !== undefined) {
-        conversation.lastTier.value = tab.tier;
-    }
-    // Restored because it governs unattended runs; a reload must not quietly disarm one still in progress.
-    if (tab.autoContinue !== undefined) {
-        conversation.autoContinue.value = tab.autoContinue;
-    }
-    // The stopped-turn offer itself doesn't restore here; only the daemon knows if it's still held (see adoptEnding).
-    if (tab.effort !== undefined) {
-        conversation.effortPick.value = tab.effort;
-    }
+    restoreTurnPicks(conversation, tab);
     // Persona restores per tab; nothing else remembers it, so a drop would silently hand back every account.
     if (tab.actsAs !== undefined) {
         conversation.actsAs.value = tab.actsAs;

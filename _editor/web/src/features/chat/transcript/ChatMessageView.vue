@@ -14,6 +14,7 @@ import { effectiveAutoLand, effectiveOutageResume, formatElapsed } from "../../a
 import { useAgents } from "../../agents/fleet/useAgents";
 import { errandOf } from "../run/errands";
 import { personaRouteWait } from "../personas/personaRoute";
+import { modelRouteWait } from "../models/modelRoute";
 import { changedNothing, type ChatMessage, type ChecklistView, foldsIntoTurn } from "./transcript";
 import { navigateInApp } from "../../../shell/window/mainWindow";
 import { useMarkdown } from "../../../lib/markdown/useMarkdown";
@@ -215,22 +216,23 @@ const showTyping = computed(() => props.streaming && !awaitingDecision.value);
 
 // Wait shown by this notice while running (ChatMessage.noticeWait); undefined once it ends. Each kind is asked of
 // whoever owns that wait, since none of them is a field on the row.
-const pendingWait = computed<{ readonly at: number; readonly counts: "up" | "down" } | undefined>(() => {
+type PendingWait = { readonly at: number; readonly counts: "up" | "down" } | undefined;
+// An instant that may not exist yet: a wait nobody owns any more has no clock, which is how a settled row stops
+// ticking without the row itself being rewritten.
+const clock = (instant: number | undefined, counts: "up" | "down"): PendingWait => (instant === undefined ? undefined : { at: instant, counts });
+
+const pendingWait = computed<PendingWait>(() => {
     switch (props.message.noticeWait) {
-        case `credentialRenewal`: {
-            const since = conversation.value.failures.credentialRenewal.value?.since;
-            return since === undefined ? undefined : { at: since, counts: `up` };
-        }
-        case `personaRoute`: {
-            const since = personaRouteWait(conversation.value)?.since;
-            return since === undefined ? undefined : { at: since, counts: `up` };
-        }
-        case `watch`: {
+        case `credentialRenewal`:
+            return clock(conversation.value.failures.credentialRenewal.value?.since, `up`);
+        case `personaRoute`:
+            return clock(personaRouteWait(conversation.value)?.since, `up`);
+        case `modelRoute`:
+            return clock(modelRouteWait(conversation.value)?.since, `up`);
+        case `watch`:
             // Counts down, like the board's own watch clock: the deadline is the next moment this conversation
             // definitely moves, and how long it has already waited says nothing about that.
-            const deadline = armedWatch.value?.deadlineAt;
-            return deadline === undefined ? undefined : { at: deadline, counts: `down` };
-        }
+            return clock(armedWatch.value?.deadlineAt, `down`);
         default:
             return undefined;
     }

@@ -1,6 +1,17 @@
 import { type AgentProvider, providerLabel } from "@intentic/sandbox-contract";
 import { afterEach, expect, test, vi } from "vitest";
-import { customEntryFor, familyGroups, filterEntries, lanesOf, type PickerEntry, pickerBlocks, pickerSections } from "./modelPickerState";
+import {
+    AUTO_KEY,
+    autoEntry,
+    customEntryFor,
+    familyGroups,
+    filterEntries,
+    isAutoPick,
+    lanesOf,
+    type PickerEntry,
+    pickerBlocks,
+    pickerSections,
+} from "./modelPickerState";
 import { endpointProviders, LOCAL_MODELS_GROUP } from "../accounts/providerCatalog";
 
 // The custom-model escape hatch: the one path that lets a user name a model no catalog has published yet, reachable
@@ -293,4 +304,27 @@ test("filters to the whole lane, so the one chip scopes the list to every card a
     withCards({ id: `endpoint/ollama-a`, label: `Ollama A`, kind: `localmodel` }, { id: `endpoint/ollama-b`, label: `Ollama B`, kind: `localmodel` });
 
     expect(filterEntries(LOCAL, ``, LOCAL_MODELS_GROUP, readyOnly()).map((row) => row.value)).toEqual([`qwen3-8`, `qwen3-5-64k`]);
+});
+
+/* THE AUTO ROW: a mode in the list's grammar, which must never leave the picker as a provider. */
+
+test("the Auto row is a pick like any other, recognisable as the mode it is", () => {
+    const row = autoEntry(`Auto`, `Let a model choose`);
+
+    expect(isAutoPick(row)).toBe(true);
+    expect(row.key).toBe(AUTO_KEY);
+    // No model id: there is nothing to run yet, which is the whole point of the row.
+    expect(row.value).toBe(``);
+});
+
+test("no real catalog row is ever mistaken for the mode", () => {
+    // A pick carrying a provider and a model id is a model, whatever it is called; only the sentinel is the mode.
+    expect(CATALOG.some(isAutoPick)).toBe(false);
+    expect(isAutoPick({ provider: `claude`, value: `` })).toBe(false);
+});
+
+test("the Auto row searches like a catalog row, so typing its name finds it", () => {
+    const withAuto = [autoEntry(`Auto`, `Let a model choose`), ...CATALOG];
+
+    expect(filterEntries(withAuto, `auto`, undefined, readyOnly(`claude`)).map((row) => row.key)).toEqual([AUTO_KEY]);
 });

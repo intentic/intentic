@@ -213,7 +213,7 @@ export const TranscriptRowSchema = z.object({
         .describe("A one-press follow-up this notice offers, by name. The chat decides what it does and whether it still applies."),
     // An unfinished wait this notice describes, by name; whether it's still running is live state, not stored here.
     noticeWait: z
-        .enum(["credentialRenewal", "personaRoute", "watch"])
+        .enum(["credentialRenewal", "personaRoute", "modelRoute", "watch"])
         .optional()
         .describe("The wait this notice describes, by name, so a reader can say whether it is still on."),
     // Which one, for a wait whose kind can have several in flight at once; without it two armed watches settle together.

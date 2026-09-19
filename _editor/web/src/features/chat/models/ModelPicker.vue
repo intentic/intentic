@@ -28,12 +28,17 @@ const t = useT();
 
 /* `submit` is the keyboard's way to the `commit` slot, and it is deliberately NOT plain Enter. */
 const emit = defineEmits<{ pick: [PickerEntry]; submit: []; close: [] }>();
-const { provider, model, unpickable } = defineProps<{
+const { provider, model, unpickable, leadRows, leadSelected } = defineProps<{
     // The pair the list checkmarks; both, since a model id is only meaningful under the provider that vends it.
     provider: AgentProvider;
     model: string;
     // Rows this caller can't switch to (mid-stream rule); undefined for a caller only picking a future run's model.
     unpickable?: (entry: PickerEntry) => boolean;
+    // Rows pinned above every provider lane: a MODE rather than a model (Auto). They belong to no lane and no rail.
+    leadRows?: readonly PickerEntry[];
+    // Which lead row is the current selection, by key. Set, it is the only checkmark in the list: a mode and a model
+    // cannot both be what the next turn runs, and two ticks would say they could.
+    leadSelected?: string;
 }>();
 
 const { mobile } = useDevice();
@@ -44,6 +49,11 @@ const rail = ref<string | undefined>();
 const searchInput = ref<{ focus: () => void } | null>(null);
 
 const searching = computed(() => query.value.trim().length > 0);
+
+// A lead row belongs to no provider, so the readiness test would sink it below every connected model in search
+// results. It is always runnable by construction — it is a mode, not a credential.
+const leadAwareReady = (candidate: AgentProvider): boolean =>
+    (leadRows ?? []).some((entry) => entry.provider === candidate) || providerReady(candidate);
 
 // Rail lanes: native providers, then endpoints and ACP agents, folded by the same rule the sections use.
 const railLanes = computed<readonly PickerLane[]>(() =>
@@ -95,7 +105,9 @@ const sections = computed<
     const withRows = (entries: readonly PickerEntry[]): { entry: PickerEntry; index: number }[] =>
         entries.map((entry) => ({ entry, index: index++ }));
     if (searching.value) {
-        const matched = filterEntries(pickerEntries.value, query.value, rail.value, providerReady);
+        // Lead rows search alongside the catalog rather than being pinned through a query: somebody typing a model
+        // name is asking for that model, not for the mode sitting above it.
+        const matched = filterEntries([...(leadRows ?? []), ...pickerEntries.value], query.value, rail.value, leadAwareReady);
         // Ranked hits first, custom entry last, so Enter takes the real match; search stays flat, no family folding.
         const rows = withRows(customEntry.value === undefined ? matched : [...matched, customEntry.value]);
         return [
@@ -114,7 +126,27 @@ const sections = computed<
             },
         ];
     }
-    return pickerSections(pickerEntries.value, provider, rail.value, providerReady).map((section) => {
+    const leading = rail.value === undefined ? (leadRows ?? []) : [];
+    return [
+        // Its own section above every lane, unlabelled: a heading over one row would make a mode look like a provider.
+        ...(leading.length === 0
+            ? []
+            : [
+                  {
+                      key: `lead`,
+                      label: undefined,
+                      provider: undefined,
+                      providers: [],
+                      blocks: [{ key: `lead`, label: undefined, rows: withRows(leading) }],
+                      rowCount: leading.length,
+                      hidden: 0,
+                      expanded: false,
+                      collapsible: false,
+                      badge: undefined,
+                      trial: undefined,
+                  },
+              ]),
+        ...pickerSections(pickerEntries.value, provider, rail.value, providerReady).map((section) => {
         const isExpanded = expanded.value.has(section.key);
         const single = section.providers.length === 1 ? section.providers[0] : undefined;
         // The selected model survives collapse only for the current provider's lane; only that checkmark is real.
@@ -134,7 +166,8 @@ const sections = computed<
             badge: single === undefined ? undefined : accessBadge(single),
             trial: single === undefined ? undefined : trialBadge(single),
         };
-    });
+        }),
+    ];
 });
 const flat = computed<readonly PickerEntry[]>(() =>
     sections.value.flatMap((section) => section.blocks.flatMap((block) => block.rows.map((row) => row.entry))),
@@ -143,7 +176,10 @@ const flat = computed<readonly PickerEntry[]>(() =>
 const { activeIndex, activeRow, move, setRowEl } = useListNavigation(flat, (entry) => entry.key);
 
 // The selected row: the caller's current pair (the harness, where a caller has one, is a separate axis).
-const isSelected = (entry: PickerEntry): boolean => entry.provider === provider && entry.value === model;
+// A selected lead row takes the tick alone: while a mode is on there is no model pick to confirm, and ticking the one
+// it would fall back to would claim a decision nobody has made yet.
+const isSelected = (entry: PickerEntry): boolean =>
+    leadSelected === undefined ? entry.provider === provider && entry.value === model : entry.key === leadSelected;
 const isDisabled = (entry: PickerEntry): boolean => unpickable?.(entry) === true;
 // A row whose provider has no credential yet; dimmed and lock-marked, never disabled.
 const isLocked = (entry: PickerEntry): boolean => !providerReady(entry.provider);

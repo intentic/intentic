@@ -20,6 +20,7 @@ import {
 import { userRow } from "@intentic/sandbox-contract/transcript-fold";
 import { implement, ORPCError } from "@orpc/server";
 import { createOutboundSniffer } from "../../activity/outbound.js";
+import { routeModel } from "../prompt/model-router.js";
 import { emitWorkspaceEvent } from "../../automations/workspace-events.js";
 import { turnCliEnv } from "../../capabilities/turn-env.js";
 import type { Services } from "../../composition.js";
@@ -1456,6 +1457,10 @@ async function* runTurn(
                 ...(plan.mapArm !== undefined ? { mapArm: plan.mapArm } : {}),
                 ...(plan.mapChars !== undefined ? { mapChars: plan.mapChars } : {}),
                 ...(plan.turnContext !== undefined ? { turnContext: plan.turnContext, turnContextMs: plan.turnContextMs } : {}),
+                // The Auto judge chose this turn's model; marked on that turn alone, so a later row of the same
+                // conversation naming a different model reads as the user overruling it. Undefined drops on the way
+                // out, so an ordinary turn carries no field rather than a false one.
+                autoPicked: input.autoPicked,
                 // What the tier judge said, if it ran; absent, not zero, when it didn't.
                 ...(tier !== undefined
                     ? {
@@ -1664,5 +1669,8 @@ export const createAgentRoutes = (services: Services) => {
         commands: i.commands.handler(({ input }) => ({ commands: [...commandsOf(input.agent ?? "claude")] })),
         // What each provider last refused a turn with; empty is the common, healthy case.
         refusals: i.refusals.handler(async () => ({ refusals: await services.providerRefusals.read() })),
+        // Never throws: no offer, no model, or a deadline are all "nothing chosen" with a reason; the composer waits
+        // on this before the first turn goes out, so a failure here must cost that turn nothing but a sentence.
+        routeModel: i.routeModel.handler(({ input, signal }) => routeModel(services, input, signal)),
     };
 };

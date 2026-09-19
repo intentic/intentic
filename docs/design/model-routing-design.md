@@ -365,7 +365,7 @@ guardrail. Past a few percent, the router is costing more in retries and trust t
 
 | Option | Why not |
 | --- | --- |
-| **LLM-as-judge router** | 100–500 ms serial hop plus tokens on every turn. The mechanism is supposed to produce savings, not consume them. |
+| **LLM-as-judge router**, *per turn* | 100–500 ms serial hop plus tokens on every turn. The mechanism is supposed to produce savings, not consume them. Still rejected, and §8 is not an exception to it: that judge runs once per conversation, not once per turn. |
 | **Pure cascade / escalate-after** | Pre-generation routing beat the best cascade on 4 of 5 datasets (2605.06350); confidence signals are weakest exactly on open-ended and tool-use turns; latency compounds per step in an agent loop. |
 | **RouteLLM's pretrained routers, dropped in** | Trained on Chatbot Arena *human preference* over open-ended chat. Useful as a reference implementation and a baseline to beat — not a predictor of "will the fast tier complete this coding task". |
 | **Arch-Router-1.5B** | Right instincts (policy-editable in plain language, new models need no retraining) but a 1.5B generative pass where an encoder or a dot-product suffices. Revisit only if routing *policies* become a user-facing feature. |
@@ -447,6 +447,65 @@ Nothing can be shown to be cheaper than an unknown, and the entire safety argume
 down.
 
 ---
+
+## 8. The opening pick — Auto, and why it is a different question
+
+Everything above routes *turns*, downward, inside one provider, for free. It cannot answer the question a person
+actually asks when they open a chat: **which model should this whole conversation run on.** The scorer is
+structurally barred from it — §3 gives it one move, down a rung of the provider already picked — and the two facts
+that decide it, what the work will turn into and how much allowance each account has left, are not in the prompt's
+words at all.
+
+So `autoTier` gains a fourth state, `"judge"`, and the composer gains an **Auto** row at the head of the model
+picker. Pick it, and the chat's *first sent message* is read once by the model on the `model-router` list, which
+answers with a provider, a model, an effort and an account drawn from an offered list. The verdict is worn exactly as
+a hand-made pick (`Conversation.wearModel`), and **the judge never runs again in that conversation**. From turn two
+the model is an ordinary pick its owner holds.
+
+**Why this does not reopen §5.** The rejection there is of paying a serial LLM hop *on every turn* to make a decision
+worth a fraction of a cent. This is one call amortised over an entire conversation, making a decision the free scorer
+cannot make at all. The three differences, stated so a later reader does not have to re-derive them:
+
+| §3's judge | §8's judge |
+| --- | --- |
+| Every turn, free, pure function | Once per conversation, one cheap model call |
+| Down a rung, same provider | Any provider, any model, any effort, any account |
+| Prompt's words only | Plus live per-account allowance |
+
+**It is a classification over an offered list, not a free choice.** `model-offer.ts` (contract, pure) builds the two
+blocks the judge sees — runnable models with their effort ladders, and each account with how much allowance it has
+left — and reads the reply back against them. A reply naming a model that is not on the list is *unusable*, so the
+role ladder steps to its next rung rather than running an id no provider has. An unrecognised effort or account is
+dropped and the model it came with is kept: those are refinements, and the turn's own defaults answer for them
+correctly.
+
+**Allowances are a hard filter as well as context.** `auto-offer.ts` drops a model whose every connected account is
+at cap before the judge ever sees it — the same reading `role-model-quota.ts` steps a helper rung over — so a pick
+cannot be one the provider would refuse. An *unmeasured* account counts as headroom, not as spent: silence is not
+evidence of a full pool, and treating it as one would hide most of the catalog in a sandbox nobody has measured.
+Endpoints and the free trial are left out entirely, since neither publishes an allowance to choose against.
+
+**Nothing blocks a send.** No offer, an unset role, a spent chain, a deadline, a reply naming nothing: each resolves
+to "nothing chosen", the chat runs on the pick it already had, and the transcript notice says which of those
+happened. The reading is always drawn — a spinning row rewritten in place with the verdict and the model that gave
+it — because a model call the owner cannot see is a bill they cannot question.
+
+**It is recorded, so it can be argued with.** §4's rule holds here too: the turn whose model the judge chose carries
+`UsageTurn.autoPicked`, and that one turn only. A later row of the same conversation naming a different model is the
+user overruling the pick — which is the escalation rate this feature has to be able to answer for, computable from
+the ledger without a schema change whenever somebody comes to draw it.
+
+**Two consequences, both deliberate.** `autoTier` is one enum, so `"judge"` and `"on"` are mutually exclusive:
+a sandbox on Auto no longer downgrades turns one by one. Shadow scoring keeps running underneath in `"judge"` mode,
+costing nothing and keeping §4's ledger one population, so switching to Auto does not blind the calibration the
+cutoff is fitted from. And a persona that wears its own model wins: `ChatPane` chains persona routing first, and
+`wearModel` disarms Auto, so a card naming a ladder is an explicit instruction Auto stands down for rather than
+overrules.
+
+**The precedent, copied rather than invented.** `persona-router.ts` / `personaRoute.ts` already does all of this for
+a different question — one classification call on the opening message, never on a draft, the send held under a
+deadline, a spinning notice settled in place, the answer applied through `wearModel`. Auto is its sibling, and any
+change to how one of them behaves should be weighed against the other.
 
 ## Sources
 

@@ -305,11 +305,14 @@ const setPickerOpen = (open: boolean): void => {
     bulkPin.value = undefined;
 };
 
-// Middle state is the point, not a halfway house: measuring first ends the guessing about a cutoff.
+// Middle state is the point, not a halfway house: measuring first ends the guessing about a cutoff. Auto sits at the
+// end because it answers the same question the other way round — once per chat, by asking a model, instead of turn by
+// turn for free — and the two cannot both be in force over one conversation.
 const autoTierOptions = computed(() => [
     { label: t(`sandbox.agentModels.off`), value: `off` },
     { label: t(`sandbox.agentModels.measure`), value: `shadow` },
     { label: t(`sandbox.agentModels.on`), value: `on` },
+    { label: t(`sandbox.agentModels.auto`), value: `judge` },
 ]);
 
 // Named, not numbered: the cutoff is meaningless unread; offered live in both Measure and On.
@@ -448,7 +451,7 @@ const eagernessOptions = computed(() => [
                     <SegmentedControl
                         :model-value="settings?.autoTier ?? `shadow`"
                         :options="autoTierOptions"
-                        @update:model-value="(autoTier: string) => patch({ autoTier: autoTier as `off` | `shadow` | `on` })"
+                        @update:model-value="(autoTier: string) => patch({ autoTier: autoTier as `off` | `shadow` | `on` | `judge` })"
                     />
                 </template>
                 <template #below>
@@ -456,6 +459,9 @@ const eagernessOptions = computed(() => [
                         <p v-if="settings?.autoTier === `off`" class="text-2xs text-muted">{{ t(`sandbox.agentModels.nothingJudgedRecorded`) }}</p>
                         <p v-else-if="settings?.autoTier === `on`" class="text-2xs text-muted">
                             {{ t(`sandbox.agentModels.simpleTurnsRunOn`) }}
+                        </p>
+                        <p v-else-if="settings?.autoTier === `judge`" class="text-2xs text-muted">
+                            {{ t(`sandbox.agentModels.autoChoosesPerChat`) }}
                         </p>
 
                         <!-- The app's standard shape for a measured answer; no background, since `#below` is inside the row's hairline. -->

@@ -47,6 +47,9 @@ export interface StoredTab {
     readonly tierHold?: boolean;
     // Complexity judge's last verdict, not a pick; without it a reload judges the next follow-up with no history.
     readonly tier?: "fast" | "standard";
+    // Chat is on Auto with its model still unchosen. Per tab, since it describes this chat's unanswered question, and
+    // a reload without it would show a model the owner never picked as though they had.
+    readonly auto?: boolean;
     // Persona this tab acts as, per tab only: a narrowing must never follow the user into their next chat.
     readonly actsAs?: string;
     // Session's full binding; may lag the tab's pick until the next send, so a reload can't fake the gap.
@@ -88,6 +91,7 @@ export const snapshotTab = (conversation: Conversation): StoredTab => ({
     autoContinue: conversation.autoContinue.value,
     tierHold: conversation.tierHold.value,
     tier: conversation.lastTier.value,
+    auto: conversation.auto.value,
     harness: conversation.harness.value,
     // Session ref verbatim, never rebuilt field by field: the two must match exactly until something is switched.
     session: conversation.session.value,
@@ -246,6 +250,7 @@ const readTab = (raw: Record<string, unknown>): StoredTab | undefined => {
         ...readFlag(`standIn`, raw[`standIn`]),
         ...readStanding(raw[`standing`]),
         ...readFlag(`tierHold`, raw[`tierHold`]),
+        ...readFlag(`auto`, raw[`auto`]),
         ...readTier(raw[`tier`]),
         ...readHarness(raw[`harness`]),
         ...readSession(raw[`session`]),

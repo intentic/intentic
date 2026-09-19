@@ -33,6 +33,7 @@ import { invalidateAgentTranscript, olderTranscriptPage } from "../transcript/ag
 import { AUTO_CONTINUE_TRIES, autoContinueDelay } from "../run/autoContinue";
 import type { PickUp } from "../run/pickUp";
 import { clampEffort } from "../models/effortScale";
+import { isAutoPick } from "../models/modelPickerState";
 import { rememberedAccountFor, selectedAccountId, setAccountUsage } from "../accounts/providerAccounts";
 import { modelLabelFor, providerModels, providerTabs } from "../accounts/providerCatalog";
 import { type ChatAttachment, type ChatMessage, continuationFor, isNudgeText, recordedRows, withCancelledCards } from "../transcript/transcript";
@@ -274,6 +275,13 @@ export class Conversation {
     readonly fast = ref<boolean>(false);
     // Standing veto over automatic tier selection; sent as an explicit boolean every turn to clear an earlier hold.
     readonly tierHold = ref<boolean>(false);
+    // The chat is on Auto and its model is still to be chosen: a model reads the opening message and wears the answer
+    // (modelRoute.ts), which clears this. `provider`/`model` keep their remembered values underneath, because that is
+    // what the chat runs on if the reading never lands.
+    readonly auto = ref<boolean>(false);
+    // The next turn's model was chosen by Auto's reading rather than picked by hand. Describes ONE turn, not the
+    // conversation: `send` spends it, so the ledger marks the turn the judge actually decided and no other.
+    readonly autoPicked = ref<boolean>(false);
     // Persona this chat acts as externally, or undefined for the ordinary chat with every account; not sticky.
     readonly actsAs = ref<string | undefined>();
     // The project the conversation was started under (app/projectScope.ts); sent with the first turn and latched there.
@@ -403,6 +411,7 @@ export class Conversation {
         this.model.value = rememberedModelFor(provider);
         this.effortPick.value = turnDefaults.effort.value;
         this.thinking.value = turnDefaults.thinking.value;
+        this.auto.value = turnDefaults.auto.value;
         // A re-seeded draft is starting over on today's picks; whatever a catalog owed the last one is gone with it.
         this.displacedModel.value = undefined;
         // Born displaced when the pick couldn't run and something else was substituted (see movedFrom).
@@ -469,10 +478,18 @@ export class Conversation {
     // The three turn-setting writes (this one and the two below): apply here, remember the pick for the next new chat.
     // One picker row is provider + model; harness is a separate axis, so a model pick keeps the harness.
     selectModel(pick: TurnPick): void {
+        // Auto is a mode, not a route: it arms the reading and leaves provider and model exactly as they were, so a
+        // chat whose reading never lands still has somewhere to run.
+        if (isAutoPick(pick)) {
+            this.setAuto(true);
+            return;
+        }
         if (this.streaming.value && pick.provider !== this.provider.value) {
             return;
         }
         this.keep();
+        // Naming a model answers the question Auto was armed to ask.
+        this.auto.value = false;
         // `pointAt` rather than `selectProvider`: the pair is remembered once below, with the model actually pressed.
         this.pointAt(pick.provider);
         this.model.value = pick.value;
@@ -492,6 +509,9 @@ export class Conversation {
             return;
         }
         this.keep();
+        // The model is now named, whoever named it: a persona's card or Auto's own reading. Either way the question
+        // Auto exists to ask has been answered for this chat, and nothing asks it again.
+        this.auto.value = false;
         this.pointAt(pin.provider);
         this.model.value = pin.model;
         if (pin.effort !== undefined) {
@@ -559,6 +579,16 @@ export class Conversation {
     // it describes.
     setTierHold(value: boolean): void {
         this.tierHold.value = value;
+    }
+
+    // Arm or disarm Auto for this chat, and for the next new one. Refused mid-stream like any other pick: a reading
+    // taken now would name a model for a turn already running on another.
+    setAuto(value: boolean): void {
+        if (this.streaming.value) {
+            return;
+        }
+        this.auto.value = value;
+        turnDefaults.auto.value = value;
     }
 
     // Point the next turn at a specific account of its current provider; retires the session at the next send.
@@ -1371,7 +1401,17 @@ export class Conversation {
             fast: this.fast.value && this.fastOffered.value,
             // Always the raw boolean: the daemon persists the hold, only an explicit false can clear one set earlier.
             tierHold: this.tierHold.value,
+            // Spent here, not merely read: the mark belongs to the turn the judge decided, and the next turn on the
+            // same model is the user having let it stand rather than a second choice.
+            ...(this.spendAutoPicked() ? { autoPicked: true } : {}),
         };
+    }
+
+    // Reads and clears the one-turn Auto mark.
+    private spendAutoPicked(): boolean {
+        const picked = this.autoPicked.value;
+        this.autoPicked.value = false;
+        return picked;
     }
 
     // Hand one queued message to the running turn via steer; false when no steerable turn is live, so it stays queued.

@@ -1,4 +1,4 @@
-import { KeyedProviderSchema, type ModelChoice } from "@intentic/sandbox-contract";
+import { KeyedProviderSchema, type ModelChoice, renewsInWords } from "@intentic/sandbox-contract";
 import type { Services } from "../../composition.js";
 import { fleetLimit, type TurnLimit } from "../../usage/fleet-limit.js";
 
@@ -12,25 +12,9 @@ export interface SpentRung {
     readonly reopensAt?: number;
 }
 
-// Relative phrasing (a provider's own renewal estimate), since an absolute instant would need the reader's timezone;
-// deliberately coarse at every scale.
-const inWords = (reopensAt: number, now: number): string => {
-    const seconds = reopensAt - Math.floor(now / 1000);
-    if (seconds <= 60) {
-        return `any moment`;
-    }
-    if (seconds < 60 * 60) {
-        return `in about ${Math.round(seconds / 60)} min`;
-    }
-    if (seconds < 36 * 60 * 60) {
-        return `in about ${Math.round(seconds / 3600)}h`;
-    }
-    return `in about ${Math.round(seconds / 86_400)} days`;
-};
-
 const spentSentence = (subject: string, pool: string | undefined, reopensAt: number | undefined, now: number): string => {
     const allowance = pool === undefined ? `allowance` : `${pool} allowance`;
-    const renews = reopensAt === undefined ? `` : `, renews ${inWords(reopensAt, now)}`;
+    const renews = reopensAt === undefined ? `` : `, renews ${renewsInWords(reopensAt, now)}`;
     return `${subject} out of ${allowance}${renews}.`;
 };
 

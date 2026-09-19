@@ -53,6 +53,13 @@ export const turnDefaults = {
         read: (raw) => (raw === null ? DEFAULT_THINKING : raw !== `false`),
         write: String,
     }),
+    // Whether a new chat opens on Auto, with its model still to be chosen. Its own preference rather than a value in
+    // `provider`, which only ever holds a provider a turn can really run on.
+    auto: definePreference<boolean>({
+        key: `ui-chat-auto`,
+        read: (raw) => raw === `true`,
+        write: String,
+    }),
 };
 
 // A turn's model choice as one value: provider and model id travel together everywhere a pick does, since an id alone
@@ -67,6 +74,8 @@ export interface TurnPick {
 // record a chosen model under whichever provider a different tab had last switched to. Callers state a pick; they never
 // poke the storage directly.
 export const rememberPick = (pick: TurnPick): void => {
+    // Naming a model is the end of Auto for later chats too: the owner just answered the question Auto exists to ask.
+    turnDefaults.auto.value = false;
     turnDefaults.provider.value = pick.provider;
     // Per-provider, so switching away and back restores each provider's own remembered model, across a harness switch
     // too.

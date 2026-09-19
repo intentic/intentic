@@ -102,6 +102,10 @@ export const UsageTurnSchema = z.object({
     tierCeiling: z.number().optional(),
     // The turn carried AgentTurn.tierHold: the user vetoed a fast verdict. Absent means no veto.
     tierDenied: z.boolean().optional(),
+    // This turn's model was chosen by the Auto judge reading the conversation's opening message, not picked by hand.
+    // Marked on that one turn only; a later row of the same conversation naming a different model is the user
+    // overruling it, which is the escalation rate this feature has to be able to answer for.
+    autoPicked: z.boolean().optional(),
 });
 export type UsageTurn = z.infer<typeof UsageTurnSchema>;
 // Ledger grouped by day, provider, account, model, harness and conversation, one panel's worth of rows per active day.

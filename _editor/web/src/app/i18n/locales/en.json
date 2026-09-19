@@ -923,6 +923,9 @@
         },
         "chatModelPicker": {
             "allowed": "Allowed",
+            "autoArmed": "A model reads your first message and picks what this chat runs on. Every turn after that stays on it, and you can change it whenever you like.",
+            "autoDescription": "Let a model choose from what's connected and still has allowance",
+            "autoLabel": "Auto",
             "keepConversationOnPicked": "Keep this conversation on the picked model",
             "myPickOnly": "My pick only",
             "notAvailableHere": "Not available here",
@@ -1683,6 +1686,7 @@
             "addModelAutomaticTier": "Add a model for automatic tier selection",
             "advanced": "Advanced",
             "auto": "Auto",
+            "autoChoosesPerChat": "The model picker gains an Auto row. Pick it, and a model reads a new chat's first message and chooses what that conversation runs on, from what is connected and still has allowance. Turns are no longer judged one by one.",
             "automaticTier": "Automatic tier",
             "balanced": "Balanced",
             "cautious": "Cautious",

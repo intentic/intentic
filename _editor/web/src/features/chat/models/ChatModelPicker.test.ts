@@ -50,6 +50,7 @@ const conversationOf = (pair: { provider: AgentProvider; harness: AgentHarness }
         fastMode: ref(undefined),
         tierHold: ref(false),
         tierAnswer: ref(undefined),
+        auto: ref(false),
         streaming: ref(false),
         generating: computed(() => false),
         account: ref(undefined),
@@ -61,6 +62,7 @@ const conversationOf = (pair: { provider: AgentProvider; harness: AgentHarness }
         setThinking: vi.fn(),
         setFast: vi.fn(),
         setTierHold: vi.fn(),
+        setAuto: vi.fn(),
     }) as unknown as Conversation;
 
 let app: App | undefined;

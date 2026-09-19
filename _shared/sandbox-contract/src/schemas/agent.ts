@@ -262,6 +262,13 @@ export const AgentTurnSchema = z
             ),
         // Vetoes automatic tier selection for this turn; the judge still runs and records its verdict, but nothing is
         // substituted.
+        // Set by the composer on the one turn whose model the Auto judge chose; the daemon only records it.
+        autoPicked: z
+            .boolean()
+            .optional()
+            .describe(
+                "Whether this turn's model was chosen for you by reading the conversation's opening message, rather than picked by hand. Recorded so the choice can be judged later against what you did next.",
+            ),
         tierHold: z
             .boolean()
             .optional()

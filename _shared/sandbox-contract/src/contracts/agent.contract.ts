@@ -3,6 +3,7 @@ import { AgentCommandsQuerySchema, AgentCommandsSchema } from "../events/cards.j
 import { AttachFrameSchema } from "../events/agent-events.js";
 import { AgentTurnSchema, AttachTurnSchema, StartedTurnSchema } from "../schemas/agent.js";
 import { RewindResultSchema, RewindTurnSchema } from "../schemas/history.js";
+import { ModelRouteAskSchema, ModelRouteSchema } from "../schemas/model-route.js";
 import { AgentReplySchema, ProviderRefusalsSchema, ResumeTurnSchema, SteerSchema, StopTurnSchema } from "../schemas/providers/plan-limits.js";
 import { OkSchema } from "../schemas/shared.js";
 
@@ -91,6 +92,17 @@ export const agentContract = {
         })
         .input(AgentCommandsQuerySchema)
         .output(AgentCommandsSchema),
+    // Never throws: no offer, no model, or a deadline are all "nothing chosen" with a reason; the composer is waiting.
+    routeModel: oc
+        .route({
+            method: "POST",
+            path: "/agent/route-model",
+            summary: "Choose the model a new chat runs on",
+            description:
+                "Reads a new chat's opening message and picks the model, effort and account that conversation should run on, from what is connected and still has allowance left. Asked once per chat, on the message actually sent, and never again: every turn after it runs on the pick the chat is wearing, which you are free to change. Answers with nothing, and a reason, whenever it cannot choose — a chat is never held up by this.",
+        })
+        .input(ModelRouteAskSchema)
+        .output(ModelRouteSchema),
     refusals: oc
         .route({
             method: "GET",

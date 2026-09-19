@@ -24,6 +24,9 @@ export interface TurnSettings {
     readonly fast: boolean;
     // Keeps the picked model despite looking simple; sent even when false, to clear an earlier hold.
     readonly tierHold: boolean;
+    // This turn's model came from Auto's reading, not a hand. Absent on every other turn, which is the point: it
+    // marks the one turn the judge decided.
+    readonly autoPicked?: boolean;
 }
 
 // A provider-minted resumable session and the runtime/account it belongs to; a mismatched selection at send
@@ -51,6 +54,13 @@ export const resumes = (
     selection: { agent: AgentProvider; account: string | undefined; harness: AgentHarness },
 ): boolean =>
     session !== undefined && session.provider === selection.agent && session.account === selection.account && session.harness === selection.harness;
+
+// Flags that ride only when true, since the daemon reads false and unset the same way. `tierHold` is deliberately not
+// one of them: unset there would leave an earlier turn's veto standing on the conversation.
+const setFlags = (settings: TurnSettings): { fast?: true; autoPicked?: true } => ({
+    ...(settings.fast ? { fast: true as const } : {}),
+    ...(settings.autoPicked === true ? { autoPicked: true as const } : {}),
+});
 
 // Builds the turn request body. An omitted `model`/`harness`/`sessionId` each resolve to the daemon's own
 // default; `isolated` picks the conversation's worktree over /work.
@@ -105,9 +115,8 @@ export const turnRequestBody = (input: {
         model: input.settings.model || undefined,
         effort: input.settings.effort,
         thinking: input.settings.thinking,
-        // Sent only when true; the daemon treats false and unset the same way.
-        ...(input.settings.fast ? { fast: true } : {}),
-        // Always sent: unlike `fast`, unset would leave an earlier turn's veto standing on the conversation.
+        ...setFlags(input.settings),
+        // Always sent: unlike the flags above, unset would leave an earlier turn's veto standing on the conversation.
         tierHold: input.settings.tierHold,
         // Starting permission posture, passed straight to the SDK:
         //   plan – proposes then executes

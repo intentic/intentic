@@ -317,11 +317,15 @@ export const SandboxSettingsSchema = z.object({
     // off: the judge never runs.
     // shadow (default): the judge scores every turn to the ledger; nothing is routed.
     // on: a turn judged fast runs on the cheap rung, where the provider publishes one.
+    // judge: the deterministic scorer keeps writing shadow rows but routes nothing; the Auto picker row is offered
+    // instead, and a model reads a new chat's opening message once to choose what the whole conversation runs on.
+    // Exclusive with `on` because the two answer the same question at different moments, and a per-turn downgrade
+    // underneath a picked-by-model conversation would be overruling a choice already made about this chat.
     autoTier: z
-        .enum(["off", "shadow", "on"])
+        .enum(["off", "shadow", "on", "judge"])
         .default("shadow")
         .describe(
-            "Whether an easy-looking turn may run on a cheaper model from the same provider. Three states rather than a switch, because the middle one is the only honest road to the third: it scores every turn and routes nothing, so the guess can become a measurement before it changes anything. It can only ever route down, so the worst case is one turn's quality rather than a bill nobody asked for.",
+            "Whether an easy-looking turn may run on a cheaper model from the same provider. Three states rather than a switch, because the middle one is the only honest road to the third: it scores every turn and routes nothing, so the guess can become a measurement before it changes anything. It can only ever route down, so the worst case is one turn's quality rather than a bill nobody asked for. The fourth, Auto, answers a different question: rather than downgrading turns one by one, it offers an Auto row in the model picker and has a model read a new chat's first message to choose what that whole conversation runs on.",
         ),
     // `balanced` is what every verdict recorded before this setting existed was judged against, so shadow history stays
     // comparable.

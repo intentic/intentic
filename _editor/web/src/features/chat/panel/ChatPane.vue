@@ -43,6 +43,7 @@ import { CHAT_SURFACE } from "../tools/chatToolSurface";
 import { workspaceSurface } from "./workspaceSurface";
 import { usePersonas } from "../../sandbox/personas/usePersonas";
 import { usePersonaRoute } from "../personas/personaRoute";
+import { useModelRoute } from "../models/modelRoute";
 import { roleSources } from "../accounts/roleModel";
 import { useRole } from "../../sandbox/secrets/useRole";
 import { attachmentPeek } from "../drafts/attachmentPeeks";
@@ -661,6 +662,10 @@ const pickPersona = (id: string | undefined): void => {
 // conversation's tree; the chat says in its own transcript that the reading is happening.
 const personaRoute = usePersonaRoute(() => props.conversation);
 
+// Which model an Auto chat runs on, asked once on the sent message (modelRoute.ts). Its own wait, chained after the
+// persona's, because the two answer different questions and the card's answer outranks this one.
+const modelRoute = useModelRoute(() => props.conversation);
+
 // Snaps the box back to one line and refocuses the cursor — what every path that spends the draft ends with.
 const settleComposer = (): void => {
     draft.value = ``;
@@ -713,13 +718,19 @@ const sendDraft = (): void => {
     } else {
         const snapshot = staging.snapshot();
         const editorContext = editorContextForSend();
-        // A routed chat's opening message waits for the reading, so the card is on before the turn that decides the
-        // tree; every other send goes now.
-        const routing = personaRoute.beforeSend(text);
-        if (routing === undefined) {
+        // A routed chat's opening message waits for its readings, so the card and the model are on before the turn
+        // that decides the tree; every other send goes now.
+        // Persona first, and not merely for ordering: a card that wears its own model has already answered which
+        // model this chat runs on, and Auto (which `wearModel` disarms) stands down rather than overruling it.
+        const persona = personaRoute.beforeSend(text);
+        const readings =
+            persona === undefined
+                ? modelRoute.beforeSend(text, includeEditorContext.value)
+                : persona.then(() => modelRoute.beforeSend(text, includeEditorContext.value));
+        if (readings === undefined) {
             void send(text, snapshot, editorContext);
         } else {
-            void routing.then(() => send(text, snapshot, editorContext));
+            void readings.then(() => send(text, snapshot, editorContext));
         }
         attachments.value = [];
         includeEditorContext.value = false;

@@ -3,7 +3,7 @@ import { computed } from "vue";
 import { limitationsOf } from "@intentic/sandbox-contract";
 import { InfoHint } from "@intentic/ui";
 import type { Conversation } from "../session/conversation";
-import type { PickerEntry } from "./modelPickerState";
+import { AUTO_KEY, autoEntry, type PickerEntry } from "./modelPickerState";
 import { usePickerAccounts } from "../accounts/pickerAccounts";
 import { modelLabelFor } from "../accounts/providerCatalog";
 import { useSandboxSettings } from "../../sandbox/overview/useSandboxSettings";
@@ -23,12 +23,19 @@ const emit = defineEmits<{ selected: [] }>();
 const { conversation } = defineProps<{ conversation: Conversation }>();
 
 // Destructured once; every host remounts this component (v-if) rather than swapping the prop in place.
-const { provider, harness, model, thinking, fast, effort, fastMode, tierHold, tierAnswer, streaming, generating, account, capabilities, box } =
+const { provider, harness, model, thinking, fast, effort, fastMode, tierHold, tierAnswer, streaming, generating, account, capabilities, box, auto } =
     conversation;
 
 // Sandbox-wide automatic-tier mode; decides what the tier block may show (a dead control is worse than none).
 const { settings } = useSandboxSettings();
 const tierMode = computed(() => settings.value?.autoTier ?? `shadow`);
+
+// Auto is offered only in the mode that has somewhere to send the reading; everywhere else the row would be a control
+// that does nothing, which is worse than no row.
+const leadRows = computed(() =>
+    tierMode.value === `judge` ? [autoEntry(t(`chat.chatModelPicker.autoLabel`), t(`chat.chatModelPicker.autoDescription`))] : [],
+);
+const leadSelected = computed(() => (auto.value ? AUTO_KEY : undefined));
 
 // Whether the shared block has content for this provider; needed before the footer renders its own padding.
 const { hasContent } = usePickerAccounts(provider, harness, model);
@@ -120,18 +127,35 @@ const tierNotice = computed<string | undefined>(() => {
 
 // Whether the footer earns its own border and padding; prevents a rule drawn above an otherwise-empty footer.
 const footerVisible = computed(
-    () => accountsShown.value || runSettingsShown.value || limitations.value.length > 0 || tierHoldOffered.value || tierNotice.value !== undefined,
+    () =>
+        accountsShown.value ||
+        runSettingsShown.value ||
+        limitations.value.length > 0 ||
+        tierHoldOffered.value ||
+        tierNotice.value !== undefined ||
+        auto.value,
 );
 </script>
 
 <template>
-    <ModelPicker :provider="provider" :model="model" :unpickable="unpickable" @pick="pick" @close="emit(`selected`)">
+    <ModelPicker
+        :provider="provider"
+        :model="model"
+        :unpickable="unpickable"
+        :lead-rows="leadRows"
+        :lead-selected="leadSelected"
+        @pick="pick"
+        @close="emit(`selected`)"
+    >
         <template #footer>
             <!-- Session controls with no place in the shared list: who serves the turn, extended thinking, fast speed, and this runtime's limits. -->
             <!-- Matches the model list's own px-3 rhythm; row groups counter it with -mx-3 so their tint still spans the panel. -->
             <!-- Shrinks and scrolls instead of holding natural height, paired with the list's own floor. -->
             <!-- bg-canvas marks the footer as the surface the list stands on, not more list; a rule alone read unclearly on a tall picker. -->
             <div v-if="footerVisible" class="flex min-h-0 shrink flex-col gap-2 overflow-y-auto border-t border-line bg-canvas px-3 py-2">
+                <!-- What Auto is about to do, said where it was switched on: a mode that changes the model owes an explanation before it does, not after. -->
+                <span v-if="auto" class="text-2xs text-subtle">{{ t(`chat.chatModelPicker.autoArmed`) }}</span>
+
                 <!-- Account list and harness axis, shared with the shell's own picker. -->
                 <PickerAccounts
                     v-if="accountsShown"
