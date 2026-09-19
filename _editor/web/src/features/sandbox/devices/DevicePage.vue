@@ -51,6 +51,7 @@ import { type DeviceScopes, manageBlock } from "./deviceFacts";
 import { startAgent } from "../../agents/fleet/agentActions";
 import HostConnectDialog from "../../capabilities/connect/HostConnectDialog.vue";
 import { useCapabilities } from "../../capabilities/connect/useCapabilities";
+import { isDefaultName } from "../../capabilities/model/cards";
 import { machineGrants } from "../../capabilities/model/connections";
 import { useRole } from "../secrets/useRole";
 import { useT } from "@intentic/ui/i18n";
@@ -537,8 +538,10 @@ const applyReshape = (ask: ResourcesAsk): void => ops.applyReshape(ask);
                 :visible="reconnecting === environment.device.key"
                 :platform="connectPlatform(environment)"
                 :permissions="machineGrants(capabilityOf(environment))"
+                :unnamed="isDefaultName(connectPlatform(environment), environment.device.hostId)"
                 @update:visible="(open) => (reconnecting = open ? environment.device.key : undefined)"
                 @connected="refetch()"
+                @renamed="refetch()"
             />
         </template>
 

@@ -420,5 +420,8 @@ export const CapabilityProbeSchema = z.object({
     message: z
         .string()
         .describe("What happened, in the words a person standing in front of the form needs: the service's own answer, or its refusal."),
+    // The account the credential turned out to be: a login, an org slug, a project name. Only when the card declares
+    // where to read it and the service answered with one; a form offers it as the connection's name.
+    who: z.string().optional().describe("Who the service said the credential belongs to, when it said."),
 });
 export type CapabilityProbe = z.infer<typeof CapabilityProbeSchema>;

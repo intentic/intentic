@@ -2,7 +2,7 @@ import type { CapabilitySummary } from "@intentic/api-contract";
 import type { CapabilityCatalogEntry } from "@intentic/capability-catalog";
 import type { ExtensionSummary } from "@intentic/sandbox-contract";
 import { expect, test } from "vitest";
-import { cardHaystack, contributedCards, entryIcon, instancesOf, suggestName, withIdentityPicker } from "./cards";
+import { cardHaystack, contributedCards, entryIcon, instancesOf, isDefaultName, suggestName, withIdentityPicker } from "./cards";
 
 // Join between a card and the connections it's answerable for. Each case is one somebody hit: a card owning two
 // providers, two extensions declaring the same connector, a repeat add that must not overwrite the connection
@@ -69,6 +69,27 @@ test(`suggests the first free name so a repeat add is an add`, () => {
     expect(suggestName(reddit, [])).toBe(`reddit`);
     expect(suggestName(reddit, [instance(`reddit`, `browser`)])).toBe(`reddit-2`);
     expect(suggestName(reddit, [instance(`reddit`, `browser`), instance(`reddit-2`, `browser`)])).toBe(`reddit-3`);
+});
+
+// Once the service has said whose token it is, a second connection is named for that account rather than counted:
+// `github-ada` in a tool prefix says which one, `github-2` does not. The first stays bare, and a taken qualified name
+// still bumps rather than overwriting.
+test(`names a repeat connection for the account the probe identified`, () => {
+    const github = card({ id: `github`, kind: `cli` });
+
+    expect(suggestName(github, [], `ada`)).toBe(`github`);
+    expect(suggestName(github, [instance(`github`, `cli`)], `ada`)).toBe(`github-ada`);
+    expect(suggestName(github, [instance(`github`, `cli`)], `Ada Lovelace (Org)`)).toBe(`github-ada-lovelace-org`);
+    expect(suggestName(github, [instance(`github`, `cli`), instance(`github-ada`, `cli`)], `ada`)).toBe(`github-ada-2`);
+    expect(suggestName(github, [instance(`github`, `cli`)], `···`)).toBe(`github-2`);
+});
+
+// The hostname offer is made only to a connection still wearing its card's name; `rog` was typed, and is left alone.
+test(`tells a card-issued name from one the owner chose`, () => {
+    expect(isDefaultName(`linux`, `linux`)).toBe(true);
+    expect(isDefaultName(`linux`, `linux-3`)).toBe(true);
+    expect(isDefaultName(`linux`, `rog`)).toBe(false);
+    expect(isDefaultName(`linux`, `linux-rog`)).toBe(false);
 });
 
 // A singleton card is the opposite case: the id is the instance, so re-picking it must land on what exists.

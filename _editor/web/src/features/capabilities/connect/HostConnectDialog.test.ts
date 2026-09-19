@@ -11,9 +11,14 @@ import { IconStub } from "@intentic/ui/testing";
 // The composable reads only the sandbox's address and a minted pairing token; everything else in the command is
 // built here.
 vi.mock(`../../sandbox/client/useSandbox`, () => ({ useSandbox: () => ({ daemonUrl: ref(`https://sandbox-abc.intentic.dev`) }) }));
+// The roster a test connects a machine into; the pair route answers a token regardless.
+const roster = ref<unknown[]>([]);
 vi.mock(`../../sandbox/client/sandboxClient`, () => ({
-    sandboxRequest: vi.fn(async () => ({ ok: true, json: async () => ({ token: `pair-token`, hosts: [] }) })),
+    sandboxRequest: vi.fn(async () => ({ ok: true, json: async () => ({ token: `pair-token`, hosts: roster.value }) })),
 }));
+// Taking the hostname is a rename, which is the capabilities composable's; this spies on the call rather than on the wire.
+const renamed = vi.fn(async (_: { id: string; to: string }) => ({}));
+vi.mock(`./useCapabilities`, () => ({ useCapabilities: () => ({ rename: { mutateAsync: renamed } }) }));
 // The fleet the dialog reads Windows PCs' distros off; empty unless a test connects one.
 const fleet = ref<Device[]>([]);
 vi.mock(`../../sandbox/devices/useDevices`, () => ({
@@ -25,12 +30,12 @@ const { scriptSource } = await import("../../../app/environments/scriptCommand")
 
 // Dialog content isn't under the mount point (PrimeVue teleports to body). `visible` starts false and flips, since
 // minting hangs off that transition, as on the card.
-const mount = (id = `my-desktop`): { open: () => void } => {
+const mount = (id = `my-desktop`, unnamed = false): { open: () => void } => {
     const el = document.createElement(`div`);
     document.body.append(el);
     const visible = ref(false);
     const app = createApp({
-        render: () => h(HostConnectDialog, { visible: visible.value, id, platform: `linux`, permissions: `run commands` }),
+        render: () => h(HostConnectDialog, { visible: visible.value, id, platform: `linux`, permissions: `run commands`, unnamed, onRenamed }),
     });
     app.component(`Icon`, IconStub);
     app.directive(`tooltip`, {});
@@ -44,6 +49,8 @@ const mount = (id = `my-desktop`): { open: () => void } => {
         },
     };
 };
+
+const onRenamed = vi.fn();
 
 const pill = (label: string): HTMLButtonElement =>
     [...document.body.querySelectorAll(`button`)].find((button) => button.textContent?.trim() === label)!;
@@ -78,7 +85,15 @@ it(`hands a WSL distro's command to PowerShell when the device is named for one`
             label: `rog`,
             hostId: `rog`,
             online: true,
-            facts: { os: `Windows`, arch: `x64`, shell: `PowerShell 7`, home: `C:\\Users\\radar`, roots: [], hostname: `rog`, wslDistros: [`Arch`, `Ubuntu`] },
+            facts: {
+                os: `Windows`,
+                arch: `x64`,
+                shell: `PowerShell 7`,
+                home: `C:\\Users\\radar`,
+                roots: [],
+                hostname: `rog`,
+                wslDistros: [`Arch`, `Ubuntu`],
+            },
         },
     ];
     mount(`rog-wsl-arch`).open();
@@ -92,4 +107,54 @@ it(`hands a WSL distro's command to PowerShell when the device is named for one`
     await vi.waitFor(() => expect(document.body.textContent).not.toContain(`wsl -d Arch`));
     expect(document.body.textContent).toContain(`in a terminal`);
     fleet.value = [];
+});
+
+const facts = (hostname: string, distro?: string) => ({
+    os: `Arch Linux`,
+    arch: `x64`,
+    shell: `/usr/bin/zsh`,
+    home: `/home/radarsu`,
+    roots: [],
+    hostname,
+    ...(distro === undefined ? {} : { wsl: { distro } }),
+});
+const connected = (id: string, hostFacts: ReturnType<typeof facts>): unknown => ({
+    id,
+    platform: `linux`,
+    online: true,
+    environments: [{ key: `native`, online: true, facts: hostFacts }],
+    facts: hostFacts,
+});
+
+// A machine still called `linux-2` is offered its own hostname once it has said it; taking it is the rename the
+// capability page would otherwise need a second dialog for, and the panel holds through the reconnect it causes.
+it(`offers a card-named machine its hostname, and renames to it on a click`, async () => {
+    document.body.innerHTML = ``;
+    renamed.mockClear();
+    onRenamed.mockClear();
+    roster.value = [connected(`linux-2`, facts(`ROG-2024`, `archlinux`))];
+    mount(`linux-2`, true).open();
+
+    await vi.waitFor(() => expect(document.body.textContent).toContain(`This machine calls itself`));
+    // Slugged the way the Devices board joins a distro to its PC, lowercased since it becomes a tool prefix.
+    expect(document.body.textContent).toContain(`rog-2024-wsl-archlinux`);
+
+    pill(`Name it rog-2024-wsl-archlinux`).click();
+
+    await vi.waitFor(() => expect(renamed).toHaveBeenCalledWith({ id: `linux-2`, to: `rog-2024-wsl-archlinux` }));
+    expect(onRenamed).toHaveBeenCalledWith(`rog-2024-wsl-archlinux`);
+    await vi.waitFor(() => expect(document.body.textContent).toContain(`Named rog-2024-wsl-archlinux`));
+    expect(document.body.textContent).not.toContain(`This machine calls itself`);
+    roster.value = [];
+});
+
+// A name the owner typed is theirs: `rog` differing from the hostname is not a reason to ask.
+it(`leaves a machine the owner named alone`, async () => {
+    document.body.innerHTML = ``;
+    roster.value = [connected(`rog`, facts(`rog-2024`))];
+    mount(`rog`, false).open();
+
+    await vi.waitFor(() => expect(document.body.textContent).toContain(`is connected`));
+    expect(document.body.textContent).not.toContain(`This machine calls itself`);
+    roster.value = [];
 });

@@ -145,7 +145,9 @@ const runHttpProbe = async (probe: HttpProbe): Promise<CapabilityProbe> => {
         return { checked: true, ok: true, message: reached };
     }
     const who = identityIn(body, probe.identity);
-    return { checked: true, ok: true, message: who === undefined ? reached : `Reached ${probe.subject}, authenticated as ${who}.` };
+    return who === undefined
+        ? { checked: true, ok: true, message: reached }
+        : { checked: true, ok: true, message: `Reached ${probe.subject}, authenticated as ${who}.`, who };
 };
 
 // Not tested is not a failure: an ssh box, paired device or signed-in browser has no test besides using it.

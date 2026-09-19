@@ -58,7 +58,7 @@ test(`reaches the service with the card's own credential, and says who answered`
 
     const answer = await probeCapability(registry, { id: "example", kind: "cli", config: { provider: "example", url, token: "tok_live" } });
 
-    expect(answer).toMatchObject({ checked: true, ok: true });
+    expect(answer).toMatchObject({ checked: true, ok: true, who: `ada` });
     expect(answer.message).toContain(`ada`);
     expect(seen[0]?.path).toBe(`/user`);
     expect(seen[0]?.auth).toBe(`Bearer tok_live`);

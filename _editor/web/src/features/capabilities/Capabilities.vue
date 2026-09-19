@@ -49,7 +49,16 @@ import VpnConnections from "../../components/VpnConnections.vue";
 import { startAgent } from "../agents/fleet/agentActions";
 import { sandboxJson } from "../sandbox/client/sandboxClient";
 import { auditBrief, updateBrief } from "../sandbox/extensions/extensionBrief";
-import { CATEGORY_ICONS, cardHaystack, contributedCards, entryIcon, instancesOf, suggestName, withIdentityPicker } from "./model/cards";
+import {
+    CATEGORY_ICONS,
+    cardHaystack,
+    contributedCards,
+    entryIcon,
+    instancesOf,
+    isDefaultName,
+    suggestName,
+    withIdentityPicker,
+} from "./model/cards";
 import {
     type ConnectionState,
     awaitingLogin,
@@ -308,7 +317,7 @@ watch(capabilities, () => {
     if (selected.value === undefined || nameEdited.value || editing.value !== undefined) {
         return;
     }
-    name.value = suggestName(selected.value, selectedInstances.value);
+    name.value = suggestName(selected.value, selectedInstances.value, probedWho.value);
 });
 
 const values = reactive<Record<string, string>>({});
@@ -520,9 +529,12 @@ const connectVisible = ref(false);
 const connectId = ref(``);
 const connectPlatform = ref(``);
 const connectPermissions = ref(``);
+// Still wearing its card's name (`linux`, `linux-2`): the dialog may then offer the machine's own hostname instead.
+const connectUnnamed = ref(false);
 const openConnect = (instance: CapabilitySummary): void => {
     connectId.value = instance.id;
     connectPlatform.value = String(instance.config[`platform`] ?? `linux`);
+    connectUnnamed.value = isDefaultName(String(instance.config[`platform`] ?? `linux`), instance.id);
     // Grant in the machine's own words (model/connections), shared with the Devices tab, which opens this same
     // dialog on a machine that has stopped answering.
     connectPermissions.value = machineGrants(instance);
@@ -570,6 +582,13 @@ const onBrowserExtConnected = (): void => {
 };
 // A machine coming online flips the capability pending -> active; refetch so the card follows.
 const onHostConnected = (): void => {
+    void refreshHosts();
+    void refetch();
+};
+// The dialog took the machine's hostname as the name: the dialog now watches that id, and the row under it moved.
+const onHostRenamed = (to: string): void => {
+    connectId.value = to;
+    connectUnnamed.value = false;
     void refreshHosts();
     void refetch();
 };
@@ -785,6 +804,9 @@ const pickForticlient = (connection: ForticlientConnection): void => {
 // back. Offered only where a check exists; `checked: false` retires the button rather than claiming failure.
 const probing = ref(false);
 const probeResult = ref<CapabilityProbe>();
+// Whose credential the last successful probe said it was; the name suggestion carries it until the form clears, so a
+// list refetch re-suggesting the name lands on the same `<card>-<who>` rather than falling back to `-2`.
+const probedWho = ref<string>();
 // Hidden once a card has answered that no test exists for it.
 const canProbe = computed(() => selected.value !== undefined && probeResult.value?.checked !== false);
 const runProbe = async (): Promise<void> => {
@@ -800,6 +822,13 @@ const runProbe = async (): Promise<void> => {
             kind: entry.kind,
             config: buildConfig(entry, values, keptSecrets.value),
         });
+        // The service has named the account: a name nobody typed yet follows it (`github-ada`, not `github-2`).
+        if (probeResult.value.ok && probeResult.value.who !== undefined) {
+            probedWho.value = probeResult.value.who;
+            if (!nameEdited.value && editing.value === undefined) {
+                name.value = suggestName(entry, selectedInstances.value, probedWho.value);
+            }
+        }
     } catch (caught) {
         error.value = noticeFrom(caught, `Could not test that connection.`);
     } finally {
@@ -817,6 +846,7 @@ const clearForm = (): void => {
         delete pasteNotes[key];
     }
     probeResult.value = undefined;
+    probedWho.value = undefined;
     keptSecrets.value = new Set<string>();
     error.value = null;
     touched.clear();
@@ -1778,7 +1808,9 @@ const submitLabel = computed(() => {
                 :id="connectId"
                 :platform="connectPlatform"
                 :permissions="connectPermissions"
+                :unnamed="connectUnnamed"
                 @connected="onHostConnected"
+                @renamed="onHostRenamed"
             />
 
             <!-- One-time code that connects a browser of the user's own (webext-kind capabilities). -->

@@ -4,6 +4,7 @@ import { contributionDiscriminator } from "@intentic/extension-manifest";
 import type { ExtensionSummary } from "@intentic/sandbox-contract";
 import type { IconName } from "@intentic/ui";
 import { t } from "@intentic/ui/i18n";
+import { cleanName } from "./form";
 
 // A card's facts and which live connections came from it: the catalog and connected-inventory questions both join a
 // catalog entry to matching instances. That join's rules (which field distinguishes two cards of one kind, a free
@@ -115,9 +116,11 @@ export const capabilityMark = (
     return { logo: card.logo, icon: card.icon };
 };
 
-// A free instance name: the provider id if unused, else the first `<id>-2`, `-3`, ... so repeat adds create distinct
-// connections instead of upserting one (the silent-overwrite trap).
-export const suggestName = (entry: CapabilityCatalogEntry, instances: readonly CapabilitySummary[]): string => {
+// A free instance name: the provider id if unused, else `<id>-<who>` when the service has said whose credential this is
+// (the probe's answer), else the first `<id>-2`, `-3`, ... so repeat adds create distinct connections instead of
+// upserting one (the silent-overwrite trap). The first connection keeps the bare id either way: that is the name the
+// rest of the page treats as "unnamed", and one GitHub needs no qualifier.
+export const suggestName = (entry: CapabilityCatalogEntry, instances: readonly CapabilitySummary[], who?: string): string => {
     // A singleton card never bumps: the id is the instance, so re-picking lands on the existing entry and submit reads
     // "Update".
     if (entry.singleton === true) {
@@ -127,12 +130,22 @@ export const suggestName = (entry: CapabilityCatalogEntry, instances: readonly C
     if (!taken.has(entry.id)) {
         return entry.id;
     }
+    const qualifier = who === undefined ? `` : cleanName(who).toLowerCase();
+    const base = qualifier === `` ? entry.id : `${entry.id}-${qualifier}`;
+    if (base !== entry.id && !taken.has(base)) {
+        return base;
+    }
     let n = 2;
-    while (taken.has(`${entry.id}-${n}`)) {
+    while (taken.has(`${base}-${n}`)) {
         n += 1;
     }
-    return `${entry.id}-${n}`;
+    return `${base}-${n}`;
 };
+
+// Whether a connection still carries the name its card handed it (`linux`, `linux-2`): the one case where a better
+// name learned later (a machine's hostname) is offered, since a name the owner typed is theirs.
+export const isDefaultName = (cardId: string, id: string): boolean =>
+    id === cardId || (id.startsWith(`${cardId}-`) && /^\d+$/.test(id.slice(cardId.length + 1)));
 
 // Kind is searched alongside visible words, since that's what typing "mcp" or "ssh" means and no card's prose
 // repeats them. Hint is searched too, since a tile's one-line description drops identifying terms ("webauthn",
