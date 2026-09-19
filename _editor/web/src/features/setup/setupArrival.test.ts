@@ -4,6 +4,7 @@ import { arrivalFor, type ArrivalInput } from "./setupArrival";
 // A blank first arrival on a platform offering everything; each test overrides the one field it is about.
 const arrival = (over: Partial<ArrivalInput> = {}): ArrivalInput => ({
     inApp: false,
+    onlySandbox: true,
     touched: false,
     hostedIdle: false,
     fresh: true,
@@ -26,6 +27,24 @@ describe(`the surface answers, not the reader`, () => {
         expect(arrivalFor(arrival({ hostedOffered: false }))).toBe(`choose`);
         expect(arrivalFor(arrival({ hostedSpent: true }))).toBe(`choose`);
         expect(arrivalFor(arrival({ inApp: true, commandOffered: false }))).toBe(`choose`);
+    });
+});
+
+// "Add sandbox" pressed in the app by an account that already has one. Installing here is the whole gesture of
+// having just installed the app, and nothing else: the second time, this computer is one of the places it could
+// go rather than the only one.
+describe(`a second sandbox asked for in the app`, () => {
+    it(`asks instead of installing on this computer`, () => {
+        expect(arrivalFor(arrival({ inApp: true, onlySandbox: false }))).toBe(`choose`);
+    });
+
+    it(`leaves the account's first one alone`, () => {
+        expect(arrivalFor(arrival({ inApp: true, onlySandbox: true }))).toBe(`local`);
+    });
+
+    // The Billing page's own door: a subscriber's slot is a machine on the platform, never one more on this desk.
+    it(`still starts the machine a link asked for by name`, () => {
+        expect(arrivalFor(arrival({ inApp: true, onlySandbox: false, requestedMachine: `hosted` }))).toBe(`hosted`);
     });
 });
 

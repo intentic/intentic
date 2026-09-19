@@ -37,7 +37,12 @@ const slugs = computed<readonly string[]>(() => tabs.value.map((tab) => tab.slug
 
 const activeSlug = computed<string>(() => {
     const tab = route.params[`tab`];
-    return typeof tab === `string` && slugs.value.includes(tab) ? tab : defaultSlug;
+    if (typeof tab !== `string` || tab.length === 0) {
+        return defaultSlug;
+    }
+    // Unknown while the set is still filling means unknown YET: falling back would draw one section and swap it for
+    // another under the reader — the same reason the redirect below waits for `ready`.
+    return slugs.value.includes(tab) || !ready ? tab : defaultSlug;
 });
 
 const linkTo = (slug: string) => ({ name: routeName, params: { tab: slug === defaultSlug ? undefined : slug } });

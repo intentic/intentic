@@ -19,7 +19,9 @@ import { SETTINGS_DEFAULT_SECTION, settingsSections } from "./settingsNav";
 // themselves live in settingsNav.ts, shared with the palette's "Settings: …" destinations.
 
 const t = useT();
-const { offered: planOffered } = useHostedPlan();
+// Billing joins the index only once the plan read answers, so until then the hub must not read `/settings/billing`
+// as an unknown slug: that is the address Stripe returns a payer to, and the redirect would drop `?plan=welcome`.
+const { offered: planOffered, isLoading: planLoading } = useHostedPlan();
 
 const HUB = `settings`;
 const DEFAULT = SETTINGS_DEFAULT_SECTION;
@@ -38,7 +40,7 @@ const GROUPS = computed<readonly NavGroup<HubTab>[]>(() => [
 </script>
 
 <template>
-    <HubLayout :title="t(`settings.title`)" :route-name="HUB" :default-slug="DEFAULT" :groups="GROUPS">
+    <HubLayout :title="t(`settings.title`)" :route-name="HUB" :default-slug="DEFAULT" :groups="GROUPS" :ready="!planLoading">
         <template #default="{ slug }">
             <SettingsProfile v-if="slug === `profile`" />
             <SettingsBilling v-else-if="slug === `billing`" />

@@ -9,6 +9,8 @@ import HostedPlanOffer from "./hosted-plan/HostedPlanOffer.vue";
 import { formatDay, formatMinutes, hoursLeftLine, RECOVERABLE } from "./hosted-plan/hostedHours";
 import { hasReturned, subscribeLabel, useHostedPlan } from "./hosted-plan/useHostedPlan";
 import { apiClient } from "../../lib/useApi";
+import { desktopVersion } from "../../app/environments/desktop";
+import type { HostedPlanState } from "@intentic/api-contract";
 import { useT } from "@intentic/ui/i18n";
 
 // The one page about money: what plan this account is on and the one action to take, this month's hours, the hosted
@@ -33,35 +35,83 @@ const outline = useLoadingReveal(
 // instead of asking for a reload, and gives up after a bounded wait.
 const route = useRoute();
 const justJoined = computed(() => route.query[`plan`] === `welcome`);
-const activating = ref(false);
+const waiting = ref(false);
 
-const POLL_EVERY_MS = 2_000;
-const POLL_FOR_MS = 40_000;
+// The app has no browser of its own: a navigation to Stripe is intercepted and handed to the reader's real browser
+// (desktop-app `windows.rs`), so this window stays on this page. Nothing else would ever clear the press or re-read
+// the plan, which is why the errand is tracked here rather than ending in a redirect.
+const inApp = desktopVersion() !== undefined;
+// The door standing open in the reader's browser, while it is.
+const away = ref<`checkout` | `portal` | undefined>(undefined);
+
+const POLL_EVERY_MS = 3_000;
+// The webhook's few seconds, once Stripe has already sent the browser back here.
+const RETURN_WAIT_MS = 40_000;
+// Someone typing a card into another window, which is a different order of time.
+const BROWSER_WAIT_MS = 10 * 60_000;
+
+// The plan half of the answer, which is all an errand on Stripe can change. The hosted half moves on its own — a
+// machine waking, a minute spent — and comparing it would report a change nobody made.
+const planMark = (state: HostedPlanState | undefined): string =>
+    state === undefined
+        ? ``
+        : `${state.onPlan}:${state.status ?? ``}:${state.renewsAt ?? ``}:${state.cancelAtPeriodEnd === true}:${state.comped === true}:${state.hosted?.slots ?? 0}`;
+
+// What the plan said when the errand left for the browser; the errand is over when the answer differs.
+let leftWith = ``;
 let poll: ReturnType<typeof setInterval> | undefined;
+let waitUntil = 0;
 
-const stopPolling = (): void => {
+const stopWaiting = (): void => {
     if (poll !== undefined) {
         clearInterval(poll);
         poll = undefined;
     }
-    activating.value = false;
+    waiting.value = false;
 };
 
-onUnmounted(stopPolling);
+// A redirect back is answered by the plan going live; an errand still out in the browser, by the answer changing at
+// all — a cancellation and a new card are the same round trip as a payment, and neither turns `onPlan` on.
+const landed = (): boolean => (away.value === undefined ? plan.value?.onPlan === true : planMark(plan.value) !== leftWith);
 
-onMounted(() => {
-    if (!justJoined.value || plan.value?.onPlan === true) {
+const waitForPlan = (forMs: number): void => {
+    waitUntil = Math.max(waitUntil, Date.now() + forMs);
+    if (poll !== undefined) {
         return;
     }
-    activating.value = true;
-    const until = Date.now() + POLL_FOR_MS;
-    poll = setInterval(() => {
+    waiting.value = true;
+    const tick = (): void => {
         void refetch().then(() => {
-            if (plan.value?.onPlan === true || Date.now() > until) {
-                stopPolling();
+            if (landed()) {
+                away.value = undefined;
+                stopWaiting();
+            } else if (Date.now() > waitUntil) {
+                stopWaiting();
             }
         });
-    }, POLL_EVERY_MS);
+    };
+    poll = setInterval(tick, POLL_EVERY_MS);
+    tick();
+};
+
+// Coming back to this window is the only thing the app hears about an errand it handed to the browser, so the return
+// re-reads the plan and keeps re-reading for the webhook's few seconds.
+const onFocus = (): void => {
+    if (away.value !== undefined) {
+        waitForPlan(RETURN_WAIT_MS);
+    }
+};
+
+onUnmounted(() => {
+    stopWaiting();
+    window.removeEventListener(`focus`, onFocus);
+});
+
+onMounted(() => {
+    window.addEventListener(`focus`, onFocus);
+    if (justJoined.value && plan.value?.onPlan !== true) {
+        waitForPlan(RETURN_WAIT_MS);
+    }
 });
 
 const periodEnd = computed(() => (plan.value?.renewsAt === undefined ? undefined : formatDay(plan.value.renewsAt)));
@@ -91,10 +141,25 @@ const open = async (door: `checkout` | `portal`): Promise<void> => {
     try {
         const { url } = await (door === `checkout` ? apiClient.hostedPlan.checkout() : apiClient.hostedPlan.portal());
         window.location.href = url;
+        // A browser has left this page by now; in the app the line above became a browser window somewhere else, and
+        // this one is still standing here holding a pressed button.
+        if (inApp) {
+            working.value = false;
+            leftWith = planMark(plan.value);
+            away.value = door;
+            waitForPlan(BROWSER_WAIT_MS);
+        }
     } catch (err) {
         actionError.value = errorMessage(err, `Couldn't open the payment page.`);
         working.value = false;
     }
+};
+
+// The reader saying the errand is over when it produced nothing: closed the tab, changed their mind. Nothing to
+// undo — no session was ever charged — so this only stops the page waiting for it.
+const dropAway = (): void => {
+    away.value = undefined;
+    stopWaiting();
 };
 
 // The hosted lane as it applies to this account; present only where the platform runs machines.
@@ -129,10 +194,25 @@ const changeSlots = async (delta: 1 | -1): Promise<void> => {
 
 // A plan with nothing under it: the one state in which cancelling is the advice rather than the door.
 const planWithoutMachine = computed(() => paying.value && hosted.value !== undefined && machines.value.length === 0);
+
+// Every door out of this page wants the platform's machine, never this computer's: without the rung named, setup in
+// the app installs one here instead (setupArrival.ts), which is the opposite of what a page about hosting offers.
+const HOSTED_SETUP = { name: `setup`, query: { machine: `hosted` } } as const;
 </script>
 
 <template>
     <div class="@container flex flex-col gap-4">
+        <!-- Stripe's own page, standing open in the reader's browser because this window has none of its own to put it
+             in. Checkout has a card of its own below, since that one must not be startable twice. -->
+        <Notice
+            v-if="away === `portal`"
+            :of="{
+                tone: `info`,
+                title: t(`settings.settingsBilling.stripeOpenInBrowser`),
+                detail: t(`settings.settingsBilling.whateverChangeThereShows`),
+            }"
+        />
+
         <Notice v-if="loadError" :of="{ tone: `danger`, title: `Couldn't load your plan.`, detail: loadError }" />
 
         <RowGroup v-else-if="plan && !plan.enabled" :label="t(`settings.settingsBilling.billing`)">
@@ -211,7 +291,7 @@ const planWithoutMachine = computed(() => paying.value && hosted.value !== undef
             </RowGroup>
 
             <!-- Activating: the webhook's few seconds, owned by the app instead of handed back to the payer. -->
-            <RowGroup v-else-if="justJoined && activating" :label="t(`settings.settingsBilling.hostedPlan`)">
+            <RowGroup v-else-if="justJoined && waiting" :label="t(`settings.settingsBilling.hostedPlan`)">
                 <RowNote variant="block">
                     <div class="flex flex-col gap-2">
                         <p class="text-sm font-medium text-content">{{ t(`settings.settingsBilling.paymentReceivedActivatingPlan`) }}</p>
@@ -220,10 +300,30 @@ const planWithoutMachine = computed(() => paying.value && hosted.value !== undef
                 </RowNote>
             </RowGroup>
 
+            <!-- Checkout, open in the reader's browser: this replaces the offer rather than sitting beside it, since a
+                 second press here would be a second subscription on one account. -->
+            <RowGroup v-else-if="away === `checkout`" :label="t(`settings.settingsBilling.hostedPlan`)">
+                <RowNote variant="block">
+                    <div class="flex flex-col gap-3">
+                        <p class="text-sm font-medium text-content">{{ t(`settings.settingsBilling.checkoutOpenInBrowser`) }}</p>
+                        <p class="text-xs text-muted">{{ t(`settings.settingsBilling.finishPayingThereNothing`) }}</p>
+                        <div class="flex flex-wrap items-center gap-x-3 gap-y-2">
+                            <!-- Says the page is watching, rather than offering a press that would only start the read
+                                 already running. Coming back to this window re-arms it either way. -->
+                            <p v-if="waiting" class="flex items-center gap-2 text-xs text-muted">
+                                <Icon name="spinner" spin class="text-info" />
+                                {{ t(`settings.settingsBilling.waitingForStripe`) }}
+                            </p>
+                            <Button :label="t(`settings.settingsBilling.didntPayAfterAll`)" size="small" severity="secondary" text @click="dropAway" />
+                        </div>
+                    </div>
+                </RowNote>
+            </RowGroup>
+
             <!-- The offer: the one buying surface in the product. -->
             <template v-else>
                 <Notice
-                    v-if="justJoined && !activating"
+                    v-if="justJoined && !waiting"
                     :of="{
                         tone: `info`,
                         title: `Your payment went through, but the plan hasn't come back from Stripe yet.`,
@@ -287,7 +387,7 @@ const planWithoutMachine = computed(() => paying.value && hosted.value !== undef
                         <div class="flex flex-wrap items-center gap-x-3 gap-y-2">
                             <Button
                                 :as="RouterLink"
-                                :to="{ name: `setup` }"
+                                :to="HOSTED_SETUP"
                                 :label="t(`settings.settingsBilling.startHostedSandbox`)"
                                 size="small"
                                 class="ui-button-loud"
@@ -305,7 +405,7 @@ const planWithoutMachine = computed(() => paying.value && hosted.value !== undef
                 <RowNote v-else-if="machines.length === 0" variant="block">
                     <p class="text-xs text-muted">
                         {{ t(`settings.settingsBilling.noneYet`) }}
-                        <RouterLink :to="{ name: `setup` }" class="text-link hover:underline">{{ t(`settings.settingsBilling.startOne`) }}</RouterLink
+                        <RouterLink :to="HOSTED_SETUP" class="text-link hover:underline">{{ t(`settings.settingsBilling.startOne`) }}</RouterLink
                         >{{ t(`settings.settingsBilling.freeInSeconds`) }}
                     </p>
                 </RowNote>

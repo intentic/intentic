@@ -12,6 +12,9 @@ export type Arrival =
 
 export interface ArrivalInput {
     readonly inApp: boolean;
+    // Nothing else on this account: the app installing on this computer is the whole gesture of having just
+    // installed the app. With a sandbox already somewhere, "add another" is a question only the reader can answer.
+    readonly onlySandbox: boolean;
     // Row has history (redeemed, reported, checked in); an unfinished errand this page must not act on.
     readonly touched: boolean;
     // Row carries a machine of ours that nothing has ever run on: a browser's errand to resume, and in the app a
@@ -41,6 +44,10 @@ const hostedTakeable = (input: ArrivalInput): boolean => input.hostedOffered && 
 // since being in the app is the gesture of running it on this computer.
 const settled = (input: ArrivalInput): boolean => input.touched || input.elsewhere || (input.hostedIdle && !input.inApp);
 
+// The app answering with this computer: only for an account with nowhere else to put a sandbox, and only where a
+// setup code can be minted for the install to redeem.
+const installsHere = (input: ArrivalInput): boolean => input.commandOffered && input.onlySandbox;
+
 export const arrivalFor = (input: ArrivalInput): Arrival => {
     if (settled(input)) {
         return `choose`;
@@ -51,9 +58,10 @@ export const arrivalFor = (input: ArrivalInput): Arrival => {
     if (input.requestedMachine !== undefined) {
         return input.requestedMachine === `hosted` && startable ? `hosted` : `choose`;
     }
-    // In the app, the machine is this window's own; gated on minting addresses, since it redeems a setup code.
+    // In the app, the first machine is this window's own; gated on minting addresses, since it redeems a setup code.
+    // Every later one asks, because by then this computer is one of the places it could go rather than the only one.
     if (input.inApp) {
-        return input.commandOffered ? `local` : `choose`;
+        return installsHere(input) ? `local` : `choose`;
     }
     // In a browser, hosted only when takeable and this arrival made the row, so a stale reload spends nothing.
     return input.fresh && startable ? `hosted` : `choose`;

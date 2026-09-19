@@ -108,7 +108,9 @@ const assurances = computed(() => [
         <div class="mt-7 flex flex-wrap items-center gap-x-4 gap-y-3">
             <Button :label="props.subscribeLabel" :loading="props.working" class="ui-button-loud" @click="emit(`checkout`)" />
             <!-- Not "leave": moving the workspace to your own machine costs nothing. -->
-            <RouterLink :to="{ name: `setup` }" class="text-xs text-link hover:underline">{{
+            <!-- The rung is named, or setup answers with whatever the surface would have picked — which on this link
+                 of all links would be a machine on the platform (setupArrival.ts). -->
+            <RouterLink :to="{ name: `setup`, query: { machine: `mine` } }" class="text-xs text-link hover:underline">{{
                 t(`settings.hostedPlanOffer.runOnOwnComputer`)
             }}</RouterLink>
         </div>

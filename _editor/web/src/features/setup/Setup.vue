@@ -1248,6 +1248,8 @@ const arrive = async (): Promise<void> => {
     // What this page does unasked (setupArrival.ts); decided here since every input is one of the two reads above.
     arrival.value = arrivalFor({
         inApp: desktop.value,
+        // Read before the auto-create above, so a row minted seconds ago is never counted as company for itself.
+        onlySandbox: rows.every((row) => row.id === created.value?.id),
         touched: resuming.value,
         hostedIdle: idleMachine,
         // Only `autoCreate` sets this, so it's exactly true: the row was minted by this visit and nothing else.

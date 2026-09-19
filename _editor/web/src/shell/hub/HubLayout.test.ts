@@ -35,7 +35,9 @@ const Section = defineComponent({
 
 let app: App | undefined;
 
-const mount = async (path: string): Promise<HTMLElement> => {
+// `listed` is the index as it stands this render — a hub whose sections arrive with a read has fewer of them for as
+// long as the read takes, which is what `ready` is about.
+const mount = async (path: string, index: { ready?: boolean; listed?: readonly string[] } = {}): Promise<HTMLElement> => {
     await router.push(path);
     await router.isReady();
     const el = document.createElement(`div`);
@@ -45,26 +47,23 @@ const mount = async (path: string): Promise<HTMLElement> => {
             // Built the way the sandbox hub builds it: the count is the row's own, the phrase comes from the ledger.
             const groups = computed(() => {
                 const running = hubWorkRunning(DEVICES);
-                return [
+                const items = [
+                    { slug: `overview`, label: `Overview`, icon: `info-circle` as const },
                     {
-                        key: `box`,
-                        items: [
-                            { slug: `overview`, label: `Overview`, icon: `info-circle` as const },
-                            {
-                                slug: `devices`,
-                                label: `Devices`,
-                                icon: `desktop` as const,
-                                badge: { count: 1, tone: `info` as const, ...(running === undefined ? {} : { running }) },
-                            },
-                        ],
+                        slug: `devices`,
+                        label: `Devices`,
+                        icon: `desktop` as const,
+                        badge: { count: 1, tone: `info` as const, ...(running === undefined ? {} : { running }) },
                     },
                 ];
+                return [{ key: `box`, items: items.filter((item) => index.listed?.includes(item.slug) ?? true) }];
             });
             return () =>
                 h(
                     HubLayout,
-                    { title: `Sandbox`, routeName: `sandbox`, defaultSlug: `overview`, groups: groups.value },
-                    { default: () => h(Section) },
+                    { title: `Sandbox`, routeName: `sandbox`, defaultSlug: `overview`, groups: groups.value, ready: index.ready ?? true },
+                    // The marker carries the slug the hub handed its body, which is the section on screen.
+                    { default: ({ slug }: { slug: string }) => [h(`p`, { "data-section": slug }), h(Section)] },
                 );
         },
     });
@@ -77,6 +76,14 @@ const mount = async (path: string): Promise<HTMLElement> => {
 };
 
 const spinners = (el: HTMLElement): Element[] => [...el.querySelectorAll(`[data-icon="spinner"][data-spin]`)];
+
+const section = (el: HTMLElement): string | null | undefined => el.querySelector(`[data-section]`)?.getAttribute(`data-section`);
+
+// The unknown-slug redirect is a navigation, so it lands a turn of the router's own after the render that decided it.
+const settle = async (): Promise<void> => {
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await nextTick();
+};
 
 afterEach(async () => {
     forgetHubWork();
@@ -100,6 +107,23 @@ it(`marks the row a run belongs to, and says what it is where a 14rem row cannot
     expect(el.textContent).toContain(`Updating a container`);
     // The count keeps its chip: a run is not an errand, and the two are separate facts about one section.
     expect(el.textContent).toContain(`1`);
+});
+
+// A deep link arriving while the index it has to be found in is still being read. This is the address Stripe sends
+// a payer back to: `/settings/billing?plan=welcome`, where Billing is a row the plan read has not answered for yet.
+// Trading it for the default costs the section AND the query the page's post-checkout wait runs off.
+it(`holds a section the index has not listed yet, address and query intact`, async () => {
+    const el = await mount(`/sandbox/devices?plan=welcome`, { ready: false, listed: [`overview`] });
+    await settle();
+    expect(section(el)).toBe(`devices`);
+    expect(router.currentRoute.value.fullPath).toBe(`/sandbox/devices?plan=welcome`);
+});
+
+it(`cleans a slug that is still unknown once the index is in`, async () => {
+    const el = await mount(`/sandbox/nonsense`, { ready: true });
+    await settle();
+    expect(router.currentRoute.value.path).toBe(`/sandbox`);
+    expect(section(el)).toBe(`overview`);
 });
 
 // The load-bearing half: a card deep inside the section's body reports its work without being told which row it
