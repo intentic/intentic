@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Icon, InfoHint, Notice, noticeOf, openForwardedPort, RowGroup, SkeletonRows, useLoadingReveal } from "@intentic/extension-ui";
+import { Icon, Notice, noticeOf, openForwardedPort, RowGroup, SkeletonRows, useLoadingReveal } from "@intentic/extension-ui";
 import { computed, ref } from "vue";
 import { host } from "./host";
 import PortRow from "./PortRow.vue";
@@ -55,20 +55,6 @@ const openTerminal = (session: string): void => host().terminal.open(session);
         <Notice v-if="error ?? actionError" :of="noticeOf(error ?? actionError ?? ``)" />
 
         <RowGroup :label="t(`portsView.services`)">
-            <template #info>
-                <InfoHint :label="t(`portsView.ports`)">
-                    <span class="block text-sm font-medium text-content">{{ t(`portsView.whatListeningHere`) }}</span>
-                    <span class="mt-1 block text-xs text-muted">
-                        {{ t(`portsView.everyTcpPortSomething`) }} <b>ⓘ</b> {{ t(`portsView.exactCommandFolderTerminal`) }}
-                        <b>{{ t(`portsView.preview`) }}</b> {{ t(`portsView.makesOneReachableIn`) }}
-                    </span>
-                    <!-- Ports here means public forwarding, not localhost mirroring (Devices); avoids the wrong-index confusion. -->
-                    <span class="mt-2 block text-xs text-muted">
-                        {{ t(`portsView.lookingPortOnOwn`) }} <b>{{ t(`portsView.localhost`) }}</b> {{ t(`portsView.insteadDesktopSyncMirroring`) }}
-                    </span>
-                </InfoHint>
-            </template>
-
             <!-- An empty scan result would read as 'nothing found' with less confidence; skeleton rows stand in while loading. -->
             <div v-if="isLoading && outline" role="status" aria-busy="true">
                 <span class="sr-only">{{ t(`portsView.scanningListeningPorts`) }}</span>
@@ -94,15 +80,6 @@ const openTerminal = (session: string): void => host().terminal.open(session);
 
         <!-- Listed for transparency, muted since nobody previews these; forwarding stays possible, just de-emphasized. -->
         <RowGroup v-if="systemPorts.length > 0" :label="t(`portsView.sandboxInternals`)" class="opacity-70">
-            <template #info>
-                <InfoHint :label="t(`portsView.internals`)">
-                    <span class="block text-sm font-medium text-content">{{ t(`portsView.sandboxsOwnServices`) }}</span>
-                    <span class="mt-1 block text-xs text-muted">
-                        {{ t(`portsView.comeSandboxRunWhether`) }}
-                    </span>
-                </InfoHint>
-            </template>
-
             <PortRow
                 v-for="entry in systemPorts"
                 :key="entry.port"

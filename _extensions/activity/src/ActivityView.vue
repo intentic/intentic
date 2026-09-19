@@ -2,7 +2,6 @@
 import {
     ui,
     FilterBar,
-    InfoHint,
     Notice,
     noticeOf,
     Row,
@@ -84,15 +83,6 @@ const voiceSpeakers = computed(() => {
                 <SourceFilter v-model="source" :sources="sources" :total="windowed.length" :failed="failed" />
                 <span class="h-4 w-px bg-line" aria-hidden="true"></span>
                 <SegmentedControl v-model="window" size="xs" :options="timeWindows()" />
-            </template>
-            <template #actions>
-                <InfoHint :label="t(`activityView.activity`)">
-                    <span class="block text-sm font-medium text-content">{{ t(`activityView.activity`) }}</span>
-                    <span class="mt-1 block text-xs text-muted">
-                        {{ t(`activityView.oneEntryPerThing`) }} <b>{{ t(`activityView.whoSetOff`) }}</b
-                        >{{ t(`activityView.connectedProviderWokeAgent`) }}
-                    </span>
-                </InfoHint>
             </template>
         </FilterBar>
 

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Button, ui, CopyButton, Icon, InfoHint, Notice, noticeOf, StatusBadge, useLoadingReveal } from "@intentic/extension-ui";
+import { Button, ui, CopyButton, Icon, Notice, noticeOf, StatusBadge, useLoadingReveal } from "@intentic/extension-ui";
 import { computed, ref } from "vue";
 import SharedConversations from "./SharedConversations.vue";
 import SharePreview from "./SharePreview.vue";
@@ -58,12 +58,6 @@ const size = (bytes: number): string => {
         <section>
             <div class="mb-2 flex items-center gap-2">
                 <h3 :class="ui.sectionLabel()">{{ t(`publicView.published`) }}</h3>
-                <InfoHint :label="t(`publicView.publicFiles`)">
-                    <span class="block text-sm font-medium text-content">{{ t(`publicView.publicFolder`) }}</span>
-                    <span class="mt-1 block text-xs text-muted">
-                        {{ t(`publicView.anythingInside`) }} <b>public/</b> {{ t(`publicView.inWorkspaceServedOn`) }}
-                    </span>
-                </InfoHint>
                 <StatusBadge v-if="servedCount > 0" variant="success" :label="t(`publicView.public2`, { servedCount })" size="xs" />
             </div>
 
