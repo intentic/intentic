@@ -29,7 +29,7 @@ const SUBSETS = ["latin", "latin-ext"];
  */
 const FAMILIES = {
     "public-sans": { family: "Public+Sans", weights: "100..900", css: "Public Sans" },
-    spectral: { family: "Spectral", weights: "600", css: "Spectral" },
+    spectral: { family: "Spectral", weights: "200;300;400;500;600;700;800", css: "Spectral" },
     "baloo-2": { family: "Baloo+2", weights: "400..800", css: "Baloo 2" },
     "jetbrains-mono": { family: "JetBrains+Mono", weights: "100..800", css: "JetBrains Mono" },
 };
