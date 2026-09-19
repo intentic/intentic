@@ -3,7 +3,9 @@
 import type { WorkspaceTreeEntry } from "@intentic/api-contract";
 import { ConfirmDialog, ContextMenu, iconForEntry, useLoadingReveal } from "@intentic/ui";
 import { basename, parentDir } from "@intentic/ui/path";
-import { computed, inject, onBeforeUnmount, ref, type VNode, watch } from "vue";
+import { computed, inject, onBeforeUnmount, onMounted, ref, type VNode, watch } from "vue";
+import { variableRows } from "../../../lib/rowWindow";
+import { useRowWindow } from "../../../lib/useRowWindow";
 import { useLayout } from "../../../shell/window/useLayout";
 import { type ExplorerFilters, explorerShows, technicalHidden } from "../explorer/explorerFilter";
 import { useWorkspaceTree } from "../explorer/useWorkspaceTree";
@@ -11,7 +13,8 @@ import { opensAsFolder } from "../files/archiveEntries";
 import { withProvisionalEntries } from "../files/provisionalEntries";
 import { workspaceDir } from "../health/workspaceScope";
 import { useWorkspaceTabs } from "../tabs/useWorkspaceTabs";
-import { isGridKey, moveInGrid, type TileBox } from "./deskGrid";
+import { type GridKey, isGridKey, moveInGrid } from "./deskGrid";
+import { bandOfIndex, deskLayout } from "./deskLayout";
 import { deskGroups, deskOrder, labelsShown } from "./deskOrder";
 import { contentMatches, nameMatches, RESULTS_CAP } from "./deskResults";
 import { DESK_DIR_ACTIONS, DESK_SEARCH, useDesk } from "./useDesk";
@@ -91,7 +94,7 @@ const results = computed(() => {
 const whereByPath = computed(() => new Map(results.value.map((result) => [result.entry.path, result.where])));
 const clearQuery = (): void => {
     search?.clear();
-    scroller.value?.focus({ preventScroll: true });
+    desk.value?.focus({ preventScroll: true });
 };
 const placeholder = computed(() =>
     search?.scope.value === `text` ? `Search text` : search?.scope.value === `smart` ? `Smart search` : `Filter names`,
@@ -104,11 +107,7 @@ const onFieldKey = (event: KeyboardEvent): void => {
         return;
     }
     if (event.key === `Enter`) {
-        const first = order.value[0];
-        if (first !== undefined) {
-            select(first.path);
-            tileEl(first.path)?.focus({ preventScroll: true });
-        }
+        void focusTile(0);
     }
 };
 
@@ -119,6 +118,57 @@ const listed = computed<readonly WorkspaceTreeEntry[]>(() =>
 const groups = computed(() => deskGroups(listed.value));
 const order = computed(() => deskOrder(groups.value));
 const showLabels = computed(() => labelsShown(groups.value));
+
+// --- The window -------------------------------------------------------------------------------------------------
+// A folder can hold tens of thousands of entries, so the desk draws the bands crossing the viewport and no others. A
+// tile per entry is what made a large directory unusable: the components cost more than the files, every tick re-diffed
+// all of them, and each one held an IntersectionObserver of its own.
+const desk = ref<HTMLElement>();
+const scroller = ref<HTMLElement>();
+const probeGrid = ref<HTMLElement>();
+const probeTile = ref<HTMLElement>();
+const probeLabel = ref<HTMLElement>();
+
+// Measured off a hidden probe wearing the real classes, never computed from numbers written down here: the template's
+// `auto-fill` track and the tile's height are the CSS's to say, and a copy of them here would drift the first time
+// someone restyled a tile.
+const probed = ref({ columns: 1, tileHeight: 1, labelHeight: 0 });
+const measure = (): void => {
+    const grid = probeGrid.value;
+    const tile = probeTile.value;
+    if (grid === undefined || tile === undefined) {
+        return;
+    }
+    const style = getComputedStyle(grid);
+    // The gap rides in the band height: bands are placed at an offset, so nothing else would space them apart.
+    const gap = Number.parseFloat(style.rowGap) || 0;
+    probed.value = {
+        columns: style.gridTemplateColumns.split(` `).filter((track) => track !== ``).length,
+        tileHeight: tile.offsetHeight + gap,
+        labelHeight: probeLabel.value?.offsetHeight ?? 0,
+    };
+};
+let probeSize: ResizeObserver | undefined;
+onMounted(() => {
+    probeSize = new ResizeObserver(measure);
+    if (probeGrid.value !== undefined) {
+        probeSize.observe(probeGrid.value);
+    }
+    measure();
+});
+onBeforeUnmount(() => probeSize?.disconnect());
+
+const gridLayout = computed(() => deskLayout(groups.value, showLabels.value, probed.value));
+const bands = useRowWindow(scroller, () => variableRows(gridLayout.value.heights));
+// What to draw, each band carrying where it sits: they are placed, not stacked, so the ones left out cost no height.
+const painted = computed(() =>
+    gridLayout.value.bands
+        .slice(bands.first.value, bands.last.value)
+        .map((band, at) => ({ band, top: bands.rows.value.offsetOf(bands.first.value + at) })),
+);
+// The spacer's height, as its own top-level ref: a template unwraps those, but not a ref reached through an object,
+// and `bands.total` there would interpolate as "[object Object]" and silently leave the folder unscrollable.
+const deskHeight = computed(() => bands.total.value);
 // Two quiet lines under the tiles, each only when it has a number to say.
 const hiddenTooling = computed(() => technicalHidden(children.value ?? [], filters.value));
 const hiddenByCap = computed(() => (deskDir.value === `` ? rootHidden.value : (lazyHidden.value.get(deskDir.value) ?? 0)));
@@ -140,7 +190,6 @@ const crumbs = computed<readonly { readonly label: string; readonly path: string
 const here = computed(() => crumbs.value.at(-1)?.label ?? rootLabel.value);
 
 // --- The verbs: the tree's file management over these tiles (useDeskActions) -----------------------------------------
-const scroller = ref<HTMLElement>();
 const {
     marked,
     select,
@@ -182,7 +231,7 @@ const {
     dir: deskDir,
     order,
     lead: selected,
-    host: scroller,
+    host: desk,
     // Closures, not the functions: both are declared below, and are only ever called later.
     open: (entry) => open(entry),
     openCreated: (path) => {
@@ -217,8 +266,8 @@ const go = (dir: string, toward: "forward" | "back"): void => {
     direction.value = toward;
     openDir(dir);
     // The tile that had the keyboard is about to unmount; the desk itself keeps it, so the next key still lands here.
-    if (scroller.value?.contains(document.activeElement) === true) {
-        scroller.value.focus({ preventScroll: true });
+    if (desk.value?.contains(document.activeElement) === true) {
+        desk.value.focus({ preventScroll: true });
     }
 };
 // Going up lands on the folder just left, so a wrong turn is one key to undo.
@@ -352,25 +401,36 @@ onBeforeUnmount(() => {
 });
 
 // --- Keyboard ------------------------------------------------------------------------------------------------------
-const tileEls = (): HTMLElement[] => [...(scroller.value?.querySelectorAll<HTMLElement>(`[data-desk-tile]`) ?? [])];
-const tileBoxes = (): TileBox[] => tileEls().map((el) => el.getBoundingClientRect());
-const tileEl = (path: string): HTMLElement | undefined => tileEls().find((el) => el.dataset[`deskTile`] === path);
+// Only the drawn tiles are here to find, which is a screenful rather than the folder; a tile outside the window has no
+// element until `bands.show` has brought its band in.
+const tileEl = (path: string): HTMLElement | undefined =>
+    [...(scroller.value?.querySelectorAll<HTMLElement>(`[data-desk-tile]`) ?? [])].find((el) => el.dataset[`deskTile`] === path);
+
+// Lands on a tile by its place in desk order: scrolls its band in, waits for it to mount, then takes focus there.
+// The wait is the whole point — focus() on a tile the window has not drawn would go nowhere.
+const focusTile = async (index: number): Promise<void> => {
+    const entry = order.value[index];
+    if (entry === undefined) {
+        return;
+    }
+    select(entry.path);
+    await bands.show(bandOfIndex(gridLayout.value, index));
+    tileEl(entry.path)?.focus({ preventScroll: true });
+};
 
 // Arrow travel lands the selection, the focus and the quick look on the same tile.
-const moveSelection = (key: Parameters<typeof moveInGrid>[2]): void => {
+const moveSelection = async (key: GridKey): Promise<void> => {
     const index = order.value.findIndex((entry) => entry.path === selected.value);
-    const next = order.value[moveInGrid(tileBoxes(), index, key)];
+    const at = moveInGrid(gridLayout.value, index, key);
+    const next = order.value[at];
     if (next === undefined) {
         return;
     }
-    select(next.path);
+    await focusTile(at);
     const el = tileEl(next.path);
-    if (el === undefined) {
-        return;
+    if (el !== undefined) {
+        onTileEnter(next, el);
     }
-    el.focus({ preventScroll: true });
-    el.scrollIntoView({ block: `nearest` });
-    onTileEnter(next, el);
 };
 // Keys that leave the folder, drop the selection or open the tile; false for any other key.
 const onNavigationKey = (event: KeyboardEvent): boolean => {
@@ -403,7 +463,7 @@ const onKeydown = (event: KeyboardEvent): void => {
     }
     if (isGridKey(event.key)) {
         event.preventDefault();
-        moveSelection(event.key);
+        void moveSelection(event.key);
         return;
     }
     if (typesIntoFilter(event)) {
@@ -418,7 +478,7 @@ const onTile = (event: Event): boolean => event.target instanceof Element && eve
 const onBackgroundClick = (event: MouseEvent): void => {
     if (!onTile(event)) {
         clear();
-        scroller.value?.focus({ preventScroll: true });
+        desk.value?.focus({ preventScroll: true });
     }
 };
 // A tile's own right-click reached its handler first; the background's menu is for the folder itself.
@@ -432,13 +492,12 @@ const onBackgroundMenu = (event: MouseEvent): void => {
 <template>
     <!-- The pane's own drop zone sits behind this one, so a drag that enters here is stopped from reaching it. -->
     <div
-        ref="scroller"
-        class="relative h-full min-h-0 overflow-auto bg-canvas focus:outline-none"
+        ref="desk"
+        class="relative flex h-full min-h-0 flex-col bg-canvas focus:outline-none"
         tabindex="-1"
         @keydown="onKeydown"
         @pointerdown="closePeek"
         @pointerleave="onTileLeave"
-        @scroll.passive="closePeek"
         @click="onBackgroundClick"
         @contextmenu="onBackgroundMenu"
         @copy="onCopyEvent($event, 'copy')"
@@ -450,10 +509,11 @@ const onBackgroundMenu = (event: MouseEvent): void => {
         @dragleave="onDragLeave($event, deskDir)"
         @drop="onDrop($event, deskDir)"
     >
-        <!-- Where you are; the root wears the scope's own name. Sticky, so a long folder keeps its way back in view. A crumb
-             also takes a drop, which is how a tile moves up a level or two. -->
+        <!-- Where you are; the root wears the scope's own name. Outside the scrolling area, so a long folder keeps its way
+             back in view without the tiles having to scroll under it. A crumb also takes a drop, which is how a tile moves
+             up a level or two. -->
         <nav
-            class="sticky top-0 z-10 flex items-center gap-1 bg-canvas/85 px-5 pt-4 pb-2 text-xs backdrop-blur"
+            class="z-10 flex shrink-0 items-center gap-1 bg-canvas px-5 pt-4 pb-2 text-xs"
             :aria-label="t(`workspace.deskView.folderPath`)"
         >
             <template v-for="(crumb, index) in crumbs" :key="crumb.path">
@@ -514,16 +574,32 @@ const onBackgroundMenu = (event: MouseEvent): void => {
             </div>
         </nav>
 
-        <!-- Keyed on the folder: a change slides the old tiles out and the new ones in, a step in the direction travelled. -->
-        <Transition
-            mode="out-in"
-            enter-active-class="ui-desk-move"
-            :enter-from-class="direction === 'forward' ? 'opacity-0 translate-x-3' : 'opacity-0 -translate-x-3'"
-            leave-active-class="ui-desk-move"
-            :leave-to-class="direction === 'forward' ? 'opacity-0 -translate-x-2' : 'opacity-0 translate-x-2'"
-            @after-leave="scroller?.scrollTo(0, 0)"
-        >
-            <div :key="deskDir" class="px-4 pb-6" role="listbox" aria-multiselectable="true" :aria-label="t(`workspace.deskView.contents`, { here })">
+        <!-- The tiles scroll under the breadcrumb rather than with it, so the window measures this element alone. -->
+        <div ref="scroller" class="relative min-h-0 flex-1 overflow-auto" @scroll.passive="bands.onScroll(); closePeek()">
+            <!-- The measure: one tile and one label wearing the real classes, laid out but not painted. Outside the
+                 Transition, so a folder change cannot swap the element out from under the observer, and the column count
+                 and band heights stay the stylesheet's to decide rather than constants kept in the script. -->
+            <div class="pointer-events-none invisible absolute inset-x-0 top-0 px-4" aria-hidden="true">
+                <div ref="probeGrid" class="grid grid-cols-[repeat(auto-fill,minmax(7.5rem,1fr))] gap-0.5">
+                    <div class="flex w-full flex-col items-center gap-1.5 rounded-lg px-2 pt-3 pb-2 text-center" ref="probeTile">
+                        <span class="flex h-14 w-full items-center justify-center"></span>
+                        <span class="h-[2.75em] w-full text-xs leading-snug"></span>
+                        <span v-if="querying" class="w-full text-2xs">&nbsp;</span>
+                    </div>
+                </div>
+                <h3 ref="probeLabel" class="px-2 pt-3 pb-1 text-2xs text-muted">&nbsp;</h3>
+            </div>
+
+            <!-- Keyed on the folder: a change slides the old tiles out and the new ones in, a step in the direction travelled. -->
+            <Transition
+                mode="out-in"
+                enter-active-class="ui-desk-move"
+                :enter-from-class="direction === 'forward' ? 'opacity-0 translate-x-3' : 'opacity-0 -translate-x-3'"
+                leave-active-class="ui-desk-move"
+                :leave-to-class="direction === 'forward' ? 'opacity-0 -translate-x-2' : 'opacity-0 translate-x-2'"
+                @after-leave="bands.toTop()"
+            >
+                <div :key="deskDir" class="px-4 pb-6" role="listbox" aria-multiselectable="true" :aria-label="t(`workspace.deskView.contents`, { here })">
                 <!-- A wait long enough to show: tile-shaped placeholders, still. -->
                 <div v-if="revealed" class="grid grid-cols-[repeat(auto-fill,minmax(7.5rem,1fr))] gap-0.5" aria-hidden="true">
                     <div v-for="index in 8" :key="index" class="flex flex-col items-center gap-2 px-2 pt-3 pb-2">
@@ -557,19 +633,28 @@ const onBackgroundMenu = (event: MouseEvent): void => {
                     <p v-if="order.length === 0 && !loading && !searching && creating === undefined" class="py-12 text-center text-xs text-subtle">
                         {{ querying ? t(`workspace.deskView.nothingMatchesIn`, { trim: query.trim(), here }) : t(`workspace.deskView.nothingHere`) }}
                     </p>
-                    <section v-for="group in groups" :key="group.key">
-                        <!-- Named only when there is a second kind to tell apart; a folder of one kind reads without a label. -->
-                        <h3 v-if="showLabels" class="px-2 pt-3 pb-1 text-2xs text-muted">
-                            {{ group.label }}
-                        </h3>
-                        <div class="grid grid-cols-[repeat(auto-fill,minmax(7.5rem,1fr))] gap-0.5">
-                            <DeskTile
-                                v-for="entry in group.entries"
-                                :key="entry.path"
-                                v-model:draft="renameDraft"
-                                :entry="entry"
-                                :where="whereByPath.get(entry.path) || undefined"
-                                :selected="marked.has(entry.path)"
+                    <!-- Only the bands crossing the viewport are drawn; the spacer carries the rest of the folder's height,
+                         so the scrollbar still measures all of it. A label band is a group's heading, a tile band one row. -->
+                    <div class="relative" :style="{ height: `${deskHeight}px` }">
+                        <template v-for="{ band, top } in painted" :key="band.key">
+                            <!-- Named only when there is a second kind to tell apart; a folder of one kind reads without a label. -->
+                            <h3 v-if="band.kind === 'label'" class="absolute inset-x-0 px-2 pt-3 pb-1 text-2xs text-muted" :style="{ top: `${top}px` }">
+                                {{ band.label }}
+                            </h3>
+                            <div
+                                v-else
+                                class="absolute inset-x-0 grid gap-0.5"
+                                :style="{ top: `${top}px`, gridTemplateColumns: `repeat(${gridLayout.columns}, minmax(0, 1fr))` }"
+                            >
+                                <DeskTile
+                                    v-for="(entry, column) in band.entries"
+                                    :key="entry.path"
+                                    v-model:draft="renameDraft"
+                                    :entry="entry"
+                                    :where="querying ? (whereByPath.get(entry.path) ?? '') : undefined"
+                                    :aria-setsize="gridLayout.count"
+                                    :aria-posinset="band.start + column + 1"
+                                    :selected="marked.has(entry.path)"
                                 :locked="locked(entry.path)"
                                 :pending="pending(entry.path)"
                                 :dimmed="dimmed(entry)"
@@ -588,19 +673,21 @@ const onBackgroundMenu = (event: MouseEvent): void => {
                                 @pointerdown="(event) => onPointerDown(event, entry)"
                                 @dragover="(event) => onDragOver(event, dropDirOf(entry))"
                                 @dragleave="(event) => onDragLeave(event, dropDirOf(entry))"
-                                @drop="(event) => onDrop(event, dropDirOf(entry))"
-                            />
-                        </div>
-                    </section>
+                                    @drop="(event) => onDrop(event, dropDirOf(entry))"
+                                />
+                            </div>
+                        </template>
+                    </div>
                 </template>
-                <p v-if="hiddenTooling > 0 && !querying" class="px-2 pt-4 text-2xs text-subtle">
-                    {{ t(`workspace.deskView.toolingHidden`, { count: hiddenTooling.toLocaleString() }, hiddenTooling) }}
-                </p>
-                <p v-if="hiddenByCap > 0 && !querying" class="px-2 pt-4 text-2xs text-subtle">
-                    {{ t(`workspace.deskView.moreEntries`, { count: hiddenByCap.toLocaleString() }, hiddenByCap) }}
-                </p>
-            </div>
-        </Transition>
+                    <p v-if="hiddenTooling > 0 && !querying" class="px-2 pt-4 text-2xs text-subtle">
+                        {{ t(`workspace.deskView.toolingHidden`, { count: hiddenTooling.toLocaleString() }, hiddenTooling) }}
+                    </p>
+                    <p v-if="hiddenByCap > 0 && !querying" class="px-2 pt-4 text-2xs text-subtle">
+                        {{ t(`workspace.deskView.moreEntries`, { count: hiddenByCap.toLocaleString() }, hiddenByCap) }}
+                    </p>
+                </div>
+            </Transition>
+        </div>
 
         <!-- A drop on the desk itself lands in the open folder; the pill says so while a drag is over it and no tile has it. -->
         <div

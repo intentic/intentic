@@ -20,6 +20,11 @@ globalThis.Element.prototype.scrollIntoView = function scrollIntoView(this: Elem
     scrolled.push(this.textContent?.trim() ?? ``);
 };
 
+// The tree windows its rows, and jsdom lays nothing out, so a real scrollport reports clientHeight 0 and only the
+// overscan would be built. Stubbing one viewport of pixels is what makes these fixtures render in full.
+const VIEWPORT = 600;
+Object.defineProperty(globalThis.HTMLElement.prototype, `clientHeight`, { configurable: true, get: () => VIEWPORT });
+
 // Set before the imports below: useSandbox reads storage at import time and keys open folders by it.
 const SANDBOX = `sb1`;
 localStorage.setItem(`intentic.activeSandboxId`, SANDBOX);

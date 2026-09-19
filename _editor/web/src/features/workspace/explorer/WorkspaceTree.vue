@@ -14,7 +14,9 @@ import {
 } from "@intentic/ui";
 import { noticeOf } from "@intentic/ui/async";
 import type { MenuItem } from "primevue/menuitem";
-import { computed, nextTick, ref, type VNode, watch } from "vue";
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, type VNode, watch } from "vue";
+import { variableRows } from "../../../lib/rowWindow";
+import { useRowWindow } from "../../../lib/useRowWindow";
 import { useLayout } from "../../../shell/window/useLayout";
 import { viewersOfPath } from "../../../shell/presence/usePresence";
 import { noteUserCreatedDir, useEmptyDirs } from "./useEmptyDirs";
@@ -325,6 +327,69 @@ const visibleRows = computed<(Row | MoreRow)[]>(() => {
 // Visible order is the axis for Shift-range and arrow steps; markers are excluded so they can't be selected.
 const orderedPaths = computed<string[]>(() => visibleRows.value.filter((row): row is Row => !(`more` in row)).map((row) => row.entry.path));
 
+// ---- the window ----
+// Expanded folders can run to thousands of rows, and a row the reader cannot see still costs a component, its handlers
+// and a diff on every tick. Only the rows crossing the viewport are built; the rest is a spacer's worth of height.
+const scroller = ref<HTMLElement>();
+// Everything above the first row, measured rather than assumed: the top spacer, and the phantom create row when the
+// target folder is the root. Read from an observer, never per scroll, since asking the DOM for it forces layout.
+const preamble = ref<HTMLElement>();
+const probeRow = ref<HTMLElement>();
+const headroom = ref(0);
+// One row's natural height, off a hidden probe wearing the real classes, so the stylesheet stays the one place it is
+// decided and a text-size change is picked up rather than baked in.
+const rowHeight = ref(22);
+let sizes: ResizeObserver | undefined;
+const remeasure = (): void => {
+    headroom.value = preamble.value?.offsetHeight ?? 0;
+    rowHeight.value = Math.max(1, probeRow.value?.offsetHeight ?? 0);
+};
+onMounted(() => {
+    sizes = new ResizeObserver(remeasure);
+    for (const el of [preamble.value, probeRow.value]) {
+        if (el !== undefined) {
+            sizes.observe(el);
+        }
+    }
+    remeasure();
+});
+onBeforeUnmount(() => sizes?.disconnect());
+
+// What the phantom create row is given: a row for the field, and a second for the message when the name is refused.
+// Allotted rather than measured, and set on the element as an explicit height, so the two cannot disagree.
+const createBlock = computed(() => rowHeight.value * (createError.value === undefined ? 1 : 2));
+// A row is one row tall, plus the create block when it is the folder the new entry will land in.
+const rowHeights = computed(() =>
+    visibleRows.value.map((row) =>
+        !(`more` in row) && creating.value?.dir === row.entry.path ? rowHeight.value + createBlock.value : rowHeight.value,
+    ),
+);
+const rowWindow = useRowWindow(scroller, () => variableRows(rowHeights.value), { offsetTop: () => headroom.value });
+// The rows actually built, each carrying where it sits: they are placed, so the ones left out cost nothing.
+const painted = computed(() =>
+    visibleRows.value
+        .slice(rowWindow.first.value, rowWindow.last.value)
+        .map((row, at) => ({ row, top: rowWindow.rows.value.offsetOf(rowWindow.first.value + at) })),
+);
+// The spacer's height, as its own top-level ref: a template unwraps those, but not a ref reached through an object,
+// and `rowWindow.total` there would interpolate as "[object Object]" and silently leave the tree unscrollable.
+const treeHeight = computed(() => rowWindow.total.value);
+// Where a path sits on the row axis, or -1. The window scrolls by index: a row it has not built has no element.
+const rowIndexOfPath = (path: string): number => visibleRows.value.findIndex((row) => !(`more` in row) && row.entry.path === path);
+// Brings a row into view and waits for it to be built, answering its element; undefined when the path is not a row.
+const showRow = async (path: string): Promise<HTMLElement | undefined> => {
+    const index = rowIndexOfPath(path);
+    if (index === -1) {
+        return undefined;
+    }
+    await rowWindow.show(index);
+    const el = rowEls.get(path);
+    // The window's arithmetic is what puts the row in the DOM; this settles whatever drift is left between the row
+    // height it works from and what the browser actually laid out. A no-op when the row already sits fully in view.
+    el?.scrollIntoView({ block: `nearest` });
+    return el;
+};
+
 // Opens the tree down to the selected file and scrolls it into view, once per path once its row exists (retried via
 // visibleRows). Keyed by path, not every refetch, so a collapsed folder stays collapsed; focus is never stolen.
 let revealedPath: string | undefined;
@@ -346,12 +411,9 @@ watch(
         // Claimed before the await: expanding re-runs this watch, so two passes could both scroll the same row.
         revealedPath = path;
         await nextTick();
-        const el = rowEls.get(path);
-        if (el === undefined) {
-            revealedPath = undefined; // not painted yet (or filtered out): a later pass reveals it
-            return;
+        if ((await showRow(path)) === undefined) {
+            revealedPath = undefined; // not a row yet (or filtered out): a later pass reveals it
         }
-        el.scrollIntoView({ block: `nearest` });
     },
     { immediate: true },
 );
@@ -438,9 +500,11 @@ const setRowEl = (path: string, el: unknown): void => {
 };
 const focusLead = async (): Promise<void> => {
     await nextTick();
-    const el = lead.value === null ? undefined : rowEls.get(lead.value);
-    el?.focus();
-    el?.scrollIntoView({ block: `nearest` });
+    if (lead.value === null) {
+        return;
+    }
+    // Scrolls before focusing: the lead may be outside the window, and focus() on a row that isn't built goes nowhere.
+    (await showRow(lead.value))?.focus();
 };
 // Focuses the row explicitly, since Safari and macOS Firefox don't focus a <button> on click by default.
 const focusRow = (path: string): void => rowEls.get(path)?.focus();
@@ -679,7 +743,7 @@ const revealBarren = async (path: string): Promise<void> => {
     anchor.value = path;
     lead.value = path;
     await nextTick();
-    rowEls.get(path)?.scrollIntoView({ block: `nearest` });
+    await showRow(path);
 };
 // Reads `soleBarren` here, not in the template, since a template closure would read it outside the `v-if` proving it.
 const revealSoleBarren = async (): Promise<void> => {
@@ -1097,8 +1161,9 @@ const openMenu = (event: MouseEvent, entry: WorkspaceTreeEntry | undefined): voi
 </script>
 
 <template>
-    <!-- Sweep line is a sibling of the `role="tree"` element, not nested inside it, so it isn't read as a stray treeitem. -->
-    <div class="flex min-h-full flex-col">
+    <!-- Sweep line is a sibling of the `role="tree"` element, not nested inside it, so it isn't read as a stray treeitem.
+         This element is the scrollport: the window measures against it, and the sweep line sticks to its bottom edge. -->
+    <div ref="scroller" class="flex h-full min-h-0 flex-col overflow-auto" @scroll.passive="rowWindow.onScroll()">
         <div
             ref="treeEl"
             class="flex-1 pb-1 focus:outline-none"
@@ -1114,9 +1179,12 @@ const openMenu = (event: MouseEvent, entry: WorkspaceTreeEntry | undefined): voi
             @paste="onPasteEvent"
             @contextmenu.self.prevent="openMenu($event, undefined)"
         >
-            <!-- Phantom create row at the root (also covers an empty workspace). -->
-            <div v-if="creating !== undefined && creating.dir === ''" class="flex flex-col" style="padding-left: 0.5rem">
-                <div class="flex items-center gap-1.5 py-1 pr-2">
+            <!-- Everything above the first row, in one element the window measures so it knows where the rows start. -->
+            <div ref="preamble">
+                <div class="h-1"></div>
+                <!-- Phantom create row at the root (also covers an empty workspace). -->
+                <div v-if="creating !== undefined && creating.dir === ''" class="flex flex-col" style="padding-left: 0.5rem">
+                    <div class="flex items-center gap-1.5 py-1 pr-2">
                     <span class="w-[0.7rem] shrink-0"></span>
                     <Icon class="shrink-0 text-2xs text-muted" :name="creating.type === 'dir' ? 'folder' : 'file'" />
                     <input
@@ -1132,13 +1200,27 @@ const openMenu = (event: MouseEvent, entry: WorkspaceTreeEntry | undefined): voi
                         @vue:mounted="focusRename"
                     />
                 </div>
-                <p v-if="createError !== undefined" class="pb-1 pl-[1.35rem] text-2xs text-danger">{{ createError }}</p>
+                    <p v-if="createError !== undefined" class="pb-1 pl-[1.35rem] text-2xs text-danger">{{ createError }}</p>
+                </div>
             </div>
-            <template v-for="row in visibleRows" :key="'more' in row ? row.key : row.entry.path">
+
+            <!-- One row wearing the real classes, laid out but not painted: what a row's height is, asked of the
+                 stylesheet rather than written down here, so a text-size change moves the window with it. -->
+            <div class="pointer-events-none invisible absolute" aria-hidden="true">
+                <div ref="probeRow" class="flex items-center gap-1.5 py-0.5 pr-2 text-[0.8125rem]">
+                    <span class="w-[0.7rem] shrink-0"></span>
+                    <span>&nbsp;</span>
+                </div>
+            </div>
+
+            <!-- Only the rows crossing the viewport are built; the spacer carries the rest of the height, so the
+                 scrollbar still measures the whole tree. -->
+            <div class="relative" :style="{ height: `${treeHeight}px` }">
+                <template v-for="{ row, top } in painted" :key="'more' in row ? row.key : row.entry.path">
                 <div
                     v-if="'more' in row"
-                    class="flex items-center gap-1.5 py-1 pr-2 text-2xs italic text-subtle select-none"
-                    :style="{ paddingLeft: `${0.5 + row.depth * 0.75}rem` }"
+                    class="absolute inset-x-0 flex items-center gap-1.5 pr-2 text-2xs italic text-subtle select-none"
+                    :style="{ top: `${top}px`, height: `${rowHeight}px`, paddingLeft: `${0.5 + row.depth * 0.75}rem` }"
                     v-tooltip.top="t(`workspace.workspaceTree.searchCtrlP`)"
                 >
                     <span class="w-[0.7rem] shrink-0"></span>
@@ -1155,7 +1237,7 @@ const openMenu = (event: MouseEvent, entry: WorkspaceTreeEntry | undefined): voi
                         :aria-expanded="expandable(row) ? row.isExpanded : undefined"
                         :tabindex="tabbablePath === row.entry.path ? 0 : -1"
                         :data-drop-dir="dropTargetOf(row)"
-                        class="ui-row-select group flex w-full items-center gap-1.5 py-0.5 pr-2 text-left text-[0.8125rem]"
+                        class="ui-row-select group absolute inset-x-0 flex items-center gap-1.5 pr-2 text-left text-[0.8125rem]"
                         :class="{
                             'ui-row-select-on': selection.has(row.entry.path),
                             'ui-row-select-pointed': row.entry.path === pointedBarren,
@@ -1167,7 +1249,7 @@ const openMenu = (event: MouseEvent, entry: WorkspaceTreeEntry | undefined): voi
                             'ui-row-select-arriving': pending(row.entry.path),
                         }"
                         v-tooltip.right="pendingTooltip(row.entry.path)"
-                        :style="{ paddingLeft: `${0.5 + row.depth * 0.75}rem` }"
+                        :style="{ top: `${top}px`, height: `${rowHeight}px`, paddingLeft: `${0.5 + row.depth * 0.75}rem` }"
                         @click="onRowClick($event, row)"
                         @dblclick="onRowDblClick(row)"
                         @contextmenu.prevent.stop="openMenu($event, row.entry)"
@@ -1285,11 +1367,16 @@ const openMenu = (event: MouseEvent, entry: WorkspaceTreeEntry | undefined): voi
                             class="shrink-0 text-[0.4rem] text-warning"
                         />
                     </button>
-                    <!-- Phantom create row as the first child of the target dir (sorted position lands on refetch). -->
+                    <!-- Phantom create row as the first child of the target dir (sorted position lands on refetch).
+                         Sits in the height its anchor row was given for it, so the rows below stay where they are. -->
                     <div
                         v-if="creating !== undefined && creating.dir === row.entry.path"
-                        class="flex flex-col"
-                        :style="{ paddingLeft: `${0.5 + (row.depth + 1) * 0.75}rem` }"
+                        class="absolute inset-x-0 flex flex-col"
+                        :style="{
+                            top: `${top + rowHeight}px`,
+                            height: `${createBlock}px`,
+                            paddingLeft: `${0.5 + (row.depth + 1) * 0.75}rem`,
+                        }"
                     >
                         <div class="flex items-center gap-1.5 py-1 pr-2">
                             <span class="w-[0.7rem] shrink-0"></span>
@@ -1317,7 +1404,8 @@ const openMenu = (event: MouseEvent, entry: WorkspaceTreeEntry | undefined): voi
                         <p v-if="createError !== undefined" class="pb-1 pl-[1.35rem] text-2xs text-danger">{{ createError }}</p>
                     </div>
                 </template>
-            </template>
+                </template>
+            </div>
             <p v-if="visibleRows.length === 0 && creating === undefined" class="px-3 py-3 text-center text-2xs text-subtle">
                 {{ filter.trim() ? t(`workspace.workspaceTree.noMatchingFiles`) : t(`workspace.workspaceTree.emptyWorkspace`) }}
             </p>

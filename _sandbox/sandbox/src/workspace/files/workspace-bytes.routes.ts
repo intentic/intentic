@@ -8,6 +8,7 @@ import { sha256Text } from "./workspace-files.js";
 import { MAX_RAW_BYTES, contentTypeForPath, openWorkspaceFileRange, parseByteRange } from "./workspace-files-download.js";
 import { isControlPlanePath, resolveWithin } from "./workspace-files-paths.js";
 import { MAX_UPLOAD_BYTES, UploadTooLargeError } from "./workspace-files-upload.js";
+import { THUMBNAIL_TYPE, thumbnailable, workspaceThumbnail } from "./workspace-thumbnail.js";
 import { insideArchive, scopedTarget } from "../layout/workspace-scope.js";
 
 // Byte routes that stay off oRPC because their bodies are streamed: raw file read, ranged media read, and file/diff/tar
@@ -76,6 +77,40 @@ export const createWorkspaceBytesRoutes = (services: WorkspaceBytesRoutesDeps) =
         }
         // Buffer's backing is ArrayBufferLike, which Hono's body type rejects; copy is cheap under MAX_RAW_BYTES.
         return c.body(new Uint8Array(bytes), 200, { "Content-Type": contentTypeForPath(target), "Content-Length": String(bytes.byteLength) });
+    },
+
+    // GET /workspace/thumb: a picture downscaled to tile size. The desk asks for one per visible tile, so answering with
+    // the original (what /workspace/raw does) meant a folder of screenshots moved a gigabyte and decoded every file at
+    // full resolution to paint boxes an inch across. Not an error route: a file with nothing to draw answers 404 and the
+    // desk keeps the glyph it was already showing.
+    thumb: async (c: Context<AppEnv>): Promise<Response> => {
+        const path = c.req.query("path");
+        if (path === undefined) {
+            return c.json({ error: "invalid path" }, 400);
+        }
+        // Shared with the raw route, so a tile and the file it opens are read from the same scope.
+        const scoped = await scopedFileTarget(services, path, c.req.query("agent"));
+        if ("error" in scoped) {
+            return c.json({ error: scoped.error }, scoped.status);
+        }
+        if (!thumbnailable(scoped.target)) {
+            return c.json({ error: "not a picture this can draw" }, 415);
+        }
+        const thumbnail = await workspaceThumbnail(services.workspace.root, scoped.target);
+        if (thumbnail === undefined) {
+            return c.json({ error: "not found" }, 404);
+        }
+        // The tag is the source's own version, so a reload revalidates into a 304 rather than moving the bytes again.
+        if (c.req.header("if-none-match") === `"${thumbnail.etag}"`) {
+            return c.body(null, 304, { ETag: `"${thumbnail.etag}"` });
+        }
+        return c.body(new Uint8Array(thumbnail.bytes), 200, {
+            "Content-Type": THUMBNAIL_TYPE,
+            "Content-Length": String(thumbnail.bytes.byteLength),
+            ETag: `"${thumbnail.etag}"`,
+            // Revalidate rather than reuse blind: the URL names a path, and the file at a path can change.
+            "Cache-Control": "private, no-cache",
+        });
     },
 
     // GET /workspace/media: range-streamed reads for a `<video>`, unlike /workspace/raw's whole-file answer; no byte

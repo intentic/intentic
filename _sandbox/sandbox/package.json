@@ -69,6 +69,7 @@
         "node-pty": "catalog:",
         "pino": "catalog:",
         "playwright": "catalog:",
+        "sharp": "catalog:",
         "smol-toml": "catalog:",
         "tar-stream": "catalog:",
         "tslib": "catalog:",

@@ -13,7 +13,7 @@ import { throttleTrailing } from "./throttleTrailing";
 const IDB_KEY = `intentic-query-cache`;
 
 // Marks a key whose value must stay only in memory, since the cache mirrors to disk as one whole clone.
-// - small, shape-stable (rosters, trees): mirror it too, cheap and worth the reload paint.
+// - small, shape-stable (rosters): mirror it too, cheap and worth the reload paint.
 // - large, disposable (a file diff): memory only, bounded by gcTime.
 // - large, worth keeping (a transcript): memory only here, persisted separately, one record at a time.
 export const UNPERSISTED = `unpersisted`;

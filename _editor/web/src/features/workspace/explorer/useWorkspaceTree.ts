@@ -15,10 +15,12 @@ import { resetUploadQueue } from "../files/upload/useUploadQueue";
 import { dropProvisional, markSettled, noteArriving, noteLeaving, reconcileProvisional, resetProvisional } from "../files/provisionalEntries";
 import { renameOpenPaths } from "../tabs/useWorkspaceTabs";
 import { changedDirs } from "../changes/live/useWorkspaceLive";
+import { useDesk } from "../desk/useDesk";
 import { readExpandedDirs, writeExpandedDirs } from "../tabs/workspaceSnapshot";
 import { scopeQuery, workspaceAgent } from "../health/workspaceScope";
 import { basename, parentDir } from "@intentic/ui/path";
 import { WORKSPACE_TREE } from "../../../lib/queryKeys";
+import { UNPERSISTED } from "../../../lib/queryPersistence";
 
 // Shared busy/error state for file actions (rename, delete, save, move); drag-drop uploads use useUploadQueue.
 // Concurrent, not mutexed: these are independent writes to different paths, and one runner shared by the tree, the
@@ -47,6 +49,10 @@ const clearLoadNotice = (): void => {
 
 // Expanded directory paths (also folded nest-parents); ignored while filtering, persisted per sandbox.
 const expanded = ref<ReadonlySet<string>>(new Set());
+// Whether a folder's listing is one someone is actually looking at: open in the tree, or the folder the desk is showing.
+// A lazy listing outlives the gesture that loaded it, so without this a folder opened once is re-read forever.
+const { deskDir } = useDesk();
+const onScreen = (path: string): boolean => expanded.value.has(path) || deskDir.value === path;
 // Sandbox the open folders belong to, captured at restore rather than read live, to avoid a rescope race.
 let scopedSandboxId: string | undefined;
 const { activeSandboxId } = useSandbox();
@@ -155,7 +161,10 @@ const readBlob = (path: string): Promise<Blob> => sandboxBlob(`/workspace/raw?${
 
 // Scope is part of the query key, not just the request: different scopes are different trees, cached independently.
 // Exported for the prefetch loader, which must read the scope live.
-export const workspaceTreeKey = (): unknown[] => WORKSPACE_TREE.of(workspaceAgent.value ?? `shared`);
+// UNPERSISTED: the mirror structured-clones the whole cache on a timer, and a workspace's tree is not the small,
+// shape-stable thing that rule was written for — a wide one runs to tens of thousands of entries, and cloning it every
+// couple of seconds stalls the main thread for longer than the paint it was meant to save.
+export const workspaceTreeKey = (): unknown[] => WORKSPACE_TREE.of(workspaceAgent.value ?? `shared`, UNPERSISTED);
 
 export const fetchWorkspaceTree = (): Promise<WorkspaceTreeResponse> =>
     sandboxJson<WorkspaceTreeResponse>(`/workspace/tree?${scopeQuery(new URLSearchParams()).toString()}`);
@@ -386,12 +395,15 @@ export function useWorkspaceTree() {
         }
     });
 
-    // Lazy subtrees sit outside the tree query; refetch each loaded one whenever the tree data changes, or new files
-    // never appear. Keyed on `query.data`, stable via structural sharing when unchanged, not `dataUpdatedAt`.
+    // Lazy subtrees sit outside the tree query; refetch the ones being looked at whenever the tree data changes, or new
+    // files never appear. Keyed on `query.data`, stable via structural sharing when unchanged, not `dataUpdatedAt`.
+    // Only the ones on screen: a listing kept for a collapsed folder is re-read when it opens again, and a workspace
+    // under a working agent invalidates this about once a second — re-listing every folder ever opened, each a readdir
+    // and a stat per file, is how one open folder of several thousand files became a second of daemon time per second.
     watch(query.data, () => {
         // Iterating the live keys is safe: fetchChildren only writes this map after its first await.
         for (const path of lazyChildren.value.keys()) {
-            if (!lazyLoading.value.has(path)) {
+            if (onScreen(path) && !lazyLoading.value.has(path)) {
                 void fetchChildren(path);
             }
         }

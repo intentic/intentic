@@ -362,6 +362,8 @@ export const createApp = (services: Services): Hono<AppEnv> => {
     // Off oRPC since their bodies are streamed bytes; registered before the catch-all, like /health.
     const workspaceBytes = createWorkspaceBytesRoutes(services);
     app.get("/workspace/raw", workspaceBytes.raw);
+    // Not bearer-exempt like /workspace/media: the desk fetches this one itself, so it can carry the header.
+    app.get("/workspace/thumb", workspaceBytes.thumb);
     app.get("/workspace/media", workspaceBytes.media);
     app.post("/workspace/upload", workspaceBytes.upload);
     app.post("/workspace/upload-diff", workspaceBytes.uploadDiff);

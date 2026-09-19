@@ -1003,7 +1003,7 @@ const deskTooltip = computed(() => tooltipWithChord(`Show desk · your tabs stay
                         </button>
                     </div>
                 </div>
-                <!-- The match list virtualizes against its own scroller; the tree scrolls in the wrapper as it always has. -->
+                <!-- Both lists window against a scroller of their own, so neither grows a row per file in the workspace. -->
                 <div v-if="layout.sidebarPanel.value === 'files' && contentMode" class="min-h-0 flex-1">
                     <WorkspaceSearchResults
                         :groups="searchGroups"
@@ -1021,8 +1021,8 @@ const deskTooltip = computed(() => tooltipWithChord(`Show desk · your tabs stay
                         @load-more="searchLoadMore"
                     />
                 </div>
-                <!-- Bottom padding belongs to the tree, not this scrollport, or scrolled rows peek under the pinned empty line. -->
-                <div v-else-if="layout.sidebarPanel.value === 'files'" class="min-h-0 flex-1 overflow-auto pt-1">
+                <!-- Padding belongs to the tree, not this wrapper: it owns the scrollport, and the window measures against it. -->
+                <div v-else-if="layout.sidebarPanel.value === 'files'" class="min-h-0 flex-1">
                     <WorkspaceTree
                         :tree="scopedTree"
                         :root-dir="workspaceDir"

@@ -3,6 +3,7 @@
 import type { WorkspaceTreeEntry } from "@intentic/api-contract";
 import { explorerColorClass, type IconName, iconForEntry } from "@intentic/ui";
 import { computed, onBeforeUnmount, onMounted, ref, type VNode, watch } from "vue";
+import { stopWaiting, whenNear } from "./nearViewport";
 import { thumbnailKind, thumbnailUrl } from "./thumbnails";
 import { useT } from "@intentic/ui/i18n";
 
@@ -81,7 +82,6 @@ const shown = ref(false);
 const failed = ref(false);
 let near = false;
 let retried = false;
-let observer: IntersectionObserver | undefined;
 
 const load = (): void => {
     if (kind.value === undefined) {
@@ -100,18 +100,17 @@ onMounted(() => {
     if (kind.value === undefined || art.value === undefined) {
         return;
     }
-    observer = new IntersectionObserver(
-        (hits) => {
-            if (hits.some((hit) => hit.isIntersecting)) {
-                near = true;
-                load();
-            }
-        },
-        { rootMargin: `240px` },
-    );
-    observer.observe(art.value);
+    whenNear(art.value, () => {
+        near = true;
+        load();
+    });
 });
-onBeforeUnmount(() => observer?.disconnect());
+// The desk windows its tiles, so this runs whenever one scrolls out of reach, not just when the folder closes.
+onBeforeUnmount(() => {
+    if (art.value !== undefined) {
+        stopWaiting(art.value);
+    }
+});
 // A rewritten file (same path, new size) is a new picture.
 watch(
     () => `${entry.path} ${entry.size ?? 0}`,
@@ -208,7 +207,7 @@ const seekFrame = (event: Event): void => {
             v-model="draft"
             type="text"
             :aria-label="t(`workspace.deskTile.newName`)"
-            class="ui-field-box ui-field-inline w-full min-w-0 px-1 text-center text-xs"
+            class="ui-field-box ui-field-inline h-[2.75em] w-full min-w-0 px-1 text-center text-xs"
             @click.stop
             @dblclick.stop
             @keydown.stop
@@ -217,9 +216,16 @@ const seekFrame = (event: Event): void => {
             @blur="emit('commit')"
             @vue:mounted="focusField"
         />
-        <span v-else class="line-clamp-2 w-full text-xs leading-snug [overflow-wrap:anywhere]" :class="quiet ? 'text-subtle' : 'text-content/90'">{{
-            entry.name
-        }}</span>
-        <span v-if="where !== undefined && !renaming" class="w-full truncate text-2xs text-subtle" :title="where">{{ where }}</span>
+        <!-- Two lines whether the name needs them or not: the desk places its rows by arithmetic, so a tile whose height
+             depended on its own name would leave the row below it in the wrong place. -->
+        <span
+            v-else
+            class="line-clamp-2 h-[2.75em] w-full text-xs leading-snug [overflow-wrap:anywhere]"
+            :class="quiet ? 'text-subtle' : 'text-content/90'"
+            >{{ entry.name }}</span
+        >
+        <!-- Drawn whenever the desk is showing results, blank for a file in the open folder, so every tile in a search is
+             the same height. -->
+        <span v-if="where !== undefined" class="w-full truncate text-2xs text-subtle" :title="where">{{ where }}</span>
     </div>
 </template>

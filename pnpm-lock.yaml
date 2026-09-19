@@ -2653,6 +2653,9 @@ importers:
       playwright:
         specifier: 'catalog:'
         version: 1.62.1
+      sharp:
+        specifier: 0.35.4
+        version: 0.35.4(@types/node@24.13.2)
       smol-toml:
         specifier: 'catalog:'
         version: 1.7.1

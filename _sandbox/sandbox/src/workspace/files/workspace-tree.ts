@@ -1,6 +1,7 @@
 import type { Dirent } from "node:fs";
 import { readdir, readlink, stat } from "node:fs/promises";
 import { join, resolve, sep } from "node:path";
+import { mapPool } from "@intentic/base/async";
 import {
     isLockedWorkspacePath,
     type WorkspaceChildren,
@@ -18,7 +19,13 @@ import { isUnder, realPathOf, realWithin, resolveWithin } from "./workspace-file
 // descended (lazy-load via listWorkspaceChildren).
 // Symlinks are listed as what they point at.
 
+// The eager walk's budget, spent across the WHOLE workspace and re-spent on every refetch, so it stays tight.
 const MAX_ENTRIES = 5000;
+
+// One folder's own budget, for the lazy listing. Far larger than the walk's: this is one directory, asked for once when
+// someone opens it, and the views that draw it window their rows, so the count no longer decides what rendering costs.
+// A folder of several thousand artifacts is an ordinary thing to open, and answering "and 1,723 more" to it is not.
+const MAX_CHILDREN = 50_000;
 
 // One directory entry with its symlink followed; isDir is the TARGET's kind, so a folder link expands like one.
 // real is where the entry's bytes actually live; used for containment (link outside workspace) and the cycle guard.
@@ -31,38 +38,52 @@ interface Entry {
     readonly link?: WorkspaceLink;
 }
 
-// Resolves one directory's entries; a plain directory costs no syscall (dirent alone), a plain file one stat for its
-// size. A symlink costs stat (kind and size; failure marks it dangling, still listed), readlink (display text),
-// realpath (cycle guard).
-// Every entry in a directory resolves concurrently, and the size comes back with the entry rather than being stat'd
-// again one at a time by the callers below: on a workspace of a few thousand files that is the difference between a
-// listing the browser waits a second for and one it waits a moment for.
-const followEntries = async (dirAbs: string, realDir: string, realRoot: string, dirents: readonly Dirent[]): Promise<Entry[]> =>
-    Promise.all(
-        dirents.map(async (dirent): Promise<Entry> => {
-            const name = dirent.name;
-            const abs = join(dirAbs, name);
-            if (!dirent.isSymbolicLink()) {
-                if (dirent.isDirectory()) {
-                    return { name, isDir: true, real: join(realDir, name) };
-                }
-                const stats = await stat(abs).catch(() => undefined);
-                return { name, isDir: false, real: join(realDir, name), ...(stats === undefined ? {} : { size: stats.size }) };
-            }
-            const [target, to, real] = await Promise.all([stat(abs).catch(() => undefined), readlink(abs).catch(() => abs), realPathOf(abs)]);
-            if (target === undefined) {
-                return { name, isDir: false, real, link: { to, state: "broken" } };
-            }
-            const inside = isUnder(realRoot, real) !== undefined;
-            return {
-                name,
-                isDir: target.isDirectory(),
-                real,
-                ...(target.isDirectory() ? {} : { size: target.size }),
-                link: inside ? { to } : { to, state: "outside" },
-            };
-        }),
+// Stats in flight at once while resolving one directory. Node's filesystem thread pool is four threads wide, so this is
+// about queue depth, not parallelism: a folder of ten thousand files used to enqueue ten thousand stats in one go and
+// every other read on the daemon — the file being opened, the diff being drawn — waited behind all of them.
+const STAT_POOL = 64;
+
+// Resolves one directory entry; a plain directory costs no syscall (dirent alone), a plain file one stat for its size.
+// A symlink costs stat (kind and size; failure marks it dangling, still listed), readlink (display text), realpath
+// (cycle guard).
+const followEntry = async (dirent: Dirent, dirAbs: string, realDir: string, realRoot: string): Promise<Entry> => {
+    const name = dirent.name;
+    const abs = join(dirAbs, name);
+    if (!dirent.isSymbolicLink()) {
+        if (dirent.isDirectory()) {
+            return { name, isDir: true, real: join(realDir, name) };
+        }
+        const stats = await stat(abs).catch(() => undefined);
+        return { name, isDir: false, real: join(realDir, name), ...(stats === undefined ? {} : { size: stats.size }) };
+    }
+    const [target, to, real] = await Promise.all([stat(abs).catch(() => undefined), readlink(abs).catch(() => abs), realPathOf(abs)]);
+    if (target === undefined) {
+        return { name, isDir: false, real, link: { to, state: "broken" } };
+    }
+    const inside = isUnder(realRoot, real) !== undefined;
+    return {
+        name,
+        isDir: target.isDirectory(),
+        real,
+        ...(target.isDirectory() ? {} : { size: target.size }),
+        link: inside ? { to } : { to, state: "outside" },
+    };
+};
+
+// The size comes back with the entry rather than being stat'd again one at a time by the callers below: on a workspace
+// of a few thousand files that is the difference between a listing the browser waits a second for and one it waits a
+// moment for. Pooled, and written back by index, so the order is the directory's own.
+const followEntries = async (dirAbs: string, realDir: string, realRoot: string, dirents: readonly Dirent[]): Promise<Entry[]> => {
+    const out: Entry[] = Array.from({ length: dirents.length });
+    await mapPool(
+        dirents.map((dirent, index) => ({ dirent, index })),
+        STAT_POOL,
+        async ({ dirent, index }) => {
+            out[index] = await followEntry(dirent, dirAbs, realDir, realRoot);
+        },
     );
+    return out;
+};
 
 // Dirs before files, then alphabetical, on the followed kind.
 const byKind = (a: Entry, b: Entry): number => (a.isDir === b.isDir ? a.name.localeCompare(b.name) : a.isDir ? -1 : 1);
@@ -222,7 +243,7 @@ export const listWorkspaceChildren = async (
 
     const realRoot = await realPathOf(base);
     const depth = options?.depth ?? 1;
-    let budget = options?.maxEntries ?? MAX_ENTRIES;
+    let budget = options?.maxEntries ?? MAX_CHILDREN;
     const entries: WorkspaceTreeEntry[] = [];
     let hidden = 0;
     let level: Job[] = [{ abs: dir, real: realDir, rel: relPath, parentScope, branchIgnored, level: 1 }];

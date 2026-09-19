@@ -5,9 +5,14 @@ import { scopeQuery, workspaceAgent } from "../health/workspaceScope";
 import { peekPlan } from "./peekContent";
 
 // One URL per picture or video the desk draws, shared by the tiles and the quick look, so a hover never re-reads what a
-// tile already fetched. A picture is its bytes as an object URL; a video is the daemon's ticketed media URL, which the
-// element streams by range, so a thumbnail costs a header and a frame rather than the file. Bounded: past the cap the
-// oldest goes, and a picture's object URL is revoked with it.
+// tile already fetched. A picture is the daemon's downscaled WebP (/workspace/thumb) as an object URL, a few kilobytes
+// rather than the file — drawing a folder of screenshots from the originals moved a gigabyte and made the browser hold
+// every one of them decoded at full size. A video is the daemon's ticketed media URL, which the element streams by
+// range, so a thumbnail costs a header and a frame rather than the file. Bounded: past the cap the oldest goes, and a
+// picture's object URL is revoked with it.
+//
+// Fetched rather than handed to the element as a URL: this route takes the bearer header like any other read, and a
+// per-file ticket (what <video> needs) would be a round trip per tile.
 
 export type ThumbnailKind = "picture" | "video";
 
@@ -16,7 +21,9 @@ export const thumbnailKind = (entry: WorkspaceTreeEntry): ThumbnailKind | undefi
     return kind === `picture` || kind === `video` ? kind : undefined;
 };
 
-const CAP = 96;
+// Held URLs. Generous because each is a few kilobytes now, and the desk only draws what is on screen: scrolling back up
+// a long folder should find its tiles already there rather than re-reading them.
+const CAP = 512;
 // In flight or settled, so a burst of tiles asking for one file makes one request.
 const urls = new Map<string, Promise<string>>();
 
@@ -25,7 +32,7 @@ const keyOf = (entry: WorkspaceTreeEntry): string => `${workspaceAgent.value ?? 
 
 const fetchUrl = async (entry: WorkspaceTreeEntry, kind: ThumbnailKind): Promise<string> =>
     kind === `picture`
-        ? URL.createObjectURL(await sandboxBlob(`/workspace/raw?${scopeQuery(new URLSearchParams({ path: entry.path })).toString()}`))
+        ? URL.createObjectURL(await sandboxBlob(`/workspace/thumb?${scopeQuery(new URLSearchParams({ path: entry.path })).toString()}`))
         : mediaUrl(entry.path);
 
 const evictOldest = (): void => {
