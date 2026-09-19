@@ -7,10 +7,12 @@
         "failingRunsInRow": "Fallando en {name} varias ejecuciones seguidas",
         "fit": "Encajar",
         "openJobGraphFull": "Abrir el grafo de tareas a pantalla completa",
+        "openJobLog": "Abrir {name} en la forja",
         "zoomOutUntilWhole": "Alejar hasta que toda la ejecución quepa"
     },
     "pipelineGraph": {
-        "failingRunsInRow": "Fallando en {name} varias ejecuciones seguidas"
+        "failingRunsInRow": "Fallando en {name} varias ejecuciones seguidas",
+        "openJobLog": "Abrir {name} en la forja"
     },
     "pipelineRunRow": {
         "agentAlreadyWorkingOn": "Ya hay un agente trabajando en {branch}, iniciado desde la ejecución #{runId}: ábrelo",

@@ -7,10 +7,12 @@
         "failingRunsInRow": "Fällt bei {name} seit mehreren Läufen in Folge durch",
         "fit": "Einpassen",
         "openJobGraphFull": "Den Job-Graphen im Vollbild öffnen",
+        "openJobLog": "{name} auf der Forge öffnen",
         "zoomOutUntilWhole": "Herauszoomen, bis der ganze Lauf im Bild ist"
     },
     "pipelineGraph": {
-        "failingRunsInRow": "Fällt bei {name} seit mehreren Läufen in Folge durch"
+        "failingRunsInRow": "Fällt bei {name} seit mehreren Läufen in Folge durch",
+        "openJobLog": "{name} auf der Forge öffnen"
     },
     "pipelineRunRow": {
         "agentAlreadyWorkingOn": "Ein Agent arbeitet bereits an {branch}, gestartet aus Lauf #{runId} — öffnen",

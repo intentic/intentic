@@ -277,12 +277,17 @@ const toggle = (id: string): void => {
                 />
             </template>
             <template #node-card="{ data }">
-                <button
-                    type="button"
+                <!-- A div with role=button, not a <button>: cards carry their own links (a job's page on its forge), and interactive content inside a button is invalid HTML. -->
+                <!-- `cursor-default` is what the button gave: the card takes a click, but only a link inside it should wear the hand. -->
+                <div
+                    role="button"
+                    tabindex="0"
                     v-tooltip.top="data.tooltip"
-                    class="relative block h-full w-full overflow-hidden rounded-md border bg-canvas text-left transition-colors"
+                    class="relative block h-full w-full cursor-default overflow-hidden rounded-md border bg-canvas text-left transition-colors"
                     :class="data.id === selectedId ? `border-link ring-1 ring-link` : `border-line hover:border-line-strong`"
                     @click="toggle(data.id)"
+                    @keydown.enter.prevent="toggle(data.id)"
+                    @keydown.space.prevent="toggle(data.id)"
                 >
                     <Handle type="target" :position="targetPosition" />
                     <!-- Fades the interior only, not the card: opacity on the card itself would let an edge behind it show through as a strikethrough. -->
@@ -290,7 +295,7 @@ const toggle = (id: string): void => {
                         <slot name="node" :node="data" :selected="data.id === selectedId" />
                     </div>
                     <Handle type="source" :position="sourcePosition" />
-                </button>
+                </div>
             </template>
         </VueFlow>
         <slot name="overlay" :fit-all="fitAll" />

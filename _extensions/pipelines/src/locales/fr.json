@@ -7,10 +7,12 @@
         "failingRunsInRow": "En échec sur {name} plusieurs exécutions d'affilée",
         "fit": "Ajuster",
         "openJobGraphFull": "Ouvrir le graphe des tâches en plein écran",
+        "openJobLog": "Ouvrir {name} sur la forge",
         "zoomOutUntilWhole": "Dézoomer jusqu'à ce que toute l'exécution tienne à l'écran"
     },
     "pipelineGraph": {
-        "failingRunsInRow": "En échec sur {name} plusieurs exécutions d'affilée"
+        "failingRunsInRow": "En échec sur {name} plusieurs exécutions d'affilée",
+        "openJobLog": "Ouvrir {name} sur la forge"
     },
     "pipelineRunRow": {
         "agentAlreadyWorkingOn": "Un agent travaille déjà sur {branch}, lancé depuis l'exécution #{runId} — ouvrez-le",

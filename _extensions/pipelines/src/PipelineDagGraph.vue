@@ -8,7 +8,8 @@ import { t } from "./i18n.js";
 
 // Job graph: one card per group of identically-wired jobs, so parallel jobs sharing every edge collapse into one set of
 // arrows. Below `readableZoom` the canvas stops shrinking rather than crop or blur past legibility. Hover traces one
-// job's card through the run; a click pins it.
+// job's card through the run; a click pins it. The job name itself is a link out to that job's page on the forge, so
+// the pin stays on the plain click everywhere else in the row.
 
 const {
     stages,
@@ -174,7 +175,22 @@ const focusedCard = computed(() => dag.value.nodes.find((node) => node.data.jobs
                         />
                         <!-- Stage names lead the row; duration has its own metadata slot. -->
                         <!-- One size below body text: at the larger size, most names in a 184px card truncated to ellipsis. -->
+                        <!-- The name alone is the link, so the rest of the row keeps the click that traces this job through the run. -->
+                        <a
+                            v-if="member.job.webUrl"
+                            :href="member.job.webUrl"
+                            target="_blank"
+                            rel="noopener"
+                            draggable="false"
+                            class="min-w-0 flex-1 truncate rounded-xs text-2xs font-medium leading-tight underline-offset-2 hover:underline focus-visible:outline focus-visible:outline-1 focus-visible:outline-link"
+                            :class="member.job.status === `failed` ? `text-danger` : `text-content hover:text-link`"
+                            v-tooltip.top="t(`pipelineDagGraph.openJobLog`, { name: member.job.name })"
+                            @click.stop
+                        >
+                            {{ member.job.name }}
+                        </a>
                         <span
+                            v-else
                             class="min-w-0 flex-1 truncate text-2xs font-medium leading-tight"
                             :class="member.job.status === `failed` ? `text-danger` : `text-content`"
                         >

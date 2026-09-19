@@ -79,6 +79,7 @@ const stageTooltip = (stage: PipelineStage, index: number): string => {
                                 rel="noopener"
                                 class="min-w-0 flex-1 truncate text-xs hover:underline"
                                 :class="job.status === `failed` ? `font-medium text-danger` : `text-content hover:text-link`"
+                                v-tooltip.top="t(`pipelineGraph.openJobLog`, { name: job.name })"
                             >
                                 {{ job.name }}
                             </a>

@@ -7,10 +7,12 @@
         "failingRunsInRow": "Failing for {name} runs in a row",
         "fit": "Fit",
         "openJobGraphFull": "Open the job graph full screen",
+        "openJobLog": "Open {name} on the forge",
         "zoomOutUntilWhole": "Zoom out until the whole run is in frame"
     },
     "pipelineGraph": {
-        "failingRunsInRow": "Failing for {name} runs in a row"
+        "failingRunsInRow": "Failing for {name} runs in a row",
+        "openJobLog": "Open {name} on the forge"
     },
     "pipelineRunRow": {
         "agentAlreadyWorkingOn": "An agent is already working on {branch}, started from run #{runId} — open it",

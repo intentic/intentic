@@ -7,10 +7,12 @@
         "failingRunsInRow": "Pada na {name} kilka przebiegów z rzędu",
         "fit": "Dopasuj",
         "openJobGraphFull": "Otwórz graf zadań na pełnym ekranie",
+        "openJobLog": "Otwórz {name} w serwisie",
         "zoomOutUntilWhole": "Oddalaj, aż cały przebieg zmieści się w kadrze"
     },
     "pipelineGraph": {
-        "failingRunsInRow": "Pada na {name} kilka przebiegów z rzędu"
+        "failingRunsInRow": "Pada na {name} kilka przebiegów z rzędu",
+        "openJobLog": "Otwórz {name} w serwisie"
     },
     "pipelineRunRow": {
         "agentAlreadyWorkingOn": "Agent już pracuje na {branch}, uruchomiony z przebiegu #{runId} — otwórz go",
