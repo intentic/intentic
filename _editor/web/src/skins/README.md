@@ -76,7 +76,7 @@ Sanctum has paid for that rule and seventeen others, and the notes are kept at t
   could be set in two different families at once. Reported as the dark look using different fonts from the light
   one, which is what it was. The skin names no face now: the app's type is the app's, in either light, and the
   skin keeps its inscriptions through the things that are paint — the stone's ink, the gold, the letter-spacing,
-  the uppercase, the lozenge cut in front of a section label.
+  and the uppercase.
 - **A decorative layer that scales with the viewport will eventually fill the screen.** The temple was sized as a
   share of window width; at 1900px it became a lit mountain range across the bottom third. It is capped in
   absolute pixels now.
