@@ -169,11 +169,11 @@ html[data-variant="desk"] {
     --role-plate-veil: 0.3;
 
     --role-stage-shadow: var(--desk-shadow-3);
-    /* The veil over the demo figure still DARKENS on hover, because what is under it is a screenshot either way and
-       the play button has to lift off it. Its label goes white for the same reason. */
+    /* The veil over the demo figure still DARKENS on hover, because what is under it is a screenshot either way.
+       The play cartouche is opaque paper, so its label deepens like every other button — white would vanish on it. */
     --role-play-veil: color-mix(in oklab, var(--desk-brand-950) 5%, transparent);
     --role-play-veil-on: color-mix(in oklab, var(--desk-brand-950) 34%, transparent);
-    --role-play-content-on: #fff;
+    --role-play-content-on: var(--role-btn-hover-content);
     /* The hero's subtitle is quiet type, not an accent: on the dark skin a soft tan, here the muted ink. */
     --role-hero-sub: var(--color-muted);
     --role-ember-rule: linear-gradient(
