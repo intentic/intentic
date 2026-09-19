@@ -1,5 +1,6 @@
 ---
 /* The bar starts transparent and lifts after the page scrolls. */
+import { deskLanding } from "@intentic/site-content/landing";
 import { navEntries } from "@intentic/site-content/nav";
 import { APP_URL, DESK_PATH, discordUrl, githubUrl } from "@intentic/site-content/site";
 import { GITHUB_MARK } from "../lib/marks";
@@ -12,7 +13,7 @@ import Lotus from "./Lotus.astro";
 import MobileNav from "./MobileNav.astro";
 
 // Which product's page this bar sits on. The mark leads home to that product, and the bar's one action is that
-// product's door: the workspace for a developer, the app for the desk. A shared page (docs, pricing) is the
+// product's door: the install for a developer, the app for the desk. A shared page (docs, pricing) is the
 // developer's by default; the pre-paint script (lib/variant.ts) points a desk reader's mark at /desk/ instead.
 interface Props {
     product?: "default" | "desk";
@@ -137,11 +138,11 @@ const currentPath = Astro.url.pathname;
             </a>
             {
                 product === "desk" ? (
-                    <DownloadCta primary class="btn-sm bar-cta" icon={false} />
-                ) : (
                     <a href={APP_URL} class="btn btn-primary btn-sm bar-cta">
-                        Create your workspace
+                        {deskLanding.hero.actions.browser}
                     </a>
+                ) : (
+                    <DownloadCta primary class="btn-sm bar-cta" icon={false} />
                 )
             }
 

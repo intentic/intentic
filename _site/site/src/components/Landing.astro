@@ -96,9 +96,9 @@ const machineStep = content.connect.steps.at(-1)!;
                         <p class="hero-sub">{content.hero.subhead}</p>
 
                         {/* Hero shows two start actions; the bar hides its duplicate while they are visible. */}
-                        <div class="hero-actions">
-                            <a class="btn btn-primary" href={APP_URL} data-hero-cta>Create your workspace</a>
-                            <DownloadCta />
+                        <div class="hero-actions" data-hero-cta>
+                            <DownloadCta primary />
+                            <a class="btn btn-secondary" href={APP_URL}>Create your workspace</a>
                         </div>
 
                         {/* The other product, for the reader who is in the wrong place: /desk/ is its own page. */}
@@ -387,7 +387,7 @@ const machineStep = content.connect.steps.at(-1)!;
                             <p class="desktop-note">{content.connect.desktop.note}</p>
                         </div>
                         {/* The download sits beside the terminal command for non-terminal users. */}
-                        <DownloadCta class="btn-sm" label={content.connect.desktop.cta} icon={false} />
+                        <DownloadCta primary class="btn-sm" label={content.connect.desktop.cta} icon={false} />
                     </div>
                 </div>
             </section>

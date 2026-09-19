@@ -102,7 +102,7 @@ export const landingContent: LandingContent = {
     },
     hero: {
         // Split 2+1 so line two lands the promise; "Agents" not "They" gives the pronoun a written antecedent.
-        headlineLines: ["You delegate. Agents work.", "You approve."],
+        headlineLines: ["More work. Less AI waste.", "Same subscriptions."],
         // Names the category; nothing else above the fold does. Visibility comes from the surfaces beside it, not text.
         subhead: "A workspace for coding agents.",
         screens: {
@@ -319,14 +319,14 @@ export interface DeskLandingContent {
         screens: { app: (DeskShot & { frameLabel: string })[]; plan: DeskShot; chat: DeskShot & { frameLabel: string } };
         /** Where the frame's press goes: the desk recording, not the code one. */
         demoHref: string;
-        /** The two doors, the app first: the download is the one this reader takes. */
+        /** The two doors: browser first for this reader; download stays for Windows and Linux. */
         actions: { download: string; browser: string };
     };
     tour: { eyebrow: string; items: DeskTourItem[]; cta: string };
     workspace: LandingSectionIntro & { comparison: WorkspaceComparison; cta: { label: string; href: string } };
     /** The account list is shared with the developer page (landingContent.economics.accounts): the plans are the same plans. */
     economics: LandingSectionIntro & { flatLabel: string; points: string[] };
-    // Download first: for this reader the app is the way in, and the command is the thing they would rather not meet.
+    // Browser first: for this reader the app is the way in, and the install is optional.
     connect: LandingSectionIntro & {
         zones: { computer: string; app: string };
         computerStep: LandingFact;
@@ -344,8 +344,7 @@ export const deskLanding: DeskLandingContent = {
             "An assistant that writes, edits and files your documents on your own computer. Every change is saved, so you can always go back. Free.",
     },
     hero: {
-        // The same three beats as the developer page's, with "delegate" and "agents" gone: this reader asks, and something works.
-        headlineLines: ["You ask. It does the work.", "You approve."],
+        headlineLines: ["More work. Less AI waste.", "Same subscriptions."],
         subhead: "An assistant for your documents, on your own computer.",
         screens: {
             app: [

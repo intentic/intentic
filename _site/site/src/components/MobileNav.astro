@@ -1,4 +1,5 @@
 ---
+import { deskLanding } from "@intentic/site-content/landing";
 import { navEntries } from "@intentic/site-content/nav";
 import { APP_URL, discordUrl, githubUrl } from "@intentic/site-content/site";
 import DownloadCta from "./DownloadCta.astro";
@@ -139,11 +140,11 @@ const currentPath = Astro.url.pathname;
 
         {
             product === "desk" ? (
-                <DownloadCta primary class="mobile-cta" icon={false} />
-            ) : (
                 <a class="btn btn-primary mobile-cta" href={APP_URL}>
-                    Create your workspace
+                    {deskLanding.hero.actions.browser}
                 </a>
+            ) : (
+                <DownloadCta primary class="mobile-cta" icon={false} />
             )
         }
     </div>

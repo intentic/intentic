@@ -75,10 +75,10 @@ const STAGE_SIZES = "(min-width: 102rem) 1440px, (min-width: 84rem) calc(50vw + 
 
                         <p class="hero-sub">{content.hero.subhead}</p>
 
-                        {/* The app leads: for this reader the download is the door. The bar hides its duplicate while this row is visible. */}
+                        {/* Browser leads: for this reader the app is the door. The bar hides its duplicate while this row is visible. */}
                         <div class="hero-actions" data-hero-cta>
-                            <DownloadCta primary label={content.hero.actions.download} />
-                            <a class="btn btn-secondary" href={APP_URL}>{content.hero.actions.browser}</a>
+                            <a class="btn btn-primary" href={APP_URL}>{content.hero.actions.browser}</a>
+                            <DownloadCta label={content.hero.actions.download} />
                         </div>
 
                         {/* The other product, for the reader who is in the wrong place. */}
@@ -297,7 +297,7 @@ const STAGE_SIZES = "(min-width: 102rem) 1440px, (min-width: 84rem) calc(50vw + 
                                 <p>{content.connect.computerStep.body}</p>
                             </div>
                             <div class="hero-actions flow-actions">
-                                <DownloadCta primary label={content.hero.actions.download} />
+                                <DownloadCta label={content.hero.actions.download} />
                             </div>
                         </div>
 
@@ -325,7 +325,7 @@ const STAGE_SIZES = "(min-width: 102rem) 1440px, (min-width: 84rem) calc(50vw + 
                             <p class="desktop-lead">{content.connect.browser.lead}</p>
                             <p class="desktop-note">{content.connect.browser.note}</p>
                         </div>
-                        <a class="btn btn-secondary btn-sm" href={APP_URL}>{content.connect.browser.cta}</a>
+                        <a class="btn btn-primary btn-sm" href={APP_URL}>{content.connect.browser.cta}</a>
                     </div>
                 </div>
             </section>
