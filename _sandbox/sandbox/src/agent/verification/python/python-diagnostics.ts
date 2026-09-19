@@ -188,7 +188,7 @@ const gateFindings = async (
     if (!(await onPath("ruff"))) {
         return undefined;
     }
-    const args = ["check", "--isolated", "--no-cache", "--quiet", "--select", "E9,F821", "--output-format", "concise", file];
+    const args = ["check", "--isolated", "--no-cache", "--quiet", "--color", "never", "--select", "E9,F821", "--output-format", "concise", file];
     const outcome = await run("ruff", args, cwd, placement);
     return outcome.answered ? ruffFindings(outcome.stdout, cwd, named) : undefined;
 };
