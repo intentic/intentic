@@ -7,13 +7,9 @@
         "showingMostRecentEntries": "Mostrando solo las entradas más recientes: esta ventana contiene más de lo que el registro trae de una vez."
     },
     "activityView": {
-        "activity": "Actividad",
-        "connectedProviderWokeAgent": ": un proveedor conectado que despertó al agente, una programación, o tú. Todo el ciclo de vida de un turno —inicio, plan, fallo, finalización y cada llamada a proveedor que hizo— es una entrada; despliégala para ver los eventos en crudo que registró el daemon.",
         "noSpeakersYet": "todavía sin hablantes",
-        "oneEntryPerThing": "Una entrada por cada cosa que pasó, agrupada por",
         "transcribing": "transcribiendo",
-        "voiceMinutes": "{minutes} min: {speakers}",
-        "whoSetOff": "quién lo puso en marcha"
+        "voiceMinutes": "{minutes} min: {speakers}"
     },
     "episodeRow": {
         "failed": "falló",

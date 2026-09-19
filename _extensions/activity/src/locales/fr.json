@@ -7,13 +7,9 @@
         "showingMostRecentEntries": "Seules les entrées les plus récentes sont affichées : cette fenêtre en contient plus que ce que le fil récupère d'un coup."
     },
     "activityView": {
-        "activity": "Activité",
-        "connectedProviderWokeAgent": ": un fournisseur connecté qui a réveillé l'agent, une planification, ou vous. Tout le cycle de vie d'un tour — démarrage, plan, échec, achèvement, et chaque appel de fournisseur qu'il a fait — forme une entrée ; dépliez-la pour les événements bruts enregistrés par le daemon.",
         "noSpeakersYet": "pas encore d'intervenants",
-        "oneEntryPerThing": "Une entrée par chose qui s'est passée, groupée par",
         "transcribing": "transcription",
-        "voiceMinutes": "{minutes} min : {speakers}",
-        "whoSetOff": "qui l'a déclenché"
+        "voiceMinutes": "{minutes} min : {speakers}"
     },
     "episodeRow": {
         "failed": "échoué",

@@ -7,13 +7,9 @@
         "showingMostRecentEntries": "Es werden nur die neuesten Einträge gezeigt: dieses Fenster hält mehr, als der Verlauf auf einmal holt."
     },
     "activityView": {
-        "activity": "Aktivität",
-        "connectedProviderWokeAgent": ": ein verbundener Anbieter, der den Agenten geweckt hat, ein Zeitplan, oder Sie. Der ganze Lebenslauf eines Zugs — Start, Plan, Fehlschlag, Abschluss und jeder Anbieteraufruf, den er gemacht hat — ist ein Eintrag; klappen Sie ihn auf für die rohen Ereignisse, die der Daemon aufgezeichnet hat.",
         "noSpeakersYet": "noch keine Sprecher",
-        "oneEntryPerThing": "Ein Eintrag pro Sache, die passiert ist, gruppiert nach",
         "transcribing": "wird transkribiert",
-        "voiceMinutes": "{minutes} Min.: {speakers}",
-        "whoSetOff": "wer es ausgelöst hat"
+        "voiceMinutes": "{minutes} Min.: {speakers}"
     },
     "episodeRow": {
         "failed": "fehlgeschlagen",

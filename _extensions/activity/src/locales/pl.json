@@ -7,13 +7,9 @@
         "showingMostRecentEntries": "Pokazujemy tylko najnowsze wpisy: to okno mieści więcej, niż strumień pobiera za jednym razem."
     },
     "activityView": {
-        "activity": "Aktywność",
-        "connectedProviderWokeAgent": ": podłączony dostawca, który obudził agenta, harmonogram albo Ty. Cały cykl życia tury — start, plan, niepowodzenie, zakończenie i każde wywołanie dostawcy, jakie wykonała — to jeden wpis; rozwiń go, żeby zobaczyć surowe zdarzenia zapisane przez demona.",
         "noSpeakersYet": "jeszcze brak mówiących",
-        "oneEntryPerThing": "Jeden wpis na każdą rzecz, która się wydarzyła, pogrupowane według",
         "transcribing": "transkrypcja",
-        "voiceMinutes": "{minutes} min: {speakers}",
-        "whoSetOff": "kto to wywołał"
+        "voiceMinutes": "{minutes} min: {speakers}"
     },
     "episodeRow": {
         "failed": "nieudane",

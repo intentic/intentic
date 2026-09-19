@@ -7,13 +7,9 @@
         "showingMostRecentEntries": "Showing the most recent entries only: this window holds more than the feed fetches at once."
     },
     "activityView": {
-        "activity": "Activity",
-        "connectedProviderWokeAgent": ": a connected provider that woke the agent, a schedule, or you. A turn's whole lifecycle: start, plan, failure, completion, and every provider call it made, is one entry; expand it for the raw events the daemon recorded.",
         "noSpeakersYet": "no speakers yet",
-        "oneEntryPerThing": "One entry per thing that happened, grouped by",
         "transcribing": "transcribing",
-        "voiceMinutes": "{minutes} min: {speakers}",
-        "whoSetOff": "who set it off"
+        "voiceMinutes": "{minutes} min: {speakers}"
     },
     "episodeRow": {
         "failed": "failed",
