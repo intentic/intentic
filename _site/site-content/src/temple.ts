@@ -47,7 +47,7 @@ export const templeScene: TempleScene = {
         // something is keeping it from becoming a mess.
         line: "Agents do the work. intentic keeps the yard in order.",
         controls: [
-            { label: "38% fewer tokens", icon: "tokens" },
+            { label: "Save 38% on tokens", icon: "tokens" },
             { label: "Stay safe", icon: "safety" },
             { label: "Agents stay aligned", icon: "aligned" },
         ],
