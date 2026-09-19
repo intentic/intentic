@@ -113,6 +113,69 @@ test("a workspace extension's backend serves its /x namespace through the daemon
     expect(((await stopped.json()) as { error: string }).error).toContain("stopped");
 });
 
+// A handler that never answers: the shape that took a hosted sandbox down, where every other route queued behind it.
+const stallServer = `export const activateServer = (api) => {
+    api.routes.mount(async (request) => {
+        const url = new URL(request.url);
+        if (url.pathname === "/hang") {
+            await new Promise(() => {});
+        }
+        if (url.pathname === "/ping") {
+            return Response.json({ ok: true });
+        }
+        return undefined;
+    });
+};
+`;
+
+test("a stalled extension is shed rather than queued, and the rest of the daemon keeps answering", async () => {
+    const root = mkdtempSync(join(tmpdir(), "ext-backend-stall-"));
+    await writeExtension(root, "stall", stallServer);
+    await writeExtension(root, "echo", echoServer);
+    const { svc, backend } = harness(root);
+    await backend.start();
+    const app = createApp(svc);
+
+    // Saturates the cap without naming it: each probe that is not refused is itself one more request waiting on a first
+    // byte, so this converges on the refusal instead of asserting a number this test would have to be told. It also
+    // outlasts the grace a call gets before it counts as stalled, which is the whole reason a burst is not shed.
+    const hanging: Promise<unknown>[] = [];
+    let refused: Response | undefined;
+    for (let attempt = 0; attempt < 60 && refused === undefined; attempt += 1) {
+        const inFlight = Promise.resolve(app.request("http://sandbox.test/x/acme.stall/hang"));
+        hanging.push(inFlight.catch(() => undefined));
+        const settled = await Promise.race([inFlight, new Promise<undefined>((resolve) => setTimeout(() => resolve(undefined), 100))]);
+        if (settled?.status === 503) {
+            refused = settled;
+        }
+    }
+    const notice = (await refused?.json()) as { error: string; extension: string; path: string } | undefined;
+    expect(notice).toMatchObject({ extension: "acme.stall", path: "/x/acme.stall/hang" });
+    expect(notice?.error).toContain("waiting seconds for a first byte");
+
+    // The point of the cap: one wedged extension is one wedged extension, not a wedged sandbox.
+    expect((await app.request("http://sandbox.test/health")).status).toBe(200);
+    expect((await app.request("http://sandbox.test/x/acme.echo/ping")).status).toBe(200);
+    // The budget belongs to the extension rather than the route: once spent, its healthy routes are shed with the rest.
+    expect((await app.request("http://sandbox.test/x/acme.stall/ping")).status).toBe(503);
+
+    backend.stop();
+    await Promise.all(hanging);
+});
+
+test("a burst of quick calls is concurrency, not a stall, and is served in full", async () => {
+    const root = mkdtempSync(join(tmpdir(), "ext-backend-burst-"));
+    await writeExtension(root, "echo", echoServer);
+    const { svc, backend } = harness(root);
+    await backend.start();
+    const app = createApp(svc);
+
+    // Comfortably more at once than the cap allows to be stalled: a panel that fans out its reads must not be shed for
+    // being busy, which is what a plain concurrency limit here would do.
+    const burst = await Promise.all(Array.from({ length: 24 }, async () => app.request("http://sandbox.test/x/acme.echo/ping")));
+    expect(burst.map((answer) => answer.status)).toEqual(Array.from({ length: 24 }, () => 200));
+});
+
 test("one extension's failing activation is its own row, never the host's death", async () => {
     const root = mkdtempSync(join(tmpdir(), "ext-backend-fail-"));
     await writeExtension(root, "echo", echoServer);

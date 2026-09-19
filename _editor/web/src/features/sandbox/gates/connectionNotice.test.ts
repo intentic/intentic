@@ -132,6 +132,51 @@ describe(`a sandbox the edge says is not dialled in`, () => {
     });
 });
 
+// The failure that cost somebody a day's work: an extension route stopped answering, every other call queued behind
+// it, and the gate blamed the machine — which was running the whole time, and whose setup screen is where a hosted
+// machine gets handed back.
+describe(`a route that stopped answering`, () => {
+    const silent = classifyFailure({ watchdog: true, message: `silent` });
+
+    it(`names the extension that stopped answering instead of the machine carrying it`, () => {
+        const shown = notice(silent, { hostedMachine: true, outageMs: HOSTED_STUCK_AFTER_MS, stalledPath: `/x/mida.przetargi/zadania` });
+        expect(shown.body).toContain(`mida.przetargi`);
+        expect(shown.body).toContain(`/x/mida.przetargi/zadania`);
+        expect(shown.body).not.toContain(`The machine we run this sandbox on`);
+    });
+
+    it(`offers nothing to press, since no setup screen repairs a handler`, () => {
+        for (const hostedMachine of [true, false]) {
+            const shown = notice(silent, { hostedMachine, outageMs: HOSTED_STUCK_AFTER_MS, stalledPath: `/x/acme.thing/slow` });
+            expect(shown.action).toBeUndefined();
+            expect(shown.waiting).toBe(false);
+        }
+    });
+
+    it(`names a daemon path plainly, with no extension to attribute it to`, () => {
+        const shown = notice(silent, { hostedMachine: true, outageMs: HOSTED_STUCK_AFTER_MS, stalledPath: `/workspace/tree` });
+        expect(shown.body).toContain(`/workspace/tree`);
+        expect(shown.body).not.toContain(`extension`);
+    });
+
+    it(`stays a plain wait until the lane's patience is spent, however loud the stall`, () => {
+        const shown = notice(silent, { hostedMachine: true, outageMs: HOSTED_STUCK_AFTER_MS - 1, stalledPath: `/x/acme.thing/slow` });
+        expect(shown.waiting).toBe(true);
+        expect(shown.body).not.toContain(`acme.thing`);
+    });
+
+    it(`yields to the causes that outrank a silence, since a refused wake explains the stall too`, () => {
+        const shown = notice(silent, {
+            hostedMachine: true,
+            owner: true,
+            hoursSpent: true,
+            outageMs: HOSTED_STUCK_AFTER_MS,
+            stalledPath: `/x/acme.thing/slow`,
+        });
+        expect(shown.action?.kind).toBe(`billing`);
+    });
+});
+
 // A restart this browser asked for, minutes ago, on a screen the reader has since left. Everything below is true of
 // a sandbox mid-swap as well — the edge really does hold no tunnel for a container being replaced — so what decides
 // this is not accuracy but which true sentence the reader can act on.

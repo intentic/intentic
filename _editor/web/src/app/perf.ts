@@ -115,6 +115,23 @@ export const recordPerf = (op: string, ms: number, fields: PerfFields = {}): voi
 };
 
 /**
+ * Daemon paths whose calls ran at least `atLeastMs` within the last `withinMs`, most-repeated first. The connecting
+ * gate reads it to name what the browser watched time out, rather than attributing a silence to the machine carrying
+ * it. Threshold is the caller's: this module is imported by everything and imports nothing.
+ */
+export const stalledPaths = (atLeastMs: number, withinMs: number, now = Date.now()): readonly string[] => {
+    const repeats = new Map<string, number>();
+    for (const span of ring) {
+        const path = span.fields["path"];
+        if (span.op !== `rpc.request` || span.ms < atLeastMs || now - span.at > withinMs || typeof path !== `string`) {
+            continue;
+        }
+        repeats.set(path, (repeats.get(path) ?? 0) + 1);
+    }
+    return [...repeats.entries()].sort(([, a], [, b]) => b - a).map(([path]) => path);
+};
+
+/**
  * Measures an async op; rethrows what it throws, since a failed call is still a span, and a slow failure is the
  * most interesting kind.
  */

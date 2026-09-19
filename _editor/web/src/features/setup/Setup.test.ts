@@ -3,6 +3,7 @@
 // Defaults to a platform that hosts nothing, the world that leaves the command lane on screen.
 import type { SandboxSummary } from "@intentic/api-contract";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import PrimeVue from "primevue/config";
 import { type App, createApp, defineComponent, h, nextTick, ref } from "vue";
 import { IconStub } from "@intentic/ui/testing";
 
@@ -148,6 +149,8 @@ const mount = async (): Promise<HTMLElement> => {
     const el = document.createElement(`div`);
     document.body.append(el);
     app = createApp({ render: () => h(Setup) });
+    // The hand-back question is a PrimeVue dialog; the bare plugin, since the theme is not on trial here.
+    app.use(PrimeVue);
     app.component(`Icon`, IconStub);
     app.directive(`tooltip`, {});
     app.mount(el);
@@ -162,6 +165,13 @@ const mount = async (): Promise<HTMLElement> => {
 // Exact label match: substring matching would false-positive on rung prose containing a button's words.
 const buttonLabelled = (text: string): HTMLButtonElement | undefined =>
     [...document.querySelectorAll(`button`)].find((button) => button.textContent?.trim() === text);
+
+// Stepping off the hosted rung deletes a disk, so it asks first; this is what the old single click amounted to.
+// The dialog teleports to body, which is why the lookup above is document-wide.
+const pressHandBack = async (): Promise<void> => {
+    await vi.waitFor(() => expect(buttonLabelled(`Delete the machine`)?.tagName).toBe(`BUTTON`));
+    buttonLabelled(`Delete the machine`)!.click();
+};
 
 // Same question for an <a>: a download is a navigation, so the installer offer is a link, not a button.
 const linkLabelled = (text: string): HTMLAnchorElement | undefined =>
@@ -655,6 +665,7 @@ it(`says what a refused start actually was, and offers the way out that works`, 
     expect(buttonLabelled(`Start it over`)).toBeUndefined();
     // The offered way out is the one that works right now, and taking it hands the stopped machine back.
     buttonLabelled(`Set it up on my own computer`)!.click();
+    await pressHandBack();
     await vi.waitFor(() => expect(hostedRelease).toHaveBeenCalledWith(`h1`));
 });
 
@@ -724,9 +735,34 @@ it(`hands the machine back when another rung is chosen, keeping the same sandbox
     // Rungs disable while the machine is made and the allowance re-read; clicking before that settles does nothing.
     await vi.waitFor(() => expect(mine().disabled).toBe(false));
     mine().click();
+    await pressHandBack();
     await vi.waitFor(() => expect(hostedRelease).toHaveBeenCalledWith(`new`));
     expect(create).toHaveBeenCalledTimes(1); // the row survived the switch
     expect(remove).not.toHaveBeenCalled();
+});
+
+// The click that cost somebody a day of work: this rung deletes the disk the sandbox is running on, and the page it
+// lands on looks like an ordinary fresh setup either way. Nothing may leave on the click alone.
+it(`asks before deleting the machine a rung switch would hand back, and says what goes with it`, async () => {
+    const hosted = sandboxRow({ id: `h1`, name: `mine`, hosted: { region: `iad`, warm: false } });
+    sandboxes.value = [hosted];
+    list.mockResolvedValue([hosted]);
+    hostedOffer.mockResolvedValue({ enabled: true, remaining: 0 });
+    const el = await mount();
+    const rung = (label: string): HTMLButtonElement =>
+        [...el.querySelectorAll(`[role="radio"]`)].find((card) => card.textContent?.includes(label)) as HTMLButtonElement;
+
+    rung(`My own computer`).click();
+    await vi.waitFor(() => expect(buttonLabelled(`Delete the machine`)?.tagName).toBe(`BUTTON`));
+    // The sentence the reader is answering; a question that only said "are you sure" would not have saved them.
+    expect(document.body.textContent).toContain(`Every file, repo and conversation on that machine is deleted`);
+    expect(hostedRelease).not.toHaveBeenCalled();
+
+    buttonLabelled(`Cancel`)!.click();
+    await nextTick();
+    expect(hostedRelease).not.toHaveBeenCalled();
+    // A refused question leaves the rung where it was: the machine still exists, so saying otherwise would lie.
+    expect(rung(`My own computer`).getAttribute(`aria-checked`)).toBe(`false`);
 });
 
 // Allowance is the server's live machine count; it must be re-read after release, not just on arrival.
@@ -741,6 +777,7 @@ it(`offers the hosted rung again once its machine has been handed back`, async (
         [...el.querySelectorAll(`[role="radio"]`)].find((card) => card.textContent?.includes(label)) as HTMLButtonElement;
 
     rung(`My own computer`).click();
+    await pressHandBack();
     await vi.waitFor(() => expect(hostedRelease).toHaveBeenCalledWith(`h1`));
     await vi.waitFor(() => expect(rung(`Start instantly`).disabled).toBe(false));
     expect(el.textContent).not.toContain(`Already using yours`);
@@ -800,6 +837,7 @@ it(`ignores a ready hosted poll returned after switching to the local install`, 
     expect(refresh).toHaveBeenCalledTimes(1);
     const mine = [...el.querySelectorAll<HTMLButtonElement>(`[role="radio"]`)].find((card) => card.textContent?.includes(`My own computer`))!;
     mine.click();
+    await pressHandBack();
     await vi.waitFor(() => expect(mine.getAttribute(`aria-checked`)).toBe(`true`));
     poll.resolve([{ ...hosted, lastSeenAt: new Date().toISOString(), bootReport: { reach: `reachable`, at: new Date().toISOString() } }]);
     await nextTick();

@@ -19,7 +19,8 @@ export class SandboxUnaddressedError extends Error {
 const bearerRefused = (status: number): boolean => status === 401 || status === 428;
 
 // Bounds waiting for response headers only; a stream answers its headers immediately then runs indefinitely.
-const DEADLINE_MS = 45_000;
+// Exported because a span that reached it is a stall rather than slowness, which is what the connecting gate names.
+export const DEADLINE_MS = 45_000;
 
 export class SandboxTimeoutError extends Error {
     constructor() {

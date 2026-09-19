@@ -55,6 +55,9 @@ export interface ConnectionNoticeInput {
     // A restart this browser asked for (sandboxRestart.ts), still young enough to be what the silence is. The only
     // input here that explains a wait instead of ending one.
     readonly restart?: RestartQuiet | undefined;
+    // A daemon path this browser watched run out its own deadline (perf.ts `stalledPaths`). Observed, not inferred:
+    // the one cause here that a silent machine cannot account for, because something did answer long enough to be timed.
+    readonly stalledPath?: string | undefined;
 }
 
 // The patient wait, in the three shapes the browser can observe; split out since the caller now has a decision to
@@ -163,27 +166,45 @@ const detachedNotice = (input: ConnectionNoticeInput, name: string): ConnectionN
           }
         : undefined;
 
+// Extension that owns a stalled path, since `/x/<id>/…` is the only route shape in the daemon somebody else wrote.
+const extensionOf = (path: string): string | undefined => /^\/x\/([^/]+)/.exec(path)?.[1];
+
+// What the browser actually watched stop answering. Outranks both lane sentences below, and carries no action on
+// purpose: neither lane's setup screen repairs a route, and that screen is where a machine gets handed back.
+const stalledBody = (path: string | undefined): string | undefined => {
+    if (path === undefined) {
+        return undefined;
+    }
+    const extension = extensionOf(path);
+    return extension === undefined
+        ? t(`sandbox.connectionNotice.routeStoppedAnswering`, { path })
+        : t(`sandbox.connectionNotice.extensionStoppedAnswering`, { extension, path });
+};
+
 // The wait that has stopped being one, on either lane. Nothing is diagnosed: the machine we run can be looked at, and
 // the machine somebody else runs is theirs to look at, which is exactly what each sentence says.
 const stuckNotice = (input: ConnectionNoticeInput, name: string): ConnectionNotice | undefined => {
-    if (input.hostedMachine) {
-        return input.outageMs >= HOSTED_STUCK_AFTER_MS
-            ? {
-                  title: t(`sandbox.connectionNotice.isntAnswering`, { name }),
-                  body: t(`sandbox.connectionNotice.machineWeRunSandbox`),
-                  action: { kind: `setup`, label: t(`sandbox.connectionNotice.checkMachine`) },
-                  waiting: false,
-              }
-            : undefined;
+    const patience = input.hostedMachine ? HOSTED_STUCK_AFTER_MS : OWN_STUCK_AFTER_MS;
+    if (input.outageMs < patience) {
+        return undefined;
     }
-    return input.outageMs >= OWN_STUCK_AFTER_MS
+    const stalled = stalledBody(input.stalledPath);
+    if (stalled !== undefined) {
+        return { title: t(`sandbox.connectionNotice.isntAnswering`, { name }), body: stalled, action: undefined, waiting: false };
+    }
+    return input.hostedMachine
         ? {
+              title: t(`sandbox.connectionNotice.isntAnswering`, { name }),
+              body: t(`sandbox.connectionNotice.machineWeRunSandbox`),
+              action: { kind: `setup`, label: t(`sandbox.connectionNotice.checkMachine`) },
+              waiting: false,
+          }
+        : {
               title: t(`sandbox.connectionNotice.isntAnswering`, { name }),
               body: t(`sandbox.connectionNotice.silentWhileSandboxRuns`),
               action: { kind: `setup`, label: t(`sandbox.connectionNotice.checkSetup`) },
               waiting: false,
-          }
-        : undefined;
+          };
 };
 
 // THE WAIT WITH A KNOWN CAUSE. Ahead of `detached`, which is the one that would otherwise speak: the edge's verdict

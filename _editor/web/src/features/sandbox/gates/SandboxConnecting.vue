@@ -9,6 +9,8 @@ import { useSandbox } from "../client/useSandbox";
 import { useGoogleIdentity } from "../../auth/useGoogleIdentity";
 import { restartExpected } from "../live/sandboxRestart";
 import { connectionNotice } from "./connectionNotice";
+import { stalledPaths } from "../../../app/perf";
+import { DEADLINE_MS } from "../client/sandboxAuthFetch";
 import { useT } from "@intentic/ui/i18n";
 
 // Shown whenever the active sandbox's daemon isn't reachable. What it says is a pure function of the classified
@@ -46,6 +48,12 @@ const known = computed(() => {
 // mid-restart say why this sandbox is quiet instead of asking its reader to guess.
 const restart = computed(() => restartExpected(active.value?.id)?.quiet);
 
+// Only spans that reached the client's own deadline count, and only from this outage: slowness is not a stall, and a
+// route that timed out before the sandbox went quiet explains nothing about why it is quiet now.
+const stalledPath = computed(() =>
+    connection.value.unavailableSince === undefined ? undefined : stalledPaths(DEADLINE_MS, now.value - connection.value.unavailableSince)[0],
+);
+
 const notice = computed(() =>
     connectionNotice({
         ...known.value,
@@ -54,6 +62,7 @@ const notice = computed(() =>
         outageMs: connection.value.unavailableSince === undefined ? 0 : now.value - connection.value.unavailableSince,
         hoursSpent: refusal.value === `hours`,
         suspended: refusal.value === `suspended`,
+        stalledPath: stalledPath.value,
     }),
 );
 

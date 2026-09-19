@@ -7,6 +7,7 @@ import {
     Button,
     Code,
     commandLang,
+    ConfirmDialog,
     CopyButton,
     InfoHint,
     Notice,
@@ -926,6 +927,10 @@ const handBackMachine = async (): Promise<boolean> => {
     }
 };
 
+// Asked before a hand-back that has something to lose. The row keeps its name, address and sharing, so the workspace
+// looks recoverable afterwards; the disk under it does not come back, and nothing else on this page says so.
+const handBackAsked = ref(false);
+
 // Cancellation must remain available while provisioning is in flight.
 const chooseMachine = async (next: "hosted" | "mine"): Promise<void> => {
     const prev = machine.value;
@@ -937,17 +942,31 @@ const chooseMachine = async (next: "hosted" | "mine"): Promise<void> => {
     }
     hostedError.value = undefined;
     const row = created.value;
-    const rowHosted = (row?.hosted ?? null) !== null;
     // Choosing hosted starts nothing; the card below carries the button, so a picker click has no side effect.
     if (next === `hosted`) {
         machine.value = next;
         return;
     }
+    // A machine on the row is a disk with work on it; a provision still in flight is neither, so only the first asks.
+    if ((row?.hosted ?? null) !== null) {
+        handBackAsked.value = true;
+        return;
+    }
     // A refusal leaves the rung where it was: the machine still exists, so saying otherwise would lie.
-    if (row !== null && (rowHosted || hostedRequested.value || hostedBusy.value || releaseRequested.value) && !(await handBackMachine())) {
+    if (row !== null && (hostedRequested.value || hostedBusy.value || releaseRequested.value) && !(await handBackMachine())) {
         return;
     }
     machine.value = next;
+};
+
+// Past the question the old path runs unchanged, including its refusal: a machine the platform would not take back is
+// still there, and the rung must not move as though it weren't.
+const confirmHandBack = async (): Promise<void> => {
+    handBackAsked.value = false;
+    if (!(await handBackMachine())) {
+        return;
+    }
+    machine.value = `mine`;
 };
 
 // Connect a sandbox that is ALREADY reachable: probe the pasted address from this browser, and only once the
@@ -2269,6 +2288,24 @@ const warmSandboxCredential = async (): Promise<void> => {
                 </aside>
             </div>
         </div>
+
+        <!-- The one action on this page that destroys data, and the page it lands on looks like a fresh setup either
+             way; the question is the only thing between the two. -->
+        <ConfirmDialog
+            :open="handBackAsked"
+            :header="t(`setup.setup.handBackHeader`)"
+            header-icon="exclamation-triangle"
+            :confirm-label="t(`setup.setup.handBackConfirm`)"
+            :loading="releasingHosted"
+            size="md"
+            @cancel="handBackAsked = false"
+            @confirm="confirmHandBack"
+        >
+            <div class="flex flex-col gap-3">
+                <p class="text-sm text-muted">{{ t(`setup.setup.handBackFiles`, { name: created?.name ?? `` }) }}</p>
+                <p class="text-sm text-muted">{{ t(`setup.setup.handBackKeeps`) }}</p>
+            </div>
+        </ConfirmDialog>
     </div>
 </template>
 
