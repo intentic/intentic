@@ -287,7 +287,7 @@ const applyReshape = (ask: ResourcesAsk): void => ops.applyReshape(ask);
             A many-sided machine: one row per environment, each its own door with its own agent, permissions and
             concerns, since Windows and a distro on it are separate installs that happen to share the hardware.
         -->
-        <RowGroup v-if="many" :label="t(`sandbox.devicePage.environmentsOnDevice`)" :count="environments.length">
+        <RowGroup v-if="many" :label="t(`sandbox.devicePage.environmentsOnDevice`)">
             <!-- One press for the computer, because one card is one computer: each side holds its own agent binary and
                  is updated in turn, its own log under its own row. Offered only where there is more than one side to
                  bring level; a single reachable environment has its row's own button and needs no wider word. -->
@@ -401,7 +401,7 @@ const applyReshape = (ask: ResourcesAsk): void => ops.applyReshape(ask);
 
         <!-- One row per sandbox, the page's only disclosure: a row is a summary and its folder, ports, image and share are the evidence. -->
         <!-- Either answer draws rows: a card granting sandbox management alone lists containers and describes no folders. -->
-        <RowGroup v-if="described" :label="t(`sandbox.devicePage.sandboxesOnDevice`)" :count="machine.groups.length">
+        <RowGroup v-if="described" :label="t(`sandbox.devicePage.sandboxesOnDevice`)">
             <!-- On a many-sided machine the door's block is about this list, so it is said here rather than under a row. -->
             <RowNote v-if="listBlock" variant="block">
                 <DeviceConcern

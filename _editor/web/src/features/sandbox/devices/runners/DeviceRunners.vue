@@ -138,11 +138,7 @@ const add = async (): Promise<void> => {
 
 <template>
     <!-- "on this device", not "for this sandbox": this list sits under the machine's own sandbox list. -->
-    <RowGroup
-        v-if="device.hostId !== undefined"
-        :label="t(`sandbox.deviceRunners.runnersOnDevice`)"
-        :count="mine.length === 0 ? undefined : mine.length"
-    >
+    <RowGroup v-if="device.hostId !== undefined" :label="t(`sandbox.deviceRunners.runnersOnDevice`)">
         <template #actions>
             <Button
                 v-if="!adding"
