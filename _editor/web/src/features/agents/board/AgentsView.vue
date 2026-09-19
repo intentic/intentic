@@ -18,6 +18,7 @@ import { usePersonas } from "../../sandbox/personas/usePersonas";
 import { agentInProject, heldWakeInProject, runInProject } from "./projectMembership";
 import { boardOwners, ownedBy, ownerFilter, sameAddress } from "./ownership";
 import { useAuth } from "../../auth/useAuth";
+import { useSandboxSharedAccess } from "../../sandbox/access/useSandboxSharedAccess";
 import { presenceOthers } from "../../../shell/presence/usePresence";
 import { type FleetLane, reviewAction, unregistered, watching } from "../fleet/agentStatus";
 import { useAgents } from "../fleet/useAgents";
@@ -173,6 +174,12 @@ const { personas } = usePersonas();
 // nobody owns them yet. A draft not yet sent has no owner on record and is about to be the reader's own, so it
 // survives Mine and everybody's, and goes under a colleague's chip, where it would never belong.
 const { user } = useAuth();
+const { sharedAccess } = useSandboxSharedAccess();
+watch(sharedAccess, (shared) => {
+    if (!shared) {
+        ownerFilter.value = undefined;
+    }
+});
 const scopedFleet = computed<FleetAgent[]>(() => {
     const project = projectScope.value;
     const owner = ownerFilter.value;
@@ -1156,8 +1163,8 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
             <div class="flex min-w-0 flex-1 basis-0 items-center gap-2">
                 <!-- Drawn only when more than one sandbox exists (scopeOffered): a switch whose two settings look identical teaches the reader to ignore controls. -->
                 <SegmentedControl v-if="scopeOffered" v-model="fleetScope" :options="SCOPE_OPTIONS" class="shrink-0" />
-                <!-- Whose sessions the board shows; drawn only for a signed-in member, since nobody else owns anything here. -->
-                <SegmentedControl v-if="user !== null" v-model="ownerScope" :options="OWNER_OPTIONS" size="xs" wrap class="shrink-0" />
+                <!-- Whose sessions the board shows; hidden when access names only one person, since Everyone and Mine say the same thing. -->
+                <SegmentedControl v-if="user !== null && sharedAccess" v-model="ownerScope" :options="OWNER_OPTIONS" size="xs" wrap class="shrink-0" />
                 <!-- The open project, and the way out of it: the same scope the workspace chip clears, so both say the same thing. -->
                 <ProjectChip :project="projectScope" :hidden="projectHidden" noun="agents" @clear="setProjectScope(undefined)" />
             </div>
