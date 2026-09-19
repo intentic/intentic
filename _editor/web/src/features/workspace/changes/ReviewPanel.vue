@@ -1084,7 +1084,8 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
         <!-- One block, two states, never both: at rest the sync every repo needs, in flight the run in the button's own place. -->
         <div
             v-if="outgoing !== undefined"
-            class="relative flex shrink-0 items-center gap-1.5 px-2 py-1.5"
+            class="relative flex shrink-0 items-center"
+            :class="outgoing === `held` ? `gap-3 px-3 py-3` : `gap-1.5 px-2 py-1.5`"
             v-tooltip.right="outgoing === `flow` && !mobile ? stageHint : undefined"
         >
             <template v-if="outgoing === `flow`">
@@ -1124,19 +1125,27 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
             </template>
             <!-- The verdict the card was closed on, kept where the press that raised it lives. -->
             <template v-else-if="outgoing === `held`">
-                <Icon name="exclamation-triangle" class="shrink-0 text-2xs" :class="heldReruns ? `text-muted` : `text-danger`" aria-hidden="true" />
                 <button
                     type="button"
-                    class="flex min-w-0 flex-1 flex-col text-left transition-colors"
-                    :class="heldReruns ? `text-muted hover:text-content` : `text-danger hover:text-content`"
+                    :class="ui.textAction(`m-0 min-w-0 flex-1 gap-2.5 rounded-md p-1 hover:bg-overlay`)"
+                    :aria-label="heldLine"
                     v-tooltip.right="heldHint"
                     @click="pushFlow.reopen"
                 >
-                    <span class="truncate whitespace-nowrap text-2xs">{{ heldLine }}</span>
-                    <!-- Its own line, not a third clause: truncated to "files c…" this says nothing. -->
-                    <span v-if="pushFlow.heldStale.value" class="truncate whitespace-nowrap text-3xs text-subtle">{{
-                        t(`workspace.reviewPanel.filesChangedSince`)
-                    }}</span>
+                    <span
+                        class="flex size-7 shrink-0 items-center justify-center rounded-md"
+                        :class="heldReruns ? `bg-warning/10 text-warning` : `bg-danger/10 text-danger`"
+                        aria-hidden="true"
+                    >
+                        <Icon name="exclamation-circle" class="text-base" />
+                    </span>
+                    <span class="flex min-w-0 flex-1 flex-col gap-1">
+                        <span class="text-xs leading-snug font-medium text-content">{{ pushFlow.held.value?.question.title }}</span>
+                        <span class="flex flex-wrap items-baseline gap-x-1.5 gap-y-0.5 text-2xs leading-snug text-muted">
+                            <span v-if="pushFlow.held.value" class="whitespace-nowrap">{{ timeAgo(pushFlow.held.value.at, { now }) }}</span>
+                            <span v-if="pushFlow.heldStale.value">{{ t(`workspace.reviewPanel.filesChangedSince`) }}</span>
+                        </span>
+                    </span>
                 </button>
                 <Button
                     v-if="syncMeta"
