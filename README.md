@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="_site/site/src/assets/intentic-full.png" alt="intentic" width="340">
+<img src="_editor/web/public/assets/intentic-full.png" alt="intentic" width="340">
 
 ### You delegate. Agents work. You approve.
 
