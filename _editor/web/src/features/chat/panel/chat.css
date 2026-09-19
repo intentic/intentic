@@ -697,37 +697,41 @@
     border-color: var(--color-primary-500);
     background: color-mix(in srgb, var(--color-primary-500) 6%, var(--color-overlay));
 }
+/* The press target only: the rung plus this padding, 22px tall against a 12px rung, because a 4px-wide button is a
+   miss at the rate replays show (two rage-clicks in twenty-two presses). It paints nothing of its own — ::before is
+   the bar, so the drawn rung is a box with its own size and never a clip of this one. */
 .composer-effort-seg {
-    height: 0.75rem;
-    width: 0.25rem;
-    box-sizing: content-box;
-    background-clip: content-box; /* keep the visible bar thin; the padding-right gap stays transparent */
-    /* The press target is the bar plus this, 22px tall against a 12px rung: a 4px-wide button is a miss at the rate
-       replays show (two rage-clicks in twenty-two presses). Padding, since content-box and the clip above already
-       keep paint off it, so the meter still draws as a meter. */
+    display: flex;
+    align-items: flex-end;
     padding-block: 0.3125rem;
-    border-radius: var(--radius-sm);
+    background: none;
     cursor: pointer;
-    background-color: color-mix(in srgb, var(--color-content) 10%, transparent);
-    transition:
-        background-color 0.15s,
-        filter 0.15s;
 }
 /* The gap between two bars is a click target for the lower (left) level — it lives as this bar's right-padding rather than a flex gap. */
 .composer-effort-seg:not(:last-child) {
     padding-right: 0.125rem;
 }
-.composer-effort-seg:hover {
-    background-color: color-mix(in srgb, var(--color-content) 22%, transparent); /* unlit hover */
-    filter: brightness(1.15); /* lit-bar hover feedback (inline bg wins over class bg) */
+.composer-effort-seg::before {
+    content: "";
+    height: 0.75rem;
+    width: 0.25rem;
+    border-radius: var(--radius-sm);
+    background-color: var(--effort-rung-fill, color-mix(in srgb, var(--color-content) 10%, transparent));
+    transition:
+        background-color 0.15s,
+        filter 0.15s;
+}
+/* A lit rung sets --effort-rung-fill, so it keeps its colour here and only brightens; an unlit one takes the darker default. */
+.composer-effort-seg:hover::before {
+    background-color: var(--effort-rung-fill, color-mix(in srgb, var(--color-content) 22%, transparent));
+    filter: brightness(1.15);
 }
 /* Touch sizing stays here because the snap-down gap is structural. */
 @media (max-width: 767.98px) {
-    .composer-effort-seg {
+    .composer-effort-seg::before {
+        /* The bar has to stay a bar — it is a METER, and a meter whose rungs are 44px wide is a row of buttons. */
         height: 1.1rem;
         width: 0.5rem;
-/* The bar has to stay a bar — it is a METER, and a meter whose rungs are 44px wide is a row of buttons. */
-        position: relative;
     }
     .composer-effort-seg:not(:last-child) {
         padding-right: 0.3rem; /* chunkier snap-down gap for touch */
@@ -735,14 +739,13 @@
 }
 /* THE SAME LADDER AS A PICTURE — the spans ComposerEffort draws on a touch pointer. */
 .composer-effort-seg-static {
-    display: inline-block;
     cursor: default;
     pointer-events: none;
     /* Nothing to press here: the sheet's rows are the target, so the drawn ladder keeps the rung's own height. */
     padding-block: 0;
 }
-.composer-effort-seg-static:hover {
-    background-color: color-mix(in srgb, var(--color-content) 10%, transparent);
+.composer-effort-seg-static:hover::before {
+    background-color: var(--effort-rung-fill, color-mix(in srgb, var(--color-content) 10%, transparent));
     filter: none;
 }
 .composer-send {

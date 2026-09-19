@@ -31,10 +31,13 @@ const effortIndex = computed(() => efforts.findIndex((option) => option.value ==
 const effortLabel = computed(() => efforts.find((option) => option.value === effort)?.label ?? (effort === `` ? emptyLabel : effort));
 /** Every possible label, stacked invisibly, so the box is fixed at its widest rung's width and never resizes. */
 const labelWidths = computed(() => [...new Set([...efforts.map((option) => option.label), ...(emptyLabel === `` ? [] : [emptyLabel])])]);
-const effortFill = (index: number): string => {
-    const top = Math.max(1, efforts.length - 1);
-    const pct = 50 + (index / top) * 45; // Low ≈ 50% brand → top level ≈ 95% brand
-    return `color-mix(in oklab, var(--color-primary-500) ${pct}%, transparent)`;
+/** Fill for a rung at or below the level in effect; the colour rides a property because the drawn bar is `.composer-effort-seg::before`, not this element. */
+const fillStyle = (index: number, litUpTo: number): Record<string, string> | undefined => {
+    if (index > litUpTo) {
+        return undefined;
+    }
+    const pct = 50 + (index / Math.max(1, efforts.length - 1)) * 45; // Low ≈ 50% brand → top level ≈ 95% brand
+    return { "--effort-rung-fill": `color-mix(in oklab, var(--color-primary-500) ${pct}%, transparent)` };
 };
 
 // `coarse`, not `mobile`: about the pointer, not the device, so a desktop tablet gets the same touch
@@ -66,7 +69,7 @@ const pick = (value: string): void => {
                         v-for="(option, index) in efforts"
                         :key="option.value"
                         class="composer-effort-seg composer-effort-seg-static"
-                        :style="index <= effortIndex ? { backgroundColor: effortFill(index) } : undefined"
+                        :style="fillStyle(index, effortIndex)"
                     ></span>
                 </span>
                 <!-- Outer span carries labelClass (hides the word in a narrow composer); the width-reserving grid lives one level in. -->
@@ -105,7 +108,7 @@ const pick = (value: string): void => {
                                 v-for="(rung, at) in efforts"
                                 :key="rung.value"
                                 class="composer-effort-seg composer-effort-seg-static"
-                                :style="at <= index ? { backgroundColor: effortFill(at) } : undefined"
+                                :style="fillStyle(at, index)"
                             ></span>
                         </span>
                         <span class="min-w-0 flex-1 truncate">{{ option.label }}</span>
@@ -123,7 +126,7 @@ const pick = (value: string): void => {
                     :key="option.value"
                     type="button"
                     class="composer-effort-seg"
-                    :style="index <= effortIndex ? { backgroundColor: effortFill(index) } : undefined"
+                    :style="fillStyle(index, effortIndex)"
                     :disabled="disabled"
                     @click="emit(`pick`, option.value)"
                     :aria-label="option.label"
