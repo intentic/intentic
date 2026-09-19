@@ -77,8 +77,8 @@
     /* Corner size must match the frame's top ledge. */
     --corner-size: 1.7rem;
 
-    /* Bar height tracks the painted band within a bounded touch-safe range. */
-    --bar-height: clamp(3.4rem, 5.625vw, 7.1rem);
+    /* Bar height tracks the plate's bottom filigree (72/1600), not the full 90-unit mat. */
+    --bar-height: clamp(2.72rem, 4.5vw, 5.68rem);
 }
 
 /* WEIGHT, PER SKIN — the rule the app keeps in _editor/ui/src/styles/tokens.css and this file did not.

@@ -472,13 +472,14 @@ const machineStep = content.connect.steps.at(-1)!;
         const heroCta = document.querySelector("[data-hero-cta]");
         if (bar && heroCta && "IntersectionObserver" in window) {
             bar.setAttribute("data-cta-managed", "");
+            const barHeight = getComputedStyle(document.documentElement).getPropertyValue("--bar-height");
             const ctaObserver = new IntersectionObserver(
                 (entries) => {
                     for (const entry of entries) {
                         bar.toggleAttribute("data-cta-shown", !entry.isIntersecting);
                     }
                 },
-                { rootMargin: "-72px 0px 0px 0px", threshold: 0 },
+                { rootMargin: `-${barHeight} 0px 0px 0px`, threshold: 0 },
             );
             ctaObserver.observe(heroCta);
         }
