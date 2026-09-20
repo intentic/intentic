@@ -3,7 +3,6 @@
 import { z } from "zod";
 import { ExitConfigSchema } from "./exit.js";
 import { entryId } from "./internal.js";
-import { ServiceKindSchema } from "./inventory.js";
 import { NetdiskConfigSchema } from "./netdisk.js";
 import { VpnConfigSchema } from "./vpn.js";
 // One-way: the browser extension bundles webext.js alone, so nothing there may reach back into this file.
@@ -15,8 +14,6 @@ export const CapabilityKindSchema = z.enum([
     "devops",
     "monorepo",
     "mcp",
-    "service",
-    "integration",
     "cli",
     "plugin",
     "extension",
@@ -41,18 +38,6 @@ export type CapabilityState = z.infer<typeof CapabilityStateSchema>;
 export const McpConfigSchema = z.object({
     url: z.url().describe("Where the tool server answers."),
     token: z.string().optional().describe("The credential it needs, if any. Stored, never echoed back."),
-});
-export const ServiceConfigSchema = z.object({
-    service: ServiceKindSchema.describe("Which service to provision."),
-    domain: z.string().min(1).describe("The address it should answer on."),
-    on: z.string().min(1).describe("Which machine to put it on."),
-    expose: z.string().min(1).describe("How it should be reachable."),
-});
-// External-app credential injected into deployed apps (i.have.stripe → STRIPE_API_KEY), not agent-facing like `cli`.
-// Closed, unlike `cli`: it becomes an `i.have.<provider>` deploy.config.ts entry, so the vocabulary belongs to the
-// deploy engine, not an extension.
-export const IntegrationConfigSchema = z.object({
-    provider: z.literal("stripe").describe("Which outside service's credential to make available to deployed apps."),
 });
 // Gives the agent an authenticated CLI tool: credential plus any non-secret URL, injected into the agent's env each
 // turn, taught via an .agents/skills/<id> cheatsheet. Provider fields are data in an extension's
@@ -303,8 +288,6 @@ export const WalletConfigSchema = z.object({
 });
 export type WalletConfig = z.infer<typeof WalletConfigSchema>;
 export type McpConfig = z.infer<typeof McpConfigSchema>;
-export type ServiceConfig = z.infer<typeof ServiceConfigSchema>;
-export type IntegrationConfig = z.infer<typeof IntegrationConfigSchema>;
 export type CliConfig = z.infer<typeof CliConfigSchema>;
 export type PluginConfig = z.infer<typeof PluginConfigSchema>;
 export type ExtensionConfig = z.infer<typeof ExtensionConfigSchema>;
@@ -320,8 +303,6 @@ export const CapabilitySchema = z.discriminatedUnion("kind", [
     // operator panel.
     z.object({ id: entryId, kind: z.literal("monorepo"), config: z.object({}) }),
     z.object({ id: entryId, kind: z.literal("mcp"), config: McpConfigSchema }),
-    z.object({ id: entryId, kind: z.literal("service"), config: ServiceConfigSchema }),
-    z.object({ id: entryId, kind: z.literal("integration"), config: IntegrationConfigSchema }),
     z.object({ id: entryId, kind: z.literal("cli"), config: CliConfigSchema }),
     z.object({ id: entryId, kind: z.literal("plugin"), config: PluginConfigSchema }),
     z.object({ id: entryId, kind: z.literal("extension"), config: ExtensionConfigSchema }),

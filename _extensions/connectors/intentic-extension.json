@@ -451,6 +451,47 @@
                 }
             },
             {
+                "id": "stripe",
+                "kind": "cli",
+                "catalog": {
+                    "name": "Stripe",
+                    "logo": "stripe",
+                    "description": "Payments, customers, invoices and subscriptions.",
+                    "category": "business",
+                    "hint": "A restricted key is enough for reading, and is the one to give an agent unless it has to charge.",
+                    "guide": {
+                        "url": "https://dashboard.stripe.com/apikeys",
+                        "linkLabel": "Open your Stripe API keys",
+                        "scopes": "a restricted key with read access; add write only for an agent that creates charges or refunds",
+                        "steps": [
+                            "`Developers` → `API keys` → `Create restricted key`.",
+                            "Grant `Read` on the resources the agent needs (Customers, Charges, Invoices).",
+                            "Test mode has its own keys: `sk_test_…` charges nothing.",
+                            "Copy the key and paste it here."
+                        ]
+                    }
+                },
+                "fields": [
+                    {
+                        "key": "apiKey",
+                        "label": "Secret key",
+                        "secret": true,
+                        "placeholder": "sk_live_… or sk_test_…"
+                    }
+                ],
+                "env": {
+                    "STRIPE_API_KEY": "${apiKey}"
+                },
+                "skill": "skills/stripe/SKILL.md",
+                "probe": {
+                    "url": "https://api.stripe.com/v1/account",
+                    "headers": {
+                        "authorization": "Bearer ${apiKey}"
+                    },
+                    "identity": "settings.dashboard.display_name"
+                }
+            },
+            {
                 "id": "sharepoint",
                 "kind": "cli",
                 "catalog": {

@@ -459,7 +459,6 @@
         },
         "capabilities": {
             "access": "Acceso",
-            "activeFirstGoBack": "activa primero. Vuelve atrás, activa la capacidad DevOps y luego añade esta.",
             "addAnother": "Añadir otra",
             "agentReadFirstWhat": "Que un agente lo lea primero: qué hace el código, ruta por ruta",
             "agentReadWhatChanged": "Que un agente lea primero qué ha cambiado: el delta del manifiesto manda",
@@ -475,7 +474,6 @@
             "connections": "Tus conexiones",
             "connectionsSearchedByName": "Las conexiones se buscan por el nombre que les diste, por aquello a lo que conectan y por tipo.",
             "couldntListCapabilities": "No se pudieron listar tus capacidades.",
-            "devops": "DevOps",
             "disconnectHeader": "¿Desconectar {machine}?",
             "eachOneSomethingOwn": "Cada una es algo a lo que tu propio código ya apunta. Rellenamos lo que pudimos leer; tú solo añades la credencial.",
             "editing": "Editando",
@@ -487,7 +485,6 @@
             "logs": "Registros",
             "losesAccessToSandbox": "pierde el acceso a este sandbox: su sincronización de archivos se detiene y sus puertos replicados desaparecen de su localhost en un minuto. En esa máquina no se borra nada, y su agente sigue instalado.",
             "name": "Nombre",
-            "needs": "Esto necesita",
             "needsSandboxRebuild": "Necesita reconstruir el sandbox",
             "notNeeded": "No hace falta",
             "nothingInMatches": "Nada en {label} coincide con «{trim}».",
@@ -497,7 +494,6 @@
             "recommendedSetup": "Configuración recomendada",
             "relaysEventsToAgent": "Retransmite eventos a tu agente: reinícialo si esta conexión deja de responder.",
             "removeCapability": "Quitar la capacidad",
-            "requiresDevops": "Requiere DevOps",
             "restart": "Reiniciar",
             "sandboxTearsDownConfiguration": "de tu sandbox? Esto desmonta su configuración y no se puede deshacer.",
             "saved": "Guardado como",
@@ -525,9 +521,7 @@
             "runsCodeInsideApp": "Ejecuta código dentro de la aplicación con tu sesión, solo para el propietario; instala únicamente editores en los que confíes",
             "runsSandboxContainerPrivileged": "Ejecuta el contenedor del sandbox en modo privilegiado, lo que necesita su propio motor de Docker aislado",
             "storesSecretInSandbox": "Guarda un secreto en tu sandbox, nunca visible en Archivos",
-            "storesSecretInjectedInto": "Guarda un secreto, inyectado en el entorno del agente en cada turno, nunca escrito en disco ni visible en Archivos",
-            "writesDeployConfigEntry": "Escribe una entrada de configuración de despliegue y aprovisiona la infraestructura ahora",
-            "writesDeployConfigEntry2": "Escribe una entrada de configuración de despliegue, aplicada en el próximo aprovisionamiento"
+            "storesSecretInjectedInto": "Guarda un secreto, inyectado en el entorno del agente en cada turno, nunca escrito en disco ni visible en Archivos"
         },
         "capabilityFieldRow": {
             "needsRebuild": "necesita reconstrucción",

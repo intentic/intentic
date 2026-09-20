@@ -459,7 +459,6 @@
         },
         "capabilities": {
             "access": "Accès",
-            "activeFirstGoBack": "active d'abord. Revenez en arrière, activez la capacité DevOps, puis ajoutez celle-ci.",
             "addAnother": "En ajouter une autre",
             "agentReadFirstWhat": "Faites-la lire d'abord par un agent : ce que fait le code, route par route",
             "agentReadWhatChanged": "Faites lire d'abord à un agent ce qui a changé : le delta du manifeste prime",
@@ -475,7 +474,6 @@
             "connections": "Vos connexions",
             "connectionsSearchedByName": "Les connexions se cherchent par le nom que vous leur avez donné, par ce à quoi elles se connectent et par type.",
             "couldntListCapabilities": "Impossible de lister vos capacités.",
-            "devops": "DevOps",
             "disconnectHeader": "Déconnecter {machine} ?",
             "eachOneSomethingOwn": "Chacune est quelque chose vers quoi votre propre code pointe déjà. Nous remplissons ce que nous avons pu lire ; vous n'ajoutez que l'identifiant.",
             "editing": "Modification",
@@ -487,7 +485,6 @@
             "logs": "Journaux",
             "losesAccessToSandbox": "perd l'accès à ce sandbox : sa synchronisation de fichiers s'arrête et ses ports reflétés disparaissent de son localhost en une minute. Rien n'est supprimé sur cette machine, et son agent reste installé.",
             "name": "Nom",
-            "needs": "Ceci nécessite",
             "needsSandboxRebuild": "Nécessite une reconstruction du sandbox",
             "notNeeded": "Pas nécessaire",
             "nothingInMatches": "Rien dans {label} ne correspond à « {trim} ».",
@@ -497,7 +494,6 @@
             "recommendedSetup": "Installation recommandée",
             "relaysEventsToAgent": "Relaie les événements vers votre agent : redémarrez-le si cette connexion cesse de répondre.",
             "removeCapability": "Retirer la capacité",
-            "requiresDevops": "Nécessite DevOps",
             "restart": "Redémarrer",
             "sandboxTearsDownConfiguration": "de votre sandbox ? Cela démonte sa configuration et c'est irréversible.",
             "saved": "Enregistré sous",
@@ -525,9 +521,7 @@
             "runsCodeInsideApp": "Exécute du code dans l'application avec votre session, réservé au propriétaire ; n'installez que des éditeurs de confiance",
             "runsSandboxContainerPrivileged": "Exécute le conteneur du sandbox en mode privilégié, ce dont son propre moteur Docker isolé a besoin",
             "storesSecretInSandbox": "Stocke un secret dans votre sandbox, jamais affiché dans Fichiers",
-            "storesSecretInjectedInto": "Stocke un secret, injecté dans l'environnement de l'agent à chaque tour, jamais écrit sur disque ni affiché dans Fichiers",
-            "writesDeployConfigEntry": "Écrit une entrée de configuration de déploiement et provisionne l'infrastructure maintenant",
-            "writesDeployConfigEntry2": "Écrit une entrée de configuration de déploiement, appliquée au prochain provisionnement"
+            "storesSecretInjectedInto": "Stocke un secret, injecté dans l'environnement de l'agent à chaque tour, jamais écrit sur disque ni affiché dans Fichiers"
         },
         "capabilityFieldRow": {
             "needsRebuild": "nécessite une reconstruction",

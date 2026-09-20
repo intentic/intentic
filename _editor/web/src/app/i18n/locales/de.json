@@ -459,7 +459,6 @@
         },
         "capabilities": {
             "access": "Zugriff",
-            "activeFirstGoBack": "zuerst aktiv. Gehen Sie zurück, aktivieren Sie die DevOps-Fähigkeit und fügen Sie dann dies hinzu.",
             "addAnother": "Weitere hinzufügen",
             "agentReadFirstWhat": "Lassen Sie es zuerst von einem Agenten lesen — was der Code tut, Route für Route",
             "agentReadWhatChanged": "Lassen Sie zuerst einen Agenten lesen, was sich geändert hat: das Manifest-Delta führt",
@@ -475,7 +474,6 @@
             "connections": "Ihre Verbindungen",
             "connectionsSearchedByName": "Verbindungen werden nach dem Namen, den Sie ihnen gegeben haben, nach dem, womit sie verbinden, und nach Art durchsucht.",
             "couldntListCapabilities": "Ihre Fähigkeiten ließen sich nicht auflisten.",
-            "devops": "DevOps",
             "disconnectHeader": "{machine} trennen?",
             "eachOneSomethingOwn": "Jede einzelne ist etwas, worauf Ihr eigener Code schon zeigt. Wir füllen aus, was wir lesen konnten; Sie ergänzen nur die Zugangsdaten.",
             "editing": "Wird bearbeitet",
@@ -487,7 +485,6 @@
             "logs": "Protokolle",
             "losesAccessToSandbox": "verliert den Zugriff auf diese Sandbox: die Dateisynchronisierung hört auf und die gespiegelten Ports fallen innerhalb einer Minute von ihrem localhost. Auf dieser Maschine wird nichts gelöscht, und ihr Agent bleibt installiert.",
             "name": "Name",
-            "needs": "Das braucht",
             "needsSandboxRebuild": "Braucht einen Sandbox-Neubau",
             "notNeeded": "Nicht nötig",
             "nothingInMatches": "Nichts in {label} passt zu „{trim}“.",
@@ -497,7 +494,6 @@
             "recommendedSetup": "Empfohlene Einrichtung",
             "relaysEventsToAgent": "Leitet Ereignisse an Ihren Agenten weiter: starten Sie ihn neu, wenn diese Verbindung nicht mehr antwortet.",
             "removeCapability": "Fähigkeit entfernen",
-            "requiresDevops": "Braucht DevOps",
             "restart": "Neu starten",
             "sandboxTearsDownConfiguration": "aus Ihrer Sandbox? Das baut seine Konfiguration ab und lässt sich nicht rückgängig machen.",
             "saved": "Gespeichert als",
@@ -525,9 +521,7 @@
             "runsCodeInsideApp": "Führt Code in der App mit Ihrer Session aus, nur für den Eigentümer; installieren Sie nur Herausgeber, denen Sie vertrauen",
             "runsSandboxContainerPrivileged": "Betreibt den Sandbox-Container privilegiert — was seine eigene isolierte Docker-Engine braucht",
             "storesSecretInSandbox": "Speichert ein Geheimnis in Ihrer Sandbox, nie in „Dateien“ sichtbar",
-            "storesSecretInjectedInto": "Speichert ein Geheimnis, das in jedem Zug in die Umgebung des Agenten gegeben wird, nie auf die Platte geschrieben und nie in „Dateien“ sichtbar",
-            "writesDeployConfigEntry": "Schreibt einen Deploy-Konfigurationseintrag und stellt die Infrastruktur jetzt bereit",
-            "writesDeployConfigEntry2": "Schreibt einen Deploy-Konfigurationseintrag, angewendet bei der nächsten Bereitstellung"
+            "storesSecretInjectedInto": "Speichert ein Geheimnis, das in jedem Zug in die Umgebung des Agenten gegeben wird, nie auf die Platte geschrieben und nie in „Dateien“ sichtbar"
         },
         "capabilityFieldRow": {
             "needsRebuild": "braucht Neubau",

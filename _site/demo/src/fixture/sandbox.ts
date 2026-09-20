@@ -88,7 +88,7 @@ export const demoCapabilities = (): CapabilitySummary[] => [
         secrets: [`token`],
     },
     { id: `discord`, kind: `cli`, status: { state: `active` }, config: { provider: `discord`, guild: `acme` }, secrets: [`token`] },
-    { id: `stripe`, kind: `integration`, status: { state: `active` }, config: { provider: `stripe` }, secrets: [] },
+    { id: `stripe`, kind: `cli`, status: { state: `active` }, config: { provider: `stripe` }, secrets: [`apiKey`] },
     { id: `docker`, kind: `docker`, status: { state: `active` }, config: {}, secrets: [] },
     {
         id: `ops-box`,
@@ -234,6 +234,19 @@ const CONNECTOR_EXTENSIONS: Omit<ExtensionSummary, "enabled">[] = [
                         ],
                         env: { OUTLINE_URL: `\${url}`, OUTLINE_API_KEY: `\${apiKey}` },
                         skill: `skills/outline/SKILL.md`,
+                    },
+                    {
+                        id: `stripe`,
+                        kind: `cli`,
+                        catalog: {
+                            name: `Stripe`,
+                            logo: `stripe`,
+                            description: `Payments, customers, invoices and subscriptions.`,
+                            category: `business`,
+                        },
+                        fields: [{ key: `apiKey`, label: `Secret key`, secret: true }],
+                        env: { STRIPE_API_KEY: `\${apiKey}` },
+                        skill: `skills/stripe/SKILL.md`,
                     },
                 ],
             },

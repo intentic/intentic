@@ -34,7 +34,6 @@ const office = (): CapabilitySummary => ({
 const add = vi.fn<(input: AddCapabilityInput) => Promise<void>>(async () => {});
 vi.mock(`./connect/useCapabilities`, () => ({
     useCapabilities: () => ({
-        hasCapability: () => true,
         recommendationFor: () => undefined,
         capabilities,
         error: ref(undefined),

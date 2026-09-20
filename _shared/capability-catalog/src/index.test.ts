@@ -79,7 +79,6 @@ describe("contributionCard", () => {
             "extension",
             // Static like endpoint: an identity has no site to vary, the email is the card.
             "identity",
-            "integration",
             // Static for the docker reason: the GPU switch is a privileged directive, and its handler is core code.
             "localmodel",
             "mcp",

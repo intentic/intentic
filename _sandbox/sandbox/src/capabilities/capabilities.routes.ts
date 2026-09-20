@@ -93,8 +93,8 @@ const keptToken = async (services: Services, token: string | undefined, keeping:
     return typeof value === "string" && !isVaulted(value) ? value : undefined;
 };
 
-// `add` streams progress frames, then records the manifest entry, then a terminal `result`, after checking any
-// `requires` precondition. `list` fans each handler's status() out concurrently.
+// `add` streams progress frames, then records the manifest entry, then a terminal `result`. `list` fans each
+// handler's status() out concurrently.
 export const createCapabilitiesRoutes = (services: Services) => {
     const i = implement(capabilitiesContract).$context<OrpcContext>();
     const ctx = capabilityCtx(services);
@@ -135,12 +135,6 @@ export const createCapabilitiesRoutes = (services: Services) => {
                     await authorizeMaintainer(services.auth, bearerFrom(context.headers.get("authorization") ?? undefined));
                 } catch {
                     throw new ORPCError("FORBIDDEN", { message: "only a sandbox maintainer can install extensions" });
-                }
-            }
-            const active = await services.capabilities.list();
-            for (const required of handler.requires ?? []) {
-                if (!active.some((capability) => capability.kind === required)) {
-                    throw new ORPCError("PRECONDITION_FAILED", { message: `activate ${required} first` });
                 }
             }
             // Resolved before the id is claimed, so a bad "keep" request refuses plainly instead of erroring

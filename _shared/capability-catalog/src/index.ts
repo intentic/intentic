@@ -177,7 +177,6 @@ export interface CapabilityGuide {
 export * from "./effects.js";
 
 // The grid the rail's "+" renders; a card is a capability type; the user names each instance, so a provider can have N.
-// `requires` cards show but stay gated until the prereq is active.
 export interface CapabilityCatalogEntry {
     readonly id: string;
     readonly name: string;
@@ -189,7 +188,6 @@ export interface CapabilityCatalogEntry {
     readonly icon?: string | undefined;
     // One line, 60 characters or fewer; the grid clamps to two lines and a longer story belongs in `hint`.
     readonly description: string;
-    readonly requires?: readonly CapabilityKind[] | undefined;
     readonly fields: readonly CapabilityField[];
     // Paragraph under the add-form, also searched, so a card stays findable by words `description` had no room for.
     readonly hint?: string | undefined;
@@ -271,9 +269,9 @@ export const CAPABILITY_CATALOG: readonly CapabilityCatalogEntry[] = [
         name: "DevOps",
         kind: "devops",
         category: "platform",
-        description: "Self-host and deploy your own apps.",
+        description: "Scaffold the two repos self-hosting runs from.",
         fields: [],
-        hint: "One-time setup, then provision hosts, services and apps.",
+        hint: "Creates the intent and desired-state repos, which open as the Infrastructure and Live status panels. Declare machines, services and apps there.",
     },
     {
         id: "monorepo",
@@ -283,17 +281,6 @@ export const CAPABILITY_CATALOG: readonly CapabilityCatalogEntry[] = [
         description: "Scaffold an empty pnpm + turbo monorepo.",
         fields: [],
         hint: "Names the repo. Once it's created, open its panel to add a Hono API, a Vue web app, or an Astro landing page.",
-    },
-    {
-        id: "stripe",
-        name: "Stripe",
-        kind: "integration",
-        category: "business",
-        logo: "stripe",
-        description: "Connect Stripe for the agent and your app.",
-        requires: ["devops"],
-        fields: [{ key: "provider", label: "", value: "stripe" }],
-        hint: "The API key is read from your sandbox env (STRIPE_API_KEY) on the next provision.",
     },
     {
         id: "docker",

@@ -53,7 +53,6 @@ const recommendations = ref<CapabilityRecommendation[]>([]);
 const dismiss = vi.fn();
 vi.mock(`./connect/useCapabilities`, () => ({
     useCapabilities: () => ({
-        hasCapability: () => true,
         recommendationFor: (id: string) => recommendations.value.find((recommendation) => recommendation.card === id),
         capabilities: ref([]),
         error: ref(undefined),

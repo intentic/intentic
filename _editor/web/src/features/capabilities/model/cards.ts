@@ -30,8 +30,6 @@ export const CATEGORY_ICONS: Readonly<Record<CapabilityCategory, IconName>> = {
 const KIND_ICONS: Readonly<Record<string, IconName>> = {
     devops: `server`,
     monorepo: `sitemap`,
-    service: `box`,
-    integration: `link`,
     plugin: `th-large`,
     browser: `globe`,
     identity: `user`,

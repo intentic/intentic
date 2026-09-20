@@ -1,8 +1,5 @@
-import type { CapabilityKind, CapabilityStatus, IntenticLine } from "@intentic/sandbox-contract";
+import type { CapabilityStatus, IntenticLine } from "@intentic/sandbox-contract";
 import type { Services } from "../composition.js";
-import { applyEventsPath, isTerminalExit, tailIntenticEvents } from "../intentic/apply-events.js";
-import { INFRA_APPLY_KEY, startInfraApplyJob } from "../intentic/infra-apply.js";
-import { type ConfigStore, createConfigStore } from "../inventory/config-store.js";
 import type { ManagedProcesses } from "../processes/managed-processes.js";
 import { relayWalletEnsure } from "../wallet/wallet-signer.js";
 import { ensureIntentInstallable } from "../scaffold/ensure-intent.js";
@@ -15,8 +12,7 @@ import type { ResolvedContribution } from "./contributions.js";
 import type { CapabilitiesStore } from "./capabilities-store.js";
 
 // Narrow slice of the daemon a handler may touch, no agent/auth/sessions; scaffolder closures wrap Services helpers.
-// Shell work goes through terminalRun into job-capability-<id>; infraApply is the path onto the one panel-infra-apply
-// job.
+// Shell work goes through terminalRun into job-capability-<id>.
 export interface CapabilityCtx {
     readonly logger: Services["logger"];
     readonly workspace: Services["workspace"];
@@ -27,14 +23,6 @@ export interface CapabilityCtx {
     readonly panels: ManagedProcesses;
     // Extension-declared background processes, supervised as daemon children (processes/service-processes.ts).
     readonly serviceProcesses: Services["serviceProcesses"];
-    readonly infraApply: {
-        // Launches the deploy resolve/apply/adopt one-shot tmux job; false if one is already running.
-        readonly start: (options?: { readonly resolveFirst?: true }) => Promise<boolean>;
-        readonly running: () => boolean;
-        // Tails the job's durable events file to its terminal exit.
-        readonly events: () => AsyncGenerator<IntenticLine>;
-    };
-    readonly config: ConfigStore;
     readonly capabilities: CapabilitiesStore;
     // User's own devices, passed whole: the hub is the live subject, the store's enrollment is the only status here.
     readonly hosts: HostStore;
@@ -58,7 +46,7 @@ export interface CapabilityCtx {
 }
 
 // A capability kind's behavior: apply is idempotent and streams progress, status is a fast non-blocking probe.
-// A kind with no remove can't be torn down (devops); requires lists kinds checked as already active before apply.
+// A kind with no remove can't be torn down (devops).
 // fragment: a code-versioned Dockerfile fragment this entry bakes in, deduped by exact content; must be self-contained.
 // Several may return so two kinds needing the same privilege (vpn, exit: /dev/net/tun) share a byte-identical block.
 // A capability's id is the agent's handle for it (skill file, env suffix, ssh alias, profile dir); rename is a
@@ -74,7 +62,6 @@ export interface CapabilityRename {
 }
 
 export interface CapabilityHandler {
-    readonly requires?: readonly CapabilityKind[];
     readonly fragment?: (config: unknown) => string | readonly string[] | undefined | Promise<string | readonly string[] | undefined>;
     readonly apply: (ctx: CapabilityCtx, id: string, config: unknown) => AsyncGenerator<IntenticLine>;
     readonly status: (ctx: CapabilityCtx, id: string, config: unknown) => Promise<CapabilityStatus>;
@@ -89,7 +76,6 @@ export interface CapabilityHandler {
 
 // Builds the handler context from full Services, wrapping the existing scaffolders as session-scoped closures.
 export const capabilityCtx = (services: Services): CapabilityCtx => {
-    const config = createConfigStore(services);
     return {
         logger: services.logger,
         workspace: services.workspace,
@@ -98,18 +84,6 @@ export const capabilityCtx = (services: Services): CapabilityCtx => {
         terminalRun: services.terminalRun,
         panels: services.processes,
         serviceProcesses: services.serviceProcesses,
-        infraApply: {
-            start: (options) => startInfraApplyJob(services, options),
-            running: () => services.processes.running(INFRA_APPLY_KEY),
-            events: () =>
-                tailIntenticEvents(
-                    applyEventsPath(services.config.historyRoot),
-                    isTerminalExit,
-                    () => services.processes.running(INFRA_APPLY_KEY),
-                    undefined,
-                ),
-        },
-        config,
         capabilities: services.capabilities,
         hosts: services.hosts,
         hostHub: services.hostHub,

@@ -76,10 +76,6 @@ const describe = (effect: CapabilityEffect): EffectRow => {
                         ? `Scaffolds a repository`
                         : `Scaffolds ${effect.repos.length === 1 ? `repository` : `repositories`} ${effect.repos.join(`, `)}`,
             };
-        case "deploy":
-            return effect.provisions
-                ? { icon: `cloud-upload`, label: t(`capabilities.capabilityEffects.writesDeployConfigEntry`) }
-                : { icon: `server`, label: t(`capabilities.capabilityEffects.writesDeployConfigEntry2`) };
         case "trusted-code":
             return {
                 icon: `exclamation-triangle`,

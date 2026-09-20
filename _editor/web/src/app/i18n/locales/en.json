@@ -459,7 +459,6 @@
         },
         "capabilities": {
             "access": "Access",
-            "activeFirstGoBack": "active first. Go back and activate the DevOps capability, then add this.",
             "addAnother": "Add another",
             "agentReadFirstWhat": "Have an agent read it first, what the code does, route by route",
             "agentReadWhatChanged": "Have an agent read what changed first: the manifest delta leads",
@@ -475,7 +474,6 @@
             "connections": "Your connections",
             "connectionsSearchedByName": "Connections are searched by the name you gave them, by what they connect to, and by kind.",
             "couldntListCapabilities": "Couldn't list your capabilities.",
-            "devops": "DevOps",
             "disconnectHeader": "Disconnect {machine}?",
             "eachOneSomethingOwn": "Each one is something your own code already points at. We fill in what we could read; you add only the credential.",
             "editing": "Editing",
@@ -487,7 +485,6 @@
             "logs": "Logs",
             "losesAccessToSandbox": "loses access to this sandbox: its file sync stops and its mirrored ports drop off its localhost within a minute. Nothing on that machine is deleted, and its agent stays installed.",
             "name": "Name",
-            "needs": "This needs",
             "needsSandboxRebuild": "Needs a sandbox rebuild",
             "notNeeded": "Not needed",
             "nothingInMatches": "Nothing in {label} matches \"{trim}\".",
@@ -497,7 +494,6 @@
             "recommendedSetup": "Recommended setup",
             "relaysEventsToAgent": "Relays events to your agent: restart it if this connection stops responding.",
             "removeCapability": "Remove capability",
-            "requiresDevops": "Requires DevOps",
             "restart": "Restart",
             "sandboxTearsDownConfiguration": "from your sandbox? This tears down its configuration and can't be undone.",
             "saved": "Saved as",
@@ -525,9 +521,7 @@
             "runsCodeInsideApp": "Runs code inside the app with your session, owner-only; install only publishers you trust",
             "runsSandboxContainerPrivileged": "Runs the sandbox container privileged, what its own isolated Docker Engine needs",
             "storesSecretInSandbox": "Stores a secret in your sandbox, never shown in Files",
-            "storesSecretInjectedInto": "Stores a secret, injected into the agent's env each turn, never written to disk or shown in Files",
-            "writesDeployConfigEntry": "Writes a deploy config entry and provisions infrastructure now",
-            "writesDeployConfigEntry2": "Writes a deploy config entry, applied on the next provision"
+            "storesSecretInjectedInto": "Stores a secret, injected into the agent's env each turn, never written to disk or shown in Files"
         },
         "capabilityFieldRow": {
             "needsRebuild": "needs rebuild",

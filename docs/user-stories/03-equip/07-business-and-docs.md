@@ -1,18 +1,18 @@
-# Be told what a capability depends on, instead of discovering it
+# Connect payments and a knowledge base, and have the agent use them
 
-As someone connecting payments and a knowledge base, I want a card that needs something else first to say so up front, so that I do not fill in a form whose save can only be refused.
+As someone connecting Stripe and a wiki, I want each card to ask for a credential and nothing else, so that connecting one is a paste and the payoff shows up in the next conversation.
 
-Some capabilities are not standalone. Payments here ride on the DevOps capability, because the credential is read from the sandbox's environment when it next provisions. That is a real dependency and a strange one to guess at, so the card carries it in the catalog (visible before I open it) and the form refuses to render its fields until the prerequisite is active, saying which one it is and where to activate it.
+Nothing in Business & docs stands on anything else. Payments is a key; the wiki is an instance URL and a key. Each writes a cheatsheet the agent reads and puts the credential in its environment for the turn, so the agent looks up a customer or reads a document without me copying anything across.
 
-The wiki side has no such dependency and should not pretend to: it is an instance URL and a key, like any other connector. What both share is that the payoff is in a conversation, where the agent reads a document or looks up a customer without me copying anything across.
+What a card owes me before I fill it in is where the credential comes from and what it costs: which page of the provider issues it, which scopes it needs, and whether a narrower one will do. Payments says a restricted read key is enough unless the agent has to charge — that is a choice worth making before pasting, not after.
 
 ## Acceptance criteria
 
 - [ ] The Business & docs section lists the payment and knowledge-base cards with a line saying what the agent gains
-- [ ] A card with a prerequisite shows that prerequisite on the card in the catalog, before it is opened
-- [ ] Opening a card whose prerequisite is not active shows what is needed and where to activate it, instead of a form
-- [ ] Once the prerequisite is active, the same card opens on its own form
+- [ ] Each card opens straight onto its own form: nothing here has a prerequisite to activate first
 - [ ] The knowledge-base card takes an instance URL and its key, with the key masked
-- [ ] Any hint about where a credential comes from, or when it takes effect, is stated on the card rather than left to be discovered
+- [ ] The payment card takes a key alone, masked, and says which provider page issues one and which scopes it needs
+- [ ] Any hint about where a credential comes from, or how narrow it can be, is stated on the card rather than left to be discovered
+- [ ] Saving runs one authenticated request against the service, so a wrong key is answered on the form rather than by a card that later reads "not connected"
 - [ ] A connected instance appears under Connected with its state, and the catalog card reflects that it has one
 - [ ] With a connection active, asking the agent to look something up in that service returns real data

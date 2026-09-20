@@ -21,7 +21,6 @@ vi.mock(import(`vue-router`), async (importOriginal) => ({
 // possibly draw, so anything on screen came from the device list.
 vi.mock(`./connect/useCapabilities`, () => ({
     useCapabilities: () => ({
-        hasCapability: () => true,
         recommendationFor: () => undefined,
         capabilities: ref([]),
         error: ref(undefined),

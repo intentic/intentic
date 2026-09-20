@@ -45,5 +45,5 @@ test("the value is never in the message: a diagnostic that prints the token has 
 });
 
 test("an entry with no credential fields at all is not a finding", async () => {
-    await expect(run([{ id: "stripe", kind: "integration", config: { provider: "stripe" } }])).resolves.toBeUndefined();
+    await expect(run([{ id: "devops", kind: "devops", config: {} }])).resolves.toBeUndefined();
 });

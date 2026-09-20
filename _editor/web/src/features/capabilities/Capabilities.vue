@@ -110,7 +110,7 @@ import { useT } from "@intentic/ui/i18n";
 
 const t = useT();
 
-const { hasCapability, recommendationFor, capabilities, error: listError, add, remove, rename, refetch, dismissRecommendation } = useCapabilities();
+const { recommendationFor, capabilities, error: listError, add, remove, rename, refetch, dismissRecommendation } = useCapabilities();
 const { contributionOf, enabled: enabledExtensions, extensions, settled: extensionsSettled } = useExtensions();
 // A tunnel's live address for the Connected slice; the VPN card reads the same query, so the two can't disagree.
 const { links: vpnLinks } = useVpn();
@@ -480,9 +480,6 @@ const touchAll = (): void => {
         touched.add(field.key);
     }
 };
-// A card with no `requires` has them all met by default.
-const requiresMet = computed(() => (selected.value?.requires ?? []).every((kind) => hasCapability(kind)));
-
 // The contribution behind a config, via the kind's discriminator; undefined for a kind with no secret/image
 // declarations or a core-only kind.
 const contributionFor = (kind: CapabilityKind, config: Record<string, string | number | boolean | undefined>) => {
@@ -606,7 +603,6 @@ onBeforeUnmount(stopBrowsers);
 const canSubmit = computed(
     () =>
         selected.value !== undefined &&
-        requiresMet.value &&
         !nameCollision.value &&
         formComplete(selected.value, values, name.value, keptSecrets.value),
 );
@@ -1188,16 +1184,13 @@ const topError = computed<NoticeModel | undefined>(() => {
 });
 
 // Submit's word in the card's own vocabulary: editing leads, since a pre-filled form must not offer to "Add" a live
-// connection; DevOps activates, a service provisions.
+// connection; DevOps activates.
 const submitLabel = computed(() => {
     if (editing.value !== undefined) {
         return `Save changes`;
     }
     if (selected.value?.kind === `devops`) {
         return `Activate`;
-    }
-    if (selected.value?.kind === `service`) {
-        return `Add & provision`;
     }
     return `Add`;
 });
@@ -1279,13 +1272,7 @@ const submitLabel = computed(() => {
                             }}{{ t(`capabilities.capabilities.finishSetup`) }}
                         </RouterLink>
 
-                        <!-- Precondition gate: a service/integration needs DevOps active first. -->
-                        <Notice v-if="!requiresMet" tone="info">
-                            {{ t(`capabilities.capabilities.needs`) }} <b>{{ t(`capabilities.capabilities.devops`) }}</b>
-                            {{ t(`capabilities.capabilities.activeFirstGoBack`) }}
-                        </Notice>
-
-                        <form v-else class="flex flex-col gap-3" @submit.prevent="submit">
+                        <form class="flex flex-col gap-3" @submit.prevent="submit">
                             <!-- What you already have of this card, suppressed on a singleton card. -->
                             <VpnConnections
                                 v-if="selected.kind === 'vpn' && selectedInstances.length > 0"
@@ -1710,14 +1697,6 @@ const submitLabel = computed(() => {
                                                 :aria-label="t(`capabilities.capabilities.recommended2`, { reason: card.recommendation.reason })"
                                             >
                                                 <Icon name="sparkles" />
-                                            </span>
-                                            <span
-                                                v-if="card.entry.requires?.includes('devops') && !hasCapability('devops')"
-                                                v-tooltip.top="t(`capabilities.capabilities.requiresDevops`)"
-                                                class="shrink-0 text-2xs text-muted"
-                                                :aria-label="t(`capabilities.capabilities.requiresDevops`)"
-                                            >
-                                                <Icon name="lock" />
                                             </span>
                                             <CapabilityEffects :effects="badgeEffects(card.entry)" :compact="true" />
                                         </div>

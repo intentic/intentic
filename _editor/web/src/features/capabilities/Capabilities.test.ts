@@ -21,7 +21,6 @@ vi.mock(import(`vue-router`), async (importOriginal) => ({
 // from the static catalog regardless, so it, its form, and the import block are the whole subject.
 vi.mock(`./connect/useCapabilities`, () => ({
     useCapabilities: () => ({
-        hasCapability: () => true,
         recommendationFor: () => undefined,
         capabilities: ref([]),
         error: ref(undefined),

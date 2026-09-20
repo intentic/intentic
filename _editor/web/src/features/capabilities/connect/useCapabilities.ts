@@ -145,8 +145,6 @@ export function useCapabilities() {
     const recommendations = computed<CapabilityRecommendation[]>(() => query.data.value?.recommendations ?? []);
     return {
         capabilities,
-        // Presence of a kind = the user activated it (status reports its live health separately).
-        hasCapability: (kind: string): boolean => capabilities.value.some((capability) => capability.kind === kind),
         // What the workspace asks for but isn't activated, by catalog card rather than kind (several connectors share
         // `cli`); the evidence renders verbatim beside the claim.
         recommendationFor: (card: string): CapabilityRecommendation | undefined =>

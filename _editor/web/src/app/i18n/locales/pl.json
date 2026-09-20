@@ -459,7 +459,6 @@
         },
         "capabilities": {
             "access": "Dostęp",
-            "activeFirstGoBack": "najpierw aktywna. Wróć, aktywuj możliwość DevOps, a potem dodaj tę.",
             "addAnother": "Dodaj kolejną",
             "agentReadFirstWhat": "Niech najpierw przeczyta to agent — co robi kod, trasa po trasie",
             "agentReadWhatChanged": "Niech najpierw agent przeczyta, co się zmieniło: prowadzi delta manifestu",
@@ -475,7 +474,6 @@
             "connections": "Twoje połączenia",
             "connectionsSearchedByName": "Połączenia wyszukuje się po nazwie, którą im nadałeś, po tym, z czym się łączą, i po rodzaju.",
             "couldntListCapabilities": "Nie udało się wypisać Twoich możliwości.",
-            "devops": "DevOps",
             "disconnectHeader": "Odłączyć {machine}?",
             "eachOneSomethingOwn": "Każda z nich to coś, na co Twój własny kod już wskazuje. Wypełniamy to, co udało nam się odczytać; Ty dodajesz tylko poświadczenie.",
             "editing": "Edycja",
@@ -487,7 +485,6 @@
             "logs": "Dzienniki",
             "losesAccessToSandbox": "traci dostęp do tego sandboxa: synchronizacja plików się zatrzymuje, a odbite porty znikają z jego localhosta w ciągu minuty. Na tamtej maszynie nic nie zostaje usunięte, a jej agent pozostaje zainstalowany.",
             "name": "Nazwa",
-            "needs": "To wymaga",
             "needsSandboxRebuild": "Wymaga przebudowy sandboxa",
             "notNeeded": "Niepotrzebne",
             "nothingInMatches": "Nic w {label} nie pasuje do „{trim}”.",
@@ -497,7 +494,6 @@
             "recommendedSetup": "Zalecana konfiguracja",
             "relaysEventsToAgent": "Przekazuje zdarzenia do Twojego agenta: zrestartuj go, jeśli to połączenie przestanie odpowiadać.",
             "removeCapability": "Usuń możliwość",
-            "requiresDevops": "Wymaga DevOps",
             "restart": "Uruchom ponownie",
             "sandboxTearsDownConfiguration": "z Twojego sandboxa? To rozbiera jego konfigurację i nie da się tego cofnąć.",
             "saved": "Zapisano jako",
@@ -525,9 +521,7 @@
             "runsCodeInsideApp": "Uruchamia kod wewnątrz aplikacji z Twoją sesją, tylko dla właściciela; instaluj tylko wydawców, którym ufasz",
             "runsSandboxContainerPrivileged": "Uruchamia kontener sandboxa w trybie uprzywilejowanym — tego potrzebuje jego własny odizolowany silnik Dockera",
             "storesSecretInSandbox": "Przechowuje sekret w Twoim sandboxie, nigdy niewidoczny w Plikach",
-            "storesSecretInjectedInto": "Przechowuje sekret, wstrzykiwany do środowiska agenta w każdej turze, nigdy niezapisywany na dysk ani niepokazywany w Plikach",
-            "writesDeployConfigEntry": "Zapisuje wpis konfiguracji wdrożenia i prowiantuje infrastrukturę teraz",
-            "writesDeployConfigEntry2": "Zapisuje wpis konfiguracji wdrożenia, stosowany przy następnym prowiantowaniu"
+            "storesSecretInjectedInto": "Przechowuje sekret, wstrzykiwany do środowiska agenta w każdej turze, nigdy niezapisywany na dysk ani niepokazywany w Plikach"
         },
         "capabilityFieldRow": {
             "needsRebuild": "wymaga przebudowy",

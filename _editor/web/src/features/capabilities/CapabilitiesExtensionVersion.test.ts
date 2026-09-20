@@ -20,7 +20,6 @@ const readRemoteRefs = vi.fn<(url: string, token?: string, keeping?: string) => 
 const capabilities = ref<{ id: string; kind: string; status: { state: string }; config: Record<string, string>; secrets: string[] }[]>([]);
 vi.mock(`./connect/useCapabilities`, () => ({
     useCapabilities: () => ({
-        hasCapability: () => true,
         recommendationFor: () => undefined,
         capabilities,
         error: ref(undefined),

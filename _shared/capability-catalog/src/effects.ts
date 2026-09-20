@@ -29,8 +29,6 @@ export type CapabilityEffect =
     | { readonly kind: "mcp" }
     // Scaffolds workspace repositories; empty while a name-derived repo is still unnamed.
     | { readonly kind: "scaffold"; readonly repos: readonly string[] }
-    // Writes a managed deploy.config.ts entry; `provisions` = also runs the infra apply job now (service).
-    | { readonly kind: "deploy"; readonly provisions: boolean }
     // Extension code runs inside the app with the owner's session; an owner-only trust decision.
     | { readonly kind: "trusted-code" }
     // Chromium profile at .intentic/local/browser/<id>, one per account; `platform` names what it's a profile of.
@@ -90,8 +88,6 @@ const KIND_EFFECTS: Record<CapabilityKind, (input: CapabilityEffectInput) => rea
         }
         return effects;
     },
-    service: () => [{ kind: "deploy", provisions: true }],
-    integration: () => [{ kind: "deploy", provisions: false }],
     cli: (input) => {
         // Without a contribution, secret falls back to hasSecret; the image row still waits on the contribution.
         const effects: CapabilityEffect[] = [{ kind: "skill", name: input.id }];

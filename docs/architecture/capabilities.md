@@ -4,7 +4,7 @@ What a capability is, how one is connected, and what the daemon does with it onc
 
 Everything a user adds to a sandbox is a **capability**: one `{ id, kind, config }` entry in a single
 discriminated union (`CapabilitySchema` in [schemas/capabilities.ts](../../_shared/sandbox-contract/src/schemas/capabilities.ts)) over the
-kinds: `devops`, `monorepo`, `mcp`, `service`, `integration`, `cli`, `plugin`, `extension`, `ssh`, `vpn`,
+kinds: `devops`, `monorepo`, `mcp`, `cli`, `plugin`, `extension`, `ssh`, `vpn`,
 `exit`, `docker`, `browser`, `host`, `agent`, `endpoint`. There is deliberately **no top-level taxonomy** of "skills vs connectors vs
 environments vs secrets": those are overlapping *ingredients*, not disjoint categories (a connector is a
 skill + a secret + env injection + maybe an image fragment; an extension is a repo + skills + processes +
@@ -31,8 +31,8 @@ machinery is uniform:
   vanishes rather than losing a label. `secret-fields.test.ts` pins that round-trip per kind.
 - **One lifecycle**: `add` (streams its apply progress live), `remove`, `status`, `setSecret`
   ([capabilities.contract.ts](../../_shared/sandbox-contract/src/contracts/capabilities.contract.ts), orchestrated
-  by [capabilities.routes.ts](../../_sandbox/sandbox/src/capabilities/capabilities.routes.ts): precondition check →
-  streamed `apply` → manifest upsert → environment recompose).
+  by [capabilities.routes.ts](../../_sandbox/sandbox/src/capabilities/capabilities.routes.ts): streamed `apply` →
+  manifest upsert → environment recompose).
 - **Two reads the form makes before anything is written**: `probe` dials the service the settings describe, and
   `refs` asks a git remote what it advertises
   ([remote-refs.ts](../../_sandbox/sandbox/src/capabilities/remote-refs.ts): one `ls-remote`, no clone, no disk).
@@ -40,7 +40,7 @@ machinery is uniform:
   install is still pinned to an exact sha, which is the security rule; a person copying that sha out of somebody's
   commit list never was.
 - **One total registry**: `Record<CapabilityKind, CapabilityHandler>` where a handler is
-  `{ requires?, fragment?, apply, status, remove? }`
+  `{ fragment?, apply, status, remove? }`
   ([registry.ts](../../_sandbox/sandbox/src/capabilities/registry.ts),
   [capability.ts](../../_sandbox/sandbox/src/capabilities/capability.ts)): a new kind is a compile error
   until it is handled everywhere, including the effects deriver and the secret/echo switches.
@@ -66,10 +66,19 @@ fails to parse:
 
 Everything else keeps a static card in `CAPABILITY_CATALOG`
 ([capability-catalog](../../_shared/capability-catalog/src/index.ts)), and every one of those is one-to-one with a
-handler it cannot be separated from. `integration` is the instructive case: its card *looks* like pure data,
-but it becomes an `i.have.<provider>` entry that only the desired-state resolver's closed
-`InventoryProviderSchema` vocabulary understands: so the vocabulary belongs to the deploy engine, not to a
-manifest, and Stripe stays static.
+handler it cannot be separated from. `docker` is the instructive case: its card *looks* like pure data, three
+text fields and a switch, but the switch is a `--privileged` runtime directive, so the card and the handler
+that bakes it are one thing and neither is contributable.
+
+**Nothing in the grid depends on anything else in it.** Two kinds once did — `integration` (Stripe) and
+`service` (a self-hosted Outline or SigNoz), both declaring `requires: ["devops"]` — and both were the same
+mistake: a *declaration about your infrastructure* wearing the shape of a *connection the agent gets to use*.
+They also duplicated the Infrastructure panel, which declares `i.have.<provider>` and `i.want.service`
+natively and stores the credential while doing it, which the cards never did. So both kinds are gone, the
+declarations stay in the panel that owns them, and Stripe is what its card always claimed to be: a `cli`
+connector with an API key. The seam is now a sentence — **the grid gives the agent things to use; the
+Infrastructure panel declares what you run** — and `requires` went with them rather than waiting for a
+second kind to misuse it.
 
 The web's grid ([Capabilities.vue](../../_editor/web/src/features/capabilities/Capabilities.vue)) merges the static cards with cards
 **derived** from the **enabled** extensions' `contributes.capabilities` (`contributionCard()`). Enabled, not
@@ -111,7 +120,6 @@ on connected instances, and as grid badges for the consequential ones (image / r
 | `process` | Long-lived tmux-managed background processes (an extension's declared `processes`), restored on boot. |
 | `mcp` | The manifest entry itself becomes an `mcp__<id>__` server the agent connects to next turn. |
 | `scaffold` | Repos created in the workspace: `devops` → the intent + desired-state repos; `monorepo` → an empty pnpm+turbo repo named after the instance. |
-| `deploy` | A managed `deploy.config.ts` entry; `service` also runs the shared infra-apply job now, `integration` applies on the next provision. |
 | `trusted-code` | Extension code runs inside the app with the owner's session: owner-only, full-sha-pinned install; the trust decision of the system. |
 | `profile` | A persisted logged-in Chromium profile under `.intentic/local/browser/<id>`, keyed by the CAPABILITY, so one site can be connected several times over (a work Reddit and a personal one) and each account signs in, and is disconnected, on its own. Established through the guided-login WebSocket (`/system/browser-login`), the credential is a browser session, not a token. Beside it, `<id>.passkeys.json` holds any WebAuthn credential enrolled in that browser: a CDP virtual authenticator is armed on every page of a logged-in browser, so the sandbox owns a software security key for that account and answers its 2FA ceremonies itself ([passkeys.ts](../../_sandbox/sandbox/src/browser/tools/passkeys.ts)). Both die with the connection. |
 
@@ -144,11 +152,9 @@ Per-kind mechanics ([handlers/](../../_sandbox/sandbox/src/capabilities/handlers
 
 | Kind | On add |
 | --- | --- |
-| `devops` | Scaffolds the intent + desired-state repos (each its own operator panel): the foundation `service`/`integration` require. Not removable. |
+| `devops` | Scaffolds the intent + desired-state repos, which open as the Infrastructure and Live status panels. Nothing in the grid depends on it. Not removable. |
 | `monorepo` | Scaffolds an empty pnpm+turbo repo named after the instance; apps are added from its operator panel. |
 | `mcp` | Pure registration: no side effect beyond the manifest entry; `status` probes the URL. |
-| `service` | Upserts an `i.want.service` entry into `deploy.config.ts`'s managed region and runs the infra-apply job, relaying its events. |
-| `integration` | Upserts an `i.have.<provider>` backend entry; the secret (e.g. `STRIPE_API_KEY`) is read from sandbox env at provision time. |
 | `cli` | Card-driven (data from `contributes.capabilities`): templates the connector's SKILL.md into `.agents/skills/<id>`, injects the credential into the agent's env each turn, optionally bakes a client-image fragment (psql, mysql, whisper). github/gitlab additionally run the core git-access hook (keypair registered to the account + an https credential, restored on every boot); `status` reports `pending` when that credential is missing, so the card can't read active while `git pull` fails. |
 | `plugin` | Clones a Claude Code plugin repo into `.intentic/records/plugins/<id>`; the Agent SDK's loader reads its skills/agents/hooks/`.mcp.json` each turn. A marketplace repo (`.claude-plugin/marketplace.json`) can pre-fill the form. |
 | `extension` | Owner-only, sha-pinned clone into `.intentic/local/extensions/<id>`, validated before swap (manifest parses, prebuilt entry exists, fragment RUN/ENV-only); starts declared `autoStart` processes. |
