@@ -215,7 +215,7 @@ const applyReshape = (ask: ResourcesAsk): void => ops.applyReshape(ask);
             A many-sided machine: one row per environment, each its own door with its own agent, permissions and
             concerns, since Windows and a distro on it are separate installs that happen to share the hardware.
         -->
-        <RowGroup v-if="many" :label="t(`sandbox.devicePage.environments`)" :count="environments.length">
+        <RowGroup v-if="many" :label="t(`sandbox.devicePage.environments`)">
             <!-- One press for the computer, because one card is one computer: each side holds its own agent binary and
                  is updated in turn, its own log under its own row. Offered only where there is more than one side to
                  bring level; a single reachable environment has its row's own button and needs no wider word. -->

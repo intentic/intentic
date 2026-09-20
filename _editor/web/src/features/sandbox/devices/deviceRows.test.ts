@@ -214,13 +214,13 @@ test(`folds a card's sleeping sides onto one computer and names each by its door
     expect(machine).toMatchObject({ key: omen, label: omen });
     const body = boardBody(machine!, ``, undefined, NOW);
     expect(body.environments.map((environment) => environment.label)).toEqual([`Windows`, `Arch Linux on WSL`, `Ubuntu-22.04 on WSL`]);
-    // One verdict for the PC, counting the sides that disagree, instead of three cards reading offline, live, offline.
-    expect(machineState(machine!, NOW)).toEqual({ word: `2 of 3 offline`, variant: `neutral` });
+    // One verdict for the PC, instead of three cards reading offline, live, offline.
+    expect(machineState(machine!, NOW)).toEqual({ word: `offline`, variant: `neutral` });
 });
 
 // The masthead's own line. It used to list the environment names, which are the section directly under it, so a
 // two-sided PC named both of its sides twice before the reader reached either row.
-test(`gives the whole PC one verdict, counting the sides that disagree`, () => {
+test(`gives the whole PC one verdict, worst side first`, () => {
     expect(machineState(pc()[0]!, NOW)).toEqual({ word: `live`, variant: `success` });
     const halfAsleep = machineRows(
         [
@@ -230,7 +230,7 @@ test(`gives the whole PC one verdict, counting the sides that disagree`, () => {
         undefined,
         NOW,
     );
-    expect(machineState(halfAsleep[0]!, NOW)).toEqual({ word: `1 of 2 offline`, variant: `neutral` });
+    expect(machineState(halfAsleep[0]!, NOW)).toEqual({ word: `offline`, variant: `neutral` });
 });
 
 // Every environment of a PC reports the same hardware, so the masthead reads it once; the hostname joins only

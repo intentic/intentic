@@ -74,8 +74,7 @@ export const deviceState = (device: Device, readAt: number): string => {
 const RANK: Record<string, number> = { live: 0, "needs attention": 1, "gone quiet": 2, reconnecting: 3, offline: 4 };
 
 // One word for the whole PC, so the masthead carries a verdict instead of restating the environment names that
-// are the section under it. Environments that agree collapse to their shared word; ones that don't are counted,
-// worst first, because "1 of 2 offline" is the only honest summary of a machine half of which is asleep.
+// are the section under it; worst side wins, since each row below carries its own state.
 export const machineState = (machine: MachineRow, readAt: number): { word: string; variant: StatusVariant } => {
     const states = machine.environments.map((environment) => ({
         word: deviceState(environment.device, readAt),
@@ -86,9 +85,7 @@ export const machineState = (machine: MachineRow, readAt: number): { word: strin
     if (worst === undefined) {
         return { word: `offline`, variant: `neutral` };
     }
-    const sharing = states.filter((state) => state.word === worst.word).length;
-    const word = sharing === states.length ? worst.word : `${sharing} of ${states.length} ${worst.word}`;
-    return { word, variant: worst.variant };
+    return { word: worst.word, variant: worst.variant };
 };
 
 // What the machine IS, in the quietest ink the masthead has: read once, mostly to tell two identically-named PCs
