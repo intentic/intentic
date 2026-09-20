@@ -123,13 +123,15 @@ test(`calls a machine whose socket just dropped reconnecting, not offline`, () =
     expect(deviceState({ ...dropped, lastSeen: NOW - 60_000 }, NOW)).toBe(`offline`);
 });
 
+// Four computers, so four cards: a device's door id names the card it hangs off, and two doors naming one card are
+// one machine however little either has said (machinesOf).
 test(`puts the machines worth reading first, and breaks ties by name`, () => {
     const rows = machineRows(
         [
-            device({ key: `zed`, label: `zed`, gap: `offline`, online: false, report: undefined }),
-            device({ key: `beta`, label: `beta` }),
-            device({ key: `alpha`, label: `alpha` }),
-            device({ key: `dead`, label: `dead`, report: report({ agent: { running: false } }) }),
+            device({ key: `zed`, label: `zed`, hostId: `zed`, gap: `offline`, online: false, report: undefined }),
+            device({ key: `beta`, label: `beta`, hostId: `beta` }),
+            device({ key: `alpha`, label: `alpha`, hostId: `alpha` }),
+            device({ key: `dead`, label: `dead`, hostId: `dead`, report: report({ agent: { running: false } }) }),
         ],
         undefined,
         NOW,
@@ -192,6 +194,28 @@ test(`sends container verbs through the first open door and file-sync verbs thro
         NOW,
     );
     expect(managerOf(asleep[0]!)?.device.key).toBe(`rog-wsl`);
+});
+
+// A PC whose Windows side and second distro are asleep: hub liveness resets on a daemon restart, so those sides hold
+// no facts, no report and no hostname — the whole of what once joined them — and the board drew one computer as
+// three. The card each door hangs off is what folds them, and the door id is what names them.
+test(`folds a card's sleeping sides onto one computer and names each by its door`, () => {
+    const omen = `radarsu-omen`;
+    const [machine, ...rest] = machineRows(
+        [
+            device({ key: `${omen}::wsl:archlinux`, label: `${omen}::wsl:archlinux`, hostId: `${omen}::wsl:archlinux`, platform: `linux`, facts: { ...ARCH, hostname: omen, wsl: { distro: `archlinux` } }, report: report({ os: `linux`, wsl: { distro: `archlinux` } }) }),
+            device({ key: omen, label: omen, hostId: omen, platform: `windows`, online: false, gap: `offline`, report: undefined }),
+            device({ key: `${omen}::wsl:Ubuntu-22.04`, label: `${omen}::wsl:Ubuntu-22.04`, hostId: `${omen}::wsl:Ubuntu-22.04`, platform: `linux`, online: false, gap: `offline`, report: undefined }),
+        ],
+        undefined,
+        NOW,
+    );
+    expect(rest).toEqual([]);
+    expect(machine).toMatchObject({ key: omen, label: omen });
+    const body = boardBody(machine!, ``, undefined, NOW);
+    expect(body.environments.map((environment) => environment.label)).toEqual([`Windows`, `Arch Linux on WSL`, `Ubuntu-22.04 on WSL`]);
+    // One verdict for the PC, counting the sides that disagree, instead of three cards reading offline, live, offline.
+    expect(machineState(machine!, NOW)).toEqual({ word: `2 of 3 offline`, variant: `neutral` });
 });
 
 // The masthead's own line. It used to list the environment names, which are the section directly under it, so a

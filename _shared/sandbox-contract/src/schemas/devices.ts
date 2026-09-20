@@ -1,6 +1,6 @@
 // What one of the user's own machines is running.
 import { z } from "zod";
-import { type HostFacts, HostFactsSchema, WslEnvironmentSchema } from "./hosts.js";
+import { hostCardOf, hostEnvironmentOf, type HostFacts, HostFactsSchema, WslEnvironmentSchema } from "./hosts.js";
 import { DEV_VERSION } from "../state/versions.js";
 // Desktop-sync report shape shared by the agent, daemon and browser, produced only by `intentic-machine status --json`.
 // The agent never reports `sandboxes`; the docker half is filled in by whoever reads the report, scoped to the reader's
@@ -451,53 +451,99 @@ export type DevicesList = z.infer<typeof DevicesListSchema>;
 // The physical computer a device is an environment of. Windows and every WSL distro on it are one machine with one
 // Docker engine, one screen and one set of disks, each environment holding its own agent and its own door.
 export interface Machine {
-    /** A lone device's own key, so its address does not change; a folded machine's is the hostname its doors share. */
+    /** The card its doors hang off, else the hostname they share, else a lone uncarded device's own key. */
     readonly key: string;
     readonly label: string;
-    /** Windows first, then distros by label: the side that owns the screen leads. */
+    /** Windows first, then distros by the name WSL registered: the side that owns the screen leads. */
     readonly environments: readonly Device[];
 }
 
 export const deviceHostname = (device: Device): string | undefined => device.facts?.hostname ?? device.report?.hostname;
-export const deviceEnvironment = (device: Device): string | undefined => environmentOf(device.facts, device.report);
-export const isWslDevice = (device: Device): boolean => deviceEnvironment(device)?.startsWith("wsl:") === true;
 
-// Two native installs that merely share a name stay two machines; only a distro joins the machine whose hostname it
-// carries, which is the one fact that makes the name safe to join on.
-const byEnvironment = (a: Device, b: Device): number => Number(isWslDevice(a)) - Number(isWslDevice(b)) || a.label.localeCompare(b.label);
+// Which side of a machine a device is. Its door id names the environment it connected under (`<card>::wsl:<distro>`),
+// and that is all an environment nobody has reached since this daemon booted can say about itself: liveness resets on
+// restart, so facts and reports are absent on a side that is merely asleep.
+export const deviceEnvironment = (device: Device): string | undefined =>
+    environmentOf(device.facts, device.report) ?? (device.hostId === undefined ? undefined : hostEnvironmentOf(device.hostId));
+
+const WSL_PREFIX = "wsl:";
+export const isWslDevice = (device: Device): boolean => deviceEnvironment(device)?.startsWith(WSL_PREFIX) === true;
+// The distro a device runs, by whatever evidence it holds; absent on a native install and on one that has said nothing.
+export const deviceDistro = (device: Device): string | undefined => {
+    const environment = deviceEnvironment(device);
+    return environment?.startsWith(WSL_PREFIX) === true ? environment.slice(WSL_PREFIX.length) : undefined;
+};
+
+// Native first, then distros by the name WSL registered them under rather than by their door id, which is that same
+// name behind a card's and so would order a PC's distros by which card each was connected through.
+const byEnvironment = (a: Device, b: Device): number =>
+    Number(isWslDevice(a)) - Number(isWslDevice(b)) || (deviceDistro(a) ?? a.label).localeCompare(deviceDistro(b) ?? b.label);
 
 const hostnameKey = (device: Device): string | undefined => deviceHostname(device)?.toLowerCase();
 
-const siblingsOf = (device: Device, devices: readonly Device[]): Device[] => {
-    const key = hostnameKey(device);
-    const shared = key === undefined ? [device] : devices.filter((candidate) => hostnameKey(candidate) === key);
-    return shared.length > 1 && shared.some(isWslDevice) ? shared.toSorted(byEnvironment) : [device];
+// The card a device's door hangs off: one card is one computer, so two doors naming the same card are one machine
+// whatever either has said about itself — which is the whole of what an environment that has never connected says.
+const cardKey = (device: Device): string | undefined => (device.hostId === undefined ? undefined : hostCardOf(device.hostId));
+
+// What makes two devices one computer: a shared card, or a shared hostname where a distro answers to it, since WSL
+// hands a distro the Windows machine's name. Two native installs that merely share a name stay two machines.
+const tokensOf = (device: Device, distroNames: ReadonlySet<string>): string[] => {
+    const card = cardKey(device);
+    const hostname = hostnameKey(device);
+    return [
+        ...(card === undefined ? [] : [`card:${card.toLowerCase()}`]),
+        ...(hostname !== undefined && distroNames.has(hostname) ? [`host:${hostname}`] : []),
+    ];
 };
 
-const machineOf = (device: Device, environments: readonly Device[]): Machine => {
-    if (environments.length === 1) {
-        return { key: device.key, label: device.label, environments };
-    }
-    // Folding needs a hostname, so it is present here; the fallback only keeps the type honest.
-    const hostname = deviceHostname(device) ?? device.key;
-    return { key: hostname, label: hostname, environments };
-};
+// Components over both joins at once: a device holding a card token and a hostname token is the evidence that merges
+// the machines those tokens named, so a distro connected under a card of its own still lands on the PC it runs on.
+interface Component {
+    readonly tokens: Set<string>;
+    readonly devices: Device[];
+}
 
-export const machinesOf = (devices: readonly Device[]): Machine[] => {
-    const folded = new Set<Device>();
-    const machines: Machine[] = [];
+const componentsOf = (devices: readonly Device[]): Component[] => {
+    const distroNames = new Set(devices.filter(isWslDevice).map(hostnameKey).filter((name) => name !== undefined));
+    const components: Component[] = [];
     for (const device of devices) {
-        if (folded.has(device)) {
+        const tokens = tokensOf(device, distroNames);
+        const [head, ...merged] = components.filter((component) => tokens.some((token) => component.tokens.has(token)));
+        if (head === undefined) {
+            components.push({ tokens: new Set(tokens), devices: [device] });
             continue;
         }
-        const environments = siblingsOf(device, devices);
-        for (const environment of environments) {
-            folded.add(environment);
+        for (const other of merged) {
+            other.tokens.forEach((token) => head.tokens.add(token));
+            head.devices.push(...other.devices);
+            components.splice(components.indexOf(other), 1);
         }
-        machines.push(machineOf(device, environments));
+        for (const token of tokens) {
+            head.tokens.add(token);
+        }
+        head.devices.push(device);
     }
-    return machines;
+    return components;
 };
+
+// Addressed by the card of the side that owns the screen, an address that does not change when a second environment
+// connects — unlike a row key, which is a hostname another environment can take first. An uncarded fold has only the
+// hostname its doors share, and an uncarded lone device its own key. Called what the owner calls it: the name the
+// leading environment carries, unless that is nothing but its door id, which reads as a PC named after one of its
+// own sides.
+const machineOf = (environments: readonly Device[]): Machine => {
+    const [first, ...rest] = environments;
+    // A component holds the device that made it; the empty case only keeps the type honest.
+    if (first === undefined) {
+        return { key: "", label: "", environments };
+    }
+    const named = environments.map(cardKey).find((key) => key !== undefined) ?? (rest.length === 0 ? undefined : deviceHostname(first));
+    const label = first.label === first.hostId ? (cardKey(first) ?? first.label) : first.label;
+    return { key: named ?? first.key, label, environments };
+};
+
+export const machinesOf = (devices: readonly Device[]): Machine[] =>
+    componentsOf(devices).map((component) => machineOf(component.devices.toSorted(byEnvironment)));
 
 // Every door whose docker reports a given sandbox slug, in list order. More than one is the ordinary case, not a
 // conflict: Windows and the WSL distros on it share one engine, so each door answers for the same containers.

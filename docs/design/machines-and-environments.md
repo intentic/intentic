@@ -3,8 +3,9 @@
 Written 2026-09-15 from the source as it stands. The question asked: a Windows PC with a WSL distro connects to a
 sandbox twice — once from Windows, once from inside the distro — and every screen and every turn treated the two as
 separate machines. The answer, stated once here and argued below: **a machine is the physical computer, an
-environment is one OS install on it with its own agent and its own door, both agents stay, and the join is the
-hostname plus the fact that one side is WSL.** Companion to the last two sections of
+environment is one OS install on it with its own agent and its own door, both agents stay, and the join is the card
+the door hangs off — hostname plus the fact that one side is WSL for the doors that have no card.** Companion to the
+last two sections of
 [capabilities.md](../architecture/capabilities.md).
 
 ## 1. One card is one computer; an environment is a connection of it
@@ -31,15 +32,26 @@ The device list is built per CONNECTION rather than per card: `hostConnections` 
 into one entry each, so a distro is read through its own socket and its row carries its own `hostId`, version,
 platform and facts. Anything else leaves the side named after the card as the machine's only door — which is what left
 a distro's agent with no way to be updated from here while the Windows side beside it had a button, and the two drifted
-versions apart. The fold (`machinesOf`, hostname plus WSL) is what puts those rows back together on screen, and it
-still covers a machine that reaches this sandbox WITHOUT a card at all.
+versions apart. The fold (`machinesOf`) is what puts those rows back together on screen, and it reads the card off
+each row's `hostId` to do it: one card is one computer, so two doors naming it are one machine whatever either has
+said about itself. The hostname join below still runs beside it, for the rows that have no card at all.
 
 Environments are listed from the enrollments as well as from the hub: hub liveness resets when the daemon restarts, so
 a distro that has not dialled in since must still read as a sleeping side of its computer rather than vanish from it.
 
-## 2. Why hostname plus WSL is the join, and not hostname alone
+## 2. Why the card leads the join, and why hostname plus WSL is the rest of it
 
-WSL hands a distro the Windows machine's hostname, and that is the whole evidence: two rows with one hostname where
+The card is evidence nothing can withhold or forget. A hostname is not: it comes from the facts an agent sent at
+connect or from a report behind "Run commands", both of which live in the hub, and hub state resets when the daemon
+restarts. So every side of a PC that has not dialled in since holds no hostname at all, and a fold that reads only
+hostnames leaves each sleeping environment standing as a computer of its own — a fleet of two PCs drawn as five rows,
+which is the regression this section is now written against. Where a card is present it also decides what the machine
+is CALLED and how it is addressed (`?device=<card>`), so a machine keeps its name and its URL when a second
+environment connects.
+
+The hostname rule is what remains for a door with no card — a desktop-sync enrollment, or a distro connected as a card
+of its own, which the Windows side's "connect this distro" link still mints. WSL hands a distro the Windows machine's
+hostname, and that is the whole evidence: two rows with one hostname where
 one of them says `wsl:<distro>` are one PC by construction. Two rows with one hostname where neither says so are two
 machines that happen to be named alike (a laptop and the desktop that replaced it), and folding them would put one
 machine's buttons on the other's row — the fault the fold existed to avoid.

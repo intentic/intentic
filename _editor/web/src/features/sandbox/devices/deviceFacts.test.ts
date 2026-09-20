@@ -86,6 +86,15 @@ test(`marks a distro that would not name itself`, () => {
     expect(osLabel(device({ platform: `linux`, report: wsl(``) }))).toBe(`Linux on WSL`);
 });
 
+// Hub liveness resets when the daemon restarts, so a side of a PC that has not dialled in since holds no facts and no
+// report — and two sleeping distros of one machine both reading "Linux" is the row telling the reader nothing.
+test(`names a sleeping distro after the door it connected through`, () => {
+    const sleeping = device({ hostId: `radarsu-omen::wsl:Ubuntu-22.04`, platform: `linux`, online: false, gap: `offline` });
+    expect(osLabel(sleeping)).toBe(`Ubuntu-22.04 on WSL`);
+    // The native side of that same card is the machine itself, and says so.
+    expect(osLabel(device({ hostId: `radarsu-omen`, platform: `windows`, online: false, gap: `offline` }))).toBe(`Windows`);
+});
+
 test(`separates what the device is, how it is reached, and which agent it runs`, () => {
     const row = device({
         label: `laptop`,

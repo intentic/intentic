@@ -17,9 +17,10 @@ import {
 } from "@intentic/sandbox-contract";
 import { expect, test } from "vitest";
 
-// The join behind "one PC, two doors": Windows and the WSL distros on it answer `hostname` alike, so a distro joins
-// the machine whose name it carries and nothing else does. Tested beside the daemon's reader of it, like
-// hostRunningSandbox; the contract directory holding it is at its layout cap.
+// The join behind "one PC, two doors": environments of one card are one computer by construction, and a distro with a
+// card of its own joins the machine whose hostname it carries, which is the one fact that makes a name safe to join
+// on. Tested beside the daemon's reader of it, like hostRunningSandbox; the contract directory holding it is at its
+// layout cap.
 
 const device = (key: string, over: Partial<Device> = {}): Device => ({ key, label: key, ...over });
 
@@ -48,7 +49,44 @@ test("reads the hostname off the report when the door has no facts", () => {
 test("keeps two native installs apart even when they share a name", () => {
     const linux = device("box", { facts: { ...ARCH, hostname: "box" } });
     const windows = device("box:win", { hostId: "win", facts: { ...WINDOWS, hostname: "box" } });
-    expect(machinesOf([linux, windows]).map((machine) => machine.key)).toEqual(["box", "box:win"]);
+    // A carded machine is addressed by its card and an uncarded one by its own key; neither is the other's.
+    expect(machinesOf([linux, windows]).map((machine) => machine.key)).toEqual(["box", "win"]);
+    expect(machinesOf([linux, windows]).map((machine) => machine.environments.length)).toEqual([1, 1]);
+});
+
+// ONE CARD IS ONE COMPUTER. Hub liveness resets when the daemon restarts, so a side nobody has reached since holds no
+// facts and no report — the whole of the hostname evidence — and without the card every sleeping environment of a PC
+// stands as a machine of its own, which is a fleet of two computers drawn as five.
+test("folds a card's environments into one machine while its sides are asleep", () => {
+    const distro = hostConnectionKey("radarsu-omen", "wsl:archlinux");
+    const ubuntu = hostConnectionKey("radarsu-omen", "wsl:Ubuntu-22.04");
+    const machines = machinesOf([
+        device(distro, { hostId: distro, platform: "linux", facts: { ...ARCH, hostname: "radarsu-omen", wsl: { distro: "archlinux" } } }),
+        device("radarsu-omen", { hostId: "radarsu-omen", platform: "windows", gap: "offline" }),
+        device(ubuntu, { hostId: ubuntu, platform: "linux", gap: "offline" }),
+    ]);
+    const [machine, ...rest] = machines;
+    expect(rest).toEqual([]);
+    // Named after its card, which is what its tools are called after, not after the hostname one side happened to say.
+    expect(machine).toMatchObject({ key: "radarsu-omen", label: "radarsu-omen" });
+    // Native leads even when it has never described itself: the door id says which side it is.
+    expect(machine?.environments.map((environment) => environment.key)).toEqual(["radarsu-omen", distro, ubuntu]);
+});
+
+// The other half of the same computer: a distro connected as a card of its own, which is what the Windows side's
+// "connect this distro" link still mints. The hostname joins it to the card it runs on, and that join carries the
+// card's other environments with it.
+test("joins a separately carded distro to the machine whose hostname it carries", () => {
+    const arch = hostConnectionKey("rog", "wsl:archlinux");
+    const machines = machinesOf([
+        device("rog", { hostId: "rog", facts: { ...WINDOWS, hostname: "rog" } }),
+        device(arch, { hostId: arch, gap: "offline" }),
+        device("rog-wsl-ubuntu", { hostId: "rog-wsl-ubuntu", facts: { ...ARCH, hostname: "rog", wsl: { distro: "Ubuntu" } } }),
+    ]);
+    const [machine, ...rest] = machines;
+    expect(rest).toEqual([]);
+    expect(machine?.key).toBe("rog");
+    expect(machine?.environments.map((environment) => environment.key)).toEqual(["rog", arch, "rog-wsl-ubuntu"]);
 });
 
 test("keeps a lone device's own key, so its address does not change", () => {

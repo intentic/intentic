@@ -1,4 +1,4 @@
-import { agentBuildSkew, agentStalled, type Device, type DeviceAgent, hostCardOf, isBehind, reportQuiet } from "@intentic/sandbox-contract";
+import { agentBuildSkew, agentStalled, type Device, type DeviceAgent, deviceDistro, hostCardOf, isBehind, reportQuiet } from "@intentic/sandbox-contract";
 import { timeAgo } from "@intentic/ui/format";
 
 // What a Devices row says about the machine itself, as distinct from what it's doing for this sandbox
@@ -26,13 +26,14 @@ const platformName = (device: Device): string | undefined =>
 // The OS label at row length. A WSL distro says so here, in the loudest ink the row has, rather than down in the
 // hardware line: WSL hands the distro the Windows machine's hostname, so two rows can arrive named the same, and
 // which environment each one is is the whole difference between them. The distro's name outranks the bare platform
-// for the same reason — "Linux" is what its neighbour distro would say too.
+// for the same reason — "Linux" is what its neighbour distro would say too, and a sleeping distro that describes
+// itself only through its door id (deviceDistro) is exactly the row with a neighbour to be told apart from.
 export const osLabel = (device: Device): string | undefined => {
-    const wsl = device.report?.wsl;
-    if (wsl === undefined) {
+    const distro = deviceDistro(device);
+    if (distro === undefined) {
         return describedOs(device) ?? platformName(device);
     }
-    const named = describedOs(device) ?? (wsl.distro === `` ? undefined : wsl.distro) ?? platformName(device);
+    const named = describedOs(device) ?? (distro === `` ? undefined : distro) ?? platformName(device);
     return named === undefined ? `WSL` : `${named} on WSL`;
 };
 

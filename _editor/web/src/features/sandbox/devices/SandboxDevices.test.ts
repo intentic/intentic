@@ -186,8 +186,9 @@ const openRow = async (el: HTMLElement, name: string): Promise<void> => {
     await nextTick();
 };
 
-// Opens a machine the way its board card does. A single-device fleet is already selected on arrival, so this
-// is only needed where the board had something to choose between.
+// Opens a machine the way its board card does, by the address machinesOf gives it: the card its doors hang off, and
+// a row key of its own only where there is no card. A single-device fleet is already selected on arrival, so this is
+// only needed where the board had something to choose between.
 const select = async (key: string): Promise<void> => {
     navigate(deviceRoute(key));
     await nextTick();
@@ -715,7 +716,7 @@ it(`gives every machine its own address, and shows only the one the URL names`, 
     const el = mount([busyMachine(), { ...syncOnly(), key: `other`, label: `other-pc` }]);
     expect(el.querySelectorAll(`a`)).toHaveLength(2);
 
-    await select(`rog`);
+    await select(`host-1`);
     const text = el.textContent ?? ``;
     expect(text).toContain(`radarsu-rog`);
     expect(text).not.toContain(`other-pc`);
@@ -774,7 +775,7 @@ it(`finds a machine by a port number and opens what matched`, async () => {
     // The matching sandbox is named on the card, so the answer is on the board rather than a click away.
     expect(text).toContain(`radarsu-web-platform-bce57bb9fe3b`);
     // The port's own address belongs to the machine's page, where its mirroring switch is.
-    await select(`rog`);
+    await select(`host-1`);
     await openRow(el, `radarsu-web-platform-bce57bb9fe3b`);
     expect(el.textContent ?? ``).toContain(`localhost:8788`);
 });
@@ -1141,7 +1142,7 @@ it(`says which half of desktop sync each device holds`, async () => {
 
     // On the machine's own page a WORKING enrollment says nothing: the folder and the mirrored ports in its
     // Sandboxes section are the same fact in the machine's own numbers, and the sentence was printed regardless.
-    await select(`laptop`);
+    await select(`host-1`);
     expect(el.textContent ?? ``).not.toContain(`syncing files and ports`);
     expect(hovers(el)).toContain(`desktop sync`);
     await select(`colleague`);

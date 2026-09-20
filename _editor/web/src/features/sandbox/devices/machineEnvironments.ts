@@ -1,3 +1,4 @@
+import { deviceDistro } from "@intentic/sandbox-contract";
 import type { RouteLocationRaw } from "vue-router";
 import { deviceDoors, osLabel, osTitle } from "./deviceFacts";
 import type { DeviceRow, MachineRow } from "./deviceRows";
@@ -35,7 +36,9 @@ export interface WslDistroRow {
     readonly connect: RouteLocationRaw;
 }
 
-const distroOf = (row: DeviceRow): string | undefined => (row.device.facts?.wsl ?? row.device.report?.wsl)?.distro;
+// Read through the door id as well as the facts: a sleeping distro describes itself with nothing else, and listing it
+// as one this sandbox has no door into is offering to connect what is already connected.
+const distroOf = (row: DeviceRow): string | undefined => deviceDistro(row.device);
 
 // The Windows environment's distros, from its own listing, minus every one already standing as a row of its own.
 // Empty on a machine with no Windows side, one whose agent is too old to list them, and one where every distro is
