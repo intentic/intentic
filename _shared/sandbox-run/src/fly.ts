@@ -1,4 +1,4 @@
-import { PREVIEW_PORT } from "@intentic/constants";
+import { type HostedShape, PREVIEW_PORT } from "@intentic/constants";
 
 // The hosted flavor of the run contract: same sandbox, emitted as a Fly Machine config instead of docker-run argv. One
 // persistent volume replaces docker's three, linked to the canonical paths by the entrypoint's VM mode. Reached via a
@@ -21,8 +21,9 @@ export interface FlyMachineRun {
     readonly baseImage: string;
     // The approved overlay's hash when `image` was built from one, stamped as SANDBOX_ENVIRONMENT_HASH.
     readonly environmentHash?: string;
-    // The Fly guest in the platform's config units: memory in MB, shared CPUs, the starter shape.
-    readonly guest: { readonly cpus: number; readonly memoryMb: number };
+    // The guest this machine runs as, which rung it is on decides; `volumeGb` of the shape is the volume's, set when
+    // the volume is created or extended rather than here.
+    readonly guest: Omit<HostedShape, "volumeGb">;
     // The created volume's id (vol_…) this machine mounts at FLY_VOLUME_PATH.
     readonly volumeId: string;
     // Wizard/platform env pairs, allowlist-filtered; empties dropped too, a secret must not shadow .env.
@@ -117,7 +118,7 @@ const frontDoorCheck = (hostname: string): FlyMachineCheck => ({
 
 export const flyMachineConfig = (run: FlyMachineRun): FlyMachineConfig => ({
     image: run.image,
-    guest: { cpu_kind: "shared", cpus: run.guest.cpus, memory_mb: run.guest.memoryMb },
+    guest: { cpu_kind: run.guest.cpuKind, cpus: run.guest.cpus, memory_mb: run.guest.memoryMb },
     env: Object.fromEntries([
         ["SANDBOX_NAME", run.name],
         ["SANDBOX_IMAGE", run.image],
@@ -139,7 +140,7 @@ export interface FlyBuildRun {
     // The buildkit image, pinned by the platform's config.
     readonly image: string;
     // CPU kind is the platform's call: shared costs less and is about as fast for a network-bound build.
-    readonly guest: { readonly cpuKind: "shared" | "performance"; readonly cpus: number; readonly memoryMb: number };
+    readonly guest: Omit<HostedShape, "volumeGb">;
     // Plain text here, base64 on the wire: the Dockerfile, the build script, the registry credential.
     readonly files: readonly { readonly path: string; readonly content: string }[];
     // What the machine runs in place of the image's entrypoint (buildkitd), the platform's build script.

@@ -425,9 +425,13 @@ describe(`the builder's report`, () => {
         };
         expect(verdict.where).toEqual({ id: `b1`, state: `building` });
         expect(verdict.data).toMatchObject({ state: `built`, exitCode: 0, digest: DIGEST, log: `#1 DONE\n`, minutes: 3 });
-        // Build minutes are charged to the owner's month the same way a session stretch is.
+        // Build minutes are charged to the sandbox's month the same way a session stretch is, and to the account
+        // beside it, so releasing the machine does not erase them.
         expect(prisma.hostedUsage.upsert).toHaveBeenCalledWith(
-            expect.objectContaining({ create: expect.objectContaining({ userId: `u1`, minutes: 3 }), update: { minutes: { increment: 3 } } }),
+            expect.objectContaining({
+                create: expect.objectContaining({ sandboxId: `s1`, ownerId: `u1`, minutes: 3 }),
+                update: { minutes: { increment: 3 } },
+            }),
         );
         expect(calls.some((call) => call.method === `DELETE` && call.url.endsWith(`/machines/mb1?force=true`))).toBe(true);
         const revoke = calls.find((call) => (call.body as { query?: string } | undefined)?.query?.includes(`deleteLimitedAccessToken`));

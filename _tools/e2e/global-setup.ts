@@ -106,6 +106,7 @@ export default async (): Promise<void> => {
             webhookUrl: `${API_URL}/hosted-plan/webhook`,
             checkoutWebhookDelayMs: 5_000,
             priceId: FAKE_STRIPE.priceId,
+            priceCents: FAKE_STRIPE.priceCents,
         });
         (globalThis as { intenticFakeStripe?: FakeStripe }).intenticFakeStripe = fakeStripe;
         state.fakeStripe = true;
@@ -122,7 +123,7 @@ export default async (): Promise<void> => {
             // Keys and price come from stack.ts's FAKE_STRIPE; the API URL points at the fake Stripe just started.
             HOSTED_PLAN_STRIPE_SECRET_KEY: FAKE_STRIPE.secretKey,
             HOSTED_PLAN_STRIPE_WEBHOOK_SECRET: FAKE_STRIPE.webhookSecret,
-            HOSTED_PLAN_STRIPE_PRICE_ID: FAKE_STRIPE.priceId,
+            HOSTED_PLAN_STRIPE_PRICES: `${FAKE_STRIPE.tier}=${FAKE_STRIPE.priceId}`,
             HOSTED_PLAN_STRIPE_API_URL: fakeStripe.url,
         });
         await waitUp(`${API_URL}/api/auth/ok`, `api`, join(cacheDir, `api.log`), 60_000);

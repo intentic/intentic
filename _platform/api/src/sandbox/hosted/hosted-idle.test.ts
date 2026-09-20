@@ -21,6 +21,7 @@ const daysAgo = (days: number) => new Date(Date.now() - days * DAY_MS);
 // One machine row as the sweep selects it.
 const machine = (over: Record<string, unknown> = {}) => ({
     id: `h1`,
+    sandboxId: `s1`,
     appName: `intentic-sbx-a`,
     machineId: `m1`,
     createdAt: daysAgo(60),
@@ -72,10 +73,10 @@ describe(`collecting the machines nobody came back to`, () => {
         stubFly(`stopped`);
         const upsert = vi.fn().mockResolvedValue({});
         const wokeAt = daysAgo(30);
-        const prisma = prismaWith([machine({ wokeAt, idleWarnedAt: daysAgo(8) })], { hostedUsage: { upsert } });
+        const prisma = prismaWith([machine({ wokeAt, idleWarnedAt: daysAgo(8) })], { hostedUsage: { upsert, aggregate: vi.fn().mockResolvedValue({ _sum: { minutes: null } }) } });
         expect(await reapIdleHosted(prisma, config(), logger)).toEqual({ warned: 0, destroyed: 1, dropped: 0 });
         expect(upsert).toHaveBeenCalledWith(
-            expect.objectContaining({ where: { userId_month: { userId: `u1`, month: wokeAt.toISOString().slice(0, 7) } } }),
+            expect.objectContaining({ where: { sandboxId_month: { sandboxId: `s1`, month: wokeAt.toISOString().slice(0, 7) } } }),
         );
         const deleteCall = (prisma.hostedMachine.delete as ReturnType<typeof vi.fn>).mock.invocationCallOrder[0]!;
         expect(upsert.mock.invocationCallOrder[0]).toBeLessThan(deleteCall);
@@ -127,7 +128,7 @@ describe(`collecting the machines nobody came back to`, () => {
 
     it(`never touches a member's machine`, async () => {
         const calls = stubFly(`stopped`);
-        const prisma = prismaWith([machine()], { hostedPlan: { findUnique: vi.fn().mockResolvedValue({ status: `active` }) } });
+        const prisma = prismaWith([machine()], { hostedPlan: { findUnique: vi.fn().mockResolvedValue({ status: `active`, items: [] }) } });
         expect(await reapIdleHosted(prisma, config(), logger)).toEqual({ warned: 0, destroyed: 0, dropped: 0 });
         expect(calls).toHaveLength(0);
     });

@@ -386,7 +386,7 @@ describe(`a metered owner whose month is spent`, () => {
             provisionsPerIpPerDay: 0,
             provisionsPerDomainPerDay: 0,
         },
-        hostedPlan: { compEmails: `` },
+        hostedPlan: { compEmails: ``, stripeSecretKey: ``, stripePrices: `` },
         api: { trustedIpHeader: `` },
     } as unknown as OrpcContext[`config`];
 
@@ -397,7 +397,10 @@ describe(`a metered owner whose month is spent`, () => {
             sandbox: { findFirst: vi.fn().mockResolvedValue({ ...sandboxRow, hosted: { id: `h1`, appName: `app`, machineId: `m1`, wokeAt: null } }) },
             user: { findUnique: vi.fn().mockResolvedValue({ hostedSuspendedAt: null, hostedSuspendedReason: null }) },
             hostedPlan: { findUnique: vi.fn().mockResolvedValue(null) },
-            hostedUsage: { findUnique: vi.fn().mockResolvedValue({ minutes: 40 * 60 }) },
+            hostedUsage: {
+                findUnique: vi.fn().mockResolvedValue({ minutes: 40 * 60 }),
+                aggregate: vi.fn().mockResolvedValue({ _sum: { minutes: 40 * 60 } }),
+            },
             hostedMachine: {
                 findUnique: vi.fn().mockResolvedValue(null),
                 findMany: vi.fn().mockResolvedValue([]),
@@ -446,7 +449,7 @@ describe(`an owner whose hosted lane is suspended`, () => {
             provisionsPerIpPerDay: 0,
             provisionsPerDomainPerDay: 0,
         },
-        hostedPlan: { compEmails: `` },
+        hostedPlan: { compEmails: ``, stripeSecretKey: ``, stripePrices: `` },
         api: { trustedIpHeader: `` },
     } as unknown as OrpcContext[`config`];
 
@@ -456,7 +459,7 @@ describe(`an owner whose hosted lane is suspended`, () => {
             sandbox: { findFirst: vi.fn().mockResolvedValue({ ...sandboxRow, hosted: { id: `h1`, appName: `app`, machineId: `m1`, wokeAt: null } }) },
             user: { findUnique: vi.fn().mockResolvedValue({ hostedSuspendedAt: new Date(), hostedSuspendedReason: `mining` }) },
             hostedPlan: { findUnique: vi.fn().mockResolvedValue(null) },
-            hostedUsage: { findUnique: usage },
+            hostedUsage: { findUnique: usage, aggregate: vi.fn().mockResolvedValue({ _sum: { minutes: null } }) },
             hostedMachine: {
                 findUnique: vi.fn().mockResolvedValue(null),
                 findMany: vi.fn().mockResolvedValue([]),
@@ -527,6 +530,7 @@ describe(`sandbox.delete on a hosted sandbox`, () => {
     // A hosted machine as the trash has to record it: everything a restore needs to land on the same disk.
     const hostedMachineRow = {
         id: `h1`,
+        sandboxId: `s1`,
         appName: `intentic-sbx-a`,
         machineId: `m1`,
         volumeId: `vol1`,
@@ -553,12 +557,12 @@ describe(`sandbox.delete on a hosted sandbox`, () => {
                 update: vi.fn().mockResolvedValue({}),
                 delete: vi.fn().mockResolvedValue({}),
             },
-            hostedUsage: { upsert },
+            hostedUsage: { upsert, aggregate: vi.fn().mockResolvedValue({ _sum: { minutes: null } }) },
         });
         await call(sandboxRoutes.delete, { sandboxId: `s1` }, { context: context({ prisma, config: hostedConfig }) });
         expect(upsert).toHaveBeenCalledWith({
-            where: { userId_month: { userId: `u1`, month } },
-            create: { userId: `u1`, month, minutes: 90 },
+            where: { sandboxId_month: { sandboxId: `s1`, month } },
+            create: { sandboxId: `s1`, ownerId: `u1`, month, minutes: 90 },
             update: { minutes: { increment: 90 } },
         });
         // Charged BEFORE the cascade: after it there is no row left to hold the minutes.

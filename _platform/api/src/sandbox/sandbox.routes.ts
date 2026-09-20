@@ -1,4 +1,5 @@
 import { apiContract, AnnounceRefusalSchema, BootReportSchema, HostedStatusSchema, SetupReportSchema } from "@intentic/api-contract";
+import { FREE_TIER } from "@intentic/constants";
 import { Prisma } from "@intentic/prisma";
 import type { MemberRole } from "@intentic/sandbox-contract";
 import { GrantedRoleSchema, localHostname } from "@intentic/sandbox-contract";
@@ -38,9 +39,10 @@ import {
     releaseHosted,
 } from "./hosted/hosted-cleanup.js";
 import { hostedPlanEnabled, hostedSlotsOf, onHostedPlan } from "./hosted/hosted-plan.js";
+import { tierOfRow } from "./hosted/hosted-shape.js";
 import { assertHostedSource, HostedSourceCapped, recordHostedProvision } from "./hosted/abuse/hosted-source.js";
 import { assertHostedStanding, HostedSuspended, hostedSuspensionOf } from "./hosted/abuse/hosted-standing.js";
-import { hostedBudgetOf, openHostedStretch, settleHostedStretch } from "./hosted/hosted-usage.js";
+import { hostedArrivalBudget, hostedBudgetOf, openHostedStretch, settleHostedStretch } from "./hosted/hosted-usage.js";
 import { hostedRegionFor } from "./hosted/region.js";
 import { mintSandbox, mintSetupCode } from "./mint-sandbox.js";
 import { listTrash, restoreSandbox, trashSandbox, TrashedSandboxGone } from "./sandbox-trash.js";
@@ -154,15 +156,16 @@ const assertHostedAllowance = async (
         }
         throw error;
     }
+    // An arrival always lands on the free rung, so the gate is that rung's allowance; a paid slot is not a way to
+    // be handed a second free machine, and the machine that stands on it got there by moving up (hosted-migrate.ts).
     const [used, slots] = await Promise.all([
-        context.prisma.hostedMachine.count({ where: { sandbox: { ownerId: userId } } }),
-        // Plan's slot count while live, otherwise the free lane's one (hosted-plan.ts).
+        context.prisma.hostedMachine.count({ where: { tier: FREE_TIER.id, sandbox: { ownerId: userId } } }),
         hostedSlotsOf(context.prisma, context.config, userId),
     ]);
-    if (used >= slots) {
+    if (used >= slots.free) {
         throw new ORPCError(`BAD_REQUEST`, { message: slotsMessage(used) });
     }
-    const budget = await hostedBudgetOf(context.prisma, context.config, userId);
+    const budget = await hostedArrivalBudget(context.prisma, context.config, userId);
     if (budget.metered && budget.remainingMinutes === 0) {
         throw paymentRequired(
             `your ${budget.allowanceMinutes / 60} free hours are used up for this month, the hosted plan lifts the limit, or run it on a machine of your own and it never applies`,
@@ -335,10 +338,11 @@ export const sandboxRoutes = {
             return { enabled: false, remaining: 0 };
         }
         const [used, slots, budget, plan, capacity, suspension] = await Promise.all([
-            context.prisma.hostedMachine.count({ where: { sandbox: { ownerId: user.id } } }),
+            // The free rung's, like the gate above: the card offers a machine, and the one on offer is a free one.
+            context.prisma.hostedMachine.count({ where: { tier: FREE_TIER.id, sandbox: { ownerId: user.id } } }),
             hostedSlotsOf(context.prisma, context.config, user.id),
             // Included so the card states the ceiling before it's spent; omitted entirely when unmetered.
-            hostedBudgetOf(context.prisma, context.config, user.id),
+            hostedArrivalBudget(context.prisma, context.config, user.id),
             // Separate from unmetered: a ceiling-less platform is also unmetered, but its card must not claim an
             // unbought plan.
             hostedPlanEnabled(context.config) ? onHostedPlan(context.prisma, context.config, user.id) : Promise.resolve(false),
@@ -350,7 +354,7 @@ export const sandboxRoutes = {
         return {
             enabled: true,
             // A suspended account is offered nothing, whatever its slots say.
-            remaining: suspension === undefined ? Math.max(0, slots - used) : 0,
+            remaining: suspension === undefined ? Math.max(0, slots.free - used) : 0,
             // Absent unless true: a lane with room says nothing, so this can't age into a false scare.
             ...(capacity.full ? { full: true } : {}),
             ...(budget.metered ? { hours: hoursOf(budget) } : {}),
@@ -390,6 +394,7 @@ export const sandboxRoutes = {
                 connectToken: input.token,
                 ownerEmail: user.email.toLowerCase(),
                 region: hostedRegionFor(context.config.hosted, context.headers),
+                tier: FREE_TIER.id,
                 profile: input.profile,
             });
             // Written once the machine exists, so a refused build leaves no count behind; a lost write costs the
@@ -486,8 +491,8 @@ export const sandboxRoutes = {
         );
         // Settling now is exact, since the stop just ended the stretch; a restart is a start, so the budget applies
         // too.
-        await settleHostedStretch(context.prisma, context.config, context.logger, hosted, sandbox.ownerId);
-        const budget = await hostedBudgetOf(context.prisma, context.config, sandbox.ownerId);
+        await settleHostedStretch(context.prisma, context.config, context.logger, { ...hosted, ownerId: sandbox.ownerId });
+        const budget = await hostedBudgetOf(context.prisma, context.config, { sandboxId: sandbox.id, tier: hosted.tier, ownerId: sandbox.ownerId });
         if (budget.metered && budget.remainingMinutes === 0) {
             throw paymentRequired(`your ${budget.allowanceMinutes / 60} free hours are used up this month; upgrade or self-host`);
         }
@@ -497,6 +502,8 @@ export const sandboxRoutes = {
                 connectToken: decryptSecret(context.config, sandbox.token),
                 ownerEmail: user.email.toLowerCase(),
                 region: hosted.region,
+                // The machine's own rung: a restart puts back the guest it had, never the one a new machine gets.
+                tier: tierOfRow(hosted.tier),
             };
             const rebuilt = await restartOrRebuild(context, args, hosted);
             // A rebuild stamps `wokeAt` at creation; opening a stretch here too would meter one boot twice.
@@ -576,8 +583,12 @@ export const sandboxRoutes = {
             throw new ORPCError(`NOT_FOUND`, { message: `sandbox not found` });
         }
         await requireHostedStanding(context, sandbox.ownerId);
-        await settleHostedStretch(context.prisma, context.config, context.logger, sandbox.hosted, sandbox.ownerId);
-        const budget = await hostedBudgetOf(context.prisma, context.config, sandbox.ownerId);
+        await settleHostedStretch(context.prisma, context.config, context.logger, { ...sandbox.hosted, ownerId: sandbox.ownerId });
+        const budget = await hostedBudgetOf(context.prisma, context.config, {
+            sandboxId: sandbox.id,
+            tier: sandbox.hosted.tier,
+            ownerId: sandbox.ownerId,
+        });
         if (budget.metered && budget.remainingMinutes === 0) {
             // Addressed as "this sandbox's" hours, not "your": the reader may not be the account that spent them.
             throw paymentRequired(`this sandbox's ${budget.allowanceMinutes / 60} free hours are used up this month; upgrade or self-host`);

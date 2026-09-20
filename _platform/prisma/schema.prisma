@@ -199,6 +199,8 @@ model Sandbox {
 
     // sandbox.list's owned-sandboxes findMany is the hottest platform query.
     @@index([ownerId])
+    hostedUsage      HostedUsage[]
+
     @@map("sandbox")
 }
 
@@ -237,16 +239,85 @@ model HostedMachine {
     // coming back cancels the notice and a later absence earns a fresh one — the stamp is what stops the
     // warning arriving every morning of the week it covers.
     idleWarnedAt DateTime?
+    /* WHICH RUNG OF THE LADDER THIS MACHINE WAS SOLD ON, and WHAT IT ACTUALLY IS. Both, because the two
+     * diverge: mid-migration the machine is still the old shape while the rung is already the new one, and an
+     * edit to the ladder (@intentic/constants hosted-tiers) changes what a rung means without touching a
+     * single machine. Every surface that tells someone what their machine is reads these columns; reading the
+     * config instead is how the Billing page came to report a shape nobody's machine necessarily had. */
+    tier      String   @default("free")
+    cpuKind   String   @default("shared")
+    cpus      Int
+    memoryMb  Int
+    volumeGb  Int
     /* These fields identify the applied image, environment overlay, and at-most-one active build. */
     image           String?
     baseImage       String?
     environmentHash String?
     buildingId      String?
     builds          HostedBuild[]
+    /* The one migration in flight for this machine, or none: at most one may run at a time, for the same
+     * reason at most one build may (buildingId above), and the row is the lock. */
+    migratingId String?
+    migrations  HostedMigration[]
     createdAt DateTime @default(now())
     updatedAt DateTime @updatedAt
 
     @@map("hosted_machine")
+}
+
+/* ONE ATTEMPT TO MOVE A SANDBOX FROM ONE MACHINE TO ANOTHER, and everything needed to undo it.
+ *
+ * Two kinds, and the difference is whether any data moves. A `resize` replaces the machine's guest where it
+ * stands — same app, same volume, same host, a restart — and grows the disk if the rung it is going to has
+ * more. A `move` builds a new volume from a fork or a snapshot and a new machine on it, which is what a
+ * region change, a host with no room for the bigger guest, or a failing host needs; the app, and therefore
+ * the hostname and the connect token, never change.
+ *
+ * `snapshotId` is taken before anything else happens and outlives the run, so the disk as it was is
+ * recoverable even after a rollback has already put the machine back. A move's old machine and old volume are
+ * destroyed only once the new machine has answered its health check on the new disk, which is why both ids
+ * are written down: until the swap, they are what the rollback returns to. */
+model HostedMigration {
+    id        String   @id @default(cuid())
+    // The machine ROW this is about. `oldMachineId`/`newMachineId` below are Fly's own machine ids, not these.
+    hostedMachineId String
+    machine   HostedMachine @relation(fields: [hostedMachineId], references: [id], onDelete: Cascade)
+    // Denormalised from the machine so a finished row still names its sandbox after the machine row is gone.
+    sandboxId String
+    // `resize` or `move`; see the header for which does what.
+    kind      String
+    fromTier  String
+    toTier    String
+    /* The shape either side of the attempt, as numbers rather than rung names: a later edit to the ladder must
+     * not rewrite the history of what a machine was. */
+    fromCpuKind  String
+    fromCpus     Int
+    fromMemoryMb Int
+    fromVolumeGb Int
+    toCpuKind    String
+    toCpus       Int
+    toMemoryMb   Int
+    toVolumeGb   Int
+    // planned | snapshotting | applying | verifying | done | failed | rolledBack
+    state     String   @default("planned")
+    // The pre-flight snapshot, which is the rollback of last resort; null only if the snapshot never took.
+    snapshotId String?
+    // A move's two pairs, old and new. Null on a resize, which replaces neither.
+    oldMachineId String?
+    newMachineId String?
+    oldVolumeId  String?
+    newVolumeId  String?
+    // The owner's email, or `platform` for one the platform decided on.
+    requestedBy String
+    // Why it ended where it did, in the words a person can act on; null while it is still going or once done.
+    error      String?
+    startedAt  DateTime @default(now())
+    finishedAt DateTime?
+
+    // The sweep reads what is still in flight; the panel reads one machine's history newest first.
+    @@index([state])
+    @@index([hostedMachineId, startedAt])
+    @@map("hosted_migration")
 }
 
 // Cleanup records must survive sandbox deletion and API restarts.
@@ -279,6 +350,13 @@ model SandboxTrash {
     flyImage        String?
     baseImage       String?
     environmentHash String?
+    /* The rung and shape the machine was on. The disk held back from teardown is a particular size on a
+     * particular rung, so a restore has to put the machine back as it was rather than as a new one would be. */
+    tier     String?
+    cpuKind  String?
+    cpus     Int?
+    memoryMb Int?
+    volumeGb Int?
     deletedAt       DateTime @default(now())
     /* Past this the row is litter: the sweep deletes it and the app goes to HostedCleanup. */
     purgeAfter DateTime
@@ -339,28 +417,41 @@ model HostedPoolMachine {
     @@map("hosted_pool_machine")
 }
 
-// Awake MINUTES this account's hosted machines have burned this calendar month — the meter behind the free
-// lane's hour ceiling (api config.ts `hosted.monthlyHours`). Shaped exactly like TrialUsage above, one period
-// coarser: a `YYYY-MM` string rather than a timestamp range, so the unique key does the resetting and an
-// upsert on (userId, month) is the whole increment with no read-modify-write to race.
+// Awake MINUTES one hosted machine has burned this calendar month — the meter behind its rung's hour ceiling
+// (@intentic/constants hosted-tiers). Shaped exactly like TrialUsage above, one period coarser: a `YYYY-MM`
+// string rather than a timestamp range, so the unique key does the resetting and an upsert on
+// (sandboxId, month) is the whole increment with no read-modify-write to race.
 //
-// Billed to the OWNER of the sandbox, never to whoever woke it — a shared sandbox's guests spend the owner's
-// month, which is the only reading under which sharing a sandbox cannot be used to launder machine time.
-// Members are unmetered, so rows exist only for accounts without a membership (and for members who were not
-// members at the time, which is why the sweep does not assume otherwise).
+// KEYED BY MACHINE, COUNTED BY ACCOUNT TOO, because the two questions are different ones.
+//
+// The CEILING is the machine's, since an account may hold two machines on two rungs and a pooled month would let
+// the expensive one spend the cheap one's hours; that is what `sandboxId` keys.
+//
+// The ACCOUNT's month is what the provision gate reads, and it has to survive the sandbox that spent it. A person
+// who burns a free machine's hours, releases it and asks for another would otherwise start a fresh month every
+// time, which is the whole free lane for the price of clicking twice. So `sandboxId` goes null when the sandbox
+// does, rather than taking the row with it, and `ownerId` keeps counting.
+//
+// Billed to the OWNER's machine, never to whoever woke it — a shared sandbox's guests spend the owner's month,
+// which is the only reading under which sharing a sandbox cannot be used to launder machine time.
 //
 // Rows are disposable — nothing reads a past month — and retention.ts sweeps them on the ledger window.
 model HostedUsage {
     id        String   @id @default(cuid())
-    userId    String
-    user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+    ownerId   String
+    owner     User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+    // Null once the sandbox is gone: the minutes stay on the account's month, keyed by nothing.
+    sandboxId String?
+    sandbox   Sandbox? @relation(fields: [sandboxId], references: [id], onDelete: SetNull)
     month     String
     minutes   Int      @default(0)
     createdAt DateTime @default(now())
     updatedAt DateTime @updatedAt
 
-    @@unique([userId, month])
-    // The sweep deletes by month; the unique index above leads with userId, which it can't use.
+    // Many rows may hold a null sandbox for one month, which is exactly what a released machine leaves behind.
+    @@unique([sandboxId, month])
+    @@index([ownerId, month])
+    // The sweep deletes by month, and neither index above leads with it.
     @@index([month])
     @@map("hosted_usage")
 }
@@ -467,9 +558,6 @@ model HostedPlan {
     user                 User     @relation(fields: [userId], references: [id], onDelete: Cascade)
     stripeCustomerId     String   @unique
     stripeSubscriptionId String   @unique
-    // The subscription's one item, which a slot change (quantity) is addressed to. Empty on a row mirrored
-    // before the item was read; the slot write reads the subscription fresh in that case.
-    stripeItemId         String   @default("")
     status               String
     // When the paid period runs out (Stripe's current_period_end) — display only ("renews on …"); the
     // plan answer keys off `status`, which the webhook keeps current through every renewal and lapse.
@@ -477,16 +565,38 @@ model HostedPlan {
     // The portal's cancel: Stripe keeps `status` active until the period ends and says so here instead. The
     // Billing page reads it to say "ends" rather than "renews" to somebody who just cancelled.
     cancelAtPeriodEnd    Boolean  @default(false)
-    // How many hosted sandboxes the plan covers: the item's quantity, one slot each (docs/design/billing-view.md).
-    quantity             Int      @default(1)
     // The platform's own clock at the moment the subscription state in this row was read from Stripe. Every
     // write reads fresh (webhooks arrive out of order and are never trusted for state); a read older than
     // the last one applied is dropped rather than rolling the mirror back (hosted-plan.ts).
     syncedAt             DateTime @default(now())
+    items                HostedPlanItem[]
     createdAt            DateTime @default(now())
     updatedAt            DateTime @updatedAt
 
     @@map("hosted_plan")
+}
+
+/* SLOTS BOUGHT AT ONE RUNG OF THE LADDER: one Stripe subscription item, one rung, `quantity` machines.
+ *
+ * What a plan buys is slots, never particular machines. A machine on a rung occupies one of that rung's slots, and
+ * moving it between rungs (hosted-migrate.ts) is a separate act from buying one — which is what keeps the two
+ * reversible on their own: a failed migration leaves a paid-for empty slot, not a charge with nothing behind it,
+ * and cancelling a slot leaves a machine that has to come down a rung before the slot can go.
+ *
+ * Mirrored from Stripe like the plan above and never trusted from an event's own copy. */
+model HostedPlanItem {
+    id           String     @id @default(cuid())
+    planId       String
+    plan         HostedPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+    // The rung's id (@intentic/constants hosted-tiers); never the free one, which is not sold.
+    tier         String
+    stripeItemId String     @unique
+    quantity     Int        @default(1)
+    createdAt    DateTime   @default(now())
+    updatedAt    DateTime   @updatedAt
+
+    @@unique([planId, tier])
+    @@map("hosted_plan_item")
 }
 
 /* Wallets are owner-scoped custody handles with decimal-string payment caps. */

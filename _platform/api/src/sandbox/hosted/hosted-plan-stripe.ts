@@ -66,7 +66,8 @@ const get = async (fetchFn: typeof fetch, client: StripeClientConfig, path: stri
 const SessionSchema = z.object({ url: z.url() });
 
 // current_period_end sits top-level or on the first item (top preferred; missing falls back to `now`).
-// cancel_at_period_end tracks the portal's cancel; the item's id/quantity are the slot count and change target.
+// cancel_at_period_end tracks the portal's cancel. ITEMS, plural: one per rung of the ladder the account holds
+// slots at, each with its own price and quantity.
 const SubscriptionSchema = z.object({
     id: z.string(),
     customer: z.string(),
@@ -75,10 +76,24 @@ const SubscriptionSchema = z.object({
     current_period_end: z.number().optional(),
     items: z
         .object({
-            data: z.array(z.object({ id: z.string().optional(), quantity: z.number().int().optional(), current_period_end: z.number().optional() })),
+            data: z.array(
+                z.object({
+                    id: z.string().optional(),
+                    quantity: z.number().int().optional(),
+                    current_period_end: z.number().optional(),
+                    price: z.object({ id: z.string() }).optional(),
+                }),
+            ),
         })
         .optional(),
 });
+
+/** One rung's worth of slots as Stripe holds it: the item to address a change to, its price, and how many. */
+export interface StripeSubscriptionItem {
+    readonly id: string;
+    readonly priceId: string;
+    readonly quantity: number;
+}
 
 export interface StripeSubscription {
     readonly id: string;
@@ -86,24 +101,23 @@ export interface StripeSubscription {
     readonly status: string;
     readonly currentPeriodEnd: Date;
     readonly cancelAtPeriodEnd: boolean;
-    // The one subscription item's id, empty when Stripe's answer carried none (a trimmed webhook object).
-    readonly itemId: string;
-    // Hosted sandboxes the plan covers; a subscription without a readable quantity is one slot.
-    readonly quantity: number;
+    // Empty when Stripe's answer carried none, which a trimmed webhook object does; the mirror keeps what it had.
+    readonly items: readonly StripeSubscriptionItem[];
 }
 
 const toSubscription = (raw: unknown, now: () => Date): StripeSubscription => {
     const parsed = SubscriptionSchema.parse(raw);
-    const item = parsed.items?.data[0];
-    const periodEnd = parsed.current_period_end ?? item?.current_period_end;
+    const data = parsed.items?.data ?? [];
+    const periodEnd = parsed.current_period_end ?? data[0]?.current_period_end;
     return {
         id: parsed.id,
         customer: parsed.customer,
         status: parsed.status,
         currentPeriodEnd: periodEnd !== undefined ? new Date(periodEnd * 1000) : now(),
         cancelAtPeriodEnd: parsed.cancel_at_period_end ?? false,
-        itemId: item?.id ?? ``,
-        quantity: item?.quantity ?? 1,
+        items: data
+            .filter((item) => item.id !== undefined && item.price !== undefined)
+            .map((item) => ({ id: item.id as string, priceId: (item.price as { id: string }).id, quantity: item.quantity ?? 1 })),
     };
 };
 
@@ -168,9 +182,15 @@ export interface StripeGateway {
     // Cancels at once, for an account being deleted with nobody left to bill; answers the subscription in its final
     // state.
     readonly cancelSubscription: (id: string) => Promise<StripeSubscription>;
-    // Sets the one item's quantity (slot count) with Stripe's default proration, so a mid-month change is prorated;
-    // answers the subscription as it now stands.
-    readonly setQuantity: (id: string, itemId: string, quantity: number) => Promise<StripeSubscription>;
+    /**
+     * Sets the whole slot picture in one update, with Stripe's default proration so a mid-month change is prorated:
+     * an entry naming an existing item changes it (quantity 0 deletes it), one naming only a price adds it. Answers
+     * the subscription as it now stands.
+     */
+    readonly setItems: (
+        id: string,
+        items: readonly { readonly itemId?: string; readonly priceId: string; readonly quantity: number }[],
+    ) => Promise<StripeSubscription>;
     // The price the plan is configured to sell, as Stripe holds it; refuses when no such price exists for this key.
     readonly price: (id: string) => Promise<StripePrice>;
 }
@@ -193,11 +213,30 @@ export const stripeGateway = (client: StripeClientConfig, fetchFn: typeof fetch 
         SessionSchema.parse(await post(fetchFn, client, `/billing_portal/sessions`, { customer: customerId, return_url: returnUrl })),
     subscription: async (id) => toSubscription(await get(fetchFn, client, `/subscriptions/${encodeURIComponent(id)}`), now),
     cancelSubscription: async (id) => toSubscription(await send(fetchFn, client, `DELETE`, `/subscriptions/${encodeURIComponent(id)}`, {}), now),
-    setQuantity: async (id, itemId, quantity) =>
+    setItems: async (id, items) =>
         toSubscription(
             await post(fetchFn, client, `/subscriptions/${encodeURIComponent(id)}`, {
-                "items[0][id]": itemId,
-                "items[0][quantity]": String(quantity),
+                ...Object.fromEntries(
+                    items.flatMap((item, index): [string, string][] => {
+                        // An existing item is addressed by id and removed with `deleted`; Stripe refuses a price on
+                        // one that already has it. A new one is addressed by price and can only be added.
+                        if (item.itemId === undefined) {
+                            return [
+                                [`items[${index}][price]`, item.priceId],
+                                [`items[${index}][quantity]`, String(item.quantity)],
+                            ];
+                        }
+                        return item.quantity === 0
+                            ? [
+                                  [`items[${index}][id]`, item.itemId],
+                                  [`items[${index}][deleted]`, `true`],
+                              ]
+                            : [
+                                  [`items[${index}][id]`, item.itemId],
+                                  [`items[${index}][quantity]`, String(item.quantity)],
+                              ];
+                    }),
+                ),
                 proration_behavior: `create_prorations`,
             }),
             now,

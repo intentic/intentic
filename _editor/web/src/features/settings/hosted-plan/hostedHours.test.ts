@@ -1,4 +1,5 @@
 import type { HostedPlanState } from "@intentic/api-contract";
+import { FREE_TIER } from "@intentic/constants";
 import { describe, expect, it } from "vitest";
 import { formatDayShort, formatMinutes, hoursLeftLine, hoursMeter, lowOnHours, machineStandingLine, planBadge } from "./hostedHours";
 
@@ -14,9 +15,12 @@ const usage = (usedMinutes: number, allowanceMinutes: number | null = 2_400) => 
 
 const hosted = (usedMinutes: number, allowanceMinutes: number | null = 2_400) => ({
     slots: 1,
+    slotsByTier: { [FREE_TIER.id]: 1 },
     machines: [],
     usage: usage(usedMinutes, allowanceMinutes),
-    shape: { cpus: 4, memoryMb: 4096, volumeGb: 10 },
+    // The rung an arrival lands on, read from the ladder rather than typed: these sentences quote no part of it, but
+    // a shape invented here would be a shape nothing hands out.
+    freeTier: { id: FREE_TIER.id, shape: FREE_TIER, monthlyHours: FREE_TIER.monthlyHours },
 });
 
 const state = (over: Partial<HostedPlanState> = {}): HostedPlanState => ({ enabled: true, onPlan: false, priceUsd: 20, ...over });

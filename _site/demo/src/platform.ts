@@ -1,4 +1,5 @@
 import type { HostedPlanState, SandboxSummary, User } from "@intentic/api-contract";
+import { FREE_TIER, hostedTier } from "@intentic/constants";
 import { inviteRecords } from "./fixture/access";
 import { DESK_SANDBOX_NAME } from "./fixture/desk";
 import { deskEdition, demoTier } from "./mode";
@@ -35,6 +36,9 @@ export const DEMO_SANDBOX: SandboxSummary = {
     hosted: null,
 };
 
+// The rung the demo account's machine is on; the Billing page reads its shape off the machine, not the account.
+const DEMO_MACHINE_TIER = hostedTier(`standard`);
+
 // Account on the hosted plan, which is why Settings shows the Billing tab at all.
 const DEMO_HOSTED_PLAN: HostedPlanState = {
     enabled: true,
@@ -43,10 +47,25 @@ const DEMO_HOSTED_PLAN: HostedPlanState = {
     renewsAt: `2026-10-01T00:00:00.000Z`,
     priceUsd: 20,
     hosted: {
-        slots: 1,
-        machines: [{ sandboxId: DEMO_SANDBOX.id, name: DEMO_SANDBOX.name, region: `arn`, wokeAt: new Date(Date.now() - 2 * 3_600_000).toISOString() }],
+        slots: 2,
+        // One free slot and one bought at the rung the demo machine stands on.
+        slotsByTier: { [FREE_TIER.id]: 1, [DEMO_MACHINE_TIER.id]: 1 },
+        machines: [
+            {
+                sandboxId: DEMO_SANDBOX.id,
+                name: DEMO_SANDBOX.name,
+                region: `arn`,
+                wokeAt: new Date(Date.now() - 2 * 3_600_000).toISOString(),
+                // A paying account in the demo, so the machine is the rung this one is standing on, with that
+                // rung's own month rather than the free lane's.
+                tier: DEMO_MACHINE_TIER.id,
+                shape: DEMO_MACHINE_TIER,
+                usedMinutes: 12_720,
+                allowanceMinutes: DEMO_MACHINE_TIER.monthlyHours * 60,
+            },
+        ],
         usage: { month: new Date().toISOString().slice(0, 7), usedMinutes: 12_720, allowanceMinutes: null, resetsAt: `2026-10-01T00:00:00.000Z` },
-        shape: { cpus: 4, memoryMb: 4096, volumeGb: 10 },
+        freeTier: { id: FREE_TIER.id, shape: FREE_TIER, monthlyHours: FREE_TIER.monthlyHours },
     },
 };
 

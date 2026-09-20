@@ -1,6 +1,7 @@
 import { createHash, createHmac, randomBytes } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { type HostedTier, PAID_TIERS } from "@intentic/constants";
 import { repoRoot } from "@intentic/constants/node";
 import { PrismaClient } from "@intentic/prisma";
 import { PrismaPg } from "@prisma/adapter-pg";
@@ -33,12 +34,16 @@ export const DAEMON_URL = `http://localhost:18787`;
 export const DAEMON_CONTAINER = `intentic-app-e2e-daemon`;
 
 // Fixed port lets the API name the stand-in early; a reused dev API sells elsewhere, so billing skips.
+// The rung on sale is the cheapest one, and its cents come from the ladder: the api's boot check compares Stripe's
+// amount against what the rung advertises, so a typed figure here would fail the run rather than the code.
 export const FAKE_STRIPE = {
     origin: `http://127.0.0.1:18789`,
     port: 18789,
     secretKey: `sk_test_e2e_browser`,
     webhookSecret: `whsec_e2e_browser`,
     priceId: `price_e2e_hosted`,
+    tier: (PAID_TIERS[0] as HostedTier).id,
+    priceCents: Math.round((PAID_TIERS[0] as HostedTier).priceUsd * 100),
 };
 
 // What global-setup started; teardown and specs that only make sense against a stack this run booted (billing) read it.

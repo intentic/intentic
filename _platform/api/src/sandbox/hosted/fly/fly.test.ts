@@ -4,7 +4,12 @@ import {
     createApp,
     createMachine,
     createVolume,
+    createVolumeSnapshot,
     deleteApp,
+    destroyVolume,
+    extendVolume,
+    getVolume,
+    listVolumeSnapshots,
     FlyError,
     getMachine,
     isFlyCapacity,
@@ -47,7 +52,7 @@ describe(`fly`, () => {
             name: `intentic-sbx-abc`,
             image: `ghcr.io/intentic/sandbox:stable`,
             baseImage: `ghcr.io/intentic/sandbox:stable`,
-            guest: { cpus: 4, memoryMb: 8192 },
+            guest: { cpuKind: `shared`, cpus: 4, memoryMb: 8192 },
             volumeId: `vol_1`,
         });
         const calls = stubFetch([
@@ -96,7 +101,7 @@ describe(`fly`, () => {
             name: `app`,
             image: `ghcr.io/intentic/sandbox:stable`,
             baseImage: `ghcr.io/intentic/sandbox:stable`,
-            guest: { cpus: 2, memoryMb: 4096 },
+            guest: { cpuKind: `shared`, cpus: 2, memoryMb: 4096 },
             volumeId: `vol_1`,
         });
         const calls = stubFetch([{ match: (method, url) => method === `POST` && url.endsWith(`/machines/m1`), respond: () => json({ ok: true }) }]);
@@ -144,7 +149,7 @@ describe(`fly`, () => {
                 name: `app`,
                 image: `ghcr.io/intentic/sandbox:stable`,
                 baseImage: `ghcr.io/intentic/sandbox:stable`,
-                guest: { cpus: 2, memoryMb: 4096 },
+                guest: { cpuKind: `shared`, cpus: 2, memoryMb: 4096 },
                 volumeId: `vol_1`,
             });
             const refused = await createMachine(`tok`, `app`, { name: `app`, region: `iad`, config: machineConfig }).catch((error: unknown) => error);
@@ -165,5 +170,106 @@ describe(`fly`, () => {
             // A timeout carries no status text and must never be read as a capacity refusal.
             expect(isFlyCapacity(new FlyError(`Fly did not answer POST /machines within 30s`))).toBe(false);
         });
+    });
+});
+
+// The calls a migration is made of. Each is one request with one shape, and the shapes are Fly's own: a mistyped key
+// is a silent no-op there, not a refusal, which is why the payloads are asserted rather than the round trip.
+describe(`the volume calls a migration needs`, () => {
+    it(`forks a volume into a region, at a size, on a host with room for the guest that will mount it`, async () => {
+        const calls = stubFetch([{ match: (method, url) => method === `POST` && url.endsWith(`/volumes`), respond: () => json({ id: `vol_2` }) }]);
+        const { volumeId } = await createVolume(`tok`, `app`, `arn`, 25, {
+            sourceVolumeId: `vol_1`,
+            compute: { cpuKind: `shared`, cpus: 8, memoryMb: 8192 },
+            snapshotRetention: 7,
+        });
+        expect(volumeId).toBe(`vol_2`);
+        expect(calls[0]?.body).toEqual({
+            name: `data`,
+            region: `arn`,
+            size_gb: 25,
+            source_volume_id: `vol_1`,
+            snapshot_retention: 7,
+            compute: { cpu_kind: `shared`, cpus: 8, memory_mb: 8192 },
+        });
+    });
+
+    it(`restores from a snapshot instead, and sends neither key when neither was asked for`, async () => {
+        const calls = stubFetch([{ match: (method, url) => method === `POST` && url.endsWith(`/volumes`), respond: () => json({ id: `vol_3` }) }]);
+        await createVolume(`tok`, `app`, `iad`, 10, { snapshotId: `vs_1` });
+        await createVolume(`tok`, `app`, `iad`, 10);
+        expect(calls[0]?.body).toEqual({ name: `data`, region: `iad`, size_gb: 10, snapshot_id: `vs_1` });
+        expect(calls[1]?.body).toEqual({ name: `data`, region: `iad`, size_gb: 10 });
+    });
+
+    it(`reads a volume's size and what is used of it, from the block counts`, async () => {
+        stubFetch([
+            {
+                match: (method, url) => method === `GET` && url.includes(`/volumes/vol_1`),
+                respond: () => json({ id: `vol_1`, size_gb: 10, state: `created`, block_size: 4096, blocks: 2_500_000, blocks_avail: 2_000_000 }),
+            },
+        ]);
+        // 500,000 blocks of 4 KiB: just over 2 GB of a 10 GB disk.
+        expect(await getVolume(`tok`, `app`, `vol_1`)).toEqual({ id: `vol_1`, sizeGb: 10, state: `created`, usedBytes: 2_048_000_000 });
+    });
+
+    // A volume mid-restore reports no blocks at all; answering 0 used would read as an empty disk, which it is not.
+    it(`says it does not know how much is used, rather than guessing zero`, async () => {
+        stubFetch([
+            { match: (method, url) => method === `GET` && url.includes(`/volumes/vol_1`), respond: () => json({ id: `vol_1`, size_gb: 10, state: `restoring` }) },
+        ]);
+        expect((await getVolume(`tok`, `app`, `vol_1`)).usedBytes).toBeUndefined();
+    });
+
+    it(`extends a volume and reports whether the filesystem needs the machine restarted to see it`, async () => {
+        const calls = stubFetch([
+            {
+                match: (method, url) => method === `PUT` && url.endsWith(`/extend`),
+                respond: () => json({ volume: { id: `vol_1`, size_gb: 25, state: `created` }, needs_restart: true }),
+            },
+        ]);
+        expect(await extendVolume(`tok`, `app`, `vol_1`, 25)).toEqual({ needsRestart: true });
+        expect(calls[0]?.body).toEqual({ size_gb: 25 });
+    });
+
+    it(`takes a snapshot on demand and reads its state back`, async () => {
+        stubFetch([
+            {
+                match: (method, url) => method === `POST` && url.endsWith(`/snapshots`),
+                respond: () => json({ id: `vs_9`, status: `waiting`, created_at: `2026-09-20T10:00:00Z` }),
+            },
+        ]);
+        expect(await createVolumeSnapshot(`tok`, `app`, `vol_1`)).toEqual({
+            id: `vs_9`,
+            status: `waiting`,
+            createdAt: new Date(`2026-09-20T10:00:00Z`),
+            sizeBytes: undefined,
+        });
+    });
+
+    // Newest first, because the only question ever asked of this list is "when was the last backup".
+    it(`lists snapshots newest first`, async () => {
+        stubFetch([
+            {
+                match: (method, url) => method === `GET` && url.endsWith(`/snapshots`),
+                respond: () =>
+                    json([
+                        { id: `vs_old`, status: `created`, created_at: `2026-09-18T10:00:00Z`, size: 100 },
+                        { id: `vs_new`, status: `created`, created_at: `2026-09-20T10:00:00Z`, size: 40 },
+                    ]),
+            },
+        ]);
+        expect((await listVolumeSnapshots(`tok`, `app`, `vol_1`)).map((snapshot) => snapshot.id)).toEqual([`vs_new`, `vs_old`]);
+    });
+
+    // Delete's contract is "not there any more", and a volume already gone satisfies it.
+    it(`destroys a volume, and counts one that is already gone as destroyed`, async () => {
+        const calls = stubFetch([
+            { match: (method, url) => method === `DELETE` && url.includes(`/volumes/vol_1`), respond: () => new Response(``, { status: 200 }) },
+            { match: (method, url) => method === `DELETE` && url.includes(`/volumes/vol_gone`), respond: () => json({ error: `not found` }, 404) },
+        ]);
+        await destroyVolume(`tok`, `app`, `vol_1`);
+        await destroyVolume(`tok`, `app`, `vol_gone`);
+        expect(calls).toHaveLength(2);
     });
 });

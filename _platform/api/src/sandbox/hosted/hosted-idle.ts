@@ -36,6 +36,8 @@ type IdleVerdict = "kept" | "warned" | "destroyed" | "dropped";
 
 interface IdleCandidate {
     readonly id: string;
+    // The sandbox whose month any open stretch lands on; the meter is per machine (hosted-usage.ts).
+    readonly sandboxId: string;
     readonly appName: string;
     readonly machineId: string;
     readonly createdAt: Date;
@@ -87,7 +89,7 @@ const decideIdleMachine = async (
     if (state === undefined) {
         // A stretch still open on a machine that no longer exists ended at the latest now; charged before the
         // row that carries it is dropped, the same ceiling the meter's own settle takes for a gone machine.
-        await closeHostedStretch(prisma, machine, machine.sandbox.ownerId);
+        await closeHostedStretch(prisma, { ...machine, ownerId: machine.sandbox.ownerId });
         await forgetHostedMachine(prisma, machine.id, machine.sandbox.id);
         logger.warn({ app: machine.appName, sandboxId: machine.sandbox.id }, `hosted idle sweep: machine gone from the provider; row dropped`);
         return `dropped`;
@@ -102,7 +104,7 @@ const decideIdleMachine = async (
     if (idleDaysSoFar >= config.hosted.idleDays && noticeServed(config, machine, now)) {
         // Any stretch still open is closed at the stop Fly just reported, BEFORE the app goes: afterwards there
         // is no machine to ask and, a line later, no row to hold the minutes.
-        await closeHostedStretch(prisma, machine, machine.sandbox.ownerId, state.updatedAt);
+        await closeHostedStretch(prisma, { ...machine, ownerId: machine.sandbox.ownerId }, state.updatedAt);
         await destroyHosted(config, machine.appName);
         // Row and address go with the machine; the sandbox stays, so its owner just picks a new one.
         await forgetHostedMachine(prisma, machine.id, machine.sandbox.id);
@@ -141,6 +143,7 @@ export const reapIdleHosted = async (
         where: { sandbox: { OR: [{ lastSeenAt: { lt: new Date(now - idleWarnDays * DAY_MS) } }, { lastSeenAt: null }] } },
         select: {
             id: true,
+            sandboxId: true,
             appName: true,
             machineId: true,
             createdAt: true,

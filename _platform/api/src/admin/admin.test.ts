@@ -1,3 +1,4 @@
+import { type HostedTier, hostedTier, PAID_TIERS } from "@intentic/constants";
 import { OpenAPIHandler } from "@orpc/openapi/fetch";
 import type { ORPCError } from "@orpc/server";
 import { describe, expect, it, vi } from "vitest";
@@ -24,12 +25,15 @@ import { adminUsers } from "./admin-users.js";
 
 const NOW = new Date(`2026-08-25T10:30:00Z`);
 
+// The rung a slot is counted at when the overview totals what Stripe is charging.
+const ENTRY = PAID_TIERS[0] as HostedTier;
+
 // The slice of Config the admin modules read, cast whole rather than parsed, so tests stay decoupled from unrelated
 // knobs' defaults.
 const configWith = (overrides?: Record<string, unknown>): Config =>
     ({
         admin: { emails: `radarsu@gmail.com`, mutations: false },
-        hostedPlan: { priceUsd: 20, stripeSecretKey: `sk`, stripePriceId: `price` },
+        hostedPlan: { stripeSecretKey: `sk`, stripePrices: `${ENTRY.id}=price_${ENTRY.id}` },
         hosted: { monthlyHours: 40, poolSize: 2, image: `ghcr.io/intentic/sandbox:stable`, flyApiToken: ``, flyOrg: `` },
         ingress: { url: ``, signingKey: ``, zone: `sbx.test` },
         trial: { keys: `k1`, dailyMessages: 12 },
@@ -101,8 +105,15 @@ describe(`adminOverview`, () => {
                     { status: `past_due`, _count: { _all: 1 } },
                 ],
                 count: async () => 1,
-                // Two active plans, one covering two hosted sandboxes: three slots billed.
-                aggregate: async () => ({ _sum: { quantity: 3 } }),
+            },
+            // Slots at two rungs, which is why the total is a sum of prices rather than a count times one.
+            hostedPlanItem: {
+                groupBy: async () => [
+                    { tier: ENTRY.id, _sum: { quantity: 2 } },
+                    { tier: `max`, _sum: { quantity: 1 } },
+                    // A rung this ladder does not have bills nothing rather than guessing a price.
+                    { tier: `enterprise`, _sum: { quantity: 4 } },
+                ],
             },
             hostedMachine: { count: async () => 5 },
         } as unknown as PrismaClient;
@@ -113,7 +124,7 @@ describe(`adminOverview`, () => {
             sandboxes: 9,
             activeDaemons: 3,
             activeSandboxes: { day: 4, week: 5, month: 6 },
-            plans: { active: 2, trialing: 0, pastDue: 1, canceled30d: 1, mrrUsd: 60 },
+            plans: { active: 2, trialing: 0, pastDue: 1, canceled30d: 1, mrrUsd: ENTRY.priceUsd * 2 + hostedTier(`max`).priceUsd },
             hostedMachines: 5,
             // trial has a key and the plan has Stripe; hosted, wallet and push are unconfigured.
             lanes: { trial: true, hostedPlan: true, hosted: false, wallet: false, push: false },
@@ -406,9 +417,9 @@ describe(`adminUserDetail`, () => {
                 ],
             },
             account: { findMany: async () => [{ providerId: `google` }, { providerId: `google` }] },
-            hostedPlan: { findUnique: async () => ({ status: `active`, currentPeriodEnd: new Date(`2026-09-01T00:00:00Z`) }) },
+            hostedPlan: { findUnique: async () => ({ status: `active`, currentPeriodEnd: new Date(`2026-09-01T00:00:00Z`), items: [] }) },
             trialUsage: { findMany: async () => [{ day: `2026-08-25`, messages: 3, lastModel: `gemini-2.5-flash` }] },
-            hostedUsage: { findUnique: async () => ({ minutes: 120 }) },
+            hostedUsage: { aggregate: async () => ({ _sum: { minutes: 120 } }) },
             wallet: { findMany: async () => [{ id: `w1`, network: `eip155:8453`, address: `0xabc`, perPaymentMaxUsd: `1.00`, dailyCapUsd: `5.00` }] },
             walletPayment: { count: async () => 4 },
             sandbox: {

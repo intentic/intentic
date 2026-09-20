@@ -30,7 +30,7 @@ export const hostedPlanHttpRoutes = ({ config, prisma, gateway, now = () => new 
             .safeParse(object);
         if (session.success) {
             const at = now();
-            await applySubscription(prisma, await stripe().subscription(session.data.subscription), { userId: session.data.client_reference_id, at });
+            await applySubscription(prisma, config, await stripe().subscription(session.data.subscription), { userId: session.data.client_reference_id, at });
         }
     };
 
@@ -40,7 +40,7 @@ export const hostedPlanHttpRoutes = ({ config, prisma, gateway, now = () => new 
         const id = subscriptionIdOfEvent(object);
         if (id !== undefined) {
             const at = now();
-            await applySubscription(prisma, await stripe().subscription(id), { at });
+            await applySubscription(prisma, config, await stripe().subscription(id), { at });
         }
     };
 

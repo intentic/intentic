@@ -20,6 +20,7 @@ import {
     HostedBuildStatusSchema,
     HOSTED_PLAN_MAX_SLOTS,
     HostedOfferSchema,
+    HostedMigrationSchema,
     HostedPlanStateSchema,
     HostedRebuildInputSchema,
     HostedStatusSchema,
@@ -153,16 +154,27 @@ export const desktopContract = {
     googleIdToken: oc.route({ method: "POST", path: "/desktop/google-id-token" }).output(z.object({ idToken: z.string().optional() })),
 };
 
-// Billing page state and actions; `setSlots` refuses a quantity below the account's current sandbox count.
-// `checkout`/`portal` return Stripe-hosted URLs; both 404 on a platform with no plan configured.
+// Billing page state and actions. Slots are bought by rung (`setSlots`) and machines are moved onto them separately
+// (`changeTier`), which is what keeps a failed move a paid-for empty slot rather than a charge with nothing behind
+// it. `checkout`/`portal` return Stripe-hosted URLs; all of them 404 on a platform with no plan configured.
 export const hostedPlanContract = {
     state: oc.route({ method: "GET", path: "/hosted-plan" }).output(HostedPlanStateSchema),
-    checkout: oc.route({ method: "POST", path: "/hosted-plan/checkout" }).output(z.object({ url: z.url() })),
+    checkout: oc
+        .route({ method: "POST", path: "/hosted-plan/checkout" })
+        // Which rung the first slot is bought at; omitted buys the cheapest one on sale.
+        .input(z.object({ tier: z.string().optional() }))
+        .output(z.object({ url: z.url() })),
     portal: oc.route({ method: "POST", path: "/hosted-plan/portal" }).output(z.object({ url: z.url() })),
     setSlots: oc
         .route({ method: "POST", path: "/hosted-plan/slots" })
-        .input(z.object({ quantity: z.number().int().min(1).max(HOSTED_PLAN_MAX_SLOTS) }))
+        // 0 gives the rung's last slot back; refused while a machine still stands on one.
+        .input(z.object({ tier: z.string(), quantity: z.number().int().min(0).max(HOSTED_PLAN_MAX_SLOTS) }))
         .output(HostedPlanStateSchema),
+    // Moves one sandbox's machine onto a slot at another rung. Answers the migration, which the page then watches.
+    changeTier: oc
+        .route({ method: "POST", path: "/hosted-plan/tier" })
+        .input(z.object({ sandboxId: z.string(), tier: z.string() }))
+        .output(HostedMigrationSchema),
 };
 
 /* THE WALLET'S OWNER-SIDE HALF: the spending caps the signer enforces (schemas.ts WalletPolicySchema). */

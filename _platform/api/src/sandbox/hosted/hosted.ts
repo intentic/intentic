@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { setTimeout as delay } from "node:timers/promises";
+import { FREE_TIER, type HostedShape, type HostedTierId } from "@intentic/constants";
 import { Prisma, type PrismaClient } from "@intentic/prisma";
 import { ENV_PLATFORM_PUBLIC_KEY, publicKeyPemOf } from "@intentic/sandbox-contract/owner-ticket";
 import { sandboxIdFromToken } from "@intentic/sandbox-contract/tunnel-ids";
@@ -30,8 +31,9 @@ import {
 } from "./fly/fly.js";
 import { AT_CAPACITY_MESSAGE, HostedAtCapacity, hostedCapacity, noteProviderAtCapacity, providerWords } from "./hosted-capacity.js";
 import { resolveHostedImage } from "./build/hosted-image.js";
-import { hostedSlotsOf } from "./hosted-plan.js";
+import { hostedSlotsOf, slotsAtTier } from "./hosted-plan.js";
 import { assertHostedIdentity, HostedAlreadyProvisioned, HostedProvisionCancelled, lockHostedSandbox, withHostedApp } from "./hosted-cleanup.js";
+import { hostedShapeFor, volumeOptions } from "./hosted-shape.js";
 
 // Hosted lane orchestration over fly.ts: one machine and one volume in one app per sandbox, named `<prefix>-<12-hex
 // tunnel id>` always. Reachability is a replay: the edge answers `sandbox-<id>` with `fly-replay: app=<prefix>-<id>`,
@@ -87,8 +89,13 @@ export const withHostedSlot = async <T>(
         const { ownerId } = await tx.sandbox.findUniqueOrThrow({ where: { id: sandboxId }, select: { ownerId: true } });
         // Two int4 keys, the first naming the purpose, so nothing else on this database can share the owner's lock.
         await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('hosted-slot'), hashtext(${ownerId}))`;
-        const [used, slots] = await Promise.all([tx.hostedMachine.count({ where: { sandbox: { ownerId } } }), hostedSlotsOf(tx, config, ownerId)]);
-        if (used >= slots) {
+        // Counted at the rung this machine is being made on: a Standard slot is not a free one, and holding one
+        // must not stop the free machine everybody is promised.
+        const [used, slots] = await Promise.all([
+            tx.hostedMachine.count({ where: { tier: args.tier, sandbox: { ownerId } } }),
+            hostedSlotsOf(tx, config, ownerId),
+        ]);
+        if (used >= slotsAtTier(slots, args.tier)) {
             throw new HostedSlotsExhausted(slotsMessage(used));
         }
         const result = await write(tx);
@@ -109,6 +116,8 @@ export interface HostedProvisionArgs {
     readonly ownerEmail: string;
     // Caller's country, decided by the route (region.ts); both machine and volume are created here for residency.
     readonly region: string;
+    // Which rung of the ladder this machine is on, which is what decides its shape (hosted-shape.ts).
+    readonly tier: HostedTierId;
     // Which profile the browser arrived in, if any; decides the definition this machine seeds itself from on first boot.
     readonly profile?: string | undefined;
 }
@@ -130,6 +139,8 @@ export const hostedMachineConfig = (
     overlay: HostedOverlay = STOCK_OVERLAY,
     /* A caller may override the configured stock image. */
     stockImage: string = config.hosted.image,
+    /* The guest this config runs as; the rung's by default, and the machine's own when one is being replaced or moved. */
+    guest: HostedShape = hostedShapeFor(config, args.tier),
 ) => {
     const hostname = sandboxHostname(config.ingress.zone, args.connectToken);
     const seed = definitionSeedFor(args.profile);
@@ -139,7 +150,7 @@ export const hostedMachineConfig = (
             image: overlay.image ?? stockImage,
             baseImage: config.hosted.image,
             ...(overlay.image !== null && overlay.environmentHash !== null ? { environmentHash: overlay.environmentHash } : {}),
-            guest: { cpus: config.hosted.cpus, memoryMb: config.hosted.memoryMb },
+            guest: { cpuKind: guest.cpuKind, cpus: guest.cpus, memoryMb: guest.memoryMb },
             volumeId,
             env: [
                 [`GOOGLE_CLIENT_ID`, config.google.clientId],
@@ -238,6 +249,11 @@ const claimPoolMachine = async (
     logger: Logger,
     args: HostedProvisionArgs,
 ): Promise<HostedProvisioned | undefined> => {
+    // Warm stock is built to the free rung's shape, so only a free-rung arrival can take one as it stands; anything
+    // bigger is built to order rather than handed a machine that is not what it was sold as.
+    if (args.tier !== FREE_TIER.id) {
+        return undefined;
+    }
     const ready = await prisma.hostedPoolMachine.findMany({
         // Rows with no token predate identities and name no app the edge could route to; reconcile replaces them.
         where: { region: args.region, state: `ready`, NOT: { token: `` } },
@@ -286,6 +302,8 @@ const claimPoolMachine = async (
                             region: row.region,
                             warm: true,
                             wokeAt: new Date(),
+                            tier: args.tier,
+                            ...hostedShapeFor(config, args.tier),
                         },
                     });
                     await tx.hostedPoolMachine.delete({ where: { id: row.id } });
@@ -330,7 +348,8 @@ export const provisionHosted = async (
     args: HostedProvisionArgs,
 ): Promise<HostedProvisioned> => {
     await assertHostedIdentity(prisma, args.sandboxId, args.connectToken);
-    const { flyApiToken, flyOrg, volumeGb } = config.hosted;
+    const { flyApiToken, flyOrg } = config.hosted;
+    const shape = hostedShapeFor(config, args.tier);
     const { region } = args;
     const claimed = await claimPoolMachine(prisma, config, logger, args);
     if (claimed !== undefined) {
@@ -362,19 +381,19 @@ export const provisionHosted = async (
                 throw error;
             }
             await assertHostedIdentity(prisma, args.sandboxId, args.connectToken);
-            const { volumeId } = await createVolume(flyApiToken, appName, region, volumeGb);
+            const { volumeId } = await createVolume(flyApiToken, appName, region, shape.volumeGb, volumeOptions(config, shape));
             await assertHostedIdentity(prisma, args.sandboxId, args.connectToken);
             const { machineId } = await createMachine(flyApiToken, appName, {
                 name: appName,
                 region,
-                config: hostedMachineConfig(config, args, appName, volumeId, STOCK_OVERLAY, stockImage),
+                config: hostedMachineConfig(config, args, appName, volumeId, STOCK_OVERLAY, stockImage, shape),
             });
             // `wokeAt` opens the hour meter's first stretch: a machine is RUNNING from the moment it is created,
             // so the free lane's clock starts here rather than at the first wake, which is the only version that
             // does not hand out an uncounted first session to everyone who ever provisions one.
             await withHostedSlot(prisma, config, args, appName, (tx) =>
                 tx.hostedMachine.create({
-                    data: { sandboxId: args.sandboxId, appName, machineId, volumeId, region, warm: false, wokeAt: new Date() },
+                    data: { sandboxId: args.sandboxId, appName, machineId, volumeId, region, warm: false, wokeAt: new Date(), tier: args.tier, ...shape },
                 }),
             );
             return { appName, region, warm: false };

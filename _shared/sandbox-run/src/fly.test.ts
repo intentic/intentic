@@ -7,7 +7,7 @@ describe(`flyMachineConfig`, () => {
         name: `intentic-sbx-abc123`,
         image: `ghcr.io/intentic/sandbox:stable`,
         baseImage: `ghcr.io/intentic/sandbox:stable`,
-        guest: { cpus: 4, memoryMb: 8192 },
+        guest: { cpuKind: `shared` as const, cpus: 4, memoryMb: 8192 },
         volumeId: `vol_123`,
     };
 
@@ -18,6 +18,15 @@ describe(`flyMachineConfig`, () => {
         expect(config.mounts).toEqual([{ volume: `vol_123`, path: FLY_VOLUME_PATH }]);
         expect(config.restart).toEqual({ policy: `on-failure`, max_retries: 3 });
         expect(config.auto_destroy).toBe(false);
+    });
+
+    // The guest is the rung's, not a constant: a ladder with a dedicated-CPU rung on it must reach Fly as one.
+    it(`passes the run's own CPU kind through rather than assuming a shared one`, () => {
+        expect(flyMachineConfig({ ...run, guest: { ...run.guest, cpuKind: `performance`, cpus: 2 } }).guest).toEqual({
+            cpu_kind: `performance`,
+            cpus: 2,
+            memory_mb: 8192,
+        });
     });
 
     it(`stamps the contract env (name, image pair, the VM switch) before the caller's pairs`, () => {
@@ -55,7 +64,7 @@ describe(`flyMachineConfig: the front door`, () => {
         name: `intentic-sbx-abcdef012345`,
         image: `ghcr.io/intentic/sandbox:stable`,
         baseImage: `ghcr.io/intentic/sandbox:stable`,
-        guest: { cpus: 2, memoryMb: 4096 },
+        guest: { cpuKind: `shared` as const, cpus: 2, memoryMb: 4096 },
         volumeId: `vol_123`,
     };
 
@@ -106,7 +115,7 @@ describe(`flyMachineConfig: an overlay-built image`, () => {
         name: `intentic-sbx-abcdef012345`,
         image: `registry.fly.io/intentic-sbx-abcdef012345:env-0123456789ab`,
         baseImage: `ghcr.io/intentic/sandbox:stable`,
-        guest: { cpus: 4, memoryMb: 4096 },
+        guest: { cpuKind: `shared` as const, cpus: 4, memoryMb: 4096 },
         volumeId: `vol_123`,
     };
 

@@ -23,6 +23,7 @@ import { mintAppDeployToken, organizationIdOf, revokeDeployToken } from "../fly/
 import { hostedCapacity, noteProviderAtCapacity, providerWords } from "../hosted-capacity.js";
 import { BUILD_ENV, BUILD_PATHS, buildScript, dockerConfigJson, LOG_TAIL_BYTES } from "./hosted-build-script.js";
 import { hostedInstanceId, hostedMachineConfig, type HostedProvisionArgs, startAfterUpdate } from "../hosted.js";
+import { tierOfRow } from "../hosted-shape.js";
 import { chargeMinutes, hostedBudgetOf, usageMonth } from "../hosted-usage.js";
 
 // Executes `ic sandbox rebuild` for hosted sandboxes: builds the approved overlay in a builder machine inside the
@@ -99,6 +100,8 @@ type BuildRow = HostedBuild & {
         machineId: string;
         volumeId: string;
         region: string;
+        // The rung this machine is on: a rebuild replaces its whole config, so it has to put the same guest back.
+        tier: string;
         buildingId: string | null;
         sandbox: { token: string; owner: { id: string; email: string } };
     };
@@ -124,7 +127,8 @@ const verifiedContent = (config: Config, hash: string, content: string): string 
 
 // Brakes read in one pass: per-owner limit first, then platform-wide ceilings, then the owner's hours. Running builds
 // count at the full timeout against the day's minutes.
-const assertWithinLimits = async (prisma: PrismaClient, config: Config, ownerId: string, now: Date): Promise<void> => {
+const assertWithinLimits = async (prisma: PrismaClient, config: Config, machine: { sandboxId: string; tier: string; ownerId: string }, now: Date): Promise<void> => {
+    const { ownerId } = machine;
     const { buildsPerDay, buildConcurrency, buildMinutesPerDay, buildTimeoutMinutes } = config.hosted;
     const dayStart = utcDayStart(now);
     const [ownerToday, running, finishedToday] = await Promise.all([
@@ -146,7 +150,7 @@ const assertWithinLimits = async (prisma: PrismaClient, config: Config, ownerId:
     if ((await hostedCapacity(prisma, config)).headroom === 0) {
         throw new HostedBuildRefused(`capacity`, `we have no room on our provider for a build machine right now; your sandbox is unaffected, try again a little later`);
     }
-    const budget = await hostedBudgetOf(prisma, config, ownerId);
+    const budget = await hostedBudgetOf(prisma, config, machine);
     if (budget.metered && budget.remainingMinutes < buildTimeoutMinutes) {
         throw new HostedBuildRefused(
             `budget`,
@@ -160,6 +164,7 @@ const provisionArgsOf = (config: Config, row: BuildRow[`machine`]): HostedProvis
     connectToken: decryptSecret(config, row.sandbox.token),
     ownerEmail: row.sandbox.owner.email,
     region: row.region,
+    tier: tierOfRow(row.tier),
 });
 
 // The config replacement a restart is: a running machine takes it up in place, a stopped one boots it on next wake
@@ -224,7 +229,7 @@ const finishHostedBuild = async (
     if (updated.count === 0) {
         return;
     }
-    await chargeMinutes(prisma, build.machine.sandbox.owner.id, usageMonth(now), minutes);
+    await chargeMinutes(prisma, { sandboxId: build.machine.sandboxId, ownerId: build.machine.sandbox.owner.id }, usageMonth(now), minutes);
     await destroyMachine(flyApiToken, build.machine.appName, build.builderMachineId, { force: true }).catch((err: unknown) =>
         logger.warn({ err, build: build.id }, `hosted build: destroying the builder failed; the reconcile retries`),
     );
@@ -383,7 +388,7 @@ export const requestHostedBuild = async (
         await applyHostedBuild(prisma, config, logger, reusable, reusable.digest);
         return buildStateOf(reusable);
     }
-    await assertWithinLimits(prisma, config, hosted.sandbox.owner.id, now);
+    await assertWithinLimits(prisma, config, { sandboxId: hosted.sandboxId, tier: hosted.tier, ownerId: hosted.sandbox.owner.id }, now);
     const id = randomUUID();
     const won = await prisma.hostedMachine.updateMany({ where: { id: hosted.id, buildingId: null }, data: { buildingId: id } });
     if (won.count === 0) {

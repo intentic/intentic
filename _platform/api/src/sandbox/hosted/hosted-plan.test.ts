@@ -1,10 +1,11 @@
 import { createHmac } from "node:crypto";
+import { FREE_TIER, type HostedTier, PAID_TIERS } from "@intentic/constants";
 import type { PrismaClient } from "@intentic/prisma";
 import { describe, expect, it, vi } from "vitest";
 import { configSchema, type Config } from "../../config.js";
 import { call } from "@orpc/server";
 import type { OrpcContext } from "../../context.js";
-import { cancelHostedPlan, checkHostedPlanPrice, hostedSlotsOf, onHostedPlan } from "./hosted-plan.js";
+import { cancelHostedPlan, checkHostedPlanPrices, hostedSlotsOf, onHostedPlan, slotsAtTier } from "./hosted-plan.js";
 import { StripeError, type StripeGateway, type StripePrice } from "./hosted-plan-stripe.js";
 import { hostedPlanRoutes } from "./hosted-plan.orpc.js";
 import { hostedPlanHttpRoutes } from "./hosted-plan.routes.js";
@@ -16,6 +17,13 @@ const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() } as never;
 
 const NOW = new Date(`2026-09-06T12:00:00Z`);
 
+// Every paid rung on sale, at a price id named after it, derived from the ladder so a fourth rung is priced here
+// without this file being edited. Transcribing the pairs would make the boot check's "unsold rung" warning fire in
+// tests that are about something else.
+const PRICE_IDS = new Map(PAID_TIERS.map((tier) => [`price_${tier.id}`, tier]));
+const STRIPE_PRICES = [...PRICE_IDS].map(([priceId, tier]) => `${tier.id}=${priceId}`).join(`,`);
+const ENTRY = PAID_TIERS[0] as HostedTier;
+
 const baseConfig = configSchema.parse({
     database: { url: `postgres://x`, poolMax: 10 },
     betterAuth: { secret: `s` },
@@ -26,38 +34,52 @@ const baseConfig = configSchema.parse({
     intenticCloudflare: { apiToken: ``, zone: `intentic.dev`, reapDryRun: `true` },
     ingress: { url: `https://ingress.sbx.test`, signingKey: `k`, zone: `sbx.test` },
     trial: { keys: ``, baseUrl: `https://upstream.test/v1beta/openai`, models: ``, dailyMessages: 2 },
-    hostedPlan: { stripeSecretKey: `sk_test`, stripeWebhookSecret: `whsec_test`, stripePriceId: `price_1`, priceUsd: 20 },
+    hostedPlan: { stripeSecretKey: `sk_test`, stripeWebhookSecret: `whsec_test`, stripePrices: STRIPE_PRICES },
     api: { url: `http://localhost:6480`, port: 6480, host: `127.0.0.1`, httpsKey: ``, httpsCert: `` },
     log: { level: `silent`, pretty: `false` },
 });
 
 const configWith = (hostedPlan: Partial<Config[`hostedPlan`]>): Config => ({ ...baseConfig, hostedPlan: { ...baseConfig.hostedPlan, ...hostedPlan } });
 
+interface ItemRow {
+    tier: string;
+    stripeItemId: string;
+    quantity: number;
+}
+
 interface PlanRow {
+    id?: string;
     userId: string;
     stripeCustomerId: string;
     stripeSubscriptionId: string;
-    stripeItemId?: string;
     status: string;
     currentPeriodEnd: Date;
     cancelAtPeriodEnd?: boolean;
-    quantity?: number;
+    items: ItemRow[];
     syncedAt?: Date;
 }
 
-// Enough Prisma for the plan: the user lookup the comp list needs, and the plan reads/writes the webhook makes.
+// Enough Prisma for the plan: the user lookup the comp list needs, the plan reads/writes the webhook makes, and the
+// per-rung slot rows it writes beside them.
 const fakePrisma = (seed?: { plans?: PlanRow[]; users?: { id: string; email: string }[] }) => {
     const plans = seed?.plans ?? [];
     const users = seed?.users ?? [];
+    const planById = (id: string) => plans.find((plan) => (plan.id ?? `plan-1`) === id);
     const prisma = {
         user: { findUnique: vi.fn(async ({ where }: { where: { id: string } }) => users.find((user) => user.id === where.id) ?? null) },
         hostedPlan: {
-            findUnique: vi.fn(async ({ where }: { where: { userId: string } }) => plans.find((plan) => plan.userId === where.userId) ?? null),
+            findUnique: vi.fn(
+                async ({ where }: { where: { userId?: string; stripeSubscriptionId?: string } }) =>
+                    plans.find((plan) =>
+                        where.userId === undefined ? plan.stripeSubscriptionId === where.stripeSubscriptionId : plan.userId === where.userId,
+                    ) ?? null,
+            ),
             upsert: vi.fn(async ({ where, create, update }: { where: { userId: string }; create: PlanRow; update: Partial<PlanRow> }) => {
                 const existing = plans.find((plan) => plan.userId === where.userId);
                 if (existing === undefined) {
-                    plans.push(create);
-                    return create;
+                    const made: PlanRow = { id: `plan-1`, ...create, items: create.items ?? [] };
+                    plans.push(made);
+                    return made;
                 }
                 Object.assign(existing, update);
                 return existing;
@@ -75,28 +97,48 @@ const fakePrisma = (seed?: { plans?: PlanRow[]; users?: { id: string; email: str
                 return { count: hits.length };
             }),
         },
+        hostedPlanItem: {
+            upsert: vi.fn(async ({ where, create, update }: { where: { planId_tier: { planId: string; tier: string } }; create: ItemRow; update: Partial<ItemRow> }) => {
+                const plan = planById(where.planId_tier.planId);
+                const existing = plan?.items.find((item) => item.tier === where.planId_tier.tier);
+                if (existing === undefined) {
+                    plan?.items.push({ tier: create.tier, stripeItemId: create.stripeItemId, quantity: create.quantity });
+                    return create;
+                }
+                Object.assign(existing, update);
+                return existing;
+            }),
+            deleteMany: vi.fn(async ({ where }: { where: { planId: string; tier: { notIn: string[] } } }) => {
+                const plan = planById(where.planId);
+                if (plan !== undefined) {
+                    plan.items = plan.items.filter((item) => where.tier.notIn.includes(item.tier));
+                }
+                return { count: 0 };
+            }),
+        },
     };
     return { prisma: prisma as unknown as PrismaClient, plans };
 };
 
 const row = (status: string, over: Partial<PlanRow> = {}): PlanRow => ({
+    id: `plan-1`,
     userId: `user-1`,
     stripeCustomerId: `cus_1`,
     stripeSubscriptionId: `sub_1`,
     status,
     currentPeriodEnd: NOW,
+    items: [],
     ...over,
 });
 
-// A subscription as the gateway answers it: one slot, not cancelling.
+// A subscription as the gateway answers it: one slot at the entry rung, not cancelling.
 const subscription = (over: Record<string, unknown> = {}) => ({
     id: `sub_9`,
     customer: `cus_9`,
     status: `active`,
     currentPeriodEnd: NOW,
     cancelAtPeriodEnd: false,
-    itemId: `si_9`,
-    quantity: 1,
+    items: [{ id: `si_9`, priceId: `price_${ENTRY.id}`, quantity: 1 }],
     ...over,
 });
 
@@ -123,7 +165,7 @@ describe(`the hosted plan`, () => {
     });
 
     it(`does not exist on a platform that sells nothing`, async () => {
-        const app = hostedPlanHttpRoutes({ config: configWith({ stripePriceId: `` }), prisma: fakePrisma().prisma, now: () => NOW });
+        const app = hostedPlanHttpRoutes({ config: configWith({ stripePrices: `` }), prisma: fakePrisma().prisma, now: () => NOW });
         expect((await app.request(`/webhook`, { method: `POST`, body: `{}` })).status).toBe(404);
     });
 
@@ -147,9 +189,13 @@ describe(`the hosted plan`, () => {
         expect(plans[0]?.status).toBe(`canceled`);
     });
 
-    it(`turns a signed completed checkout into a plan row, item and slot count included`, async () => {
+    it(`turns a signed completed checkout into a plan row and a slot row for every rung it bought`, async () => {
         const { prisma, plans } = fakePrisma();
-        const gateway = { subscription: vi.fn(async () => subscription({ quantity: 2 })) } as unknown as StripeGateway;
+        const bought = [
+            { id: `si_9`, priceId: `price_${ENTRY.id}`, quantity: 2 },
+            { id: `si_10`, priceId: `price_max`, quantity: 1 },
+        ];
+        const gateway = { subscription: vi.fn(async () => subscription({ items: bought })) } as unknown as StripeGateway;
         const app = hostedPlanHttpRoutes({ config: baseConfig, prisma, gateway, now: () => NOW });
         const payload = JSON.stringify({
             type: `checkout.session.completed`,
@@ -159,30 +205,58 @@ describe(`the hosted plan`, () => {
         expect(response.status).toBe(200);
         expect(plans).toEqual([
             {
+                id: `plan-1`,
                 userId: `user-1`,
                 stripeCustomerId: `cus_9`,
                 stripeSubscriptionId: `sub_9`,
-                stripeItemId: `si_9`,
                 status: `active`,
                 currentPeriodEnd: NOW,
                 cancelAtPeriodEnd: false,
-                quantity: 2,
+                // The rung each item's price belongs to, which is how a slot knows what it is a slot of.
+                items: [
+                    { tier: ENTRY.id, stripeItemId: `si_9`, quantity: 2 },
+                    { tier: `max`, stripeItemId: `si_10`, quantity: 1 },
+                ],
                 syncedAt: expect.any(Date),
             },
         ]);
+    });
+
+    // A price this platform does not sell names no rung, so it buys no slot rather than an unnamed one.
+    it(`writes no slot for an item whose price belongs to no rung of this ladder`, async () => {
+        const { prisma, plans } = fakePrisma();
+        const gateway = {
+            subscription: vi.fn(async () => subscription({ items: [{ id: `si_x`, priceId: `price_somebody_elses`, quantity: 4 }] })),
+        } as unknown as StripeGateway;
+        const app = hostedPlanHttpRoutes({ config: baseConfig, prisma, gateway, now: () => NOW });
+        const payload = JSON.stringify({
+            type: `checkout.session.completed`,
+            data: { object: { mode: `subscription`, client_reference_id: `user-1`, subscription: `sub_9` } },
+        });
+        await app.request(`/webhook`, { method: `POST`, body: payload, headers: signed(payload) });
+        expect(plans[0]?.items).toEqual([]);
     });
 
     // Stripe keeps status active until the period ends; cancel_at_period_end is what says otherwise.
     it(`mirrors a cancellation that has not ended yet`, async () => {
         const { prisma, plans } = fakePrisma({ plans: [row(`active`, { syncedAt: new Date(NOW.getTime() - 60_000) })] });
         const gateway = {
-            subscription: vi.fn(async () => subscription({ id: `sub_1`, customer: `cus_1`, status: `active`, cancelAtPeriodEnd: true, itemId: `si_1`, quantity: 3 })),
+            subscription: vi.fn(async () =>
+                subscription({
+                    id: `sub_1`,
+                    customer: `cus_1`,
+                    status: `active`,
+                    cancelAtPeriodEnd: true,
+                    items: [{ id: `si_1`, priceId: `price_${ENTRY.id}`, quantity: 3 }],
+                }),
+            ),
         } as unknown as StripeGateway;
         const app = hostedPlanHttpRoutes({ config: baseConfig, prisma, gateway, now: () => NOW });
         // The event's own copy is trimmed to nothing useful; state comes from the fresh read.
         const payload = JSON.stringify({ type: `customer.subscription.updated`, data: { object: { id: `sub_1`, object: `subscription` } } });
         expect((await app.request(`/webhook`, { method: `POST`, body: payload, headers: signed(payload) })).status).toBe(200);
-        expect(plans[0]).toMatchObject({ status: `active`, cancelAtPeriodEnd: true, quantity: 3, stripeItemId: `si_1`, syncedAt: NOW });
+        expect(plans[0]).toMatchObject({ status: `active`, cancelAtPeriodEnd: true, syncedAt: NOW });
+        expect(plans[0]?.items).toEqual([{ tier: ENTRY.id, stripeItemId: `si_1`, quantity: 3 }]);
     });
 
     it(`never rolls the mirror back: the event's copy is not trusted, and a read older than the row is dropped`, async () => {
@@ -237,7 +311,7 @@ describe(`cancelling the plan with its account`, () => {
         const gateway = { cancelSubscription: vi.fn() } as unknown as StripeGateway;
         await cancelHostedPlan(fakePrisma().prisma, baseConfig, logger, `user-1`, gateway);
         await cancelHostedPlan(fakePrisma({ plans: [row(`canceled`)] }).prisma, baseConfig, logger, `user-1`, gateway);
-        await cancelHostedPlan(fakePrisma({ plans: [row(`active`)] }).prisma, configWith({ stripePriceId: `` }), logger, `user-1`, gateway);
+        await cancelHostedPlan(fakePrisma({ plans: [row(`active`)] }).prisma, configWith({ stripePrices: `` }), logger, `user-1`, gateway);
         expect(gateway.cancelSubscription).not.toHaveBeenCalled();
     });
 
@@ -253,10 +327,12 @@ describe(`cancelling the plan with its account`, () => {
 // A price nobody can buy is otherwise found by the first buyer, as a 500 on checkout and no word anywhere else; this is
 // the boot read that says so first, in the terms an operator can act on.
 describe(`the price the plan sells`, () => {
-    const price = (over: Partial<StripePrice> = {}): StripePrice => ({
+    // A rung's price exactly as the ladder advertises it, so the "charges something else" test is the only one that
+    // disagrees on purpose. Read from the tier rather than typed, since the ladder is what the check compares against.
+    const price = (tier: HostedTier, over: Partial<StripePrice> = {}): StripePrice => ({
         active: true,
         livemode: true,
-        unitAmount: 2000,
+        unitAmount: Math.round(tier.priceUsd * 100),
         currency: `usd`,
         interval: `month`,
         ...over,
@@ -267,63 +343,89 @@ describe(`the price the plan sells`, () => {
         return { ...spies, logger: spies as never };
     };
 
-    const answering = (answer: StripePrice | Error): StripeGateway =>
+    // Answers for whichever rung's price is asked about; one override applies to every rung, which is what each fault
+    // test means. A price id off the ladder is a mistake in the test, not a case to answer.
+    const answering = (over: Partial<StripePrice> | Error = {}): StripeGateway =>
         ({
-            price: vi.fn(async () => {
-                if (answer instanceof Error) {
-                    throw answer;
+            price: vi.fn(async (priceId: string) => {
+                if (over instanceof Error) {
+                    throw over;
                 }
-                return answer;
+                const tier = PRICE_IDS.get(priceId);
+                if (tier === undefined) {
+                    throw new Error(`the boot check asked about ${priceId}, which is not a rung's price`);
+                }
+                return price(tier, over);
             }),
         }) as unknown as StripeGateway;
 
     it(`asks nothing of Stripe on a platform that sells nothing`, async () => {
-        const gateway = answering(price());
+        const gateway = answering();
         const log = logs();
-        await checkHostedPlanPrice(configWith({ stripePriceId: `` }), log.logger, gateway);
+        await checkHostedPlanPrices(configWith({ stripePrices: `` }), log.logger, gateway);
         expect(gateway.price).not.toHaveBeenCalled();
         expect([log.error, log.warn, log.info].every((spy) => spy.mock.calls.length === 0)).toBe(true);
     });
 
-    it(`says an archived price cannot be sold, naming the price`, async () => {
+    // A rung with no price is not a fault, it is a rung nobody can buy; the warning is what says which.
+    it(`names the rungs that have no price at all, and still sells the ones that do`, async () => {
         const log = logs();
-        await checkHostedPlanPrice(baseConfig, log.logger, answering(price({ active: false })));
-        expect(log.error).toHaveBeenCalledWith(expect.objectContaining({ priceId: `price_1` }), expect.stringContaining(`archived`));
+        await checkHostedPlanPrices(configWith({ stripePrices: `${ENTRY.id}=price_${ENTRY.id}` }), log.logger, answering());
+        const unsold = PAID_TIERS.filter((tier) => tier.id !== ENTRY.id).map((tier) => tier.id);
+        expect(log.warn).toHaveBeenCalledWith({ unsold }, expect.stringContaining(`cannot be bought`));
+        expect(log.error).not.toHaveBeenCalled();
+    });
+
+    it(`says an archived price cannot be sold, naming the price and its rung`, async () => {
+        const log = logs();
+        await checkHostedPlanPrices(baseConfig, log.logger, answering({ active: false }));
+        expect(log.error).toHaveBeenCalledWith(
+            expect.objectContaining({ tier: ENTRY.id, priceId: `price_${ENTRY.id}` }),
+            expect.stringContaining(`archived`),
+        );
     });
 
     it(`says a one-off price cannot be sold in subscription mode`, async () => {
         const log = logs();
-        await checkHostedPlanPrice(baseConfig, log.logger, answering(price({ interval: `` })));
+        await checkHostedPlanPrices(baseConfig, log.logger, answering({ interval: `` }));
         expect(log.error).toHaveBeenCalledWith(expect.anything(), expect.stringContaining(`subscription mode`));
     });
 
-    // The Billing page's number is display only, so a price charging something else is a lie nothing else would catch.
-    it(`says so when Stripe charges something other than the advertised price`, async () => {
+    // The ladder's number is display only, so a price charging something else is a lie nothing else would catch.
+    it(`says so when Stripe charges something other than the rung's advertised price`, async () => {
         const log = logs();
-        await checkHostedPlanPrice(baseConfig, log.logger, answering(price({ unitAmount: 599 })));
-        expect(log.error).toHaveBeenCalledWith(expect.anything(), expect.stringContaining(`5.99 USD, while the Billing page advertises 20.00 USD`));
+        await checkHostedPlanPrices(baseConfig, log.logger, answering({ unitAmount: 599 }));
+        expect(log.error).toHaveBeenCalledWith(
+            expect.anything(),
+            expect.stringContaining(`5.99 USD, while the ladder advertises ${ENTRY.priceUsd.toFixed(2)} USD`),
+        );
     });
 
     it(`keeps Stripe's own words when it refuses the read, and does not throw`, async () => {
         const log = logs();
-        await checkHostedPlanPrice(baseConfig, log.logger, answering(new Error(`Stripe refused: No such price: 'price_1'`)));
+        await checkHostedPlanPrices(baseConfig, log.logger, answering(new Error(`Stripe refused: No such price: 'price_1'`)));
         expect(log.error).toHaveBeenCalledWith(
             expect.objectContaining({ err: expect.objectContaining({ message: expect.stringContaining(`No such price`) }) }),
-            expect.stringContaining(`nobody can subscribe`),
+            expect.stringContaining(`nobody can buy it`),
         );
     });
 
     it(`warns that a test-mode price charges nobody, and stays quiet about a live one`, async () => {
         const testMode = logs();
-        await checkHostedPlanPrice(baseConfig, testMode.logger, answering(price({ livemode: false })));
+        await checkHostedPlanPrices(baseConfig, testMode.logger, answering({ livemode: false }));
         expect(testMode.error).not.toHaveBeenCalled();
         expect(testMode.warn).toHaveBeenCalledWith(expect.anything(), expect.stringContaining(`TEST-mode`));
 
         const live = logs();
-        await checkHostedPlanPrice(baseConfig, live.logger, answering(price()));
+        await checkHostedPlanPrices(baseConfig, live.logger, answering());
         expect(live.error).not.toHaveBeenCalled();
         expect(live.warn).not.toHaveBeenCalled();
-        expect(live.info).toHaveBeenCalledWith(expect.anything(), expect.stringContaining(`selling price_1 at 20.00 USD per month`));
+        // Every rung on the ladder is sold, and each says so by name.
+        expect(live.info).toHaveBeenCalledTimes(PAID_TIERS.length);
+        expect(live.info).toHaveBeenCalledWith(
+            { tier: ENTRY.id, priceId: `price_${ENTRY.id}` },
+            `hosted plan: selling ${ENTRY.id} (price_${ENTRY.id}) at ${ENTRY.priceUsd.toFixed(2)} USD per month`,
+        );
     });
 });
 
@@ -361,20 +463,35 @@ describe(`the doors to Stripe`, () => {
 
 // How many hosted sandboxes an account may have: the plan's quantity while live, the free lane's otherwise, never fewer
 // than the free lane gives.
+/* SLOTS ARE PER RUNG, AND THE FREE ONE IS NEVER BOUGHT. A plan adds machines beside the free one rather than
+ * replacing it, which is what stops paying for a Standard taking away the machine everybody is promised. */
 describe(`hosted slots`, () => {
     const config = { ...baseConfig, hosted: { ...baseConfig.hosted, perUser: 1 } };
+    const item = (tier: string, quantity: number) => ({ tier, quantity, stripeItemId: `si_${tier}` });
 
-    it(`is the plan's quantity while the plan is live`, async () => {
-        expect(await hostedSlotsOf(fakePrisma({ plans: [row(`active`, { quantity: 3 })] }).prisma, config, `user-1`)).toBe(3);
+    it(`adds each rung's bought slots to the free lane's own`, async () => {
+        const slots = await hostedSlotsOf(fakePrisma({ plans: [row(`active`, { items: [item(ENTRY.id, 2), item(`max`, 1)] })] }).prisma, config, `user-1`);
+        expect(slots.free).toBe(1);
+        expect(slotsAtTier(slots, ENTRY.id)).toBe(2);
+        expect(slotsAtTier(slots, `max`)).toBe(1);
+        expect(slots.total).toBe(4);
     });
 
-    it(`falls back to the free lane's one for a lapsed plan, no plan, and a comped account`, async () => {
-        expect(await hostedSlotsOf(fakePrisma({ plans: [row(`past_due`, { quantity: 3 })] }).prisma, config, `user-1`)).toBe(1);
-        expect(await hostedSlotsOf(fakePrisma().prisma, config, `user-1`)).toBe(1);
+    it(`counts no bought slot for a lapsed plan or no plan, and still gives the free lane's`, async () => {
+        const lapsed = await hostedSlotsOf(fakePrisma({ plans: [row(`past_due`, { items: [item(ENTRY.id, 3)] })] }).prisma, config, `user-1`);
+        expect(lapsed).toMatchObject({ free: 1, total: 1 });
+        expect(slotsAtTier(lapsed, ENTRY.id)).toBe(0);
+        expect(await hostedSlotsOf(fakePrisma().prisma, config, `user-1`)).toMatchObject({ free: 1, total: 1 });
     });
 
-    it(`never gives a subscriber fewer than the free lane does`, async () => {
-        const generous = { ...config, hosted: { ...config.hosted, perUser: 2 } };
-        expect(await hostedSlotsOf(fakePrisma({ plans: [row(`active`, { quantity: 1 })] }).prisma, generous, `user-1`)).toBe(2);
+    // A rung this ladder does not have is not a slot anybody can stand a machine on.
+    it(`ignores an item at a rung off the ladder rather than counting it`, async () => {
+        const slots = await hostedSlotsOf(fakePrisma({ plans: [row(`active`, { items: [item(`enterprise`, 5)] })] }).prisma, config, `user-1`);
+        expect(slots.total).toBe(1);
+    });
+
+    it(`never sells a slot at the free rung, whatever an item says`, async () => {
+        const slots = await hostedSlotsOf(fakePrisma({ plans: [row(`active`, { items: [item(FREE_TIER.id, 9)] })] }).prisma, config, `user-1`);
+        expect(slotsAtTier(slots, FREE_TIER.id)).toBe(config.hosted.perUser);
     });
 });

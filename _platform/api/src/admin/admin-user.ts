@@ -41,7 +41,7 @@ export const adminUserDetail = async (
             orderBy: { day: `desc` },
             select: { day: true, messages: true, lastModel: true },
         }),
-        prisma.hostedUsage.findUnique({ where: { userId_month: { userId: user.id, month } }, select: { minutes: true } }),
+        prisma.hostedUsage.aggregate({ where: { month, sandbox: { ownerId: user.id } }, _sum: { minutes: true } }),
         prisma.wallet.findMany({
             where: { userId: user.id },
             select: { id: true, network: true, address: true, perPaymentMaxUsd: true, dailyCapUsd: true },
@@ -100,7 +100,7 @@ export const adminUserDetail = async (
         providers: [...new Set(accounts.map((account) => account.providerId))],
         plan: plan ? { status: plan.status, currentPeriodEnd: plan.currentPeriodEnd.toISOString() } : null,
         trialDays: trialRows,
-        hostedMonthMinutes: hostedRows?.minutes ?? 0,
+        hostedMonthMinutes: hostedRows._sum.minutes ?? 0,
         hostedSuspended: user.hostedSuspendedAt ? { at: user.hostedSuspendedAt.toISOString(), reason: user.hostedSuspendedReason ?? `` } : null,
         // The rows are written by the watch with these words; an unknown one is a bug there, not a page to blank.
         strikes: strikes.map((strike) => ({

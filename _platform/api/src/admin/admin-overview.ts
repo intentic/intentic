@@ -1,4 +1,5 @@
 import type { AdminOverview } from "@intentic/api-contract";
+import { hostedTier, isHostedTierId } from "@intentic/constants";
 import type { PrismaClient } from "@intentic/prisma";
 import type { Config } from "../config.js";
 import { trialEnabled } from "../trial/trial-pool.js";
@@ -27,8 +28,8 @@ export const adminOverview = async (prisma: PrismaClient, config: Config, now: (
         // Churn that already happened: canceled rows whose last webhook update landed this month.
         prisma.hostedPlan.count({ where: { status: `canceled`, updatedAt: { gte: new Date(at.getTime() - 30 * DAY_MS) } } }),
         prisma.hostedMachine.count(),
-        // Slots, not rows: a plan covering three hosted sandboxes bills three times the price.
-        prisma.hostedPlan.aggregate({ where: { status: `active` }, _sum: { quantity: true } }),
+        // Slots, not rows, and per rung: a plan covering a Standard and a Max bills two different prices.
+        prisma.hostedPlanItem.groupBy({ by: [`tier`], where: { plan: { status: `active` } }, _sum: { quantity: true } }),
     ]);
     const planCount = (status: string) => plansByStatus.find((row) => row.status === status)?._count._all ?? 0;
     const active = planCount(`active`);
@@ -42,9 +43,9 @@ export const adminOverview = async (prisma: PrismaClient, config: Config, now: (
             trialing: planCount(`trialing`),
             pastDue: planCount(`past_due`),
             canceled30d,
-            // Display arithmetic, never accounting: Stripe is the money's source of truth. Trialing rows pay nothing
-            // yet.
-            mrrUsd: (activeSlots._sum.quantity ?? 0) * config.hostedPlan.priceUsd,
+            // Display arithmetic, never accounting: Stripe is the money's source of truth, and trialing rows pay
+            // nothing yet. A slot at a rung this ladder no longer has is counted at nothing rather than guessed at.
+            mrrUsd: activeSlots.reduce((sum, row) => sum + (row._sum.quantity ?? 0) * (isHostedTierId(row.tier) ? hostedTier(row.tier).priceUsd : 0), 0),
         },
         hostedMachines,
         lanes: {

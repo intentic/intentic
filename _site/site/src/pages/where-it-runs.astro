@@ -1,6 +1,5 @@
 ---
-import { hosted } from "@intentic/site-content/hosted";
-import { installScriptUrl } from "@intentic/constants";
+import { FREE_TIER, installScriptUrl, PAID_TIERS } from "@intentic/constants";
 import { APP_URL, DEMO_PATH } from "@intentic/site-content/site";
 import BaseLayout from "../layouts/BaseLayout.astro";
 import Footer from "../components/Footer.astro";
@@ -16,7 +15,7 @@ const rungs = [
     {
         machine: "hosted",
         title: "Start instantly",
-        cost: `Free · ${hosted.freeHours} hours a month, always on for $${hosted.priceUsd}`,
+        cost: `Free · ${FREE_TIER.monthlyHours} hours a month, bigger machines from $${PAID_TIERS[0]?.priceUsd}`,
         whose: "Our servers",
         asks: "One click. No install, nothing to run, no account anywhere else.",
         body: "We start a machine for you and hand your workspace back in seconds. It is the fastest way to see what the product is, and the only rung that asks nothing of a device you own.",

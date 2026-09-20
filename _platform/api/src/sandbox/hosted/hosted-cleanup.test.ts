@@ -1,3 +1,4 @@
+import { FREE_TIER } from "@intentic/constants";
 import { Prisma, type PrismaClient } from "@intentic/prisma";
 import type { Logger } from "pino";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -22,7 +23,7 @@ const config = configSchema.parse({
     hosted: { flyApiToken: `fly`, flyOrg: `org` },
 });
 const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() } as unknown as Logger;
-const args = { sandboxId: `s1`, connectToken: `token`, ownerEmail: `owner@example.test`, region: `iad` };
+const args = { sandboxId: `s1`, connectToken: `token`, ownerEmail: `owner@example.test`, region: `iad`, tier: FREE_TIER.id };
 const appName = `${config.hosted.appPrefix}-${connectTokenIdentity(args.connectToken).tunnelId}`;
 
 const fixture = () => {

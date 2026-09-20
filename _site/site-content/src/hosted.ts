@@ -1,12 +1,9 @@
-// Published hosted figures, mirrored from the platform's own defaults (_platform/api/src/config.ts, the `hosted` and
-// `hostedPlan` blocks). Derived figures (like `idleWeeks`) are computed here, not retyped, so they can't drift from the
-// numbers they come from.
+// Published hosted figures. The machine ladder itself — shapes, hours, prices — comes from `@intentic/constants`
+// (hosted-tiers), the same module the platform's config defaults read, so a rung cannot say one thing here and another
+// in the product. What stays here is what the site alone states: the lane's lifecycle knobs, mirrored from the
+// platform's `hosted` config block, and the phrasings derived from them.
 
 export const hosted = {
-    // The hosted plan's monthly price in USD (HOSTED_PLAN_PRICE_USD).
-    priceUsd: 20,
-    // Awake hours per calendar month on the free lane (HOSTED_MONTHLY_HOURS); a sleeping machine spends none.
-    freeHours: 40,
     // A new account's ceiling for its first days (HOSTED_NEW_ACCOUNT_HOURS, HOSTED_NEW_ACCOUNT_DAYS), then the month's.
     newAccountHours: 10,
     newAccountDays: 7,
@@ -15,10 +12,6 @@ export const hosted = {
     // Days unopened before removal, and the warning day (HOSTED_IDLE_DAYS, HOSTED_IDLE_WARN_DAYS); free lane only.
     idleDays: 21,
     idleWarnDays: 14,
-    // The machine's shape (HOSTED_CPUS, HOSTED_MEMORY_MB, HOSTED_VOLUME_GB); same on the free lane and the plan.
-    cpus: 4,
-    memoryGb: 4,
-    diskGb: 10,
 } as const;
 
 // The free lane's removal window in weeks, for copy that says "three weeks".

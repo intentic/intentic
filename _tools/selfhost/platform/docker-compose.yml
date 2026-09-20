@@ -181,13 +181,13 @@ services:
             TRIAL_BASE_URL: ${TRIAL_BASE_URL:-}
             TRIAL_MODELS: ${TRIAL_MODELS:-}
             TRIAL_DAILY_MESSAGES: ${TRIAL_DAILY_MESSAGES:-}
-            # THE HOSTED PLAN (the one paid thing). stripeSecretKey + stripePriceId are the switch: both empty
+            # THE HOSTED PLAN (the one paid thing). stripeSecretKey + stripePrices are the switch: both empty
             # and the plan does not exist — /hosted-plan routes 404 and no plan is offered anywhere.
             HOSTED_PLAN_STRIPE_SECRET_KEY: ${HOSTED_PLAN_STRIPE_SECRET_KEY:-}
             HOSTED_PLAN_STRIPE_WEBHOOK_SECRET: ${HOSTED_PLAN_STRIPE_WEBHOOK_SECRET:-}
-            HOSTED_PLAN_STRIPE_PRICE_ID: ${HOSTED_PLAN_STRIPE_PRICE_ID:-}
-            # The published price, display only; what Stripe charges is the Price above.
-            HOSTED_PLAN_PRICE_USD: ${HOSTED_PLAN_PRICE_USD:-}
+            # One `tier=price_id` pair per rung on sale, comma-separated: `standard=price_x,max=price_y`. A rung
+            # left out is a rung nobody can buy; what each rung costs is the ladder's, not this file's.
+            HOSTED_PLAN_STRIPE_PRICES: ${HOSTED_PLAN_STRIPE_PRICES:-}
             # Comma-separated emails that count as on the plan WITHOUT a subscription (comped).
             HOSTED_PLAN_COMP_EMAILS: ${HOSTED_PLAN_COMP_EMAILS:-}
             # Where the Stripe client sends its calls: Stripe itself unless a test points it at a stand-in.

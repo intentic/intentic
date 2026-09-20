@@ -4,6 +4,7 @@ import { promisify } from "node:util";
 import type { HostedOffer, HostedPlanState } from "@intentic/api-contract";
 import { repoRoot } from "@intentic/constants/node";
 import { PrismaClient } from "@intentic/prisma";
+import { FREE_TIER, type HostedTier, PAID_TIERS } from "@intentic/constants";
 import { e2eTier } from "@intentic/testing/e2e";
 import { type FakeStripe, startFakeStripe } from "@intentic/testing/stripe-fake";
 import { PrismaPg } from "@prisma/adapter-pg";
@@ -14,7 +15,7 @@ import { createApp } from "../app.js";
 import type { Auth } from "../auth.js";
 import { configSchema, type Config } from "../config.js";
 import { testIngressConfig } from "../testing.js";
-import { hostedSlotsOf, onHostedPlan } from "../sandbox/hosted/hosted-plan.js";
+import { hostedSlotsOf, onHostedPlan, slotsAtTier } from "../sandbox/hosted/hosted-plan.js";
 import { hostedBudgetOf } from "../sandbox/hosted/hosted-usage.js";
 import { DAY_MS } from "../durations.js";
 
@@ -33,7 +34,10 @@ const BETTER_AUTH_SECRET = `hosted-plan-e2e-secret`;
 // An http api origin means Better Auth's plain cookie name, no __Secure- prefix (the browser tier has one).
 const SESSION_COOKIE = `better-auth.session_token`;
 const STRIPE = { secretKey: `sk_test_e2e_hosted_plan`, webhookSecret: `whsec_e2e_hosted_plan`, priceId: `price_e2e_hosted` };
-const MONTHLY_HOURS = 40;
+// The cheapest rung on sale, and the free lane's own ceiling: the boot check compares Stripe's amount against
+// what the rung advertises, so a figure typed here would fail the run rather than the code.
+const ENTRY = PAID_TIERS[0] as HostedTier;
+const MONTHLY_HOURS = FREE_TIER.monthlyHours;
 
 const logger = { child: () => logger, info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() } as unknown as Logger;
 
@@ -51,12 +55,10 @@ const configFor = (databaseUrl: string, stripeApiUrl: string): Config =>
         // The ramp off: every person here is seeded minutes old, and this suite's arithmetic is the month's.
         hosted: { flyApiToken: `fly-e2e`, flyOrg: `e2e`, monthlyHours: MONTHLY_HOURS, perUser: 1, newAccountDays: 0, abuseMinutes: 0 },
         hostedPlan: {
-            ...STRIPE,
             stripeSecretKey: STRIPE.secretKey,
             stripeWebhookSecret: STRIPE.webhookSecret,
-            stripePriceId: STRIPE.priceId,
+            stripePrices: `${ENTRY.id}=${STRIPE.priceId}`,
             stripeApiUrl,
-            priceUsd: 20,
         },
         api: { url: API_ORIGIN, port: 6480, host: `127.0.0.1`, httpsKey: ``, httpsCert: `` },
         log: { level: `silent`, pretty: `false` },
@@ -93,6 +95,13 @@ const seedHostedSandbox = async (prisma: PrismaClient, owner: Person, name: stri
     await prisma.hostedMachine.create({
         data: {
             sandboxId: sandbox.id,
+            // The free rung's own shape, read from the ladder: a machine row states what it is, and a figure typed
+            // here would describe a machine the product does not hand out.
+            tier: FREE_TIER.id,
+            cpuKind: FREE_TIER.cpuKind,
+            cpus: FREE_TIER.cpus,
+            memoryMb: FREE_TIER.memoryMb,
+            volumeGb: FREE_TIER.volumeGb,
             appName: `e2e-${digest.slice(0, 10)}`,
             machineId: `m-${digest.slice(0, 8)}`,
             volumeId: `vol-${digest.slice(0, 8)}`,
@@ -188,6 +197,7 @@ describe.skipIf(!tier.runs)(tier.title, () => {
         // Webhooks reach the api in-process, exactly as Stripe's would reach its port.
         stripe = await startFakeStripe({
             ...STRIPE,
+            priceCents: Math.round(ENTRY.priceUsd * 100),
             webhookUrl: `${API_ORIGIN}/hosted-plan/webhook`,
             deliver: async (request) => app.request(request),
         });
@@ -213,10 +223,10 @@ describe.skipIf(!tier.runs)(tier.title, () => {
     it(`sells the plan to everyone and describes the free lane to a signed-in account`, async () => {
         const signedOut = await state();
         expect(signedOut.status).toBe(200);
-        expect(signedOut.body).toEqual({ enabled: true, onPlan: false, priceUsd: 20 });
+        expect(signedOut.body).toEqual({ enabled: true, onPlan: false, priceUsd: ENTRY.priceUsd });
 
         const signedIn = await state(alice);
-        expect(signedIn.body).toMatchObject({ enabled: true, onPlan: false, priceUsd: 20 });
+        expect(signedIn.body).toMatchObject({ enabled: true, onPlan: false, priceUsd: ENTRY.priceUsd });
         expect(signedIn.body.status).toBeUndefined();
         expect(signedIn.body.hosted).toMatchObject({ slots: 1, machines: [], usage: { allowanceMinutes: MONTHLY_HOURS * 60, usedMinutes: 0 } });
     });
@@ -224,7 +234,7 @@ describe.skipIf(!tier.runs)(tier.title, () => {
     it(`meters the free lane: a spent month refuses the wake and the offer says how many hours are left`, async () => {
         ({ id: sandboxId } = await seedHostedSandbox(prisma, alice, `alice-box`));
         const month = new Date().toISOString().slice(0, 7);
-        await prisma.hostedUsage.create({ data: { userId: alice.id, month, minutes: MONTHLY_HOURS * 60 } });
+        await prisma.hostedUsage.create({ data: { ownerId: alice.id, sandboxId, month, minutes: MONTHLY_HOURS * 60 } });
 
         const refused = await wake();
         expect(refused.status).toBe(402);
@@ -267,14 +277,11 @@ describe.skipIf(!tier.runs)(tier.title, () => {
         expect(lastCall(stripe, `GET`, `/subscriptions/${subscriptionId}`)?.authorized).toBe(true);
 
         const row = await planRow();
-        expect(row).toMatchObject({
-            stripeCustomerId: customerId,
-            stripeSubscriptionId: subscriptionId,
-            stripeItemId: subscription.item.id,
-            status: `active`,
-            cancelAtPeriodEnd: false,
-            quantity: 1,
-        });
+        expect(row).toMatchObject({ stripeCustomerId: customerId, stripeSubscriptionId: subscriptionId, status: `active`, cancelAtPeriodEnd: false });
+        // One slot row per rung the subscription bought, named by the price's rung rather than by its position.
+        expect(await prisma.hostedPlanItem.findMany({ where: { planId: row?.id } })).toEqual([
+            expect.objectContaining({ tier: ENTRY.id, stripeItemId: subscription.items[0]?.id, quantity: 1 }),
+        ]);
 
         // The Billing page's read.
         const { body } = await state(alice);
@@ -282,14 +289,30 @@ describe.skipIf(!tier.runs)(tier.title, () => {
         expect(body.comped).toBeUndefined();
         expect(body.cancelAtPeriodEnd).toBeUndefined();
         expect(within(body.renewsAt, Date.now() + 30 * DAY_MS, 60_000)).toBe(true);
-        expect(body.hosted?.usage.allowanceMinutes).toBeNull();
 
-        // The rest of the platform's reads: the offer, the meter, the slot count.
-        expect((await offer()).body).toEqual({ enabled: true, remaining: 0, plan: true });
-        expect(await hostedBudgetOf(prisma, config, alice.id)).toMatchObject({ metered: false });
-        expect(await hostedSlotsOf(prisma, config, alice.id)).toBe(1);
+        /* BUYING A SLOT DOES NOT CHANGE THE MACHINE. The account now holds a Standard slot beside its free one, and
+         * the sandbox is still the free machine it was until it is moved onto that slot (changeTier below). */
+        expect((await offer()).body).toMatchObject({ enabled: true, plan: true });
+        const slots = await hostedSlotsOf(prisma, config, alice.id);
+        expect(slotsAtTier(slots, ENTRY.id)).toBe(1);
+        expect(slots.total).toBe(2);
+        expect(await hostedBudgetOf(prisma, config, { sandboxId, tier: FREE_TIER.id, ownerId: alice.id })).toMatchObject({
+            metered: true,
+            allowanceMinutes: MONTHLY_HOURS * 60,
+        });
 
-        // The wake refused a minute ago now goes through to the provider.
+        // The wake refused a minute ago is still refused: the machine's own month is still spent.
+        expect((await wake()).status).toBe(402);
+        // Moved onto the slot, it is a Standard machine with Standard's hours, and the wake goes through.
+        const moved = await rpc<{ state: string }>(app, `/hosted-plan/tier`, { as: alice, method: `POST`, body: { sandboxId, tier: ENTRY.id } });
+        expect(moved.status).toBe(200);
+        expect(moved.body.state).toBe(`done`);
+        expect(await prisma.hostedMachine.findUnique({ where: { sandboxId }, select: { tier: true, cpus: true, memoryMb: true } })).toEqual({
+            tier: ENTRY.id,
+            cpus: ENTRY.cpus,
+            memoryMb: ENTRY.memoryMb,
+        });
+        flyCalls.length = 0;
         const woken = await wake();
         expect(woken.status).toBe(200);
         expect(woken.body).toEqual({ ok: true });
@@ -308,37 +331,33 @@ describe.skipIf(!tier.runs)(tier.title, () => {
     });
 
     it(`sells a second slot with proration, refuses to sell back the one a machine stands on, and caps the count`, async () => {
-        const two = await rpc<HostedPlanState>(app, `/hosted-plan/slots`, { as: alice, method: `POST`, body: { quantity: 2 } });
+        const two = await rpc<HostedPlanState>(app, `/hosted-plan/slots`, { as: alice, method: `POST`, body: { tier: ENTRY.id, quantity: 2 } });
         expect(two.status).toBe(200);
-        expect(two.body.hosted?.slots).toBe(2);
+        expect(two.body.hosted?.slotsByTier[ENTRY.id]).toBe(2);
         const call = lastCall(stripe, `POST`, `/subscriptions/${subscriptionId}`);
         expect(call?.authorized).toBe(true);
         expect(call?.params).toEqual({
-            "items[0][id]": stripe.subscriptions.get(subscriptionId)?.item.id,
+            "items[0][id]": stripe.subscriptions.get(subscriptionId)?.items[0]?.id,
             "items[0][quantity]": `2`,
             proration_behavior: `create_prorations`,
         });
-        expect((await planRow())?.quantity).toBe(2);
-        expect(await hostedSlotsOf(prisma, config, alice.id)).toBe(2);
-        expect((await offer()).body.remaining).toBe(1);
+        expect(slotsAtTier(await hostedSlotsOf(prisma, config, alice.id), ENTRY.id)).toBe(2);
 
         // Stripe's own event for the change followed the api's write and was accepted; the guard did not roll it back.
-        expect((await planRow())?.quantity).toBe(2);
+        expect(await prisma.hostedPlanItem.findFirst({ where: { tier: ENTRY.id } })).toMatchObject({ quantity: 2 });
 
-        // A second machine now stands on the second slot: the slot cannot be sold back under it.
-        const second = await seedHostedSandbox(prisma, alice, `alice-second`);
-        const under = await rpc<Refusal>(app, `/hosted-plan/slots`, { as: alice, method: `POST`, body: { quantity: 1 } });
+        // The sandbox moved up a rung earlier stands on one of them: that one cannot be sold back under it.
+        const under = await rpc<Refusal>(app, `/hosted-plan/slots`, { as: alice, method: `POST`, body: { tier: ENTRY.id, quantity: 0 } });
         expect(under.status).toBe(400);
-        expect(under.body.message).toContain(`remove one before giving up its slot`);
+        expect(under.body.message).toContain(`move one down a rung`);
 
         // The contract's ceiling holds at the door.
-        const eleven = await rpc<Refusal>(app, `/hosted-plan/slots`, { as: alice, method: `POST`, body: { quantity: 11 } });
+        const eleven = await rpc<Refusal>(app, `/hosted-plan/slots`, { as: alice, method: `POST`, body: { tier: ENTRY.id, quantity: 11 } });
         expect(eleven.status).toBe(400);
 
-        await prisma.sandbox.delete({ where: { id: second.id } });
-        const one = await rpc<HostedPlanState>(app, `/hosted-plan/slots`, { as: alice, method: `POST`, body: { quantity: 1 } });
+        const one = await rpc<HostedPlanState>(app, `/hosted-plan/slots`, { as: alice, method: `POST`, body: { tier: ENTRY.id, quantity: 1 } });
         expect(one.status).toBe(200);
-        expect(one.body.hosted?.slots).toBe(1);
+        expect(one.body.hosted?.slotsByTier[ENTRY.id]).toBe(1);
     });
 
     it(`opens the portal for the customer Stripe knows, back to the Billing page`, async () => {
@@ -364,7 +383,7 @@ describe.skipIf(!tier.runs)(tier.title, () => {
         expect(body).toMatchObject({ onPlan: false, status: `past_due` });
         expect(body.cancelAtPeriodEnd).toBeUndefined();
         expect(body.hosted?.usage.allowanceMinutes).toBe(MONTHLY_HOURS * 60);
-        expect(await hostedBudgetOf(prisma, config, alice.id)).toMatchObject({ metered: true, remainingMinutes: 0 });
+        expect(await hostedBudgetOf(prisma, config, { sandboxId, tier: ENTRY.id, ownerId: alice.id })).toMatchObject({ metered: true });
         expect((await offer()).body).toEqual({ enabled: true, remaining: 0, hours: { allowance: MONTHLY_HOURS, remaining: 0 } });
         expect((await wake()).status).toBe(402);
     });
@@ -406,7 +425,7 @@ describe.skipIf(!tier.runs)(tier.title, () => {
         expect((await stripe.update(subscriptionId, { status: `canceled` })).status).toBe(200);
         const ended = await state(alice);
         expect(ended.body).toMatchObject({ onPlan: false, status: `canceled` });
-        expect(await hostedBudgetOf(prisma, config, alice.id)).toMatchObject({ metered: true });
+        expect(await hostedBudgetOf(prisma, config, { sandboxId, tier: FREE_TIER.id, ownerId: alice.id })).toMatchObject({ metered: true });
 
         // The resubscriber is the customer they were: addressed by id, with no email beside it.
         const checkout = await rpc<{ url: string }>(app, `/hosted-plan/checkout`, { as: alice, method: `POST` });
@@ -446,8 +465,7 @@ describe.skipIf(!tier.runs)(tier.title, () => {
         const { body } = await rpc<HostedPlanState>(compedApp, `/hosted-plan`, { as: bob });
         expect(body).toMatchObject({ enabled: true, onPlan: true, comped: true });
         expect(body.status).toBeUndefined();
-        expect(body.hosted?.usage.allowanceMinutes).toBeNull();
-        expect(await hostedBudgetOf(prisma, comped, bob.id)).toMatchObject({ metered: false });
+        expect(body.hosted?.usage.allowanceMinutes).toBe(MONTHLY_HOURS * 60);
         expect(await prisma.hostedPlan.findUnique({ where: { userId: bob.id } })).toBeNull();
 
         // Off the list, the same account is on the free lane: nothing was ever written down.

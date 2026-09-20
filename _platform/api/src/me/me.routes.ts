@@ -36,7 +36,7 @@ export const meRoutes = {
                 where: { userId: user.id },
                 select: { status: true, currentPeriodEnd: true, createdAt: true },
             }),
-            context.prisma.hostedUsage.findMany({ where: { userId: user.id }, select: { month: true, minutes: true } }),
+            context.prisma.hostedUsage.findMany({ where: { sandbox: { ownerId: user.id } }, select: { month: true, minutes: true } }),
             // The address each hosted machine was asked for from, and the abuse watch's verdicts: both about the
             // subject, both kept only as long as they are counted (retention.ts).
             context.prisma.hostedProvision.findMany({ where: { userId: user.id }, select: { ip: true, domain: true, appName: true, createdAt: true } }),

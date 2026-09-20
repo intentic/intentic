@@ -36,10 +36,14 @@ const config = (over: Record<string, unknown> = {}): Config =>
     }) as unknown as Config;
 
 // One machine as the sweep selects it: awake for two hours already.
+const MACHINE_CPUS = 4;
+
 const machine = (over: Record<string, unknown> = {}) => ({
     id: `h1`,
+    sandboxId: `s1`,
     appName: `intentic-sbx-a`,
     machineId: `m1`,
+    cpus: MACHINE_CPUS,
     wokeAt: new Date(NOW.getTime() - 120 * MINUTE_MS),
     sandbox: { id: `s1`, name: `dev`, ownerId: `u1`, owner: { email: `owner@example.test` } },
     ...over,
@@ -77,7 +81,7 @@ const prismaWith = (
                 return data;
             }),
         },
-        hostedUsage: { upsert: vi.fn().mockResolvedValue({}) },
+        hostedUsage: { upsert: vi.fn().mockResolvedValue({}), aggregate: vi.fn().mockResolvedValue({ _sum: { minutes: null } }) },
         hostedPlan: { findUnique: vi.fn().mockResolvedValue(null) },
         user: { update: vi.fn().mockResolvedValue({}) },
         ...over,
@@ -127,6 +131,10 @@ const stubFly = (samples: { cpu?: Sample[]; egress?: Sample[] }) => {
     return calls;
 };
 
+// What the provider reports for a machine busy this share of its CPUs: centiseconds per second, summed over them
+// and not divided by anything. Derived rather than typed, so a case reads as the share it means.
+const busyCpu = (share: number, cpus: number = MACHINE_CPUS): number => share * 100 * cpus;
+
 const stops = (calls: { method: string; url: string }[]) => calls.filter((call) => call.method === `POST` && call.url.endsWith(`/stop`));
 const queries = (calls: { method: string; url: string }[]) => calls.filter((call) => call.url.startsWith(`https://api.fly.io/prometheus/`));
 
@@ -136,7 +144,7 @@ afterEach(() => {
 
 describe(`the abuse watch`, () => {
     it(`stops a free machine at full CPU for the window, strikes it and closes its stretch`, async () => {
-        const calls = stubFly({ cpu: [{ app: `intentic-sbx-a`, instance: `m1`, value: 0.97 }] });
+        const calls = stubFly({ cpu: [{ app: `intentic-sbx-a`, instance: `m1`, value: busyCpu(0.97) }] });
         const { prisma, created } = prismaWith([machine()]);
         expect(await sweepHostedAbuse(prisma, config(), logger, NOW)).toEqual({ stopped: 1, suspended: 0, reported: 0 });
         expect(stops(calls).map((call) => call.url)).toEqual([expect.stringContaining(`/apps/intentic-sbx-a/machines/m1/stop`)]);
@@ -144,26 +152,45 @@ describe(`the abuse watch`, () => {
             expect.objectContaining({ userId: `u1`, appName: `intentic-sbx-a`, kind: `cpu`, measure: 0.97, windowMinutes: 90, action: `stopped` }),
         ]);
         // The stretch is charged and closed at the stop, not left for the meter to find.
-        expect(prisma.hostedUsage.upsert).toHaveBeenCalledWith(expect.objectContaining({ create: { userId: `u1`, month: `2026-09`, minutes: 120 } }));
+        expect(prisma.hostedUsage.upsert).toHaveBeenCalledWith(
+            expect.objectContaining({ create: { sandboxId: `s1`, ownerId: `u1`, month: `2026-09`, minutes: 120 } }),
+        );
         expect(prisma.hostedMachine.update).toHaveBeenCalledWith({ where: { id: `h1` }, data: { wokeAt: null } });
         expect(prisma.user.update).not.toHaveBeenCalled();
     });
 
-    it(`asks the provider with the window, the prefix and the machine's CPU count`, async () => {
+    // One query covers the whole fleet, and the fleet runs more than one CPU count, so the division cannot be in it.
+    it(`asks the provider with the window and the prefix, and divides by nothing`, async () => {
         const calls = stubFly({});
         await sweepHostedAbuse(prismaWith([machine()]).prisma, config(), logger, NOW);
         const asked = queries(calls).map((call) => decodeURIComponent(new URL(call.url).searchParams.get(`query`) ?? ``));
         expect(asked).toHaveLength(2);
-        expect(asked[0]).toBe(`sum by (app, instance) (rate(fly_instance_cpu{app=~"intentic-sbx-.*", mode!="idle"}[90m])) / 400`);
+        expect(asked[0]).toBe(`sum by (app, instance) (rate(fly_instance_cpu{app=~"intentic-sbx-.*", mode!="idle"}[90m]))`);
         expect(asked[1]).toContain(`fly_instance_net_sent_bytes`);
         expect(queries(calls)[0]?.url.startsWith(`https://api.fly.io/prometheus/intentic/api/v1/query?`)).toBe(true);
+    });
+
+    /* THE SHARE IS OF THIS MACHINE'S CPUS, NOT THE FLEET'S. One Prometheus query covers every app, so it cannot
+     * divide by a CPU count; with the division in the query, a rung with twice the CPUs read as twice as busy and
+     * every Max machine doing ordinary work would have been stopped at half load. */
+    it(`judges a bigger machine against its own CPUs, so the same absolute load is not a strike`, async () => {
+        const absolute = busyCpu(0.9);
+        const small = prismaWith([machine()]);
+        stubFly({ cpu: [{ app: `intentic-sbx-a`, instance: `m1`, value: absolute }] });
+        expect(await sweepHostedAbuse(small.prisma, config(), logger, NOW)).toMatchObject({ stopped: 1 });
+
+        // Twice the CPUs, the same work: 45% of them, well under the line.
+        const big = prismaWith([machine({ cpus: MACHINE_CPUS * 2 })]);
+        stubFly({ cpu: [{ app: `intentic-sbx-a`, instance: `m1`, value: absolute }] });
+        expect(await sweepHostedAbuse(big.prisma, config(), logger, NOW)).toMatchObject({ stopped: 0 });
+        expect(big.created).toEqual([]);
     });
 
     it(`leaves a machine under the line, and a builder's sample in the same app, alone`, async () => {
         const calls = stubFly({
             cpu: [
-                { app: `intentic-sbx-a`, instance: `m1`, value: 0.6 },
-                { app: `intentic-sbx-a`, instance: `builder`, value: 1 },
+                { app: `intentic-sbx-a`, instance: `m1`, value: busyCpu(0.6) },
+                { app: `intentic-sbx-a`, instance: `builder`, value: busyCpu(1) },
             ],
         });
         const { prisma, created } = prismaWith([machine()]);
@@ -173,7 +200,7 @@ describe(`the abuse watch`, () => {
     });
 
     it(`suspends the account on the second strike within the strike window, and says so to the owner`, async () => {
-        const calls = stubFly({ cpu: [{ app: `intentic-sbx-a`, instance: `m1`, value: 0.99 }] });
+        const calls = stubFly({ cpu: [{ app: `intentic-sbx-a`, instance: `m1`, value: busyCpu(0.99) }] });
         const earlier = { userId: `u1`, appName: `intentic-sbx-a`, action: `stopped`, createdAt: new Date(NOW.getTime() - 10 * 24 * 60 * MINUTE_MS) };
         const { prisma, created } = prismaWith([machine()], [earlier]);
         expect(await sweepHostedAbuse(prisma, config(), logger, NOW)).toEqual({ stopped: 0, suspended: 1, reported: 0 });
@@ -186,19 +213,19 @@ describe(`the abuse watch`, () => {
     });
 
     it(`does not count a strike older than the strike window, nor suspend with the line at 0`, async () => {
-        stubFly({ cpu: [{ app: `intentic-sbx-a`, instance: `m1`, value: 0.99 }] });
+        stubFly({ cpu: [{ app: `intentic-sbx-a`, instance: `m1`, value: busyCpu(0.99) }] });
         const old = { userId: `u1`, appName: `intentic-sbx-b`, action: `stopped`, createdAt: new Date(NOW.getTime() - 40 * 24 * 60 * MINUTE_MS) };
         const aged = prismaWith([machine()], [old]);
         expect(await sweepHostedAbuse(aged.prisma, config(), logger, NOW)).toMatchObject({ stopped: 1, suspended: 0 });
 
-        stubFly({ cpu: [{ app: `intentic-sbx-a`, instance: `m1`, value: 0.99 }] });
+        stubFly({ cpu: [{ app: `intentic-sbx-a`, instance: `m1`, value: busyCpu(0.99) }] });
         const recent = { ...old, createdAt: new Date(NOW.getTime() - 24 * 60 * MINUTE_MS) };
         const lenient = prismaWith([machine()], [recent]);
         expect(await sweepHostedAbuse(lenient.prisma, config({ abuseStrikesToSuspend: 0 }), logger, NOW)).toMatchObject({ stopped: 1, suspended: 0 });
     });
 
     it(`reports a subscriber's saturated machine without stopping it`, async () => {
-        const calls = stubFly({ cpu: [{ app: `intentic-sbx-a`, instance: `m1`, value: 1 }] });
+        const calls = stubFly({ cpu: [{ app: `intentic-sbx-a`, instance: `m1`, value: busyCpu(1) }] });
         const { prisma, created } = prismaWith([machine()], [], { hostedPlan: { findUnique: vi.fn().mockResolvedValue({ status: `active` }) } });
         expect(await sweepHostedAbuse(prisma, config(), logger, NOW)).toEqual({ stopped: 0, suspended: 0, reported: 1 });
         expect(stops(calls)).toHaveLength(0);
@@ -206,7 +233,7 @@ describe(`the abuse watch`, () => {
     });
 
     it(`strikes one machine once per window, however many ticks see it`, async () => {
-        const calls = stubFly({ cpu: [{ app: `intentic-sbx-a`, instance: `m1`, value: 1 }] });
+        const calls = stubFly({ cpu: [{ app: `intentic-sbx-a`, instance: `m1`, value: busyCpu(1) }] });
         const struck = { userId: `u1`, appName: `intentic-sbx-a`, action: `stopped`, createdAt: new Date(NOW.getTime() - 20 * MINUTE_MS) };
         const { prisma, created } = prismaWith([machine()], [struck]);
         expect(await sweepHostedAbuse(prisma, config(), logger, NOW)).toEqual({ stopped: 0, suspended: 0, reported: 0 });
@@ -229,7 +256,7 @@ describe(`the abuse watch`, () => {
     });
 
     it(`selects only machines awake for a whole window, and asks nothing when there are none`, async () => {
-        const calls = stubFly({ cpu: [{ app: `intentic-sbx-a`, instance: `m1`, value: 1 }] });
+        const calls = stubFly({ cpu: [{ app: `intentic-sbx-a`, instance: `m1`, value: busyCpu(1) }] });
         const { prisma } = prismaWith([]);
         expect(await sweepHostedAbuse(prisma, config(), logger, NOW)).toEqual({ stopped: 0, suspended: 0, reported: 0 });
         expect(prisma.hostedMachine.findMany).toHaveBeenCalledWith(
@@ -239,7 +266,7 @@ describe(`the abuse watch`, () => {
     });
 
     it(`is off with the tick at 0 or no lane`, async () => {
-        const calls = stubFly({ cpu: [{ app: `intentic-sbx-a`, instance: `m1`, value: 1 }] });
+        const calls = stubFly({ cpu: [{ app: `intentic-sbx-a`, instance: `m1`, value: busyCpu(1) }] });
         const { prisma } = prismaWith([machine()]);
         expect(await sweepHostedAbuse(prisma, config({ abuseMinutes: 0 }), logger, NOW)).toEqual({ stopped: 0, suspended: 0, reported: 0 });
         expect(await sweepHostedAbuse(prisma, config({ flyApiToken: `` }), logger, NOW)).toEqual({ stopped: 0, suspended: 0, reported: 0 });

@@ -386,15 +386,32 @@ export type User = z.infer<typeof UserSchema>;
 
 // The caller's hosted-plan billing state; `enabled: false` means the page doesn't exist at all.
 // `cancelAtPeriodEnd` turns "renews" into "ends": a cancel leaves `status` active until the period runs out.
+// A machine's own shape, as the row records it rather than as its rung would imply: the two differ mid-migration
+// and after any edit to the ladder, and this is the one a person's machine actually is.
+export const HostedShapeSchema = z.object({
+    cpuKind: z.enum(["shared", "performance"]),
+    cpus: z.number().int().positive(),
+    memoryMb: z.number().int().positive(),
+    volumeGb: z.number().int().positive(),
+});
+
 export const HostedPlanMachineSchema = z.object({
     sandboxId: z.string(),
     name: z.string(),
     region: z.string(),
     // Awake since (or stopped with its stretch not yet settled). Null when asleep and settled.
     wokeAt: z.iso.datetime().nullable(),
+    // Which rung sold this machine, and what it actually is.
+    tier: z.string(),
+    shape: HostedShapeSchema,
+    // This machine's own month: the ceiling belongs to its rung, so an account with two machines has two meters.
+    usedMinutes: z.number().int().nonnegative(),
+    allowanceMinutes: z.number().int().nonnegative().nullable(),
 });
 export type HostedPlanMachine = z.infer<typeof HostedPlanMachineSchema>;
 
+// The ACCOUNT's month, which is a different question from any one machine's: it counts minutes whose sandbox has
+// since been released, and its ceiling is the free rung's, because that is what a NEW machine would be allowed.
 export const HostedPlanUsageSchema = z.object({
     // The calendar month the meter is keyed by, `YYYY-MM` UTC.
     month: z.string(),
@@ -410,12 +427,15 @@ export const HostedPlanUsageSchema = z.object({
 export type HostedPlanUsage = z.infer<typeof HostedPlanUsageSchema>;
 
 export const HostedPlanHostedSchema = z.object({
-    // Hosted sandboxes this account may have: the plan's quantity when live, the free lane's otherwise.
+    // Hosted sandboxes this account may have in total, and how many at each rung; a machine occupies one slot at
+    // its own rung, so the page can say "1 of 2 Standard" as well as "2 of 3".
     slots: z.number().int().nonnegative(),
+    slotsByTier: z.record(z.string(), z.number().int().nonnegative()),
     machines: z.array(HostedPlanMachineSchema),
     usage: HostedPlanUsageSchema,
-    // The machine every slot is, the same on the free lane and the plan.
-    shape: z.object({ cpus: z.number().int().positive(), memoryMb: z.number().int().positive(), volumeGb: z.number().int().positive() }),
+    // The rung a machine lands on with nothing bought, and the shape this deployment gives it: an operator running
+    // their own fleet may size the free rung differently from the published ladder.
+    freeTier: z.object({ id: z.string(), shape: HostedShapeSchema, monthlyHours: z.number().int().nonnegative() }),
 });
 export type HostedPlanHosted = z.infer<typeof HostedPlanHostedSchema>;
 
@@ -433,6 +453,23 @@ export type HostedPlanState = z.infer<typeof HostedPlanStateSchema>;
 
 // Most hosted sandboxes one plan sells; reachable by pressing a button, absorbable without review.
 export const HOSTED_PLAN_MAX_SLOTS = 10;
+
+/* ONE ATTEMPT TO MOVE A SANDBOX BETWEEN MACHINES, as the Billing page watches it. `state` walks
+ * planned → snapshotting → applying → verifying → done, or ends at failed/rolledBack; `rolledBack` means the
+ * machine was changed and put back, `failed` that nothing was changed at all. */
+export const HostedMigrationSchema = z.object({
+    id: z.string(),
+    sandboxId: z.string(),
+    kind: z.enum(["resize", "move"]),
+    state: z.enum(["planned", "snapshotting", "applying", "verifying", "done", "failed", "rolledBack"]),
+    fromTier: z.string(),
+    toTier: z.string(),
+    startedAt: z.iso.datetime(),
+    finishedAt: z.iso.datetime().optional(),
+    // Why it ended where it did, in words a person can act on; absent while it is still going or once done.
+    error: z.string().optional(),
+});
+export type HostedMigration = z.infer<typeof HostedMigrationSchema>;
 
 // Avatars/logos as inline data URLs, client-downscaled; caps what the API persists in a row.
 export const ImageDataUrlSchema = z.string().startsWith("data:image/").max(150_000);

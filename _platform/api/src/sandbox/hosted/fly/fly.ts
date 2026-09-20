@@ -146,9 +146,127 @@ export const listAppNames = async (token: string, org: string): Promise<string[]
     return parsed.apps.map((app) => app.name);
 };
 
-export const createVolume = async (token: string, app: string, region: string, sizeGb: number): Promise<{ volumeId: string }> => {
-    const parsed = idSchema.parse(await call(token, `POST`, `/apps/${encodeURIComponent(app)}/volumes`, { name: `data`, region, size_gb: sizeGb }));
+/* HOW A NEW VOLUME IS FILLED, and where its machine will have to fit.
+ *
+ * `sourceVolumeId` forks an existing volume block for block (same app, any region); `snapshotId` restores one from a
+ * snapshot. Neither may be smaller than what it came from: Fly volumes grow and never shrink.
+ *
+ * `compute` is a placement hint, and leaving it off is how a migration discovers too late that the host holding the
+ * volume has no room for the guest that is supposed to mount it. Ask for the shape up front and Fly picks a host that
+ * can take it. */
+export interface FlyVolumeOptions {
+    readonly sourceVolumeId?: string;
+    readonly snapshotId?: string;
+    readonly compute?: { readonly cpuKind: "shared" | "performance"; readonly cpus: number; readonly memoryMb: number };
+    // Days Fly keeps this volume's daily snapshots, 1 to 60. Left off, Fly's own default (5) applies unstated.
+    readonly snapshotRetention?: number;
+}
+
+export const createVolume = async (
+    token: string,
+    app: string,
+    region: string,
+    sizeGb: number,
+    options: FlyVolumeOptions = {},
+): Promise<{ volumeId: string }> => {
+    const parsed = idSchema.parse(
+        await call(token, `POST`, `/apps/${encodeURIComponent(app)}/volumes`, {
+            name: `data`,
+            region,
+            size_gb: sizeGb,
+            ...(options.sourceVolumeId === undefined ? {} : { source_volume_id: options.sourceVolumeId }),
+            ...(options.snapshotId === undefined ? {} : { snapshot_id: options.snapshotId }),
+            ...(options.snapshotRetention === undefined ? {} : { snapshot_retention: options.snapshotRetention }),
+            ...(options.compute === undefined
+                ? {}
+                : { compute: { cpu_kind: options.compute.cpuKind, cpus: options.compute.cpus, memory_mb: options.compute.memoryMb } }),
+        }),
+    );
     return { volumeId: parsed.id };
+};
+
+// A volume's own state, for the two questions a migration asks: how big is it, and how much of it is free. `blocks`
+// and `blocks_avail` are optional because Fly omits them on a volume that is still being created or restored.
+const volumeSchema = z.object({
+    id: z.string(),
+    size_gb: z.number(),
+    state: z.string(),
+    block_size: z.number().optional(),
+    blocks: z.number().optional(),
+    blocks_avail: z.number().optional(),
+});
+
+export interface FlyVolume {
+    readonly id: string;
+    readonly sizeGb: number;
+    readonly state: string;
+    // Bytes in use, or undefined when Fly has not reported the block counts yet.
+    readonly usedBytes: number | undefined;
+}
+
+export const getVolume = async (token: string, app: string, volumeId: string): Promise<FlyVolume> => {
+    const parsed = volumeSchema.parse(await call(token, `GET`, `/apps/${encodeURIComponent(app)}/volumes/${encodeURIComponent(volumeId)}`));
+    const { block_size: blockSize, blocks, blocks_avail: free } = parsed;
+    return {
+        id: parsed.id,
+        sizeGb: parsed.size_gb,
+        state: parsed.state,
+        usedBytes: blockSize === undefined || blocks === undefined || free === undefined ? undefined : (blocks - free) * blockSize,
+    };
+};
+
+// Grows a volume in place. Fly refuses a size below the current one, which is the whole reason a downgrade leaves the
+// disk alone. `needs_restart` says the filesystem will only see the new size after the machine restarts.
+const extendSchema = z.object({ volume: volumeSchema, needs_restart: z.boolean().optional() });
+
+export const extendVolume = async (token: string, app: string, volumeId: string, sizeGb: number): Promise<{ needsRestart: boolean }> => {
+    const parsed = extendSchema.parse(
+        await call(token, `PUT`, `/apps/${encodeURIComponent(app)}/volumes/${encodeURIComponent(volumeId)}/extend`, { size_gb: sizeGb }),
+    );
+    return { needsRestart: parsed.needs_restart === true };
+};
+
+// Destroys one volume. Already-gone (404) counts as success, like every other delete here.
+export const destroyVolume = async (token: string, app: string, volumeId: string): Promise<void> => {
+    try {
+        await call(token, `DELETE`, `/apps/${encodeURIComponent(app)}/volumes/${encodeURIComponent(volumeId)}`);
+    } catch (error) {
+        if (!isFlyGone(error)) {
+            throw error;
+        }
+    }
+};
+
+// A snapshot as Fly reports it. `status` walks waiting → running → created; only `created` can be restored from.
+const snapshotSchema = z.object({ id: z.string(), status: z.string().optional(), created_at: z.string().optional(), size: z.number().optional() });
+
+export interface FlySnapshot {
+    readonly id: string;
+    readonly status: string;
+    readonly createdAt: Date | undefined;
+    // Stored bytes, which is the incremental size Fly bills for, not the volume's.
+    readonly sizeBytes: number | undefined;
+}
+
+const toSnapshot = (raw: z.infer<typeof snapshotSchema>): FlySnapshot => ({
+    id: raw.id,
+    status: raw.status ?? ``,
+    createdAt: parsedDate(raw.created_at),
+    sizeBytes: raw.size,
+});
+
+/* ASKS FOR A SNAPSHOT NOW, rather than waiting for the daily one; answers as soon as Fly has scheduled it. */
+export const createVolumeSnapshot = async (token: string, app: string, volumeId: string): Promise<FlySnapshot> =>
+    toSnapshot(snapshotSchema.parse(await call(token, `POST`, `/apps/${encodeURIComponent(app)}/volumes/${encodeURIComponent(volumeId)}/snapshots`)));
+
+// Every snapshot Fly still holds for a volume, newest first; the daily automatic ones and any taken on demand.
+export const listVolumeSnapshots = async (token: string, app: string, volumeId: string): Promise<FlySnapshot[]> => {
+    const parsed = z
+        .array(snapshotSchema)
+        .parse(await call(token, `GET`, `/apps/${encodeURIComponent(app)}/volumes/${encodeURIComponent(volumeId)}/snapshots`));
+    return parsed
+        .map(toSnapshot)
+        .toSorted((left, right) => (right.createdAt?.getTime() ?? 0) - (left.createdAt?.getTime() ?? 0));
 };
 
 // `instance_id`: this create's machine version; the build row records it to distinguish builder runs.

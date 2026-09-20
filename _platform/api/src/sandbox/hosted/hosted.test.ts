@@ -1,3 +1,4 @@
+import { FREE_TIER, type HostedTier, PAID_TIERS } from "@intentic/constants";
 import { Prisma } from "@intentic/prisma";
 import { call, ORPCError } from "@orpc/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -7,6 +8,7 @@ import { sandboxRoutes } from "../sandbox.routes.js";
 import { sandboxIdFromToken, sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
 import { hostedEnabled, hostedInstanceId, provisionHosted, reapHostedOrphans, startAfterUpdate, wakeHosted } from "./hosted.js";
 import { HostedAlreadyProvisioned } from "./hosted-cleanup.js";
+import { hostedShapeFor } from "./hosted-shape.js";
 import { AT_CAPACITY_MESSAGE, forgetProviderCapacity, HostedAtCapacity } from "./hosted-capacity.js";
 import { forgetHostedImage } from "./build/hosted-image.js";
 import { testIngressConfig } from "../../testing.js";
@@ -55,15 +57,23 @@ const config = (over?: Record<string, unknown>): Config =>
             // No ceiling by default; capacity tests set this to the number under test.
             maxMachines: 0,
         },
-        hostedPlan: { compEmails: ``, stripeSecretKey: ``, stripePriceId: `` },
+        hostedPlan: { compEmails: ``, stripeSecretKey: ``, stripePrices: `` },
         ...over,
     }) as unknown as Config;
+
+// The cheapest rung on sale, for the one case that needs this platform to be selling something at all.
+const ENTRY = PAID_TIERS[0] as HostedTier;
+const PAID = ENTRY;
 
 /* Every model the hosted routes touch, stubbed to the harmless answer, with the case's own overrides on top. */
 const fakePrisma = (overrides: Record<string, Record<string, ReturnType<typeof vi.fn>>>) => {
     const prisma = {
         hostedPlan: { findUnique: vi.fn().mockResolvedValue(null) },
-        hostedUsage: { findUnique: vi.fn().mockResolvedValue(null), upsert: vi.fn().mockResolvedValue({}) },
+        hostedUsage: {
+            findUnique: vi.fn().mockResolvedValue(null),
+            upsert: vi.fn().mockResolvedValue({}),
+            aggregate: vi.fn().mockResolvedValue({ _sum: { minutes: null } }),
+        },
         // In good standing, and the provision ledger accepts every row.
         user: { findUnique: vi.fn().mockResolvedValue({ hostedSuspendedAt: null, hostedSuspendedReason: null }) },
         hostedProvision: { create: vi.fn().mockResolvedValue({}), findMany: vi.fn().mockResolvedValue([]) },
@@ -237,6 +247,8 @@ describe(`provisionHosted`, () => {
         ownerEmail: `owner@example.com`,
         // In production this comes from the caller's country; region.test.ts covers the pick.
         region: `iad`,
+        // The rung an arrival with no plan lands on, and the only one warm stock can serve.
+        tier: FREE_TIER.id,
     };
     // Hostname a machine answers under, derived from its connect token.
     const hostnameOf = (token: string): string => `sandbox-${sandboxIdFromToken(token)}.sbx.test`;
@@ -289,6 +301,10 @@ describe(`provisionHosted`, () => {
                 region: `iad`,
                 warm: false,
                 wokeAt: expect.any(Date),
+                // The row states the machine it made, rather than leaving a reader to look the rung up later. Read
+                // from the same place the provisioner reads it, since this deployment overrides the free rung's CPUs.
+                tier: FREE_TIER.id,
+                ...hostedShapeFor(config(), FREE_TIER.id),
             },
         });
     });
@@ -418,6 +434,10 @@ describe(`provisionHosted`, () => {
                 region: `iad`,
                 warm: true,
                 wokeAt: expect.any(Date),
+                // The row states the machine it made, rather than leaving a reader to look the rung up later. Read
+                // from the same place the provisioner reads it, since this deployment overrides the free rung's CPUs.
+                tier: FREE_TIER.id,
+                ...hostedShapeFor(config(), FREE_TIER.id),
             },
         });
         expect(poolDelete).toHaveBeenCalledWith({ where: { id: `p1` } });
@@ -836,15 +856,19 @@ describe(`sandbox routes: the hosted lane's gates`, () => {
         expect(on).toEqual({ enabled: true, remaining: 1, hours: { allowance: 40, remaining: 40 } });
     });
 
-    it(`hostedOffer tells a member nothing about hours, because none apply to them`, async () => {
+    /* THE CARD OFFERS A FREE MACHINE, so it states the free lane's hours even to somebody on the plan: a plan buys
+     * slots at a bigger rung, and the machine this card would hand over is still a free one. (`plan` is absent here
+     * because this platform sells nothing; the case below sets a price and gets it.) */
+    it(`tells a subscriber the free lane's hours too, since the machine on offer is still a free one`, async () => {
         const member = fakePrisma({
             hostedMachine: { count: vi.fn().mockResolvedValue(0) },
-            // Plan row: status and how many hosted sandboxes it covers.
-            hostedPlan: { findUnique: vi.fn().mockResolvedValue({ status: `active`, quantity: 1 }) },
+            // Plan row: status and the slots it holds at each rung.
+            hostedPlan: { findUnique: vi.fn().mockResolvedValue({ status: `active`, items: [] }) },
         });
         expect(await call(sandboxRoutes.hostedOffer, undefined, { context: routeContext({ prisma: member }) })).toEqual({
             enabled: true,
             remaining: 1,
+            hours: { allowance: config().hosted.monthlyHours, remaining: config().hosted.monthlyHours },
         });
         const uncapped = routeContext({
             prisma: fakePrisma({ hostedMachine: { count: vi.fn().mockResolvedValue(0) } }),
@@ -855,9 +879,15 @@ describe(`sandbox routes: the hosted lane's gates`, () => {
         // from the uncapped case above.
         const selling = routeContext({
             prisma: member,
-            config: config({ hostedPlan: { ...config().hostedPlan, stripeSecretKey: `sk`, stripePriceId: `price` } }),
+            config: config({ hostedPlan: { ...config().hostedPlan, stripeSecretKey: `sk`, stripePrices: `${ENTRY.id}=price_${ENTRY.id}` } }),
         });
-        expect(await call(sandboxRoutes.hostedOffer, undefined, { context: selling })).toEqual({ enabled: true, remaining: 1, plan: true });
+        expect(await call(sandboxRoutes.hostedOffer, undefined, { context: selling })).toEqual({
+            enabled: true,
+            remaining: 1,
+            // The hours are the free lane's, which is what the machine on offer would be; the plan buys a rung beside it.
+            hours: { allowance: config().hosted.monthlyHours, remaining: config().hosted.monthlyHours },
+            plan: true,
+        });
     });
 
     // PAYMENT_REQUIRED specifically, so the editor can offer membership without parsing the message.
@@ -877,18 +907,26 @@ describe(`sandbox routes: the hosted lane's gates`, () => {
         expect(fetchSpy).toHaveLength(0);
     });
 
-    it(`wake starts a member's machine however much of the month has been used`, async () => {
+    /* THE CEILING IS THE MACHINE'S RUNG'S. The same spent month that refuses a free machine's wake is nowhere near
+     * a Standard one's, and the rung on the row is the only thing that decides which. */
+    it(`wakes a machine on a paid rung past the hours a free one would have spent`, async () => {
         stubFetch([{ match: (method, url) => method === `POST` && url.endsWith(`/start`), respond: () => json({ ok: true }) }]);
-        const spentMember = fakePrisma({
-            sandbox: {
-                findFirst: vi
-                    .fn()
-                    .mockResolvedValue({ id: `s1`, ownerId: `u1`, hosted: { id: `h1`, appName: `intentic-sbx-a`, machineId: `m1`, wokeAt: null } }),
-            },
-            hostedUsage: { findUnique: vi.fn().mockResolvedValue({ minutes: 40 * 60 }) },
-            hostedPlan: { findUnique: vi.fn().mockResolvedValue({ status: `active` }) },
-        });
-        expect(await call(sandboxRoutes.wake, { sandboxId: `s1` }, { context: routeContext({ prisma: spentMember }) })).toEqual({ ok: true });
+        const spent = (tier: string) =>
+            fakePrisma({
+                sandbox: {
+                    findFirst: vi.fn().mockResolvedValue({
+                        id: `s1`,
+                        ownerId: `u1`,
+                        hosted: { id: `h1`, tier, appName: `intentic-sbx-a`, machineId: `m1`, wokeAt: null },
+                    }),
+                },
+                hostedUsage: { findUnique: vi.fn().mockResolvedValue({ minutes: FREE_TIER.monthlyHours * 60 }) },
+                hostedPlan: { findUnique: vi.fn().mockResolvedValue({ status: `active`, items: [] }) },
+            });
+        await expect(call(sandboxRoutes.wake, { sandboxId: `s1` }, { context: routeContext({ prisma: spent(FREE_TIER.id) }) })).rejects.toThrow(
+            /free hours are used up/u,
+        );
+        expect(await call(sandboxRoutes.wake, { sandboxId: `s1` }, { context: routeContext({ prisma: spent(PAID.id) }) })).toEqual({ ok: true });
     });
 
     // Baseline sandbox row: ordinary creation, tunnel already claimed.

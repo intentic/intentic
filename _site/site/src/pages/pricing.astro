@@ -56,6 +56,40 @@ const faq = content.faq.map((item) => ({ question: item.question, answer: item.a
             </div>
         </section>
 
+        <section class="border-t band-rule" aria-labelledby="machines-heading">
+            <div class="mx-auto max-w-6xl px-6 py-16">
+                <h2 id="machines-heading" class="display text-2xl font-semibold sm:text-3xl">{content.machines.heading}</h2>
+                <p class="mt-3 max-w-copy text-sm text-muted">{content.machines.sub}</p>
+                <div class="mt-8 grid gap-5 lg:grid-cols-3">
+                    {
+                        content.machines.rows.map((machine) => (
+                            <article class="card relative flex flex-col gap-4 p-6">
+                                <Corners set="diag" />
+                                <header>
+                                    <h3 class="text-base font-semibold tracking-tight text-content">{machine.name}</h3>
+                                    <div class="mt-3 flex flex-wrap items-baseline gap-x-2 gap-y-1">
+                                        <span class="text-3xl font-semibold tracking-tight text-content">{machine.price}</span>
+                                        <span class="text-sm text-muted">{machine.priceNote}</span>
+                                    </div>
+                                </header>
+                                <dl class="flex flex-col gap-2 border-t border-line pt-4 text-sm">
+                                    <div class="flex flex-col gap-0.5">
+                                        <dt class="text-2xs text-subtle">Machine</dt>
+                                        <dd class="text-muted">{machine.shape}</dd>
+                                    </div>
+                                    <div class="flex flex-col gap-0.5">
+                                        <dt class="text-2xs text-subtle">Hours</dt>
+                                        <dd class="text-muted">{machine.hours}</dd>
+                                    </div>
+                                </dl>
+                                <p class="mt-auto max-w-copy text-2xs leading-relaxed text-subtle">{machine.note}</p>
+                            </article>
+                        ))
+                    }
+                </div>
+            </div>
+        </section>
+
         <section class="band border-t band-rule" aria-labelledby="providers-heading">
             <div class="wall" aria-hidden="true"></div>
             <div class="relative mx-auto max-w-6xl px-6 py-16">

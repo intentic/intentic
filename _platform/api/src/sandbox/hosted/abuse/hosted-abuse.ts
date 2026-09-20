@@ -38,9 +38,10 @@ export const ABUSE_SUSPENSION_REASON = `repeated full-load use of a free hosted 
 // Prometheus anchors a label regex whole; the prefix is a literal inside it.
 const regexLiteral = (text: string): string => text.replace(/[.*+?^${}()|[\]\\]/g, `\\$&`);
 
-// Busy share of the machine's CPUs: non-idle centiseconds per second over the window, over 100 per CPU.
+// Non-idle centiseconds per second over the window, summed over the machine's CPUs and NOT divided here: one query
+// covers the whole fleet, and the fleet no longer runs one CPU count. verdictFor divides by the machine's own.
 const cpuQuery = (config: Config): string =>
-    `sum by (app, instance) (rate(fly_instance_cpu{app=~"${regexLiteral(config.hosted.appPrefix)}-.*", mode!="idle"}[${config.hosted.abuseWindowMinutes}m])) / ${100 * config.hosted.cpus}`;
+    `sum by (app, instance) (rate(fly_instance_cpu{app=~"${regexLiteral(config.hosted.appPrefix)}-.*", mode!="idle"}[${config.hosted.abuseWindowMinutes}m]))`;
 
 // Bytes sent per second over the window, as GB per hour.
 const egressQuery = (config: Config): string =>
@@ -61,9 +62,13 @@ const readFleet = async (config: Config): Promise<Reading[]> => {
 
 interface Candidate {
     readonly id: string;
+    // The sandbox whose month this machine's minutes land on; the meter is per machine, not per account.
+    readonly sandboxId: string;
     readonly appName: string;
     readonly machineId: string;
     readonly wokeAt: Date | null;
+    // What the busy share is a share OF: a 16-CPU machine at 85% is doing four times the work an 4-CPU one is.
+    readonly cpus: number;
     readonly sandbox: { readonly id: string; readonly name: string; readonly ownerId: string; readonly owner: { readonly email: string } };
 }
 
@@ -73,30 +78,35 @@ interface Verdict {
 }
 
 // The first rule this machine's own sample exceeds; a builder in the same app has another machine id and is never it.
+// The CPU sample arrives un-normalised (cpuQuery), so it is divided by this machine's own CPUs before comparing.
 const verdictFor = (readings: readonly Reading[], machine: Candidate): Verdict | undefined => {
     for (const reading of readings) {
         const sample = reading.samples.find((candidate) => candidate.app === machine.appName && candidate.machineId === machine.machineId);
-        if (sample !== undefined && sample.value >= reading.threshold) {
-            return { kind: reading.kind, measure: sample.value };
+        if (sample === undefined) {
+            continue;
+        }
+        const measure = reading.kind === `cpu` ? sample.value / (100 * machine.cpus) : sample.value;
+        if (measure >= reading.threshold) {
+            return { kind: reading.kind, measure };
         }
     }
     return undefined;
 };
 
-// What was measured, in the owner's units.
-const measured = (config: Config, verdict: Verdict): string =>
+// What was measured, in the owner's units; the CPU count is this machine's, not the fleet's.
+const measured = (config: Config, cpus: number, verdict: Verdict): string =>
     verdict.kind === `cpu`
-        ? `running at ${Math.round(verdict.measure * 100)}% of its ${config.hosted.cpus} CPUs for the last ${config.hosted.abuseWindowMinutes} minutes`
+        ? `running at ${Math.round(verdict.measure * 100)}% of its ${cpus} CPUs for the last ${config.hosted.abuseWindowMinutes} minutes`
         : `sending ${verdict.measure.toFixed(1)} GB an hour for the last ${config.hosted.abuseWindowMinutes} minutes`;
 
-const strikeMail = (config: Config, sandboxName: string, verdict: Verdict, suspended: boolean) => {
+const strikeMail = (config: Config, sandboxName: string, cpus: number, verdict: Verdict, suspended: boolean) => {
     const policy = `${PLATFORM_SITE_ORIGIN}/acceptable-use/`;
     return suspended
         ? {
               subject: `Hosted sandboxes are switched off for your account`,
               html: linkEmail({
                   heading: `"${sandboxName}" was stopped again, and hosted sandboxes are now off for your account`,
-                  body: `Our provider's meter showed this machine ${measured(config, verdict)}, and it is not the first time in ${config.hosted.abuseStrikeDays} days. A free hosted machine is for one person's development work, and sustained full load is against the acceptable use policy, so we have switched hosted sandboxes off for your account. Your account, your files and any sandbox on your own computer are unaffected. If we have this wrong, reply to this email and a person will look.`,
+                  body: `Our provider's meter showed this machine ${measured(config, cpus, verdict)}, and it is not the first time in ${config.hosted.abuseStrikeDays} days. A free hosted machine is for one person's development work, and sustained full load is against the acceptable use policy, so we have switched hosted sandboxes off for your account. Your account, your files and any sandbox on your own computer are unaffected. If we have this wrong, reply to this email and a person will look.`,
                   action: `Read the acceptable use policy`,
                   link: policy,
               }),
@@ -106,7 +116,7 @@ const strikeMail = (config: Config, sandboxName: string, verdict: Verdict, suspe
               subject: `Your hosted machine "${sandboxName}" was stopped`,
               html: linkEmail({
                   heading: `"${sandboxName}" was stopped for running flat out`,
-                  body: `Our provider's meter showed this machine ${measured(config, verdict)}. A free hosted machine is for one person's development work, not sustained full load, and we stop one that runs that way; mining and similar workloads are against the acceptable use policy. If this was real work, a long build or a test run, open the sandbox and it starts again, nothing was lost. A repeat within ${config.hosted.abuseStrikeDays} days switches hosted sandboxes off for your account.`,
+                  body: `Our provider's meter showed this machine ${measured(config, cpus, verdict)}. A free hosted machine is for one person's development work, not sustained full load, and we stop one that runs that way; mining and similar workloads are against the acceptable use policy. If this was real work, a long build or a test run, open the sandbox and it starts again, nothing was lost. A repeat within ${config.hosted.abuseStrikeDays} days switches hosted sandboxes off for your account.`,
                   action: `Open the sandbox`,
                   link: config.webOrigin,
               }),
@@ -148,7 +158,7 @@ const strike = async (
         return `reported`;
     }
     await stopMachine(config.hosted.flyApiToken, machine.appName, machine.machineId);
-    await closeHostedStretch(prisma, machine, ownerId, now);
+    await closeHostedStretch(prisma, { ...machine, ownerId }, now);
     const prior = await prisma.hostedStrike.count({
         where: {
             userId: ownerId,
@@ -164,7 +174,7 @@ const strike = async (
     } else {
         logger.warn({ app: machine.appName, ownerId, ...verdict, prior }, `hosted abuse: machine stopped, owner warned`);
     }
-    await sendMail(config, logger, { to: machine.sandbox.owner.email, ...strikeMail(config, machine.sandbox.name, verdict, suspend) }).catch(
+    await sendMail(config, logger, { to: machine.sandbox.owner.email, ...strikeMail(config, machine.sandbox.name, machine.cpus, verdict, suspend) }).catch(
         (error: unknown) => logger.error({ err: error, ownerId }, `hosted abuse: the owner's email could not be sent`),
     );
     return suspend ? `suspended` : `stopped`;
@@ -186,9 +196,11 @@ export const sweepHostedAbuse = async (
         where: { wokeAt: { lte: new Date(now.getTime() - config.hosted.abuseWindowMinutes * 60_000) } },
         select: {
             id: true,
+            sandboxId: true,
             appName: true,
             machineId: true,
             wokeAt: true,
+            cpus: true,
             sandbox: { select: { id: true, name: true, ownerId: true, owner: { select: { email: true } } } },
         },
     });

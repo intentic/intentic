@@ -1,3 +1,4 @@
+import { FREE_TIER } from "@intentic/constants";
 import { repoRoot } from "@intentic/constants/node";
 import { type ConfigDefinition, cliArgs, env, envFile, loadConfig as loadPuristicConfig } from "@puristic/env/index.js";
 import { join } from "node:path";
@@ -87,18 +88,23 @@ export const configSchema = z.object({
             appPrefix: z.string().default(`intentic-sbx`),
             // The image every hosted machine boots, the same public sandbox image every lane runs.
             image: z.string().default(`ghcr.io/intentic/sandbox:stable`),
-            // Starter machine shape; CPUs must stay high or git-heavy work beside cloudflared/dockerd starves the loop.
-            cpus: z.coerce.number().int().positive().default(4),
-            memoryMb: z.coerce.number().int().positive().default(4096),
-            volumeGb: z.coerce.number().int().positive().default(10),
+            // The free rung's shape, overridable by an operator running their own fleet; every paid rung's shape comes
+            // from the ladder itself (@intentic/constants hosted-tiers) and is not a deployment's to change.
+            cpus: z.coerce.number().int().positive().default(FREE_TIER.cpus),
+            memoryMb: z.coerce.number().int().positive().default(FREE_TIER.memoryMb),
+            volumeGb: z.coerce.number().int().positive().default(FREE_TIER.volumeGb),
+            // Days the provider keeps a volume's daily snapshots, 1 to 60, stated rather than inherited: Fly's own
+            // default is 5, and a backup window nobody wrote down is one nobody can promise. 0 leaves it to Fly.
+            snapshotRetentionDays: z.coerce.number().int().min(0).max(60).default(7),
             // Hosted sandboxes per user; the free promise is one instant box each.
             perUser: z.coerce.number().int().positive().default(1),
             // The fleet's machine ceiling on the provider; 0 defers to the provider's own limit instead of one here.
             maxMachines: z.coerce.number().int().nonnegative().default(0),
             // Idle minutes before the daemon exits and the machine stops; 0 disables (always-on).
             idleStopMinutes: z.coerce.number().int().nonnegative().default(20),
-            // Free-lane awake hours per month; members are unmetered. Charged only while awake, enforced at wake.
-            monthlyHours: z.coerce.number().int().nonnegative().default(40),
+            // The free rung's awake hours per month; a paid rung's ceiling is its own (hosted-tiers). 0 unmeters the
+            // free rung entirely. Charged only while awake, enforced at wake.
+            monthlyHours: z.coerce.number().int().nonnegative().default(FREE_TIER.monthlyHours),
             // Backstop past monthlyHours: stops a metered owner's machine once over budget by this many minutes.
             overBudgetGraceMinutes: z.coerce.number().int().nonnegative().default(60),
             // Days since last wake before a non-member's disk is collected; idleWarnDays emails once first. 0 disables.
@@ -171,9 +177,10 @@ export const configSchema = z.object({
             stripeApiUrl: z.url().default(`https://api.stripe.com/v1`),
             // Webhook signing secret; without it, subscription events are refused.
             stripeWebhookSecret: z.string().default(``).meta({ secret: true }),
-            stripePriceId: z.string().default(``),
-            // Display only; what Stripe actually charges is the Price above.
-            priceUsd: z.coerce.number().nonnegative().default(20),
+            // Comma-separated `tier=price_id` pairs, one per paid rung of the ladder (`standard=price_x,max=price_y`).
+            // A pairs list rather than a field per rung, so adding a rung is a ladder edit and one env var, never a
+            // schema change. A rung with no price here is not on sale; every rung unpriced means no plan at all.
+            stripePrices: z.string().default(``),
             // Comma-separated emails treated as on-plan without a subscription; checked live, never seeded as rows.
             compEmails: z.string().default(``),
         })

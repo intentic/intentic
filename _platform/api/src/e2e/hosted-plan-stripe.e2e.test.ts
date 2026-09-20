@@ -82,9 +82,10 @@ describe.skipIf(!tier.runs)(tier.title, () => {
 
     it(`reads a subscription in the shape the mirror needs, on this account's API version`, async () => {
         const read = await gateway.subscription(subscriptionId);
-        expect(read).toMatchObject({ id: subscriptionId, customer: customerId, status: `active`, cancelAtPeriodEnd: false, quantity: 1 });
-        expect(read.itemId).toMatch(/^si_/);
-        itemId = read.itemId;
+        expect(read).toMatchObject({ id: subscriptionId, customer: customerId, status: `active`, cancelAtPeriodEnd: false });
+        // One item per rung the account holds slots at; each carries the price that says which rung it is.
+        expect(read.items).toEqual([{ id: expect.stringMatching(/^si_/u), priceId, quantity: 1 }]);
+        itemId = read.items[0]?.id ?? ``;
         // A period end Stripe actually stated, not the client's fallback for a shape it could not read.
         expect(read.currentPeriodEnd.getTime()).toBeGreaterThan(Date.now() + 20 * DAY_MS);
     });
@@ -96,10 +97,12 @@ describe.skipIf(!tier.runs)(tier.title, () => {
         expect(price.unitAmount).toBeGreaterThan(0);
     });
 
-    it(`changes the slot count with proration and reads the new count back`, async () => {
-        expect((await gateway.setQuantity(subscriptionId, itemId, 2)).quantity).toBe(2);
-        expect((await gateway.subscription(subscriptionId)).quantity).toBe(2);
-        expect((await gateway.setQuantity(subscriptionId, itemId, 1)).quantity).toBe(1);
+    const quantityOf = (subscription: { items: readonly { quantity: number }[] }): number => subscription.items[0]?.quantity ?? 0;
+
+    it(`changes a rung's slot count with proration and reads the new count back`, async () => {
+        expect(quantityOf(await gateway.setItems(subscriptionId, [{ itemId, priceId, quantity: 2 }]))).toBe(2);
+        expect(quantityOf(await gateway.subscription(subscriptionId))).toBe(2);
+        expect(quantityOf(await gateway.setItems(subscriptionId, [{ itemId, priceId, quantity: 1 }]))).toBe(1);
     });
 
     it(`mints a checkout session for a new buyer and for a returning customer`, async () => {

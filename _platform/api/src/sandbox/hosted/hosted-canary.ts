@@ -1,4 +1,5 @@
 import { randomBytes } from "node:crypto";
+import { FREE_TIER } from "@intentic/constants";
 import type { PrismaClient } from "@intentic/prisma";
 import { sleep as pause } from "@intentic/base/async";
 import { previewUrl, STARTER_APP, STARTER_REPO } from "@intentic/sandbox-contract";
@@ -158,6 +159,8 @@ export const runHostedCanary = async (
             ownerEmail: email,
             // Default region: proves the lane; per-region proof is hosted-health.ts's job.
             region: config.hosted.region,
+            // The free rung, because it is the path a new signup takes and the one this watch exists to prove.
+            tier: FREE_TIER.id,
         });
         const announced = await waitForAnnounce(prisma, sandbox.id, DEADLINE_MS, sleep);
         const announcedInMs = Date.now() - startedAt;

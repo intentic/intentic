@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { HOSTED_PLAN_MAX_SLOTS } from "@intentic/api-contract";
+import { hostedShapeLine } from "@intentic/constants";
 import { Button, Notice, RowGroup, RowNote, useLoadingReveal } from "@intentic/ui";
 import { errorMessage } from "@intentic/ui/async";
 import { timeAgo } from "@intentic/ui/format";
@@ -19,7 +20,7 @@ import { useT } from "@intentic/ui/i18n";
 
 const t = useT();
 
-const { state: plan, error, refetch, meter, setSlots, slotsWorking } = useHostedPlan();
+const { state: plan, error, refetch, meter, setSlots, slotsWorking, changeTier, moving, tiers } = useHostedPlan();
 
 const working = ref(false);
 const actionError = ref<string | undefined>(undefined);
@@ -139,7 +140,8 @@ const open = async (door: `checkout` | `portal`): Promise<void> => {
     working.value = true;
     actionError.value = undefined;
     try {
-        const { url } = await (door === `checkout` ? apiClient.hostedPlan.checkout() : apiClient.hostedPlan.portal());
+        // Checkout buys the cheapest rung on sale; the ladder below is where another one is added.
+        const { url } = await (door === `checkout` ? apiClient.hostedPlan.checkout({}) : apiClient.hostedPlan.portal());
         window.location.href = url;
         // A browser has left this page by now; in the app the line above became a browser window somewhere else, and
         // this one is still standing here holding a pressed button.
@@ -167,9 +169,10 @@ const hosted = computed(() => plan.value?.hosted);
 const machines = computed(() => hosted.value?.machines ?? []);
 const slots = computed(() => hosted.value?.slots ?? 0);
 const price = computed(() => plan.value?.priceUsd ?? 0);
-const shape = computed(() => {
-    const value = hosted.value?.shape;
-    return value === undefined ? undefined : `${value.cpus} shared vCPUs · ${value.memoryMb / 1024} GB memory · ${value.volumeGb} GB disk`;
+// The machine a sandbox lands on with nothing bought, as this deployment sizes it.
+const freeShape = computed(() => {
+    const free = hosted.value?.freeTier;
+    return free === undefined ? undefined : hostedShapeLine(free.shape);
 });
 
 const resetsOn = computed(() => (hosted.value === undefined ? undefined : formatDay(hosted.value.usage.resetsAt)));
@@ -180,15 +183,50 @@ const machineState = (wokeAt: string | null): string => (wokeAt === null ? `asle
 
 // Slots are a subscriber's only (not comped); bounded up by the plan's cap, down by machines still standing.
 const paying = computed(() => plan.value?.onPlan === true && !comped.value);
-const canAddSlot = computed(() => paying.value && slots.value < HOSTED_PLAN_MAX_SLOTS);
-const canRemoveSlot = computed(() => paying.value && slots.value > 1 && machines.value.length < slots.value);
 const slotsError = ref<string | undefined>(undefined);
-const changeSlots = async (delta: 1 | -1): Promise<void> => {
+
+/* THE LADDER AS THIS PAGE SHOWS IT: every rung, what it is, what it costs, how many slots are held at it and how
+ * many of those a machine already stands on. Free is on the list because it is a rung like the others; it just is
+ * not bought, and its shape is this deployment's rather than the published one's. */
+const ladder = computed(() =>
+    tiers.map((tier) => {
+        const held = hosted.value?.slotsByTier[tier.id] ?? 0;
+        const free = hosted.value?.freeTier;
+        return {
+            id: tier.id,
+            name: tier.name,
+            priceUsd: tier.priceUsd,
+            shape: hostedShapeLine(tier.id === free?.id ? free.shape : tier),
+            hours: tier.id === free?.id ? (free?.monthlyHours ?? tier.monthlyHours) : tier.monthlyHours,
+            held,
+            standing: machines.value.filter((machine) => machine.tier === tier.id).length,
+        };
+    }),
+);
+
+const changeSlots = async (tier: string, quantity: number): Promise<void> => {
     slotsError.value = undefined;
     try {
-        await setSlots(slots.value + delta);
+        await setSlots(tier, quantity);
     } catch (err) {
         slotsError.value = errorMessage(err, `Couldn't change the plan.`);
+    }
+};
+
+// Whether this machine could move to that rung right now: a slot there, not already there, nothing in flight.
+const canMoveTo = (machine: { sandboxId: string; tier: string }, rung: { id: string; held: number; standing: number }): boolean =>
+    machine.tier !== rung.id && moving.value === undefined && rung.standing < (rung.id === hosted.value?.freeTier.id ? slots.value : rung.held);
+
+const moveError = ref<string | undefined>(undefined);
+const moveTo = async (sandboxId: string, tier: string): Promise<void> => {
+    moveError.value = undefined;
+    try {
+        const migration = await changeTier(sandboxId, tier);
+        if (migration.state !== `done`) {
+            moveError.value = migration.error ?? `The machine was put back as it was.`;
+        }
+    } catch (err) {
+        moveError.value = errorMessage(err, `Couldn't move this sandbox.`);
     }
 };
 
@@ -416,45 +454,88 @@ const HOSTED_SETUP = { name: `setup`, query: { machine: `hosted` } } as const;
                             :key="machine.sandboxId"
                             class="flex items-baseline justify-between gap-3 py-1.5 first:pt-0 last:pb-0"
                         >
-                            <span class="min-w-0 truncate text-sm text-content">{{ machine.name }}</span>
-                            <span class="shrink-0 text-2xs text-subtle">{{ machine.region }} · {{ machineState(machine.wokeAt) }}</span>
+                            <div class="flex min-w-0 flex-col gap-1">
+                                <span class="min-w-0 truncate text-sm text-content">{{ machine.name }}</span>
+                                <!-- This machine's own shape and month, from its row: once rungs differ, the account has neither. -->
+                                <span class="text-2xs text-subtle">
+                                    {{ hostedShapeLine(machine.shape) }} · {{ machine.region }} · {{ machineState(machine.wokeAt) }}
+                                    <template v-if="machine.allowanceMinutes !== null">
+                                        {{
+                                            t(`settings.settingsBilling.hoursOfMonth`, {
+                                                used: formatMinutes(machine.usedMinutes),
+                                                allowance: formatMinutes(machine.allowanceMinutes),
+                                            })
+                                        }}
+                                    </template>
+                                </span>
+                                <!-- Moving is its own act: the slot is already bought, and this puts the machine on it. -->
+                                <span v-if="hosted" class="flex flex-wrap items-center gap-1.5">
+                                    <Button
+                                        v-for="rung in ladder"
+                                        :key="rung.id"
+                                        :label="t(`settings.settingsBilling.moveToRung`, { name: rung.name })"
+                                        size="small"
+                                        severity="secondary"
+                                        text
+                                        :disabled="!canMoveTo(machine, rung)"
+                                        :loading="moving === machine.sandboxId"
+                                        @click="moveTo(machine.sandboxId, rung.id)"
+                                    />
+                                </span>
+                            </div>
                         </li>
                     </ul>
                 </RowNote>
-                <!-- A subscriber's control: each slot is another machine at the same price, so the button states it. -->
-                <RowNote v-if="paying" variant="block">
-                    <div class="flex flex-wrap items-center gap-x-3 gap-y-2">
+                <p v-if="moveError" class="mt-2 text-2xs text-danger">{{ moveError }}</p>
+            </RowGroup>
+
+            <!-- The ladder: every machine there is, what it costs, and how many of each this account holds. -->
+            <RowGroup v-if="hosted" :label="t(`settings.settingsBilling.theMachines`)">
+                <RowNote v-for="rung in ladder" :key="rung.id" variant="block">
+                    <div class="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+                        <span class="text-sm font-medium text-content">{{ rung.name }}</span>
+                        <span class="text-2xs text-subtle">
+                            {{ rung.priceUsd === 0 ? t(`settings.settingsBilling.noCard`) : `$${rung.priceUsd}/month` }}
+                        </span>
+                    </div>
+                    <p class="mt-1 text-xs text-muted">
+                        {{ rung.shape }} · {{ t(`settings.settingsBilling.awakeHoursMonth`, { hours: rung.hours }) }}
+                    </p>
+                    <div v-if="paying && rung.priceUsd > 0" class="mt-2 flex flex-wrap items-center gap-x-3 gap-y-2">
+                        <span class="text-2xs text-subtle">{{ t(`settings.settingsBilling.slotsHeld`, { held: rung.held, standing: rung.standing }) }}</span>
                         <Button
-                            :label="t(`settings.settingsBilling.addHostedSandboxMonth`, { price })"
+                            :label="t(`settings.settingsBilling.addSlotAt`, { price: rung.priceUsd })"
                             size="small"
                             severity="secondary"
-                            :disabled="!canAddSlot"
+                            :disabled="rung.held >= HOSTED_PLAN_MAX_SLOTS"
                             :loading="slotsWorking"
-                            @click="changeSlots(1)"
+                            @click="changeSlots(rung.id, rung.held + 1)"
                         />
                         <Button
-                            v-if="slots > 1"
+                            v-if="rung.held > 0"
                             :label="t(`settings.settingsBilling.removeSlot`)"
                             size="small"
                             severity="secondary"
                             text
-                            :disabled="!canRemoveSlot"
+                            :disabled="rung.standing >= rung.held"
                             :loading="slotsWorking"
-                            v-tooltip.top="canRemoveSlot ? undefined : t(`settings.settingsBilling.removeHostedSandboxFirst`)"
-                            @click="changeSlots(-1)"
+                            v-tooltip.top="rung.standing < rung.held ? undefined : t(`settings.settingsBilling.removeHostedSandboxFirst`)"
+                            @click="changeSlots(rung.id, rung.held - 1)"
                         />
-                        <span class="text-2xs text-subtle">{{ t(`settings.settingsBilling.chargedRestMonthStripe`) }}</span>
                     </div>
+                </RowNote>
+                <RowNote variant="block">
+                    <p class="text-2xs text-subtle">{{ t(`settings.settingsBilling.chargedRestMonthStripe`) }}</p>
                     <p v-if="slotsError" class="mt-2 text-2xs text-danger">{{ slotsError }}</p>
                 </RowNote>
             </RowGroup>
 
             <!-- What a slot is: what the money is a machine of. -->
-            <RowGroup v-if="hosted && shape" :label="t(`settings.settingsBilling.whatSlot`)">
+            <RowGroup v-if="hosted && freeShape" :label="t(`settings.settingsBilling.whatSlot`)">
                 <RowNote variant="block">
                     <dl class="grid grid-cols-1 gap-x-6 gap-y-2 text-xs @lg:grid-cols-[auto_1fr]">
                         <dt class="text-subtle">{{ t(`settings.settingsBilling.machine`) }}</dt>
-                        <dd class="text-muted">{{ t(`settings.settingsBilling.sameOnFreeLane`, { shape }) }}</dd>
+                        <dd class="text-muted">{{ t(`settings.settingsBilling.sameOnFreeLane`, { shape: freeShape }) }}</dd>
                         <dt class="text-subtle">{{ t(`settings.settingsBilling.freeLane`) }}</dt>
                         <dd class="text-muted">{{ t(`settings.settingsBilling.oneHostedSandboxAwake`) }}</dd>
                         <dt class="text-subtle">{{ t(`settings.settingsBilling.onPlan`) }}</dt>

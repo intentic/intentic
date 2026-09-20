@@ -50,7 +50,8 @@ export interface FakeSubscription {
     /** Epoch seconds, the item's `current_period_end`. */
     current_period_end: number;
     readonly created: number;
-    readonly item: { readonly id: string; readonly price: string; quantity: number };
+    // One per rung the account holds slots at; a subscription update may add, change or delete any of them.
+    items: { readonly id: string; readonly price: string; quantity: number }[];
 }
 
 export interface FakeSession {
@@ -172,18 +173,46 @@ const wireSubscription = (subscription: FakeSubscription): Record<string, unknow
     created: subscription.created,
     items: {
         object: "list",
-        data: [
-            {
-                id: subscription.item.id,
-                object: "subscription_item",
-                price: { id: subscription.item.price, object: "price" },
-                quantity: subscription.item.quantity,
-                current_period_start: subscription.current_period_end - PERIOD_DAYS * 86_400,
-                current_period_end: subscription.current_period_end,
-            },
-        ],
+        data: subscription.items.map((item) => ({
+            id: item.id,
+            object: "subscription_item",
+            price: { id: item.price, object: "price" },
+            quantity: item.quantity,
+            current_period_start: subscription.current_period_end - PERIOD_DAYS * 86_400,
+            current_period_end: subscription.current_period_end,
+        })),
     },
 });
+
+/* ONE SUBSCRIPTION UPDATE'S ITEM GROUPS, applied the way Stripe applies them: an `id` addresses an existing item
+ * and `deleted` removes it, a bare `price` adds a new one. Answers Stripe's own refusal text, or undefined. */
+const applyItemChanges = (subscription: FakeSubscription, params: Record<string, string>): string | undefined => {
+    for (let index = 0; params[`items[${index}][id]`] !== undefined || params[`items[${index}][price]`] !== undefined; index += 1) {
+        const itemId = params[`items[${index}][id]`];
+        const quantity = params[`items[${index}][quantity]`];
+        const counted = quantity !== undefined && /^\d+$/.test(quantity);
+        if (itemId === undefined) {
+            if (!counted) {
+                return `Invalid integer: items[${index}][quantity]`;
+            }
+            subscription.items.push({ id: id("si"), price: params[`items[${index}][price]`] ?? "", quantity: Number(quantity) });
+            continue;
+        }
+        const existing = subscription.items.find((item) => item.id === itemId);
+        if (existing === undefined) {
+            return `No such subscription_item: '${itemId}'`;
+        }
+        if (params[`items[${index}][deleted]`] === "true") {
+            subscription.items = subscription.items.filter((item) => item.id !== itemId);
+            continue;
+        }
+        if (!counted) {
+            return `Invalid integer: items[${index}][quantity]`;
+        }
+        existing.quantity = Number(quantity);
+    }
+    return undefined;
+};
 
 // The refusals Stripe makes of a checkout request that the client's encoding must never provoke.
 const checkoutRefusal = (params: Record<string, string>, customers: Map<string, FakeCustomer>, price: FakePrice): string | undefined => {
@@ -300,7 +329,7 @@ export const startFakeStripe = async (options: FakeStripeOptions): Promise<FakeS
             cancel_at_period_end: false,
             current_period_end: at + PERIOD_DAYS * 86_400,
             created: at,
-            item: { id: id("si"), price: session.price, quantity: session.quantity },
+            items: [{ id: id("si"), price: session.price, quantity: session.quantity }],
         };
         subscriptions.set(subscription.id, subscription);
         session.status = "complete";
@@ -326,7 +355,10 @@ export const startFakeStripe = async (options: FakeStripeOptions): Promise<FakeS
         subscription.status = patch.status ?? subscription.status;
         subscription.cancel_at_period_end = patch.cancel_at_period_end ?? subscription.cancel_at_period_end;
         subscription.current_period_end = patch.current_period_end ?? subscription.current_period_end;
-        subscription.item.quantity = patch.quantity ?? subscription.item.quantity;
+        const first = subscription.items[0];
+        if (patch.quantity !== undefined && first !== undefined) {
+            first.quantity = patch.quantity;
+        }
         const type = subscription.status === "canceled" ? "customer.subscription.deleted" : "customer.subscription.updated";
         return emit(type, wireSubscription(subscription), opts);
     };
@@ -432,14 +464,12 @@ export const startFakeStripe = async (options: FakeStripeOptions): Promise<FakeS
                 if (subscription === undefined) {
                     return refuse(hit.res, 404, `No such subscription: '${hit.match[1]}'`);
                 }
-                const quantity = params["items[0][quantity]"];
-                if (params["items[0][id]"] !== subscription.item.id) {
-                    return refuse(hit.res, 400, `No such subscription_item: '${params["items[0][id]"] ?? ""}'`);
+                // Every `items[n][…]` group in one update, the way Stripe takes them.
+                const refused = applyItemChanges(subscription, params);
+                if (refused !== undefined) {
+                    return refuse(hit.res, 400, refused);
                 }
-                if (quantity === undefined || !/^\d+$/.test(quantity)) {
-                    return refuse(hit.res, 400, "Invalid integer: items[0][quantity]");
-                }
-                await update(subscription.id, { quantity: Number(quantity) });
+                await update(subscription.id, {});
                 json(hit.res, wireSubscription(subscription));
             }),
         },

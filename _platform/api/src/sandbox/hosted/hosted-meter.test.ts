@@ -1,10 +1,14 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { PrismaClient } from "@intentic/prisma";
 import type { Config } from "../../config.js";
+import { FREE_TIER, hostedTier } from "@intentic/constants";
 import { stopOverBudgetHosted } from "./hosted-meter.js";
 
-// Reads the open stretch live and stops a metered owner's running machines once the month exceeds the ceiling plus
-// grace; a subscriber, an owner under the ceiling, and an already-stopped machine are left alone.
+const STANDARD = hostedTier(`standard`);
+
+// Reads the open stretch live and stops a machine once ITS OWN month exceeds ITS OWN rung's ceiling plus the grace.
+// Judged per machine, not per account: an account holding a spent free machine and a Standard one nowhere near its
+// hours loses only the first. A machine under its ceiling and one that already stopped are left alone.
 
 const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() } as never;
 
@@ -21,6 +25,8 @@ const config = (over: Record<string, unknown> = {}): Config =>
 // One machine with an open stretch, as the tick selects it.
 const machine = (over: Record<string, unknown> = {}) => ({
     id: `h1`,
+    sandboxId: `s1`,
+    tier: FREE_TIER.id,
     appName: `intentic-sbx-a`,
     machineId: `m1`,
     wokeAt: new Date(NOW.getTime() - 10 * 60_000),
@@ -30,11 +36,12 @@ const machine = (over: Record<string, unknown> = {}) => ({
 
 const prismaWith = (rows: ReturnType<typeof machine>[], over: Record<string, Record<string, ReturnType<typeof vi.fn>>> = {}) =>
     ({
-        // The tick's select and the meter's per-owner read share this table; the stub honors the owner filter.
+        // The tick's select and the meter's per-machine read share this table; the stub answers both.
         hostedMachine: {
             findMany: vi.fn(async ({ where }: { where: { sandbox?: { ownerId: string } } }) =>
                 where.sandbox === undefined ? rows : rows.filter((row) => row.sandbox.ownerId === where.sandbox?.ownerId),
             ),
+            findUnique: vi.fn(async ({ where }: { where: { sandboxId: string } }) => rows.find((row) => row.sandboxId === where.sandboxId) ?? null),
         },
         hostedUsage: { findUnique: vi.fn().mockResolvedValue(null) },
         hostedPlan: { findUnique: vi.fn().mockResolvedValue(null) },
@@ -82,13 +89,31 @@ describe(`the hour meter's stop`, () => {
         expect(stops(calls)).toHaveLength(1);
     });
 
-    it(`never touches a subscriber's machine`, async () => {
+    // A stretch belongs to the month it began in, so one still running from last month spends none of this one's.
+    it(`counts nothing against this month for a stretch that began in the last`, async () => {
         const calls = stubFly(`started`);
-        const prisma = prismaWith([machine({ wokeAt: new Date(NOW.getTime() - 400 * 60 * 60_000) })], {
-            hostedPlan: { findUnique: vi.fn().mockResolvedValue({ status: `active` }) },
-        });
+        const prisma = prismaWith([machine({ wokeAt: new Date(`2026-07-25T12:00:00.000Z`) })]);
         expect(await stopOverBudgetHosted(prisma, config(), logger, NOW)).toEqual({ stopped: 0 });
         expect(stops(calls)).toHaveLength(0);
+    });
+
+    /* A PAID MACHINE IS NOT UNMETERED, it has a bigger month. Awake for 100 of this month's hours is past the free
+     * rung's 40 and well inside Standard's, and the rung on the row is the only thing that decides which. */
+    it(`judges a paid machine against its own rung's hours, not the free lane's`, async () => {
+        const awake = { wokeAt: new Date(NOW.getTime() - 100 * 60 * 60_000) };
+        stubFly(`started`);
+        expect(await stopOverBudgetHosted(prismaWith([machine(awake)]), config(), logger, NOW)).toEqual({ stopped: 1 });
+
+        const calls = stubFly(`started`);
+        expect(await stopOverBudgetHosted(prismaWith([machine({ ...awake, tier: STANDARD.id })]), config(), logger, NOW)).toEqual({ stopped: 0 });
+        expect(stops(calls)).toHaveLength(0);
+    });
+
+    // The operator's ceiling knob is the free rung's; switching it off does not make a bought rung free of its own.
+    it(`keeps a paid machine metered where the free ceiling is switched off`, async () => {
+        stubFly(`started`);
+        const past = prismaWith([machine({ tier: STANDARD.id, wokeAt: new Date(NOW.getTime() - 300 * 60 * 60_000) })]);
+        expect(await stopOverBudgetHosted(past, config({ monthlyHours: 0 }), logger, NOW)).toEqual({ stopped: 1 });
     });
 
     // An open wokeAt also describes a machine that stopped on its own before its stretch settled.
@@ -99,7 +124,7 @@ describe(`the hour meter's stop`, () => {
         expect(stops(calls)).toHaveLength(0);
     });
 
-    it(`is off where the platform has no ceiling or no lane`, async () => {
+    it(`is off for a free machine where the platform sets no ceiling, and off entirely with no lane`, async () => {
         const calls = stubFly(`started`);
         const prisma = prismaWith([machine()], { hostedUsage: { findUnique: vi.fn().mockResolvedValue({ minutes: 9_000 }) } });
         expect(await stopOverBudgetHosted(prisma, config({ monthlyHours: 0 }), logger, NOW)).toEqual({ stopped: 0 });
@@ -120,13 +145,18 @@ describe(`the hour meter's stop`, () => {
         expect(stops(calls)).toHaveLength(1);
     });
 
-    it(`stops every running machine of a spent owner in one pass, and only theirs`, async () => {
+    it(`stops every spent machine in one pass, and only the spent ones`, async () => {
         const calls = stubFly(`started`);
-        const usage = vi.fn(async ({ where }: { where: { userId_month: { userId: string } } }) =>
-            where.userId_month.userId === `u1` ? { minutes: 9_000 } : { minutes: 0 },
+        const spent = new Set([`s1`, `s2`]);
+        const usage = vi.fn(async ({ where }: { where: { sandboxId_month: { sandboxId: string } } }) =>
+            spent.has(where.sandboxId_month.sandboxId) ? { minutes: 9_000 } : { minutes: 0 },
         );
         const prisma = prismaWith(
-            [machine(), machine({ id: `h2`, appName: `intentic-sbx-b`, machineId: `m2` }), machine({ id: `h3`, appName: `intentic-sbx-c`, machineId: `m3`, sandbox: { ownerId: `u2` } })],
+            [
+                machine(),
+                machine({ id: `h2`, sandboxId: `s2`, appName: `intentic-sbx-b`, machineId: `m2` }),
+                machine({ id: `h3`, sandboxId: `s3`, appName: `intentic-sbx-c`, machineId: `m3`, sandbox: { ownerId: `u2` } }),
+            ],
             { hostedUsage: { findUnique: usage } },
         );
         expect(await stopOverBudgetHosted(prisma, config(), logger, NOW)).toEqual({ stopped: 2 });

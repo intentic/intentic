@@ -18,6 +18,8 @@ export const JOB_HOSTED_BUILD = 6;
 export const JOB_HOSTED_METER = 7;
 // Stops and strikes machines at full load; concurrent runs would strike one window twice.
 export const JOB_HOSTED_ABUSE = 8;
+// Destroys the half-built machines and volumes a dead migration left; two replicas would race each other's deletes.
+export const JOB_HOSTED_MIGRATE = 9;
 
 export const runExclusive = async (config: Config, key: number, fn: () => Promise<void>): Promise<void> => {
     const client = new Client({ connectionString: config.database.url });

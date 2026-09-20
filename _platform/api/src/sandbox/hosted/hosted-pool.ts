@@ -1,3 +1,4 @@
+import { FREE_TIER } from "@intentic/constants";
 import type { PrismaClient } from "@intentic/prisma";
 import { sandboxIdFromToken } from "@intentic/sandbox-contract/tunnel-ids";
 import { flyMachineConfig } from "@intentic/sandbox-run/fly";
@@ -10,6 +11,7 @@ import { createApp, createMachine, createVolume, deleteApp, flyWarmRole, FlyErro
 import { hostedCapacity, noteProviderAtCapacity, providerWords } from "./hosted-capacity.js";
 import { resolveHostedImage } from "./build/hosted-image.js";
 import { hostedEnabled, hostedInstanceId } from "./hosted.js";
+import { hostedShapeFor, volumeOptions } from "./hosted-shape.js";
 
 // The warm pool's whole lifecycle except the claim (hosted.ts, since a claim's product is a HostedMachine). A pool
 // machine's one boot is the daemon's prewarm (`SANDBOX_PREWARM=1`): real image, real entrypoint, no identity, pulling
@@ -30,17 +32,19 @@ const TICK_MS = 5 * 60 * 1000;
 // Builds one pool machine: app, volume, then a machine whose boot is the prewarm, stamped `building`. The reconcile
 // flips it `ready` once Fly reports the boot stopped; a failed build deletes the app.
 const buildPoolMachine = async (prisma: PrismaClient, config: Config, logger: Logger, region: string, image: string): Promise<void> => {
-    const { flyApiToken, flyOrg, cpus, memoryMb, volumeGb } = config.hosted;
+    const { flyApiToken, flyOrg } = config.hosted;
+    // Stock is the free rung's shape and nothing else: a paid arrival is built to order (hosted.ts's claim guard).
+    const { volumeGb, ...guest } = hostedShapeFor(config, FREE_TIER.id);
     // Identity first, since the app is named after it; same derivation as a built-to-order app's.
     const token = mintConnectToken();
     const appName = `${config.hosted.appPrefix}-${sandboxIdFromToken(token) ?? ``}`;
     await createApp(flyApiToken, flyOrg, appName);
     try {
-        const { volumeId } = await createVolume(flyApiToken, appName, region, volumeGb);
+        const { volumeId } = await createVolume(flyApiToken, appName, region, volumeGb, volumeOptions(config, { ...guest, volumeGb }));
         // Stamped as warm from birth (so no other deployment reads it as litter) and named like an owned app; nothing
         // routes to it.
         const warm = {
-            ...flyMachineConfig({ name: appName, image, baseImage: image, guest: { cpus, memoryMb }, volumeId, env: PREWARM_ENV }),
+            ...flyMachineConfig({ name: appName, image, baseImage: image, guest, volumeId, env: PREWARM_ENV }),
             metadata: flyWarmRole(hostedInstanceId(config)),
         };
         const { machineId } = await createMachine(flyApiToken, appName, { name: appName, region, config: warm });

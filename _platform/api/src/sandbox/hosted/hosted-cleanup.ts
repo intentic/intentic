@@ -90,7 +90,7 @@ export const releaseHosted = async (prisma: PrismaClient, config: Config, sandbo
                 create: { appName: sandbox.hosted.appName, deleteAfter },
                 update: { deleteAfter },
             });
-            await closeHostedStretch(tx, sandbox.hosted, sandbox.ownerId);
+            await closeHostedStretch(tx, { ...sandbox.hosted, ownerId: sandbox.ownerId });
             await tx.hostedMachine.delete({ where: { id: sandbox.hosted.id } });
         }
         const token = mintConnectToken();
