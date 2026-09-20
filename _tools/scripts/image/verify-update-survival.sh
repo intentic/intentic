@@ -31,6 +31,9 @@
 set -euo pipefail
 . "$(dirname "$0")/../lib/repo-root.sh"
 . "$(dirname "$0")/../lib/dind-host.sh"
+# The two pulls below are this drill's only conversation with ghcr.io; registry-retry.sh decides which
+# failures are the wire's rather than a verdict, and only those are asked again.
+. "$(dirname "$0")/../lib/registry-retry.sh"
 ROOT="$(repo_root)"
 
 START_IMAGE="${START_IMAGE:-ghcr.io/intentic/sandbox:stable}"
@@ -76,9 +79,12 @@ docker cp "$ROOT/_site/site/public/scripts/connect.sh" "$HOST_CONTAINER:/root/co
 DRILL_IMAGE="intentic-sandbox:update-drill"
 echo "==> resolving $START_IMAGE and $UPDATE_IMAGE"
 for image in "$START_IMAGE" "$UPDATE_IMAGE"; do
-    if ! in_host docker pull -q "$image" >/dev/null; then
+    # registry_retry, not image_pull: the dind host is created fresh above, so its image store cannot be
+    # holding the half-unpacked layer that helper exists to drop.
+    if ! registry_retry in_host docker pull -q "$image"; then
         echo "error: could not pull $image — the drill has no pair of images to move between, and nothing below" >&2
-        echo "       would be a statement about the update engine. This is the registry or this host's login." >&2
+        echo "       would be a statement about the update engine. The registry kept refusing or dropping the" >&2
+        echo "       pull, so this is the registry or this host's login." >&2
         exit 1
     fi
 done
