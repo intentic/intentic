@@ -156,6 +156,38 @@ describe(`the real sandbox contract`, () => {
         expect(SANDBOX_ROUTE_NAMES.filter((name) => !(name in SANDBOX_ROUTE_SHAPES))).toEqual([]);
     });
 
+    it(`fingerprints the streaming routes eventIterator used to hide`, () => {
+        expect(
+            [
+                `agent.attach`,
+                `capabilities.add`,
+                `exit.rotate`,
+                `exit.start`,
+                `exit.use`,
+                `intentic.applyEvents`,
+                `intentic.run`,
+                `netdisk.mount`,
+                `system.events`,
+                `system.manageDeviceSandbox`,
+                `system.runDeviceAgentFlow`,
+                `vpn.connect`,
+            ].filter((name) => name in SANDBOX_ROUTE_SHAPES).toSorted(),
+        ).toEqual([
+            `agent.attach`,
+            `capabilities.add`,
+            `exit.rotate`,
+            `exit.start`,
+            `exit.use`,
+            `intentic.applyEvents`,
+            `intentic.run`,
+            `netdisk.mount`,
+            `system.events`,
+            `system.manageDeviceSandbox`,
+            `system.runDeviceAgentFlow`,
+            `vpn.connect`,
+        ]);
+    });
+
     it(`fingerprints every route exactly once`, () => {
         expect(Object.keys(SANDBOX_ROUTE_SHAPES).every((name) => SANDBOX_ROUTE_NAMES.includes(name))).toBe(true);
         expect(Object.keys(SANDBOX_ROUTE_SHAPES).length).toBe(SANDBOX_ROUTE_NAMES.length);
