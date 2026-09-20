@@ -378,6 +378,11 @@ jobs:
           set -euo pipefail
           if [ "$EVENT_NAME" = "pull_request" ]; then
             base="$BASE_PR"
+          elif [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            base=$(git merge-base origin/main HEAD)
+            if [ "$base" = "$(git rev-parse HEAD)" ]; then
+              base=$(git rev-parse HEAD^)
+            fi
           else
             base="$BASE_PUSH"
           fi
