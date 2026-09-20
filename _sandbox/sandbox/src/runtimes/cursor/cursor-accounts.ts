@@ -4,8 +4,9 @@ import { composeEnvironment } from "../../environment/environment.js";
 import { cancelCursorLogin, startCursorLogin, toAccount } from "./cursor-credentials.js";
 
 // Cursor's account door (agent/provider-module.ts): start begins a device-style flow, keeps the PKCE verifier in memory
-// (never leaves the daemon), polls until sign-in completes, then mints a 90-day user key. `force` on `list` answers at
-// once: Cursor publishes no plan-wide headroom to re-measure.
+// (never leaves the daemon), polls until sign-in completes, then mints a 90-day user key. `list` carries each row's
+// reading, which for Cursor is what it has refused (cursor-usage.ts) rather than anything it publishes — the one thing
+// that tells two Cursor accounts apart in a picker.
 
 // Name shown in Cursor's own dashboard API-keys list; must distinguish this sandbox from the owner's laptop so revoking
 // the right key doesn't require guessing.
@@ -17,7 +18,16 @@ export const cursorAccountDoor = (services: Services): AccountDoor => ({
         return { url: started.url, code: "", state: "", flow: "device", variant: "", handshake: started.handshake, expiresAt: started.expiresAt };
     },
     cancel: cancelCursorLogin,
-    list: async () => await services.cursorStore.list(),
+    // Swept first, since a ledger entry ages out on its own: the sweep is what takes a spent reading back, and without
+    // it a row that has since reopened would keep its ring until the next refusal somewhere else.
+    list: async (force) => {
+        await services.headroom.refresh({ scope: { providers: ["cursor"] }, ...(force ? { maxAgeMs: 0, watched: true } : {}) });
+        const [accounts, usage] = await Promise.all([services.cursorStore.list(), services.accountUsage.read()]);
+        return accounts.map((account) => {
+            const reading = usage[account.id];
+            return reading === undefined ? account : { ...account, usage: reading };
+        });
+    },
     rename: async (id, label) => {
         const stored = await services.cursorStore.read(id);
         if (stored === undefined) {

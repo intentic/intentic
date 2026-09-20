@@ -99,3 +99,39 @@ test("asks Claude when an account has no reading at all", async () => {
 test("says nothing about a rung on a user's own endpoint", async () => {
     await expect(spentRung(unstubbed<Services>(`services`, {}), { provider: `endpoint/local`, model: `qwen` }, NOW)).resolves.toBeUndefined();
 });
+
+// Cursor publishes no allowance, so its rung is read off what it has already refused, per account and per model.
+const cursor = (accounts: Record<string, readonly string[]>): Services =>
+    unstubbed<Services>(`services`, {
+        cursorStore: unstubbed<Services[`cursorStore`]>(`cursorStore`, {
+            credentials: async () => Object.keys(accounts).map((id) => ({ id, apiKey: `k`, connectedAt: 0 })),
+        }),
+        cursorModels: unstubbed<Services[`cursorModels`]>(`cursorModels`, {
+            models: async () => ({ models: [{ id: `composer-2.5`, label: `Composer 2.5` }], default: `composer-2.5` }),
+        }),
+        observedLimits: unstubbed<Services[`observedLimits`]>(`observedLimits`, {
+            spent: async (_provider, account) =>
+                Object.fromEntries((accounts[account] ?? []).map((model) => [model, { at: NOW, message: `429 usage limit reached` }])),
+        }),
+    });
+
+const COMPOSER = { provider: `cursor`, model: `composer-2.5` };
+
+// The rung that went unused: one account is out of Composer, the other is not, and the chain must still ask it.
+test("asks Cursor while one account still has the model, whatever the other is out of", async () => {
+    await expect(spentRung(cursor({ one: [`composer-2.5`], two: [] }), COMPOSER, NOW)).resolves.toBeUndefined();
+});
+
+test("steps over Cursor once every account has been refused that model, naming the pool", async () => {
+    const spent = await spentRung(cursor({ one: [`composer-2.5`], two: [`composer-2.5`] }), COMPOSER, NOW);
+
+    expect(spent?.reason).toContain(`2`);
+    expect(spent?.reason).toContain(`Composer 2.5 allowance`);
+    // Cursor publishes no reset, so the sentence must not date one.
+    expect(spent?.reopensAt).toBeUndefined();
+    expect(spent?.reason).not.toMatch(/renews/);
+});
+
+test("an account out of another model is still asked for this one", async () => {
+    await expect(spentRung(cursor({ one: [`claude-opus-5`] }), COMPOSER, NOW)).resolves.toBeUndefined();
+});

@@ -9,6 +9,7 @@ import {
     type ContextUsage,
     type EditorContext,
     KeyedProviderSchema,
+    reportsPlanLimits,
     RESUME_NOTES,
     type SnapshotTurn,
     type TodoItem,
@@ -222,6 +223,26 @@ const recordModelRefusal = (
     void services.modelRefusals
         .record(provider, model, { at: Date.now(), message: event.message })
         .catch((error: unknown) => services.logger.warn({ err: error }, "model refusal: write failed"));
+};
+
+// Files a spent allowance as a READING, for a plan that publishes none to poll (usage/observed-limits.ts). Scoped to
+// the one account that was serving and the one model it was asked for: without that, one account's spent model reads as
+// the whole fleet's, which is what leaves a separately metered model (Cursor's Composer) unused beside it.
+const recordObservedLimit = (
+    services: Pick<Services, "observedLimits" | "headroom" | "logger">,
+    provider: AgentProvider,
+    account: string | undefined,
+    model: string | undefined,
+    event: { readonly code?: string | undefined; readonly message: string },
+): void => {
+    if (event.code !== "rate_limit" || account === undefined || model === undefined || model === "" || reportsPlanLimits(provider)) {
+        return;
+    }
+    void services.observedLimits
+        .record(provider, account, model, { at: Date.now(), message: event.message })
+        // Re-read at once, so an open picker's ring moves with the refusal instead of at the next sweep.
+        .then(() => services.headroom.refresh({ scope: { providers: [provider], account }, maxAgeMs: 0 }))
+        .catch((error: unknown) => services.logger.warn({ err: error }, "observed limit: write failed"));
 };
 
 // This turn's before-state, as a branch commit: recorded for a reopened tab and framed for the live one, using the same
@@ -1254,6 +1275,8 @@ async function* runTurn(
                         scope: { providers: [provider], ...(resolvedAccount === undefined ? {} : { account: resolvedAccount }) },
                         maxAgeMs: 0,
                     });
+                    // A plan with nothing to poll leaves its own refusal as the reading.
+                    recordObservedLimit(services, provider, resolvedAccount, request.model, event);
                 }
                 // The plan does not cover this model: file it so the picker stops offering it.
                 recordModelRefusal(services, provider, request.model, event);

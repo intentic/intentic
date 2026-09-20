@@ -255,3 +255,30 @@ test("a reading handed in from elsewhere is recorded and announced like a swept 
         ["codex", "codex:one.json", undefined],
     ]);
 });
+
+// Three different silences: a read that failed, a read that found nothing, and a read that found nothing where nothing
+// was ever shown. Only the middle one may retire a snapshot, and only it announces.
+test("a read that failed keeps the last snapshot; one that found nothing takes it back", async () => {
+    const { store, recorded } = memoryStore();
+    let answer: HeadroomReading = WINDOWS;
+    const { source: cursor } = source([{ key: "a", provider: "cursor", answer: async () => answer }]);
+    const service = createHeadroomService({ store, parks: memoryUsageParkStore(), sources: [cursor], logger: silent });
+    const announced: (AccountUsage | undefined)[] = [];
+    service.onChange((_provider, _account, usage) => announced.push(usage));
+
+    await service.refresh({ maxAgeMs: 0 });
+    expect(recorded["a"]?.windows).toEqual(WINDOWS.windows);
+
+    answer = { windows: [] };
+    await service.refresh({ maxAgeMs: 0 });
+    expect(recorded["a"]?.windows).toEqual(WINDOWS.windows);
+
+    answer = { windows: [], empty: true };
+    await service.refresh({ maxAgeMs: 0 });
+    expect(recorded["a"]).toBeUndefined();
+    expect(announced).toEqual([expect.objectContaining({ windows: WINDOWS.windows }), undefined]);
+
+    // Nothing left to take back: a second empty read must not redraw every open window each sweep.
+    await service.refresh({ maxAgeMs: 0 });
+    expect(announced).toHaveLength(2);
+});

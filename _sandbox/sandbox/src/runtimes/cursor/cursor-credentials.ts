@@ -205,12 +205,8 @@ export const cancelAllCursorLogins = (): void => {
     pending.clear();
 };
 
-// Named account if still usable wins; otherwise the oldest usable one (first-connected-is-default). The one place
-// expiry gates rather than warns: a dead key would otherwise fail the turn with a 401 the store already knew.
-export const usableCursorAccount = async (store: CursorStore, requested: string | undefined): Promise<StoredCursorAccount | undefined> => {
-    const usable = (await store.credentials()).filter((account) => account.apiKeyExpiresAtMs === undefined || account.apiKeyExpiresAtMs > Date.now());
-    if (requested !== undefined && requested !== "") {
-        return usable.find((account) => account.id === requested);
-    }
-    return usable[0];
-};
+// Accounts a turn could actually run on, oldest connection first (first-connected-is-default, where nothing else
+// decides). The one place expiry gates rather than warns: a dead key would otherwise fail the turn with a 401 the store
+// already knew. Which of them serves is cursor-usage.ts's question, since that needs the ledger this file never reads.
+export const liveCursorAccounts = async (store: CursorStore): Promise<StoredCursorAccount[]> =>
+    (await store.credentials()).filter((account) => account.apiKeyExpiresAtMs === undefined || account.apiKeyExpiresAtMs > Date.now());

@@ -32,6 +32,9 @@ export const HISTORY_STATE_FILES: readonly StateFile[] = [
     { path: "provider-refusals.json", portability: "carry" },
     // Models refused to this sandbox's credentials; expires daily, same subscriptions apply elsewhere.
     { path: "model-refusals.json", portability: "carry" },
+    // What each account has run out of, for a plan publishing no allowance to poll — the refusal is the reading.
+    // Carried like the refusals above: an allowance belongs to the account, not to the machine that spent it.
+    { path: "observed-limits.json", portability: "carry" },
     // First-time dependency setup requests; carried so an interrupted queue survives export, entries self-remove.
     { path: "dependency-requests.json", portability: "carry" },
     // Which device cards were already offered; carry, not identity, since it holds ids, never a token.

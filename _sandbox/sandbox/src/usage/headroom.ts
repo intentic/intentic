@@ -11,6 +11,9 @@ export interface HeadroomReading {
     readonly windows: readonly UsageWindow[];
     // Endpoint's own stay-away on a 429, in ms; must not be retried on the next trigger while it holds.
     readonly retryAfterMs?: number;
+    // A read that succeeded and found no pools, as against one that failed. The only thing that may retire a snapshot:
+    // without it a source whose pools come and go (observed-limits.ts) can never take one back.
+    readonly empty?: boolean;
 }
 
 export interface HeadroomTarget {
@@ -155,9 +158,18 @@ export const createHeadroomService = (deps: {
                 );
                 return;
             }
-            // A failed or poolless read leaves the last snapshot standing; an empty list would misread as "no limits".
+            // A failed read leaves the last snapshot standing; an empty list alone would misread as "no limits". Only a
+            // read that says it found nothing retires one, and only when there was one to retire — announcing an
+            // absence nobody was shown would redraw every open window each sweep.
             if (reading.windows.length > 0) {
                 await record(target.provider, target.key, { windows: [...reading.windows], measuredAt: Date.now() });
+                return;
+            }
+            // `read()` has already dropped windows that have reset, so a key still present is a reading someone was
+            // actually shown — the only case worth announcing an absence for.
+            if (reading.empty === true && (await deps.store.read())[target.key] !== undefined) {
+                await deps.store.clear(target.key);
+                announce(target.provider, target.key, undefined);
             }
         })()
             .catch((error: unknown) => deps.logger.warn({ err: error, account: target.key }, "headroom: read failed, the next trigger retries"))

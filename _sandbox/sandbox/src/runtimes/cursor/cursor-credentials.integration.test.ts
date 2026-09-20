@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { createLogger } from "../../logger.js";
-import { displayLabel, fileCursorStore, toAccount, usableCursorAccount } from "./cursor-credentials.js";
+import { displayLabel, fileCursorStore, liveCursorAccounts, toAccount } from "./cursor-credentials.js";
 
 const DAY = 24 * 60 * 60_000;
 const logger = createLogger({ logLevel: "silent", logPretty: false, historyRoot: "" });
@@ -48,7 +48,7 @@ test("accounts are listed oldest first, which is the one that serves a turn by d
     await store.write({ id: "second", apiKey: "k", connectedAt: NOW + 1000 });
     await store.write({ id: "first", apiKey: "k", connectedAt: NOW });
     expect((await store.list()).map((account) => account.id)).toEqual(["first", "second"]);
-    expect((await usableCursorAccount(store, undefined))?.id).toBe("first");
+    expect((await liveCursorAccounts(store)).map((account) => account.id)).toEqual(["first", "second"]);
 });
 
 test("an expiring key warns; only a dead one asks for a reconnect", () => {
@@ -76,19 +76,17 @@ test("a row names itself before it names the provider", () => {
     expect(displayLabel({ label: undefined, email: undefined })).toBe("Cursor");
 });
 
-test("a turn is never planned onto an expired key", async () => {
+test("an expired key is never offered to a turn, whatever else is connected", async () => {
     const store = newStore();
     await store.write({ id: "dead", apiKey: "k", apiKeyExpiresAtMs: NOW - 1, connectedAt: NOW });
     await store.write({ id: "live", apiKey: "k", apiKeyExpiresAtMs: NOW + DAY, connectedAt: NOW + 1 });
-    expect((await usableCursorAccount(store, undefined))?.id).toBe("live");
-    expect(await usableCursorAccount(store, "dead")).toBeUndefined();
-    expect((await usableCursorAccount(store, "live"))?.id).toBe("live");
+    expect((await liveCursorAccounts(store)).map((account) => account.id)).toEqual(["live"]);
 });
 
 test("a key with no stated expiry is usable, since nothing says otherwise", async () => {
     const store = newStore();
     await store.write({ id: "forever", apiKey: "k", connectedAt: NOW });
-    expect((await usableCursorAccount(store, undefined))?.id).toBe("forever");
+    expect((await liveCursorAccounts(store)).map((account) => account.id)).toEqual(["forever"]);
 });
 
 test("disconnecting one account leaves the others", async () => {

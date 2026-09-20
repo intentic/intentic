@@ -117,7 +117,9 @@ import { claudeHeadroomSource } from "./usage/claude-usage.js";
 import { createHeadroomService, type HeadroomService } from "./usage/headroom.js";
 import { fileUsageParkStore } from "./usage/usage-parks.js";
 import { fileModelRefusalStore, type ModelRefusalStore } from "./usage/model-refusals.js";
+import { fileObservedLimitStore, type ObservedLimitStore } from "./usage/observed-limits.js";
 import { fileProviderRefusalStore, type ProviderRefusalStore } from "./usage/provider-refusals.js";
+import { cursorHeadroomSource } from "./runtimes/cursor/cursor-usage.js";
 import { type ApprovalsStore, fileApprovalsStore } from "./approvals/approvals-store.js";
 import { fileIssuesStore, type IssuesStore } from "./issues/issues-store.js";
 import { fileInstallsStore, type InstallsStore } from "./store/installs.js";
@@ -462,6 +464,9 @@ export interface Services extends ClaudeSlice, CodexSlice, CursorSlice, GrokSlic
     readonly providerRefusals: ProviderRefusalStore;
     // Which models this sandbox was refused on, finer-grained than providerRefusals; the picker drops them.
     readonly modelRefusals: ModelRefusalStore;
+    // What each account has run out of, per model, for a plan that publishes no allowance to poll: the refusal itself
+    // is the reading, and the only one Cursor ever gives.
+    readonly observedLimits: ObservedLimitStore;
     // Every native provider's live model catalog, assembled from provider modules for one lookup, not each its own.
     readonly providerCatalogs: Record<NativeProvider, ProviderCatalog>;
     // What each endpoint capability's server publishes, keyed by id; only the server says what it serves.
@@ -785,15 +790,22 @@ export const createServices = (config: Config, logger: Logger): Services => {
 
     // Provider slices: each directory builds its own Services members; Gemini's slice is built beside OpenCode.
     const claude = createClaudeSlice({ config, logger, authRoot, workspaceRoot: workspace.root });
-    // Both halves of 'what each account has left': Claude's own tokens, routed subscriptions via the translator.
+    const codex = createCodexSlice({ config, authRoot });
+    const cursor = createCursorSlice({ authRoot, logger });
+    // What this sandbox has been refused, for the plans that publish no allowance to read; Cursor's only reading.
+    const observedLimits = fileObservedLimitStore(join(config.historyRoot, "observed-limits.json"));
+    // Every way 'what each account has left' can be learned: Claude's own tokens, routed subscriptions via the
+    // translator, and — where nothing is published — the refusals this sandbox has collected itself.
     const headroom = createHeadroomService({
         store: accountUsage,
         parks: fileUsageParkStore(join(config.historyRoot, "usage-parks.json")),
-        sources: [claudeHeadroomSource(claude.claudeStore), cliProxy.headroom],
+        sources: [
+            claudeHeadroomSource(claude.claudeStore),
+            cliProxy.headroom,
+            cursorHeadroomSource({ cursorStore: cursor.cursorStore, cursorModels: cursor.cursorModels, observedLimits }),
+        ],
         logger,
     });
-    const codex = createCodexSlice({ config, authRoot });
-    const cursor = createCursorSlice({ authRoot, logger });
     const grok = createGrokSlice(openCode);
     const kimi = createKimiSlice(cliProxy);
     // One slice for every minted provider, built from a spec table so adding one is a contract row, not code here.
@@ -1181,6 +1193,7 @@ export const createServices = (config: Config, logger: Logger): Services => {
         headroom,
         providerRefusals: fileProviderRefusalStore(join(config.historyRoot, "provider-refusals.json")),
         modelRefusals: fileModelRefusalStore(join(config.historyRoot, "model-refusals.json")),
+        observedLimits,
         // Late-bound through the same holder the extension backend uses; the thunks only run per request.
         providerCatalogs: providerCatalogsOf(() => {
             if (servicesHolder.current === undefined) {

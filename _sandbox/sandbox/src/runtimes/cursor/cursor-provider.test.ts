@@ -96,3 +96,53 @@ test("the daemon's own tools and the workspace's mcp capabilities arrive togethe
 test("a sandbox with nothing connected carries no tools field at all", async () => {
     expect((await planned([])).tools).toBeUndefined();
 });
+
+// Cursor publishes no allowance, so which connection serves follows the refusals this sandbox has collected.
+const fleet = (ledger: Record<string, readonly string[]>): Partial<Services> => ({
+    // Two models, since placement follows the one a turn names, and an unoffered id falls back to the catalog default.
+    cursorModels: unstubbed<Services["cursorModels"]>("cursorModels", {
+        models: async () => ({
+            models: [
+                { id: "composer-2.5", label: "Composer 2.5" },
+                { id: "auto", label: "Auto" },
+            ],
+            default: "composer-2.5",
+        }),
+    }),
+    cursorStore: unstubbed<Services["cursorStore"]>("cursorStore", {
+        credentials: async () => [
+            { id: "one", apiKey: "key-one", connectedAt: 0 },
+            { id: "two", apiKey: "key-two", connectedAt: 1 },
+        ],
+    }),
+    observedLimits: unstubbed<Services["observedLimits"]>("observedLimits", {
+        spent: async (_provider, account) =>
+            Object.fromEntries((ledger[account] ?? []).map((model) => [model, { at: Date.now(), message: "429 usage limit reached" }])),
+    }),
+});
+
+const placed = async (overrides: Partial<Services>, input: Partial<AgentTurn> = {}) => {
+    const plan = await planCursorTurn(services(overrides), turn({ conversationId: "conv-1", ...input }), context, []);
+    expect(plan.ok).toBe(true);
+    return plan as { account: string; request: AgentRequest };
+};
+
+test("an unnamed turn is placed on the account that still has the model it asked for", async () => {
+    const plan = await placed(fleet({ one: ["composer-2.5"] }), { model: "composer-2.5" });
+
+    expect(plan.account).toBe("two");
+    expect(plan.request.cursorApiKey).toBe("key-two");
+});
+
+// The picker's whole point: a chosen account is spent on, spent allowance and all, so the refusal is the user's to see.
+test("a named account is used even when it is the one out of the model", async () => {
+    const plan = await placed(fleet({ one: ["composer-2.5"] }), { model: "composer-2.5", account: "one" });
+
+    expect(plan.account).toBe("one");
+});
+
+test("a model neither account was refused keeps first-connected-is-default", async () => {
+    const plan = await placed(fleet({ one: ["composer-2.5"] }), { model: "auto" });
+
+    expect(plan.account).toBe("one");
+});

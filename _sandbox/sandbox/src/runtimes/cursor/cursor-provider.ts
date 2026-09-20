@@ -12,12 +12,13 @@ import type { Services } from "../../composition.js";
 import { mayDelegate, turnPersona } from "../../personas/personas.js";
 import { createCursorAgent } from "./cursor-agent.js";
 import { type CursorCatalog, createCursorCatalog } from "./cursor-catalog.js";
-import { type CursorStore, fileCursorStore, readCursorCredentials, usableCursorAccount } from "./cursor-credentials.js";
+import { type CursorStore, fileCursorStore, readCursorCredentials } from "./cursor-credentials.js";
 import { createCursorHookService, type CursorHookService } from "./cursor-hooks.js";
 import { cursorReadiness } from "./cursor-readiness.js";
 import { cursorSdk } from "./cursor-sdk.js";
 import { cursorAccountDoor } from "./cursor-accounts.js";
 import { cursorOneShot } from "./cursor-one-shot.js";
+import { cursorAccountForTurn } from "./cursor-usage.js";
 
 // Everything Cursor contributes to the daemon, aggregated by the provider registry (agent/provider-module.ts); the
 // directory's other files keep their own jobs. Holds only what the shared tables used to hold: the turn arm, the
@@ -63,11 +64,6 @@ export const planCursorTurn = async (
     if (!readiness.ok) {
         return { ok: false, ...(readiness.code !== undefined ? { code: readiness.code } : {}), message: readiness.detail };
     }
-    const account = await usableCursorAccount(services.cursorStore, input.account);
-    if (account === undefined) {
-        // Reachable only if disconnected after the readiness check, or a pinned id never existed; both mean pick one.
-        return { ok: false, message: "That Cursor account is no longer connected. Pick another one, or connect it again in Sandbox ▸ Agent." };
-    }
     const persona = context.persona ?? turnPersona({ personas: [], actsAs: undefined, unattended: false });
     // Never empty, so this always resolves: keeps the pinned model while offered, else the catalog default.
     const [catalog, browser] = await Promise.all([
@@ -75,6 +71,13 @@ export const planCursorTurn = async (
         browserServersOf(granted, services.workspace.root, persona.powers.browser, input.conversationId),
     ]);
     const model = input.model !== undefined && catalog.models.some((entry) => entry.id === input.model) ? input.model : catalog.default;
+    // Placed after the model resolves, because which connection can still serve is a question about that model's own
+    // pool: Cursor meters some models apart, so one account can be out of everything but the one being asked for.
+    const account = await cursorAccountForTurn(services, input.account, model);
+    if (account === undefined) {
+        // Reachable only if disconnected after the readiness check, or a pinned id never existed; both mean pick one.
+        return { ok: false, message: "That Cursor account is no longer connected. Pick another one, or connect it again in Sandbox ▸ Agent." };
+    }
     // The same remote MCP set the harness and ACP arms mount, which cursorMcpServers turns into http servers: a machine,
     // a connected browser or an mcp capability the owner granted must reach a Cursor turn like any other.
     const tools = turnToolsOf(services, granted, input.conversationId);
