@@ -113,6 +113,11 @@ const outline = useLoadingReveal(
 // - In history: committed work, a second body of work rather than a narrowing, so it sits last
 type ReviewFilter = `all` | `blocked` | `code` | `tests` | `pending` | `history`;
 const filter = ref<ReviewFilter>(`all`);
+// Some landed and some not: the only state in which "not landed" tells one file apart from its neighbours, and so the
+// only state that earns a narrowing option, a row dot or a badge on the open file. With nothing landed yet — the
+// ordinary case for an agent still holding its work — the mark would sit on every row while saying nothing, and the
+// header's Land button already says it once for the whole review.
+const mixedLanding = computed(() => changes.pending.value.length > 0 && changes.pending.value.length < changes.count.value);
 const filterOptions = computed<{ label: string; value: ReviewFilter }[]>(() => [
     ...(changes.count.value > 0 ? [{ label: t(`agents.agentReviewPanel.all`, { count: changes.count.value }), value: `all` as const }] : []),
     ...(changes.blocked.value.length > 0
@@ -124,7 +129,7 @@ const filterOptions = computed<{ label: string; value: ReviewFilter }[]>(() => [
               { label: t(`agents.agentReviewPanel.tests`, { files: changes.testStat.value.files }), value: `tests` as const },
           ]
         : []),
-    ...(changes.pending.value.length > 0 && changes.pending.value.length < changes.count.value
+    ...(mixedLanding.value
         ? [{ label: t(`agents.agentReviewPanel.notLanded2`, { count: changes.pending.value.length }), value: `pending` as const }]
         : []),
     ...(history.count.value > 0
@@ -532,10 +537,13 @@ const rawSides = computed(() =>
         : diffRawUrls({ source: `agent`, agent: agentId, repo: selected.value.repo }, selected.value.change.path, selected.value.change.status),
 );
 
-// Escape hatch to the full editor (same diff as a workspace tab); no longer what a row click does by default.
-const openInWorkspace = (file: AgentReviewFile): void => {
+// Escape hatch to the full editor (same diff as a workspace tab); no longer what a row click does by default. Reads
+// the selection itself rather than taking it, since its press now comes from inside a slot, where the template's
+// `selected !== undefined` no longer narrows.
+const openInWorkspace = (): void => {
     const body = diff.value;
-    if (body === undefined) {
+    const file = selected.value;
+    if (body === undefined || file === undefined) {
         return;
     }
     openDiff(
@@ -814,7 +822,7 @@ const seamWidth = computed<number>({
                                                 >{{ file.carriedBy.short }}</span
                                             >
                                             <span
-                                                v-else-if="file.carriedBy === undefined && !file.change.landed"
+                                                v-else-if="mixedLanding && file.carriedBy === undefined && !file.change.landed"
                                                 class="h-1.5 w-1.5 shrink-0 rounded-full bg-warning"
                                                 v-tooltip.right="t(`agents.agentReviewPanel.notYetLandedIn`)"
                                             ></span>
@@ -905,13 +913,14 @@ const seamWidth = computed<number>({
                                 <Icon name="check" class="text-2xs" />{{ selected.carriedBy.short }}
                             </span>
                             <span
-                                v-else-if="!selected.change.landed"
+                                v-else-if="mixedLanding && !selected.change.landed"
                                 class="shrink-0 ui-status-pill bg-warning/15 text-2xs font-medium text-warning"
                                 v-tooltip.bottom="t(`agents.agentReviewPanel.stillWaitingLandNow`)"
                             >
                                 {{ t(`agents.agentReviewPanel.notLanded`) }}
                             </span>
                         </template>
+                        <!-- The review pass itself, and nothing else: accept this file, step to the next. Both have one-key peers (v, j/k), so they are here to say the pass exists as much as to be pressed. -->
                         <template #actions>
                             <button
                                 type="button"
@@ -926,35 +935,42 @@ const seamWidth = computed<number>({
                             >
                                 <Icon :name="isViewed(selected) ? 'check-square' : 'check'" class="text-2xs" />
                             </button>
-                            <button
-                                type="button"
-                                :class="ICON_BUTTON"
-                                @click="move(-1)"
-                                v-tooltip.bottom="t(`agents.agentReviewPanel.previousFileK`)"
-                                :aria-label="t(`agents.agentReviewPanel.previousFile`)"
-                            >
-                                <Icon name="chevron-up" class="text-2xs" />
-                            </button>
-                            <button
-                                type="button"
-                                :class="ICON_BUTTON"
-                                @click="move(1)"
-                                v-tooltip.bottom="t(`agents.agentReviewPanel.nextFileJ`)"
-                                :aria-label="t(`agents.agentReviewPanel.nextFile`)"
-                            >
-                                <Icon name="chevron-down" class="text-2xs" />
-                            </button>
-                            <!-- Remote agents have no local workspace editor tab. -->
+                            <!-- Two halves of one move, so they are drawn as one stepper on a shared plate rather than as two loose glyphs. -->
+                            <span class="flex shrink-0 items-center rounded-md bg-overlay/60">
+                                <button
+                                    type="button"
+                                    :class="ICON_BUTTON"
+                                    @click="move(-1)"
+                                    v-tooltip.bottom="t(`agents.agentReviewPanel.previousFileK`)"
+                                    :aria-label="t(`agents.agentReviewPanel.previousFile`)"
+                                >
+                                    <Icon name="chevron-up" class="text-2xs" />
+                                </button>
+                                <button
+                                    type="button"
+                                    :class="ICON_BUTTON"
+                                    @click="move(1)"
+                                    v-tooltip.bottom="t(`agents.agentReviewPanel.nextFileJ`)"
+                                    :aria-label="t(`agents.agentReviewPanel.nextFile`)"
+                                >
+                                    <Icon name="chevron-down" class="text-2xs" />
+                                </button>
+                            </span>
+                        </template>
+                        <!-- Leaving for the editor is a once-a-review escape, not part of the pass: it rides in the toolbar's own panel instead of spending a place in the row. Remote agents have no local workspace tab to open. -->
+                        <template #settings="{ item, label, close }">
                             <button
                                 v-if="!mobile && at === undefined"
                                 type="button"
-                                :class="ICON_BUTTON"
+                                :class="item"
                                 :disabled="diff === undefined"
-                                @click="openInWorkspace(selected)"
-                                v-tooltip.bottom="t(`agents.agentReviewPanel.openDiffInWorkspace`)"
-                                :aria-label="t(`agents.agentReviewPanel.openDiffInWorkspace2`)"
+                                @click="
+                                    close();
+                                    openInWorkspace();
+                                "
                             >
-                                <Icon name="external-link" class="text-2xs" />
+                                <span :class="label">{{ t(`agents.agentReviewPanel.openDiffInWorkspace`) }}</span>
+                                <Icon name="external-link" class="text-2xs text-subtle" />
                             </button>
                         </template>
                     </DiffToolbar>

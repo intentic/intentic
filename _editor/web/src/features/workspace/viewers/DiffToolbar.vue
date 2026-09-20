@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { ChangeStatusMark, SegmentedControl, useDevice } from "@intentic/ui";
-import { computed } from "vue";
+import { ChangeStatusMark, type IconName, ResponsiveOverlay, SegmentedControl, ui, useDevice } from "@intentic/ui";
+import { computed, ref, useSlots } from "vue";
 import type { DiffLayout } from "../../../shell/window/useLayout";
 import { useLayout } from "../../../shell/window/useLayout";
 import type { ChangeStatus } from "@intentic/extension-api";
@@ -13,12 +13,20 @@ import { compareViewerForExtension } from "../../../core-views/viewerRegistry";
 import { useT } from "@intentic/ui/i18n";
 
 // Bar above a diff: which file, and how it's read. Shared by every diff surface (workspace tab, agent review,
-// environment card). Owns only the reading settings (comments, split/unified), global via useLayout since that's a
-// habit, not per-file; never the file's place in a review (viewed tick, next-file arrows, open-in-editor) — those
-// arrive through slots, in render order:
+// environment card).
+//
+// The bar itself carries only what changes with the file — mark, path, badges, its ± — because that is what a reader
+// scanning a review looks at. Everything about HOW a diff reads (comments, split/unified, a document's reading) is a
+// sticky global habit, not a property of the file, so it sits behind one control at the end of the row instead of
+// spending the row's width on settings that change a few times a year. That control's glyph still states the one
+// setting that silently withholds lines (comments), since a default that removes them has to keep saying so.
+//
+// Never the file's place in a review (viewed tick, next-file arrows) — that arrives through slots, in render order:
 // lead → before the path (the phone's back arrow out of a full-screen diff).
 // badges → after the path (a blocked/not-landed mark, a property of the file).
 // actions → after the reading controls (the host's own file-scoped buttons).
+// settings → rows inside the reading popover, for a host action that is rare enough to belong there (`item` is the
+//   row class, passed down so one definition dresses every row in the panel).
 
 const t = useT();
 
@@ -34,6 +42,7 @@ const { path, status, code, additions, deletions, from } = defineProps<{
     from?: string;
 }>();
 
+const slots = useSlots();
 const { mobile } = useDevice();
 const { showComments, toggleShowComments, diffLayout, setDiffLayout, diffProse, setDiffProse, diffDocument, setDiffDocument } = useLayout();
 
@@ -82,6 +91,43 @@ const LAYOUT_OPTIONS = computed((): { label: string; value: DiffLayout }[] => [
     { label: t(`workspace.diffToolbar.split`), value: `split` },
     { label: t(`workspace.diffToolbar.unified`), value: `unified` },
 ]);
+const COMMENT_OPTIONS = computed(() => [
+    { label: t(`workspace.diffToolbar.shown`), value: `shown` as const },
+    { label: t(`workspace.diffToolbar.hidden`), value: `hidden` as const },
+]);
+// The preference is a toggle, the control is a pair: pressing the pill already lit must not flip it back.
+const setComments = (value: string): void => {
+    if ((value === `shown`) !== showComments.value) {
+        toggleShowComments();
+    }
+};
+
+// Which rows the popover has to offer for THIS file; with none of them the button has nothing to open.
+const layoutRow = computed(() => !mobile.value && !proseOn.value && !documentChanges.value);
+const commentsRow = computed(() => !proseOn.value && !document.value);
+const hosted = computed(() => slots[`settings`] !== undefined);
+const reads = computed(() => prose.value || document.value || layoutRow.value || commentsRow.value || hosted.value);
+
+// The two things the closed button still has to say: that lines may be missing, and what pressing it is about. The
+// glyph carries the first (comments are hidden by default, so the eye is struck through most of the time); the
+// summary carries the rest, in the same words the rows inside use.
+const readingGlyph = computed<IconName>(() => (commentsRow.value ? (showComments.value ? `eye` : `eye-slash`) : `sliders-h`));
+const readingSummary = computed(() =>
+    [
+        layoutRow.value ? LAYOUT_OPTIONS.value.find((option) => option.value === diffLayout.value)?.label : undefined,
+        commentsRow.value ? (showComments.value ? t(`workspace.diffToolbar.commentsShown`) : t(`workspace.diffToolbar.commentsHidden`)) : undefined,
+    ]
+        .filter((part) => part !== undefined)
+        .join(` · `),
+);
+
+const readingAnchor = ref<HTMLElement | null>(null);
+const readingOpen = ref(false);
+
+// One row shape for every setting, and for whatever a host hangs below them: label left, control right.
+const ROW = `flex items-center justify-between gap-3 rounded-lg px-2 py-1.5`;
+const ITEM = `${ROW} w-full cursor-pointer text-left transition-colors hover:bg-overlay max-md:py-3`;
+const LABEL = `text-2xs text-content max-md:text-sm`;
 </script>
 
 <template>
@@ -104,40 +150,65 @@ const LAYOUT_OPTIONS = computed((): { label: string; value: DiffLayout }[] => [
         </span>
         <slot name="badges" />
         <ReviewStat :code="code" :additions="additions" :deletions="deletions" />
-        <SegmentedControl
-            v-if="prose"
-            :model-value="proseOn ? `prose` : `code`"
-            :options="READING_OPTIONS"
-            size="xs"
-            @update:model-value="(value: string) => setDiffProse(value === `prose`)"
-        />
-        <SegmentedControl
-            v-if="document"
-            :model-value="documentReading"
-            :options="DOCUMENT_OPTIONS"
-            size="xs"
-            @update:model-value="(value: string) => setDiffDocument(value === `changes` ? `changes` : value === `text` ? `text` : `sides`)"
-        />
-        <SegmentedControl
-            v-if="!mobile && !proseOn && !documentChanges"
-            :model-value="diffLayout"
-            :options="LAYOUT_OPTIONS"
-            size="xs"
-            @update:model-value="setDiffLayout"
-        />
-        <!-- Labelled, not just a glyph: a default that silently removes lines has to keep saying so at a glance. -->
-        <button
-            v-if="!proseOn && !document"
-            type="button"
-            class="ui-chip shrink-0 justify-center gap-1 rounded-md px-1.5 py-0.5 font-medium max-md:h-9 max-md:w-9"
-            :class="showComments ? `ui-chip-on` : ``"
-            :aria-pressed="showComments"
-            v-tooltip.bottom="showComments ? t(`workspace.diffToolbar.commentsShownClickTo`) : t(`workspace.diffToolbar.commentsHiddenClickTo`)"
-            @click="toggleShowComments()"
-        >
-            <Icon class="text-2xs" :name="showComments ? `eye` : `eye-slash`" />
-            <span class="max-md:hidden">{{ t(`workspace.diffToolbar.comments`) }}</span>
-        </button>
         <slot name="actions" />
+        <!-- Last in the row, after the file's own actions: the settings are about every file, so they sit outside them. -->
+        <button
+            v-if="reads"
+            ref="readingAnchor"
+            type="button"
+            :class="ui.iconButton(`w-auto gap-0.5 px-1 max-md:h-9`, readingOpen ? `bg-overlay text-content` : ``)"
+            :aria-expanded="readingOpen"
+            :aria-label="t(`workspace.diffToolbar.howThisReads`)"
+            v-tooltip.bottom="readingSummary === `` ? t(`workspace.diffToolbar.howThisReads`) : readingSummary"
+            @click="readingOpen = !readingOpen"
+        >
+            <Icon :name="readingGlyph" class="text-2xs" />
+            <Icon name="chevron-down" class="text-3xs opacity-60" />
+        </button>
+        <ResponsiveOverlay
+            v-model="readingOpen"
+            :anchor="readingAnchor ?? undefined"
+            :header="t(`workspace.diffToolbar.howThisReads`)"
+            side="bottom"
+            cross="end"
+            panel-class="w-72 p-1"
+        >
+            <div :class="ROW" v-if="prose">
+                <span :class="LABEL">{{ t(`workspace.diffToolbar.reading`) }}</span>
+                <SegmentedControl
+                    :model-value="proseOn ? `prose` : `code`"
+                    :options="READING_OPTIONS"
+                    size="xs"
+                    @update:model-value="(value: string) => setDiffProse(value === `prose`)"
+                />
+            </div>
+            <div :class="ROW" v-if="document">
+                <span :class="LABEL">{{ t(`workspace.diffToolbar.reading`) }}</span>
+                <SegmentedControl
+                    :model-value="documentReading"
+                    :options="DOCUMENT_OPTIONS"
+                    size="xs"
+                    @update:model-value="(value: string) => setDiffDocument(value === `changes` ? `changes` : value === `text` ? `text` : `sides`)"
+                />
+            </div>
+            <div :class="ROW" v-if="layoutRow">
+                <span :class="LABEL">{{ t(`workspace.diffToolbar.layout`) }}</span>
+                <SegmentedControl :model-value="diffLayout" :options="LAYOUT_OPTIONS" size="xs" @update:model-value="setDiffLayout" />
+            </div>
+            <div :class="ROW" v-if="commentsRow">
+                <span :class="LABEL">{{ t(`workspace.diffToolbar.comments`) }}</span>
+                <SegmentedControl
+                    :model-value="showComments ? `shown` : `hidden`"
+                    :options="COMMENT_OPTIONS"
+                    size="xs"
+                    @update:model-value="setComments"
+                />
+            </div>
+            <!-- A host's own rare action, dressed as one of these rows rather than as a seventh glyph in the bar. Ruled
+                 off from the settings above it, since an act and a preference should not read as the same kind of row. -->
+            <div v-if="hosted" class="mt-1 border-t border-line/60 pt-1">
+                <slot name="settings" :item="ITEM" :label="LABEL" :close="() => (readingOpen = false)" />
+            </div>
+        </ResponsiveOverlay>
     </div>
 </template>

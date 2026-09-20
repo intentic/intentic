@@ -237,6 +237,12 @@ const confirmForceLand = async (): Promise<void> => {
 
 // Role split on the primary action: maintainers land, collaborators ask (the daemon enforces the floor itself).
 const { canDrive, canShip } = useRole();
+// Whichever of the three land presses this reader gets, they all answer the same condition.
+const landOffered = computed(() => !mobile.value && reviewable.value && changes.pending.value.length > 0 && (canShip.value || canDrive.value));
+// `ready` says "ready to land", which the button beside it says in a stronger voice: the press IS the status, and two
+// controls 60px apart stating one fact is what makes a header read as clutter. Every other status keeps its words —
+// running, failed, conflict are things no button here says.
+const statusShown = computed(() => status.value !== undefined && !(landOffered.value && fleetAgent.value?.status === `ready`));
 const words = useVocabulary();
 const requestingLand = ref(false);
 const requestLand = async (): Promise<void> => {
@@ -305,6 +311,17 @@ const menuAnchor = ref<HTMLButtonElement | null>(null);
 const menuOpen = ref(false);
 const closeMenu = (): void => {
     menuOpen.value = false;
+};
+
+// The marks people left on this session, in the row that names it rather than in a band of their own: a 👍 is worth a
+// chip, never a third full-width strip above someone's code. AgentReactions in `dense` dress draws the marks and
+// nothing else, and hands the press that adds one to whoever hosts it (`open`), which is this button.
+const reactionChips = ref<InstanceType<typeof AgentReactions> | null>(null);
+const reactTrigger = ref<HTMLButtonElement | null>(null);
+const openReactions = (): void => {
+    if (reactTrigger.value !== null) {
+        reactionChips.value?.open(reactTrigger.value);
+    }
 };
 
 // Destructive and unrecoverable (branch and worktree go); same confirm modal as other irreversible git actions.
@@ -384,17 +401,6 @@ const confirmHandOver = async (): Promise<void> => {
                     <Icon name="chevron-down" class="shrink-0 text-2xs text-subtle" aria-hidden="true" />
                 </button>
                 <span v-else class="min-w-0 flex-1 truncate text-xs font-medium text-content">{{ title }}</span>
-                <!-- Desktop only: on a phone the row has no room, and Rename is the session menu's. -->
-                <button
-                    v-if="localOnly && !unnamed && !mobile"
-                    type="button"
-                    :aria-label="t(`agents.agentDetail.renameAgent`)"
-                    v-tooltip.bottom="t(`ui.action.rename`)"
-                    :class="ui.iconButton()"
-                    @click="edit.begin()"
-                >
-                    <Icon name="pencil" class="text-xs" />
-                </button>
             </template>
             <!-- Which sandbox this agent is in, not decoration: every number below (diff, file count, what Land applies) is about a workspace on another machine. -->
             <span
@@ -415,7 +421,7 @@ const confirmHandOver = async (): Promise<void> => {
             </span>
             <!-- Status compresses to its glyph in a narrow header; words return once the header itself has room. -->
             <span
-                v-if="status !== undefined"
+                v-if="statusShown && status !== undefined"
                 v-tooltip.top="status.label"
                 class="inline-flex shrink-0 items-center gap-1 text-2xs"
                 :class="status.class"
@@ -426,6 +432,23 @@ const confirmHandOver = async (): Promise<void> => {
             </span>
             <!-- Its place, held: the status arrives with the roster entry, and a header that grows one on arrival jumps. -->
             <span v-else-if="headerOutline" class="skeleton block h-2.5 w-14 shrink-0" aria-hidden="true"></span>
+            <!-- What people have made of this session, beside the name of it. The size comes from this wrapper, not a
+                 class on the component: its template is a fragment, so anything passed to it is dropped. -->
+            <template v-if="fleetAgent !== undefined">
+                <span class="inline-flex shrink-0 items-center text-2xs">
+                    <AgentReactions ref="reactionChips" :agent-id="fleetAgent.id" :reactions="fleetAgent.reactions" :sandbox-id="remoteBox" dense />
+                </span>
+                <button
+                    ref="reactTrigger"
+                    type="button"
+                    :class="ui.iconButton()"
+                    :aria-label="t(`agents.agentReactions.addReaction`)"
+                    v-tooltip.bottom="t(`agents.agentReactions.addReaction`)"
+                    @click="openReactions"
+                >
+                    <Icon name="plus" class="text-2xs" />
+                </button>
+            </template>
             <template v-if="reviewable">
                 <Icon v-if="changes.actionBusy.value" name="spinner" class="shrink-0 text-xs text-muted" spin />
                 <!-- The page's one primary action: appearing only when something is pending is itself the "not landed" signal, replacing the toolbar's old pill. -->
@@ -484,10 +507,6 @@ const confirmHandOver = async (): Promise<void> => {
             </Button>
         </div>
         <p v-if="edit.error !== undefined" class="border-b border-line px-3 py-1 text-2xs text-danger">{{ edit.error }}</p>
-        <!-- What people have made of this session, under the header that names it. The same chips the board card wears, but with room to keep the presses that add one in plain sight rather than behind a hover. -->
-        <div v-if="fleetAgent !== undefined" class="shrink-0 border-b border-line px-3 py-1.5">
-            <AgentReactions :agent-id="fleetAgent.id" :reactions="fleetAgent.reactions" :sandbox-id="remoteBox" />
-        </div>
         <!-- Chat|Changes gets its own row on a phone: crowding the header left too little width for the title. -->
         <!-- Local-only like the chat below; a remote conversation lives elsewhere, so mobile gets the full review. -->
         <div v-if="mobile && reviewable && localOnly" class="shrink-0 border-b border-line px-2 py-1.5">
@@ -607,7 +626,14 @@ const confirmHandOver = async (): Promise<void> => {
             </div>
             <form class="mt-3 flex flex-col gap-1" @submit.prevent="confirmHandOver">
                 <label class="text-2xs font-medium text-muted" for="hand-over-address">{{ t(`agents.agentDetail.handOverAddress`) }}</label>
-                <input id="hand-over-address" v-model="handOverTo" type="email" autocomplete="off" placeholder="teammate@example.com" :class="ui.inputSm('min-w-0')" />
+                <input
+                    id="hand-over-address"
+                    v-model="handOverTo"
+                    type="email"
+                    autocomplete="off"
+                    placeholder="teammate@example.com"
+                    :class="ui.inputSm('min-w-0')"
+                />
             </form>
             <p v-if="handOverError !== undefined" class="mt-2 text-xs text-danger">{{ handOverError }}</p>
             <template #footer>

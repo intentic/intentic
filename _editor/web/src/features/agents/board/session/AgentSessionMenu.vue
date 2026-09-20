@@ -11,10 +11,11 @@ import { landsByDefault } from "../../../sandbox/environment/rules";
 import { useSandboxSettings } from "../../../sandbox/overview/useSandboxSettings";
 import { useT } from "@intentic/ui/i18n";
 
-// Session-level actions (refresh, land, hold, archive, discard), as opposed to diff actions; once-per-session decisions
-// live behind one glyph rather than permanently cluttering the toolbar.
-// Land, Rename and the session name stay in the header on desktop; on a phone, where the row holds the title and
-// little else, they are this menu's first items instead.
+// Session-level actions (refresh, rename, land, hold, archive, discard), as opposed to diff actions; once-per-session
+// decisions live behind one glyph rather than permanently cluttering the toolbar.
+// Land stays in the header, on desktop, as the page's one primary press. Rename is here on both form factors: it is
+// named once and never again, so it was buying a permanent glyph beside the title with a press nobody makes twice.
+// The session name is the header's chip on desktop and this menu's row on a phone, where the row holds little else.
 
 const t = useT();
 
@@ -22,9 +23,9 @@ const { changes, agentId, phone, renameable, sessionName } = defineProps<{
     agentId: string;
     // AgentDetail's one useAgentChanges instance; a second one here would desync the panel's busy/error state.
     changes: ReturnType<typeof useAgentChanges>;
-    // The phone, whose header row dropped Land, Rename and the session chip: they lead this menu.
+    // The phone, whose header row dropped Land and the session chip: they lead this menu.
     phone: boolean;
-    // Whether the header would have offered Rename (a local, named agent).
+    // Whether this agent can be renamed at all (a local, named one).
     renameable: boolean;
     // The agent's branch, the session's pasteable name; absent for a draft.
     sessionName?: string | undefined;
@@ -184,7 +185,7 @@ const ITEM = `flex w-full items-start gap-2 rounded-lg px-2.5 py-1.5 text-left t
                 <span class="text-2xs text-subtle">{{ t(`agents.agentSessionMenu.handOverHint`) }}</span>
             </span>
         </button>
-        <button v-if="phone && renameable" type="button" :class="ITEM" @click="run(() => emit(`rename`))">
+        <button v-if="renameable" type="button" :class="ITEM" @click="run(() => emit(`rename`))">
             <Icon name="pencil" class="mt-0.5 text-xs text-subtle" />
             <span class="text-sm text-content md:text-xs">{{ t(`ui.action.rename`) }}</span>
         </button>

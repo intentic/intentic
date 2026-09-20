@@ -312,6 +312,38 @@ it(`offers Blocked first and keeps the control alive when a refusal left nothing
     expect(filters(el)).toEqual([`All 5`, `Blocked 2`, `Code 4`, `Tests 1`]);
 });
 
+// A mark every row wears distinguishes nothing. Until a land has actually split the review, "not landed" is true of
+// the whole of it — a fact the header's Land button already states once — so the rows and the open file say nothing
+// about it, and start saying it the moment part of the work has gone.
+it(`points at what is still unlanded only once part of the review has landed`, async () => {
+    const dots = (el: HTMLElement): HTMLElement[] => [
+        ...el.querySelectorAll<HTMLElement>(`[class*="group/file"] [class*="rounded-full"][class*="bg-warning"]`),
+    ];
+
+    const whole = await mount();
+    expect(dots(whole)).toHaveLength(0);
+    expect(whole.textContent).not.toContain(`not landed`);
+
+    app?.unmount();
+    app = undefined;
+    document.body.innerHTML = ``;
+    queryClient.clear();
+
+    // The docs repo landed, the rest did not: now the remainder is a subset worth marking.
+    const split: AgentChangesResponse = {
+        ...changes,
+        repos: changes.repos.map((repo) =>
+            repo.repo === `docs` ? { ...repo, changes: repo.changes.map((change) => ({ ...change, landed: true })) } : repo,
+        ),
+    };
+    const mixed = await mount([], split);
+    // The two unlanded rows that aren't blocked; a blocked row wears its cause instead, which is the sharper fact.
+    expect(dots(mixed)).toHaveLength(2);
+    // The open file is one of them, so the diff's own bar carries the same mark its row does.
+    expect(mixed.textContent).toContain(`not landed`);
+    expect(filters(mixed)).toContain(`Not landed 4`);
+});
+
 it(`narrows to exactly the blocked files`, async () => {
     const el = await mount();
     [...el.querySelectorAll(`button`)].find((button) => button.textContent?.trim() === `Blocked 2`)!.click();
