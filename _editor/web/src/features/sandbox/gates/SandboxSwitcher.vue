@@ -447,7 +447,7 @@ const confirmRemove = async (): Promise<void> => {
                 @click="dismiss"
             >
                 <span class="flex h-5 w-5 shrink-0 items-center justify-center">
-                    <Icon name="plus" class="text-xs text-muted" />
+                    <Icon name="plus" class="text-base text-muted" />
                 </span>
                 {{ t(`sandbox.sandboxSwitcher.addSandbox`) }}
             </RouterLink>
@@ -521,7 +521,7 @@ const confirmRemove = async (): Promise<void> => {
                 @click="dismiss"
             >
                 <span class="flex h-5 w-5 shrink-0 items-center justify-center">
-                    <Icon name="cog" class="text-xs text-muted" />
+                    <Icon name="cog" class="text-base text-muted" />
                 </span>
                 {{ t(`sandbox.sandboxSwitcher.sandboxSettings`) }}
             </RouterLink>
