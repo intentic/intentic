@@ -1,5 +1,6 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { WORKSPACE_ROOT } from "@intentic/constants";
 import type { MemberRole } from "@intentic/sandbox-contract";
 import { unstubbed } from "@intentic/testing";
 import { expect, test } from "vitest";
@@ -20,7 +21,7 @@ const SLICES = [
 ];
 
 const TREE = {
-    root: "/work",
+    root: WORKSPACE_ROOT,
     tree: [
         { name: "support", path: "support", type: "dir" as const, children: [{ name: "faq.md", path: "support/faq.md", type: "file" as const }] },
         {

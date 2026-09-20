@@ -1,6 +1,7 @@
 import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { STATE_DIR } from "@intentic/constants";
 import { LOCAL_MODEL_INSTANT, LOCAL_MODEL_WINDOW_DEFAULT, LOCAL_MODELS } from "@intentic/sandbox-contract";
 import { expect, test } from "vitest";
 import { estimatedModelMemory, fitsBudget, localModelFit } from "./local-model-fit.js";
@@ -24,9 +25,9 @@ test("every curated model is priced at every window, and held says what is alrea
     }
 
     // A file already in the cache costs no download, whichever card put it there.
-    await mkdir(join(root, ".intentic/local/cache/models"), { recursive: true });
+    await mkdir(join(root, STATE_DIR, "local/cache/models"), { recursive: true });
     const file = LOCAL_MODEL_INSTANT.id.split("/").at(-1)!;
-    await writeFile(join(root, ".intentic/local/cache/models", file), "weights");
+    await writeFile(join(root, STATE_DIR, "local/cache/models", file), "weights");
     const second = await localModelFit(root, IDLE);
     expect(second.options.find((option) => option.model === LOCAL_MODEL_INSTANT.id)?.held).toBe(true);
 });
