@@ -2817,6 +2817,7 @@
             "access": "Dostęp",
             "areaPick": "Które obszary przestrzeni roboczej widzi",
             "browser": "Ta przeglądarka",
+            "changeFilesInTheirFolders": "Może zmieniać pliki w folderach, które wskażesz, i sterować agentami. Scalanie i publikowanie pozostają prośbami; sekrety i ustawienia pozostają poza zasięgiem.",
             "ciNotifications": "Powiadomienia CI",
             "collaborator": "Współpracownik",
             "copyLink": "Kopiuj link",
@@ -2860,6 +2861,8 @@
             "viewer": "Obserwator",
             "watchEverythingAgentsChats": "Może wszystko oglądać: agenty, czaty, pliki. Niczego nie może zmienić.",
             "webhooks": "Webhooki",
+            "writer": "Edytor",
+            "writerNeedsArea": "Wybierz co najmniej jeden folder. Edytor nie zostaje nadany, dopóki nie ma żadnego.",
             "you": "Ty"
         },
         "sandboxAgent": {
@@ -4446,7 +4449,7 @@
             "newFile": "Nowy plik",
             "newFolder": "Nowy folder",
             "paste": "Wklej",
-            "readOnlyChangingFiles": "Tylko do odczytu: zmiana plików wymaga dostępu opiekuna"
+            "readOnlyChangingFiles": "Tylko do odczytu: zmiana plików wymaga dostępu edytora"
         },
         "fileBreadcrumb": {
             "alsoViewingFile": "też ogląda ten plik"
@@ -4777,7 +4780,7 @@
             "noMatchingEntries": "Brak pasujących wpisów.",
             "nothing": ": nic tam nie ma",
             "outsideWorkspaceSandboxWont": ": poza przestrzenią roboczą, więc sandbox tego nie otworzy",
-            "readOnlyChangingFiles": "Tylko do odczytu: zmiana plików wymaga dostępu opiekuna",
+            "readOnlyChangingFiles": "Tylko do odczytu: zmiana plików wymaga dostępu edytora",
             "restorePoints": "Punkty przywracania",
             "searchInFiles": "Szukaj w plikach…",
             "showIgnoredFiles": "Pokaż ignorowane pliki",

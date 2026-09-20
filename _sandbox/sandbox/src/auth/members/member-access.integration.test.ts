@@ -125,10 +125,14 @@ const SURFACE: readonly { readonly does: string; readonly method: string; readon
     { does: `read what this box can reach`, method: `GET`, url: `/capabilities`, needs: `maintainer` },
     { does: `read the spend`, method: `GET`, url: `/system/usage`, needs: `maintainer` },
     { does: `read the daemon's logs`, method: `GET`, url: `/logs`, needs: `maintainer` },
-    { does: `edit the shared workspace`, method: `POST`, url: `/workspace/move`, needs: `maintainer` },
+    // Changing files in the shared tree. WHERE a writer may change them is the fence's answer, not this table's:
+    // these rows read as permission by tier alone (areas/area-fence.integration.test.ts holds the path half).
+    { does: `edit the shared workspace`, method: `POST`, url: `/workspace/move`, needs: `writer` },
+    { does: `make a folder`, method: `POST`, url: `/workspace/dir`, needs: `writer` },
+    { does: `unpack an archive`, method: `POST`, url: `/workspace/extract`, needs: `writer` },
 ];
 
-const TIERS: readonly MemberRole[] = [`viewer`, `collaborator`, `maintainer`];
+const TIERS: readonly MemberRole[] = [`viewer`, `collaborator`, `writer`, `maintainer`];
 const rank = (role: MemberRole): number => TIERS.indexOf(role);
 
 test("every co-working act answers at its own tier, and at none below it", async () => {

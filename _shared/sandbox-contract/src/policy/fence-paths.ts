@@ -1,3 +1,5 @@
+import { PUBLIC_DIR, STATE_DIR } from "@intentic/constants";
+
 // The path arithmetic a workspace fence is made of: whether a path is inside a folder, whether one set of folders
 // covers another, and what a fenced tree may still list. Pure and shared, because the daemon refuses on these answers
 // and the browser draws on them, and two implementations would disagree at exactly the boundary that matters.
@@ -35,6 +37,15 @@ export const pathInsideFolder = (folder: string, path: string): boolean => {
     }
     return outer === "" || inner === outer || inner.startsWith(`${outer}/`);
 };
+
+// "Change the sandbox" as paths: the daemon's own configuration, and the outbox the internet reads. One list, read by
+// the persona hook that judges a turn's writes and by the area schema that decides what a grant may name.
+export const SANDBOX_PATHS: readonly string[] = [STATE_DIR, PUBLIC_DIR];
+
+// Whether a path is one of those folders or sits inside one, by segment: `publications` is not `public`.
+// No area may name such a folder, which is what keeps a fence from handing anyone the config that decides what agents
+// may do — the enumerated control-plane table (state/workspace-state.ts) locks named entries, not the whole tree.
+export const isSandboxPath = (path: string): boolean => SANDBOX_PATHS.some((folder) => pathInsideFolder(folder, path));
 
 // A fence: the folders a caller may touch, or undefined for the whole workspace. Undefined and `[]` are deliberately
 // different answers — no fence at all, versus a fence that admits nothing.

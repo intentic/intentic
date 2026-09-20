@@ -23,9 +23,20 @@ describe(`grantBody`, () => {
 });
 
 describe(`grantSendable`, () => {
-    it(`holds a desk grant until it names a card, and nothing else`, () => {
-        expect(grantSendable(`desk`, [])).toBe(false);
-        expect(grantSendable(`desk`, [`support`])).toBe(true);
-        expect(grantSendable(`collaborator`, [])).toBe(true);
+    it(`holds a desk grant until it names a card`, () => {
+        expect(grantSendable(`desk`, [], undefined)).toBe(false);
+        expect(grantSendable(`desk`, [`support`], undefined)).toBe(true);
+        expect(grantSendable(`collaborator`, [], undefined)).toBe(true);
+    });
+
+    // An unfenced writer would be a grant to change every file in the workspace; the absent area list is exactly what
+    // the daemon reads as the whole of it, so the form cannot send one either.
+    it(`holds a writer grant until it names an area`, () => {
+        expect(grantSendable(`writer`, [], undefined)).toBe(false);
+        expect(grantSendable(`writer`, [], [])).toBe(false);
+        expect(grantSendable(`writer`, [], [`support`])).toBe(true);
+        // Every other tier reaches the whole workspace unfenced, and still may.
+        expect(grantSendable(`viewer`, [], undefined)).toBe(true);
+        expect(grantSendable(`maintainer`, [], undefined)).toBe(true);
     });
 });

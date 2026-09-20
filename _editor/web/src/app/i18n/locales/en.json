@@ -2860,7 +2860,10 @@
             "noAreasToGrant": "This sandbox has no named areas yet, so everyone sees the whole workspace.",
             "nameOne": "Name one",
             "noAreaMeansWhole": "No area picked: they see the whole workspace.",
-            "folders": "Folders"
+            "folders": "Folders",
+            "writer": "Writer",
+            "changeFilesInTheirFolders": "Can change files in the folders you name, and drive agents. Landing and publishing are still requests; secrets and settings stay out of reach.",
+            "writerNeedsArea": "Pick at least one folder. A writer is not granted until it holds one."
         },
         "sandboxAgent": {
             "agentSettingsCategory": "Agent settings category",
@@ -4446,7 +4449,7 @@
             "newFile": "New File",
             "newFolder": "New Folder",
             "paste": "Paste",
-            "readOnlyChangingFiles": "Read-only: changing files needs maintainer access"
+            "readOnlyChangingFiles": "Read-only: changing files needs writer access"
         },
         "fileBreadcrumb": {
             "alsoViewingFile": "also viewing this file"
@@ -4777,7 +4780,7 @@
             "noMatchingEntries": "No matching entries.",
             "nothing": ": there is nothing there",
             "outsideWorkspaceSandboxWont": ": outside the workspace, so the sandbox won't open it",
-            "readOnlyChangingFiles": "Read-only: changing files needs maintainer access",
+            "readOnlyChangingFiles": "Read-only: changing files needs writer access",
             "restorePoints": "Restore points",
             "searchInFiles": "Search in files…",
             "showIgnoredFiles": "Show ignored files",

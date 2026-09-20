@@ -55,7 +55,12 @@ const deskRefusal = async (services: Pick<Services, "personas">, grant: { role: 
 // nobody wrote resolves to a fence admitting nothing, and somebody would have to guess whether that was intended.
 // A maintainer is not fenceable: the tier carries the owner's operating authority, reads every credential and drives
 // every conversation, so a folder fence over it would be a line on a screen rather than a boundary.
+// A writer is the opposite case and is checked before the absent-areas exit: its fence is the only thing standing
+// between it and every file in the workspace, since that is what an absent area list resolves to.
 const areaRefusal = async (services: Pick<Services, "areas">, grant: { role: GrantedRole; areas?: readonly string[] }): Promise<string | undefined> => {
+    if (grant.role === "writer" && (grant.areas?.length ?? 0) === 0) {
+        return "a writer needs at least one area to write in";
+    }
     if (grant.areas === undefined) {
         return undefined;
     }

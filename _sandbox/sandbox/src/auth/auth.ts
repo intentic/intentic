@@ -77,7 +77,7 @@ export interface Member {
     // Persona ids a desk member may act through; present, and non-empty, only on a `desk` row.
     readonly desks?: readonly string[];
     // Area ids fencing what of the workspace this person reaches. Absent means the whole workspace, which is what
-    // every row written before areas existed keeps; empty means nothing at all.
+    // every row written before areas existed keeps; empty means nothing at all. Never absent on a writer row.
     readonly areas?: readonly string[];
 }
 
@@ -97,7 +97,10 @@ export interface MembersStore {
 
 // A desk row must name at least one card, and no other row may carry any: a desk with nothing to wear has nothing to
 // reach, and desks on a viewer would be a grant with no reader. Areas ride on any row, since where a person may look
-// is a question independent of what they may do there.
+// is a question independent of what they may do there — except on a writer, where they are the question.
+// Both refusals are enforced here rather than only at the route, because the roster file is hand-editable: a malformed
+// row is skipped by the store, so a writer row with no areas costs that person their access instead of handing them
+// the unfenced workspace their absent area list would otherwise resolve to.
 const MemberSchema = z
     .object({
         email: z.string(),
@@ -107,6 +110,9 @@ const MemberSchema = z
     })
     .refine((member) => (member.role === "desk" ? (member.desks?.length ?? 0) > 0 : member.desks === undefined), {
         message: "a desk names at least one persona, and only a desk names any",
+    })
+    .refine((member) => member.role !== "writer" || (member.areas?.length ?? 0) > 0, {
+        message: "a writer names at least one area: the folders it may change are what the tier is",
     });
 const MembersFileSchema = z.object({ members: z.array(z.unknown()) });
 

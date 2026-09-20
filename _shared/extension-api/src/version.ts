@@ -94,4 +94,8 @@
 // cards the owner handed them and is shown nothing else of the box. No member was added, so the recorded surface has
 // no entry for it; a view that gates on `viewer` and up keeps drawing what it drew, since the daemon refuses a desk
 // every read of the tree and of the fleet beyond its own conversations.
+// Also under 2.15.0, `api.sandbox.role()` answers `writer`: above collaborator, a member who changes files inside the
+// areas it was granted and ships none of them. No member was added, so the recorded surface has no entry for it. A
+// view that gates a WRITE affordance on `maintainer` now hides it from somebody the daemon would admit, which is the
+// one drift worth knowing about: gate on `writer` and up instead.
 export const extensionApiVersion = "2.15.0";

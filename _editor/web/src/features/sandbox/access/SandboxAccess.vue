@@ -75,6 +75,13 @@ const ROLE_OPTIONS = computed((): readonly PickerOption<GrantedRole>[] => [
         hint: t(`sandbox.sandboxAccess.driveAgentsReviewWork`),
     },
     {
+        label: t(`sandbox.sandboxAccess.writer`),
+        value: `writer`,
+        icon: `file-edit`,
+        // The areas are the tier, not a refinement of it, which is why this row cannot be granted without one.
+        hint: t(`sandbox.sandboxAccess.changeFilesInTheirFolders`),
+    },
+    {
         label: t(`sandbox.sandboxAccess.maintainer`),
         value: `maintainer`,
         icon: `wrench`,
@@ -102,11 +109,19 @@ const areasOf = (address: string): readonly string[] | undefined => grants.value
 // A row on its way to desk. The tier can't be written on the pick alone: the daemon refuses a desk that names no
 // card, and a re-grade away from desk drops the cards that row held, so every arrival at desk starts with none.
 // The pick is held here, the picker under the row names a card, and that write is what makes the tier real.
-const deskDraft = ref<{ email: string; desks: readonly string[] }>();
-const draftOf = (address: string): readonly string[] | undefined => (deskDraft.value?.email === address ? deskDraft.value.desks : undefined);
-// What the row reads as: the staged tier while a desk is being composed, the granted one otherwise.
-const rowRole = (member: InviteRecord): GrantedRole => (draftOf(member.email) === undefined ? member.role : `desk`);
-const rowDesks = (address: string): readonly string[] => draftOf(address) ?? desksOf(address);
+// Two tiers are refused half-made: a desk that names no card, a writer that names no area. Both stage here.
+const draft = ref<{ email: string; role: Extract<GrantedRole, `desk` | `writer`>; desks: readonly string[]; areas: readonly string[] | undefined }>();
+const draftFor = (address: string): { role: GrantedRole; desks: readonly string[]; areas: readonly string[] | undefined } | undefined =>
+    draft.value?.email === address ? draft.value : undefined;
+// What the row reads as: the staged tier while one is being composed, the granted one otherwise.
+const rowRole = (member: InviteRecord): GrantedRole => draftFor(member.email)?.role ?? member.role;
+const rowDesks = (address: string): readonly string[] => draftFor(address)?.desks ?? desksOf(address);
+// Read through the draft rather than `??`: undefined is the whole workspace, so a staged row's own empty list has to
+// survive as itself instead of falling back to what the grant still says.
+const rowAreas = (address: string): readonly string[] | undefined => {
+    const staged = draftFor(address);
+    return staged === undefined ? areasOf(address) : staged.areas;
+};
 // A card is named on the row the way it is named everywhere else. An id with no card behind it is one the owner has
 // since deleted, and reads as itself rather than disappearing: the desk still holds it.
 const { personas } = usePersonas();
@@ -229,7 +244,7 @@ const showDelivery = (result: { link: string; delivery: InviteDelivery; reason?:
 const invite = async (): Promise<void> => {
     const id = sandbox.activeSandboxId.value;
     const value = email.value.trim().toLowerCase();
-    if (id === undefined || busy.value || !validEmail(value) || !grantSendable(inviteRole.value, inviteDesks.value)) {
+    if (id === undefined || busy.value || !validEmail(value) || !grantSendable(inviteRole.value, inviteDesks.value, inviteAreas.value)) {
         return;
     }
     busy.value = true;
@@ -320,7 +335,7 @@ const setRole = async (
     areas: readonly string[] | undefined = areasOf(target),
 ): Promise<boolean> => {
     const id = sandbox.activeSandboxId.value;
-    if (id === undefined || busy.value || !grantSendable(role, desks)) {
+    if (id === undefined || busy.value || !grantSendable(role, desks, areas)) {
         return false;
     }
     busy.value = true;
@@ -344,22 +359,33 @@ const setRole = async (
     }
 };
 
-// Picking desk stages the row instead of writing it; every other tier is a decision complete in itself.
+// Picking a tier the daemon refuses half-made stages the row instead of writing it: a desk always, since a re-grade
+// away from one drops the cards it held, and a writer while it still holds no area. Every other tier is a decision
+// complete in itself.
 const pickRole = (member: InviteRecord, role: GrantedRole): void => {
+    const areas = areasOf(member.email);
     if (role === `desk`) {
-        deskDraft.value = { email: member.email, desks: desksOf(member.email) };
+        draft.value = { email: member.email, role, desks: desksOf(member.email), areas };
         return;
     }
-    deskDraft.value = undefined;
+    if (role === `writer` && (areas ?? []).length === 0) {
+        draft.value = { email: member.email, role, desks: desksOf(member.email), areas: [] };
+        return;
+    }
+    draft.value = undefined;
     void setRole(member.email, role);
 };
+
+// A staged writer opens its own fence: the pick is not a grant until it names a folder, so the picker that names one
+// has to be on screen without being asked for.
+const fenceStaged = (address: string): boolean => draftFor(address)?.role === `writer`;
 
 // A card toggled on is what commits the desk tier. Toggling the last one off would be a desk with nothing to wear,
 // so the row stays staged and the picker says what it still needs.
 const pickDesks = async (address: string, desks: string[]): Promise<void> => {
-    deskDraft.value = { email: address, desks };
+    draft.value = { email: address, role: `desk`, desks, areas: areasOf(address) };
     if (desks.length > 0 && (await setRole(address, `desk`, desks))) {
-        deskDraft.value = undefined;
+        draft.value = undefined;
     }
 };
 
@@ -368,9 +394,17 @@ const pickDesks = async (address: string, desks: string[]): Promise<void> => {
 const fenceOpen = ref<string>();
 
 // Changing which areas a row holds is a re-grade at the same tier; a maintainer cannot be fenced, so the daemon
-// refuses one and the picker is not offered on that row.
-const pickAreas = (member: InviteRecord, areas: string[] | undefined): void => {
-    void setRole(member.email, rowRole(member), rowDesks(member.email), areas);
+// refuses one and the picker is not offered on that row. On a staged writer the first folder named is what makes the
+// tier real, and taking the last one away leaves it staged rather than sending a grant the daemon would refuse.
+const pickAreas = async (member: InviteRecord, areas: string[] | undefined): Promise<void> => {
+    const role = rowRole(member);
+    if (role === `writer` && (areas ?? []).length === 0) {
+        draft.value = { email: member.email, role, desks: rowDesks(member.email), areas: areas ?? [] };
+        return;
+    }
+    if (await setRole(member.email, role, rowDesks(member.email), areas)) {
+        draft.value = undefined;
+    }
 };
 
 const revoke = async (target: string): Promise<void> => {
@@ -380,9 +414,9 @@ const revoke = async (target: string): Promise<void> => {
     }
     busy.value = true;
     clearNotice();
-    // A staged desk on a row that is about to stop existing.
-    if (deskDraft.value?.email === target) {
-        deskDraft.value = undefined;
+    // A staged tier on a row that is about to stop existing.
+    if (draft.value?.email === target) {
+        draft.value = undefined;
     }
     try {
         // Enforcer drops access first; a rejecting/offline daemon errors instead of leaving access standing.
@@ -430,7 +464,7 @@ const revoke = async (target: string): Promise<void> => {
                         <!-- A desk's cards, named on the row: the whole of what that person reaches. -->
                         <StatusBadge v-for="desk in desksOf(member.email)" :key="desk" variant="neutral" :label="deskLabel(desk)" size="xs" />
                         <!-- And which parts of the workspace they see; no badge at all is the whole of it. -->
-                        <StatusBadge v-for="area in areasOf(member.email) ?? []" :key="area" variant="info" :label="areaLabel(area)" size="xs" />
+                        <StatusBadge v-for="area in rowAreas(member.email) ?? []" :key="area" variant="info" :label="areaLabel(area)" size="xs" />
                     </template>
                     <template #control>
                         <!-- Changeable in place, since a re-grade is routine and shouldn't cost a revoke + re-invite. -->
@@ -481,8 +515,13 @@ const revoke = async (target: string): Promise<void> => {
                 </RowNote>
                 <!-- Which parts of the workspace they reach. Not offered to a maintainer: that tier carries the
                      owner's operating authority, so a folder fence over it would be a line on a screen. -->
-                <RowNote v-if="fenceOpen === member.email && rowRole(member) !== 'maintainer'" variant="block">
-                    <AreaPicker :picked="areasOf(member.email)" :disabled="busy" @change="(areas) => pickAreas(member, areas)" />
+                <RowNote v-if="(fenceOpen === member.email || fenceStaged(member.email)) && rowRole(member) !== 'maintainer'" variant="block">
+                    <AreaPicker
+                        :picked="rowAreas(member.email)"
+                        :needs-one="fenceStaged(member.email)"
+                        :disabled="busy"
+                        @change="(areas) => void pickAreas(member, areas)"
+                    />
                 </RowNote>
                 </template>
 
@@ -525,7 +564,7 @@ const revoke = async (target: string): Promise<void> => {
                                         :label="t(`sandbox.sandboxAccess.invite2`)"
                                         size="small"
                                         :loading="busy"
-                                        :disabled="busy || !validEmail(email.trim().toLowerCase()) || !grantSendable(inviteRole, inviteDesks)"
+                                        :disabled="busy || !validEmail(email.trim().toLowerCase()) || !grantSendable(inviteRole, inviteDesks, inviteAreas)"
                                         class="shrink-0"
                                     >
                                         <template #icon><Icon name="send" /></template>
@@ -539,7 +578,13 @@ const revoke = async (target: string): Promise<void> => {
                             <!-- A desk is nothing without its cards, so the pick sits on the invite itself. -->
                             <DeskPicker v-if="inviteRole === 'desk'" :picked="inviteDesks" :disabled="busy" @change="(desks) => (inviteDesks = desks)" />
                             <!-- What they will see of the workspace, decided with the invite rather than after it. -->
-                            <AreaPicker v-if="inviteRole !== 'maintainer'" :picked="inviteAreas" :disabled="busy" @change="(areas) => (inviteAreas = areas)" />
+                            <AreaPicker
+                                v-if="inviteRole !== 'maintainer'"
+                                :picked="inviteAreas"
+                                :needs-one="inviteRole === 'writer'"
+                                :disabled="busy"
+                                @change="(areas) => (inviteAreas = areas)"
+                            />
                         </form>
                     </div>
                 </RowNote>

@@ -23,5 +23,8 @@ export const grantBody = (email: string, role: GrantedRole, desks: readonly stri
     ...(areas === undefined || role === `maintainer` ? {} : { areas: [...areas] }),
 });
 
-// Whether the grant can be sent at all; the one refusal the form makes itself rather than reading off the daemon.
-export const grantSendable = (role: GrantedRole, desks: readonly string[]): boolean => role !== `desk` || desks.length > 0;
+// Whether the grant can be sent at all; the two refusals the form makes itself rather than reading off the daemon.
+// A writer's areas are the tier rather than a narrowing of it: unfenced, it would be a grant to change every file in
+// the workspace, which is why the daemon refuses one and the form never sends it.
+export const grantSendable = (role: GrantedRole, desks: readonly string[], areas: readonly string[] | undefined): boolean =>
+    (role !== `desk` || desks.length > 0) && (role !== `writer` || (areas ?? []).length > 0);

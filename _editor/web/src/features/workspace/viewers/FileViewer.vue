@@ -334,7 +334,7 @@ const scopedReadOnly = computed(
 const scopeTitle = useScopeTitle();
 const readOnlyReason = computed(() => {
     if (!canEditFiles.value) {
-        return `Your access to this sandbox is read-only: changing files needs maintainer access.`;
+        return `Your access to this sandbox is read-only: changing files needs writer access.`;
     }
     if (inArchive.value) {
         return `Inside an archive: extract it to get a copy you can change.`;

@@ -2817,6 +2817,7 @@
             "access": "Acceso",
             "areaPick": "Qué áreas del espacio de trabajo ve",
             "browser": "Este navegador",
+            "changeFilesInTheirFolders": "Puede cambiar archivos en las carpetas que indiques y dirigir agentes. Integrar y publicar siguen siendo peticiones; los secretos y los ajustes quedan fuera de su alcance.",
             "ciNotifications": "Notificaciones de CI",
             "collaborator": "Colaborador",
             "copyLink": "Copiar el enlace",
@@ -2860,6 +2861,8 @@
             "viewer": "Espectador",
             "watchEverythingAgentsChats": "Puede verlo todo: agentes, chats, archivos. No puede cambiar nada.",
             "webhooks": "Webhooks",
+            "writer": "Editor",
+            "writerNeedsArea": "Elige al menos una carpeta. Un editor no se concede hasta que tiene una.",
             "you": "tú"
         },
         "sandboxAgent": {
@@ -4446,7 +4449,7 @@
             "newFile": "Archivo nuevo",
             "newFolder": "Carpeta nueva",
             "paste": "Pegar",
-            "readOnlyChangingFiles": "Solo lectura: cambiar archivos necesita acceso de responsable"
+            "readOnlyChangingFiles": "Solo lectura: cambiar archivos requiere acceso de editor"
         },
         "fileBreadcrumb": {
             "alsoViewingFile": "también está viendo este archivo"
@@ -4777,7 +4780,7 @@
             "noMatchingEntries": "No hay entradas que coincidan.",
             "nothing": ": ahí no hay nada",
             "outsideWorkspaceSandboxWont": ": fuera del espacio de trabajo, así que el sandbox no lo abrirá",
-            "readOnlyChangingFiles": "Solo lectura: cambiar archivos necesita acceso de responsable",
+            "readOnlyChangingFiles": "Solo lectura: cambiar archivos requiere acceso de editor",
             "restorePoints": "Puntos de restauración",
             "searchInFiles": "Buscar en los archivos…",
             "showIgnoredFiles": "Mostrar los archivos ignorados",

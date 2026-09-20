@@ -26,14 +26,16 @@ vi.mock("../../sandbox/client/sandboxClient", async (importOriginal) => {
 });
 
 // Signed-in member's tier, switched per test; mocked directly since the subject is what the explorer does with it.
-const role = vi.hoisted(() => ({ canShip: false }));
+// The tier that writes is `writer`, below the operating one: a collaborator is read-only in the tree.
+const role = vi.hoisted(() => ({ canWrite: false }));
 vi.mock("../../sandbox/secrets/useRole", async () => {
     const { computed } = await import("vue");
     return {
         useRole: () => ({
-            role: computed(() => (role.canShip ? `maintainer` : `collaborator`)),
+            role: computed(() => (role.canWrite ? `writer` : `collaborator`)),
             canDrive: computed(() => true),
-            canShip: computed(() => role.canShip),
+            canWrite: computed(() => role.canWrite),
+            canShip: computed(() => false),
             isOwner: computed(() => false),
         }),
     };
@@ -72,7 +74,7 @@ const rowFor = (el: HTMLElement, name: string): HTMLElement =>
     [...el.querySelectorAll(`[role="treeitem"]`)].find((row) => row.textContent?.includes(name)) as HTMLElement;
 
 beforeEach(() => {
-    role.canShip = false;
+    role.canWrite = false;
     daemon.calls.length = 0;
     sessionStorage.clear();
     resetWorkspaceTreeState();
@@ -93,7 +95,7 @@ it(`answers a read-only member's Delete with the tier, and asks the daemon nothi
 
     expect(daemon.calls.filter((call) => call.init?.method === `DELETE`)).toEqual([]);
     expect(document.body.textContent).not.toContain(`Delete file?`);
-    expect(feedback?.actionError.value?.title).toMatch(/maintainer access/i);
+    expect(feedback?.actionError.value?.title).toMatch(/writer access/i);
 });
 
 it(`does not open the rename field for a read-only member`, async () => {
@@ -105,11 +107,11 @@ it(`does not open the rename field for a read-only member`, async () => {
     await nextTick();
 
     expect(el.querySelector(`input`)).toBeNull();
-    expect(feedback?.actionError.value?.title).toMatch(/maintainer access/i);
+    expect(feedback?.actionError.value?.title).toMatch(/writer access/i);
 });
 
-it(`lets the operating tier through unchanged`, async () => {
-    role.canShip = true;
+it(`lets the writing tier through unchanged`, async () => {
+    role.canWrite = true;
     const el = await mount();
     const row = rowFor(el, `notes.txt`);
     row.click();

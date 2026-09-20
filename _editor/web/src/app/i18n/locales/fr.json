@@ -2817,6 +2817,7 @@
             "access": "Accès",
             "areaPick": "Quelles zones de l’espace de travail il voit",
             "browser": "Ce navigateur",
+            "changeFilesInTheirFolders": "Peut modifier les fichiers dans les dossiers que vous nommez et piloter des agents. Intégrer et publier restent des demandes ; les secrets et les réglages restent hors de portée.",
             "ciNotifications": "Notifications CI",
             "collaborator": "Collaborateur",
             "copyLink": "Copier le lien",
@@ -2860,6 +2861,8 @@
             "viewer": "Observateur",
             "watchEverythingAgentsChats": "Peut tout voir : agents, chats, fichiers. Ne peut rien changer.",
             "webhooks": "Webhooks",
+            "writer": "Rédacteur",
+            "writerNeedsArea": "Choisissez au moins un dossier. Un rédacteur n'est accordé que lorsqu'il en détient un.",
             "you": "vous"
         },
         "sandboxAgent": {
@@ -4446,7 +4449,7 @@
             "newFile": "Nouveau fichier",
             "newFolder": "Nouveau dossier",
             "paste": "Coller",
-            "readOnlyChangingFiles": "Lecture seule : modifier des fichiers demande un accès mainteneur"
+            "readOnlyChangingFiles": "Lecture seule : modifier des fichiers demande un accès rédacteur"
         },
         "fileBreadcrumb": {
             "alsoViewingFile": "consulte aussi ce fichier"
@@ -4777,7 +4780,7 @@
             "noMatchingEntries": "Aucune entrée correspondante.",
             "nothing": " : il n'y a rien là",
             "outsideWorkspaceSandboxWont": " : hors de l'espace de travail, le sandbox ne l'ouvrira donc pas",
-            "readOnlyChangingFiles": "Lecture seule : modifier des fichiers demande un accès mainteneur",
+            "readOnlyChangingFiles": "Lecture seule : modifier des fichiers demande un accès rédacteur",
             "restorePoints": "Points de restauration",
             "searchInFiles": "Chercher dans les fichiers…",
             "showIgnoredFiles": "Afficher les fichiers ignorés",

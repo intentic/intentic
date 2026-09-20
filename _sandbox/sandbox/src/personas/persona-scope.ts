@@ -1,6 +1,6 @@
 import { isAbsolute, relative, resolve } from "node:path";
 import type { HookCallbackMatcher, HookEvent } from "@anthropic-ai/claude-agent-sdk";
-import type { Fence } from "@intentic/sandbox-contract";
+import { type Fence, SANDBOX_PATHS } from "@intentic/sandbox-contract";
 import type { TurnPersona } from "./personas.js";
 
 // Enforces a turn's fence and its `sandbox` scope as a PreToolUse hook, the point a path is a fact, not an
@@ -20,8 +20,8 @@ const PATH_FIELDS: Record<string, string> = {
 // Tools that change a file; the `sandbox` switch gates editing config, not reading it.
 const WRITE_TOOLS = new Set(["Write", "Edit", "NotebookEdit"]);
 
-// "Change the sandbox" as paths: config/automations, and the outbox served publicly; matched as prefixes.
-const SANDBOX_PATHS = [".intentic", "public"];
+// "Change the sandbox" as paths: config/automations, and the outbox served publicly; matched as prefixes. Shared with
+// the area schema (policy/fence-paths.ts), so what a persona may not write and what a grant may not name are one list.
 
 // Is `target` inside `folder`, via `relative`, not a string prefix; `/work/app2` isn't inside `/work/app`.
 const inside = (target: string, folder: string): boolean => {

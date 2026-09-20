@@ -130,6 +130,35 @@ test("a fenced member may attach a file to a message but may not write into the 
     expect(elsewhere.status).toBe(403);
 });
 
+// The write half of the same fence. The floor (auth/role-floor.ts) admits a writer to these routes at all; what is
+// pinned here is that the path still has to be one the fence admits, on every door that changes the tree.
+test("a writer changes files inside its areas and is refused on every route outside them", async () => {
+    const { client, app, actAs } = await desk();
+    actAs(`writer`, [`support`]);
+    await expect(client.workspace.mkdir({ path: "support/tickets" })).resolves.toEqual({ ok: true });
+    expect(await errorCode(client.workspace.mkdir({ path: "finance/tickets" }))).toBe("FORBIDDEN");
+    expect(await errorCode(client.workspace.delete({ path: "finance/payroll.csv" }))).toBe("FORBIDDEN");
+    expect(await errorCode(client.workspace.extract({ path: "finance/books.zip" }))).toBe("FORBIDDEN");
+    // Both endpoints of a move are write targets, so carrying a file out of the fence is refused from either side.
+    expect(await errorCode(client.workspace.move({ from: "support/faq.md", to: "finance/faq.md" }))).toBe("FORBIDDEN");
+    expect(await errorCode(client.workspace.move({ from: "finance/payroll.csv", to: "support/payroll.csv" }))).toBe("FORBIDDEN");
+    const inside = await app.request(`/workspace/upload?path=support/note.md`, { method: "POST", body: "hi" });
+    expect(inside.status).toBe(200);
+    const outside = await app.request(`/workspace/upload?path=finance/leak.csv`, { method: "POST", body: "hi" });
+    expect(outside.status).toBe(403);
+});
+
+// The tier is an editor, not an operator: it changes files and has no way to move them into the owner's tree, read a
+// credential, or operate the workspace it writes in.
+test("a writer ships nothing it wrote", async () => {
+    const { app, actAs } = await desk();
+    actAs(`writer`, [`support`]);
+    for (const path of [`/agents/abc/land`, `/workspace/setup`, `/workspace/repos`]) {
+        expect((await app.request(path, { method: "POST", body: "{}", headers: { "content-type": "application/json" } })).status).toBe(403);
+    }
+    expect((await app.request(`/secrets`, { method: "GET" })).status).toBe(403);
+});
+
 // A fence has to be the shape of the workspace as far as this person is concerned, so an ancestor on the way down
 // stays listable while its other branches do not.
 test("a folder leading to the fence lists only what leads somewhere", async () => {

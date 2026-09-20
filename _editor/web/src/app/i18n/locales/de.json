@@ -2817,6 +2817,7 @@
             "access": "Zugriff",
             "areaPick": "Welche Bereiche des Arbeitsbereichs sie sehen",
             "browser": "Dieser Browser",
+            "changeFilesInTheirFolders": "Kann Dateien in den Ordnern ändern, die Sie nennen, und Agenten steuern. Landen und Veröffentlichen bleiben Anfragen; Geheimnisse und Einstellungen bleiben unerreichbar.",
             "ciNotifications": "CI-Benachrichtigungen",
             "collaborator": "Mitarbeiter",
             "copyLink": "Link kopieren",
@@ -2860,6 +2861,8 @@
             "viewer": "Beobachter",
             "watchEverythingAgentsChats": "Kann alles sehen: Agenten, Chats, Dateien. Kann nichts ändern.",
             "webhooks": "Webhooks",
+            "writer": "Bearbeiter",
+            "writerNeedsArea": "Wählen Sie mindestens einen Ordner. Ein Bearbeiter wird erst gewährt, wenn er einen hält.",
             "you": "Sie"
         },
         "sandboxAgent": {
@@ -4446,7 +4449,7 @@
             "newFile": "Neue Datei",
             "newFolder": "Neuer Ordner",
             "paste": "Einfügen",
-            "readOnlyChangingFiles": "Nur lesen: Dateien zu ändern braucht Maintainer-Zugriff"
+            "readOnlyChangingFiles": "Nur Lesen: Dateien ändern erfordert Bearbeiter-Zugriff"
         },
         "fileBreadcrumb": {
             "alsoViewingFile": "sieht diese Datei ebenfalls an"
@@ -4777,7 +4780,7 @@
             "noMatchingEntries": "Keine passenden Einträge.",
             "nothing": ": dort ist nichts",
             "outsideWorkspaceSandboxWont": ": außerhalb des Workspace, die Sandbox öffnet es also nicht",
-            "readOnlyChangingFiles": "Nur lesen: Dateien zu ändern braucht Maintainer-Zugriff",
+            "readOnlyChangingFiles": "Nur Lesen: Dateien ändern erfordert Bearbeiter-Zugriff",
             "restorePoints": "Wiederherstellungspunkte",
             "searchInFiles": "In Dateien suchen…",
             "showIgnoredFiles": "Ignorierte Dateien zeigen",

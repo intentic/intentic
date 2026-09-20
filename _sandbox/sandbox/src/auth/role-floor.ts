@@ -68,16 +68,25 @@ const NAME_FLOORS: Readonly<Record<string, MemberRole>> = {
     "push.subscribe": "collaborator",
     "push.unsubscribe": "collaborator",
     "push.test": "collaborator",
+    // Changing files in the shared tree, the writer grant. Each of these resolves its path through `contained`
+    // (workspace/workspace.routes.ts), which refuses anything outside the caller's fence — so lowering the floor here
+    // widens who may write, never where. What ships the result (land, discard, push) stays at the maintainer default,
+    // and so does everything that operates the tree rather than edits it: setup, install, addRepo, sync, startApp.
+    "workspace.mkdir": "writer",
+    "workspace.delete": "writer",
+    "workspace.move": "writer",
+    "workspace.copy": "writer",
+    "workspace.extract": "writer",
     // Spend is the operator's reading, not the audience's.
     "system.usage": "maintainer",
 };
 
 // /workspace/upload is two acts wearing one address: an attachment lands at ATTACHMENTS_DIR (collaborator's grant), but
-// any other target is editing the shared workspace like move/copy/delete (maintainer).
+// any other target is editing the shared workspace like move/copy/delete (writer).
 // `isAttachmentPath` folds `..` before matching since the path arrives in a caller-written query; a missing or
-// non-attachment target gets the workspace floor.
-const uploadFloor = (target: string | undefined): MemberRole =>
-    target !== undefined && isAttachmentPath(target) ? "collaborator" : "maintainer";
+// non-attachment target gets the workspace floor, which is what keeps a traversal out of the attachments dir from
+// buying the lower tier.
+const uploadFloor = (target: string | undefined): MemberRole => (target !== undefined && isAttachmentPath(target) ? "collaborator" : "writer");
 
 // The hand-written (non-contract) routes that sit below the mutation default.
 const PATH_FLOORS: Readonly<Record<string, MemberRole>> = {

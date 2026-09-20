@@ -171,14 +171,16 @@ export const fetchWorkspaceTree = (): Promise<WorkspaceTreeResponse> =>
 
 export function useWorkspaceTree() {
     const queryClient = useQueryClient();
-    // Whether this member may edit the shared tree; the daemon floors writes at maintainer, so others get read-only
+    // Whether this member may edit the shared tree; the daemon floors writes at writer, so others get read-only
     // access. Menus withdraw write items for them; refuseWrite reports the tier for actions with none to withdraw.
-    const { canShip: canEditFiles } = useRole();
+    // The tier, not the fence: a writer is offered every verb and is refused per path by the daemon, since only it
+    // knows which areas that person holds.
+    const { canWrite: canEditFiles } = useRole();
     const refuseWrite = (): boolean => {
         if (canEditFiles.value) {
             return false;
         }
-        actionError.value = noticeOf(`Changing files needs maintainer access. Yours is read-only here.`);
+        actionError.value = noticeOf(`Changing files needs writer access. Yours is read-only here.`);
         return true;
     };
 

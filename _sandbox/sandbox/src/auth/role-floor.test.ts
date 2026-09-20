@@ -40,18 +40,34 @@ describe("routeFloor", () => {
         expect(routeFloor("POST", "/system/sync/pair")).toBe("collaborator");
     });
 
-    test("what leaves the sandbox floors at maintainer: land, discard, approvals, workspace writes", () => {
+    test("changing files in the shared tree is the writer tier", () => {
+        expect(routeFloor("POST", "/workspace/dir")).toBe("writer");
+        expect(routeFloor("DELETE", "/workspace/entry")).toBe("writer");
+        expect(routeFloor("POST", "/workspace/move")).toBe("writer");
+        expect(routeFloor("POST", "/workspace/copy")).toBe("writer");
+        expect(routeFloor("POST", "/workspace/extract")).toBe("writer");
+        // Writing bytes into the shared tree is that same edit, whichever door it uses: the upload route only
+        // drops to collaborator for an attachment address, so a plain file, a missing target, and a path that
+        // climbs back out of the attachments dir all land here with move and delete. Where in the tree any of
+        // them may land is the fence's answer, not this one (areas/area-fence.integration.test.ts).
+        expect(routeFloor("POST", "/workspace/upload", "app/main.ts")).toBe("writer");
+        expect(routeFloor("POST", "/workspace/upload")).toBe("writer");
+        expect(routeFloor("POST", "/workspace/upload", `${ATTACHMENTS_DIR}/u1/../../../../config/hooks/lint.mjs`)).toBe("writer");
+    });
+
+    test("what leaves the sandbox floors at maintainer: land, discard, approvals", () => {
         expect(routeFloor("POST", "/agents/abc/land")).toBe("maintainer");
         expect(routeFloor("POST", "/agents/abc/discard")).toBe("maintainer");
         expect(routeFloor("POST", "/approvals")).toBe("maintainer");
         expect(routeFloor("DELETE", "/approvals/d1")).toBe("maintainer");
-        expect(routeFloor("POST", "/workspace/move")).toBe("maintainer");
-        // Writing bytes into the shared tree is that same edit, whichever door it uses: the upload route only
-        // drops to collaborator for an attachment address, so a plain file, a missing target, and a path that
-        // climbs back out of the attachments dir all land here with move and delete.
-        expect(routeFloor("POST", "/workspace/upload", "app/main.ts")).toBe("maintainer");
-        expect(routeFloor("POST", "/workspace/upload")).toBe("maintainer");
-        expect(routeFloor("POST", "/workspace/upload", `${ATTACHMENTS_DIR}/u1/../../../../config/hooks/lint.mjs`)).toBe("maintainer");
+    });
+
+    test("operating the tree is not editing it, and stays at maintainer", () => {
+        expect(routeFloor("POST", "/workspace/setup")).toBe("maintainer");
+        expect(routeFloor("POST", "/workspace/setup/install")).toBe("maintainer");
+        expect(routeFloor("POST", "/workspace/repos")).toBe("maintainer");
+        expect(routeFloor("POST", "/workspace/repos/new")).toBe("maintainer");
+        expect(routeFloor("POST", "/workspace/sync")).toBe("maintainer");
     });
 
     test("operator reads outrank the GET default: logs, usage, capabilities", () => {
@@ -135,5 +151,19 @@ describe("memberRefusal", () => {
         // A desk never clears a floor by rank: the list is the whole of its admission.
         expect(memberRefusal({ role: "desk" }, "GET", "/no/such/route")).toEqual({ error: "not open to a desk member", floor: "viewer" });
         expect(memberRefusal({ role: "viewer" }, "GET", "/no/such/route")).toBeUndefined();
+    });
+
+    test("a writer clears the file routes and nothing that ships or operates", () => {
+        expect(memberRefusal({ role: "writer", areas: ["support"] }, "POST", "/workspace/move")).toBeUndefined();
+        expect(memberRefusal({ role: "writer", areas: ["support"] }, "POST", "/workspace/upload", "support/note.md")).toBeUndefined();
+        expect(memberRefusal({ role: "collaborator" }, "POST", "/workspace/move")).toEqual({ error: "writer access required", floor: "writer" });
+        expect(memberRefusal({ role: "writer", areas: ["support"] }, "POST", "/agents/abc/land")).toEqual({
+            error: "maintainer access required",
+            floor: "maintainer",
+        });
+        expect(memberRefusal({ role: "writer", areas: ["support"] }, "GET", "/secrets")).toEqual({
+            error: "maintainer access required",
+            floor: "maintainer",
+        });
     });
 });

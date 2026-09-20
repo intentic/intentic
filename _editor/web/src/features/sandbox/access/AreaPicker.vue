@@ -11,7 +11,13 @@ import { useT } from "@intentic/ui/i18n";
 
 const t = useT();
 
-const { picked, disabled = false } = defineProps<{ picked: readonly string[] | undefined; disabled?: boolean }>();
+// `needsOne` is the writer tier asking: there, naming no area is not the whole workspace but a grant the daemon
+// refuses, so the picker has to say what the row is still waiting for rather than read as finished.
+const {
+    picked,
+    disabled = false,
+    needsOne = false,
+} = defineProps<{ picked: readonly string[] | undefined; disabled?: boolean; needsOne?: boolean }>();
 // `undefined` is the whole workspace; a list, even empty, is the grant deciding.
 const emit = defineEmits<{ change: [areas: string[] | undefined] }>();
 
@@ -47,6 +53,11 @@ const toggle = (id: string, on: boolean): void => {
                 @update:model-value="(on: boolean) => toggle(area.id, on)"
             />
         </label>
-        <span v-if="areas.length > 0 && picked === undefined" class="text-2xs text-subtle">{{ t(`sandbox.sandboxAccess.noAreaMeansWhole`) }}</span>
+        <span v-if="needsOne && (picked ?? []).length === 0 && areas.length > 0" class="ui-field-error">{{
+            t(`sandbox.sandboxAccess.writerNeedsArea`)
+        }}</span>
+        <span v-else-if="areas.length > 0 && picked === undefined" class="text-2xs text-subtle">{{
+            t(`sandbox.sandboxAccess.noAreaMeansWhole`)
+        }}</span>
     </div>
 </template>

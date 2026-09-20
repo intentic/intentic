@@ -92,13 +92,13 @@ describe(`the entry menu`, () => {
 
     it(`keeps a read-only member to the readable rows and says why`, () => {
         const items = entryMenuItems(input({ canEdit: false, lead: [{ label: `Open management panel` }] }));
-        expect(labels(items)).toEqual([`Open management panel`, `—`, `Read-only: changing files needs maintainer access`]);
+        expect(labels(items)).toEqual([`Open management panel`, `—`, `Read-only: changing files needs writer access`]);
         expect(items.at(-1)?.disabled).toBe(true);
     });
 
     it(`does not lead a read-only menu with a separator when nothing else is readable`, () => {
         const items = entryMenuItems(input({ canEdit: false }));
-        expect(labels(items)).toEqual([`Read-only: changing files needs maintainer access`]);
+        expect(labels(items)).toEqual([`Read-only: changing files needs writer access`]);
         expect(items[0]?.separator).not.toBe(true);
     });
 

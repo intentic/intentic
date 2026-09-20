@@ -201,7 +201,7 @@ export interface IntenticApi {
         // The signed-in user's trust tier, reactive like `reachable`. For affordances only: every route is
         // still floored by the daemon independently. A desk sees only the chat and its own conversations; a view
         // reading files or the fleet for one draws a refusal.
-        role(): "owner" | "maintainer" | "collaborator" | "viewer" | "desk";
+        role(): "owner" | "maintainer" | "writer" | "collaborator" | "viewer" | "desk";
         // The address this browser should frame or open a preview at, given the public one the daemon handed out (a
         // forwarded port's `previewUrl`, a panel's): its loopback twin when the app is on the daemon's loopback lane
         // and that lane answers as this sandbox's preview proxy, else the public address as given. On the sandbox's

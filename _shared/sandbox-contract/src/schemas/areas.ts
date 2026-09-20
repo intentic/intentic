@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { foldPath } from "../policy/fence-paths.js";
+import { foldPath, isSandboxPath } from "../policy/fence-paths.js";
 import { entryId } from "./internal.js";
 
 // A named part of the workspace: the unit a person's reach is granted in. Named rather than listed per member because
@@ -17,6 +17,11 @@ export const AreaFolderSchema = z
     .max(200)
     .refine((raw) => (foldPath(raw) ?? "") !== "", {
         message: "a folder is workspace-relative and inside the workspace; the workspace root is what naming no area already means",
+    })
+    // A fence is what a writer's every file route refuses on, so an area naming the control plane would be the one way
+    // a grant below maintainer could reach the config that decides what agents may do, or publish to the internet.
+    .refine((raw) => !isSandboxPath(raw), {
+        message: "an area cannot name the sandbox's own configuration or its public outbox",
     });
 
 export const AreaSchema = z.object({
