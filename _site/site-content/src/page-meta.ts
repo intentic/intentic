@@ -47,7 +47,7 @@ export const pageMeta: Record<string, PageMeta> = {
     "/credits/": {
         title: "Credits · intentic",
         description:
-            "The open-source works intentic uses that ask to be credited, with each licence and what was changed. DiceBear avatars and the Adventurer illustration set.",
+            "The open-source works intentic uses that ask to be credited, with each licence and what was changed. DiceBear avatars and the Clay style.",
         datePublished: "2026-08-15",
     },
     "/about/": aboutMeta,

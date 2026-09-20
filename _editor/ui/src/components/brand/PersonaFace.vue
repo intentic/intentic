@@ -1,7 +1,7 @@
-<!-- A persona's cartoon face, generated deterministically from its name via DiceBear's adventurer style. -->
+<!-- A persona's cartoon face, generated deterministically from its name via DiceBear's clay style. -->
 <script setup lang="ts">
 import { Avatar, Style } from "@dicebear/core";
-import definition from "@dicebear/styles/adventurer.json";
+import definition from "@dicebear/styles/clay.json";
 import { computed } from "vue";
 import { FACE_SIZES, type PersonaLike } from "./personaFace.js";
 
@@ -11,31 +11,32 @@ const { persona, size = FACE_SIZES.card } = defineProps<{ persona: PersonaLike; 
 // The name somebody chose, or the id it was filed under.
 const seed = computed<string>(() => persona.label ?? persona.id);
 
-// Curated, not the style's defaults: skin is what a reader recognises a face by across a column.
-const SKIN_COLORS = [`#f2d3b1`, `#ecad80`, `#9e5622`, `#763900`, `#c3cde0`, `#b9b4b8`, `#b7c7a5`, `#e3b3c1`] as const;
-
 // Parsed once at module load, shared by every face: the expensive validation is persona-independent.
 const style = new Style(definition);
 
 // Reads variant lists straight off the definition (typed to the style's own literals), so a picked part is
-// guaranteed valid. Throws on empty, rather than silently drawing everyone the same nose.
+// guaranteed valid. Throws on empty, rather than silently drawing everyone the same eyes.
 type Components = typeof definition.components;
 type VariantOf<K extends keyof Components> = keyof Components[K][`variants`] & string;
 const variants = <K extends keyof Components>(component: K): readonly VariantOf<K>[] => {
     const names = Object.keys(definition.components[component].variants) as VariantOf<K>[];
     if (names.length === 0) {
-        throw new Error(`DiceBear adventurer style has no variants for "${String(component)}"`);
+        throw new Error(`DiceBear clay style has no variants for "${String(component)}"`);
     }
     return names;
 };
 
+const TOPS = variants(`top`);
+const BODIES = variants(`body`);
+const PATTERNS = variants(`pattern`);
 const EYES = variants(`eyes`);
-const EYEBROWS = variants(`eyebrows`);
 const MOUTHS = variants(`mouth`);
-const HAIRS = variants(`hair`);
-const DETAILS = variants(`details`);
-const GLASSES = variants(`glasses`);
-const EARRINGS = variants(`earrings`);
+
+const BODY_COLORS = definition.colors.body.values;
+const ACCENT_COLORS = definition.colors.accent.values;
+
+// Clay draws a full-canvas square by default; DiceBear has no "no background" switch, only a color.
+const TRANSPARENT = `00000000`;
 
 // Twelve bytes from a name: FNV-1a hashes it (its avalanche keeps similar names from sharing parts), then a small
 // xorshift spins out one byte at a time. Deterministic and dependency-free.
@@ -56,9 +57,8 @@ const bytesOf = (text: string): number[] => {
 };
 
 const pick = <T,>(list: readonly T[], byte: number): T => list[byte % list.length]!;
-const hex = (byte: number): string => byte.toString(16).padStart(2, `0`);
 
-// Cached per seed: a rail redraws on every keystroke elsewhere, and re-assembling an 8kB SVG each time is wasted
+// Cached per seed: a rail redraws on every keystroke elsewhere, and re-assembling a multi-kB SVG each time is wasted
 // work.
 const cache = new Map<string, string>();
 
@@ -72,25 +72,17 @@ const svg = computed<string>(() => {
         // Keys the SVG's clip-path ids; without it, every face on a rail would share one id and clip through the
         // others.
         seed: seed.value,
-        // Zooms past the margin the 762-unit frame reserves for its longest hair, which the median face (ink 547
-        // units wide) never reaches. The head's ink reaches 263 of the 381 units from centre, so no zoom under
-        // 1.45 can cut a face; the cost is paid by hair's outer edge — 27 of the 45 variants touch the frame here
-        // against 8 at 1, losing 2.8% of their span on average and 13 points at worst (long06, already cut at 1).
-        scale: 1.25,
-        headVariant: `default`,
-        skinColor: pick(SKIN_COLORS, bytes[0]!),
-        detailsVariant: pick(DETAILS, bytes[1]!),
-        detailsProbability: 100,
-        eyesVariant: pick(EYES, bytes[2]!),
-        eyebrowsVariant: pick(EYEBROWS, bytes[3]!),
+        topVariant: pick(TOPS, bytes[1]!),
+        topProbability: 100,
+        bodyVariant: pick(BODIES, bytes[5]!),
+        patternVariant: pick(PATTERNS, bytes[2]!),
+        patternProbability: 100,
+        eyesVariant: pick(EYES, bytes[3]!),
         mouthVariant: pick(MOUTHS, bytes[4]!),
-        hairVariant: pick(HAIRS, bytes[5]!),
-        hairProbability: 100,
-        hairColor: `#${hex(bytes[9]!)}${hex(bytes[10]!)}${hex(bytes[11]!)}`,
-        glassesVariant: pick(GLASSES, bytes[6]!),
-        glassesProbability: 100,
-        earringsVariant: pick(EARRINGS, bytes[7]!),
-        earringsProbability: 100,
+        animationVariant: `none`,
+        bodyColor: pick(BODY_COLORS, bytes[0]!),
+        accentColor: pick(ACCENT_COLORS, bytes[6]!),
+        backgroundColor: TRANSPARENT,
     }).toString();
     cache.set(seed.value, drawn);
     return drawn;

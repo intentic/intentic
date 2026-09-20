@@ -467,7 +467,7 @@ export const creditsDoc: LegalDoc = {
             heading: "Persona avatars",
             paragraphs: [
                 `Persona faces are generated with DiceBear (dicebear.com), an open-source avatar library by Florian Körner, MIT-licensed.`,
-                `The artwork is the "Adventurer" style, a remix of the Adventurer illustration set (figma.com/community/file/1184595184137881796) by Lisa Wischofsky, licensed under Creative Commons Attribution 4.0 International (CC BY 4.0, creativecommons.org/licenses/by/4.0/). Changes were made: the illustrations are assembled programmatically from the style's component variants rather than used as-is.`,
+                `The artwork is the "Clay" style by DiceBear, licensed under Creative Commons Zero 1.0 (CC0 1.0, creativecommons.org/publicdomain/zero/1.0/). Changes were made: the illustrations are assembled programmatically from the style's component variants rather than used as-is.`,
             ],
         },
     ],

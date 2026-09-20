@@ -244,7 +244,7 @@ catalog:
   "@cursor/sdk": 1.0.31
   "@dagrejs/dagre": 3.0.0
   # DiceBear v10 discontinued the per-style npm packages (@dicebear/adventurer and its ~50 siblings) in favour of
-  # one package of JSON style definitions, so the pair below is what used to be `core` + `adventurer`. They
+  # one package of JSON style definitions, so the pair below is what used to be `core` + a per-style package. They
   # version independently — core carries the renderer, styles carries the artwork — which is why both are here
   # rather than one entry standing in for the other.
   "@dicebear/core": 10.5.0
