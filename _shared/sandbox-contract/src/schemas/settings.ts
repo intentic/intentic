@@ -305,6 +305,15 @@ export const SandboxSettingsSchema = z.object({
         .describe(
             "Which models do which job, one ordered list per job: commit messages, session titles, the safety judge, pipeline fixes, and every other place this sandbox picks a model for you. Tried in order, so one spent account does not take a job down. Nothing is chosen for you: a one-shot job with no list does not run, and a whole session with no list opens on whatever your own chat is set to.",
         ),
+    // Folded into the Auto router's prompt (agent/prompt/model-router.ts), never into a turn's own. Capped small on
+    // purpose: the reading runs under a 5s deadline, and this text is paid for on every chat that opens on Auto.
+    autoModelGuidance: z
+        .string()
+        .max(2000)
+        .default("")
+        .describe(
+            "What you would tell somebody choosing the model for a new chat on your behalf: which model you want the cheap work on, which account to leave alone, when to reach for the strongest one. Read once per chat, alongside the models and allowances this sandbox can actually run, and it overrides the product's own advice where the two disagree. It cannot invent a model: the answer is still a choice from that list.",
+        ),
     // Named by repo id ("root" or discoverRepos's dir); a commit spanning repos gets the trailer only where one was
     // asked for.
     changelogRepos: z

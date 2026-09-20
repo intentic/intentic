@@ -7,11 +7,12 @@ import {
     type ModelRoleSpec,
     modelPinKey,
 } from "@intentic/sandbox-contract";
-import { Button, RowGroup, SegmentedControl } from "@intentic/ui";
+import { Button, MarkdownDocument, RowGroup, SegmentedControl } from "@intentic/ui";
 import Checkbox from "primevue/checkbox";
 import { computed, ref, shallowRef, watch } from "vue";
 import { RouterLink } from "vue-router";
 import { honoredPinKnobs } from "../../../chat/models/run-settings/pickerRunSettings";
+import { useDraft } from "../../../../lib/useDraft";
 import { useSandboxSettings } from "../../overview/useSandboxSettings";
 import ModelGroupRow from "./ModelGroupRow.vue";
 import { type PinnedList, pinKnobSummary, pinnedList } from "./modelPinList";
@@ -25,8 +26,15 @@ import { useT } from "@intentic/ui/i18n";
 
 const t = useT();
 
-const { settings, patch } = useSandboxSettings();
+const { settings, patch, save } = useSandboxSettings();
 const loaded = computed(() => settings.value !== undefined);
+
+// The one job on this page that also takes words: Auto reads them once per chat, so the save is explicit and the cap
+// matches the schema's (SandboxSettingsSchema.autoModelGuidance), which is what the daemon would refuse past.
+const GUIDANCE_MAX = 2000;
+const guidance = useDraft(() => settings.value?.autoModelGuidance);
+const storedGuidance = computed(() => settings.value?.autoModelGuidance);
+const saveGuidance = (text: string): void => patch({ autoModelGuidance: text.trim() });
 
 // Sends the whole `modelRoles` record every time: the settings patch merges only at the top level, so writing one
 // role's key alone would drop the others. The bulk editor batches several keys through here in one patch.
@@ -386,6 +394,24 @@ const setPickerOpen = (open: boolean): void => {
             </template>
         </RowGroup>
 
+        <!-- The one model choice made by reading rather than by a pin, so it is the one that takes words as well as a
+             list. Its own group, below every block, because it is about what Auto weighs, not about which model reads. -->
+        <RowGroup :label="t(`sandbox.agentModels.howAutoChooses`)">
+            <MarkdownDocument
+                v-model="guidance"
+                frame="section"
+                :editable="loaded"
+                :stored="storedGuidance"
+                :saving="save.isPending.value"
+                save="explicit"
+                :label="t(`sandbox.agentModels.howAutoChooses`)"
+                :max-chars="GUIDANCE_MAX"
+                :placeholder="t(`sandbox.agentModels.whatYoudTellSomebody`)"
+                @save="saveGuidance"
+            >
+                <template #note>{{ t(`sandbox.agentModels.readOnceChatOpens`) }}</template>
+            </MarkdownDocument>
+        </RowGroup>
     </div>
 
     <!-- Mount once so the picker can place itself on open. -->

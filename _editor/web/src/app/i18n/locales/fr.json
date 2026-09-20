@@ -1706,8 +1706,10 @@
         "agentModels": {
             "advanced": "Avancé",
             "clearModels": "Vider les modèles",
+            "howAutoChooses": "Comment Auto choisit",
             "howToShow": "Comment afficher {toLowerCase}",
             "nothingJudgingCommandsAt": "Rien ne juge de commandes en ce moment : ceci n'est donc pas utilisé.",
+            "readOnceChatOpens": "Lu une seule fois, sur le message qui ouvre le chat, avec les modèles et les allocations que ce bac à sable peut réellement faire tourner. Votre texte l'emporte sur les conseils du produit en cas de désaccord, mais la réponse reste un choix dans cette liste.",
             "safetyJudgeOffNot": "Le juge de sécurité est désactivé : ce n'est donc pas l'un d'eux et rien ici ne lui écrit.",
             "selectEveryJobUnder": "Sélectionner toutes les tâches sous {toLowerCase}",
             "selectJobs": "Sélectionner des tâches",
@@ -1716,6 +1718,7 @@
             "simple": "Simple",
             "turnJudgeOn": "Activer le juge",
             "underSafety": "sous Sécurité.",
+            "whatYoudTellSomebody": "Ce que vous diriez à quelqu'un qui choisit le modèle d'un nouveau chat : quel travail peut partir au moins cher, quel compte ménager, quand prendre le plus puissant.",
             "worthBetterModelThan": "Mérite un meilleur modèle que le reste des tâches automatiques : il lit la commande comme des données, et dans un tour qui a absorbé quelque chose de l'extérieur, ce texte plaide peut-être pour sa propre approbation."
         },
         "agentRecovery": {

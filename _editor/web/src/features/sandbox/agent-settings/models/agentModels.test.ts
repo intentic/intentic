@@ -26,7 +26,14 @@ const patch = vi.fn((fields: Partial<SandboxSettings>) => {
 });
 
 vi.mock(`../../overview/useSandboxSettings`, () => ({
-    useSandboxSettings: () => ({ settings, patch, dropped: ref(undefined), error: ref(undefined), isLoading: ref(false), save: { mutate: patch } }),
+    useSandboxSettings: () => ({
+        settings,
+        patch,
+        dropped: ref(undefined),
+        error: ref(undefined),
+        isLoading: ref(false),
+        save: { mutate: patch, isPending: ref(false) },
+    }),
 }));
 
 // Two connected accounts, one not, since which one a click spends is exactly what these rows test.
@@ -60,6 +67,23 @@ vi.mock(`./ModelPinPicker.vue`, () => ({
             opened = props;
             answer = { pick: (pin) => emit(`pick`, pin), configure: (pin) => emit(`configure`, pin) };
             return () => h(`div`, { class: `pin-picker` });
+        },
+    }),
+}));
+
+// The guidance editor, stubbed the same way and for the same reason as the picker: what is under test is what this page
+// hands it and what it does with a save, not the document surface, which is `@intentic/ui`'s own.
+let doc: { readonly modelValue?: string; readonly stored?: string; readonly maxChars?: number } | undefined;
+let saveDoc: ((text: string) => void) | undefined;
+vi.mock(`@intentic/ui`, async (importOriginal) => ({
+    ...(await importOriginal<Record<string, unknown>>()),
+    MarkdownDocument: defineComponent({
+        props: { modelValue: String, stored: String, maxChars: Number, placeholder: String, label: String, editable: Boolean, saving: Boolean },
+        emits: [`update:modelValue`, `save`],
+        setup(props, { emit }) {
+            doc = props;
+            saveDoc = (text: string) => emit(`save`, text);
+            return () => h(`div`, { class: `guidance-doc` }, props.placeholder ?? ``);
         },
     }),
 }));
@@ -191,8 +215,10 @@ test("draws one group per declared block, in order, holding exactly that block's
         expect(adders(section as HTMLElement), block.id).toEqual(block.roles.map((role) => `Add a model for ${role.label.toLowerCase()}`));
     }
 
-    // Every section is a block: this page is jobs and nothing else.
-    expect(sections).toHaveLength(MODEL_ROLE_BLOCKS.length);
+    // The blocks, and after them the one section that is not a job list: what Auto is told to weigh. Nothing else.
+    expect(sections).toHaveLength(MODEL_ROLE_BLOCKS.length + 1);
+    expect(sections.at(-1)?.querySelector(`.guidance-doc`)).not.toBeNull();
+    expect(adders(sections.at(-1) as HTMLElement)).toEqual([]);
 });
 
 test("a job's glyph and its tick share one slot", async () => {
@@ -842,4 +868,25 @@ test("a switched-off job offers no tick, and the group's master box writes witho
             .filter((id) => id !== JUDGE)
             .toSorted(),
     );
+});
+
+/* THE ONE JOB THAT ALSO TAKES WORDS: Auto reads the owner's preferences alongside the list it may choose from. */
+test("the Auto guidance is handed over as it was saved, capped where the settings file itself would refuse it", () => {
+    settings.value = { ...settings.value, autoModelGuidance: `Cheap work goes to Haiku.` };
+    mount();
+
+    expect(doc?.stored).toBe(`Cheap work goes to Haiku.`);
+    expect(doc?.modelValue).toBe(`Cheap work goes to Haiku.`);
+    // Not transcribed: the cap the page draws is the cap the schema would refuse past.
+    const cap = doc?.maxChars ?? 0;
+    expect(SandboxSettingsSchema.safeParse({ autoModelGuidance: `x`.repeat(cap) }).success).toBe(true);
+    expect(SandboxSettingsSchema.safeParse({ autoModelGuidance: `x`.repeat(cap + 1) }).success).toBe(false);
+});
+
+test("saving the guidance writes the trimmed text, and nothing else on the page with it", () => {
+    mount();
+
+    saveDoc?.(`  Leave the work account alone.\n`);
+
+    expect(patch).toHaveBeenLastCalledWith({ autoModelGuidance: `Leave the work account alone.` });
 });

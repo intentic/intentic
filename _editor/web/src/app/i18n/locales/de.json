@@ -1706,8 +1706,10 @@
         "agentModels": {
             "advanced": "Erweitert",
             "clearModels": "Modelle leeren",
+            "howAutoChooses": "Wie Auto wählt",
             "howToShow": "Wie {toLowerCase} gezeigt wird",
             "nothingJudgingCommandsAt": "Gerade beurteilt nichts Befehle, das hier ist also nicht in Gebrauch.",
+            "readOnceChatOpens": "Wird einmal gelesen, mit der Nachricht, die einen Chat eröffnet, zusammen mit den Modellen und Kontingenten, die diese Sandbox wirklich fahren kann. Wo es dem Rat des Produkts widerspricht, gilt Ihr Text — gewählt wird aber weiterhin aus dieser Liste.",
             "safetyJudgeOffNot": "Der Sicherheitsrichter ist aus, das hier ist also keiner davon, und nichts hier schreibt darauf.",
             "selectEveryJobUnder": "Jeden Job unter {toLowerCase} auswählen",
             "selectJobs": "Jobs auswählen",
@@ -1716,6 +1718,7 @@
             "simple": "Einfach",
             "turnJudgeOn": "Den Richter einschalten",
             "underSafety": "unter „Sicherheit“.",
+            "whatYoudTellSomebody": "Was Sie jemandem sagen würden, der das Modell für einen neuen Chat wählt: welche Arbeit günstig laufen darf, welches Konto zu schonen ist, wann das stärkste gefragt ist.",
             "worthBetterModelThan": "Ein besseres Modell wert als der Rest der automatischen Jobs: es liest den Befehl als Daten, und in einem Zug, der etwas von außen aufgenommen hat, argumentiert dieser Text womöglich für seine eigene Freigabe."
         },
         "agentRecovery": {

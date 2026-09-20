@@ -41,7 +41,14 @@ const OFFER: ModelOffer = {
 };
 
 const warn = vi.fn();
-const services = (): Services => unstubbed<Services>("services", { logger: unstubbed<Services["logger"]>("logger", { warn } as Partial<Services["logger"]>) });
+// The owner's standing preferences live in settings, so a router test states them the way the daemon reads them.
+const services = (autoModelGuidance = ""): Services =>
+    unstubbed<Services>("services", {
+        logger: unstubbed<Services["logger"]>("logger", { warn } as Partial<Services["logger"]>),
+        sandboxSettings: unstubbed<Services["sandboxSettings"]>("sandboxSettings", {
+            get: async () => ({ autoModelGuidance }) as Awaited<ReturnType<Services["sandboxSettings"]["get"]>>,
+        }),
+    });
 
 const ASK = { prompt: "the invoice totals are off in billing", paths: [] as string[] };
 
@@ -73,6 +80,20 @@ test("a long message is front-loaded: the tail only dilutes the question it open
     expect(prompt).not.toContain("x".repeat(700));
 });
 
+test("the owner's own preferences are folded in, ahead of the list and the format they must be answered in", () => {
+    const prompt = routerPrompt(ASK, OFFER, NOW, "  Keep the work account for real work.  ");
+    expect(prompt).toContain("Where they disagree with the two paragraphs above, follow the owner:\nKeep the work account for real work.");
+    // Ahead of both, so the last thing read is the contract the reply is parsed against, whatever the owner wrote.
+    expect(prompt.indexOf("Keep the work account")).toBeLessThan(prompt.indexOf("Models you may choose:"));
+    expect(prompt.indexOf("Keep the work account")).toBeLessThan(prompt.indexOf("Reply with exactly these three lines"));
+});
+
+test("an owner who wrote nothing is not quoted as having written nothing", () => {
+    const written = routerPrompt(ASK, OFFER, NOW, "   ");
+    expect(written).toBe(routerPrompt(ASK, OFFER, NOW));
+    expect(written).not.toContain("follow the owner");
+});
+
 test("the reply is read as three keyed lines against the offer", () => {
     const answer = routeAnswer(OFFER);
     expect(answer.read("model: claude:claude-opus-5\neffort: high\naccount: work")).toEqual({
@@ -87,6 +108,12 @@ test("a model off the list is a rung that ignored it, not a softer answer", () =
     // Unusable, so the ladder steps to its next rung rather than running an id no provider has.
     expect(answer.unusable(answer.read("model: openai:gpt-9"))).toBe(`named "openai:gpt-9", which is not on the list it was given`);
     expect(answer.unusable(answer.read("Opus, obviously"))).toBe("named no model at all");
+});
+
+test("the reading a chat spends carries the guidance the owner saved in settings", async () => {
+    ask.mockResolvedValue("model: claude:claude-opus-5");
+    await routeModel(services("Cheap work goes to Haiku."), ASK);
+    expect(ask.mock.calls[0]?.[0]).toContain("Cheap work goes to Haiku.");
 });
 
 test("the Auto list is what gets spent, and the pick comes back with the model that read it", async () => {

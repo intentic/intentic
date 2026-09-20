@@ -34,13 +34,25 @@ const chatFacts = (ask: ModelRouteAsk): readonly string[] => {
     return facts.length === 0 ? [] : [``, `Facts about the chat:`, ...facts];
 };
 
-export const routerPrompt = (ask: ModelRouteAsk, offer: ModelOffer, now: number): string =>
+// The owner's own standing preferences, from settings (`autoModelGuidance`). Their text, not a visitor's, so it is
+// instruction rather than data — but it sits BEFORE the offer and the reply contract, so the format lines are the last
+// thing read and no wording of theirs can quietly cost them a usable answer. It cannot widen the choice either: a model
+// it names that is not on the list below is read back as no pick at all (parseModelPick).
+const ownerGuidance = (guidance: string): readonly string[] => {
+    const text = guidance.trim();
+    return text === ``
+        ? []
+        : [``, `The owner of this sandbox has written standing preferences for this choice. Where they disagree with the two paragraphs above, follow the owner:`, text];
+};
+
+export const routerPrompt = (ask: ModelRouteAsk, offer: ModelOffer, now: number, guidance = ``): string =>
     [
         `Choose the model a new chat should run on, reading the message it opens with.`,
         ``,
         `This choice is made once and holds for the whole conversation, so weigh what the work is likely to become, not just the first sentence. A question about how something works, a rename, a one-file edit: the cheapest model that will not embarrass itself. Work spanning several files, a design decision, a bug whose cause is unknown, anything asking to think first: the strongest model available. Most chats are somewhere between, and the middle rung is the honest answer for them.`,
         ``,
         `Spend allowance the way somebody would who has to live with the rest of the month: do not put easy work on a scarce account, and do not refuse to use a strong model when there is plenty left. An account whose allowance was never measured is unknown, not empty.`,
+        ...ownerGuidance(guidance),
         ``,
         ...offerLines(offer, now),
         ...chatFacts(ask),
@@ -72,7 +84,8 @@ const pickWords = (pick: ModelPick, label: string): string => {
 };
 
 export const routeModel = async (services: Services, ask: ModelRouteAsk, signal?: AbortSignal): Promise<ModelRoute> => {
-    const offer = await autoOffer(services);
+    // Read together: the settings are only wanted for a reading that is actually going to be spent.
+    const [offer, settings] = await Promise.all([autoOffer(services), services.sandboxSettings.get()]);
     if (offer.models.length === 0) {
         return { reason: `Nothing connected can run a turn right now, so this chat keeps the model it had.` };
     }
@@ -83,7 +96,12 @@ export const routeModel = async (services: Services, ask: ModelRouteAsk, signal?
     }
     const deadline = AbortSignal.any([...(signal === undefined ? [] : [signal]), AbortSignal.timeout(ROUTE_DEADLINE_MS)]);
     try {
-        const answer = await askRoleModel(services, "model-router", { prompt: routerPrompt(ask, offer, Date.now()), answer: routeAnswer(offer) }, deadline);
+        const answer = await askRoleModel(
+            services,
+            "model-router",
+            { prompt: routerPrompt(ask, offer, Date.now(), settings.autoModelGuidance), answer: routeAnswer(offer) },
+            deadline,
+        );
         const pick = answer.value.pick;
         const judge = modelPinKey(answer.choice);
         if (pick === undefined) {

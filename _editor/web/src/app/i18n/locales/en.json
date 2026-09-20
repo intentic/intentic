@@ -1706,16 +1706,19 @@
         "agentModels": {
             "advanced": "Advanced",
             "clearModels": "Clear models",
+            "howAutoChooses": "How Auto chooses",
             "howToShow": "How to show {toLowerCase}",
             "nothingJudgingCommandsAt": "Nothing is judging commands at the moment, so this is not in use.",
+            "readOnceChatOpens": "Read once, on the message a chat opens with, alongside the models and allowances this sandbox can actually run. It wins where it disagrees with the product's own advice, but the answer is still a choice from that list.",
             "safetyJudgeOffNot": "Safety judge is off, so it is not one of these and nothing here writes to it.",
+            "selected": "{count} selected",
             "selectEveryJobUnder": "Select every job under {toLowerCase}",
             "selectJobs": "Select jobs",
-            "selected": "{count} selected",
             "setModelAll": "Set a model for all…",
             "simple": "Simple",
             "turnJudgeOn": "Turn the judge on",
             "underSafety": "under Safety.",
+            "whatYoudTellSomebody": "What you'd tell somebody choosing the model for a new chat: which work can go cheap, which account to leave alone, when to reach for the strongest one.",
             "worthBetterModelThan": "Worth a better model than the rest of the automatic jobs: it reads the command as data, and on a turn that has taken in something from outside, that text may be arguing for its own approval."
         },
         "agentRecovery": {

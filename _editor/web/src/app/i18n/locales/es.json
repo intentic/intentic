@@ -1706,8 +1706,10 @@
         "agentModels": {
             "advanced": "Avanzado",
             "clearModels": "Vaciar los modelos",
+            "howAutoChooses": "Cómo elige Auto",
             "howToShow": "Cómo mostrar {toLowerCase}",
             "nothingJudgingCommandsAt": "Ahora mismo nada está juzgando comandos, así que esto no está en uso.",
+            "readOnceChatOpens": "Se lee una sola vez, con el mensaje que abre el chat, junto a los modelos y las asignaciones que esta sandbox puede usar de verdad. Manda sobre el consejo del producto cuando no coinciden, pero la respuesta sigue saliendo de esa lista.",
             "safetyJudgeOffNot": "El juez de seguridad está desactivado, así que no es uno de estos y nada de aquí le escribe.",
             "selectEveryJobUnder": "Seleccionar todas las tareas bajo {toLowerCase}",
             "selectJobs": "Seleccionar tareas",
@@ -1716,6 +1718,7 @@
             "simple": "Sencillo",
             "turnJudgeOn": "Activar el juez",
             "underSafety": "en Seguridad.",
+            "whatYoudTellSomebody": "Lo que le dirías a alguien que elige el modelo para un chat nuevo: qué trabajo puede ir barato, qué cuenta conviene no tocar, cuándo recurrir al más potente.",
             "worthBetterModelThan": "Merece un modelo mejor que el resto de tareas automáticas: lee el comando como datos, y en un turno que ha absorbido algo de fuera, ese texto puede estar argumentando a favor de su propia aprobación."
         },
         "agentRecovery": {

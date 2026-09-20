@@ -63,8 +63,11 @@ The Auto row is offered on a chat of this sandbox's **with nothing sent yet**, w
 
 - Which model a chat runs on is a **per-chat** question. A mode that only appears once you have found a switch
   on a settings page is a mode nobody finds.
-- The one part a sandbox *configures* is which model does the reading — the `model-router` job under Settings ›
-  Models, an ordered list like every other job, so one spent account does not take it down.
+- What a sandbox *configures* is not whether Auto is offered but how it reads: which model does the reading — the
+  `model-router` job under Settings › Models, an ordered list like every other job, so one spent account does not take
+  it down — and what that model is told to weigh (`autoModelGuidance`, the same page). The guidance is spliced in ahead
+  of the offer and the reply contract, so an owner can change the judgement without being able to break the answer:
+  a model it names that is not on the offered list is still read back as no pick at all.
 
 While Auto is armed the picker's footer answers **nothing** about the model underneath. That model is only the
 fallback if the reading never lands; drawing its accounts, its effort chips and its runtime's limits there
@@ -112,6 +115,7 @@ turn* is the product telling you, from inside itself, that the router was wrong,
 | What may be chosen from, and the allowance filter | `sandbox/src/agent/models/auto-offer.ts` |
 | The offered list's shape, and reading a reply against it | `sandbox-contract/src/models/model-offer.ts` |
 | Which model does the reading | `model-roles.ts` (`model-router`) → Settings › Models |
+| What the owner tells it to weigh | `settings.ts` (`autoModelGuidance`) → `AgentModels.vue` |
 | The Auto row, the tick and the footer | `ModelPicker.vue` (lead rows) / `ChatModelPicker.vue` |
 | The armed state, where it is legible | `ComposerModelPill.vue` |
 | The send-time wait, the notice, wearing the answer | `modelRoute.ts` → `Conversation.wearModel` |

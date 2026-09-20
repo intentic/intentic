@@ -1706,8 +1706,10 @@
         "agentModels": {
             "advanced": "Zaawansowane",
             "clearModels": "Wyczyść modele",
+            "howAutoChooses": "Jak Auto wybiera",
             "howToShow": "Jak pokazywać {toLowerCase}",
             "nothingJudgingCommandsAt": "W tej chwili nic nie ocenia poleceń, więc to nie jest w użyciu.",
+            "readOnceChatOpens": "Czytane raz, przy wiadomości otwierającej czat, razem z modelami i limitami, które ta piaskownica naprawdę może uruchomić. Wygrywa tam, gdzie kłóci się z radą produktu, ale odpowiedź i tak pochodzi z tej listy.",
             "safetyJudgeOffNot": "Sędzia bezpieczeństwa jest wyłączony, więc to nie jest jedno z tych zadań i nic tutaj do niego nie pisze.",
             "selectEveryJobUnder": "Zaznacz każde zadanie w kategorii {toLowerCase}",
             "selectJobs": "Zaznacz zadania",
@@ -1716,6 +1718,7 @@
             "simple": "Proste",
             "turnJudgeOn": "Włącz sędziego",
             "underSafety": "w sekcji Bezpieczeństwo.",
+            "whatYoudTellSomebody": "Co powiedziałbyś komuś, kto wybiera model dla nowego czatu: która praca może pójść taniej, którego konta nie ruszać, kiedy sięgnąć po najmocniejszy.",
             "worthBetterModelThan": "Wart lepszego modelu niż reszta zadań automatycznych: czyta polecenie jako dane, a w turze, która wchłonęła coś z zewnątrz, ten tekst może argumentować za własnym zatwierdzeniem."
         },
         "agentRecovery": {
