@@ -15,7 +15,10 @@ export function useFitToContent(content: Ref<HTMLElement | undefined>, floor?: H
         if (element === undefined) {
             return;
         }
-        const height = Math.max(Math.ceil(element.offsetHeight), floor?.value ?? 0);
+        // getBoundingClientRect, not offsetHeight: offsetHeight is rounded to the NEAREST integer, so a column
+        // laid out at 450.4 asks for a 450-tall window and the page it was measured from overflows it by the
+        // fraction — a scrollbar down a card that has nothing to scroll.
+        const height = Math.max(Math.ceil(element.getBoundingClientRect().height), floor?.value ?? 0);
         if (height === 0 || height === reported) {
             return;
         }

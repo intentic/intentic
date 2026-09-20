@@ -702,7 +702,7 @@ The whole channel between the SPA and the app
 
 | Link | From | What it does |
 | --- | --- | --- |
-| `intentic://setup?code=…` | Setup step 3 | run this setup code's sandbox here |
+| `intentic://setup?code=…[&sandbox=…]` | Setup step 3 | run this setup code's sandbox here; `sandbox` is the row it belongs to, so a run that stops can hand that same sandbox back to `/setup` rather than a blank one |
 | `intentic://recreate?slug=…[&hash=…][&rollback=1]` | the Update / Environment cards | update, build the approved overlay, or roll back |
 | `intentic://signin` | the login screen | sign in, in the user's real browser |
 | `intentic://auth?handoff=…&state=…` | the browser, after sign-in | the credential coming back |
@@ -783,7 +783,7 @@ install's outcome was invisible. It now sends named events of its own
 | `desktop_install_started` / `_finished` | a handed-over setup runs | outcome, duration, exit code, and the step it stopped on |
 | `desktop_install_dismissed` | the setup card is closed | whether the run was still going, and how far it had got |
 | `desktop_install_stopped` | the user ends a run with **Stop** | how far it had got |
-| `desktop_install_elsewhere` | the requirements card's hosted escape hatch is taken | which prerequisites made them take it |
+| `desktop_install_elsewhere` | the hosted escape hatch is taken, from the requirements card or from a stopped/failed run | which of the two, and which prerequisites made them take it |
 | `desktop_install_restart` | Windows is restarted **or signed out of** mid-setup | which of the two, and which prerequisites asked for it |
 | `desktop_install_resumed` / `_resume_expired` | the app comes back after that restart | how long the parked setup sat there |
 | `desktop_install_fresh_code` | the expired card's **Get a fresh code** is pressed | nothing: the count is the fact |

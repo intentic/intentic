@@ -183,6 +183,8 @@ export const desktopFrameless = (): boolean => desktopApp()?.frameless === true;
 
 export interface DesktopSetupArgs {
     code: string;
+    /** The row this install is for, so the app can hand the SAME sandbox back to this page rather than a new one. */
+    sandboxId?: string;
     name?: string;
     cfToken?: string;
     syncDir?: string;
@@ -195,15 +197,16 @@ export interface DesktopSetupArgs {
 // there.
 export const desktopSetupLink = (args: DesktopSetupArgs): string => {
     const params = new URLSearchParams({ code: args.code });
-    if (args.name !== undefined && args.name !== ``) {
-        params.set(`name`, args.name);
-    }
-    if (args.cfToken !== undefined && args.cfToken !== `` && desktopVersion() !== undefined) {
-        params.set(`cfToken`, args.cfToken);
-    }
-    if (args.syncDir !== undefined && args.syncDir !== ``) {
-        params.set(`syncDir`, args.syncDir);
-    }
+    // Empty is absent: a blank name or folder on the link is a value the app would otherwise act on.
+    const carry = (key: string, value: string | undefined): void => {
+        if (value !== undefined && value !== ``) {
+            params.set(key, value);
+        }
+    };
+    carry(`sandbox`, args.sandboxId);
+    carry(`name`, args.name);
+    carry(`cfToken`, desktopVersion() === undefined ? undefined : args.cfToken);
+    carry(`syncDir`, args.syncDir);
     if (args.platformUrl !== undefined) {
         params.set(`platform`, args.platformUrl);
     }

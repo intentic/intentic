@@ -646,6 +646,7 @@ const runHere = (): void => {
     openDesktopLink(
         desktopSetupLink({
             code,
+            sandboxId: created.value.id,
             name: created.value.name,
             ...(mode.value === `own` ? { cfToken: cfToken.value.trim() } : {}),
             ...(syncEnabled.value ? { syncDir: syncDir.value } : {}),

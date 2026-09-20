@@ -534,6 +534,21 @@ mod tests {
         assert!(parse(&["sandbox", "connect"]).is_ok());
     }
 
+    /* A SETUP CODE IS A VALUE, WHATEVER IT STARTS WITH — the shims pass it behind `--` so it stays one. */
+    #[test]
+    fn connect_takes_a_hyphen_leading_code_after_the_end_of_flags_marker() {
+        // Bare, a code like this is argv this parser is right to refuse: it cannot tell it from a flag.
+        assert!(parse(&["sandbox", "connect", "-Tq9xk", "-y"]).is_err());
+        let Ok(Cli {
+            command: Command::Sandbox(SandboxCommand::Connect { setup_code, yes }),
+        }) = parse(&["sandbox", "connect", "-y", "--", "-Tq9xk"])
+        else {
+            panic!("connect did not take a hyphen-leading code behind --")
+        };
+        assert_eq!(setup_code.as_deref(), Some("-Tq9xk"));
+        assert!(yes);
+    }
+
     #[test]
     fn remove_takes_many_slugs_and_its_destructive_flags_are_explicit() {
         let Ok(Cli {

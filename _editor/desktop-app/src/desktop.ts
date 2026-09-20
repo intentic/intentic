@@ -7,6 +7,8 @@ import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 
 export interface SetupArgs {
     code: string;
+    // The platform row this install is for, so a run that ends here can hand the SAME sandbox back to /setup.
+    sandboxId?: string;
     name?: string;
     cfToken?: string;
     syncDir?: string;

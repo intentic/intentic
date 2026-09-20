@@ -305,6 +305,7 @@ mod tests {
         std::fs::create_dir_all(&dir).expect("temp config dir");
         let args = SetupArgs {
             code: "abc".into(),
+            sandbox_id: None,
             name: None,
             cf_token: None,
             sync_dir: None,

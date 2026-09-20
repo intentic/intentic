@@ -162,8 +162,11 @@ if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
 # Everything else - claim, tunnels, launch, the dind deploy target, sync - is ic's. The env this shell
 # carries (CF_TOKEN, SANDBOX_IMAGE, SELF_HOST, ...) rides along.
+#
+# The code goes LAST, behind `--`: it is a positional, and an argument parser reads anything starting with a
+# hyphen as a flag unless the end-of-flags marker has already gone by.
 $IcArgs = @('sandbox', 'connect')
-if ($SetupCode) { $IcArgs += $SetupCode }
 if ($Yes) { $IcArgs += '-y' }
+if ($SetupCode) { $IcArgs += '--'; $IcArgs += $SetupCode }
 & $Ic @IcArgs
 exit $LASTEXITCODE

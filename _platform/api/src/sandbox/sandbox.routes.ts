@@ -1,4 +1,3 @@
-import { randomBytes } from "node:crypto";
 import { apiContract, AnnounceRefusalSchema, BootReportSchema, HostedStatusSchema, SetupReportSchema } from "@intentic/api-contract";
 import { Prisma } from "@intentic/prisma";
 import type { MemberRole } from "@intentic/sandbox-contract";
@@ -43,7 +42,7 @@ import { assertHostedSource, HostedSourceCapped, recordHostedProvision } from ".
 import { assertHostedStanding, HostedSuspended, hostedSuspensionOf } from "./hosted/abuse/hosted-standing.js";
 import { hostedBudgetOf, openHostedStretch, settleHostedStretch } from "./hosted/hosted-usage.js";
 import { hostedRegionFor } from "./hosted/region.js";
-import { mintSandbox } from "./mint-sandbox.js";
+import { mintSandbox, mintSetupCode } from "./mint-sandbox.js";
 import { listTrash, restoreSandbox, trashSandbox, TrashedSandboxGone } from "./sandbox-trash.js";
 import { definitionSeedFor, ENV_DEFINITION_SEED } from "./profiles/profiles.js";
 import { sendSetupLinkEmail } from "./setup-email.js";
@@ -655,7 +654,7 @@ export const sandboxRoutes = {
         ) {
             return { code: held, hostname, expiresAt: heldUntil.toISOString() };
         }
-        const code = randomBytes(8).toString(`base64url`);
+        const code = mintSetupCode();
         const expiresAt = new Date(Date.now() + SETUP_CODE_TTL_MS);
         // Claim stamp belongs to the code: a fresh code must start unclaimed, or the wizard would report a stale claim.
         await context.prisma.sandbox.update({

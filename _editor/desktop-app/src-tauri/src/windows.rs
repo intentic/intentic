@@ -166,6 +166,22 @@ fn fitted_height(content: f64, available: Option<f64>) -> f64 {
     }
 }
 
+/// A logical size as whole physical pixels, rounded UP. Tauri would convert this itself, and it ROUNDS: at a
+/// fractional display scale (Windows' 125%, 150%, 175%) a size rounded down gives the webview a client area a
+/// fraction shorter than the page that measured it, and the page answers that with a scrollbar down a card
+/// which has nothing to scroll. A scale that is not a positive number is no scale at all.
+fn whole_pixels(size: LogicalSize<f64>, scale: f64) -> PhysicalSize<u32> {
+    let scale = if scale.is_finite() && scale > 0.0 {
+        scale
+    } else {
+        1.0
+    };
+    PhysicalSize::new(
+        (size.width * scale).ceil() as u32,
+        (size.height * scale).ceil() as u32,
+    )
+}
+
 /// Where a window that has just been refitted keeps its top edge: where it was, unless its new bottom edge
 /// would leave the work area, in which case it moves up by exactly the overhang, and never above the area's
 /// top margin. A card grows DOWNWARD from a heading that stays put, which is what makes rows arriving under
@@ -190,7 +206,7 @@ pub fn fit_to_content(app: &AppHandle, window: &WebviewWindow, content_height: f
         width,
         fitted_height(content_height, work.map(|work| work.size.1)),
     );
-    let _ = window.set_size(size);
+    let _ = window.set_size(whole_pixels(size, window.scale_factor().unwrap_or(1.0)));
     if window.label() == CONFIRM_CLOSE {
         center_over(window, app.get_webview_window(WORKSPACE).as_ref(), size);
         return;
@@ -1415,6 +1431,29 @@ mod frame_tests {
         assert_eq!(fitted_height(1400.0, None), 1400.0);
         // A screen smaller than the margins still asks for a window somebody can see.
         assert!(fitted_height(300.0, Some(20.0)) >= 1.0);
+    }
+
+    /// A fitted window is never a fraction of a pixel SHORTER than the page it was measured from: that
+    /// fraction is the scrollbar the install card grew down its right edge whenever its height changed.
+    #[test]
+    fn a_fitted_window_is_never_rounded_below_the_content_it_was_measured_from() {
+        for scale in [1.0, 1.25, 1.5, 1.75, 2.0] {
+            for content in [120.0, 427.0, 451.0, 632.5] {
+                let size = LogicalSize::new(LAUNCHER_WIDTH, content);
+                let pixels = whole_pixels(size, scale);
+                assert!(
+                    f64::from(pixels.height) >= content * scale,
+                    "{content} at {scale}x fitted to {} physical pixels",
+                    pixels.height
+                );
+                assert!(f64::from(pixels.width) >= LAUNCHER_WIDTH * scale);
+            }
+        }
+        // A monitor that reports nothing usable is no scale at all, not a window of zero height.
+        assert_eq!(
+            whole_pixels(LogicalSize::new(620.0, 440.0), 0.0),
+            PhysicalSize::new(620, 440)
+        );
     }
 
     /// A card grows downward under a heading that stays put — until its bottom edge would leave the work

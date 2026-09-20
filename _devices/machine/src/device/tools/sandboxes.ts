@@ -266,7 +266,8 @@ export const icReconnectArgs = (setupCode: string | undefined): string[] => {
     }
     // No slug in argv: ic derives it from the claim, and a second spelling would build a second sandbox.
     // -y: there is no terminal to answer ic's other-sandboxes prompt.
-    return ["sandbox", "connect", setupCode.trim(), "-y"];
+    // `--` before the code: it is a positional, and a code beginning with a hyphen would otherwise parse as a flag.
+    return ["sandbox", "connect", "-y", "--", setupCode.trim()];
 };
 
 // The reshape argv, spelled the way `ic sandbox reshape` takes it: a cap as `<n>g`/`<n>`, `null` as ic's

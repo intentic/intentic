@@ -102,8 +102,13 @@ test("each swap builds the argv ic actually takes", () => {
 
 // ic sandbox connect derives the sandbox from the claim; a slug alongside it would pick a second one.
 test("a reconnect redeems the claim and lets ic derive the sandbox from it", () => {
-    expect(icReconnectArgs("code-abc")).toEqual(["sandbox", "connect", "code-abc", "-y"]);
-    expect(icReconnectArgs("  code-abc  ")).toEqual(["sandbox", "connect", "code-abc", "-y"]);
+    expect(icReconnectArgs("code-abc")).toEqual(["sandbox", "connect", "-y", "--", "code-abc"]);
+    expect(icReconnectArgs("  code-abc  ")).toEqual(["sandbox", "connect", "-y", "--", "code-abc"]);
+});
+
+// A code starting with a hyphen is a code, not a flag: `--` is what keeps the argument parser from reading it as one.
+test("a reconnect passes a hyphen-leading code as a value", () => {
+    expect(icReconnectArgs("-Tq9xk")).toEqual(["sandbox", "connect", "-y", "--", "-Tq9xk"]);
 });
 
 test("a reconnect with no claim is refused rather than run as a bare connect", () => {

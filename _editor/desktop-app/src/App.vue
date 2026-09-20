@@ -650,11 +650,20 @@ watch(
     },
 );
 
-/* THE WAY OUT THAT IS NOT "GIVE UP". */
-const setUpElsewhere = async (): Promise<void> => {
-    track(`desktop_install_elsewhere`, { requirements: requirements.value.map((requirement) => requirement.id) });
+/* THE WAY OUT THAT IS NOT "GIVE UP" — offered by a machine that cannot meet the requirements, and by one that
+   met them all and then stopped anyway. Both are the same question: run this sandbox somewhere else. */
+const setUpElsewhere = async (from: `requirements` | `stopped`): Promise<void> => {
+    track(`desktop_install_elsewhere`, { from, requirements: requirements.value.map((requirement) => requirement.id) });
     setupOpen.value = false;
-    await workspaceOpen(`/setup?elsewhere=1`);
+    // `elsewhere=1` is what stops /setup acting on arrival: the hosted rung is preselected, and it is the reader's
+    // click on it that spends their allowance, never this handover. `sandbox` names the row this install was for —
+    // without it the page has to guess, and guesses at a fresh one.
+    const query = new URLSearchParams({ elsewhere: `1`, machine: `hosted` });
+    const sandboxId = pending.value?.sandboxId;
+    if (sandboxId !== undefined && sandboxId !== ``) {
+        query.set(`sandbox`, sandboxId);
+    }
+    await workspaceOpen(`/setup?${query.toString()}`);
 };
 
 // The user's go-ahead after the first pass reported what it would change; the terminal path's equivalent of a
@@ -1116,7 +1125,7 @@ onUnmounted(() => {
                     @restart="endSession(`restart`)"
                     @signout="endSession(`signout`)"
                     @recheck="runSetup"
-                    @elsewhere="setUpElsewhere"
+                    @elsewhere="setUpElsewhere(`requirements`)"
                 />
 
                 <!-- Only where the progress card cannot say it: with a plan on screen, the failure is told once, there. -->
@@ -1140,10 +1149,16 @@ onUnmounted(() => {
                 />
 
                 <!-- Only on failure: the way out otherwise is the header's, not a repeated button here. -->
-                <div v-if="(setupError || wasStopped) && !expired && requirements.length === 0" class="flex flex-wrap items-center gap-2">
+                <!-- The hosted alternative rides the same row, as it does on the requirements card: a stopped install
+     is the other place a reader learns this computer is not where they want their sandbox. -->
+                <div v-if="(setupError || wasStopped) && !expired && requirements.length === 0" class="flex flex-wrap items-center gap-x-4 gap-y-2">
                     <Button :label="t(`ui.action.tryAgain`)" :disabled="running" @click="runSetup">
                         <template #icon><Icon name="bolt" /></template>
                     </Button>
+                    <button type="button" :class="ui.textAction()" :disabled="running" @click="setUpElsewhere(`stopped`)">
+                        <Icon name="server" class="shrink-0" />
+                        <span>{{ t(`desktop.requirements.runOnMachineWe`) }}</span>
+                    </button>
                 </div>
 
                 <!-- THE FOOT OF THE CARD: the true sentence about leaving, then the quiet verbs. None of them is the accent —

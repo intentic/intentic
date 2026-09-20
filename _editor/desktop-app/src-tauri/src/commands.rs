@@ -1122,6 +1122,7 @@ mod tests {
     fn setup_args(code: &str) -> SetupArgs {
         SetupArgs {
             code: code.into(),
+            sandbox_id: None,
             name: None,
             cf_token: None,
             sync_dir: None,

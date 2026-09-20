@@ -24,6 +24,9 @@ impl Source<'_> {
 #[serde(rename_all = "camelCase")]
 pub struct SetupArgs {
     pub code: String,
+    /// The platform row this install is for. Grants nothing on its own — the code is the capability — and is
+    /// carried so a run that stops here can hand the SAME sandbox back to /setup instead of a blank one.
+    pub sandbox_id: Option<String>,
     pub name: Option<String>,
     /// Own-Cloudflare only. It rides the link ONLY from the in-app webview, where the navigation is cancelled
     /// in-process and never reaches the OS — an external browser's deep link may be logged by the protocol
@@ -160,6 +163,7 @@ pub fn parse_link(url: &str, source: Source) -> Option<Link> {
             let from_app = source.is_app();
             Some(Link::Setup(Box::new(SetupArgs {
                 code: get("code")?,
+                sandbox_id: get("sandbox"),
                 name: get("name"),
                 cf_token: get("cfToken").filter(|_| from_app),
                 sync_dir: get("syncDir"),
@@ -236,10 +240,11 @@ mod tests {
     #[test]
     fn parses_a_full_setup_link() {
         let args = setup_of(
-            "intentic://setup?code=abc123&name=My%20Sandbox&syncDir=%7E%2Fintentic%2Fwork&platform=https%3A%2F%2Fapi.intentic.dev",
+            "intentic://setup?code=abc123&sandbox=sbx_7&name=My%20Sandbox&syncDir=%7E%2Fintentic%2Fwork&platform=https%3A%2F%2Fapi.intentic.dev",
         )
         .unwrap();
         assert_eq!(args.code, "abc123");
+        assert_eq!(args.sandbox_id.as_deref(), Some("sbx_7"));
         assert_eq!(args.name.as_deref(), Some("My Sandbox"));
         assert_eq!(args.sync_dir.as_deref(), Some("~/intentic/work"));
         assert_eq!(
