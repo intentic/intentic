@@ -499,3 +499,54 @@ describe(`tables`, () => {
         expect(renderMarkdown(`See /history/transcripts/solid-condor-urdu.jsonl for the record.`)).not.toContain(`<wbr>`);
     });
 });
+
+// The `---` block a document may open with. Left to marked it is a rule plus a setext heading, which makes the file's
+// metadata its largest type and the first entry in the outline rail.
+describe(`document metadata`, () => {
+    const POST = `---\ntitle: "One worktree per agent"\ntags: ["engineering"]\n---\n\nThe working tree is what breaks.\n`;
+
+    it(`renders the block as metadata rather than as a heading and a rule`, () => {
+        const html = renderMarkdown(POST);
+
+        expect(html).toContain(`class="md-frontmatter"`);
+        expect(html).toContain(`<dt>title</dt><dd>One worktree per agent</dd>`);
+        expect(html).not.toContain(`<h2`);
+        expect(html).not.toContain(`<hr>`);
+    });
+
+    it(`leaves the document after it as the prose it is`, () => {
+        expect(renderMarkdown(POST)).toContain(`<p>The working tree is what breaks.</p>`);
+    });
+
+    it(`keeps a rule in the middle of a document a rule`, () => {
+        const html = renderMarkdown(`Intro.\n\n---\n\nOutro.\n`);
+
+        expect(html).toContain(`<hr>`);
+        expect(html).not.toContain(`md-frontmatter`);
+    });
+
+    it(`leaves metadata quoted inside a fenced block as code`, () => {
+        expect(renderMarkdown("```md\n---\ntitle: x\n---\n```")).not.toContain(`md-frontmatter`);
+    });
+
+    it(`renders a document that is only metadata`, () => {
+        const html = renderMarkdown(`---\nname: review\n---\n`);
+
+        expect(html).toContain(`<dt>name</dt><dd>review</dd>`);
+        expect(html).not.toContain(`---`);
+    });
+
+    it(`survives the sanitizer with a value that is markup`, () => {
+        const html = renderMarkdown(`---\ntitle: <img src=x onerror=alert(1)>\n---\n\nBody.\n`);
+
+        expect(html).not.toContain(`<img`);
+        expect(html).toContain(`&lt;img`);
+    });
+
+    it(`draws no header until the closing fence has streamed in`, () => {
+        const stream = createStreamingMarkdown(() => undefined);
+
+        expect(prose(stream.render(`---\ntitle: "One worktree`))).not.toContain(`md-frontmatter`);
+        expect(prose(stream.render(POST))).toContain(`md-frontmatter`);
+    });
+});

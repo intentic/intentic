@@ -2,6 +2,7 @@ import DOMPurify from "dompurify";
 import { Marked } from "marked";
 import { type CodeBlock, codeBlockHtml, escapeHtml } from "./code.js";
 import { type Figure, splitFigureSegments } from "./figures.js";
+import { frontmatterHtml, splitFrontmatter } from "./frontmatter.js";
 import { refineTables } from "./tables.js";
 
 // Renders untrusted markdown (workspace files, chat output, memory notes) to sanitized HTML for v-html, which does
@@ -79,16 +80,22 @@ const vanished = (holder: HTMLElement, text: string): boolean =>
 
 // Never throws: a chat bubble re-runs this on every streamed delta, so any failure falls back to the escaped raw
 // text. Sanitizes to a DOM fragment, not a string, so a decorator can rewrite it without a second parse.
-const parseParts = (text: string, decorate: MarkdownDecorator | undefined): MarkdownParts => {
+// `leading` says this text starts the document, the only place metadata can open one; everywhere else `---` is a rule.
+const parseParts = (text: string, decorate: MarkdownDecorator | undefined, leading: boolean): MarkdownParts => {
     parses += 1;
     collected = [];
     try {
-        const fragment = DOMPurify.sanitize(marked.parse(text, { async: false }), { RETURN_DOM_FRAGMENT: true });
+        const matter = leading ? splitFrontmatter(text) : undefined;
+        const body = matter?.rest ?? text;
+        // Prepended before sanitizing, not after: the header is built from escaped text and still answers to DOMPurify.
+        const source = (matter === undefined ? `` : frontmatterHtml(matter.matter)) + marked.parse(body, { async: false });
+        const fragment = DOMPurify.sanitize(source, { RETURN_DOM_FRAGMENT: true });
         refineTables(fragment);
         decorate?.(fragment);
         const holder = document.createElement(`div`);
         holder.append(fragment);
-        return vanished(holder, text) ? { html: escapeHtml(text), blocks: [] } : { html: holder.innerHTML, blocks: collected };
+        // Measured against the prose alone; metadata that renders as nothing must not cost the document its parse.
+        return vanished(holder, body) ? { html: escapeHtml(text), blocks: [] } : { html: holder.innerHTML, blocks: collected };
     } catch {
         return { html: escapeHtml(text), blocks: [] };
     }
@@ -109,7 +116,7 @@ const asText = (source: string): string => (typeof source === `string` ? source 
 
 // Renders one prose run to an HTML string. The document-level API is built from this and is the only shape a
 // figure fits in.
-export const renderMarkdown = (source: string, decorate?: MarkdownDecorator): string => substitute(parseParts(asText(source), decorate), true);
+export const renderMarkdown = (source: string, decorate?: MarkdownDecorator): string => substitute(parseParts(asText(source), decorate, true), true);
 
 // Documents render as a list of parts, prose already sanitized to HTML and figures as data, since a figure fence
 // cannot sit inside an HTML string. A document without figures is just one part.
@@ -121,9 +128,13 @@ export type RenderedMarkdown = readonly MarkdownPart[];
 // reruns on every render (see `substitute`).
 type ParsedPart = { readonly kind: "prose"; readonly parts: MarkdownParts } | { readonly kind: "figure"; readonly figure: Figure };
 
-const parseDocument = (text: string, decorate: MarkdownDecorator | undefined): readonly ParsedPart[] =>
-    splitFigureSegments(text).map((segment) =>
-        segment.kind === `prose` ? { kind: `prose`, parts: parseParts(segment.text, decorate) } : { kind: `figure`, figure: segment.figure },
+// `leading` is the document's own start, which only the first segment can be: a figure ahead of the metadata means
+// the document did not open with it.
+const parseDocument = (text: string, decorate: MarkdownDecorator | undefined, leading: boolean): readonly ParsedPart[] =>
+    splitFigureSegments(text).map((segment, index) =>
+        segment.kind === `prose`
+            ? { kind: `prose`, parts: parseParts(segment.text, decorate, leading && index === 0) }
+            : { kind: `figure`, figure: segment.figure },
     );
 
 // Figures pass through by identity so a streaming diagram is not redrawn, or re-imported, every frame. Empty prose
@@ -139,7 +150,7 @@ const renderDocument = (document: readonly ParsedPart[], colour: boolean): Markd
 
 // Whole-message render: every code block gets coloured and every closed figure fence gets drawn.
 export const renderMarkdownParts = (source: string, decorate?: MarkdownDecorator): RenderedMarkdown =>
-    renderDocument(parseDocument(asText(source), decorate), true);
+    renderDocument(parseDocument(asText(source), decorate, true), true);
 
 // Streaming re-render splits the message at the last point provably finished: that prefix parses once and returns
 // byte-identical HTML, so Vue skips patching it (preserving selection), and only the short tail is re-parsed.
@@ -237,12 +248,16 @@ export const createStreamingMarkdown = (decorate?: MarkdownDecorator): Streaming
                 // Reparses the whole settled prefix, not just the new chunk, so blocks needing earlier context (list
                 // continuation,
                 // reference links) keep resolving.
-                settled = parseDocument(settledSource, decorate);
+                settled = parseDocument(settledSource, decorate, true);
             }
             // Tail renders as parts too, not one string, so a trailing diagram draws immediately instead of waiting for
             // text
             // after it; left uncoloured since it changes every frame.
-            return [...renderDocument(settled, true), ...renderDocument(parseDocument(text.slice(boundary), decorate), false)];
+            // The tail starts the document only while nothing has settled in front of it.
+            return [
+                ...renderDocument(settled, true),
+                ...renderDocument(parseDocument(text.slice(boundary), decorate, boundary === 0), false),
+            ];
         },
     };
 };

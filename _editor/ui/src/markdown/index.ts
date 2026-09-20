@@ -29,6 +29,7 @@ export {
     type StatsFigure,
     type StatsFigureItem,
 } from "./figures.js";
+export { type Frontmatter, type FrontmatterField, frontmatterHtml, splitFrontmatter } from "./frontmatter.js";
 export {
     createStreamingMarkdown,
     lexBlocks,

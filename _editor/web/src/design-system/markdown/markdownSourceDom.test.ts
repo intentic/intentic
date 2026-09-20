@@ -47,6 +47,8 @@ const BLOCKS = {
     tableWithInlineMarkup: "| **a** | `b` |\n| - | - |\n| [x](y.md) | z |",
     tableWithRaggedRow: `| a | b |\n| - | - |\n| 1 |`,
     rule: `---`,
+    // One span since the splitter stopped reading it as a rule plus a heading: edited as the YAML it is.
+    frontmatter: `---\ntitle: "A post"\ntags: ["one"]\n---`,
     ruleWithStars: `***`,
     ruleWithSpaces: `- - -`,
     htmlBlock: `<details>\n<summary>More</summary>\n</details>`,

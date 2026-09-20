@@ -137,6 +137,64 @@
     border-top: 1px solid var(--color-line);
 }
 
+/* DOCUMENT METADATA — the `---` block a file opens with (markdown/frontmatter.ts), drawn as the document's
+   letterhead: rows of apparatus above the title. Never a heading and never prose, so it neither enters the outline
+   nor sets the page's largest type, which is exactly what it did while marked read it as a rule plus a setext h2. */
+.md-prose .md-frontmatter {
+    margin: 0 0 1.5em;
+    padding-bottom: 0.9em;
+    border-bottom: 1px solid var(--color-line);
+}
+/* The rule under the metadata is the separation; the heading below it does not also need its full section gap. */
+.md-prose .md-frontmatter + :is(h1, h2, h3, h4) {
+    margin-top: 1.2em;
+}
+.md-prose .md-frontmatter dl {
+    display: grid;
+    /* Keys take the width they need and no more; the rest of the measure is the values'. */
+    grid-template-columns: minmax(0, max-content) minmax(0, 1fr);
+    gap: 0.3em 1.2em;
+    margin: 0;
+}
+/* The file's own key, in the file's own case: a stylesheet must not retitle somebody's metadata. */
+.md-prose .md-frontmatter dt {
+    font-family: var(--font-mono, ui-monospace, monospace);
+    font-feature-settings: var(--font-mono--font-feature-settings);
+    font-size: var(--prose-code);
+    line-height: 1.55;
+    color: var(--color-subtle);
+    overflow-wrap: anywhere;
+}
+.md-prose .md-frontmatter dd {
+    margin: 0;
+    font-size: 0.95em;
+    line-height: 1.55;
+    color: var(--color-muted);
+    /* A long description wraps inside its column rather than widening the grid past the prose measure. */
+    overflow-wrap: break-word;
+}
+/* A sequence reads as the several things it is, not as one comma-spliced string. */
+.md-prose .md-fm-item {
+    display: inline-block;
+    margin-right: 0.3em;
+    border-radius: var(--radius-xs);
+    background: color-mix(in srgb, var(--color-content) 7%, transparent);
+    padding: 0.05em 0.4em;
+}
+/* Metadata with no rows to draw (nesting, a block scalar) keeps the file's own line breaks instead of a guessed
+   shape; flush with the letterhead, since the rule above already frames it. */
+.md-prose .md-frontmatter pre.md-fm-source {
+    margin: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    padding: 0;
+    white-space: pre-wrap;
+    font-size: var(--prose-code);
+    line-height: 1.55;
+    color: var(--color-muted);
+}
+
 .md-prose img {
     max-width: 100%;
     border-radius: var(--radius-md);
