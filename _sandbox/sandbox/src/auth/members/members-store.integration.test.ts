@@ -2,7 +2,7 @@ import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, test } from "vitest";
-import { fileMembersStore } from "./auth.js";
+import { fileMembersStore } from "../auth.js";
 
 // The members file on disk: what a desk grant writes, and what a malformed desk row reads as.
 const storePath = async (): Promise<string> => join(await mkdtemp(join(tmpdir(), "members-")), "members.json");

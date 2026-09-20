@@ -1,9 +1,9 @@
 import { type GrantedRole, GrantedRoleSchema } from "@intentic/sandbox-contract";
 import type { Context } from "hono";
 import { z } from "zod";
-import type { Services } from "../composition.js";
-import type { AppEnv } from "../app-env.js";
-import { ownershipDenied } from "./owner-gates.js";
+import type { Services } from "../../composition.js";
+import type { AppEnv } from "../../app-env.js";
+import { ownershipDenied } from "../owner-gates.js";
 
 // The shared-access roster (/members): who besides the owner may reach this sandbox, and at what tier.
 // Owner-gated by ownership rather than the maintainer-equivalent operating gate, since membership is the one thing a

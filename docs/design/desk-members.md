@@ -47,7 +47,7 @@ mentions are not offered.
 
 The Access page grants a desk with a persona picker on the invite, shows a desk row's cards as chips, and re-grades a
 row to desk through the same picker. The daemon refuses a desk grant naming no card, or a card the workspace does
-not have, on the spot (`auth/members.routes.ts`).
+not have, on the spot (`auth/members/members.routes.ts`).
 
 ## Deferred, and named so nobody reads the tier as more than it is
 

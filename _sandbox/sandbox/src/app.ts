@@ -13,7 +13,7 @@ import { allowedOriginsOf, originAllowedBy } from "./auth/browser-origins.js";
 import { createPasskeyRoutes } from "./auth/passkeys/passkeys.routes.js";
 import { createAccessRoutes } from "./auth/access.routes.js";
 import { createControlTokenRoutes } from "./auth/control-tokens.routes.js";
-import { createMembersRoutes } from "./auth/members.routes.js";
+import { createMembersRoutes } from "./auth/members/members.routes.js";
 import { memberRefusal } from "./auth/role-floor.js";
 import { admitByGrant, grantsOf } from "./auth/grants.js";
 import { createAutomationFireRoute } from "./automations/fire.routes.js";

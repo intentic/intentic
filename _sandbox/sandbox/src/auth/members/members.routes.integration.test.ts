@@ -1,9 +1,9 @@
 import { expect, test } from "vitest";
 
-import { createApp } from "../app.js";
-import { clientFor, postJson, proven } from "../harness/route-client.testing.js";
-import { services } from "../harness/route-services.testing.js";
-import { fileMembersStore } from "./auth.js";
+import { createApp } from "../../app.js";
+import { clientFor, postJson, proven } from "../../harness/route-client.testing.js";
+import { services } from "../../harness/route-services.testing.js";
+import { fileMembersStore } from "../auth.js";
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
