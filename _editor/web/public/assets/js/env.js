@@ -1,5 +1,14 @@
 "use strict";
 (() => {
+  // ../../_tools/constants/dist/hosted-tiers.js
+  var HOSTED_TIERS = [
+    { id: "free", name: "Free", cpuKind: "shared", cpus: 4, memoryMb: 4096, volumeGb: 10, monthlyHours: 40, priceUsd: 0, flyHourUsd: 0.0329 },
+    { id: "standard", name: "Standard", cpuKind: "shared", cpus: 8, memoryMb: 8192, volumeGb: 25, monthlyHours: 220, priceUsd: 20, flyHourUsd: 0.0657 },
+    { id: "max", name: "Max", cpuKind: "shared", cpus: 8, memoryMb: 16384, volumeGb: 50, monthlyHours: 320, priceUsd: 50, flyHourUsd: 0.1234 }
+  ];
+  var FREE_TIER = HOSTED_TIERS[0];
+  var PAID_TIERS = HOSTED_TIERS.filter((tier) => tier.priceUsd > 0);
+
   // ../../_tools/constants/dist/index.js
   var GOOGLE_CLIENT_ID = "481795963975-cq9msl6higcd91joidrfp8mjlkuq5fk3.apps.googleusercontent.com";
   var GOOGLE_TOKEN_STORAGE_KEY = `intentic.gid.${GOOGLE_CLIENT_ID}`;
