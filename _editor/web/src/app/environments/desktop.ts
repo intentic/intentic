@@ -290,4 +290,9 @@ export const openDesktopLink = (link: string): void => {
 // Every sign-in surface funnels through here rather than reimplementing "this webview can't ask Google" each time.
 // `useGoogleIdentity.renderButton` now refuses in this posture too, so the rule holds even if a caller forgets to
 // check.
-export const signInThroughBrowser = (): void => openDesktopLink(DESKTOP_SIGN_IN_LINK);
+// `pickAccount` is the press that means "not that Google account": it rides all the way to the browser page
+// (setup_link.rs, auth.rs), which then refuses every silent road and puts Google's chooser up. Nothing downstream
+// can infer it — a browser signed into one Google account and one platform account looks the same either way — so a
+// surface that drops it turns a switch into the same sign-in again.
+export const signInThroughBrowser = (options?: { readonly pickAccount?: boolean }): void =>
+    openDesktopLink(options?.pickAccount === true ? `${DESKTOP_SIGN_IN_LINK}?switch=1` : DESKTOP_SIGN_IN_LINK);

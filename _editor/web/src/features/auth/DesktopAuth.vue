@@ -16,6 +16,11 @@ import { useT } from "@intentic/ui/i18n";
 // Session handling is this page's own job, not a route guard's: bouncing a signed-out window to /login would sign
 // in the wrong browser while the app that asked stays stuck. Only the handoff row's id crosses to the app, never
 // the credentials; `state` is the app's nonce, echoed back to match.
+//
+// TWO CREDENTIALS CROSS HERE AND THEY HAVE TO NAME ONE PERSON: a one-time token for this browser's Intentic session,
+// and a Google ID token minted beside it. The app shows the first and the sandbox daemon trusts only the second, so a
+// row carrying two identities hands the app a sandbox it can never open — and no screen in the app can say why, since
+// each half looks right on its own. That is what `agreed` below refuses.
 
 const t = useT();
 
@@ -27,6 +32,18 @@ const error = ref<NoticeModel | undefined>(undefined);
 const working = ref(false);
 // Which wait the user is in; only `signin` (Google) can need a click, so only then does the button show.
 const stage = ref<`checking` | `signin` | `handing` | `done`>(`checking`);
+
+// The app's press said "not that account" (`intentic://signin?switch=1`), so every road that answers without asking
+// is refused here and Google's chooser is what this page puts up. The fork below turns it on too.
+const picking = ref(route.query[`switch`] === `1`);
+
+// The pair that would not name one person, held for the reader to settle rather than handed over.
+const disagreement = ref<{ readonly google: string; readonly intentic: string; readonly idToken: string } | undefined>(undefined);
+
+// Whose credential is crossing, once one is in hand — the Google account, which is the half the sandbox verifies.
+// Before that there is only this browser's Intentic account to name.
+const googleEmail = ref<string | undefined>(undefined);
+const handingEmail = computed(() => googleEmail.value ?? user.value?.email);
 
 const googleButton = ref<HTMLElement>();
 
@@ -84,49 +101,75 @@ const useGooglesOwnPage = async (): Promise<void> => {
     await signInWithGoogle(route.fullPath);
 };
 
-const hand = async (): Promise<void> => {
+// Whether this credential may cross as this browser's own sign-in. A browser with no Intentic session takes the
+// credential as one (the trade the login screen makes), equal addresses hand over, and anything else stops at the
+// fork: the app has no way to reconcile two people, and shipping both is what made "Switch Google account" loop.
+const agreed = async (idToken: string, session: boolean): Promise<boolean> => {
+    const google = idTokenClaims(idToken)?.email;
+    if (google === undefined) {
+        error.value = noticeOf(`Google's answer couldn't be read. Try signing in again.`);
+        return false;
+    }
+    googleEmail.value = google;
+    const intentic = session ? user.value?.email : undefined;
+    if (intentic === undefined) {
+        stage.value = `handing`;
+        await signInWithGoogleCredential(idToken);
+        return true;
+    }
+    if (intentic.toLowerCase() === google.toLowerCase()) {
+        return true;
+    }
+    disagreement.value = { google, intentic, idToken };
+    return false;
+};
+
+// What ties this page to the app that opened it: the app's nonce, echoed back on the deep link, and the challenge
+// whose verifier only the app holds. Undefined means a link nobody's app is waiting behind.
+const linkParts = (): { readonly state: string; readonly challenge: string } | undefined => {
     const state = route.query[`state`];
     const challenge = route.query[`challenge`];
-    if (typeof state !== `string` || state === `` || typeof challenge !== `string` || challenge === ``) {
+    return typeof state === `string` && state !== `` && typeof challenge === `string` && challenge !== `` ? { state, challenge } : undefined;
+};
+
+const hand = async (): Promise<void> => {
+    const link = linkParts();
+    if (link === undefined) {
         error.value = noticeOf(`This link is missing the value that ties it to your app: open Intentic and sign in from there.`);
         return;
     }
     // Parks the credential for one pickup; the app receives only the row's id, never the credential itself.
     const deliver = async (idToken: string): Promise<void> => {
         stage.value = `handing`;
-        const { handoff } = await apiClient.desktop.handoff({ idToken, challenge });
+        const { handoff } = await apiClient.desktop.handoff({ idToken, challenge: link.challenge });
         stage.value = `done`;
-        globalThis.location.href = desktopAuthLink(handoff, state, arrivingProfile());
+        globalThis.location.href = desktopAuthLink(handoff, link.state, arrivingProfile());
     };
     working.value = true;
     error.value = undefined;
+    disagreement.value = undefined;
     stage.value = `checking`;
     try {
         const session = await platformSession();
-        const held = session ? await platformHeldToken() : undefined;
-        if (held !== undefined) {
-            await deliver(held);
-            return;
+        // Skipped on a switch: the platform's own token names the account being rejected, and it would answer
+        // before the reader was asked anything.
+        let idToken = session && !picking.value ? await platformHeldToken() : undefined;
+        if (idToken === undefined) {
+            stage.value = `signin`;
+            // `gate: false`: this page's own button is already up, so the shared overlay is redundant; a silent re-auth
+            // attempt races it. `usableFor`: the token leaves for the app, which may be a whole setup away from having a
+            // daemon to spend it on, so a nearly-expired one is re-minted here instead. `pick`: no silent attempt at
+            // all, so Google's chooser is the only road to a credential.
+            idToken = await getIdToken({ gate: false, usableFor: HANDOFF_USABLE_FOR_MS, pick: picking.value });
         }
-        stage.value = `signin`;
-        // `gate: false`: this page's own button is already up, so the shared overlay is redundant; a silent re-auth
-        // attempt races it. `usableFor`: the token leaves for the app, which may be a whole setup away from having a
-        // daemon to spend it on, so a nearly-expired one is re-minted here instead.
-        const idToken = await getIdToken({ gate: false, usableFor: HANDOFF_USABLE_FOR_MS });
         if (idToken === undefined) {
             error.value = noticeOf(`Intentic needs your Google sign-in to reach your sandbox.`);
             return;
         }
-        // Only runs when there was no session: the freshly minted token both signs this browser in and is the
-        // credential
-        // the daemon verifies, the same trade the login screen makes. A refusal (client-id mismatch, no endpoint) falls
-        // to
-        // the catch below, which offers Google's own page instead.
-        if (!session) {
-            stage.value = `handing`;
-            await signInWithGoogleCredential(idToken);
+        // A refusal inside (client-id mismatch, no endpoint) falls to the catch below, which offers Google's own page.
+        if (await agreed(idToken, session)) {
+            await deliver(idToken);
         }
-        await deliver(idToken);
     } catch (err) {
         error.value = noticeFrom(err, `Couldn't finish signing in to the app.`);
     } finally {
@@ -134,10 +177,45 @@ const hand = async (): Promise<void> => {
     }
 };
 
+// The fork's first road: this browser's Intentic account becomes the Google account that answered — the same trade
+// the login screen makes — after which the ordinary road has one person to hand over.
+const continueAsGoogle = async (): Promise<void> => {
+    const pair = disagreement.value;
+    if (pair === undefined) {
+        return;
+    }
+    working.value = true;
+    stage.value = `handing`;
+    try {
+        await signInWithGoogleCredential(pair.idToken);
+    } catch (err) {
+        error.value = noticeFrom(err, `Couldn't sign in to Intentic as ${pair.google}.`);
+        return;
+    } finally {
+        working.value = false;
+    }
+    picking.value = false;
+    disagreement.value = undefined;
+    await hand();
+};
+
+// The fork's other road, and what the app's own "Switch Google account" asks for: Google is asked again with
+// auto-select off, so its chooser lists every account signed in here instead of re-answering with one.
+const pickAnother = async (): Promise<void> => {
+    picking.value = true;
+    disagreement.value = undefined;
+    googleEmail.value = undefined;
+    await hand();
+};
+
 // Shown from the first frame rather than after a timer; the silent attempt is often blocked (a suppressed FedCM
 // prompt), and this is the only thing that can then end the wait. A render refusal means this is running in the
-// desktop webview, so the fallback opens the real browser instead.
+// desktop webview, so the fallback opens the real browser instead — carrying the same switch intent this page has.
 const googleReady = ref(true);
+const openInBrowser = (): void => signInThroughBrowser({ pickAccount: picking.value });
+
+// A beat the reader has to answer before it can move: a failure, or the two accounts disagreeing.
+const stalled = computed(() => error.value !== undefined || disagreement.value !== undefined);
 
 // Always rendered in light theme, never following the app's scheme, for /login's reason: this screen has one
 // near-black ground, and a light button is the only light-on-dark object needing the visitor's attention.
@@ -204,10 +282,12 @@ onMounted(() => void hand());
                 <span class="entry-corner entry-corner-br"></span>
                 <span class="entry-finial" aria-hidden="true"><AppBrand shape="mark" /></span>
 
-                <!-- Shown only once there's an account; a browser that was never signed in gets one from the credential below. -->
-                <p v-if="user" class="whom">
+                <!-- The account actually crossing, which is the Google one as soon as there is a credential: naming the
+                     Intentic account here while another Google account's token shipped is what made the mismatch in the
+                     app unreadable. Held back while the two disagree, since the fork below names them both. -->
+                <p v-if="handingEmail && !disagreement" class="whom">
                     <span class="whom-label">{{ t(`auth.desktopAuth.signingIn`) }}</span>
-                    <span class="whom-mail">{{ user.email }}</span>
+                    <span class="whom-mail">{{ handingEmail }}</span>
                 </p>
 
                 <template v-if="error">
@@ -218,6 +298,39 @@ onMounted(() => void hand());
                     </div>
                     <!-- Offered with the retry, since retrying alone repeats what just failed (often the platform refusing the token). -->
                     <button type="button" class="escape" v-action="useGooglesOwnPage">{{ t(`auth.desktopAuth.useGooglesOwnPage`) }}</button>
+                </template>
+
+                <!-- THE PAIR THAT WOULD NOT NAME ONE PERSON. Handing it over is what put the app in front of a sandbox
+                     it could never open, with no screen able to say why; so both names are shown and the reader says
+                     which of them this is. -->
+                <template v-else-if="disagreement">
+                    <p class="gate-say">{{ t(`auth.desktopAuth.twoAccountsHere`) }}</p>
+                    <dl class="pair">
+                        <div class="pair-row">
+                            <dt>{{ t(`auth.desktopAuth.googleAccount`) }}</dt>
+                            <dd>{{ disagreement.google }}</dd>
+                        </div>
+                        <div class="pair-row">
+                            <dt>{{ t(`auth.desktopAuth.intenticAccount`) }}</dt>
+                            <dd>{{ disagreement.intentic }}</dd>
+                        </div>
+                    </dl>
+                    <p class="gate-aside">{{ t(`auth.desktopAuth.sandboxOpensForGoogle`) }}</p>
+                    <div class="gate-actions">
+                        <Button
+                            :label="t(`auth.desktopAuth.continueAs`, { email: disagreement.google })"
+                            class="w-full justify-center"
+                            :loading="working"
+                            @click="continueAsGoogle"
+                        />
+                        <Button
+                            :label="t(`auth.desktopAuth.useDifferentGoogle`)"
+                            severity="secondary"
+                            class="w-full justify-center"
+                            :disabled="working"
+                            @click="pickAnother"
+                        />
+                    </div>
                 </template>
 
                 <!-- The seal is this page's one moving part: it turns while the handoff runs and locks when it lands. -->
@@ -248,14 +361,16 @@ onMounted(() => void hand());
                 <!-- Google may resolve this silently, or need this button; it's on screen from the start either way. -->
                 <template v-else>
                     <p class="gate-say">
-                        <template v-if="googleReady">{{ t(`auth.desktopAuth.continueGoogleAppTakes`) }}</template>
-                        <template v-else>{{ t(`auth.desktopAuth.pageToRunIn`) }}</template>
+                        <template v-if="!googleReady">{{ t(`auth.desktopAuth.pageToRunIn`) }}</template>
+                        <!-- A switch press: the button is the whole of this beat, since nothing here may answer silently. -->
+                        <template v-else-if="picking">{{ t(`auth.desktopAuth.pickAccountForSandbox`) }}</template>
+                        <template v-else>{{ t(`auth.desktopAuth.continueGoogleAppTakes`) }}</template>
                     </p>
                     <div v-show="googleReady" class="entry-socket">
                         <div ref="googleButton" class="entry-socket-slot"></div>
                     </div>
                     <div v-if="!googleReady" class="gate-actions">
-                        <Button :label="t(`auth.desktopAuth.openInBrowser`)" class="w-full justify-center" @click="signInThroughBrowser">
+                        <Button :label="t(`auth.desktopAuth.openInBrowser`)" class="w-full justify-center" @click="openInBrowser">
                             <template #icon><Icon name="external-link" /></template>
                         </Button>
                     </div>
@@ -276,8 +391,8 @@ onMounted(() => void hand());
                         class="station"
                         :class="{
                             'station-done': index < reached,
-                            'station-now': index === reached && error === undefined,
-                            'station-stalled': index === reached && error !== undefined,
+                            'station-now': index === reached && !stalled,
+                            'station-stalled': index === reached && stalled,
                         }"
                         :aria-current="index === reached ? `step` : undefined"
                     >
@@ -365,6 +480,32 @@ onMounted(() => void hand());
 }
 /* `anywhere`: a long address must break inside the frame rather than push its rule out. */
 .whom-mail {
+    font-size: 0.875rem;
+    color: var(--ink);
+    overflow-wrap: anywhere;
+}
+
+/* The two names, set as facts between rules rather than inside a warning box: this is a question about who the
+   reader is, and the plate caption above is the same object with one name in it. */
+.pair {
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+    margin: 1rem 0 0;
+    padding: 0.9rem 0;
+    border-top: 1px solid var(--rule);
+    border-bottom: 1px solid var(--rule);
+    text-align: left;
+}
+.pair dt {
+    font-size: 0.6875rem;
+    font-weight: var(--font-weight-semibold);
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--gold);
+}
+.pair dd {
+    margin: 0.15rem 0 0;
     font-size: 0.875rem;
     color: var(--ink);
     overflow-wrap: anywhere;

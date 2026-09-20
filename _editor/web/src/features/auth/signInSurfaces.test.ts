@@ -17,7 +17,8 @@ vi.mock(import(`vue-router`), async (importOriginal) => ({
 // renderButton mimics the real mechanism (false in the desktop window, true elsewhere), since what's under test is
 // each surface's response to that. The mechanism's own half is asserted in useGoogleIdentity.desktop.test.ts.
 const desktopVersion = vi.fn<() => string | undefined>();
-const signInThroughBrowser = vi.fn();
+// Takes the options the real one does: a surface asking for Google's chooser says so here (environments/desktop.ts).
+const signInThroughBrowser = vi.fn<(options?: { pickAccount?: boolean }) => void>();
 vi.mock(`../../app/environments/desktop`, () => ({
     DESKTOP_SIGN_IN_LINK: `intentic://signin`,
     DESKTOP_DOWNLOADS: {},
@@ -26,7 +27,7 @@ vi.mock(`../../app/environments/desktop`, () => ({
     desktopInstaller: () => undefined,
     desktopSetupLink: () => ``,
     openDesktopLink: vi.fn(),
-    signInThroughBrowser: () => signInThroughBrowser(),
+    signInThroughBrowser: (options?: { pickAccount?: boolean }) => signInThroughBrowser(options),
 }));
 
 const renderButton = vi.fn<() => Promise<boolean>>();

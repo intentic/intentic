@@ -121,9 +121,12 @@ pub enum Link {
     Setup(Box<SetupArgs>),
     Recreate(RecreateArgs),
     Sync(SyncArgs),
-    /// `intentic://signin` — the SPA's login screen asking to be signed in the way this app can be: in the
-    /// user's real browser. It carries nothing, because everything it starts is minted afterwards.
-    SignIn,
+    /// `intentic://signin[?switch=1]` — the SPA's login screen asking to be signed in the way this app can be:
+    /// in the user's real browser. `switch` is the one thing it carries, because it is the one thing the page
+    /// cannot work out for itself: the press meant "not the account you would pick on your own".
+    SignIn {
+        switch_account: bool,
+    },
     Auth(AuthArgs),
     /* `intentic://update` — the workspace banner's button, and the reason the SPA can offer a swap it has no way to perform. */
     Update,
@@ -163,7 +166,9 @@ pub fn parse_link(url: &str, source: Source) -> Option<Link> {
                 platform_url: get("platform").filter(|_| from_app),
             })))
         }
-        "signin" => Some(Link::SignIn),
+        "signin" => Some(Link::SignIn {
+            switch_account: get("switch").is_some(),
+        }),
         "update" => source.is_app().then_some(Link::Update),
         "launcher" => source.is_app().then_some(Link::Launcher),
         // App-window only, like `update`, and for a sharper reason: see [`SyncArgs`]. There is nothing to
@@ -246,7 +251,23 @@ mod tests {
 
     #[test]
     fn parses_a_signin_request() {
-        assert_eq!(parse_link("intentic://signin", APP), Some(Link::SignIn));
+        assert_eq!(
+            parse_link("intentic://signin", APP),
+            Some(Link::SignIn {
+                switch_account: false
+            })
+        );
+    }
+
+    /* The press that means "not this account" — dropped here, it becomes a sign-in that repeats itself. */
+    #[test]
+    fn parses_a_signin_that_asks_for_a_different_account() {
+        assert_eq!(
+            parse_link("intentic://signin?switch=1", APP),
+            Some(Link::SignIn {
+                switch_account: true
+            })
+        );
     }
 
     #[test]

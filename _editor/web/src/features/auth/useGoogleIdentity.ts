@@ -59,9 +59,17 @@ const signedInEmail = ref<string | undefined>();
 
 let token: string | undefined;
 let expiresAt = 0;
-let initialized = false;
+// The auto-select posture GIS is initialized in, undefined before the first initialize. A switch re-initializes
+// with it off: Google auto-selects the account already approved for this client, which on a switch is the very
+// account being rejected.
+let initializedAutoSelect: boolean | undefined;
+// True from the moment a caller asks to change accounts until that mint settles: no silent attempt is made, so
+// Google's chooser is the only road to a credential.
+let picking = false;
 // The single in-flight mint, so concurrent callers share one prompt/gate instead of racing for it.
 let inflight: Promise<string | undefined> | undefined;
+// Counts mints so a retired one can't run its epilogue over the state of the mint that replaced it.
+let mintGeneration = 0;
 // Resolves the in-flight mint; called by the credential callback or cancelSignIn (undefined on dismissal).
 let settle: ((token: string | undefined) => void) | undefined;
 // True only while a real mint is waiting, so a callback queued before sign-out can't repopulate the cache after.
@@ -121,12 +129,15 @@ const waitForGis = async (): Promise<GoogleAccountsId> => {
     return id;
 };
 
+// Re-initializes whenever the wanted auto-select posture differs from the one GIS holds, so the button rendered by
+// one surface and the mint awaiting it always agree about whether Google may answer without asking.
 const ensureInitialized = async (): Promise<void> => {
     const id = await waitForGis();
-    if (!initialized) {
+    const autoSelect = !picking;
+    if (initializedAutoSelect !== autoSelect) {
         id.initialize({
             client_id: environment.auth.googleClientId,
-            auto_select: true,
+            auto_select: autoSelect,
             callback: (response) => {
                 if (!acceptingCredential) {
                     return;
@@ -135,7 +146,7 @@ const ensureInitialized = async (): Promise<void> => {
                 settle?.(accepted ? response.credential : undefined);
             },
         });
-        initialized = true;
+        initializedAutoSelect = autoSelect;
     }
 };
 
@@ -192,28 +203,76 @@ const trySilent = (): ReturnType<typeof setTimeout> | undefined => {
     return guard;
 };
 
+// What a switch does instead of the silent attempt: Google re-selects the account already approved for this client,
+// which on a switch is the one being rejected, so auto-select goes off, any prompt in flight is cancelled, and the
+// shared overlay comes up to carry the button whose click reaches Google's chooser.
+const openChooser = (mode: MintMode): void => {
+    window.google?.accounts?.id?.disableAutoSelect?.();
+    window.google?.accounts?.id?.cancel?.();
+    if (mode === `gate`) {
+        needsSignIn.value = true;
+    }
+};
+
 // One mint: initializes GIS (wires the credential callback and whichever button renders), tries the silent prompt,
-// acts per mode on failure, then waits for the credential via `settle`.
+// acts per mode on failure, then waits for the credential via `settle`. A picking mint skips the silent prompt
+// entirely: its whole point is that Google asks.
 const mint = async (mode: MintMode): Promise<string | undefined> => {
     mintMode = mode;
+    const generation = ++mintGeneration;
+    const current = (): boolean => generation === mintGeneration;
     try {
         await ensureInitialized();
     } catch {
-        inflight = undefined;
+        if (current()) {
+            picking = false;
+            inflight = undefined;
+        }
         return undefined;
     }
     const minted = new Promise<string | undefined>((resolve) => {
         settle = resolve;
     });
     acceptingCredential = true;
-    const guard = trySilent();
+    if (picking) {
+        openChooser(mode);
+    }
+    const guard = picking ? undefined : trySilent();
     const result = await minted;
+    // A mint retired by a later one owns none of this state any more; its caller already has its undefined.
+    if (!current()) {
+        return result;
+    }
     clearTimeout(guard);
     settle = undefined;
     acceptingCredential = false;
+    picking = false;
     inflight = undefined;
     needsSignIn.value = false;
     return result;
+};
+
+// Ends the mint in flight with nothing and leaves the module ready for the next one; a dismissal, a sign-out and a
+// switch all need exactly this much. The retired mint's own epilogue is skipped by its generation check.
+const retireMint = (): void => {
+    settle?.(undefined);
+    settle = undefined;
+    inflight = undefined;
+    acceptingCredential = false;
+};
+
+// Which failure road a mint takes, read off the asker's standing (see the MintMode table above).
+const modeFor = (options?: { readonly gate?: boolean; readonly silent?: boolean }): MintMode =>
+    options?.silent === true ? `silent` : options?.gate === false ? `button` : `gate`;
+
+// The mint in flight, upgraded when this asker has more standing than the one that started it; undefined when there
+// is none to join.
+const joinMint = (mode: MintMode): Promise<string | undefined> | undefined => {
+    if (inflight !== undefined && mintMode === `silent` && mode !== `silent`) {
+        // A person joining a quiet mint upgrades it to the gate; a warmer joining a person's mint never downgrades it.
+        mintMode = mode;
+    }
+    return inflight;
 };
 
 // Margin against serving a token that's about to die; a caller handing it off needs more (see `usableFor`).
@@ -238,26 +297,34 @@ const cached = (margin = NEAR_EXPIRY_MS): string | undefined => {
 // concurrent caller with more standing upgrades it).
 // usableFor — minimum life the token needs left; the desktop hand-off ships it to another process that may not
 // spend it for a while, so a soon-to-expire token counts as absent.
+// pick: true — the reader is changing accounts: the cached credential is the one being rejected, a mint in flight
+// would hand that same one back, and Google is asked with auto-select off so its chooser comes up.
 const getIdToken = async (options?: {
     readonly gate?: boolean;
     readonly usableFor?: number;
     readonly interactive?: boolean;
     readonly silent?: boolean;
+    readonly pick?: boolean;
 }): Promise<string | undefined> => {
-    const valid = cached(options?.usableFor ?? NEAR_EXPIRY_MS);
+    const pick = options?.pick === true;
+    const valid = pick ? undefined : cached(options?.usableFor ?? NEAR_EXPIRY_MS);
     if (valid !== undefined) {
         return valid;
     }
     if (options?.interactive === false) {
         return inflight;
     }
-    const mode: MintMode = options?.silent === true ? `silent` : options?.gate === false ? `button` : `gate`;
-    if (inflight !== undefined) {
-        // A person joining a quiet mint upgrades it to the gate; a warmer joining a person's mint never downgrades it.
-        if (mintMode === `silent` && mode !== `silent`) {
-            mintMode = mode;
+    const mode = modeFor(options);
+    if (pick) {
+        // Retired rather than joined: whatever that mint returns is about the account being left behind. Its caller
+        // is settled with nothing, exactly as a dismissal settles one.
+        retireMint();
+        picking = true;
+    } else {
+        const joined = joinMint(mode);
+        if (joined !== undefined) {
+            return joined;
         }
-        return inflight;
     }
     inflight = mint(mode);
     return inflight;
@@ -277,10 +344,7 @@ const clearCredential = (): void => {
     expiresAt = 0;
     signedInEmail.value = undefined;
     needsSignIn.value = false;
-    settle?.(undefined);
-    settle = undefined;
-    inflight = undefined;
-    acceptingCredential = false;
+    retireMint();
     // Cancels a pending silent prompt (a late credential must not repopulate the cache) and stops auto_select from
     // re-signing the account just signed out of.
     window.google?.accounts?.id?.cancel?.();

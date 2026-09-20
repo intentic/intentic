@@ -39,10 +39,10 @@ const handoff = vi.fn();
 const googleIdToken = vi.fn<() => Promise<{ idToken?: string }>>().mockResolvedValue({});
 vi.mock(`../../lib/useApi`, () => ({ apiClient: { desktop: { handoff, googleIdToken } } }));
 
-// A Google credential shaped like idTokenClaims actually reads one, so the page's freshness check runs for real,
-// not against a stub.
-const credential = (livesForMs: number): string => {
-    const payload = { email: `owner@example.com`, exp: Math.floor((Date.now() + livesForMs) / 1000) };
+// A Google credential shaped like idTokenClaims actually reads one, so the page's freshness check and its identity
+// check both run for real, not against a stub.
+const credential = (livesForMs: number, email = `owner@example.com`): string => {
+    const payload = { email, exp: Math.floor((Date.now() + livesForMs) / 1000) };
     const body = btoa(JSON.stringify(payload)).replace(/\+/g, `-`).replace(/\//g, `_`).replace(/=+$/, ``);
     return `header.${body}.signature`;
 };
@@ -66,7 +66,9 @@ const mount = async (): Promise<HTMLElement> => {
 beforeEach(() => {
     query.value = { state: `nonce-1`, challenge: `chal-1` };
     user.value = { email: `owner@example.com` };
-    getIdToken.mockClear();
+    // Reset, not clear: a test that gave the mint an answer must not leave it answering for the next one. Vitest
+    // restores the implementation `vi.fn(impl)` was built with, which is the mint that never settles.
+    getIdToken.mockReset();
     renderButton.mockClear();
     adoptIdToken.mockClear();
     signInWithGoogle.mockClear();
@@ -94,8 +96,8 @@ it(`asks for the token without the shared sign-in overlay, and only one with rea
     await mount();
 
     // `gate: false` skips the redundant overlay button. `usableFor` requires enough life to survive setup after a
-    // fresh install, not just this page.
-    expect(getIdToken).toHaveBeenCalledWith({ gate: false, usableFor: expect.any(Number) });
+    // fresh install, not just this page. `pick` is off on the ordinary road: a silent re-auth is welcome here.
+    expect(getIdToken).toHaveBeenCalledWith({ gate: false, usableFor: expect.any(Number), pick: false });
     expect(getIdToken.mock.calls[0]?.[0]?.usableFor).toBeGreaterThanOrEqual(10 * 60 * 1000);
 });
 
@@ -214,6 +216,54 @@ it(`leaves a signed-in browser on the account it is already using`, async () => 
 
     expect(signInWithGoogleCredential).not.toHaveBeenCalled();
     expect(handoff).toHaveBeenCalledTimes(1);
+});
+
+// THE PAIR THAT NAMED TWO PEOPLE. The one-time token signs the app into THIS BROWSER'S Intentic session while the
+// Google token names whoever Google answered with here; handed over together, the app opens on a sandbox its own
+// credential cannot unlock, and every screen in it looks correct while saying so.
+it(`refuses to hand over a Google account that is not this browser's Intentic account`, async () => {
+    getIdToken.mockResolvedValueOnce(credential(60 * 60 * 1000, `someone.else@example.com`));
+
+    const el = await mount();
+
+    expect(handoff).not.toHaveBeenCalled();
+    // The browser's own account is not switched behind the reader either; the fork asks.
+    expect(signInWithGoogleCredential).not.toHaveBeenCalled();
+    expect(el.textContent).toContain(`someone.else@example.com`);
+    expect(el.textContent).toContain(`owner@example.com`);
+});
+
+// The fork's first road: the Google account that answered becomes this browser's Intentic account too, and the pair
+// crossing to the app then names one person.
+it(`hands over once the reader takes the Google account as their Intentic one`, async () => {
+    const other = credential(60 * 60 * 1000, `someone.else@example.com`);
+    getIdToken.mockResolvedValue(other);
+    signInWithGoogleCredential.mockImplementation(async () => {
+        user.value = { email: `someone.else@example.com` };
+    });
+    handoff.mockResolvedValue({ handoff: `row-1` });
+
+    const el = await mount();
+    [...el.querySelectorAll(`button`)].find((node) => node.textContent?.includes(`Continue as`))?.click();
+    await new Promise((resolve) => setTimeout(resolve));
+    await nextTick();
+
+    expect(signInWithGoogleCredential).toHaveBeenCalledWith(other);
+    expect(handoff).toHaveBeenCalledWith({ idToken: other, challenge: `chal-1` });
+});
+
+// The app's "Switch Google account", arriving as `?switch=1`. Every road that answers without asking is refused —
+// including the credential the platform holds, which names the account being left behind.
+it(`asks Google's chooser and skips the platform's credential when the app asked for a switch`, async () => {
+    query.value = { state: `nonce-1`, challenge: `chal-1`, switch: `1` };
+    googleIdToken.mockResolvedValue({ idToken: credential(60 * 60 * 1000) });
+
+    const el = await mount();
+
+    expect(googleIdToken).not.toHaveBeenCalled();
+    expect(getIdToken).toHaveBeenCalledWith({ gate: false, usableFor: expect.any(Number), pick: true });
+    expect(handoff).not.toHaveBeenCalled();
+    expect(el.textContent).toContain(`Pick the Google account`);
 });
 
 it(`asks Google for nothing when the link is missing its handoff values`, async () => {

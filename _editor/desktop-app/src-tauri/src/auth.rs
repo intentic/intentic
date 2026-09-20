@@ -14,6 +14,10 @@ struct PendingAttempt {
     /// The page this attempt was opened at, kept so a second click can open THE SAME one again. Without it a
     /// repeat click had nothing to re-open and did nothing at all — see [`start`].
     url: String,
+    /// Whether this attempt asked the page to put Google's chooser up. Part of the identity of an attempt, not
+    /// a detail of it: reusing a plain attempt for a switch press re-opens the page that auto-completed as the
+    /// account the reader just rejected.
+    switch_account: bool,
     started_at: Instant,
 }
 
@@ -25,16 +29,20 @@ pub struct PendingAuth(Mutex<Option<PendingAttempt>>);
 const ATTEMPT_TTL: Duration = Duration::from_secs(3 * 60);
 
 impl PendingAuth {
-    /// The page a click should re-open, when an attempt is still in flight — `None` when a fresh one is due.
+    /// The page a click should re-open, when an attempt asking for the same thing is still in flight — `None`
+    /// when a fresh one is due.
     ///
     /// Split out from [`start`] because it is the whole of the bug: everything else on that path needs a Tauri
     /// handle to exercise, and this needs nothing, so this is where the regression can be held down.
-    fn live_url(&self) -> Option<String> {
+    fn live_url(&self, switch_account: bool) -> Option<String> {
         self.0
             .lock()
             .unwrap()
             .as_ref()
-            .filter(|attempt| attempt.started_at.elapsed() < ATTEMPT_TTL)
+            .filter(|attempt| {
+                attempt.started_at.elapsed() < ATTEMPT_TTL
+                    && attempt.switch_account == switch_account
+            })
             .map(|attempt| attempt.url.clone())
     }
 }
@@ -46,9 +54,9 @@ fn open_browser(app: &AppHandle, url: &str) -> Result<(), String> {
 }
 
 /* Open the sign-in page in the default browser — and open it EVERY time, which is the whole subtlety here. */
-pub fn start(app: &AppHandle) -> Result<(), String> {
+pub fn start(app: &AppHandle, switch_account: bool) -> Result<(), String> {
     let pending = app.state::<PendingAuth>();
-    if let Some(url) = pending.live_url() {
+    if let Some(url) = pending.live_url(switch_account) {
         return open_browser(app, &url);
     }
     let mut slot = pending.0.lock().unwrap();
@@ -61,14 +69,16 @@ pub fn start(app: &AppHandle) -> Result<(), String> {
     let challenge = base64::engine::general_purpose::URL_SAFE_NO_PAD
         .encode(Sha256::digest(verifier.as_bytes()));
     let base = app.state::<crate::state::AppState>().app_url();
+    let switch = if switch_account { "&switch=1" } else { "" };
     let url = format!(
-        "{}/desktop-auth?state={state}&challenge={challenge}",
+        "{}/desktop-auth?state={state}&challenge={challenge}{switch}",
         base.trim_end_matches('/')
     );
     *slot = Some(PendingAttempt {
         state,
         verifier,
         url: url.clone(),
+        switch_account,
         started_at: Instant::now(),
     });
     drop(slot);
@@ -126,17 +136,22 @@ mod tests {
     use super::*;
 
     fn attempt(age: Duration, url: &str) -> PendingAuth {
+        switching_attempt(age, url, false)
+    }
+
+    fn switching_attempt(age: Duration, url: &str, switch_account: bool) -> PendingAuth {
         PendingAuth(Mutex::new(Some(PendingAttempt {
             state: "state".into(),
             verifier: "verifier".into(),
             url: url.into(),
+            switch_account,
             started_at: Instant::now() - age,
         })))
     }
 
     #[test]
     fn nothing_in_flight_means_a_fresh_attempt() {
-        assert_eq!(PendingAuth::default().live_url(), None);
+        assert_eq!(PendingAuth::default().live_url(false), None);
     }
 
     /* THE REGRESSION. */
@@ -147,10 +162,34 @@ mod tests {
             "https://app.intentic.dev/desktop-auth?state=a&challenge=b",
         );
         assert_eq!(
-            pending.live_url().as_deref(),
+            pending.live_url(false).as_deref(),
             Some("https://app.intentic.dev/desktop-auth?state=a&challenge=b"),
             "a click during a live attempt must re-open that attempt's page, not do nothing"
         );
+    }
+
+    /* A reader who has just been told the wrong account signed them in must not be sent back to the page that did it. */
+    #[test]
+    fn asking_for_a_different_account_never_reuses_a_plain_attempt() {
+        let pending = attempt(
+            Duration::from_secs(5),
+            "https://app.intentic.dev/desktop-auth?state=a&challenge=b",
+        );
+        assert_eq!(pending.live_url(true), None);
+    }
+
+    #[test]
+    fn a_second_switch_click_reopens_the_switching_page() {
+        let pending = switching_attempt(
+            Duration::from_secs(5),
+            "https://app.intentic.dev/desktop-auth?state=a&challenge=b&switch=1",
+            true,
+        );
+        assert_eq!(
+            pending.live_url(true).as_deref(),
+            Some("https://app.intentic.dev/desktop-auth?state=a&challenge=b&switch=1")
+        );
+        assert_eq!(pending.live_url(false), None);
     }
 
     #[test]
@@ -175,7 +214,7 @@ mod tests {
     #[test]
     fn an_expired_attempt_makes_way_for_a_fresh_one() {
         assert_eq!(
-            attempt(ATTEMPT_TTL + Duration::from_secs(1), "https://old").live_url(),
+            attempt(ATTEMPT_TTL + Duration::from_secs(1), "https://old").live_url(false),
             None
         );
     }

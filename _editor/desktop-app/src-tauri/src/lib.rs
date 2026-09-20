@@ -18,10 +18,11 @@ pub(crate) fn handle_intentic_link(app: &AppHandle, link: &str, source: setup_li
     windows::handle_link(app, link, source);
 }
 
-/// Open the platform's sign-in page in the default browser (see auth.rs).
+/// Open the platform's sign-in page in the default browser (see auth.rs). The app's own faces have no account
+/// to reject, so this road never asks for the chooser; the link `intentic://signin?switch=1` is the one that does.
 #[tauri::command]
 fn sign_in(app: AppHandle) -> Result<(), String> {
-    auth::start(&app)
+    auth::start(&app, false)
 }
 
 /// What a launch opens onto. The app's own face is for the two things a workspace window cannot show: work

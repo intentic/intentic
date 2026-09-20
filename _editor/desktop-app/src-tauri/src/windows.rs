@@ -1055,8 +1055,8 @@ pub fn handle_link(app: &AppHandle, link: &str, source: Source) {
             show_launcher(app);
             let _ = tauri::Emitter::emit(app, "desktop://pending-sync", ());
         }
-        Some(Link::SignIn) => {
-            if let Err(error) = crate::auth::start(app) {
+        Some(Link::SignIn { switch_account }) => {
+            if let Err(error) = crate::auth::start(app, switch_account) {
                 eprintln!("{error}");
             }
         }
