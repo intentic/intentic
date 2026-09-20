@@ -73,5 +73,6 @@ const picked = computed<string>({ get: () => selected.value ?? ``, set: (value) 
 </script>
 
 <template>
-    <Picker v-model="picked" :options="groups" :aria-label="t(`sourceLabel`)" :header="t(`source`)" class="min-w-36 text-xs" />
+    <!-- Ghost: this rides the filter bar's own bordered box, and a field trigger would stack a second rim inside it. -->
+    <Picker v-model="picked" :options="groups" variant="ghost" :aria-label="t(`sourceLabel`)" :header="t(`source`)" class="max-w-48" />
 </template>
