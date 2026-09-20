@@ -10,6 +10,7 @@ import ChatPersonaRail from "../personas/ChatPersonaRail.vue";
 import {
     activityIcon,
     activityLine,
+    agentDisplayTitle,
     agentStatusMeta,
     type FleetLane,
     type StandingChip,
@@ -780,7 +781,7 @@ const keepTab = (event: Event, id: string): void => {
                     <RailCard
                         v-for="agent in notOpen"
                         :key="agent.id"
-                        :title="agent.title ?? t(`chat.chatTabList.untitledAgent`)"
+                        :title="agentDisplayTitle(agent)"
                         :title-action="agent.titleAction"
                         :needle="needle"
                         :match-case="matchCase"

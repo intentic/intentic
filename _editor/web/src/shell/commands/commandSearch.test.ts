@@ -1,5 +1,5 @@
 import { expect, it } from "vitest";
-import { commandScore, rankCommands } from "./commandSearch";
+import { nameScore, rankCommands } from "./commandSearch";
 import type { RegisteredCommand } from "./useCommands";
 
 // Pins what a typed query finds: word order must not matter, the name must beat the id, and an empty query must be the
@@ -51,6 +51,14 @@ it(`reads an empty query as the whole registry: destinations first, then alphabe
 });
 
 it(`scores a family-only match, so typing a family lists all of it`, () => {
-    expect(commandScore(`Sandbox: Secrets`, `view.sandbox.secrets`, `sandbox`)).toBeGreaterThan(0);
-    expect(commandScore(`Sandbox: Secrets`, `view.sandbox.secrets`, `personas`)).toBeUndefined();
+    expect(nameScore(`Sandbox: Secrets`, `view.sandbox.secrets`, `sandbox`)).toBeGreaterThan(0);
+    expect(nameScore(`Sandbox: Secrets`, `view.sandbox.secrets`, `personas`)).toBeUndefined();
+});
+
+// The palette lists four kinds of row at once and orders the kinds against each other by their best score, so every
+// tier has to answer on the same 0..1 axis a path scores on. A tier above 1 would let one kind outrank another by
+// arithmetic rather than by evidence.
+it(`scores name matches between zero and one, the axis paths are scored on`, () => {
+    const scores = [`Sandbox: Secrets`, `sandbox`, `secrets`, `view.sandbox`].map((query) => nameScore(`Sandbox: Secrets`, `view.sandbox.secrets`, query));
+    expect(scores).toEqual([0.95, 0.95, 0.8, 0.3]);
 });

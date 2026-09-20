@@ -31,13 +31,13 @@ export function useShellCommands(): void {
         // Explicitly typed: heterogeneous members would otherwise infer a narrow union from the first entries.
         const entries: Omit<CommandRegistration, `owner`>[] = [
             {
-                command: `workspace.goToFile`,
-                title: t(`shell.useShellCommands.file`),
+                command: `workspace.goToAnything`,
+                title: t(`shell.useShellCommands.anything`),
                 category: GO_TO,
                 icon: `search`,
                 keybinding: `Mod+P`,
                 handler: (): void => {
-                    mode.value = `files`;
+                    mode.value = `all`;
                     isOpen.value = true;
                 },
             },

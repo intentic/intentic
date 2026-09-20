@@ -21,6 +21,7 @@ import { dropActionFor, type PendingAction } from "../laneDrop";
 import {
     activityIcon,
     activityLine,
+    agentDisplayTitle,
     agentStatusMeta,
     conflictIsYours,
     formatCost,
@@ -332,20 +333,7 @@ const model = computed(() => {
 // The summary carries only a UUID; read against the window's account list, so an unresolvable id (disconnected login)
 // draws nothing.
 const account = computed(() => accountBadge(providerAccounts.value[props.agent.provider] ?? [], props.agent.account));
-// Fallback name for a card with no title yet (a new tab, an untitled history entry, naming not yet landed).
-// Prefers the composer's own preview text over a generic placeholder, since a title is only minted by the first turn.
-const displayTitle = computed(() => {
-    if (props.agent.title !== undefined) {
-        return props.agent.title;
-    }
-    if (props.agent.preview !== undefined) {
-        return props.agent.preview;
-    }
-    if (props.agent.status === `draft`) {
-        return `New agent`;
-    }
-    return props.agent.status === `resumed` ? `Untitled chat` : `Untitled agent`;
-});
+const displayTitle = computed(() => agentDisplayTitle(props.agent));
 // Marks the filter term in the title; the matched line (via MatchLine, which also names the speaker) is never shown
 // apart from it.
 // Term is case-folded to match the filter's own rule, unless `Aa` (matchCase) is on.

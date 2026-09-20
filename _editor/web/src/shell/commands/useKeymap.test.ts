@@ -9,13 +9,13 @@ afterEach(() => {
 
 describe(`effectiveKeybinding`, () => {
     it(`falls through to the declared default when there is no override`, () => {
-        expect(effectiveKeybinding(`workspace.goToFile`, `Mod+P`)).toBe(`Mod+P`);
+        expect(effectiveKeybinding(`workspace.goToAnything`, `Mod+P`)).toBe(`Mod+P`);
         expect(effectiveKeybinding(`view.agents`, undefined)).toBeUndefined();
     });
 
     it(`prefers a remap over the declared default`, () => {
-        useKeymap().setKeybinding(`workspace.goToFile`, `Mod+E`);
-        expect(effectiveKeybinding(`workspace.goToFile`, `Mod+P`)).toBe(`Mod+E`);
+        useKeymap().setKeybinding(`workspace.goToAnything`, `Mod+E`);
+        expect(effectiveKeybinding(`workspace.goToAnything`, `Mod+P`)).toBe(`Mod+E`);
     });
 
     it(`treats a null override as unbound: the declared default is suppressed`, () => {

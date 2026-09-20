@@ -177,6 +177,7 @@
             "movingTo": "Przechodzi na {account}",
             "needs": "Potrzebuje Cię",
             "new": "Nowy",
+            "newAgent": "New agent",
             "onBranch": "na gałęzi",
             "openChat": "Otwórz czat",
             "openedByAutomationFirst": "Otwarte przez automatyzację „{automationId}”{where}, jej pierwszy prompt nie jest Twój",
@@ -203,6 +204,8 @@
             "stopped": "Zatrzymany",
             "stopping": "Zatrzymywanie…",
             "stopping2": "Zatrzymywanie",
+            "untitledAgent": "Untitled agent",
+            "untitledChat": "Untitled chat",
             "updated": "Zaktualizowany",
             "usageLimit": "Limit użycia",
             "viewError": "Zobacz błąd",
@@ -1140,8 +1143,7 @@
             "runsInQuoted": "Działa w „{sandbox}”",
             "share": "Udostępnij…",
             "showFewer": "Pokaż mniej",
-            "steps": "kroków",
-            "untitledAgent": "Agent bez tytułu"
+            "steps": "kroków"
         },
         "chatTabs": {
             "archived": "Zarchiwizowane",
@@ -3773,19 +3775,23 @@
         },
         "quickOpen": {
             "agent": "Agent",
+            "agents": "Agents",
             "allCommands": "Wszystkie polecenia",
             "commands": "Polecenia",
+            "everything": "Everything",
             "files": "Pliki",
-            "goToFile": "Przejdź do pliku",
-            "goToFilePaste": "Przejdź do pliku albo wklej id sesji… (> dla poleceń)",
-            "noCommandsMatch": "Żadne polecenie nie pasuje.",
-            "noFilesMatch": "Żaden plik nie pasuje.",
+            "jumpTo": "Jump to anything",
+            "jumpToPaste": "Jump to an agent, a file, a terminal or a command… (or paste a session id)",
+            "narrowTo": "Narrow to one kind",
+            "noMatches": "Nothing matches.",
             "openAgent": "Otwórz tego agenta",
+            "recentCommands": "Recent commands",
             "recentlyOpened": "Ostatnio otwierane",
             "recentlyUsed": "Ostatnio używane",
             "showingFirstMatchesOnly": "Pokazujemy tylko pierwsze trafienia.",
+            "terminals": "Terminals",
             "typeAtLeastCharacters": "Wpisz co najmniej {floor} znaki, żeby szukać plików.",
-            "typeToSearchFiles": "Pisz, żeby szukać plików."
+            "typeToSearch": "Type to search, or pick a kind above."
         },
         "shellDesktop": {
             "addCapability": "Dodaj możliwość",
@@ -3815,8 +3821,8 @@
             "subagents": "Podagenty"
         },
         "useShellCommands": {
+            "anything": "Anything…",
             "commandPalette": "Paleta poleceń…",
-            "file": "Plik…",
             "new": "Nowy",
             "togglePanel": "Przełącz panel"
         },

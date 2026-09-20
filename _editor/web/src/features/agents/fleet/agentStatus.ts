@@ -125,6 +125,21 @@ const statusMeta = () =>
 export const agentStatusMeta = (status: AgentStatus | ClientAgentStatus): { icon: IconName; spin?: boolean; label: string; class: string } =>
     statusMeta()[status] ?? statusMeta().idle;
 
+// What to call a conversation whose title the first turn has not minted yet (a new tab, an untitled history entry).
+// The composer's own unsent words beat any placeholder: they are what the reader wrote, and what they will recognise.
+export const agentDisplayTitle = (agent: { readonly title?: string; readonly preview?: string; readonly status: AgentStatus | ClientAgentStatus }): string => {
+    if (agent.title !== undefined) {
+        return agent.title;
+    }
+    if (agent.preview !== undefined) {
+        return agent.preview;
+    }
+    if (agent.status === `draft`) {
+        return t(`agents.agentStatus.newAgent`);
+    }
+    return agent.status === `resumed` ? t(`agents.agentStatus.untitledChat`) : t(`agents.agentStatus.untitledAgent`);
+};
+
 // A turn is in flight: running, unwinding after a Stop, or repairing itself after its daemon died. Every hands-off
 // guard (its worktree is a live turn's working state) and the live readouts (elapsed, activity line) key off this.
 // `starting` counts even though nothing is registered yet, elapsed should tick from the send. `dismissing` and

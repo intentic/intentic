@@ -177,6 +177,7 @@
             "movingTo": "Wechselt zu {account}",
             "needs": "Braucht Sie",
             "new": "Neu",
+            "newAgent": "New agent",
             "onBranch": "auf Branch",
             "openChat": "Chat öffnen",
             "openedByAutomationFirst": "Von der Automation „{automationId}“ geöffnet{where}, ihr erster Prompt ist nicht Ihrer",
@@ -203,6 +204,8 @@
             "stopped": "Gestoppt",
             "stopping": "Stoppt…",
             "stopping2": "Stoppt",
+            "untitledAgent": "Untitled agent",
+            "untitledChat": "Untitled chat",
             "updated": "Aktualisiert",
             "usageLimit": "Nutzungslimit",
             "viewError": "Fehler ansehen",
@@ -1140,8 +1143,7 @@
             "runsInQuoted": "Läuft in „{sandbox}“",
             "share": "Teilen…",
             "showFewer": "Weniger anzeigen",
-            "steps": "Schritte",
-            "untitledAgent": "Agent ohne Titel"
+            "steps": "Schritte"
         },
         "chatTabs": {
             "archived": "Archiviert",
@@ -3773,19 +3775,23 @@
         },
         "quickOpen": {
             "agent": "Agent",
+            "agents": "Agents",
             "allCommands": "Alle Befehle",
             "commands": "Befehle",
+            "everything": "Everything",
             "files": "Dateien",
-            "goToFile": "Zu Datei springen",
-            "goToFilePaste": "Zu einer Datei springen, oder eine Session-ID einfügen… (> für Befehle)",
-            "noCommandsMatch": "Keine Befehle passen.",
-            "noFilesMatch": "Keine Dateien passen.",
+            "jumpTo": "Jump to anything",
+            "jumpToPaste": "Jump to an agent, a file, a terminal or a command… (or paste a session id)",
+            "narrowTo": "Narrow to one kind",
+            "noMatches": "Nothing matches.",
             "openAgent": "Diesen Agenten öffnen",
+            "recentCommands": "Recent commands",
             "recentlyOpened": "Zuletzt geöffnet",
             "recentlyUsed": "Zuletzt benutzt",
             "showingFirstMatchesOnly": "Es werden nur die ersten Treffer gezeigt.",
+            "terminals": "Terminals",
             "typeAtLeastCharacters": "Tippen Sie mindestens {floor} Zeichen, um Dateien zu suchen.",
-            "typeToSearchFiles": "Tippen Sie, um Dateien zu suchen."
+            "typeToSearch": "Type to search, or pick a kind above."
         },
         "shellDesktop": {
             "addCapability": "Fähigkeit hinzufügen",
@@ -3815,8 +3821,8 @@
             "subagents": "Subagenten"
         },
         "useShellCommands": {
+            "anything": "Anything…",
             "commandPalette": "Befehlspalette…",
-            "file": "Datei…",
             "new": "Neu",
             "togglePanel": "Panel umschalten"
         },

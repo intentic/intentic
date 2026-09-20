@@ -1,18 +1,20 @@
 import { GO_TO, SANDBOX, SETTINGS } from "./categories";
 import { commandLabel, type RegisteredCommand } from "./useCommands";
 
-// How a typed query picks rows out of the command registry, shared by the palette and the Keybindings page so the same
-// words find the same commands on both. Two rules, both about how people actually type:
+// How a typed query picks rows by name, shared by the palette (every kind of row it lists), the command registry's own
+// ranking and the Keybindings page, so the same words find the same rows everywhere. Two rules, both about how people
+// actually type:
 // - every whitespace-separated term has to appear somewhere, in any order: "secrets sandbox" finds "Sandbox: Secrets",
 //   which a single substring match refuses.
-// - a match on what the command is called beats a match on its id, and the start of a word beats the middle of one, so
+// - a match on what the row is called beats a match on its id, and the start of a word beats the middle of one, so
 //   the row someone typed the first letters of is the row under the cursor.
 
-/** Matched on the label (name and family) versus matched only on the id; the gap between tiers is what ranks. */
-const NAME_PREFIX = 4;
-const WORD_START = 3;
-const IN_NAME = 2;
-const IN_ID = 1;
+// The four tiers a name match lands in, as fractions of one: the same 0..1 axis a path scores on
+// (fuzzyPaths.fuzzyScore), which is what lets the palette order files against agents, terminals and commands.
+const NAME_PREFIX = 0.95;
+const WORD_START = 0.8;
+const IN_NAME = 0.6;
+const IN_ID = 0.3;
 
 const terms = (query: string): readonly string[] => query.trim().toLowerCase().split(/\s+/u).filter((term) => term.length > 0);
 
@@ -29,14 +31,14 @@ const startsWord = (text: string, term: string): boolean => {
     return false;
 };
 
-/** How well one command answers the query, or undefined when a term is missing from both its name and its id. */
-export const commandScore = (label: string, command: string, query: string): number | undefined => {
+/** How well one row answers the query, or undefined when a term is missing from both its name and its id. */
+export const nameScore = (label: string, identifier: string, query: string): number | undefined => {
     const wanted = terms(query);
     if (wanted.length === 0) {
         return 0;
     }
     const name = label.toLowerCase();
-    const id = command.toLowerCase();
+    const id = identifier.toLowerCase();
     if (!wanted.every((term) => name.includes(term) || id.includes(term))) {
         return undefined;
     }
@@ -67,7 +69,7 @@ export const rankCommands = <T extends RegisteredCommand>(entries: readonly T[],
     const browsing = terms(query).length === 0;
     return entries
         .flatMap((entry) => {
-            const score = commandScore(commandLabel(entry), entry.command, query);
+            const score = nameScore(commandLabel(entry), entry.command, query);
             return score === undefined ? [] : [{ entry, score, label: commandLabel(entry) }];
         })
         .toSorted((left, right) =>

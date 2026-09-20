@@ -5,8 +5,9 @@ import { commandContext } from "./contextKeys";
 import { formatChord, isApplePlatform, matchesChord } from "./keybindings";
 import { effectiveKeybinding } from "./useKeymap";
 
-// Command registry: extensions (and builtins) register commands here, surfaced in Quick Open's `>` mode and
-// executable by id. A module-level singleton ref; every consumer reads the same reactive list.
+// Command registry: extensions (and builtins) register commands here, listed by the jump palette alongside every other
+// kind of row (and alone under its `>` scope), and executable by id. A module-level singleton ref; every consumer reads
+// the same reactive list.
 
 export interface CommandRegistration {
     // "builtin" or the owning extension's id.
