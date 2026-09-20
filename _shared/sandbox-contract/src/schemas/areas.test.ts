@@ -1,3 +1,4 @@
+import { PUBLIC_DIR, STATE_DIR } from "@intentic/constants";
 import { describe, expect, test } from "vitest";
 import { AreaFolderSchema } from "./areas.js";
 
@@ -21,7 +22,13 @@ describe("AreaFolderSchema", () => {
     });
 
     test("the sandbox's own configuration and its outbox can never be named", () => {
-        for (const folder of [".intentic", ".intentic/config", ".intentic/config/hooks", "public", "public/site"]) {
+        for (const folder of [
+            STATE_DIR,
+            `${STATE_DIR}/config`,
+            `${STATE_DIR}/config/hooks`,
+            PUBLIC_DIR,
+            `${PUBLIC_DIR}/site`,
+        ]) {
             expect(AreaFolderSchema.safeParse(folder).success, folder).toBe(false);
         }
     });
