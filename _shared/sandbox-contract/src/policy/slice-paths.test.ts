@@ -97,7 +97,7 @@ describe("fenceIntersection", () => {
         expect(fenceIntersection(undefined, undefined)).toBeUndefined();
     });
 
-    // The narrower of the pair survives, whichever side it came from, so a card asking for more than its starter
+    // The narrower of the pair survives, whichever side it came from, so a persona asking for more than its starter
     // holds gets the starter's answer.
     test("the tighter folder is what survives, from whichever side", () => {
         expect(fenceIntersection(["apps"], ["apps/web"])).toEqual(["apps/web"]);

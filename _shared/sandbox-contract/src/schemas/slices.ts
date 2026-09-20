@@ -20,7 +20,7 @@ export const SliceFolderSchema = z
     });
 
 export const SliceSchema = z.object({
-    id: entryId.describe("The slice's id, the name a member row or a persona card points at."),
+    id: entryId.describe("The slice's id, the name a member row points at."),
     label: z.string().max(60).optional().describe("What to call it on screen. Absent falls back to the id, which somebody chose anyway."),
     brief: z
         .string()

@@ -2,7 +2,7 @@ import { describe, expect, test } from "vitest";
 import type { ProvenCaller } from "./auth.js";
 import { framedEvent, heldPersonas, refuseUnlessHeld, refuseUnlessVisible, visibleTo } from "./fleet-scope.js";
 
-// The two fences over the fleet, as pure rules: whose conversation counts as a desk's, which card a desk may wear,
+// The two fences over the fleet, as pure rules: whose conversation counts as a desk's, which persona a desk may wear,
 // what a fenced member may see of work that is not theirs, and which frames of the event stream reach either. The
 // routes apply these; this pins what they apply.
 
@@ -52,13 +52,13 @@ describe("visibleTo", () => {
 });
 
 describe("refuseUnlessHeld", () => {
-    test("a desk must name a card it holds; naming none is refused like naming another's", () => {
+    test("a desk must name a persona it holds; naming none is refused like naming another's", () => {
         expect(() => refuseUnlessHeld(desk, "support")).not.toThrow();
         expect(() => refuseUnlessHeld(desk, "sales")).toThrow(/"sales" is not one of your personas: support/);
         expect(() => refuseUnlessHeld(desk, undefined)).toThrow(/speaks through one of its personas: support/);
     });
 
-    test("other tiers may name any card or none", () => {
+    test("other tiers may name any persona or none", () => {
         expect(() => refuseUnlessHeld(viewer, undefined)).not.toThrow();
         expect(() => refuseUnlessHeld(undefined, "sales")).not.toThrow();
     });

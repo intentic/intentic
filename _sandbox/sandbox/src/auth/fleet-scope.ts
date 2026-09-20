@@ -19,7 +19,8 @@ export interface Provenance {
 const sameEmail = (a: string, b: string): boolean => a.toLowerCase() === b.toLowerCase();
 
 const theirs = (caller: Caller, agent: Provenance): boolean =>
-    (agent.owner !== undefined && sameEmail(agent.owner.email, caller.email)) || (agent.startedBy !== undefined && sameEmail(agent.startedBy, caller.email));
+    (agent.owner !== undefined && sameEmail(agent.owner.email, caller.email)) ||
+    (agent.startedBy !== undefined && sameEmail(agent.startedBy, caller.email));
 
 /**
  * Whether a holder's slices cover work born with these: the one rule behind both narrowings that involve a fence —
@@ -59,7 +60,7 @@ export const refuseUnlessVisible = (caller: Caller | undefined, agent: Provenanc
     }
 };
 
-// A desk may act only through the cards it holds; naming none is refused too, since an unpinned attended chat reaches
+// A desk may act only through the personas it holds; naming none is refused too, since an unpinned attended chat reaches
 // every account, which is exactly what a desk is not handed.
 export const refuseUnlessHeld = (caller: Caller | undefined, actsAs: string | undefined): void => {
     if (caller === undefined || caller.role !== "desk") {
@@ -68,7 +69,10 @@ export const refuseUnlessHeld = (caller: Caller | undefined, actsAs: string | un
     const held = caller.desks ?? [];
     if (actsAs === undefined || !held.includes(actsAs)) {
         throw new ORPCError("FORBIDDEN", {
-            message: actsAs === undefined ? `a desk speaks through one of its personas: ${held.join(", ")}` : `"${actsAs}" is not one of your personas: ${held.join(", ")}`,
+            message:
+                actsAs === undefined
+                    ? `a desk speaks through one of its personas: ${held.join(", ")}`
+                    : `"${actsAs}" is not one of your personas: ${held.join(", ")}`,
         });
     }
 };

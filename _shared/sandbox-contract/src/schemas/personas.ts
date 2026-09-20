@@ -46,10 +46,10 @@ export const PersonaPowersSchema = z.object({
 export type PersonaPowers = z.infer<typeof PersonaPowersSchema>;
 // `folders` only refuses file-tool calls outside it; it stops a misread instruction, not a shell. The container is the
 // real workspace-wide fence, and a conversation started by a fenced person is narrower still — the turn works inside
-// the card's folders AND that person's slices, never the wider of the two.
+// this persona's folders AND that person's slices, never the wider of the two.
 // A plain folder list rather than a named slice (schemas/slices.ts), because the two answer different questions: a
-// card's fence is written once for that card, while a slice is a grant several people hold and one edit has to move
-// all of them.
+// persona's fence is written once for that persona, while a slice is a grant several people hold and one edit has to
+// move all of them.
 // No placement field, by decision: every session already opens in its own private copy, never the shared tree.
 export const PersonaWorkspaceSchema = z.object({
     // Absent means the workspace root.
@@ -196,7 +196,9 @@ export const PersonaSchema = z.object({
         .string()
         .max(200)
         .optional()
-        .describe("What this persona is for, in one line. A new chat is routed onto a persona by this sentence, and the Personas page shows it under the name."),
+        .describe(
+            "What this persona is for, in one line. A new chat is routed onto a persona by this sentence, and the Personas page shows it under the name.",
+        ),
     powers: PersonaPowersSchema.optional().describe(
         "What a conversation wearing it may do. Absent means the full toolbox, so a card written before this existed behaves exactly as it did.",
     ),
@@ -225,13 +227,18 @@ export const PersonaSchema = z.object({
 export type Persona = z.infer<typeof PersonaSchema>;
 // Ladder filtered to connected providers, deduplicated. Empty (absent, or every provider disconnected) means the card
 // has no opinion — the caller decides, not "run nothing".
-export const personaModels = (card: Pick<Persona, "models">, sources: readonly ModelSource[]): readonly ModelPin[] => readyChain(sources, card.models ?? []);
+export const personaModels = (card: Pick<Persona, "models">, sources: readonly ModelSource[]): readonly ModelPin[] =>
+    readyChain(sources, card.models ?? []);
 // Asked once per chat, on the message it was sent with; answers with the one card the message belongs to, or none.
 // `folder`/`paths` are the facts a card's `context`/`startIn` can be matched against that words alone can't supply.
 export const PersonaRouteAskSchema = z.object({
     prompt: z.string().min(1).max(20000).describe("The message a new chat is about to open with."),
     folder: z.string().max(200).optional().describe("The workspace folder the chat was opened in, when it was opened in one."),
-    paths: z.array(z.string().min(1).max(500)).max(50).default([]).describe("Workspace paths the message names: uploads, @-mentions, the editor's own file."),
+    paths: z
+        .array(z.string().min(1).max(500))
+        .max(50)
+        .default([])
+        .describe("Workspace paths the message names: uploads, @-mentions, the editor's own file."),
 });
 export type PersonaRouteAsk = z.infer<typeof PersonaRouteAskSchema>;
 export const PersonaRouteSchema = z.object({

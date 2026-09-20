@@ -32,7 +32,7 @@ const inside = (target: string, folder: string): boolean => {
 export interface PersonaScope {
     // Turn's own root (worktree if isolated, else the workspace); fence folders resolve against this.
     readonly cwd: string;
-    // The turn's resolved fence: the card's slices already narrowed by the one its starter holds. Undefined is the
+    // The turn's resolved fence: the persona's own folders already narrowed by the one its starter holds. Undefined is the
     // whole workspace; an EMPTY list is a real fence that admits nothing, which is why this is not a plain array.
     readonly fence: Fence;
     // Whether this persona may change the sandbox's own configuration and its public outbox.
@@ -40,7 +40,7 @@ export interface PersonaScope {
 }
 
 // Scope a persona asks for; undefined when it asks for nothing, so an unconfigured workspace pays for no hook.
-// A conversation a fenced person opened is bounded here even when its card names no slice at all.
+// A conversation a fenced person opened is bounded here even when its persona names no folder at all.
 export const personaScopeOf = (persona: TurnPersona, cwd: string): PersonaScope | undefined => {
     if (persona.fence === undefined && persona.powers.sandbox) {
         return undefined;

@@ -12,31 +12,31 @@ import {
 } from "@intentic/sandbox-contract";
 import { FRONT_DESK_GUIDANCE } from "./front-desk.js";
 
-// A card answers four questions together: accounts, tool shelves, workspace, and prompt. Accounts default to nothing
-// for an unpinned unattended turn; powers default to everything regardless, since owners opt into bounds one card at a
-// time. An unknown persona denies both, rather than assuming a safe default.
+// A persona answers four questions together: accounts, tool shelves, workspace, and prompt. Accounts default to
+// nothing for an unpinned unattended turn; powers default to everything regardless, since owners opt into bounds one
+// persona at a time. An unknown persona denies both, rather than assuming a safe default.
 
 // Why a turn got the accounts and powers it did; feeds the log line and surfaces explaining a blocked tool.
 export type PersonaReason =
     // No persona named, someone watching: every connected account.
     | "attended-open"
-    // A persona was named and found: exactly what its card says.
+    // A persona was named and found: exactly what it says.
     | "persona"
     // Nobody watching and no persona named: no logged-in account, but the full toolbox.
     | "unattended-unpinned"
-    // A persona was named and no card carries that id: nothing at all, of either kind.
+    // A persona was named and none carries that id: nothing at all, of either kind.
     | "unknown-persona";
 
 export interface TurnPersona {
-    // The card that was named and found, for the turn's own note. Absent in every other case.
+    // The persona that was named and found, for the turn's own note. Absent in every other case.
     readonly persona: Persona | undefined;
     // Whether this turn may act through a capability; takes the whole entry, since the rule differs per kind.
     readonly allows: (capability: Capability) => boolean;
     // The shelves, fully resolved, no undefined fields, so no caller re-implements a default.
     readonly powers: PersonaPowers;
-    // Where the turn works, when the card says. Absent means the surface's own answer, unchanged.
+    // Where the turn works, when the persona says. Absent means the surface's own answer, unchanged.
     readonly workspace: PersonaWorkspace | undefined;
-    // Folders this turn's file tools may touch, already the tighter of the card's slices and the fence the
+    // Folders this turn's file tools may touch, already the tighter of the persona's own folders and the fence the
     // conversation inherited from whoever started it. Undefined is the whole workspace.
     // Resolved here rather than at each surface, so no caller can enforce one of the two halves and miss the other.
     readonly fence: Fence;
@@ -56,7 +56,7 @@ export interface TurnPersonaInput {
 
 // Every shelf open, what an unpinned turn gets, and the shape every caller can read without a fallback.
 const FULL: PersonaPowers = PersonaPowersSchema.parse({});
-// Every shelf shut; only a named-but-missing card gets this.
+// Every shelf shut; only a named-but-missing persona gets this.
 const NONE_POWERS: PersonaPowers = {
     files: "none",
     shell: false,
@@ -76,11 +76,11 @@ const NOTHING = (): boolean => false;
 // Identities count as accounts: an identity's browser holds every account born from it.
 const ACCOUNTS_ONLY_DENIED = (capability: Capability): boolean => capability.kind !== "browser" && capability.kind !== "identity";
 
-// Which capability kinds a card has an opinion about; a kind absent from this switch (an agent runtime, a devops entry)
+// Which capability kinds a persona has an opinion about; a kind absent from this switch (an agent runtime, a devops entry)
 // passes through untouched, so a new kind is never silently denied.
 const allowsCapability = (capability: Capability, card: Persona, powers: PersonaPowers): boolean => {
     switch (capability.kind) {
-        // The signed-in browsers: the card's own `capabilities` list, and the field that predates the shelves.
+        // The signed-in browsers: the persona's own `capabilities` list, and the field that predates the shelves.
         case "browser":
             return card.capabilities.includes(capability.id);
         // Granting an account (`reddit-work`) grants its hands; granting the identity itself grants the someone.
@@ -115,17 +115,16 @@ export const turnPersona = ({ personas, actsAs, unattended, fence }: TurnPersona
         allows: (capability) => allowsCapability(capability, card, powers),
         powers,
         ...(card.workspace !== undefined ? { workspace: card.workspace } : { workspace: undefined }),
-        // The card narrows the conversation's fence, never widens it: a card naming a folder its starter cannot see
+        // The persona narrows the conversation's fence, never widens it: one naming a folder its starter cannot see
         // drops that folder here rather than opening it.
         fence: fenceIntersection(fence, card.workspace?.folders),
         reason: "persona",
     };
 };
 
-// Whether this card may start agents elsewhere: a child is a whole agent holding shell and write, so a narrowed card
-// must not reach them by proxy. One predicate, since every runtime's arm decides the spawn door the same way.
-export const mayDelegate = (persona: TurnPersona): boolean =>
-    persona.powers.delegate && persona.powers.shell && persona.powers.files === "write";
+// Whether this persona may start agents elsewhere: a child is a whole agent holding shell and write, so a narrowed
+// persona must not reach them by proxy. One predicate, since every runtime's arm decides the spawn door the same way.
+export const mayDelegate = (persona: TurnPersona): boolean => persona.powers.delegate && persona.powers.shell && persona.powers.files === "write";
 
 // Capability manifest as this turn may see it: narrowed before anything is built, so a filtered account's browser never
 // launches, rather than present-and-discouraged. The credential-free `browser` shelf isn't a capability here.
@@ -150,7 +149,7 @@ export const UNATTENDED_ACCOUNTS_TITLE = "This turn reaches no signed-in account
 // It names the boundary as well as the loss: this rule takes signed-in browsers only, so a turn reading it must not
 // conclude that the connector credentials still in its environment are gone too.
 //
-// Only for the unpinned case: a turn wearing a card is told what it is wearing by personaNote, which is the same
+// Only for the unpinned case: a turn wearing a persona is told what it is wearing by personaNote, which is the same
 // sentence from the other end.
 export const unattendedAccountsNote = (persona: TurnPersona, withheld: readonly Capability[]): TurnNote | undefined => {
     if (persona.reason !== "unattended-unpinned" || withheld.length === 0) {
@@ -241,8 +240,8 @@ export const personaNote = (persona: TurnPersona): string | undefined => {
         return undefined;
     }
     const name = card.label ?? card.id;
-    // The resolved fence, not the card's slice ids: the turn is told the folders it will actually be refused outside
-    // of, which is the card's slices already narrowed by whoever started the conversation.
+    // The resolved fence, not the persona's own folder list: the turn is told the folders it will actually be
+    // refused outside of, which is the persona's folders already narrowed by whoever started the conversation.
     const folders = persona.fence;
     const scope =
         folders === undefined || folders.length === 0

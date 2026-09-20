@@ -350,7 +350,7 @@ export const planTurn = async (services: Services, input: AgentTurn, context: Tu
         // nobody, whose answer must still be "no accounts".
         services.perf.track("turn.plan.personas", {}, () => services.personas.list()),
         // Read unconditionally for the same reason: this resolves both halves of the turn's fence (the conversation's
-        // own and its card's), and a turn with no card still carries the fence of whoever started it.
+        // own and its persona's), and a turn wearing no persona still carries the fence of whoever started it.
         services.perf.track("turn.plan.slices", {}, () => services.slices.list()),
         // Native skill loaders read the filesystem themselves; everyone else gets this generated catalogue once, on the
         // opening request, with paths as the agent sees them. Rides the user preamble, not systemAppend, since Pi/ACP
@@ -370,9 +370,7 @@ export const planTurn = async (services: Services, input: AgentTurn, context: Tu
         // turn that would have been assembled anyway must not wait on an optimisation. OFF by default — this shipped
         // once and an A/B removed it (env.config.ts iqTurnContext), so it stays behind the flag until re-measured.
         services.config.iqTurnContext && (context.settings ?? settings).iqSearch
-            ? services.perf.track("turn.plan.turn-context", {}, () =>
-                  retrieveTurnContext({ iq: services.iq, logger: services.logger }, input.prompt),
-              )
+            ? services.perf.track("turn.plan.turn-context", {}, () => retrieveTurnContext({ iq: services.iq, logger: services.logger }, input.prompt))
             : // Undefined, not a skip: "the flag was off so nothing was attempted" and "the message had nothing to
               // look up" are different facts, and a ledger that spells both `ineligible` cannot tell them apart.
               Promise.resolve(undefined),
@@ -383,7 +381,12 @@ export const planTurn = async (services: Services, input: AgentTurn, context: Tu
     // The conversation's fence is resolved through the slice manifest every turn rather than frozen at birth: the ids
     // are what was latched, so editing a slice moves its holders' conversations on the next turn, as it moves the
     // people themselves on their next request.
-    const persona = turnPersona({ personas: cast, actsAs: input.actsAs, unattended: input.unattended === true, fence: conversationFence(sliceManifest, entry) });
+    const persona = turnPersona({
+        personas: cast,
+        actsAs: input.actsAs,
+        unattended: input.unattended === true,
+        fence: conversationFence(sliceManifest, entry),
+    });
     if (persona.reason === "unknown-persona") {
         // The turn asked to act as somebody this workspace has no card for, so it runs with nothing while the prompt
         // still reads as if it had everything.

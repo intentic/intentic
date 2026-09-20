@@ -21,7 +21,7 @@ const { slices, isLoading, save, remove } = useSlices();
 const outline = useSandboxOutline(isLoading);
 const notice = ref<NoticeModel>();
 
-// One open slice at a time, edited in place and written on change, like a persona card: there is no Save button
+// One open slice at a time, edited in place and written on change, like a persona: there is no Save button
 // anywhere else in these settings, and one here would be the only thing a reader had to remember.
 const open = ref<string>();
 const draftName = ref(``);

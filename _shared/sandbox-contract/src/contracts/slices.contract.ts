@@ -35,7 +35,7 @@ export const slicesContract = {
             path: "/slices/{id}",
             summary: "Delete a slice",
             description:
-                "Removes the name and the folders behind it. Refused while a member or a persona card still points at it, since nobody chose what such a row should then mean; move those onto another slice first, or off slices entirely.",
+                "Removes the name and the folders behind it. Refused while a member still points at it, since nobody chose what such a row should then mean; move them onto another slice first, or off slices entirely.",
         })
         .input(SliceIdParamSchema)
         .output(OkSchema),

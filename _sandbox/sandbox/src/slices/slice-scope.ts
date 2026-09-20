@@ -18,8 +18,8 @@ export const conversationFence = (slices: readonly Slice[], entry: { readonly sl
     foldersOf(slices, entry?.slices);
 
 /**
- * Whether one fence covers another, in folders: what a checkout may be cut to, and what a card's slices may narrow
- * to. The id-level question — who may see or be handed a conversation — is `slicesCover` in auth/fleet-scope.ts,
+ * Whether one fence covers another, in folders: what a checkout may be cut to, and what a persona's own folders may
+ * narrow to. The id-level question — who may see or be handed a conversation — is `slicesCover` in auth/fleet-scope.ts,
  * which has to answer synchronously and so cannot read the manifest.
  */
 export const fenceHolds = (holder: Fence, work: Fence): boolean => fenceCovers(holder, work);

@@ -8,10 +8,7 @@ const ROOT = "/work";
 
 // `fence` is what the conversation was born with (its starter's own); undefined is an unfenced member.
 const scopeFor = (extra: Partial<Persona>, fence?: Fence) =>
-    personaScopeOf(
-        turnPersona({ personas: [{ id: "card", capabilities: [], ...extra }], actsAs: "card", unattended: true, fence }),
-        ROOT,
-    );
+    personaScopeOf(turnPersona({ personas: [{ id: "support", capabilities: [], ...extra }], actsAs: "support", unattended: true, fence }), ROOT);
 
 // Drives the PreToolUse hook like the SDK does; returns the refusal reason, or undefined for allowed.
 const attempt = async (
@@ -30,7 +27,7 @@ const attempt = async (
     return output?.permissionDecision === "deny" ? output.permissionDecisionReason : undefined;
 };
 
-test("a card with no folder limit and full sandbox access asks for no scope", () => {
+test("a persona with no folder limit and full sandbox access asks for no scope", () => {
     expect(scopeFor({})).toBeUndefined();
 });
 
@@ -70,17 +67,17 @@ test("a search tool with no path is left alone", async () => {
 
 // The fence a conversation inherits from whoever started it
 
-// A card that names no folder used to mean "the whole workspace"; it now means "whatever the starter could see",
-// which is the whole point of inheritance — a fenced person cannot ask an unfenced card to fetch a file for them.
-test("a card naming no folder is still bounded by the fence its conversation was born with", async () => {
+// A persona that names no folder used to mean "the whole workspace"; it now means "whatever the starter could see",
+// which is the whole point of inheritance — a fenced person cannot ask an unfenced persona to fetch a file for them.
+test("a persona naming no folder is still bounded by the fence its conversation was born with", async () => {
     const scope = scopeFor({}, ["apps/web"]);
     const hooks = personaScopeHooks(scope!);
     expect(await attempt(hooks, "Read", { file_path: "/work/apps/web/src/main.ts" })).toBeUndefined();
     expect(await attempt(hooks, "Read", { file_path: "/work/apps/api/secret.ts" })).toContain("apps/web");
 });
 
-test("a card's folders narrow the conversation's fence and can never widen it", async () => {
-    // The card asks for all of `apps`; the conversation was started by someone who only holds `apps/web`.
+test("a persona's folders narrow the conversation's fence and can never widen it", async () => {
+    // The persona asks for all of `apps`; the conversation was started by someone who only holds `apps/web`.
     const hooks = personaScopeHooks(scopeFor({ workspace: { folders: ["apps"] } }, ["apps/web"])!);
     expect(await attempt(hooks, "Read", { file_path: "/work/apps/web/main.ts" })).toBeUndefined();
     expect(await attempt(hooks, "Read", { file_path: "/work/apps/api/main.ts" })).toEqual(expect.any(String));
@@ -95,7 +92,7 @@ test("a fence that resolves to no folder admits nothing rather than everything",
 
 // "Change the sandbox"
 
-test("a card that may not change the sandbox is refused its config and its public outbox", async () => {
+test("a persona that may not change the sandbox is refused its config and its public outbox", async () => {
     const hooks = personaScopeHooks(scopeFor({ powers: PersonaPowersSchema.parse({ sandbox: false }) })!);
     expect(await attempt(hooks, "Write", { file_path: "/work/.intentic/config/settings.json" })).toContain("sandbox's own configuration");
     expect(await attempt(hooks, "Edit", { file_path: "/work/public/leak.txt" })).toContain("sandbox's own configuration");
