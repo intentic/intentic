@@ -16,7 +16,7 @@ export interface OwnerLook {
     readonly name: string;
     // What fits a card's meta line and a header chip: the given name, never the whole address.
     readonly short: string;
-    // The person's accent, so one dot means one person on a card and in the chip that filters to them.
+    // The person's accent on the board header chip that filters to them.
     readonly hue: number;
     // The reader's own. Cards draw nothing for it: a mark on nearly every card tells no two cards apart.
     readonly mine: boolean;
