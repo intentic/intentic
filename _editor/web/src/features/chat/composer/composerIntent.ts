@@ -115,6 +115,15 @@ const SEND_HINT: Record<SendIntent, (words: ComposerWords) => string> = {
  */
 export const viewerPlaceholder = (): string => t(`chat.composerIntent.viewerPlaceholder`);
 
+/**
+ * A chat with nothing to send with. The box still takes the task — it is what a first-run reader came to write — and
+ * neither line names a vendor, since nothing has been chosen for one to be named. Send opens the model list from
+ * here, keeping the draft, so the sentence already typed is what the chosen model answers.
+ */
+export const unconnectedPlaceholder = (): string => t(`chat.composerIntent.unconnectedPlaceholder`);
+
+export const unconnectedHint = (): string => t(`chat.composerIntent.unconnectedHint`);
+
 export const placeholderFor = (intent: SendIntent, words: ComposerWords): string => PLACEHOLDER[intent](words);
 
 export const sendHintFor = (intent: SendIntent, words: ComposerWords): string => SEND_HINT[intent](words);

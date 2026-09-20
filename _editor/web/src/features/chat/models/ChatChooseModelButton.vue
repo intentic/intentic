@@ -5,9 +5,9 @@ import { requestModelPick } from "./host/hostModelPicker";
 import { usePaneView } from "../panel/useChat-view";
 import { useT } from "@intentic/ui/i18n";
 
-// Stand-in for the composer's model picker when the composer itself is not rendered (account gate, trial-spent
-// strip): opens the shell's picker anchored to itself, and applies the answer to this pane's conversation, same
-// as a pick from the composer would.
+// The model list reached from a notice rather than from the composer's own pill (account gate, trial-spent strip):
+// opens the shell's picker anchored to itself, and applies the answer to this pane's conversation, same as a pick
+// from the composer would. Anchored to itself, not the pill, so the panel opens where the press happened.
 
 const t = useT();
 

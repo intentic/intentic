@@ -801,9 +801,9 @@
             "runEverythingWithoutAsking": "Run everything without asking."
         },
         "chatAccountPanel": {
-            "checkingAiAccounts": "Checking your AI accounts…",
             "connecting": "Connecting {provider}",
-            "isntConnectedInSandbox": "{providerName} isn't connected in this sandbox."
+            "isntConnectedInSandbox": "{providerName} isn't connected in this sandbox.",
+            "noModelYet": "No model is connected in this sandbox yet."
         },
         "chatArea": {
             "bringBackHere": "Bring it back here",
@@ -991,6 +991,7 @@
             "sendLoopsMessageUntil": "Send loops this message until it's met: ends on",
             "sendStarts": "Send starts \"",
             "startConversation": "Start a conversation with {providerName}.",
+            "startConversationAny": "Start a conversation.",
             "talkHandsFree": "Talk hands-free",
             "whereRuns": "Where this runs",
             "writingAgent": "Writing as the agent",
@@ -1269,10 +1270,13 @@
             "refusalRunningPlace": "The agent is running: its words can be placed once the turn ends.",
             "refusalUploadFailed": "An attachment failed to upload: remove it (×) to send.",
             "refusalUploading": "Waiting for the attachment to finish uploading…",
+            "unconnectedHint": "Choose a model to send this",
+            "unconnectedPlaceholder": "What should this agent do? Send picks a model first…",
             "viewerPlaceholder": "You’re viewing: ask the owner for a collaborator role to drive agents"
         },
         "composerModelPill": {
             "auto": "Auto",
+            "chooseModel": "Choose a model",
             "model": "Model: {modelLabelText}"
         },
         "composerMore": {

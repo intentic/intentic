@@ -7,7 +7,6 @@ import {
     type PlanLimitsRefreshed,
     type ProviderRefusals,
     providerSpec,
-    TRIAL_PROVIDER,
     type TranslatorAccounts,
     type UsageAccount,
 } from "@intentic/sandbox-contract";
@@ -15,8 +14,8 @@ import { computed, ref, watch } from "vue";
 import { reloadOnHotUpdate } from "../../../app/hotReload";
 import { accountsLoaded, providerAccounts, providerRefusals, selectedAccountId, translatorAccounts } from "./providerAccounts";
 import { endpointProviders, trialStatus } from "./providerCatalog";
-import { turnDefaults } from "../run/turnDefaults";
-import { accessKnown, providerReady, providerReadyOn } from "../session/access";
+import { rememberedProviderFor } from "../run/turnDefaults";
+import { accessKnown, firstReadyProvider, providerReadyOn } from "../session/access";
 import { conversations } from "../tabs/useChat-tabs";
 import { loadActiveProviderModels, loadRunnableProviders, loadProviderCommands, readOrKeep } from "../models/useChat-catalog";
 import { sandboxJson, sandboxRequest } from "../../sandbox/client/sandboxClient";
@@ -35,7 +34,7 @@ export const providerBase = (p: AgentProvider): string => `/accounts/${encodeURI
 export const subscriptionOnly = (p: AgentProvider): p is KeyedProvider => p !== `grok` && providerSpec(p)?.auth.kind === `translator`;
 
 // Provider the manage/connect card acts on; decoupled from the active conversation's own provider.
-export const managedProvider = ref<AgentProvider>(turnDefaults.provider.value);
+export const managedProvider = ref<AgentProvider>(rememberedProviderFor());
 
 // Per-account token/cost totals, keyed by account id; loaded when the manage card opens.
 export const accountUsage = ref<Record<string, UsageAccount>>({});
@@ -92,9 +91,7 @@ watch([providerAccounts, translatorAccounts, accessKnown, endpointProviders, tri
         if (providerReadyOn(conversation.provider.value, conversation.harness.value)) {
             continue;
         }
-        // A connected account first; the trial is only a floor under nothing connected, never a subscription
-        // fallback.
-        const fallback = NATIVE_PROVIDERS.find((p) => providerReady(p)) ?? (providerReady(TRIAL_PROVIDER) ? TRIAL_PROVIDER : undefined);
+        const fallback = firstReadyProvider();
         if (fallback) {
             // repointProvider, not selectProvider: an app-forced move says nothing about what the user wants next
             // time.

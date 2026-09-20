@@ -801,9 +801,9 @@
             "runEverythingWithoutAsking": "Alles ohne Rückfrage ausführen."
         },
         "chatAccountPanel": {
-            "checkingAiAccounts": "Ihre KI-Konten werden geprüft…",
             "connecting": "{provider} wird verbunden",
-            "isntConnectedInSandbox": "{providerName} ist in dieser Sandbox nicht verbunden."
+            "isntConnectedInSandbox": "{providerName} ist in dieser Sandbox nicht verbunden.",
+            "noModelYet": "No model is connected in this sandbox yet."
         },
         "chatArea": {
             "bringBackHere": "Hierher zurückholen",
@@ -991,6 +991,7 @@
             "sendLoopsMessageUntil": "Senden wiederholt diese Nachricht, bis sie erfüllt ist: endet bei",
             "sendStarts": "Senden startet „",
             "startConversation": "Beginnen Sie eine Unterhaltung mit {providerName}.",
+            "startConversationAny": "Start a conversation.",
             "talkHandsFree": "Freihändig sprechen",
             "whereRuns": "Wo das läuft",
             "writingAgent": "Als Agent schreiben",
@@ -1269,10 +1270,13 @@
             "refusalRunningPlace": "Der Agent läuft: seine Worte lassen sich einlegen, sobald der Zug endet.",
             "refusalUploadFailed": "Ein Anhang ließ sich nicht hochladen: entfernen Sie ihn (×), um zu senden.",
             "refusalUploading": "Es wird gewartet, bis der Anhang fertig hochgeladen ist…",
+            "unconnectedHint": "Choose a model to send this",
+            "unconnectedPlaceholder": "What should this agent do? Send picks a model first…",
             "viewerPlaceholder": "Sie sehen nur zu: bitten Sie den Eigentümer um die Rolle „Mitarbeiter“, um Agenten zu steuern"
         },
         "composerModelPill": {
             "auto": "Auto",
+            "chooseModel": "Choose a model",
             "model": "Modell: {modelLabelText}"
         },
         "composerMore": {

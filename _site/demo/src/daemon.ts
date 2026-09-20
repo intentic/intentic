@@ -410,8 +410,8 @@ const ROUTES: readonly (readonly [string, string, Handler])[] = [
 
     // One connected Claude subscription; the composer's account gate needs at least one to stop waiting. The path is
     // the daemon's own `/accounts/{provider}` (provider-module.ts). It used to be `/{provider}/accounts` here, and
-    // when the app moved, every read 404'd: `accountsLoaded` never flipped, so the Agent tab drew skeleton rows and
-    // the chat said "Checking your AI accounts…" for as long as you left it open — including in the marketing shots.
+    // when the app moved, every read 404'd: `accountsLoaded` never flipped, so the Agent tab drew skeleton rows for as
+    // long as you left it open — including in the marketing shots.
     [
         `GET`,
         `/accounts/{provider}`,

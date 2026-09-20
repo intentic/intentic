@@ -408,7 +408,8 @@ export class Conversation {
         this.displacedModel.value = undefined;
         // Born displaced when the pick couldn't run and something else was substituted (see movedFrom).
         const picked = turnDefaults.provider.value;
-        this.movedFrom.value = picked === provider ? undefined : { provider: picked, value: rememberedModelFor(picked) };
+        this.movedFrom.value =
+            picked === undefined || picked === provider ? undefined : { provider: picked, value: rememberedModelFor(picked) };
     }
 
     // Switch the provider this chat's next turn runs on, re-scoping provider settings; writes the module default.

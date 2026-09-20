@@ -140,8 +140,9 @@ export const resetChat = (): void => {
     endpointProviders.value = [];
     endpointsLoaded.value = false;
 /* The account card opens on the user's remembered pick, but ONLY where that pick is a provider it can connect. */
-    if (hasSignIn(turnDefaults.provider.value)) {
-        managedProvider.value = turnDefaults.provider.value;
+    const picked = turnDefaults.provider.value;
+    if (picked !== undefined && hasSignIn(picked)) {
+        managedProvider.value = picked;
     }
     cancelConnect();
     cancelTranslatorConnect();

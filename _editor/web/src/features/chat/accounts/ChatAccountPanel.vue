@@ -4,6 +4,7 @@ import { computed } from "vue";
 import { type AgentProvider, PROVIDER_VENDOR } from "@intentic/sandbox-contract";
 import { accessKnown, connectPitch, trialExhausted } from "../session/access";
 import { providerDisplayLabel } from "./providerCatalog";
+import { turnDefaults } from "../run/turnDefaults";
 import { useChat } from "../run/useChat";
 import { usePaneView } from "../panel/useChat-view";
 import ConnectFlow from "../../sandbox/secrets/ConnectFlow.vue";
@@ -11,9 +12,11 @@ import ChatChooseModelButton from "../models/ChatChooseModelButton.vue";
 import ProviderLogo from "./ProviderLogo.vue";
 import { useT } from "@intentic/ui/i18n";
 
-// The one strip above the composer when this chat has nothing to send with; it never pitches a
-// subscription, only opens the model picker. Waits for `accessKnown` (both accounts and endpoints)
-// before claiming "not connected", and stands down for a spent trial, which is connected but metered out.
+// The one line above the composer when this chat has nothing to send with. It sits beside a composer that
+// stands whatever it says — it never replaced the box and never pitches a subscription unasked; its one
+// action opens the model list. Silent until `accessKnown` (both accounts and endpoints): a spinner over a
+// usable composer is noise, and "not connected" is not a claim an unanswered read can make. Stands down for
+// a spent trial, which is connected but metered out.
 
 const t = useT();
 
@@ -51,9 +54,15 @@ const finishing = computed(
     () => live.value !== undefined && accountBusy.value === (live.value.kind === `native` ? live.value.provider : translatorKey(live.value.provider)),
 );
 
+// Whether a vendor may be named at all: only a provider the owner actually chose. With nothing stored this chat is
+// sitting on a floor the app picked (turnDefaults.ts), and naming it would tell a first-run reader that some
+// particular vendor is missing from a sandbox where they never asked for one — the app is not any vendor's.
+const chosen = computed(() => turnDefaults.provider.value === provider.value);
+
 // Named as what to connect, not the runtime; `pitch` is absent where there's no account to connect.
 const providerName = computed(() => PROVIDER_VENDOR[provider.value as keyof typeof PROVIDER_VENDOR] ?? providerDisplayLabel(provider.value));
-const pitch = computed(() => connectPitch(provider.value, harness.value));
+// Only ever offered for a chosen provider: a sign-in nobody asked for is a pitch, which this strip does not make.
+const pitch = computed(() => (chosen.value ? connectPitch(provider.value, harness.value) : undefined));
 
 // Starts sign-in for the selected provider, and sets it on the account card too so the two agree on
 // what just connected. Which mechanism runs mirrors the daemon's own split: translator for
@@ -67,13 +76,8 @@ const connect = async (): Promise<void> => {
 </script>
 
 <template>
-    <!-- Shown until `accessKnown`: "not connected" is a claim this panel can't make before both account and endpoint reads land. -->
-    <p v-if="!accessKnown" class="flex items-center justify-center gap-2 px-4 py-3 text-center text-2xs text-subtle">
-        <Icon name="spinner" spin class="shrink-0" />{{ t(`chat.chatAccountPanel.checkingAiAccounts`) }}
-    </p>
-
     <!-- The sign-in, once running, takes the whole strip; Cancel is the only other control, and abandoning it restores the line below. -->
-    <div v-else-if="live" class="flex flex-col gap-2 rounded-2xl border border-line bg-card px-4 py-3">
+    <div v-if="accessKnown && live" class="flex flex-col gap-2 rounded-2xl border border-line bg-card px-4 py-3">
         <div class="flex items-center gap-2">
             <ProviderLogo :provider="live.provider" class="shrink-0 text-link" />
             <span class="min-w-0 flex-1 truncate text-left text-xs font-medium text-body">{{
@@ -91,13 +95,15 @@ const connect = async (): Promise<void> => {
         <ConnectFlow :kind="live.kind" :provider="live.provider" />
     </div>
 
-    <!-- Names what this chat is pointed at; the model list leads (free to look at, holds every option), the provider's own sign-in follows. -->
+    <!-- The model list leads (free to look at, holds every option, costs nothing to open); a chosen provider's own sign-in follows it. -->
     <div
-        v-else-if="!connected && !trialSpent"
+        v-else-if="accessKnown && !connected && !trialSpent"
         class="flex flex-wrap items-center gap-x-2 gap-y-1.5 rounded-2xl border border-line bg-card px-4 py-3 text-2xs text-muted"
     >
-        <Icon name="lock" class="shrink-0 text-subtle" />
-        <span class="min-w-0 flex-1 text-left">{{ t(`chat.chatAccountPanel.isntConnectedInSandbox`, { providerName }) }}</span>
+        <Icon name="th-large" class="shrink-0 text-subtle" />
+        <span class="min-w-0 flex-1 text-left">{{
+            chosen ? t(`chat.chatAccountPanel.isntConnectedInSandbox`, { providerName }) : t(`chat.chatAccountPanel.noModelYet`)
+        }}</span>
         <ChatChooseModelButton />
         <button
             v-if="pitch"

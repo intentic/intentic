@@ -1,6 +1,13 @@
-import { type AgentHarness, type AgentProvider, NATIVE_PROVIDERS, type NativeProvider, type PermissionMode } from "@intentic/sandbox-contract";
+import {
+    type AgentHarness,
+    type AgentProvider,
+    isEndpointProvider,
+    NATIVE_PROVIDERS,
+    type NativeProvider,
+    type PermissionMode,
+} from "@intentic/sandbox-contract";
 import { definePreference } from "@intentic/ui/preference";
-import { accessKnown, providerReady } from "../session/access";
+import { accessKnown, firstReadyProvider, providerReady } from "../session/access";
 import { DEFAULT_EFFORT, DEFAULT_THINKING } from "../models/run-settings/pickerRunSettings";
 import { defaultModelFor, perProvider, providerModels, providerModelsState } from "../accounts/providerCatalog";
 
@@ -23,12 +30,15 @@ const readModels = (raw: string | null): Record<AgentProvider, string> => {
 
 // Turn prefs a new conversation seeds from; permission mode is not one of them (see startingMode, per conversation).
 export const turnDefaults = {
-    provider: definePreference<AgentProvider>({
+    provider: definePreference<AgentProvider | undefined>({
         key: `ui-chat-provider`,
-        // Only a native provider is restored: an ACP agent's id may name a capability no longer installed, so it
-        // degrades to Claude rather than a dead picker.
-        read: (raw) => (NATIVE_PROVIDERS.includes(raw as NativeProvider) ? (raw as AgentProvider) : `claude`),
-        write: (provider) => provider,
+        // Undefined is a real value here: nobody has chosen yet, which is not the same as having chosen Claude. Every
+        // surface that would otherwise name a provider reads this, so a sandbox whose owner never picked one is never
+        // told that some particular vendor is missing. A native id and an endpoint id (the free trial among them) both
+        // restore; an ACP agent's id names a capability this sandbox may no longer have, so it reads as unchosen.
+        read: (raw) =>
+            raw !== null && (NATIVE_PROVIDERS.includes(raw as NativeProvider) || isEndpointProvider(raw)) ? (raw as AgentProvider) : undefined,
+        write: (provider) => provider ?? null,
     }),
     harness: definePreference<AgentHarness>({
         key: `ui-chat-harness`,
@@ -82,16 +92,22 @@ export const rememberPick = (pick: TurnPick): void => {
     turnDefaults.models.value = { ...turnDefaults.models.value, [pick.provider]: pick.value };
 };
 
+// Where a chat points when nothing has been chosen and nothing can run: a picker still has to open on some list, and
+// a composer still has to name some model. Nothing SAYS this provider out loud — the surfaces that would name one read
+// `turnDefaults.provider`, which is undefined here.
+const UNCHOSEN: AgentProvider = `claude`;
+
 // The user's pick when it can actually run, else the first provider that can — resolved at read, never written back
 // over the pick, so a provider merely slow to load once doesn't cost the choice forever. Before the connection lists
 // are read (accessKnown), the pick rides through untouched: an empty list there means "haven't asked", not "nothing
-// connected".
+// connected". The fallback is `firstReadyProvider`, the same ladder the watcher that repoints open chats falls down,
+// so a chat is never born on a provider it would be moved off a beat later.
 export const rememberedProviderFor = (): AgentProvider => {
     const picked = turnDefaults.provider.value;
-    if (!accessKnown.value || providerReady(picked)) {
+    if (picked !== undefined && (!accessKnown.value || providerReady(picked))) {
         return picked;
     }
-    return NATIVE_PROVIDERS.find((provider) => providerReady(provider)) ?? picked;
+    return firstReadyProvider() ?? picked ?? UNCHOSEN;
 };
 
 // Same rule as rememberedProviderFor, for the model: the picked value when the provider's loaded catalog still offers

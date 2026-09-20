@@ -5,8 +5,10 @@ import {
     type AgentProvider,
     isTrialProvider,
     type KeyedProvider,
+    NATIVE_PROVIDERS,
     type ProviderAccess,
     providerSpec,
+    TRIAL_PROVIDER,
 } from "@intentic/sandbox-contract";
 import { computed, type ComputedRef } from "vue";
 import { accountsLoaded, providerAccounts, translatorAccounts } from "../accounts/providerAccounts";
@@ -54,6 +56,13 @@ export const providerReadyOn = (provider: AgentProvider, harness: AgentHarness):
     }
     return providerReady(provider);
 };
+
+// The one ladder anything falls down when the provider it wanted cannot run: a connected account first, the free
+// trial only as the floor under nothing connected, never as a substitute for a subscription. Shared by the seed a
+// new conversation is born on and the watcher that repoints an open one, so a chat is never born on a provider it
+// would be moved off a beat later — that beat was the "connect a model" state flashing over a usable chat.
+export const firstReadyProvider = (): AgentProvider | undefined =>
+    NATIVE_PROVIDERS.find((provider) => providerReady(provider)) ?? (providerReady(TRIAL_PROVIDER) ? TRIAL_PROVIDER : undefined);
 
 export const accessStateFor = (provider: AgentProvider): ProviderAccessState => ({
     ready: providerReady(provider),
