@@ -12,7 +12,7 @@ import { checks as hostChecks, owner as hostOwner } from "../hosts/invariant.js"
 import { checks as netdiskChecks, type NetdiskInvariantDeps, owner as netdiskOwner } from "../netdisk/invariant.js";
 import { checks as peerChecks, owner as peerOwner, type PeerRegistryDeps } from "../peers/invariant.js";
 import { checks as runnerChecks, owner as runnerOwner } from "../runners/invariant.js";
-import { checks as sliceChecks, owner as sliceOwner, type SliceRosterDeps } from "../slices/invariant.js";
+import { checks as areaChecks, owner as areaOwner, type AreaRosterDeps } from "../areas/invariant.js";
 import { checks as fenceChecks, owner as fenceOwner } from "../fences/invariant.js";
 import { checks as runtimeChecks, owner as runtimeOwner } from "../runtimes/invariant.js";
 import { checks as tunnelChecks, owner as tunnelOwner } from "../tunnel/invariant.js";
@@ -30,7 +30,7 @@ export type DaemonInvariantDeps = TurnJournalDeps &
     NetdiskInvariantDeps &
     PeerRegistryDeps &
     IssuesInboxDeps &
-    SliceRosterDeps &
+    AreaRosterDeps &
     CommandGateDeps;
 
 export const registerDaemonInvariants = (registry: InvariantRegistry, deps: DaemonInvariantDeps): void => {
@@ -42,7 +42,7 @@ export const registerDaemonInvariants = (registry: InvariantRegistry, deps: Daem
     registry.register(peerOwner, peerChecks(deps));
     registry.register(issueOwner, issueChecks(deps));
     registry.register(cursorOwner, cursorChecks(deps));
-    registry.register(sliceOwner, sliceChecks(deps));
+    registry.register(areaOwner, areaChecks(deps));
     // Read their subjects off module state and the volume rather than off a service.
     registry.register(childrenOwner, childrenChecks());
     registry.register(hostOwner, hostChecks());

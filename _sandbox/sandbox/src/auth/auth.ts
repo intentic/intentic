@@ -76,47 +76,47 @@ export interface Member {
     readonly role: GrantedRole;
     // Persona ids a desk member may act through; present, and non-empty, only on a `desk` row.
     readonly desks?: readonly string[];
-    // Slice ids fencing what of the workspace this person reaches. Absent means the whole workspace, which is what
-    // every row written before slices existed keeps; empty means nothing at all.
-    readonly slices?: readonly string[];
+    // Area ids fencing what of the workspace this person reaches. Absent means the whole workspace, which is what
+    // every row written before areas existed keeps; empty means nothing at all.
+    readonly areas?: readonly string[];
 }
 
 // What a grant decides, in the shape both the store and the route pass it around in.
 export interface MemberGrant {
     readonly role: GrantedRole;
     readonly desks?: readonly string[] | undefined;
-    readonly slices?: readonly string[] | undefined;
+    readonly areas?: readonly string[] | undefined;
 }
 
 export interface MembersStore {
     list(): Promise<Member[]>;
-    // Upsert: granting an email that already holds access re-grades its role, and replaces its desks and slices.
+    // Upsert: granting an email that already holds access re-grades its role, and replaces its desks and areas.
     add(email: string, grant: MemberGrant): Promise<void>;
     remove(email: string): Promise<void>;
 }
 
 // A desk row must name at least one card, and no other row may carry any: a desk with nothing to wear has nothing to
-// reach, and desks on a viewer would be a grant with no reader. Slices ride on any row, since where a person may look
+// reach, and desks on a viewer would be a grant with no reader. Areas ride on any row, since where a person may look
 // is a question independent of what they may do there.
 const MemberSchema = z
     .object({
         email: z.string(),
         role: GrantedRoleSchema,
         desks: z.array(z.string().min(1)).optional(),
-        slices: z.array(z.string().min(1)).optional(),
+        areas: z.array(z.string().min(1)).optional(),
     })
     .refine((member) => (member.role === "desk" ? (member.desks?.length ?? 0) > 0 : member.desks === undefined), {
         message: "a desk names at least one persona, and only a desk names any",
     });
 const MembersFileSchema = z.object({ members: z.array(z.unknown()) });
 
-// The row a grant writes: desks ride only on a desk, so a re-grade away from desk drops them. A slice list is kept
+// The row a grant writes: desks ride only on a desk, so a re-grade away from desk drops them. An area list is kept
 // whatever the tier, and its absence is the whole workspace, so an omitted field can never read as an empty fence.
 export const memberRow = (email: string, grant: MemberGrant): Member => ({
     email,
     role: grant.role,
     ...(grant.role === "desk" && grant.desks !== undefined ? { desks: [...grant.desks] } : {}),
-    ...(grant.slices !== undefined ? { slices: [...grant.slices] } : {}),
+    ...(grant.areas !== undefined ? { areas: [...grant.areas] } : {}),
 });
 
 // Same substrate as the owner store; the per-file update queue lets two grants landing together both survive instead of
@@ -179,10 +179,10 @@ export interface Caller extends VerifiedIdentity {
     readonly role: MemberRole;
     // The persona cards a desk member may act through; absent on every other tier.
     readonly desks?: readonly string[];
-    // Slice ids fencing what of the workspace this caller reaches; absent means the whole workspace, which is what the
-    // owner always holds. Carried as ids, not folders, so one read of the slice manifest per request answers it
-    // freshly: editing a slice narrows its holders on their very next call, like a re-grade does.
-    readonly slices?: readonly string[];
+    // Area ids fencing what of the workspace this caller reaches; absent means the whole workspace, which is what the
+    // owner always holds. Carried as ids, not folders, so one read of the area manifest per request answers it
+    // freshly: editing an area narrows its holders on their very next call, like a re-grade does.
+    readonly areas?: readonly string[];
 }
 
 // What authorize() hands the middleware: the caller and the proof behind them, so a session renewal keeps its methods
@@ -290,7 +290,7 @@ export const createAuthorizer = (deps: {
             ...proof,
             role: member.role,
             ...(member.desks !== undefined ? { desks: member.desks } : {}),
-            ...(member.slices !== undefined ? { slices: member.slices } : {}),
+            ...(member.areas !== undefined ? { areas: member.areas } : {}),
         };
     };
     // The require-passkey policy, read per request like the roster. A recovery code counts: it exists to get an owner

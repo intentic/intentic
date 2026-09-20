@@ -34,7 +34,7 @@ import {
     searchPaths,
 } from "./layout/workspace-fence.js";
 import { refuseUnlessVisible } from "../auth/fleet-scope.js";
-import { callerFence } from "../slices/slice-scope.js";
+import { callerFence } from "../areas/area-scope.js";
 import type { Fence } from "@intentic/sandbox-contract";
 
 // Row cap for one /workspace/search page, sized to the virtualized list's visible rows.
@@ -84,8 +84,8 @@ export const createWorkspaceRoutes = (services: Services) => {
         relative(services.workspace.root, await containedIn(services.workspace.root, relPath));
     // Read scope shared with the byte routes in app.ts; two resolvers here would disagree on a file's contents.
     const scope = services.workspaceScope;
-    // The caller's own fence, read per request so a slice edit lands on the very next one rather than at next sign-in.
-    const fenceFor = async (context: OrpcContext): Promise<Fence> => callerFence(await services.slices.list(), context.identity);
+    // The caller's own fence, read per request so an area edit lands on the very next one rather than at next sign-in.
+    const fenceFor = async (context: OrpcContext): Promise<Fence> => callerFence(await services.areas.list(), context.identity);
     // A conversation's checkout is its own. A caller who may not see the conversation may not read out of it either,
     // or every fence would have a second door marked with somebody else's id.
     const refuseUnseenAgent = (context: OrpcContext, agent: string | undefined): void => {

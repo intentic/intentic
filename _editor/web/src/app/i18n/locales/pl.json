@@ -2813,6 +2813,7 @@
         },
         "sandboxAccess": {
             "access": "Dostęp",
+            "areaPick": "Które obszary przestrzeni roboczej widzi",
             "browser": "Ta przeglądarka",
             "ciNotifications": "Powiadomienia CI",
             "collaborator": "Współpracownik",
@@ -2832,10 +2833,10 @@
             "invite2": "Zaproś",
             "inviteRole": "Rola w zaproszeniu",
             "maintainer": "Opiekun",
-            "nameOne": "Utwórz jedną",
+            "nameOne": "Utwórz jeden",
+            "noAreaMeansWhole": "Nie wybrano obszaru: widzi całą przestrzeń roboczą.",
+            "noAreasToGrant": "Ten sandbox nie ma jeszcze nazwanych obszarów, więc wszyscy widzą całą przestrzeń roboczą.",
             "noOneElseConnected": "W tej chwili nikt inny nie jest podłączony.",
-            "noSliceMeansWhole": "Nie wybrano części: widzi całą przestrzeń roboczą.",
-            "noSlicesToGrant": "Ten sandbox nie ma jeszcze nazwanych części, więc wszyscy widzą całą przestrzeń roboczą.",
             "onlySandboxOwnerInvite": "Tylko właściciel sandboxa może zapraszać ludzi albo zmieniać role.",
             "operateEverythingOwnerOwner": "Może robić wszystko to, co właściciel. Właściciel może odebrać ten dostęp; właścicielowi odebrać się nie da.",
             "otherBrowsersArentListed": "Inne przeglądarki nie są wypisane",
@@ -2853,7 +2854,6 @@
             "signOutEverywhere": "Wyloguj wszędzie",
             "signedIn": "zalogowana",
             "signedInBrowsers": "Zalogowane przeglądarki",
-            "slicePick": "Które części przestrzeni roboczej widzi",
             "sureEveryoneWorkingIn": "Na pewno? Każdy, kto właśnie pracuje w tym sandboxie, będzie musiał zalogować się ponownie.",
             "viewer": "Obserwator",
             "watchEverythingAgentsChats": "Może wszystko oglądać: agenty, czaty, pliki. Niczego nie może zmienić.",
@@ -2869,6 +2869,22 @@
             "safety": "Bezpieczeństwo",
             "sandboxOfflineSettingsCant": "Twój sandbox jest offline, jego ustawień nie da się stąd odczytać ani zmienić.",
             "tools": "Narzędzia"
+        },
+        "sandboxAreas": {
+            "areaName": "Nazwa obszaru",
+            "areas": "Obszary przestrzeni roboczej",
+            "couldNotDelete": "Nie udało się usunąć obszaru.",
+            "couldNotSave": "Nie udało się zapisać obszaru: czy sandbox jest online?",
+            "deleteArea": "Usuń obszar",
+            "folders": "Foldery",
+            "needsFolder": "Wybierz co najmniej jeden folder. Obszar bez folderów byłby nadaniem bez czytelnika.",
+            "newArea": "Nowy obszar",
+            "newAreaName": "Nowy obszar",
+            "noAreasYet": "Brak obszarów. Każdy z dostępem widzi całą przestrzeń roboczą.",
+            "onlyOwnerEdits": "Tylko właściciel sandboxa decyduje, kto widzi które foldery.",
+            "pickFolders": "Wybierz foldery, które obejmuje",
+            "pickFoldersToFinish": "Wybierz co najmniej jeden folder i zapisz. Obszar bez folderów byłby nadaniem bez czytelnika.",
+            "whatAnAreaIs": "Obszar to nazwany fragment tej przestrzeni roboczej. Dostęp nadaje się w obszarach, a nie w listach folderów dla każdej osoby, więc poszerzenie tego, co widzi zespół, to jedna zmiana tutaj, a nie jedna na osobę. Kto dostanie obszar, widzi te foldery i nic więcej — w drzewie plików, w wyszukiwaniu i w rozmowach, które otwiera."
         },
         "sandboxAttention": {
             "agentProposedChangeTo": "Agent zaproponował zmianę w Twoim środowisku",
@@ -2936,6 +2952,7 @@
         "sandboxNav": {
             "access": "Dostęp",
             "agent": "Agent",
+            "areas": "Obszary",
             "box": "Ta skrzynka",
             "configuration": "Konfiguracja",
             "devices": "Urządzenia",
@@ -2945,7 +2962,6 @@
             "personas": "Persony",
             "reach": "Zasięg",
             "secrets": "Sekrety",
-            "slices": "Części",
             "usage": "Zużycie"
         },
         "sandboxOverview": {
@@ -3012,22 +3028,6 @@
             "secrets": "Twoje sekrety",
             "showLess": "Pokaż mniej",
             "showMoreAccounts": "Pokaż więcej kont ({collapsedCredentialCount})"
-        },
-        "sandboxSlices": {
-            "couldNotDelete": "Nie udało się usunąć części.",
-            "couldNotSave": "Nie udało się zapisać części: czy sandbox jest online?",
-            "deleteSlice": "Usuń część",
-            "folders": "Foldery",
-            "needsFolder": "Wybierz co najmniej jeden folder. Część bez folderów byłaby nadaniem bez czytelnika.",
-            "newSlice": "Nowa część",
-            "newSliceName": "Nowa część",
-            "noSlicesYet": "Brak części. Każdy z dostępem widzi całą przestrzeń roboczą.",
-            "onlyOwnerEdits": "Tylko właściciel sandboxa decyduje, kto widzi które foldery.",
-            "pickFolders": "Wybierz foldery, które obejmuje",
-            "pickFoldersToFinish": "Wybierz co najmniej jeden folder i zapisz. Część bez folderów byłaby nadaniem bez czytelnika.",
-            "sliceName": "Nazwa części",
-            "slices": "Części przestrzeni roboczej",
-            "whatASliceIs": "Część to nazwany fragment tej przestrzeni roboczej. Dostęp nadaje się w częściach, a nie w listach folderów dla każdej osoby, więc poszerzenie tego, co widzi zespół, to jedna zmiana tutaj, a nie jedna na osobę. Kto dostanie część, widzi te foldery i nic więcej — w drzewie plików, w wyszukiwaniu i w rozmowach, które otwiera."
         },
         "sandboxSwitcher": {
             "addSandbox": "Dodaj sandbox",

@@ -23,7 +23,7 @@ import SandboxEnvironment from "./environment/SandboxEnvironment.vue";
 import SandboxExtensions from "./extensions/SandboxExtensions.vue";
 import { toListing, updateCount } from "./extensions/discoverListing";
 import SandboxPersonas from "./personas/SandboxPersonas.vue";
-import SandboxSlices from "./slices/SandboxSlices.vue";
+import SandboxAreas from "./areas/SandboxAreas.vue";
 import SandboxOverview from "./overview/SandboxOverview.vue";
 import SandboxSecrets from "./secrets/SandboxSecrets.vue";
 import SandboxUsage from "./usage/SandboxUsage.vue";
@@ -128,7 +128,7 @@ const groups = computed<readonly NavGroup<HubTab>[]>(() => [
             <SandboxEnvironment v-else-if="slug === `environment`" />
             <SandboxAccess v-else-if="slug === `access`" />
             <SandboxPersonas v-else-if="slug === `personas`" />
-            <SandboxSlices v-else-if="slug === `slices`" />
+            <SandboxAreas v-else-if="slug === `areas`" />
             <SandboxAgent v-else-if="slug === `agent`" />
             <SandboxExtensions v-else-if="slug === `extensions`" />
             <SandboxDevices v-else-if="slug === `devices`" />

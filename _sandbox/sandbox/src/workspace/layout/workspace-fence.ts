@@ -11,7 +11,7 @@ import {
 } from "@intentic/sandbox-contract";
 import { ORPCError } from "@orpc/server";
 
-// What a fenced person is shown of the workspace. Point reads refuse (slices/slice-scope.ts); listings PRUNE, because
+// What a fenced person is shown of the workspace. Point reads refuse (areas/area-scope.ts); listings PRUNE, because
 // a folder that 403s on every click is a worse answer than a folder that isn't there — the fence is meant to be the
 // shape of the workspace as far as this person is concerned, not a wall they keep walking into.
 
@@ -22,7 +22,7 @@ import { ORPCError } from "@orpc/server";
  */
 export const fenceOpens = (fence: Fence, relPath: string): boolean => fenceAllows(fence, relPath) || isAttachmentPath(relPath);
 
-// The refusal a fenced caller meets on a path outside their slices. Names the folders they DO hold rather than the
+// The refusal a fenced caller meets on a path outside their areas. Names the folders they DO hold rather than the
 // one they asked for: the path is already theirs to know, and the folders are what turns a dead end into a next step.
 export const refuseFenced = (fence: Fence, relPath: string): void => {
     if (fenceOpens(fence, relPath)) {
@@ -32,7 +32,7 @@ export const refuseFenced = (fence: Fence, relPath: string): void => {
     throw new ORPCError("FORBIDDEN", {
         message:
             folders.length === 0
-                ? "your access to this workspace holds no folders; ask the owner for a slice"
+                ? "your access to this workspace holds no folders; ask the owner for an area"
                 : `outside your access to this workspace, which holds ${folders.join(", ")}`,
     });
 };

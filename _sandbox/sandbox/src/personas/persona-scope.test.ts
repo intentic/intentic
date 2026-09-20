@@ -83,7 +83,7 @@ test("a persona's folders narrow the conversation's fence and can never widen it
     expect(await attempt(hooks, "Read", { file_path: "/work/apps/api/main.ts" })).toEqual(expect.any(String));
 });
 
-// A member granted slices that resolve to no folder (every one deleted, or a slice file that will not parse) reaches
+// A member granted areas that resolve to no folder (every one deleted, or an area file that will not parse) reaches
 // nothing. Fail-shut: the empty list is a real fence, not the absence of one.
 test("a fence that resolves to no folder admits nothing rather than everything", async () => {
     const hooks = personaScopeHooks(scopeFor({}, [])!);

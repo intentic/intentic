@@ -57,7 +57,7 @@ import { nudgeUnverifiedWork } from "../verification/verify-nudge.js";
 import { commandRuleFindings, touchedRepos, workspaceRelative } from "../../rules/turn-ending.js";
 import { mentionsSpentAllowance } from "../providers/failure-sentences.js";
 import { conversationOf } from "../tools/agent-requests.js";
-import { actorOf, ownerOf, slicesOf, type TurnInput } from "../run/turn/turn-actor.js";
+import { actorOf, ownerOf, areasOf, type TurnInput } from "../run/turn/turn-actor.js";
 import { refuseUnlessHeld, refuseUnlessVisible } from "../../auth/fleet-scope.js";
 import { opt } from "../run/opt.js";
 import { registerTurn, SteeringQueue, steerTurn, stopTurn } from "../anchors/agent-steering.js";
@@ -337,7 +337,7 @@ async function* runConversationTurn(
             ...(input.origin !== undefined ? { origin: input.origin } : {}),
             ...opt("startedBy", input.actor),
             ...opt("owner", input.owner),
-            ...opt("slices", input.slices),
+            ...opt("areas", input.areas),
             ...opt("startIn", input.startIn),
             ...opt("actsAs", input.actsAs),
             // A fork names its source once; `keep` is the cut's index in the source's own record.
@@ -1578,7 +1578,7 @@ export const createAgentRoutes = (services: Services) => {
                 conversationId,
                 ...opt("actor", actor),
                 ...opt("owner", ownerOf(context.identity)),
-                ...opt("slices", slicesOf(context.identity)),
+                ...opt("areas", areasOf(context.identity)),
             });
             if (run === undefined) {
                 throw new ORPCError("CONFLICT", { message: "a turn is already running for this conversation" });

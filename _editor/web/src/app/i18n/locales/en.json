@@ -2854,10 +2854,10 @@
             "watchEverythingAgentsChats": "Can watch everything, agents, chats, files. Can't change anything.",
             "webhooks": "Webhooks",
             "you": "you",
-            "slicePick": "Which parts of the workspace they see",
-            "noSlicesToGrant": "This sandbox has no named slices yet, so everyone sees the whole workspace.",
+            "areaPick": "Which areas of the workspace they see",
+            "noAreasToGrant": "This sandbox has no named areas yet, so everyone sees the whole workspace.",
             "nameOne": "Name one",
-            "noSliceMeansWhole": "No slice picked: they see the whole workspace.",
+            "noAreaMeansWhole": "No area picked: they see the whole workspace.",
             "folders": "Folders"
         },
         "sandboxAgent": {
@@ -2946,7 +2946,7 @@
             "reach": "Reach",
             "secrets": "Secrets",
             "usage": "Usage",
-            "slices": "Slices"
+            "areas": "Areas"
         },
         "sandboxOverview": {
             "addLogo": "Add a logo",
@@ -3243,20 +3243,20 @@
             "sandboxNeverReportedAddress": "This sandbox has never reported an address.",
             "sandboxStoppedResponding": "The sandbox stopped responding."
         },
-        "sandboxSlices": {
-            "slices": "Slices of the workspace",
-            "whatASliceIs": "A slice is a named part of this workspace. Access is granted in slices rather than in folder lists per person, so widening what a team sees is one edit here instead of one edit per member. Somebody granted a slice sees those folders and nothing else — in the file tree, in search, and in the conversations they open.",
-            "noSlicesYet": "No slices yet. Everyone with access sees the whole workspace.",
-            "newSlice": "New slice",
-            "newSliceName": "New slice",
-            "sliceName": "Slice name",
+        "sandboxAreas": {
+            "areas": "Areas of the workspace",
+            "whatAnAreaIs": "An area is a named part of this workspace. Access is granted in areas rather than in folder lists per person, so widening what a team sees is one edit here instead of one edit per member. Somebody granted an area sees those folders and nothing else — in the file tree, in search, and in the conversations they open.",
+            "noAreasYet": "No areas yet. Everyone with access sees the whole workspace.",
+            "newArea": "New area",
+            "newAreaName": "New area",
+            "areaName": "Area name",
             "folders": "Folders",
             "pickFolders": "Pick the folders it holds",
-            "pickFoldersToFinish": "Pick at least one folder, then save. A slice holding none would be a grant with no reader.",
-            "needsFolder": "Pick at least one folder. A slice holding none would be a grant with no reader.",
-            "couldNotSave": "Couldn’t save the slice: is the sandbox online?",
-            "couldNotDelete": "Couldn’t delete the slice.",
-            "deleteSlice": "Delete slice",
+            "pickFoldersToFinish": "Pick at least one folder, then save. An area holding none would be a grant with no reader.",
+            "needsFolder": "Pick at least one folder. An area holding none would be a grant with no reader.",
+            "couldNotSave": "Couldn’t save the area: is the sandbox online?",
+            "couldNotDelete": "Couldn’t delete the area.",
+            "deleteArea": "Delete area",
             "onlyOwnerEdits": "Only the sandbox owner decides who sees which folders."
         }
     },

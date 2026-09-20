@@ -6,13 +6,13 @@ import type { GrantedRole } from "@intentic/sandbox-contract";
 // only makes sense when the two agree. One store here, read by both seams (platform.ts, daemon.ts), is what keeps
 // them agreeing through a grant, a re-grade and a revoke.
 
-// The daemon's row: desks ride only on a desk, and a slice list only where it was granted, as the real store writes
-// it (auth/auth.ts memberRow). Absent slices are the whole workspace, which is what an unnarrowed grant means.
+// The daemon's row: desks ride only on a desk, and an area list only where it was granted, as the real store writes
+// it (auth/auth.ts memberRow). Absent areas are the whole workspace, which is what an unnarrowed grant means.
 export interface DemoGrant {
     email: string;
     role: GrantedRole;
     desks?: string[];
-    slices?: string[];
+    areas?: string[];
 }
 
 interface DemoMember extends DemoGrant {
@@ -37,15 +37,15 @@ export const inviteRecords = (): InviteRecord[] =>
 
 /** The daemon's copy: the enforced grant, with a desk's cards. */
 export const grants = (): DemoGrant[] =>
-    roster.map(({ email, role, desks, slices }) => ({
+    roster.map(({ email, role, desks, areas }) => ({
         email,
         role,
         ...(role === `desk` ? { desks: [...(desks ?? [])] } : {}),
-        ...(slices === undefined ? {} : { slices: [...slices] }),
+        ...(areas === undefined ? {} : { areas: [...areas] }),
     }));
 
 /** Upsert, as both stores do: granting an address that already holds access re-grades it and replaces its cards. */
-export const grantAccess = (email: string, role: GrantedRole, desks: readonly string[] | undefined, slices: readonly string[] | undefined): void => {
+export const grantAccess = (email: string, role: GrantedRole, desks: readonly string[] | undefined, areas: readonly string[] | undefined): void => {
     const address = email.toLowerCase();
     const at = index(address);
     const held = at === -1 ? undefined : roster[at];
@@ -53,7 +53,7 @@ export const grantAccess = (email: string, role: GrantedRole, desks: readonly st
         email: address,
         role,
         ...(role === `desk` ? { desks: [...(desks ?? [])] } : {}),
-        ...(slices === undefined ? {} : { slices: [...slices] }),
+        ...(areas === undefined ? {} : { areas: [...areas] }),
         status: held?.status ?? `pending`,
         invitedAt: held?.invitedAt ?? new Date().toISOString(),
     };

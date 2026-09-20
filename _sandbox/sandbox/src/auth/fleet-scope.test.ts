@@ -8,8 +8,8 @@ import { framedEvent, heldPersonas, refuseUnlessHeld, refuseUnlessVisible, visib
 
 const desk: ProvenCaller = { email: "Dee@Example.com", role: "desk", desks: ["support"], methods: ["google"] };
 const viewer: ProvenCaller = { email: "vic@example.com", role: "viewer", methods: ["google"] };
-// Fenced to one slice; the fence rides on the row whatever the tier, so a collaborator carries one too.
-const fenced: ProvenCaller = { email: "fay@example.com", role: "collaborator", slices: ["support"], methods: ["google"] };
+// Fenced to one area; the fence rides on the row whatever the tier, so a collaborator carries one too.
+const fenced: ProvenCaller = { email: "fay@example.com", role: "collaborator", areas: ["support"], methods: ["google"] };
 
 describe("visibleTo", () => {
     test("a desk sees what it owns or started, compared folded; nothing else", () => {
@@ -27,22 +27,22 @@ describe("visibleTo", () => {
 
     // Fencing the files and leaving the transcripts open would be a fence with a door in it: a conversation carries
     // whatever it read.
-    test("a fenced member sees work behind their own slices, whoever started it", () => {
-        expect(visibleTo(fenced, { owner: { email: "ada@example.com" }, slices: ["support"] })).toBe(true);
-        expect(visibleTo(fenced, { owner: { email: "ada@example.com" }, slices: ["finance"] })).toBe(false);
+    test("a fenced member sees work behind their own areas, whoever started it", () => {
+        expect(visibleTo(fenced, { owner: { email: "ada@example.com" }, areas: ["support"] })).toBe(true);
+        expect(visibleTo(fenced, { owner: { email: "ada@example.com" }, areas: ["finance"] })).toBe(false);
         // Started by someone unfenced: it could have read anything, so it is not theirs to read back.
         expect(visibleTo(fenced, { owner: { email: "ada@example.com" } })).toBe(false);
-        // Their own conversation is no exception; it is visible because its slices are theirs.
+        // Their own conversation is no exception; it is visible because its areas are theirs.
         expect(visibleTo(fenced, { owner: { email: "fay@example.com" } })).toBe(false);
     });
 
     test("both narrowings apply at once to a fenced desk", () => {
-        const fencedDesk: ProvenCaller = { ...desk, slices: ["support"] };
-        expect(visibleTo(fencedDesk, { owner: { email: "dee@example.com" }, slices: ["support"] })).toBe(true);
+        const fencedDesk: ProvenCaller = { ...desk, areas: ["support"] };
+        expect(visibleTo(fencedDesk, { owner: { email: "dee@example.com" }, areas: ["support"] })).toBe(true);
         // Theirs, but born wider than they hold.
-        expect(visibleTo(fencedDesk, { owner: { email: "dee@example.com" }, slices: ["support", "finance"] })).toBe(false);
-        // Within their slices, but somebody else's.
-        expect(visibleTo(fencedDesk, { owner: { email: "ada@example.com" }, slices: ["support"] })).toBe(false);
+        expect(visibleTo(fencedDesk, { owner: { email: "dee@example.com" }, areas: ["support", "finance"] })).toBe(false);
+        // Within their areas, but somebody else's.
+        expect(visibleTo(fencedDesk, { owner: { email: "ada@example.com" }, areas: ["support"] })).toBe(false);
     });
 
     test("the refusal is FORBIDDEN and names nobody", () => {

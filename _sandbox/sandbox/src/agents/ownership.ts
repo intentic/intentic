@@ -1,5 +1,5 @@
 import { type MemberRole, roleAtLeast, type SessionOwner } from "@intentic/sandbox-contract";
-import { slicesCover } from "../auth/fleet-scope.js";
+import { areasCover } from "../auth/fleet-scope.js";
 
 // Who may make a member answerable for a conversation (agents.assign): its owner hands it over, a maintainer or the
 // sandbox owner reassigns anyone's, and one nobody owns is claimable by anyone at the driving tier, which the route's
@@ -17,14 +17,14 @@ export const assignVerdict = (owner: SessionOwner | undefined, caller: { readonl
     };
 };
 
-// Whether the work may change hands to this member at all: the slices it was born with must be among the ones they
+// Whether the work may change hands to this member at all: the areas it was born with must be among the ones they
 // hold. Assignment is the one route that can hand a conversation to someone who could not have started it, so
 // without this it is the way around every other narrowing — a fenced member cannot read `finance/`, but an unfenced
 // colleague's conversation about it, handed over, is that folder in prose.
 // Narrowing is always allowed: a conversation keeps its own fence when it moves, so handing it to someone who holds
 // more changes nothing about what it may touch.
 export const fenceVerdict = (work: readonly string[] | undefined, holder: readonly string[] | undefined, to: string): AssignVerdict =>
-    slicesCover(holder, work)
+    areasCover(holder, work)
         ? { kind: "ok" }
         : {
               kind: "forbidden",

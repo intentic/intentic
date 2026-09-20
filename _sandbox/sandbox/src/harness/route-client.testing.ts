@@ -47,14 +47,14 @@ export const proven = (
     role: MemberRole,
     methods: readonly ProofMethod[] = ["google"],
     desks?: readonly string[],
-    // The slices this caller is fenced to; absent is the whole workspace, which is what every unfenced tier holds.
-    slices?: readonly string[],
+    // The areas this caller is fenced to; absent is the whole workspace, which is what every unfenced tier holds.
+    areas?: readonly string[],
 ): ProvenCaller => ({
     email,
     role,
     methods,
     ...(desks === undefined ? {} : { desks }),
-    ...(slices === undefined ? {} : { slices }),
+    ...(areas === undefined ? {} : { areas }),
 });
 
 // A JSON POST against the in-process app, for the plain (non-oRPC) routes.

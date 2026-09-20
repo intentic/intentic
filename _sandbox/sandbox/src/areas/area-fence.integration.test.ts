@@ -9,13 +9,13 @@ import type { Services } from "../composition.js";
 import { clientFor, errorCode, proven, rejectForbidden } from "../harness/route-client.testing.js";
 import { fakeFiles, fakeHistory, tempWorkspace } from "../harness/route-fakes.testing.js";
 import { services } from "../harness/route-services.testing.js";
-import { memorySlicesStore } from "../harness/route-stores.testing.js";
+import { memoryAreasStore } from "../harness/route-stores.testing.js";
 
 // A fenced member over the daemon's own HTTP surface: what they may list, read, search and write. The path arithmetic
-// is slice-paths.test.ts and the pruning is workspace-fence's; what is pinned here is that the routes actually ask.
+// is fence-paths.test.ts and the pruning is workspace-fence's; what is pinned here is that the routes actually ask.
 
 // `support` holds one folder; `finance` is what the fenced member must never reach.
-const SLICES = [
+const AREAS = [
     { id: "support", folders: ["support"] },
     { id: "finance", folders: ["finance"] },
 ];
@@ -38,7 +38,7 @@ const TREE = {
 const desk = async (): Promise<{
     readonly client: ReturnType<typeof clientFor>;
     readonly app: ReturnType<typeof createApp>;
-    readonly actAs: (role: MemberRole, slices?: readonly string[]) => void;
+    readonly actAs: (role: MemberRole, areas?: readonly string[]) => void;
 }> => {
     let caller = proven(`ada@example.com`, `owner`);
     const workspace = tempWorkspace([]);
@@ -53,7 +53,7 @@ const desk = async (): Promise<{
             history: fakeHistory(),
             workspaceTree: async () => TREE,
             workspaceChildren: async (_root, path) => ({ entries: TREE.tree.find((entry) => entry.path === path)?.children ?? [], hidden: 0 }),
-            slices: memorySlicesStore(SLICES),
+            areas: memoryAreasStore(AREAS),
             auth: { authorize: async () => caller, authorizeOwner: rejectForbidden },
             ownerEmail: async () => `ada@example.com`,
         }),
@@ -61,7 +61,7 @@ const desk = async (): Promise<{
     return {
         client: clientFor(app, { bearer: `member` }),
         app,
-        actAs: (role, slices) => (caller = proven(`fay@example.com`, role, [`google`], undefined, slices)),
+        actAs: (role, areas) => (caller = proven(`fay@example.com`, role, [`google`], undefined, areas)),
     };
 };
 
@@ -94,7 +94,7 @@ test("a fenced search runs inside the fence, and inside a folder outside it runs
     const client = clientFor(
         createApp(
             services({
-                slices: memorySlicesStore(SLICES),
+                areas: memoryAreasStore(AREAS),
                 auth: { authorize: async () => caller, authorizeOwner: rejectForbidden },
                 iq: unstubbed<Services["iq"]>("iq", {
                     run: async (request) => {

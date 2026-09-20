@@ -46,9 +46,9 @@ export const PersonaPowersSchema = z.object({
 export type PersonaPowers = z.infer<typeof PersonaPowersSchema>;
 // `folders` only refuses file-tool calls outside it; it stops a misread instruction, not a shell. The container is the
 // real workspace-wide fence, and a conversation started by a fenced person is narrower still — the turn works inside
-// this persona's folders AND that person's slices, never the wider of the two.
-// A plain folder list rather than a named slice (schemas/slices.ts), because the two answer different questions: a
-// persona's fence is written once for that persona, while a slice is a grant several people hold and one edit has to
+// this persona's folders AND that person's areas, never the wider of the two.
+// A plain folder list rather than a named area (schemas/areas.ts), because the two answer different questions: a
+// persona's fence is written once for that persona, while an area is a grant several people hold and one edit has to
 // move all of them.
 // No placement field, by decision: every session already opens in its own private copy, never the shared tree.
 export const PersonaWorkspaceSchema = z.object({

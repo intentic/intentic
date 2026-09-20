@@ -30,7 +30,7 @@ import {
     memoryMintedStore,
     memoryPasskeyStore,
     memoryPersonasStore,
-    memorySlicesStore,
+    memoryAreasStore,
     memorySecretVault,
     memoryThreadSessionsStore,
 } from "./route-stores.testing.js";
@@ -87,7 +87,7 @@ export const testProviderCatalogs: Services["providerCatalogs"] = {
 // Nothing connected by default (Meta/Z.ai turns are refused); a factory, not a constant, since the store holds state
 // suites must not share. Sign-in refuses; a suite needing a real handshake passes its own driver.
 export const testMintedSlices = (): Services["minted"] => {
-    const slice = (providerName: string, models: { id: string; label: string }[]): Services["minted"]["meta"] => {
+    const area = (providerName: string, models: { id: string; label: string }[]): Services["minted"]["meta"] => {
         const catalog = { models: async () => ({ models, default: models[0]?.id ?? "" }), forget: () => {} };
         return {
             store: memoryMintedStore(providerName),
@@ -99,8 +99,8 @@ export const testMintedSlices = (): Services["minted"] => {
         };
     };
     return {
-        meta: slice("Meta", [{ id: "muse-spark-1.2", label: "Muse Spark 1.2" }]),
-        zai: slice("Z.ai", [{ id: "glm-5.3", label: "GLM-5.3" }]),
+        meta: area("Meta", [{ id: "muse-spark-1.2", label: "Muse Spark 1.2" }]),
+        zai: area("Z.ai", [{ id: "glm-5.3", label: "GLM-5.3" }]),
     };
 };
 
@@ -232,8 +232,8 @@ export const services = (overrides: ServiceOverrides = {}): Services => {
         // No personas by default: an unattended turn reaches no logged-in account, since an unpinned wake is denied
         // rather than waved through. A suite wanting one builds the card and its browser capability.
         personas: memoryPersonasStore(),
-        // No slices by default: the unfenced workspace, which is what every member row without them already means.
-        slices: memorySlicesStore(),
+        // No areas by default: the unfenced workspace, which is what every member row without them already means.
+        areas: memoryAreasStore(),
         automations: memoryAutomationsStore(),
         // No held wakes: agents.list projects them as `held`, and no suite here holds one.
         heldWakes: {

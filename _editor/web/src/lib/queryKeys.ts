@@ -90,8 +90,8 @@ export const MANIFESTS = family(`manifests`);
 export const PANELS = family(`panels`);
 export const PERSONAS = family(`personas`);
 export const PORTS = family(`ports`);
-// The named parts of the workspace a member's access is granted in; the daemon invalidates this on a slice write.
-export const SLICES = family(`slices`);
+// The named parts of the workspace a member's access is granted in; the daemon invalidates this on an area write.
+export const AREAS = family(`areas`);
 // This sandbox's runners: the machines it can hand a conversation to.
 export const RUNNERS = family(`runners`);
 // Shared with the preview extension by exact path: its manifest binds `public/` to the name `public`, so

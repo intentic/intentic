@@ -416,8 +416,8 @@ export type AgentTurnIdentity = Pick<AgentTurn, "prompt"> &
         readonly startedBy?: string;
         // The member the conversation belongs to when this turn opens it; ignored once it has one.
         readonly owner?: Pick<SessionOwner, "email" | "name">;
-        // The fence that member holds, as slice ids; ignored once the conversation has one.
-        readonly slices?: readonly string[];
+        // The fence that member holds, as area ids; ignored once the conversation has one.
+        readonly areas?: readonly string[];
     };
 
 // Who asked for the conversation's first turn; an existing entry keeps its answer, latched the same way as `origin`.
@@ -427,17 +427,17 @@ const startedByOf = (existing: PersistedAgent | undefined, turn: AgentTurnIdenti
 // The fence it was born with: kept once set, else the opening turn's, else the parent's for a spawned child. A child
 // inherits rather than starting unfenced, since a delegate a fenced turn opens is that turn continuing by other means.
 // `undefined` is the whole workspace, so a child of an unfenced parent is unfenced too, which is the same answer.
-const slicesOfConversation = (
+const areasOfConversation = (
     existing: PersistedAgent | undefined,
     turn: AgentTurnIdentity,
     entryOf: (id: string) => PersistedAgent | undefined,
-): { readonly slices?: string[] } => {
-    if (existing?.slices !== undefined) {
-        return { slices: [...existing.slices] };
+): { readonly areas?: string[] } => {
+    if (existing?.areas !== undefined) {
+        return { areas: [...existing.areas] };
     }
     const parentId = parentOfActor(existing?.startedBy ?? turn.startedBy);
-    const inherited = turn.slices ?? (parentId === undefined ? undefined : entryOf(parentId)?.slices);
-    return inherited === undefined ? {} : { slices: [...inherited] };
+    const inherited = turn.areas ?? (parentId === undefined ? undefined : entryOf(parentId)?.areas);
+    return inherited === undefined ? {} : { areas: [...inherited] };
 };
 
 // Who answers for it: kept once set, else the opening turn's member, else the parent's owner for a child (`since` is
@@ -918,7 +918,7 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
                 ...(origin !== undefined ? { origin } : {}),
                 ...startedByOf(existing, turn),
                 ...ownerOf(existing, turn, entryOf, now),
-                ...slicesOfConversation(existing, turn, entryOf),
+                ...areasOfConversation(existing, turn, entryOf),
                 // Where it opened and as whom: the first turn's answer, kept; a later turn's differing persona does not
                 // move the conversation to another project.
                 ...opt("startIn", existing?.startIn ?? turn.startIn),

@@ -2813,6 +2813,7 @@
         },
         "sandboxAccess": {
             "access": "Accès",
+            "areaPick": "Quelles zones de l’espace de travail il voit",
             "browser": "Ce navigateur",
             "ciNotifications": "Notifications CI",
             "collaborator": "Collaborateur",
@@ -2833,9 +2834,9 @@
             "inviteRole": "Rôle de l'invitation",
             "maintainer": "Mainteneur",
             "nameOne": "En créer une",
+            "noAreaMeansWhole": "Aucune zone choisie : il voit l’espace de travail entier.",
+            "noAreasToGrant": "Cette sandbox n’a encore aucune zone nommée, donc tout le monde voit l’espace de travail entier.",
             "noOneElseConnected": "Personne d'autre n'est connecté en ce moment.",
-            "noSliceMeansWhole": "Aucune partie choisie : il voit l’espace de travail entier.",
-            "noSlicesToGrant": "Cette sandbox n’a encore aucune partie nommée, donc tout le monde voit l’espace de travail entier.",
             "onlySandboxOwnerInvite": "Seul le propriétaire du sandbox peut inviter des gens ou changer les rôles.",
             "operateEverythingOwnerOwner": "Peut tout faire comme le propriétaire. Le propriétaire peut révoquer cet accès ; le propriétaire ne peut pas être révoqué.",
             "otherBrowsersArentListed": "Les autres navigateurs ne sont pas listés",
@@ -2853,7 +2854,6 @@
             "signOutEverywhere": "Se déconnecter partout",
             "signedIn": "connecté",
             "signedInBrowsers": "Navigateurs connectés",
-            "slicePick": "Quelles parties de l’espace de travail il voit",
             "sureEveryoneWorkingIn": "Sûr ? Tous ceux qui travaillent dans ce sandbox en ce moment devront se reconnecter.",
             "viewer": "Observateur",
             "watchEverythingAgentsChats": "Peut tout voir : agents, chats, fichiers. Ne peut rien changer.",
@@ -2869,6 +2869,22 @@
             "safety": "Sécurité",
             "sandboxOfflineSettingsCant": "Votre sandbox est hors ligne, ses paramètres ne peuvent être ni lus ni modifiés d'ici.",
             "tools": "Outils"
+        },
+        "sandboxAreas": {
+            "areaName": "Nom de la zone",
+            "areas": "Zones de l’espace de travail",
+            "couldNotDelete": "Impossible de supprimer la zone.",
+            "couldNotSave": "Impossible d’enregistrer la zone : la sandbox est-elle en ligne ?",
+            "deleteArea": "Supprimer la zone",
+            "folders": "Dossiers",
+            "needsFolder": "Choisissez au moins un dossier. Une zone sans dossier serait un droit sans lecteur.",
+            "newArea": "Nouvelle zone",
+            "newAreaName": "Nouvelle zone",
+            "noAreasYet": "Aucune zone pour l’instant. Toute personne ayant accès voit l’espace de travail entier.",
+            "onlyOwnerEdits": "Seul le propriétaire de la sandbox décide qui voit quels dossiers.",
+            "pickFolders": "Choisissez les dossiers qu’elle contient",
+            "pickFoldersToFinish": "Choisissez au moins un dossier, puis enregistrez. Une zone sans dossier serait un droit sans lecteur.",
+            "whatAnAreaIs": "Une zone est une section nommée de cet espace de travail. L’accès se donne par zones plutôt que par listes de dossiers pour chaque personne : élargir ce que voit une équipe tient en une seule modification ici, et non une par membre. Qui reçoit une zone voit ces dossiers et rien d’autre — dans l’arborescence, dans la recherche et dans les conversations qu’il ouvre."
         },
         "sandboxAttention": {
             "agentProposedChangeTo": "L'agent a proposé un changement de votre environnement",
@@ -2936,6 +2952,7 @@
         "sandboxNav": {
             "access": "Accès",
             "agent": "Agent",
+            "areas": "Zones",
             "box": "Cette boîte",
             "configuration": "Configuration",
             "devices": "Appareils",
@@ -2945,7 +2962,6 @@
             "personas": "Personas",
             "reach": "Portée",
             "secrets": "Secrets",
-            "slices": "Parties",
             "usage": "Usage"
         },
         "sandboxOverview": {
@@ -3012,22 +3028,6 @@
             "secrets": "Vos secrets",
             "showLess": "Afficher moins",
             "showMoreAccounts": "Afficher {collapsedCredentialCount} comptes de plus"
-        },
-        "sandboxSlices": {
-            "couldNotDelete": "Impossible de supprimer la partie.",
-            "couldNotSave": "Impossible d’enregistrer la partie : la sandbox est-elle en ligne ?",
-            "deleteSlice": "Supprimer la partie",
-            "folders": "Dossiers",
-            "needsFolder": "Choisissez au moins un dossier. Une partie sans dossier serait un droit sans lecteur.",
-            "newSlice": "Nouvelle partie",
-            "newSliceName": "Nouvelle partie",
-            "noSlicesYet": "Aucune partie pour l’instant. Toute personne ayant accès voit l’espace de travail entier.",
-            "onlyOwnerEdits": "Seul le propriétaire de la sandbox décide qui voit quels dossiers.",
-            "pickFolders": "Choisissez les dossiers qu’elle contient",
-            "pickFoldersToFinish": "Choisissez au moins un dossier, puis enregistrez. Une partie sans dossier serait un droit sans lecteur.",
-            "sliceName": "Nom de la partie",
-            "slices": "Parties de l’espace de travail",
-            "whatASliceIs": "Une partie est une section nommée de cet espace de travail. L’accès se donne par parties plutôt que par listes de dossiers pour chaque personne : élargir ce que voit une équipe tient en une seule modification ici, et non une par membre. Qui reçoit une partie voit ces dossiers et rien d’autre — dans l’arborescence, dans la recherche et dans les conversations qu’il ouvre."
         },
         "sandboxSwitcher": {
             "addSandbox": "Ajouter un sandbox",

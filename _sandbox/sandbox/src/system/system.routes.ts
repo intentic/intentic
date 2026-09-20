@@ -39,7 +39,7 @@ import { manifestProblems } from "../store/manifest-problems.js";
 import { repairManifest } from "../store/manifest-repair.js";
 import { workspaceIdentity } from "./workspace-identity.js";
 import { framedEvent } from "../auth/fleet-scope.js";
-import { callerFence } from "../slices/slice-scope.js";
+import { callerFence } from "../areas/area-scope.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -78,8 +78,8 @@ async function* systemEvents(
     const queue: { readonly event: SystemEvent; readonly at: bigint }[] = [];
     // A narrowed caller's stream is cut frame by frame (auth/fleet-scope.ts): a desk's own conversations and no
     // paths, a fenced member's own folders. Resolved once here rather than per frame, which a file read cannot be;
-    // editing a slice revokes the connection, so this can never outlive the grant it was read from.
-    const fence = callerFence(await services.slices.list(), identity);
+    // editing an area revokes the connection, so this can never outlive the grant it was read from.
+    const fence = callerFence(await services.areas.list(), identity);
     const enqueue = (event: SystemEvent): void => {
         const framed = framedEvent(identity, fence, event);
         if (framed !== undefined) {

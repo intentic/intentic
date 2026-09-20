@@ -36,10 +36,10 @@ describe(`staleQueryKeys`, () => {
     it(`refreshes the unreadable-manifest notice for the four files a person hand-edits`, () => {
         const carries = WORKSPACE_STATE_FILES.filter((file) => file.invalidates.includes(`manifests`)).map((file) => file.path);
         expect(carries.toSorted()).toEqual([
+            `.intentic/config/areas.json`,
             `.intentic/config/capabilities.json`,
             `.intentic/config/personas.json`,
             `.intentic/config/settings.json`,
-            `.intentic/config/slices.json`,
         ]);
     });
 
@@ -317,9 +317,12 @@ describe(`VERSIONED_STATE_PATHS`, () => {
     });
 
     // Spelled out rather than derived, so adding a tracked entry is a visible edit here, not a silent side effect.
-    it(`tracks exactly the configuration slice plus the agent's own authored output`, () => {
+    it(`tracks exactly the configuration files plus the agent's own authored output`, () => {
         expect(VERSIONED_STATE_PATHS.toSorted()).toEqual([
             `${STATE_DIR}/config/approvals/`,
+            // Which folders each named area holds: editing one moves what everyone granted it can see, so the
+            // change belongs in a diff rather than only in a screen.
+            `${STATE_DIR}/config/areas.json`,
             `${STATE_DIR}/config/automations.json`,
             // Which apps the daemon starts at boot: the starter site, plus whatever the owner adds.
             `${STATE_DIR}/config/autostart.json`,
@@ -354,9 +357,6 @@ describe(`VERSIONED_STATE_PATHS`, () => {
             `${STATE_DIR}/config/settings.json`,
             // Skills the owner wrote: text that changes agent behavior, worth a diff like the rules in settings.json.
             `${STATE_DIR}/config/skills/`,
-            // Which folders each named slice holds: editing one moves what everyone granted it can see, so the
-            // change belongs in a diff rather than only in a screen.
-            `${STATE_DIR}/config/slices.json`,
             `${STATE_DIR}/config/templates.json`,
             `${STATE_DIR}/config/workflows.json`,
             `${STATE_DIR}/config/workspace-extensions/`,
@@ -497,7 +497,7 @@ describe(`SHARED_STATE_PATHS`, () => {
     });
 });
 
-// Pins the split: the authored slice that now backs up, and the credentials that still must not.
+// Pins the split: the authored area that now backs up, and the credentials that still must not.
 describe(`BACKED_UP_STATE_PATHS`, () => {
     it(`splits the table in two with nothing falling between`, () => {
         expect([...BACKED_UP_STATE_PATHS, ...UNBACKED_STATE_PATHS].toSorted()).toEqual(WORKSPACE_STATE_FILES.map((file) => file.path).toSorted());

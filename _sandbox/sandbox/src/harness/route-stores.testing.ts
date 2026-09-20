@@ -1,4 +1,4 @@
-import type { Automation, Capability, Persona, Slice } from "@intentic/sandbox-contract";
+import type { Automation, Capability, Persona, Area } from "@intentic/sandbox-contract";
 import { type Member, type MembersStore, memberRow } from "../auth/auth.js";
 import type { PasskeyStore, StoredCredential, StoredRecoveryCode } from "../auth/passkeys/passkey-store.js";
 import type { AutomationRecord, AutomationsStore } from "../automations/automations-store.js";
@@ -7,7 +7,7 @@ import type { DismissalsStore, DismissedRecommendation } from "../capabilities/d
 import type { SecretVault } from "../capabilities/credentials/secret-vault.js";
 import { type MintedStore, type StoredKeyAccount, toMintedAccount } from "../runtimes/minted/minted-credentials.js";
 import type { PersonasStore } from "../personas/personas-store.js";
-import type { SlicesStore } from "../slices/slices-store.js";
+import type { AreasStore } from "../areas/areas-store.js";
 import type { ThreadSession, ThreadSessionsStore } from "../sessions/thread-sessions.js";
 
 // In-memory stores, one real implementation per persistence seam the routes and the turn read, so a suite can seed
@@ -71,20 +71,20 @@ export const memoryPersonasStore = (initial: Persona[] = []): PersonasStore => {
     };
 };
 
-// An in-memory slice manifest. Empty by default, which is the unfenced workspace: every member row is written without
-// slices, so every caller reaches the whole tree exactly as before slices existed.
-export const memorySlicesStore = (initial: Slice[] = []): SlicesStore => {
-    let slices = [...initial];
+// An in-memory area manifest. Empty by default, which is the unfenced workspace: every member row is written without
+// areas, so every caller reaches the whole tree exactly as before areas existed.
+export const memoryAreasStore = (initial: Area[] = []): AreasStore => {
+    let areas = [...initial];
     return {
-        list: async () => slices,
-        get: async (id) => slices.find((slice) => slice.id === id),
-        upsert: async (slice) => {
-            slices = [...slices.filter((existing) => existing.id !== slice.id), slice];
+        list: async () => areas,
+        get: async (id) => areas.find((area) => area.id === id),
+        upsert: async (area) => {
+            areas = [...areas.filter((existing) => existing.id !== area.id), area];
         },
         remove: async (id) => {
-            const next = slices.filter((slice) => slice.id !== id);
-            const existed = next.length !== slices.length;
-            slices = next;
+            const next = areas.filter((area) => area.id !== id);
+            const existed = next.length !== areas.length;
+            areas = next;
             return existed;
         },
     };

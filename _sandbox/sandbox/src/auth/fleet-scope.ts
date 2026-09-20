@@ -3,8 +3,8 @@ import { ORPCError } from "@orpc/server";
 import type { Caller } from "./auth.js";
 
 // What a caller may see of the fleet, on two independent narrowings. A DESK sees the conversations they own or
-// started and nothing else. A FENCED member — anyone granted slices of the workspace — sees only conversations whose
-// own slices are among theirs. Everyone else sees the fleet whole, which is what the board's Everyone/Mine row is for.
+// started and nothing else. A FENCED member — anyone granted areas of the workspace — sees only conversations whose
+// own areas are among theirs. Everyone else sees the fleet whole, which is what the board's Everyone/Mine row is for.
 // Neither narrowing is a preference: the transcript of someone else's wider conversation is the brain in prose, and
 // fencing the files while leaving the transcripts open would be a fence with a door in it.
 
@@ -12,8 +12,8 @@ import type { Caller } from "./auth.js";
 export interface Provenance {
     readonly startedBy?: string | undefined;
     readonly owner?: { readonly email: string } | undefined;
-    // The fence the conversation was born with, as slice ids. Absent means it was started by someone unfenced.
-    readonly slices?: readonly string[] | undefined;
+    // The fence the conversation was born with, as area ids. Absent means it was started by someone unfenced.
+    readonly areas?: readonly string[] | undefined;
 }
 
 const sameEmail = (a: string, b: string): boolean => a.toLowerCase() === b.toLowerCase();
@@ -23,22 +23,22 @@ const theirs = (caller: Caller, agent: Provenance): boolean =>
     (agent.startedBy !== undefined && sameEmail(agent.startedBy, caller.email));
 
 /**
- * Whether a holder's slices cover work born with these: the one rule behind both narrowings that involve a fence —
+ * Whether a holder's areas cover work born with these: the one rule behind both narrowings that involve a fence —
  * what a fenced member may read of the fleet, and who a conversation may be handed to.
  * Compared as ids, not as the folders behind them, so this stays a synchronous answer every route and every event
- * frame can afford; the slice manifest is a file read, and this is asked once per conversation per frame.
- * The cost is conservatism: a member holding `finance` does not see work fenced to a different slice that happens to
+ * frame can afford; the area manifest is a file read, and this is asked once per conversation per frame.
+ * The cost is conservatism: a member holding `finance` does not see work fenced to a different area that happens to
  * name a folder inside `finance`. It errs toward hiding, never toward showing.
  */
-export const slicesCover = (holder: readonly string[] | undefined, work: readonly string[] | undefined): boolean => {
+export const areasCover = (holder: readonly string[] | undefined, work: readonly string[] | undefined): boolean => {
     if (holder === undefined) {
         return true;
     }
     const held = new Set(holder);
-    return work !== undefined && work.every((slice) => held.has(slice));
+    return work !== undefined && work.every((area) => held.has(area));
 };
 
-const withinFence = (caller: Caller, agent: Provenance): boolean => slicesCover(caller.slices, agent.slices);
+const withinFence = (caller: Caller, agent: Provenance): boolean => areasCover(caller.areas, agent.areas);
 
 // Whether the caller may see this conversation. Undefined identity is the owner's own tool (a panel, loopback), which
 // sees everything.
@@ -98,7 +98,7 @@ const framedRepos = <T extends { readonly repos: readonly string[] }>(fence: Fen
 
 // What a narrowed caller's event stream carries: the roster cut to the conversations they may see, and no path or
 // repository they may not. Undefined drops the frame.
-// `fence` is the caller's own, resolved once when the stream opens — a slice edit revokes the connection, so a frame
+// `fence` is the caller's own, resolved once when the stream opens — an area edit revokes the connection, so a frame
 // is never filtered against a fence its reader no longer has.
 export const framedEvent = (caller: Caller | undefined, fence: Fence, event: SystemEvent): SystemEvent | undefined => {
     if (caller === undefined) {

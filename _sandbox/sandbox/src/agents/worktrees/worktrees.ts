@@ -363,7 +363,7 @@ export const createAgentWorktrees = (
     // holds the README and package.json beside the folders it was given. Everything in a directory it was not given
     // is genuinely absent.
     // Not undone anywhere: a conversation's fence is latched at its first turn, so one born unfenced never becomes
-    // sparse and one born fenced stays that way. Re-applied every ensure, which is what makes an edited slice move an
+    // sparse and one born fenced stays that way. Re-applied every ensure, which is what makes an edited area move an
     // existing conversation's checkout.
     const sparsen = async (id: string, repo: string, fence: Fence): Promise<void> => {
         const cone = coneFor(fence, repo);
@@ -494,7 +494,7 @@ export const createAgentWorktrees = (
             if (recorded.length > 0) {
                 await eachRepo(recorded, "root-first", (repo) => withRepoLock(repo, () => repairOne(id, repo)));
                 // An unselected, unfenced conversation keeps the composition it was born with; anything narrowed goes
-                // to what it should now hold, so an edited slice moves the checkout on the next turn.
+                // to what it should now hold, so an edited area moves the checkout on the next turn.
                 const repos = selection === undefined && fence === undefined ? recorded : await reconcile(id, recorded, await wanted());
                 await sparsenComposition(id, repos, fence);
                 await linkComposition(id, repos, namespaced);

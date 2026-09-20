@@ -72,12 +72,12 @@ const STATE_FILES = [
     // capability catalog. `carry`: a card is a name and ids, never a credential.
     { path: ".intentic/config/personas.json", invalidates: ["personas", "capabilities", "manifests"], portability: "carry", versioned: true },
 
-    // Named parts of the workspace (SliceSchema), the unit a person's reach is granted in. `carry`: folder names, no
-    // credential, and a workspace that moves keeps the shape of its own fences. `versioned` because editing a slice
+    // Named parts of the workspace (AreaSchema), the unit a person's reach is granted in. `carry`: folder names, no
+    // credential, and a workspace that moves keeps the shape of its own fences. `versioned` because editing an area
     // changes what people already granted it can see, which is precisely a change a human should review. It stays
     // agent-writable like personas.json, and is safe there for a reason worth stating: a fenced conversation's own
     // fence has to admit `.intentic` before its agent can reach this file, so no fence can widen itself.
-    { path: ".intentic/config/slices.json", invalidates: ["slices", "manifests"], portability: "carry", versioned: true },
+    { path: ".intentic/config/areas.json", invalidates: ["areas", "manifests"], portability: "carry", versioned: true },
 
     // Four files split by portability, not just prefix: `custom` is the owner-approved source and the only one that
     // must travel; `approved` is composed from custom + capability fragments + the base image and is rebuilt on the
@@ -482,7 +482,7 @@ export const WORKSPACE_STATE_FILES: readonly WorkspaceStateFile[] = STATE_FILES;
 // entry `versioned` is the only change needed.
 export const VERSIONED_STATE_PATHS: readonly string[] = WORKSPACE_STATE_FILES.filter((file) => file.versioned).map((file) => file.path);
 
-// Slice a workspace search may surface: `versioned` config plus `authored` content (approvals, staged docs,
+// What a workspace search may surface: `versioned` config plus `authored` content (approvals, staged docs,
 // workspace extensions). Everything else under `.intentic` is machine state, denied by default. `auth/`, where
 // vaulted credentials live, is always denied regardless.
 export const SEARCHABLE_STATE_PATHS: readonly string[] = WORKSPACE_STATE_FILES.filter((file) => file.versioned || file.authored).map(
@@ -559,7 +559,7 @@ export const SHARED_STATE_PATHS: readonly string[] = STATE_GROUPS.flatMap((group
         : [`${STATE_GROUP_DIR[group]}/`];
 });
 
-// Slice desktop-sync copies down: ordinary state and the records binding this sandbox to its owner, minus anything
+// What desktop-sync copies down: ordinary state and the records binding this sandbox to its owner, minus anything
 // that opts out via `backup: false`. Deliberately not the same question as the export bundle: a bundle asks what
 // may be reconstituted elsewhere, this asks what the owner may keep a copy of.
 export const BACKED_UP_STATE_PATHS: readonly string[] = WORKSPACE_STATE_FILES.filter(

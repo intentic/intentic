@@ -328,7 +328,7 @@ export const createAgentsRoutes = (services: Services) => {
                 throw new ORPCError("BAD_REQUEST", { message: `${input.to} is not a member of this sandbox` });
             }
             // The recipient's own fence, as the roster holds it; the sandbox owner is on no row and is unfenced.
-            const fenced = fenceVerdict(entry.slices, members.find((member) => member.email === input.to)?.slices, input.to);
+            const fenced = fenceVerdict(entry.areas, members.find((member) => member.email === input.to)?.areas, input.to);
             if (fenced.kind === "forbidden") {
                 throw new ORPCError("FORBIDDEN", { message: fenced.message });
             }

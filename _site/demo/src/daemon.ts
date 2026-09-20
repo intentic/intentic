@@ -13,7 +13,7 @@ import {
     type TurnBreak,
     type TurnBreakPolicy,
     type Persona,
-    type Slice,
+    type Area,
     type Model,
     type OauthAccount,
     type OauthAccountList,
@@ -573,11 +573,11 @@ const ROUTES: readonly (readonly [string, string, Handler])[] = [
     // is real (the fixture is the store), so the project persona New agent makes under a scope shows in the picker.
     [`GET`, `/personas`, () => json({ personas: demoPersonas, connected: [`gmail-support`, `intercom`, `x-brand`, `linkedin`, `github`, `stripe-ops`] })],
     [`POST`, `/personas`, savePersonaRoute],
-    // The named parts of the workspace a grant can be fenced to; a save is real, like a persona's, so the Slices
+    // The named parts of the workspace a grant can be fenced to; a save is real, like a persona's, so the Areas
     // page edits what the Access tab's picker then offers.
-    [`GET`, `/slices`, () => json({ slices: demoSlices })],
-    [`POST`, `/slices`, saveSliceRoute],
-    [`DELETE`, `/slices/{id}`, removeSliceRoute],
+    [`GET`, `/areas`, () => json({ areas: demoAreas })],
+    [`POST`, `/areas`, saveAreaRoute],
+    [`DELETE`, `/areas/{id}`, removeAreaRoute],
     // Every registry URL answers the same joined data; the real route would clone a repo and read two JSON
     // files from it.
     [`POST`, `/capabilities/marketplace`, () => json(demoRegistry())],
@@ -978,10 +978,10 @@ function grantMemberRoute({ request }: RouteContext): Promise<Response> {
         }
         // The other refusal the real daemon makes: a maintainer carries the owner's operating authority, so a folder
         // fence over it would enforce nothing.
-        if (grant.role === `maintainer` && grant.slices !== undefined) {
+        if (grant.role === `maintainer` && grant.areas !== undefined) {
             return json({ error: `a maintainer holds the owner's operating authority and cannot be fenced to part of the workspace` }, 400);
         }
-        grantAccess(grant.email, grant.role, grant.desks, grant.slices);
+        grantAccess(grant.email, grant.role, grant.desks, grant.areas);
         return json({ members: grants() });
     });
 }
@@ -1015,29 +1015,29 @@ function savePersonaRoute({ request }: RouteContext): Promise<Response> {
 
 // The named parts of the workspace, upserted like the personas above: two, so a picker shows both the fence and
 // what it leaves out.
-const demoSlices: Slice[] = [
+const demoAreas: Area[] = [
     { id: `support`, label: `Support desk`, brief: `Tickets, replies and the help centre.`, folders: [`web/support`] },
     { id: `site`, label: `Marketing site`, folders: [`web/site`] },
 ];
-function saveSliceRoute({ request }: RouteContext): Promise<Response> {
+function saveAreaRoute({ request }: RouteContext): Promise<Response> {
     return request.json().then((body) =>
         okAfter(() => {
-            const slice = body as Slice;
-            const index = demoSlices.findIndex((entry) => entry.id === slice.id);
+            const area = body as Area;
+            const index = demoAreas.findIndex((entry) => entry.id === area.id);
             if (index === -1) {
-                demoSlices.push(slice);
+                demoAreas.push(area);
             } else {
-                demoSlices[index] = slice;
+                demoAreas[index] = area;
             }
         }),
     );
 }
 // Refused while a demo member still holds it, as the daemon refuses one: the demo roster is the fixture's own.
-function removeSliceRoute({ param }: RouteContext): Response {
+function removeAreaRoute({ param }: RouteContext): Response {
     return okAfter(() => {
-        const index = demoSlices.findIndex((entry) => entry.id === param(`id`));
+        const index = demoAreas.findIndex((entry) => entry.id === param(`id`));
         if (index !== -1) {
-            demoSlices.splice(index, 1);
+            demoAreas.splice(index, 1);
         }
     });
 }

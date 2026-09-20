@@ -50,8 +50,8 @@ export const DEFINITION_WORKSPACE: readonly { readonly path: string; readonly no
     {
         // Joined from the constant rather than spelled or interpolated: this entry postdates both the hardcoded-path
         // baseline and the rule against composing a state path out of a template.
-        path: [STATE_DIR, "config", "slices.json"].join("/"),
-        note: "The named parts of the workspace arrive with their folders, and nobody holding them: the roster is the target's own, so who sees which slice is granted again there.",
+        path: [STATE_DIR, "config", "areas.json"].join("/"),
+        note: "The named parts of the workspace arrive with their folders, and nobody holding them: the roster is the target's own, so who sees which area is granted again there.",
     },
     {
         // Via stateRelPath so the state union type checks this name; the trailing slash is re-added after trimming.

@@ -2,7 +2,7 @@
 
 A fourth grantable tier, below viewer: a member who reaches the sandbox only through the persona cards the owner
 handed them. Written 2026-09-20, with the build; the analysis it came out of is the "company brain" question: when one
-sandbox holds everything a company knows, who gets a slice, and what is the slice made of.
+sandbox holds everything a company knows, who gets an area, and what is the area made of.
 
 ## The short version
 
@@ -60,5 +60,5 @@ not have, on the spot (`auth/members/members.routes.ts`).
 - **Scope on the principal**: a member who needs *files* of one product and not another is not a desk (a desk has
   no files at all) and not a viewer (who has them all). That is a path filter beside the role floor, built when the
   case shows up.
-- **Cross-slice questions**: a desk gets no hand-off to a broader card. The brain's value is cross-cutting, and the
+- **Cross-area questions**: a desk gets no hand-off to a broader card. The brain's value is cross-cutting, and the
   hand-off is a confused deputy until it is designed as one.

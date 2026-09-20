@@ -68,8 +68,8 @@ const servicesIn = (root: string, overrides: Partial<Services> = {}): Services =
         sandboxSettings: unstubbed<Services["sandboxSettings"]>("sandboxSettings", { get: async () => SandboxSettingsSchema.parse({}) }),
         // Every turn resolves a persona now; an empty list is the open, attended posture these tests assume.
         personas: unstubbed<Services["personas"]>("personas", { list: async () => [] }),
-        // No slices: the unfenced workspace, which is what a turn an owner started carries.
-        slices: unstubbed<Services["slices"]>("slices", { list: async () => [] }),
+        // No areas: the unfenced workspace, which is what a turn an owner started carries.
+        areas: unstubbed<Services["areas"]>("areas", { list: async () => [] }),
         // A measurement seam, not a behavioural one: runs the work, times nothing.
         perf: unstubbed<Services["perf"]>("perf", { track: (_op, _fields, run) => run() }),
         // Snapshotted for the judge on every planned turn, so every arm below needs it too.

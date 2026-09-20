@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { fenceAllows, fenceCovers, fenceIntersection, fenceReaches, foldPath, pathInsideFolder } from "./slice-paths.js";
+import { fenceAllows, fenceCovers, fenceIntersection, fenceReaches, foldPath, pathInsideFolder } from "./fence-paths.js";
 
 describe("foldPath", () => {
     test("folds the spellings of one path into one answer", () => {

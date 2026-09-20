@@ -33,9 +33,9 @@ vi.mock(`../overview/useSandboxOutline`, () => ({ useSandboxOutline: () => false
 const personas = ref([{ id: `support`, label: `Support`, capabilities: [] }]);
 vi.mock(`../personas/usePersonas`, () => ({ usePersonas: () => ({ personas, connected: ref([]), isConnected: () => false }) }));
 // The named parts of the workspace a grant can be fenced to; one, so the picker has a row to toggle.
-const slices = ref([{ id: `support`, label: `Support desk`, folders: [`support`] }]);
-vi.mock(`../slices/useSlices`, () => ({
-    useSlices: () => ({ slices, labelOf: (id: string) => slices.value.find((slice) => slice.id === id)?.label ?? id }),
+const areas = ref([{ id: `support`, label: `Support desk`, folders: [`support`] }]);
+vi.mock(`../areas/useAreas`, () => ({
+    useAreas: () => ({ areas, labelOf: (id: string) => areas.value.find((area) => area.id === id)?.label ?? id }),
 }));
 vi.mock(`../../../shell/presence/usePresence`, () => ({ presenceOthers: [], presenceActivity: () => `` }));
 // Session module touches GIS/localStorage at eval; needs only its expiry. Fixed date avoids timezone drift.
@@ -281,7 +281,7 @@ it(`holds a member's move to desk until a card is picked, then grants tier and c
 
 // Fencing somebody is a re-grade at the same tier, so it travels the same two writes in the same order. The
 // absence of the field is the whole workspace, which is why an unfenced row sends no field rather than an empty list.
-it(`grants a slice on an existing row, at the tier that row already holds`, async () => {
+it(`grants an area on an existing row, at the tier that row already holds`, async () => {
     const member = (tier: string): unknown => ({ email: `guest@example.com`, role: tier, status: `accepted`, invitedAt: `2026-08-18T00:00:00.000Z` });
     list.mockResolvedValue({ members: [member(`collaborator`)] });
     setRole.mockResolvedValue({ members: [member(`collaborator`)] });
@@ -295,10 +295,10 @@ it(`grants a slice on an existing row, at the tier that row already holds`, asyn
     expect(switches()).toHaveLength(1);
     buttonLabelled(`Folders`)?.click();
     await nextTick();
-    // A collaborator row draws no desk picker, so the switch that just appeared is the slice it would be fenced to.
+    // A collaborator row draws no desk picker, so the switch that just appeared is the area it would be fenced to.
     expect(switches()).toHaveLength(2);
-    expect(shown()).toContain(`No slice picked: they see the whole workspace.`);
-    daemonMembers.mockReturnValue([{ email: `guest@example.com`, role: `collaborator`, slices: [`support`] }]);
+    expect(shown()).toContain(`No area picked: they see the whole workspace.`);
+    daemonMembers.mockReturnValue([{ email: `guest@example.com`, role: `collaborator`, areas: [`support`] }]);
     switches()[0]?.click();
     await settle();
 
@@ -308,7 +308,7 @@ it(`grants a slice on an existing row, at the tier that row already holds`, asyn
     if (grant === undefined) {
         throw new Error(`no fenced grant reached the sandbox`);
     }
-    expect(JSON.parse((grant[1] as { body: string }).body)).toEqual({ email: `guest@example.com`, role: `collaborator`, slices: [`support`] });
+    expect(JSON.parse((grant[1] as { body: string }).body)).toEqual({ email: `guest@example.com`, role: `collaborator`, areas: [`support`] });
     // The row now names what it holds, so the fence is readable without opening the picker.
     expect(shown()).toContain(`Support desk`);
 });

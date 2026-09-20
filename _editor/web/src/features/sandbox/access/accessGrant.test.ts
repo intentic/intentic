@@ -10,9 +10,9 @@ describe(`grantBody`, () => {
 
     // Absent and empty are different grants: no field is the whole workspace, an empty list is a fence admitting
     // nothing. Sending one for the other is the difference between a colleague seeing everything and seeing nothing.
-    it(`omits the fence entirely when no slice is picked, and sends it when one is`, () => {
+    it(`omits the fence entirely when no area is picked, and sends it when one is`, () => {
         expect(grantBody(`vic@example.com`, `viewer`, [], undefined)).toEqual({ email: `vic@example.com`, role: `viewer` });
-        expect(grantBody(`vic@example.com`, `viewer`, [], [`support`])).toEqual({ email: `vic@example.com`, role: `viewer`, slices: [`support`] });
+        expect(grantBody(`vic@example.com`, `viewer`, [], [`support`])).toEqual({ email: `vic@example.com`, role: `viewer`, areas: [`support`] });
     });
 
     // The tier carries the owner's operating authority and reads every credential; a folder fence over it would be a

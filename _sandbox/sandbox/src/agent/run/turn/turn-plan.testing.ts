@@ -40,8 +40,8 @@ export const servicesWith = (overrides: Partial<Services> = {}): Services =>
         // Read on every turn, not just a pinned one: an unattended wake naming no persona must still answer "no
         // accounts".
         personas: unstubbed<Services["personas"]>("personas", { list: async () => [] }),
-        // No slices: the unfenced workspace, which is what a turn started by an owner carries.
-        slices: unstubbed<Services["slices"]>("slices", { list: async () => [] }),
+        // No areas: the unfenced workspace, which is what a turn started by an owner carries.
+        areas: unstubbed<Services["areas"]>("areas", { list: async () => [] }),
         // A measurement seam, not a behavioural one: runs the work, times nothing.
         perf: unstubbed<Services["perf"]>("perf", { track: (_op, _fields, run) => run() }),
         // Pre-turn retrieval asks this on every turn whose prompt carries search intent. Answers "nothing found", so a

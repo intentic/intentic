@@ -9,7 +9,7 @@ import { ownershipDenied } from "../owner-gates.js";
 // Owner-gated by ownership rather than the maintainer-equivalent operating gate, since membership is the one thing a
 // revokable grant must not change.
 
-export type MembersRoutesDeps = Pick<Services, "auth" | "members" | "ownerEmail" | "wsTickets" | "personas" | "slices">;
+export type MembersRoutesDeps = Pick<Services, "auth" | "members" | "ownerEmail" | "wsTickets" | "personas" | "areas">;
 
 // The lowercased email in a member-management request body, or undefined when absent/malformed.
 const memberEmail = async (c: Context): Promise<string | undefined> => {
@@ -17,24 +17,24 @@ const memberEmail = async (c: Context): Promise<string | undefined> => {
     return typeof body?.email === "string" ? body.email.toLowerCase() : undefined;
 };
 
-// A grant request's email + role (+ the desks a desk holds, + the slices it is fenced to), or undefined if any is
+// A grant request's email + role (+ the desks a desk holds, + the areas it is fenced to), or undefined if any is
 // missing or malformed.
-// Role is required: a grant is a role decision, and a default here would be a policy nobody chose. Slices are
-// optional, and their absence is the whole workspace — the same answer every grant written before slices existed has.
+// Role is required: a grant is a role decision, and a default here would be a policy nobody chose. Areas are
+// optional, and their absence is the whole workspace — the same answer every grant written before areas existed has.
 const GrantBodySchema = z.object({
     email: z.string(),
     role: GrantedRoleSchema,
     desks: z.array(z.string().min(1)).max(50).optional(),
-    slices: z.array(z.string().min(1)).max(20).optional(),
+    areas: z.array(z.string().min(1)).max(20).optional(),
 });
 
-const memberGrant = async (c: Context): Promise<{ email: string; role: GrantedRole; desks?: readonly string[]; slices?: readonly string[] } | undefined> => {
+const memberGrant = async (c: Context): Promise<{ email: string; role: GrantedRole; desks?: readonly string[]; areas?: readonly string[] } | undefined> => {
     const body = GrantBodySchema.safeParse(await c.req.json().catch(() => undefined));
     if (!body.success) {
         return undefined;
     }
-    const { email, role, desks, slices } = body.data;
-    return { email: email.toLowerCase(), role, ...(desks !== undefined ? { desks } : {}), ...(slices !== undefined ? { slices } : {}) };
+    const { email, role, desks, areas } = body.data;
+    return { email: email.toLowerCase(), role, ...(desks !== undefined ? { desks } : {}), ...(areas !== undefined ? { areas } : {}) };
 };
 
 // Why a desk grant cannot be written, or undefined when it can. A desk names at least one card, and every card it
@@ -51,20 +51,20 @@ const deskRefusal = async (services: Pick<Services, "personas">, grant: { role: 
     return missing.length === 0 ? undefined : `no such persona: ${missing.join(", ")}`;
 };
 
-// Why a fence cannot be written, or undefined when it can. Every slice named exists, since a row pointing at a slice
+// Why a fence cannot be written, or undefined when it can. Every area named exists, since a row pointing at an area
 // nobody wrote resolves to a fence admitting nothing, and somebody would have to guess whether that was intended.
 // A maintainer is not fenceable: the tier carries the owner's operating authority, reads every credential and drives
 // every conversation, so a folder fence over it would be a line on a screen rather than a boundary.
-const sliceRefusal = async (services: Pick<Services, "slices">, grant: { role: GrantedRole; slices?: readonly string[] }): Promise<string | undefined> => {
-    if (grant.slices === undefined) {
+const areaRefusal = async (services: Pick<Services, "areas">, grant: { role: GrantedRole; areas?: readonly string[] }): Promise<string | undefined> => {
+    if (grant.areas === undefined) {
         return undefined;
     }
     if (grant.role === "maintainer") {
         return "a maintainer holds the owner's operating authority and cannot be fenced to part of the workspace";
     }
-    const known = new Set((await services.slices.list()).map((slice) => slice.id));
-    const missing = grant.slices.filter((id) => !known.has(id));
-    return missing.length === 0 ? undefined : `no such slice: ${missing.join(", ")}`;
+    const known = new Set((await services.areas.list()).map((area) => area.id));
+    const missing = grant.areas.filter((id) => !known.has(id));
+    return missing.length === 0 ? undefined : `no such area: ${missing.join(", ")}`;
 };
 
 export const createMembersRoutes = (services: MembersRoutesDeps) => ({
@@ -90,7 +90,7 @@ export const createMembersRoutes = (services: MembersRoutesDeps) => ({
         if (grant === undefined) {
             return c.json({ error: "email and role required" }, 400);
         }
-        const refusal = (await deskRefusal(services, grant)) ?? (await sliceRefusal(services, grant));
+        const refusal = (await deskRefusal(services, grant)) ?? (await areaRefusal(services, grant));
         if (refusal !== undefined) {
             return c.json({ error: refusal }, 400);
         }

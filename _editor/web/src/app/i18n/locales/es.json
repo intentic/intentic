@@ -2813,6 +2813,7 @@
         },
         "sandboxAccess": {
             "access": "Acceso",
+            "areaPick": "Qué áreas del espacio de trabajo ve",
             "browser": "Este navegador",
             "ciNotifications": "Notificaciones de CI",
             "collaborator": "Colaborador",
@@ -2833,9 +2834,9 @@
             "inviteRole": "Rol de la invitación",
             "maintainer": "Responsable",
             "nameOne": "Crear una",
+            "noAreaMeansWhole": "Ningún área elegida: ve el espacio de trabajo completo.",
+            "noAreasToGrant": "Esta sandbox aún no tiene áreas con nombre, así que todos ven el espacio de trabajo completo.",
             "noOneElseConnected": "Ahora mismo no hay nadie más conectado.",
-            "noSliceMeansWhole": "Ninguna parte elegida: ve el espacio de trabajo completo.",
-            "noSlicesToGrant": "Esta sandbox aún no tiene partes con nombre, así que todos ven el espacio de trabajo completo.",
             "onlySandboxOwnerInvite": "Solo el propietario del sandbox puede invitar gente o cambiar roles.",
             "operateEverythingOwnerOwner": "Puede operar todo lo que puede el propietario. El propietario puede revocar este acceso; al propietario no se le puede revocar.",
             "otherBrowsersArentListed": "Otros navegadores no se listan",
@@ -2853,7 +2854,6 @@
             "signOutEverywhere": "Cerrar sesión en todas partes",
             "signedIn": "con sesión iniciada",
             "signedInBrowsers": "Navegadores con sesión iniciada",
-            "slicePick": "Qué partes del espacio de trabajo ve",
             "sureEveryoneWorkingIn": "¿Seguro? Todo el que esté trabajando en este sandbox ahora mismo tendrá que iniciar sesión de nuevo.",
             "viewer": "Espectador",
             "watchEverythingAgentsChats": "Puede verlo todo: agentes, chats, archivos. No puede cambiar nada.",
@@ -2869,6 +2869,22 @@
             "safety": "Seguridad",
             "sandboxOfflineSettingsCant": "Tu sandbox está desconectado; sus ajustes no se pueden leer ni cambiar desde aquí.",
             "tools": "Herramientas"
+        },
+        "sandboxAreas": {
+            "areaName": "Nombre del área",
+            "areas": "Áreas del espacio de trabajo",
+            "couldNotDelete": "No se pudo eliminar el área.",
+            "couldNotSave": "No se pudo guardar el área: ¿está en línea la sandbox?",
+            "deleteArea": "Eliminar área",
+            "folders": "Carpetas",
+            "needsFolder": "Elige al menos una carpeta. Un área sin carpetas sería una concesión sin lector.",
+            "newArea": "Nueva área",
+            "newAreaName": "Nueva área",
+            "noAreasYet": "Aún no hay áreas. Todos los que tienen acceso ven el espacio de trabajo completo.",
+            "onlyOwnerEdits": "Solo el propietario de la sandbox decide quién ve qué carpetas.",
+            "pickFolders": "Elige las carpetas que contiene",
+            "pickFoldersToFinish": "Elige al menos una carpeta y guarda. Un área sin carpetas sería una concesión sin lector.",
+            "whatAnAreaIs": "Un área es una sección con nombre de este espacio de trabajo. El acceso se concede por áreas en lugar de por listas de carpetas para cada persona, así que ampliar lo que ve un equipo es un solo cambio aquí en vez de uno por miembro. Quien recibe un área ve esas carpetas y nada más: en el árbol de archivos, en la búsqueda y en las conversaciones que abre."
         },
         "sandboxAttention": {
             "agentProposedChangeTo": "El agente propuso un cambio en tu entorno",
@@ -2936,6 +2952,7 @@
         "sandboxNav": {
             "access": "Acceso",
             "agent": "Agente",
+            "areas": "Áreas",
             "box": "Esta caja",
             "configuration": "Configuración",
             "devices": "Dispositivos",
@@ -2945,7 +2962,6 @@
             "personas": "Personas",
             "reach": "Alcance",
             "secrets": "Secretos",
-            "slices": "Partes",
             "usage": "Uso"
         },
         "sandboxOverview": {
@@ -3012,22 +3028,6 @@
             "secrets": "Tus secretos",
             "showLess": "Mostrar menos",
             "showMoreAccounts": "Mostrar {collapsedCredentialCount} cuentas más"
-        },
-        "sandboxSlices": {
-            "couldNotDelete": "No se pudo eliminar la parte.",
-            "couldNotSave": "No se pudo guardar la parte: ¿está en línea la sandbox?",
-            "deleteSlice": "Eliminar parte",
-            "folders": "Carpetas",
-            "needsFolder": "Elige al menos una carpeta. Una parte sin carpetas sería una concesión sin lector.",
-            "newSlice": "Nueva parte",
-            "newSliceName": "Nueva parte",
-            "noSlicesYet": "Aún no hay partes. Todos los que tienen acceso ven el espacio de trabajo completo.",
-            "onlyOwnerEdits": "Solo el propietario de la sandbox decide quién ve qué carpetas.",
-            "pickFolders": "Elige las carpetas que contiene",
-            "pickFoldersToFinish": "Elige al menos una carpeta y guarda. Una parte sin carpetas sería una concesión sin lector.",
-            "sliceName": "Nombre de la parte",
-            "slices": "Partes del espacio de trabajo",
-            "whatASliceIs": "Una parte es una sección con nombre de este espacio de trabajo. El acceso se concede por partes en lugar de por listas de carpetas para cada persona, así que ampliar lo que ve un equipo es un solo cambio aquí en vez de uno por miembro. Quien recibe una parte ve esas carpetas y nada más: en el árbol de archivos, en la búsqueda y en las conversaciones que abre."
         },
         "sandboxSwitcher": {
             "addSandbox": "Añadir un sandbox",

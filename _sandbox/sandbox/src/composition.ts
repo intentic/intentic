@@ -89,7 +89,7 @@ import { createTrialService, type TrialService } from "./trial/trial.js";
 import { withTrialEndpoint } from "./trial/trial-endpoint.js";
 import { type DismissalsStore, fileDismissalsStore } from "./capabilities/dismissals-store.js";
 import { filePersonasStore, type PersonasStore } from "./personas/personas-store.js";
-import { fileSlicesStore, type SlicesStore } from "./slices/slices-store.js";
+import { fileAreasStore, type AreasStore } from "./areas/areas-store.js";
 import { fileHeavyCommandsStore, type HeavyCommandsStore } from "./platform/resources/heavy-commands.js";
 import { type BlobSource, deriveBytes } from "./derived/derived-blob.js";
 import { deriveText, readDerivedText } from "./derived/derived-text.js";
@@ -277,7 +277,7 @@ import { createDependencyCoordinator, type DependencyCoordinator } from "./works
 
 // Wired once at boot for the route factories; a module should Pick only the seams it uses, not take Services whole,
 // unless it orchestrates most of the daemon.
-// One interface; each provider extends it with its own slice declared beside its code, so adding a provider needs only
+// One interface; each provider extends it with its own area declared beside its code, so adding a provider needs only
 // an extends clause and a spread.
 export interface Services extends ClaudeSlice, CodexSlice, CursorSlice, GrokSlice, GeminiSlice, KimiSlice, MintedSlice {
     readonly config: Config;
@@ -395,7 +395,7 @@ export interface Services extends ClaudeSlice, CodexSlice, CursorSlice, GrokSlic
     // Named personas this sandbox shows outside; the turn path reads it to decide what a wake may act through.
     readonly personas: PersonasStore;
     // Named parts of the workspace; every path fence resolves through it, for people and for the turns they start.
-    readonly slices: SlicesStore;
+    readonly areas: AreasStore;
     // Which agent commands are heavy enough to queue; the Bash hook reads it per command, binding on the next one.
     readonly heavyCommands: HeavyCommandsStore;
     // Scheduled agent wake-ups; run history is a separate ledger joined on read, so callers see one store.
@@ -738,7 +738,7 @@ export const createServices = (config: Config, logger: Logger): Services => {
         authDir: cliProxyAuthDir(authRoot),
         usageStore: accountUsage,
     });
-    // OpenCode and the Gemini slice reference each other; safe since the model read runs lazily, after returning.
+    // OpenCode and the Gemini area reference each other; safe since the model read runs lazily, after returning.
     // oxlint-disable-next-line prefer-const -- The config closure reads this binding before assignment.
     let gemini!: GeminiSlice;
     const openCode = createOpenCodeService(authRoot, {
@@ -806,7 +806,7 @@ export const createServices = (config: Config, logger: Logger): Services => {
           }
         : undefined;
 
-    // Provider slices: each directory builds its own Services members; Gemini's slice is built beside OpenCode.
+    // Provider areas: each directory builds its own Services members; Gemini's area is built beside OpenCode.
     const claude = createClaudeSlice({ config, logger, authRoot, workspaceRoot: workspace.root });
     const codex = createCodexSlice({ config, authRoot });
     const cursor = createCursorSlice({ authRoot, logger });
@@ -826,7 +826,7 @@ export const createServices = (config: Config, logger: Logger): Services => {
     });
     const grok = createGrokSlice(openCode);
     const kimi = createKimiSlice(cliProxy);
-    // One slice for every minted provider, built from a spec table so adding one is a contract row, not code here.
+    // One area for every minted provider, built from a spec table so adding one is a contract row, not code here.
     const minted = createMintedSlice({ authRoot, logger });
 
     // Hoisted: worktree ops and the Changes scan must file into the same tracker the summary line reads.
@@ -946,8 +946,8 @@ export const createServices = (config: Config, logger: Logger): Services => {
     const personas = filePersonasStore(statePath(workspace.root, ".intentic/config/personas.json"), (id, reason) =>
         logger.warn(`personas: skipping unreadable card "${id}" (${reason}), the rest are unaffected`),
     );
-    const slices = fileSlicesStore(statePath(workspace.root, ".intentic/config/slices.json"), (id, reason) =>
-        logger.warn(`slices: skipping unreadable slice "${id}" (${reason}); anyone fenced to it reaches nothing until it parses`),
+    const areas = fileAreasStore(statePath(workspace.root, ".intentic/config/areas.json"), (id, reason) =>
+        logger.warn(`areas: skipping unreadable area "${id}" (${reason}); anyone fenced to it reaches nothing until it parses`),
     );
     const heavyCommands = fileHeavyCommandsStore(statePath(workspace.root, ".intentic/config/heavy-commands.json"), (reason) =>
         logger.warn(`heavy-commands: ${reason}, falling back to the shipped rules`),
@@ -1154,7 +1154,7 @@ export const createServices = (config: Config, logger: Logger): Services => {
         platformTunnel,
         capabilityDismissals: fileDismissalsStore(statePath(workspace.root, ".intentic/config/capability-dismissals.json")),
         personas,
-        slices,
+        areas,
         heavyCommands,
         ciStore,
         verifyStore,
@@ -1204,7 +1204,7 @@ export const createServices = (config: Config, logger: Logger): Services => {
         driftSweep: createDriftSweep({ workspace, runtimeInstalls, agents, logger }),
         push: pushStore,
         pushSender,
-        // Provider slices, spread whole; their members' docs live on the slice interfaces, beside the code.
+        // Provider areas, spread whole; their members' docs live on the area interfaces, beside the code.
         ...claude,
         ...codex,
         ...cursor,
@@ -1400,7 +1400,7 @@ export const createServices = (config: Config, logger: Logger): Services => {
     registerDaemonInvariants(invariants, {
         turnJournal,
         agents,
-        slices,
+        areas,
         members,
         manifest: capabilityManifest,
         connectors: secretFieldConnectors,

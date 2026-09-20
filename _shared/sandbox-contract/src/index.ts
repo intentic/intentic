@@ -5,6 +5,7 @@ import { activityContract } from "./contracts/activity.contract.js";
 import { agentContract } from "./contracts/agent.contract.js";
 import { agentsContract } from "./contracts/agents.contract.js";
 import { approvalsContract } from "./contracts/approvals.contract.js";
+import { areasContract } from "./contracts/areas.contract.js";
 import { automationsContract } from "./contracts/automations.contract.js";
 import { capabilitiesContract } from "./contracts/capabilities.contract.js";
 import { choresContract } from "./contracts/chores.contract.js";
@@ -34,7 +35,6 @@ import { sessionsContract } from "./contracts/sessions.contract.js";
 import { settingsContract } from "./contracts/settings.contract.js";
 import { shareContract } from "./contracts/share.contract.js";
 import { skillsContract } from "./contracts/skills.contract.js";
-import { slicesContract } from "./contracts/slices.contract.js";
 import { systemContract } from "./contracts/system.contract.js";
 import { translatorContract } from "./contracts/translator.contract.js";
 import { usageContract } from "./contracts/usage.contract.js";
@@ -47,6 +47,7 @@ export { activityContract } from "./contracts/activity.contract.js";
 export { agentContract } from "./contracts/agent.contract.js";
 export { agentsContract } from "./contracts/agents.contract.js";
 export { approvalsContract } from "./contracts/approvals.contract.js";
+export { areasContract } from "./contracts/areas.contract.js";
 export { automationsContract } from "./contracts/automations.contract.js";
 export { capabilitiesContract } from "./contracts/capabilities.contract.js";
 export { choresContract } from "./contracts/chores.contract.js";
@@ -94,7 +95,6 @@ export { sessionsContract } from "./contracts/sessions.contract.js";
 export { settingsContract } from "./contracts/settings.contract.js";
 export { shareContract } from "./contracts/share.contract.js";
 export { skillsContract } from "./contracts/skills.contract.js";
-export { slicesContract } from "./contracts/slices.contract.js";
 export { systemContract } from "./contracts/system.contract.js";
 export { translatorContract } from "./contracts/translator.contract.js";
 export { type PlanLimitsHeld, type PlanLimitsRefreshed, PlanLimitsRefreshedSchema, usageContract } from "./contracts/usage.contract.js";
@@ -156,6 +156,8 @@ export * from "./policy/approvals-execution.js";
 // flat object, split back into path/body/query. `schemas/internal.ts` is absent: it's vocabulary, not a wire shape.
 export * from "./schemas/activity.js";
 export * from "./schemas/agent.js";
+export * from "./schemas/areas.js";
+export * from "./policy/fence-paths.js";
 export * from "./schemas/agents.js";
 export * from "./schemas/approvals.js";
 export * from "./schemas/automations.js";
@@ -197,8 +199,6 @@ export * from "./schemas/sessions.js";
 export * from "./schemas/settings.js";
 export * from "./schemas/share.js";
 export * from "./schemas/shared.js";
-export * from "./schemas/slices.js";
-export * from "./policy/slice-paths.js";
 export * from "./schemas/system.js";
 export * from "./schemas/terminal.js";
 export * from "./schemas/turn-break.js";
@@ -231,6 +231,7 @@ export const sandboxContract = {
     agent: agentContract,
     agents: agentsContract,
     approvals: approvalsContract,
+    areas: areasContract,
     automations: automationsContract,
     capabilities: capabilitiesContract,
     chores: choresContract,
@@ -244,7 +245,6 @@ export const sandboxContract = {
     settings: settingsContract,
     share: shareContract,
     skills: skillsContract,
-    slices: slicesContract,
     intentic: intenticContract,
     git: gitContract,
     history: historyContract,
