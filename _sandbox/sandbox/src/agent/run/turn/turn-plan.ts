@@ -32,6 +32,7 @@ import { gatedCapabilities, gatedCliEnv, gatedCredentialsNote, gatedSkills } fro
 import { fetchEmailCode } from "../../../browser/tools/email-codes.js";
 import { openBrowserAccount } from "../../../capabilities/open-account.js";
 import { browserOutputDir } from "../../../browser/cast/browser-artifacts.js";
+import { browserPrepareBridge } from "../../../browser/tools/browser-prepare.js";
 import { browserServersOf } from "../../../browser/tools/browser-tools.js";
 import { personaKitPlugin, readPersonaPrompt } from "../../../personas/persona-kit.js";
 import {
@@ -699,7 +700,7 @@ export const planHarnessTurn = async (
         // Browser capabilities grant the one routed @playwright/mcp server, each call bound to its account's persisted
         // profile (or signed in if pending), filtered to this persona's accounts.
         services.perf.track("turn.plan.browser", {}, () =>
-            browserServersOf(granted, services.workspace.root, persona.powers.browser, input.conversationId),
+            browserServersOf(granted, services.workspace.root, browserPrepareBridge(services), persona.powers.browser, input.conversationId),
         ),
         // The card's own folder (skills, subagents, tools), loaded as a plugin dir; undefined for an unpinned turn or a
         // card with no kit.

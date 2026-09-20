@@ -20,9 +20,12 @@ import { ensureStealthScript } from "../sessions/stealth.js";
 // Pure wiring over Microsoft's @playwright/mcp; no browser tools of our own.
 // `web` is always available, credential-free, in-memory profile (--isolated), for ordinary page reads.
 // `browser` fronts every signed-in account/identity via one router, one backend per owner, spawned only when named.
+// Both mounts are routers: neither spawns anything until a call names it.
 
 // Router's mount point; the observer keys on this to read a call's `account` arg, not the prefix.
 export const ROUTED_BROWSER_SERVER = "browser";
+// The credential-free browser's mount, and the owner name its single backend and its X display are keyed under.
+export const ANONYMOUS_BROWSER_SERVER = "web";
 
 const nodeRequire = createRequire(import.meta.url);
 let mcpCli: string | undefined;
@@ -171,7 +174,6 @@ export const browserServerSpec = (
     ],
     env: { ...process.env, DISPLAY: display.name },
     timeout: BROWSER_CALL_TIMEOUT_MS,
-    alwaysLoad: true,
 });
 
 // --isolated keeps it credential-free and lets concurrent turns each have one, unlike a shared profile directory.
@@ -250,24 +252,104 @@ export interface BrowserTurnTools {
     readonly passkeys: Record<string, string>;
 }
 
-// Removes an owner and every account living in its browser, used when its exit or display fails mid-setup.
-// The router then refuses that account by name instead of launching it wrong.
-const dropOwner = (accounts: Record<string, string>, owner: string): void => {
-    delete accounts[owner];
-    for (const [id, mapped] of Object.entries(accounts)) {
-        if (mapped === owner) {
-            delete accounts[id];
-        }
-    }
-};
+
+// Where the router asks this daemon to bring one owner up, mid-turn. The token is the daemon's per-boot browser bridge
+// secret, not a capability's own; it authorizes the ask, the manifest decides which owners may be asked for.
+export interface PrepareBridge {
+    readonly url: string;
+    readonly token: string;
+}
+
+// What a prepared owner takes to spawn: the full environment, not a delta, so a headless backend can be handed an
+// environment with DISPLAY removed rather than one the router would merge its own back into.
+export interface BrowserBackendSpec {
+    readonly command: string;
+    readonly args: readonly string[];
+    readonly env: Record<string, string>;
+}
+
+const backendOf = (spec: McpServerConfig): BrowserBackendSpec | { readonly refusal: string } =>
+    spec.type === "stdio"
+        ? { command: spec.command, args: spec.args ?? [], env: spec.env ?? {} }
+        : { refusal: "the browser server came back with a transport nothing here can spawn" };
 
 const NO_BROWSER_TOOLS: BrowserTurnTools = { servers: {}, accounts: {}, ports: {}, passkeys: {} };
 
-// One backend per profile owner, not per account: identities share one with born accounts; two standalone get two.
-// `anonymous` controls the separate credential-free browser: a different question from whose name this turn may use.
+// Everything a browser costs to have — its X display, its exit, its fingerprint, its config file and the
+// @playwright/mcp process itself — is paid here, on the first call that names this owner, never at turn setup. A turn
+// that mentions no browser starts no process, which is the whole point of the router standing in front.
+// An owner that cannot come up refuses here rather than being dropped from the roster at plan time: the model then
+// reads why, instead of finding an account it was told it had silently missing.
+export const prepareBrowserOwner = async (
+    capabilities: readonly Capability[],
+    root: string,
+    owner: string,
+    // The port this turn already reserved for the owner, so the session view attaches where it was told to.
+    port: number,
+): Promise<BrowserBackendSpec | { readonly refusal: string }> => {
+    const runtime = await browserRuntime();
+    if (runtime === undefined) {
+        return { refusal: "no browser is installed in this sandbox: rebuild it from the Environment card first" };
+    }
+    // One display per browser, not shared: the pointer is an X-server property, sharing one would overlap windows.
+    if (owner === ANONYMOUS_BROWSER_SERVER) {
+        // The only browser allowed to fall back to headless: it carries no identity, so nothing is fingerprinted as a
+        // bot on an account's behalf.
+        const webDisplay = await ensureDisplay(ANONYMOUS_BROWSER_SERVER).catch(() => undefined);
+        const fingerprint = await browserFingerprint(root, ANONYMOUS_BROWSER_SERVER);
+        return backendOf(
+            isolatedBrowserSpec(
+                runtime.cli,
+                runtime.executablePath,
+                browserOutputDir(root),
+                await ensureStealthScript(root, ANONYMOUS_BROWSER_SERVER, fingerprint),
+                webDisplay,
+                await writeBrowserConfig(ANONYMOUS_BROWSER_SERVER, port, fingerprint, webDisplay),
+            ),
+        );
+    }
+    // Taken by the login window since this turn's manifest was written; two Chromiums on one profile corrupt it.
+    // Checked before anything is started, so a refused call costs no display and no exit.
+    if (isProfileOpen(owner)) {
+        return { refusal: `${owner} is open in a login window right now; close it before the agent drives that browser.` };
+    }
+    // A bound exit that won't come up refuses, rather than falling back to the sandbox's own address.
+    const bound = await resolveProfileExit(capabilities, owner, EXIT_START_BUDGET_MS).catch((error: unknown) => ({
+        refusal: `${owner}: its exit could not be resolved (${errorMessage(error)})`,
+    }));
+    if (bound !== undefined && "refusal" in bound) {
+        return bound;
+    }
+    // Logged-in browsers require the display; a missing Xvfb refuses rather than shipping a headless one.
+    const display = await ensureDisplay(owner).catch(() => undefined);
+    if (display === undefined) {
+        return { refusal: `${owner}: no X display could be started for it, so it was not opened headless instead. Rebuild the sandbox to install Xvfb.` };
+    }
+    const exit = bound?.exit;
+    // One device per owner (fingerprint.ts); a bound profile's clock matches its exit's country, not the sandbox's.
+    const fingerprint = await browserFingerprint(root, owner, exit?.place);
+    return backendOf(
+        browserServerSpec(
+            runtime.cli,
+            runtime.executablePath,
+            sessionDir(root, owner),
+            await ensureStealthScript(root, owner, fingerprint),
+            display,
+            await writeBrowserConfig(owner, port, fingerprint, display, exit),
+        ),
+    );
+};
+
+// One router process per mount, and one backend per profile owner behind it: identities share one with born accounts;
+// two standalone get two. `anonymous` controls the separate credential-free browser: a different question from whose
+// name this turn may use.
+// Nothing here spawns a browser, starts a display or resolves an exit: this only declares what the turn *may* reach,
+// at the cost of a reserved port per owner. The router answers the handshake and the tool list from a schema cache, so
+// a turn that never calls a browser tool never pays for one.
 export const browserServersOf = async (
     capabilities: readonly Capability[],
     root: string,
+    bridge: PrepareBridge,
     anonymous = true,
     // Router's workload stamp for the reaper to claim a hard-killed harness's leftovers; absent on the bench.
     conversationId?: string,
@@ -280,19 +362,31 @@ export const browserServersOf = async (
     const ports: Record<string, number> = {};
     const passkeys: Record<string, string> = {};
     const servers: Record<string, McpServerConfig> = {};
-    // One display per browser, not shared: the pointer is an X-server property, sharing one would overlap windows.
-    const webDisplay = await ensureDisplay("web").catch(() => undefined);
+    // Schema probe: isolated headless server, initialize+tools/list only; depends on the package, not the display.
+    // Shared by both mounts, since the tool list is a property of the @playwright/mcp version and nothing else.
+    const shared = {
+        schemaCachePath: join(configDir, `tools-${mcpVersion}.json`),
+        probe: {
+            command: process.execPath,
+            args: [runtime.cli, "--browser", "chromium", "--executable-path", runtime.executablePath, "--no-sandbox", "--isolated", "--headless"],
+        },
+        prepare: { url: bridge.url, token: bridge.token },
+        // Applied over the prepared environment when a backend spawns, so the reaper can claim a hard-killed
+        // harness's leftovers; the daemon that prepares it doesn't carry this turn's stamp.
+        backendEnv: conversationId === undefined ? {} : workloadStamp(conversationId),
+    };
     if (anonymous) {
-        const webPort = await freePort();
-        ports["web"] = webPort;
-        const fingerprint = await browserFingerprint(root, "web");
-        servers["web"] = isolatedBrowserSpec(
-            runtime.cli,
-            runtime.executablePath,
-            browserOutputDir(root),
-            await ensureStealthScript(root, "web", fingerprint),
-            webDisplay,
-            await writeBrowserConfig("web", webPort, fingerprint, webDisplay),
+        ports[ANONYMOUS_BROWSER_SERVER] = await freePort();
+        // Its own router, not a second account on the shared one: `mcp__web__*` takes no `account` argument, and a
+        // sole-owner manifest is what keeps that parameter off its schemas.
+        servers[ANONYMOUS_BROWSER_SERVER] = await routerServer(
+            {
+                ...shared,
+                soleOwner: ANONYMOUS_BROWSER_SERVER,
+                accounts: {},
+                owners: { [ANONYMOUS_BROWSER_SERVER]: { port: ports[ANONYMOUS_BROWSER_SERVER] } },
+            },
+            conversationId,
         );
     }
     const granted = capabilities.filter((capability) => capability.kind === "browser" || capability.kind === "identity");
@@ -309,72 +403,25 @@ export const browserServersOf = async (
             accounts[owner] = owner;
         }
     }
-    // Logged-in browsers require the display; missing Xvfb stands them down rather than shipping a headless one.
-    if (webDisplay === undefined) {
-        return { ...NO_BROWSER_TOOLS, servers, ports };
-    }
-    const backends: Record<string, { command: string; args: readonly string[]; env: Record<string, string> }> = {};
-    // A bound exit that won't come up drops its owner, rather than falling back to the sandbox's own address.
-    const resolved = new Map(
-        await Promise.all(
-            [...owners].map(
-                async (owner) =>
-                    [
-                        owner,
-                        await resolveProfileExit(capabilities, owner, EXIT_START_BUDGET_MS).catch((error: unknown) => ({
-                            refusal: `${owner}: its exit could not be resolved (${errorMessage(error)})`,
-                        })),
-                    ] as const,
-            ),
-        ),
-    );
+    const backends: Record<string, { readonly port: number }> = {};
+    // Sequential, not Promise.all: freePort's don't-reissue guard reads and appends between awaits, so concurrent
+    // callers can be handed the same port before either has claimed it.
     for (const owner of owners) {
-        const bound = resolved.get(owner);
-        if (bound !== undefined && "refusal" in bound) {
-            dropOwner(accounts, owner);
-            continue;
-        }
-        const exit = bound?.exit;
-        const port = await freePort();
-        ports[owner] = port;
+        ports[owner] = await freePort();
         passkeys[owner] = passkeyPath(root, owner);
-        // One device per owner (fingerprint.ts); a bound profile's clock matches its exit's country, not the sandbox's.
-        const fingerprint = await browserFingerprint(root, owner, exit?.place);
-        // This owner's own display; if it can't start, the owner drops, like a refused exit, rather than going
-        // headless.
-        const display = await ensureDisplay(owner).catch(() => undefined);
-        if (display === undefined) {
-            dropOwner(accounts, owner);
-            continue;
-        }
-        const spec = browserServerSpec(
-            runtime.cli,
-            runtime.executablePath,
-            sessionDir(root, owner),
-            await ensureStealthScript(root, owner, fingerprint),
-            display,
-            await writeBrowserConfig(owner, port, fingerprint, display, exit),
-        );
-        if (spec.type !== "stdio") {
-            return { ...NO_BROWSER_TOOLS, servers, ports };
-        }
-        // Only argv and DISPLAY differ; backends inherit the rest, the conversation stamp included, from the router.
-        backends[owner] = { command: spec.command, args: spec.args ?? [], env: { DISPLAY: display.name } };
+        backends[owner] = { port: ports[owner] };
     }
-    const manifest = {
-        schemaCachePath: join(configDir, `tools-${mcpVersion}.json`),
-        // Schema probe: isolated headless server, initialize+tools/list only; depends on the package, not the display.
-        probe: {
-            command: process.execPath,
-            args: [runtime.cli, "--browser", "chromium", "--executable-path", runtime.executablePath, "--no-sandbox", "--isolated", "--headless"],
-        },
-        accounts,
-        owners: backends,
-    };
+    servers[ROUTED_BROWSER_SERVER] = await routerServer({ ...shared, accounts, owners: backends }, conversationId);
+    return { servers, accounts, ports, passkeys };
+};
+
+// The manifest is written 0600 under a per-daemon 0700 directory: it carries the bridge token, so anything that can
+// read it can ask the daemon to bring a browser up.
+const routerServer = async (manifest: object, conversationId: string | undefined): Promise<McpServerConfig> => {
     const manifestPath = join(configDir, `router-${randomBytes(4).toString("hex")}.json`);
     await writeFile(manifestPath, JSON.stringify(manifest), { flag: "wx", mode: 0o600 });
-    // Not alwaysLoad: this router's schemas defer like the credential-free browser's; system append names it.
-    servers[ROUTED_BROWSER_SERVER] = {
+    // Not alwaysLoad: the router's schemas defer behind ToolSearch like every other MCP tool; system append names it.
+    return {
         type: "stdio",
         command: process.execPath,
         args: [ROUTER_SCRIPT, manifestPath],
@@ -384,5 +431,4 @@ export const browserServersOf = async (
         },
         timeout: BROWSER_CALL_TIMEOUT_MS,
     };
-    return { servers, accounts, ports, passkeys };
 };

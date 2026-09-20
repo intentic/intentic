@@ -2,6 +2,7 @@ import { join } from "node:path";
 import type { AgentTurn, Capability } from "@intentic/sandbox-contract";
 import type { Config } from "../../env.config.js";
 import { browserFields } from "../../browser/tools/browser-fields.js";
+import { browserPrepareBridge } from "../../browser/tools/browser-prepare.js";
 import { browserServersOf } from "../../browser/tools/browser-tools.js";
 import { attemptProbe, type AgentAdapter, healthReady, healthUnavailable, healthUnknown } from "../../agent/providers/adapter.js";
 import { withAttachments } from "../../agent/prompt/attachment-note.js";
@@ -68,7 +69,7 @@ export const planCodexTurn = async (
             ? Promise.resolve(input.model)
             : services.codexModels.models().then((catalog) => catalog.default),
         // Plan emulation restarts app-server between review and execution; a fresh process rereads the same manifest.
-        browserServersOf(granted, services.workspace.root, persona.powers.browser, input.conversationId),
+        browserServersOf(granted, services.workspace.root, browserPrepareBridge(services), persona.powers.browser, input.conversationId),
     ]);
     const withModel = { ...context.base, model, ...(context.steering !== undefined ? { steering: context.steering } : {}) };
     // Subscription turns use the translator endpoint with a fixed bearer; the dev path falls to Codex's own key.

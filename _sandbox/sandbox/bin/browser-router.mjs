@@ -2,6 +2,10 @@
 // browser-router <manifest.json>: one stdio MCP server standing in for every signed-in browser. Each tool takes an
 // `account`, resolved through the manifest to an owner whose real backend spawns lazily on first use; an unrecognised
 // account is refused. Backends are children of this process: stdin closing ends the turn and kills them.
+// A sole-owner manifest drops the `account` parameter and routes everything to that one owner: how the credential-free
+// browser gets the same lazy spawn without its tool names growing an argument that has one legal value.
+// Nothing here knows how to build a browser. The first call naming an owner asks the daemon for its spawn spec, since
+// display allocation, profile locks, fingerprints and exits are all daemon state.
 
 import { spawn } from "node:child_process";
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
@@ -14,7 +18,7 @@ if (manifestPath === undefined) {
 }
 const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
 // { schemaCachePath, probe: {command, args}, accounts: { <account-or-identity-id>: <owner> },
-//   owners: { <owner>: { command, args, env } } }
+//   owners: { <owner>: { port } }, prepare: { url, token }, backendEnv: { ... }, soleOwner?: <owner> }
 
 const PROBE_TIMEOUT_MS = 30_000;
 // Prefix for backend-initiated request ids, so two backends' ids can't collide and answers route home.
@@ -45,6 +49,8 @@ const send = (stream, message) => {
 const toClient = (message) => send(process.stdout, message);
 
 const backends = new Map(); // owner → { child, ready, queue: string[], nextId: number }
+// owner → Promise<{ backend } | { refusal }> while its spec is being fetched, so two racing calls prepare once.
+const preparing = new Map();
 
 const shutdown = (code) => {
     for (const backend of backends.values()) {
@@ -125,28 +131,46 @@ const ACCOUNT_PROPERTY = {
         "Which account to act as: a connected account's capability id, or an identity's id for its own browser. " +
         "The account skills and `mcp__accounts__roster` name the ones this sandbox holds.",
 };
+// A sole-owner router has one legal answer, so the parameter would be noise on every schema it serves.
 const withAccountParameter = (tools) =>
-    tools.map((tool) => {
-        const schema = tool.inputSchema ?? { type: "object", properties: {} };
-        return {
-            ...tool,
-            inputSchema: {
-                ...schema,
-                properties: { ...schema.properties, account: ACCOUNT_PROPERTY },
-                required: [...(schema.required ?? []), "account"],
-            },
-        };
-    });
+    manifest.soleOwner !== undefined
+        ? tools
+        : tools.map((tool) => {
+              const schema = tool.inputSchema ?? { type: "object", properties: {} };
+              return {
+                  ...tool,
+                  inputSchema: {
+                      ...schema,
+                      properties: { ...schema.properties, account: ACCOUNT_PROPERTY },
+                      required: [...(schema.required ?? []), "account"],
+                  },
+              };
+          });
 
 // ---- one owner's lazily-spawned real server -----------------------------------------------------------------
-const backendFor = (owner) => {
-    const existing = backends.get(owner);
-    if (existing !== undefined) {
-        return existing;
+
+// The daemon's answer is the whole spawn: the display it started, the exit it dialled, the config it wrote. A refusal
+// comes back as prose for the model, not an error, since "that account's exit is down" is a fact it can act on.
+const askDaemon = async (owner) => {
+    const response = await fetch(manifest.prepare.url, {
+        method: "POST",
+        headers: { authorization: `Bearer ${manifest.prepare.token}`, "content-type": "application/json" },
+        body: JSON.stringify({ owner, port: manifest.owners[owner].port }),
+    });
+    if (!response.ok) {
+        return { refusal: `${owner}: this sandbox refused to start that browser (HTTP ${response.status})` };
     }
-    const spec = manifest.owners[owner];
+    const prepared = await response.json();
+    return typeof prepared?.command === "string"
+        ? prepared
+        : { refusal: typeof prepared?.refusal === "string" ? prepared.refusal : `${owner}: this sandbox started no browser for it` };
+};
+
+// The environment arrives whole from the daemon, not merged over this process's: a headless backend needs DISPLAY
+// absent, which a merge could not express. backendEnv is the turn's workload stamp, which the daemon doesn't carry.
+const spawnBackend = (owner, spec) => {
     const child = spawn(spec.command, spec.args, {
-        env: { ...process.env, ...spec.env },
+        env: { ...spec.env, ...manifest.backendEnv },
         stdio: ["pipe", "pipe", "ignore"],
     });
     const backend = { child, ready: false, queue: [], nextId: 1 };
@@ -203,6 +227,25 @@ const backendFor = (owner) => {
     return backend;
 };
 
+// One prepare per owner even under concurrent calls; a refused owner is not remembered as refused, since the reason
+// (a login window open, an exit still dialling) can pass before the turn ends.
+const backendFor = (owner) => {
+    const existing = backends.get(owner);
+    if (existing !== undefined) {
+        return Promise.resolve({ backend: existing });
+    }
+    const pending = preparing.get(owner);
+    if (pending !== undefined) {
+        return pending;
+    }
+    const started = askDaemon(owner)
+        .catch((error) => ({ refusal: `${owner}: this sandbox could not be reached to start that browser (${error?.message ?? error})` }))
+        .then((prepared) => ("refusal" in prepared ? prepared : { backend: spawnBackend(owner, prepared) }))
+        .finally(() => preparing.delete(owner));
+    preparing.set(owner, started);
+    return started;
+};
+
 const forward = (backend, message) => {
     const line = JSON.stringify(message);
     if (backend.ready) {
@@ -217,104 +260,116 @@ let clientInitializeParams;
 const callRoutes = new Map(); // client request id → owner, so cancellations chase their call
 const backendRequests = new Map(); // prefixed id → { owner, id }, so a client answer routes home
 
+// A refusal is a tool result, not a JSON-RPC error: the model reads the sentence and picks another account or waits.
+const toolRefusal = (id, text) => toClient({ jsonrpc: "2.0", id, result: { content: [{ type: "text", text }], isError: true } });
+
 const refusal = (id, account) =>
-    toClient({
-        jsonrpc: "2.0",
+    toolRefusal(
         id,
-        result: {
-            content: [
-                {
-                    type: "text",
-                    text:
-                        account === undefined
-                            ? `this call names no account, pass \`account\` (granted this turn: ${Object.keys(manifest.accounts).join(", ")})`
-                            : `no account "${account}" this turn can act as, granted: ${Object.keys(manifest.accounts).join(", ")}. ` +
-                              `An account opened this turn lives in its identity's browser: pass the identity's id.`,
-                },
-            ],
-            isError: true,
-        },
-    });
+        account === undefined
+            ? `this call names no account, pass \`account\` (granted this turn: ${Object.keys(manifest.accounts).join(", ")})`
+            : `no account "${account}" this turn can act as, granted: ${Object.keys(manifest.accounts).join(", ")}. ` +
+                  `An account opened this turn lives in its identity's browser: pass the identity's id.`,
+    );
+
+// One function per JSON-RPC method this process answers itself; anything absent belongs to a backend nothing here
+// can name.
+const clientMethods = {
+    initialize: (message) => {
+        clientInitializeParams = message.params;
+        toClient({
+            jsonrpc: "2.0",
+            id: message.id,
+            result: {
+                protocolVersion: message.params?.protocolVersion ?? "2025-06-18",
+                capabilities: { tools: {} },
+                serverInfo: { name: "intentic-browser", version: "1.0.0" },
+            },
+        });
+    },
+    "notifications/initialized": () => {},
+    // A call whose backend is still being prepared has launched nothing to cancel; it lands when the backend does.
+    "notifications/cancelled": (message) => {
+        const owner = callRoutes.get(message.params?.requestId);
+        const backend = owner === undefined ? undefined : backends.get(owner);
+        if (backend !== undefined) {
+            forward(backend, message);
+        }
+    },
+    ping: (message) => toClient({ jsonrpc: "2.0", id: message.id, result: {} }),
+    // Answered from the schema cache: the tool list is what a client needs before it can call anything, and paying a
+    // browser to learn it is the cost this router exists to avoid.
+    "tools/list": (message) => {
+        void toolSchemas().then(
+            (tools) => toClient({ jsonrpc: "2.0", id: message.id, result: { tools: withAccountParameter(tools) } }),
+            (error) =>
+                toClient({
+                    jsonrpc: "2.0",
+                    id: message.id,
+                    error: { code: -32603, message: `browser tools unavailable: ${error?.message ?? error}` },
+                }),
+        );
+    },
+    "tools/call": (message) => {
+        // `account` is stripped either way: a sole-owner router never declared it, so one passed anyway is noise the
+        // real server would reject.
+        const { account, ...rest } = message.params?.arguments ?? {};
+        const owner = manifest.soleOwner ?? (typeof account === "string" ? manifest.accounts[account] : undefined);
+        if (owner === undefined || manifest.owners[owner] === undefined) {
+            refusal(message.id, typeof account === "string" ? account : undefined);
+            return;
+        }
+        callRoutes.set(message.id, owner);
+        // Trimmed opportunistically: a route matters only while its call is in flight.
+        if (callRoutes.size > 512) {
+            for (const key of [...callRoutes.keys()].slice(0, 256)) {
+                callRoutes.delete(key);
+            }
+        }
+        // The first call for an owner waits on its bring-up; this pipe stays readable meanwhile, so a second account's
+        // call is not stuck behind the first one's Chromium starting.
+        void backendFor(owner).then((ready) => {
+            if (ready.refusal !== undefined) {
+                callRoutes.delete(message.id);
+                toolRefusal(message.id, ready.refusal);
+                return;
+            }
+            forward(ready.backend, { ...message, params: { ...message.params, arguments: rest } });
+        });
+    },
+};
+
+// The client answering a backend-initiated request: strip the prefix and route it home.
+const answersBackend = (message) => message.method === undefined && typeof message.id === "string" && message.id.startsWith(BACKEND_ID_PREFIX);
+
+const fromClient = (message) => {
+    if (answersBackend(message)) {
+        const route = backendRequests.get(message.id);
+        backendRequests.delete(message.id);
+        const backend = route === undefined ? undefined : backends.get(route.owner);
+        if (backend !== undefined) {
+            forward(backend, { ...message, id: route.id });
+        }
+        return;
+    }
+    const handler = clientMethods[message.method];
+    if (handler !== undefined) {
+        handler(message);
+        return;
+    }
+    // Anything else is a question only a specific backend could answer, and nothing here says which one.
+    if (message.id !== undefined) {
+        toClient({ jsonrpc: "2.0", id: message.id, error: { code: -32601, message: `unsupported method "${message.method}"` } });
+    }
+};
 
 process.stdin.on(
     "data",
     lineReader((line) => {
-        let message;
         try {
-            message = JSON.parse(line);
+            fromClient(JSON.parse(line));
         } catch {
-            return;
-        }
-        // The client answering a backend-initiated request: strip the prefix and route it home.
-        if (message.method === undefined && typeof message.id === "string" && message.id.startsWith(BACKEND_ID_PREFIX)) {
-            const route = backendRequests.get(message.id);
-            backendRequests.delete(message.id);
-            const backend = route === undefined ? undefined : backends.get(route.owner);
-            if (backend !== undefined) {
-                forward(backend, { ...message, id: route.id });
-            }
-            return;
-        }
-        if (message.method === "initialize") {
-            clientInitializeParams = message.params;
-            toClient({
-                jsonrpc: "2.0",
-                id: message.id,
-                result: {
-                    protocolVersion: message.params?.protocolVersion ?? "2025-06-18",
-                    capabilities: { tools: {} },
-                    serverInfo: { name: "intentic-browser", version: "1.0.0" },
-                },
-            });
-            return;
-        }
-        if (message.method === "notifications/initialized") {
-            return;
-        }
-        if (message.method === "notifications/cancelled") {
-            const owner = callRoutes.get(message.params?.requestId);
-            const backend = owner === undefined ? undefined : backends.get(owner);
-            if (backend !== undefined) {
-                forward(backend, message);
-            }
-            return;
-        }
-        if (message.method === "ping") {
-            toClient({ jsonrpc: "2.0", id: message.id, result: {} });
-            return;
-        }
-        if (message.method === "tools/list") {
-            void toolSchemas().then(
-                (tools) => toClient({ jsonrpc: "2.0", id: message.id, result: { tools: withAccountParameter(tools) } }),
-                (error) =>
-                    toClient({
-                        jsonrpc: "2.0",
-                        id: message.id,
-                        error: { code: -32603, message: `browser tools unavailable: ${error?.message ?? error}` },
-                    }),
-            );
-            return;
-        }
-        if (message.method === "tools/call") {
-            const { account, ...rest } = message.params?.arguments ?? {};
-            const owner = typeof account === "string" ? manifest.accounts[account] : undefined;
-            if (owner === undefined || manifest.owners[owner] === undefined) {
-                refusal(message.id, typeof account === "string" ? account : undefined);
-                return;
-            }
-            callRoutes.set(message.id, owner);
-            // Trimmed opportunistically: a route matters only while its call is in flight.
-            if (callRoutes.size > 512) {
-                for (const key of [...callRoutes.keys()].slice(0, 256)) {
-                    callRoutes.delete(key);
-                }
-            }
-            forward(backendFor(owner), { ...message, params: { ...message.params, arguments: rest } });
-            return;
-        }
-        // Anything else is a question only a specific backend could answer, and nothing here says which one.
-        if (message.id !== undefined) {
-            toClient({ jsonrpc: "2.0", id: message.id, error: { code: -32601, message: `unsupported method "${message.method}"` } });
+            // A line that is not JSON, or a handler that threw: neither is worth ending the turn's browsing over.
         }
     }),
 );

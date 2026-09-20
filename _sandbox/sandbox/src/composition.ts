@@ -329,6 +329,9 @@ export interface Services extends ClaudeSlice, CodexSlice, CursorSlice, GrokSlic
     // The desktop-sync enrollments, for the same reason and in the same shape: the devices view merges them with host
     // pulls without the hosts subsystem importing the platform's sync store.
     readonly syncFleet: () => Promise<SyncFleet>;
+    // Per-boot secret a turn's browser routers carry to ask this daemon to bring one profile up; its own, so one
+    // leaking can't open a peer's door.
+    readonly browserBridgeToken: string;
     // Same pair for the user's own browsers; a separate bridge token so one leaking can't open the other's door.
     readonly webextBridgeToken: string;
     readonly webexts: WebExtStore;
@@ -1104,6 +1107,7 @@ export const createServices = (config: Config, logger: Logger): Services => {
         hostReach: (granted) => hostDeviceReach(services, granted),
         syncFleet: () => enrolledFleet(config.historyRoot),
         hostHub: createPeerHub<HostClient, HostAnnounced, HostFacts, HostScopes>(HOST_PEER.hub, logger),
+        browserBridgeToken: randomBytes(32).toString("hex"),
         webextBridgeToken: randomBytes(32).toString("hex"),
         webexts: filePeerStore(config.historyRoot, WEBEXT_PEER.store),
         webextHub: createPeerHub<WebExtClient, WebExtAnnounced, WebExtFacts, WebExtScopes>(WEBEXT_PEER.hub, logger),

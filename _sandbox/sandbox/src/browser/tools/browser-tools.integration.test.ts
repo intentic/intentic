@@ -1,10 +1,10 @@
-import { existsSync, mkdtempSync, readFileSync, statSync, utimesSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readdirSync, readFileSync, statSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { STATE_DIR, WORKSPACE_ROOT } from "@intentic/constants";
 import type { Capability } from "@intentic/sandbox-contract";
 import { expect, test } from "vitest";
-import { browserServerSpec, browserServersOf, isolatedBrowserSpec, writeBrowserConfig } from "./browser-tools.js";
+import { browserServerSpec, browserServersOf, isolatedBrowserSpec, prepareBrowserOwner, writeBrowserConfig } from "./browser-tools.js";
 import { chromiumWindowArgs, type Display, DISPLAY_HEIGHT, DISPLAY_WIDTH } from "../cast/display.js";
 import { browserFingerprint } from "../sessions/fingerprint.js";
 import { acquireProfileLock, markConnected, releaseProfileLock } from "../sessions/session-store.js";
@@ -13,13 +13,16 @@ import { acquireProfileLock, markConnected, releaseProfileLock } from "../sessio
 const DISPLAY: Display = { name: ":99", width: DISPLAY_WIDTH, height: DISPLAY_HEIGHT };
 
 const tempRoot = (): string => mkdtempSync(join(tmpdir(), "browser-tools-"));
+// Where a router would ask the daemon to bring an owner up. Never dialled here: these tests only check what a turn
+// declares, and declaring is the half that now costs nothing.
+const BRIDGE = { url: "http://127.0.0.1:1/system/browser/prepare", token: "test-token" };
 const reddit: Capability = { id: "reddit", kind: "browser", config: { platform: "reddit" } };
 
 // Any owner works: these tests check wiring, not device values.
 const anyDevice = async (): Promise<Awaited<ReturnType<typeof browserFingerprint>>> => browserFingerprint(tempRoot(), "reddit");
 
 // CI images may lack Chromium; shape assertions stay version-independent regardless.
-const chromiumInstalled = async (): Promise<boolean> => Object.keys((await browserServersOf([], tempRoot())).servers).length > 0;
+const chromiumInstalled = async (): Promise<boolean> => Object.keys((await browserServersOf([], tempRoot(), BRIDGE)).servers).length > 0;
 
 test("browser MCP configs live in a private directory, each one written exclusively", async () => {
     const server = `permissions-${process.hrtime.bigint()}`;
@@ -116,12 +119,13 @@ test("config directories left by dead daemons are swept, and the live one is kep
     utimesSync(join(dead, "web-40000-abcdef01.json"), stale, stale);
     utimesSync(dead, stale, stale);
 
-    const { servers } = await browserServersOf([], tempRoot());
+    const { servers } = await browserServersOf([], tempRoot(), BRIDGE);
 
     expect(existsSync(dead)).toBe(false);
-    // This turn's own config survives the same sweep pass.
+    // This turn's own router manifest survives the same sweep pass. It is the only file a turn writes now: the
+    // browser config is written when a call arrives, by prepareBrowserOwner.
     const args = (servers["web"] as { args: string[] }).args;
-    expect(existsSync(args[args.indexOf("--config") + 1] as string)).toBe(true);
+    expect(existsSync(args[1] as string)).toBe(true);
 });
 
 test("browserServerSpec is a HEADED stdio server bound to the profile + stealth + display", () => {
@@ -204,18 +208,18 @@ test("a browser is available with no capabilities and no login at all", async ()
     if (!(await chromiumInstalled())) {
         return;
     }
-    expect(Object.keys((await browserServersOf([], tempRoot())).servers)).toEqual(["web"]);
+    expect(Object.keys((await browserServersOf([], tempRoot(), BRIDGE)).servers)).toEqual(["web"]);
     const github: Capability = { id: "gh", kind: "cli", config: { provider: "github", token: "x" } };
-    expect(Object.keys((await browserServersOf([github], tempRoot())).servers)).toEqual(["web"]);
+    expect(Object.keys((await browserServersOf([github], tempRoot(), BRIDGE)).servers)).toEqual(["web"]);
 });
 
 // A pending account's browser still mounts: only the profile lock gates it now, not the connected marker.
-// Needs Xvfb like every persisted-profile server; guarded accordingly.
+// No Xvfb guard any more: declaring the server starts no display, which is the point.
 test("a browser capability mounts the ONE routed server before anyone has logged in", async () => {
-    if (!(await chromiumInstalled()) || !existsSync("/usr/bin/Xvfb")) {
+    if (!(await chromiumInstalled())) {
         return;
     }
-    const { servers, accounts, passkeys } = await browserServersOf([reddit], tempRoot());
+    const { servers, accounts, passkeys } = await browserServersOf([reddit], tempRoot(), BRIDGE);
     expect(Object.keys(servers).toSorted()).toEqual(["browser", "web"]);
     expect(accounts["reddit"]).toBe("reddit");
     // The passkey store is armed from the first page: a sign-up is exactly when the account enrolls its key.
@@ -233,14 +237,13 @@ test("a login in progress suppresses that account's server (the profile is locke
     await markConnected(root, "reddit");
     expect(acquireProfileLock("reddit")).toBe(true);
     // The credential-free browser is unaffected: it holds no profile to lock.
-    expect(Object.keys((await browserServersOf([reddit], root)).servers)).toEqual(["web"]);
+    expect(Object.keys((await browserServersOf([reddit], root, BRIDGE)).servers)).toEqual(["web"]);
     releaseProfileLock("reddit");
 });
 
-// Two accounts of one site are two backends (own --user-data-dir); sharing a dir would fail, Chromium locks it.
-// Needs Xvfb like the logged-in path above; guarded the same way.
-test("accounts of the same site each get their own backend on their own profile, behind one server", async () => {
-    if (!(await chromiumInstalled()) || !existsSync("/usr/bin/Xvfb")) {
+// Two accounts of one site are two backends; the manifest that says so costs one port each and nothing else.
+test("accounts of the same site each stand behind one server, declared without being built", async () => {
+    if (!(await chromiumInstalled())) {
         return;
     }
     const root = tempRoot();
@@ -249,37 +252,73 @@ test("accounts of the same site each get their own backend on their own profile,
     await markConnected(root, "reddit-work");
     await markConnected(root, "reddit-personal");
 
-    const { servers, accounts, passkeys } = await browserServersOf([work, personal], root);
+    const { servers, accounts, passkeys } = await browserServersOf([work, personal], root, BRIDGE);
 
     // The prompt pays for one server however many accounts stand behind it.
     expect(Object.keys(servers).toSorted()).toEqual(["browser", "web"]);
     expect(accounts).toEqual({ "reddit-work": "reddit-work", "reddit-personal": "reddit-personal" });
-    const routerArgs = (servers["browser"] as { args: string[] }).args;
-    const manifest = JSON.parse(readFileSync(routerArgs[1] as string, "utf8")) as {
+    const manifestPath = (servers["browser"] as { args: string[] }).args[1] as string;
+    const manifest = JSON.parse(readFileSync(manifestPath, "utf8")) as {
         accounts: Record<string, string>;
-        owners: Record<string, { args: string[] }>;
+        owners: Record<string, { port: number; command?: string }>;
+        prepare: { url: string; token: string };
     };
     expect(manifest.accounts).toEqual(accounts);
-    const dirOf = (id: string): string | undefined => {
-        const args = manifest.owners[id]?.args ?? [];
-        return args[args.indexOf("--user-data-dir") + 1];
-    };
-    expect(dirOf("reddit-work")).toBe(join(root, ".intentic", "local", "browser", "reddit-work"));
-    expect(dirOf("reddit-personal")).toBe(join(root, ".intentic", "local", "browser", "reddit-personal"));
+    expect(manifest.prepare).toEqual(BRIDGE);
+    // An owner is a reserved port and nothing else: no argv, so nothing here could spawn a browser without asking.
+    expect(manifest.owners["reddit-work"]?.command).toBeUndefined();
+    expect(manifest.owners["reddit-work"]?.port).toBeGreaterThan(0);
+    expect(manifest.owners["reddit-personal"]?.port).not.toBe(manifest.owners["reddit-work"]?.port);
+    // And no browser config was written for either of them: that file is what a launched Chromium reads.
+    expect(readdirSync(dirname(manifestPath)).filter((name) => name.startsWith("reddit-"))).toEqual([]);
     // Their software security keys are separate too: one account's second factor is not the other's.
     expect(passkeys["reddit-work"]).not.toBe(passkeys["reddit-personal"]);
 });
 
+// The other half: what a call pays for once it names an owner. Needs Xvfb, since a logged-in profile is headed.
+test("preparing an owner writes its config and binds its own profile directory", async () => {
+    if (!(await chromiumInstalled()) || !existsSync("/usr/bin/Xvfb")) {
+        return;
+    }
+    const root = tempRoot();
+    const work: Capability = { id: "reddit-work", kind: "browser", config: { platform: "reddit" } };
+    await markConnected(root, "reddit-work");
+
+    const prepared = await prepareBrowserOwner([work], root, "reddit-work", 41_999);
+
+    if ("refusal" in prepared) {
+        throw new Error(`expected a spawn spec, got a refusal: ${prepared.refusal}`);
+    }
+    const args = [...prepared.args];
+    expect(args[args.indexOf("--user-data-dir") + 1]).toBe(join(root, ".intentic", "local", "browser", "reddit-work"));
+    const config = JSON.parse(readFileSync(args[args.indexOf("--config") + 1] as string, "utf8")) as {
+        browser: { launchOptions: { args: string[] } };
+    };
+    expect(config.browser.launchOptions.args).toContain("--remote-debugging-port=41999");
+});
+
+test("preparing an owner whose profile a login window holds refuses instead of racing it", async () => {
+    if (!(await chromiumInstalled())) {
+        return;
+    }
+    const root = tempRoot();
+    await markConnected(root, "reddit");
+    expect(acquireProfileLock("reddit")).toBe(true);
+    const prepared = await prepareBrowserOwner([reddit], root, "reddit", 41_998);
+    releaseProfileLock("reddit");
+    expect((prepared as { refusal: string }).refusal).toContain("login window");
+});
+
 // An identity and an account born from it are one backend (the shared profile), addressable by either id.
 test("an identity-born account routes to its identity's browser", async () => {
-    if (!(await chromiumInstalled()) || !existsSync("/usr/bin/Xvfb")) {
+    if (!(await chromiumInstalled())) {
         return;
     }
     const root = tempRoot();
     const main: Capability = { id: "main", kind: "identity", config: { email: "studio@gmail.com", openAccounts: "off" } };
     const born: Capability = { id: "reddit-main", kind: "browser", config: { platform: "reddit", identity: "main" } };
 
-    const { servers, accounts, ports } = await browserServersOf([main, born], root);
+    const { servers, accounts, ports } = await browserServersOf([main, born], root, BRIDGE);
     expect(Object.keys(servers).toSorted()).toEqual(["browser", "web"]);
     expect(accounts).toEqual({ main: "main", "reddit-main": "main" });
     // One profile owner, one debugging port: the observer's map is per owner, not per account.
@@ -294,5 +333,5 @@ test("no Chromium on disk means no browser servers at all", async () => {
     }
     const root = tempRoot();
     await markConnected(root, "reddit");
-    expect(await browserServersOf([reddit], root)).toEqual({ servers: {}, accounts: {}, ports: {}, passkeys: {} });
+    expect(await browserServersOf([reddit], root, BRIDGE)).toEqual({ servers: {}, accounts: {}, ports: {}, passkeys: {} });
 });

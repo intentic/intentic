@@ -2,6 +2,7 @@ import { join } from "node:path";
 import type { AgentTurn, Capability } from "@intentic/sandbox-contract";
 import type { Logger } from "pino";
 import { browserFields } from "../../browser/tools/browser-fields.js";
+import { browserPrepareBridge } from "../../browser/tools/browser-prepare.js";
 import { browserServersOf } from "../../browser/tools/browser-tools.js";
 import { attemptProbe, type AgentAdapter, healthReady, healthUnavailable, healthUnknown } from "../../agent/providers/adapter.js";
 import { withAttachments } from "../../agent/prompt/attachment-note.js";
@@ -68,7 +69,7 @@ export const planCursorTurn = async (
     // Never empty, so this always resolves: keeps the pinned model while offered, else the catalog default.
     const [catalog, browser] = await Promise.all([
         services.cursorModels.models(),
-        browserServersOf(granted, services.workspace.root, persona.powers.browser, input.conversationId),
+        browserServersOf(granted, services.workspace.root, browserPrepareBridge(services), persona.powers.browser, input.conversationId),
     ]);
     const model = input.model !== undefined && catalog.models.some((entry) => entry.id === input.model) ? input.model : catalog.default;
     // Placed after the model resolves, because which connection can still serve is a question about that model's own

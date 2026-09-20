@@ -26,7 +26,9 @@ vi.mock("../../providers/harness-credentials.js", async (importOriginal) => ({
 const browserServers = vi.fn();
 vi.mock("../../../browser/tools/browser-tools.js", () => ({
     ROUTED_BROWSER_SERVER: "browser",
+    ANONYMOUS_BROWSER_SERVER: "web",
     browserServersOf: (...args: unknown[]) => browserServers(...args),
+    prepareBrowserOwner: vi.fn(),
 }));
 
 /* NOTHING HERE TOUCHES THE DISK, which is what keeps this suite under the unit budget: the shared fixture's ROOT is a path that does not exist. */
@@ -211,7 +213,14 @@ test("Codex receives the connected browser granted to its persona, and no other 
     const plan = await planTurn(services, turn({ agent: "codex", actsAs: "reddit-writer", conversationId: "reddit-conversation" }), context);
     const request = (plan as { request: AgentRequest }).request;
 
-    expect(browserServers).toHaveBeenCalledWith([reddit], ROOT, true, "reddit-conversation");
+    // The bridge is this daemon's own loopback door, so the turn's router can ask it to bring that profile up later.
+    expect(browserServers).toHaveBeenCalledWith(
+        [reddit],
+        ROOT,
+        { url: `http://127.0.0.1:${testConfig.sandbox.port}/system/browser/prepare`, token: "test-browser-bridge-token" },
+        true,
+        "reddit-conversation",
+    );
     expect(request.sdkServers).toEqual({
         identity: { type: "stdio", command: "/usr/bin/socat", args: ["STDIO", "UNIX-CONNECT:/tmp/identity.sock"] },
     });

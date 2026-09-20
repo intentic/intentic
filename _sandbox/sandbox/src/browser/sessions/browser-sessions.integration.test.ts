@@ -13,7 +13,7 @@ import {
     browserSessionPage,
     listBrowserSessions,
 } from "./browser-sessions.js";
-import { browserServersOf } from "../tools/browser-tools.js";
+import { browserServersOf, prepareBrowserOwner } from "../tools/browser-tools.js";
 import { startScreencast } from "../cast/screencast.js";
 
 test("a browser tool's server and session name are derived the same way everywhere", () => {
@@ -44,12 +44,18 @@ const pagesOf = (): number => listBrowserSessions().find((session) => session.na
 
 test("the agent's browser is listed, watchable, and closable while the MCP drives it", { timeout: 120_000 }, async () => {
     const root = mkdtempSync(join(tmpdir(), "browser-sessions-"));
-    const { servers, ports } = await browserServersOf([], root);
-    const web = servers["web"] as { command: string; args: string[]; env: Record<string, string> } | undefined;
+    // The turn reserves the port; the call that names the browser is what builds it. Driven here without the router
+    // in between, since what is under test is the session the browser becomes, not how a call reaches it.
+    const { ports } = await browserServersOf([], root, { url: "http://127.0.0.1:1/system/browser/prepare", token: "t" });
     const port = ports["web"];
-    if (web === undefined || port === undefined) {
+    if (port === undefined) {
         return; // no Chromium on disk — nothing to drive
     }
+    const prepared = await prepareBrowserOwner([], root, "web", port);
+    if ("refusal" in prepared) {
+        throw new Error(`the credential-free browser would not start: ${prepared.refusal}`);
+    }
+    const web = prepared;
 
     const site = createServer((_request, response) => response.end("<title>Probe Page</title><h1>hello</h1>"));
     await new Promise<void>((resolve) => site.listen(0, "127.0.0.1", () => resolve()));

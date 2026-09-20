@@ -268,7 +268,7 @@ accounts spelled out.
 | The JS execution backend a card can grant | [js-runtime.ts](../../_sandbox/sandbox/src/execution/js-runtime.ts) (the fence and the runner) · [js-tool.ts](../../_sandbox/sandbox/src/execution/js-tool.ts) (the `Code` tool the Claude Code loop mounts) |
 | The disk state behind a login | [session-store.ts](../../_sandbox/sandbox/src/browser/sessions/session-store.ts) |
 | Adding / removing a site login | [handlers/browser.ts](../../_sandbox/sandbox/src/capabilities/handlers/browser.handler.ts) |
-| The one `browser` server routing every account | [browser-router.mjs](../../_sandbox/sandbox/bin/browser-router.mjs) (spawned per turn) · [browser-tools.ts](../../_sandbox/sandbox/src/browser/tools/browser-tools.ts) (its manifest: the persona-filtered account map) |
+| The one `browser` server routing every account | [browser-router.mjs](../../_sandbox/sandbox/bin/browser-router.mjs) (spawned per turn; each account's browser only when a call names it) · [browser-tools.ts](../../_sandbox/sandbox/src/browser/tools/browser-tools.ts) (its manifest: the persona-filtered account map) · [browser-prepare.ts](../../_sandbox/sandbox/src/browser/tools/browser-prepare.ts) (the door it brings one up through) |
 | The per-site skills, accounts as roster lines | [account-skills.ts](../../_sandbox/sandbox/src/capabilities/account-skills.ts) (the converge) · [browser-skill.ts](../../_sandbox/sandbox/src/browser/tools/browser-skill.ts) (the core notes) |
 | The agent signing itself in | [accounts-tools.ts](../../_sandbox/sandbox/src/browser/tools/accounts-tools.ts) |
 | Where the rule is applied to a turn | [turn-plan.ts](../../_sandbox/sandbox/src/agent/run/turn/turn-plan.ts) |

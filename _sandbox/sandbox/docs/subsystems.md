@@ -360,11 +360,18 @@ A reader's tour of `src/`: which directory answers which question, and the file 
   ([bin/browser-router.mjs](../bin/browser-router.mjs), configured by
   [src/browser/tools/browser-tools.ts](../src/browser/tools/browser-tools.ts)): every tool takes an `account` argument the
   router resolves to a profile, so the prompt pays for one schema set however many accounts are connected:
-  before this every account pinned its own copy of ~21 tool schemas. The router also answers the harness's
-  startup handshake from a version-keyed schema cache and spawns an account's real node+playwright backend
-  only when a call names it: before that, every turn started one such process per connected account, ~3.5 GB
-  a turn for browsers mostly never touched: and an `account` outside the turn's persona-filtered manifest is
-  refused by name, which is what makes the persona rule hold at the tool layer. The same collapse holds for
+  before this every account pinned its own copy of ~21 tool schemas. The credential-free `web` browser is the
+  same router under a sole-owner manifest, which is what lets `mcp__web__*` keep its tool names and take no
+  `account` while spawning as late as the rest. The router answers the harness's startup handshake and
+  `tools/list` from a version-keyed schema cache, and NOTHING a browser costs is paid until a call names an
+  owner: the first such call asks the daemon (`POST /system/browser/prepare`, per-boot bridge token) for that
+  owner's spawn spec, and only then does its X display start, its exit dial, its config get written and its
+  node+playwright process spawn. A turn declares what it may reach for the price of one reserved port per
+  owner. Before this, turn planning brought every granted profile up eagerly: one Xvfb per connected account
+  at daemon start whether or not a browser was ever opened, and a playwright process every turn for `web`.
+  An `account` outside the turn's persona-filtered manifest is refused by name, which is what makes the
+  persona rule hold at the tool layer; an owner that cannot come up refuses at the call, naming why, rather
+  than going missing from the roster the model was handed. The same collapse holds for
   the SKILLS: one `identities` skill and one per connected SITE, each account a roster line, converged by
   [src/capabilities/account-skills.ts](../src/capabilities/account-skills.ts): never a per-account clone. The
   owner signs the email provider in themselves in a live

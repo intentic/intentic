@@ -40,6 +40,7 @@ import { createBackendProxyRoute } from "./extensions/backend/backend-proxy.rout
 import { createExtensionBundleRoute } from "./extensions/extension-bundle.routes.js";
 import { createListenerRoutes } from "./extensions/listener.routes.js";
 import { createBrowserProfileRoute } from "./browser/sessions/browser-profile.js";
+import { BROWSER_PREPARE_PATH, createBrowserPrepareRoute } from "./browser/tools/browser-prepare.js";
 import { HOST_PEER, hostPeerRoutes } from "./hosts/host-peer.js";
 import { peerConnectPath, peerEnrollPath, peerMcpPath } from "./peers/peer.js";
 import { mountPeerRoutes } from "./peers/peer-routes.js";
@@ -140,6 +141,8 @@ const BEARER_EXEMPT_PATHS = new Set([
     "/system/authorized-key",
     // Account deletion must stay repeatable after a partial attempt; the handler does its own owner check.
     "/system/access/disable",
+    // A turn's own browser router, carrying the per-boot browser bridge token the handler checks itself.
+    BROWSER_PREPARE_PATH,
     ...PASSKEY_SIGNIN_PATHS,
 ]);
 const bearerExemptPath = (path: string): boolean =>
@@ -521,6 +524,8 @@ export const createApp = (services: Services): Hono<AppEnv> => {
     mountPeerRoutes(app, HOST_PEER, hostPeerRoutes(services));
     mountPeerRoutes(app, WEBEXT_PEER, webextPeerRoutes(services));
     mountPeerRoutes(app, RUNNER_PEER, runnerPeerRoutes(services));
+    // A turn's browser router asking for one profile's spawn spec, on the first call that names it.
+    app.post(BROWSER_PREPARE_PATH, createBrowserPrepareRoute(services));
     // A browser's two credential doors: `session` moves a site sign-in in, `lend` moves one back out.
     app.post("/system/webext/session", createWebExtSessionRoute(services));
     app.post("/system/webext/lend", createWebExtLendRoute(services));
