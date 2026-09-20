@@ -68,22 +68,35 @@ export const fileOwnerStore = (path: string): OwnerStore => {
 };
 
 // The additional authorized identities beyond the owner and the role each was granted, stored as
-// {members:[{email,role}]}.
-// The owner is never listed here; the daemon enforces shared access, the platform only mirrors these grants.
+// {members:[{email,role,desks?}]}.
+// The owner is never listed here; the daemon enforces shared access, the platform only mirrors these grants. Desks
+// are the daemon's alone: which cards a desk member holds is a fact about this workspace's personas, never mirrored.
 export interface Member {
     readonly email: string;
     readonly role: GrantedRole;
+    // Persona ids a desk member may act through; present, and non-empty, only on a `desk` row.
+    readonly desks?: readonly string[];
 }
 
 export interface MembersStore {
     list(): Promise<Member[]>;
-    // Upsert: granting an email that already holds access re-grades its role.
-    add(email: string, role: GrantedRole): Promise<void>;
+    // Upsert: granting an email that already holds access re-grades its role, and replaces its desks.
+    add(email: string, role: GrantedRole, desks?: readonly string[]): Promise<void>;
     remove(email: string): Promise<void>;
 }
 
-const MemberSchema = z.object({ email: z.string(), role: GrantedRoleSchema });
+// A desk row must name at least one card, and no other row may carry any: a desk with nothing to wear has nothing to
+// reach, and desks on a viewer would be a grant with no reader.
+const MemberSchema = z
+    .object({ email: z.string(), role: GrantedRoleSchema, desks: z.array(z.string().min(1)).optional() })
+    .refine((member) => (member.role === "desk" ? (member.desks?.length ?? 0) > 0 : member.desks === undefined), {
+        message: "a desk names at least one persona, and only a desk names any",
+    });
 const MembersFileSchema = z.object({ members: z.array(z.unknown()) });
+
+// The row a grant writes: desks ride only on a desk, so a re-grade away from desk drops them.
+export const memberRow = (email: string, role: GrantedRole, desks: readonly string[] | undefined): Member =>
+    role === "desk" && desks !== undefined ? { email, role, desks: [...desks] } : { email, role };
 
 // Same substrate as the owner store; the per-file update queue lets two grants landing together both survive instead of
 // one erasing the other.
@@ -92,14 +105,22 @@ export const fileMembersStore = (path: string): MembersStore => {
     const file = jsonFile<{ readonly members: readonly Member[] }>(path, {
         parse: (raw) => {
             const parsed = MembersFileSchema.safeParse(raw);
-            return parsed.success ? { members: parsed.data.members.flatMap((entry) => MemberSchema.safeParse(entry).data ?? []) } : undefined;
+            if (!parsed.success) {
+                return undefined;
+            }
+            return {
+                members: parsed.data.members.flatMap((entry) => {
+                    const member = MemberSchema.safeParse(entry).data;
+                    return member === undefined ? [] : [memberRow(member.email, member.role, member.desks)];
+                }),
+            };
         },
         fallback: () => ({ members: [] }),
     });
     return {
         list: async () => [...(await file.read()).members],
-        add: async (email, role) => {
-            await file.update((current) => ({ members: [...current.members.filter((member) => member.email !== email), { email, role }] }));
+        add: async (email, role, desks) => {
+            await file.update((current) => ({ members: [...current.members.filter((member) => member.email !== email), memberRow(email, role, desks)] }));
         },
         remove: async (email) => {
             await file.update((current) => {
@@ -135,6 +156,8 @@ export const tokenEquals = (a: string, b: string): boolean => {
 // Role is resolved fresh on each authorize (owner + members re-read), so a re-grade applies on the very next request.
 export interface Caller extends VerifiedIdentity {
     readonly role: MemberRole;
+    // The persona cards a desk member may act through; absent on every other tier.
+    readonly desks?: readonly string[];
 }
 
 // What authorize() hands the middleware: the caller and the proof behind them, so a session renewal keeps its methods
@@ -238,7 +261,7 @@ export const createAuthorizer = (deps: {
         if (member === undefined) {
             throw new ForbiddenError("not authorized for this sandbox");
         }
-        return { ...proof, role: member.role };
+        return { ...proof, role: member.role, ...(member.desks !== undefined ? { desks: member.desks } : {}) };
     };
     // The require-passkey policy, read per request like the roster. A recovery code counts: it exists to get an owner
     // with no passkey left back to registering one.

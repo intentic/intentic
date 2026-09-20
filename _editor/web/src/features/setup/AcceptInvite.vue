@@ -47,6 +47,9 @@ const grantSentence = computed<string>(() => {
         case `viewer`: {
             return `follow along: read the files and watch the agents work, without changing anything`;
         }
+        case `desk`: {
+            return `talk to the assistants its owner picked for you; nothing else in it is shown`;
+        }
         default: {
             return `open it`;
         }

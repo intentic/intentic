@@ -219,7 +219,7 @@ const landing = computed(() => props.pending === `land` || props.agent.status ==
 // Maintainers get Land now; collaborators get Request land instead, since the daemon floors landing at maintainer;
 // viewers get neither.
 // The request is sent here rather than emitted, since the board is only one of this card's several hosts.
-const { canDrive, canShip } = useRole();
+const { canReview, canShip } = useRole();
 // The audience's words for the verbs on this card; a maker also loses the branch and runner chips, which name nothing
 // they chose.
 const words = useVocabulary();
@@ -721,7 +721,7 @@ const grab = (event: PointerEvent): void => {
             </div>
 
             <!-- The same Ready card for a collaborator: land is a maintainer's press, so this offers the ask instead, same spot and size but quieter chrome. -->
-            <div v-else-if="landable && canDrive" class="flex min-w-0 flex-col gap-1">
+            <div v-else-if="landable && canReview" class="flex min-w-0 flex-col gap-1">
                 <p v-if="landAsk" class="flex min-w-0 items-start gap-1.5 text-2xs leading-snug text-muted">
                     <Icon name="clock" class="mt-0.5 shrink-0 text-2xs" /><span class="min-w-0">{{
                         t(`agents.agentCard.waitingMaintainer`, { landAsk })

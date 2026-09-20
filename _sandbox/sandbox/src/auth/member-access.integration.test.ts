@@ -146,6 +146,41 @@ test("every co-working act answers at its own tier, and at none below it", async
     }
 });
 
+// A desk sits under the tiers with a list of its own (role-floor.ts deskReach): the chat it drives and the cards it
+// holds are open, and the tree, the archive of past conversations, the box and every ship control are shut.
+test("a desk reaches its chat and nothing of the tree, the past, or the box", async () => {
+    const open: readonly [string, string][] = [
+        [`GET`, `/agents`],
+        [`GET`, `/personas`],
+        [`GET`, `/providers`],
+        [`GET`, `/settings`],
+        [`POST`, `/system/presence`],
+        [`POST`, `/agent/attach`],
+        [`DELETE`, `/members/self`],
+        [`POST`, `/workspace/upload?path=${encodeURIComponent(`${ATTACHMENTS_DIR}/u1/note.txt`)}`],
+    ];
+    for (const [method, url] of open) {
+        expect(await statusAs(`desk`, method, url, {}), `desk should reach ${method} ${url}`).not.toBe(403);
+    }
+    const shut: readonly [string, string][] = [
+        [`GET`, `/workspace/tree`],
+        [`GET`, `/workspace/file?path=README.md`],
+        [`POST`, `/workspace/upload?path=app/main.ts`],
+        [`GET`, `/sessions`],
+        [`GET`, `/agents/search?query=x`],
+        [`GET`, `/secrets`],
+        [`GET`, `/capabilities`],
+        [`POST`, `/personas/route`],
+        [`POST`, `/agents/abc/request-land`],
+        [`POST`, `/agents/abc/land`],
+        [`POST`, `/system/ws-ticket`],
+        [`GET`, `/no/such/route`],
+    ];
+    for (const [method, url] of shut) {
+        expect(await statusAs(`desk`, method, url, {}), `desk should not reach ${method} ${url}`).toBe(403);
+    }
+});
+
 test("the attachment carve-out cannot be walked out of", async () => {
     // The floor normalizes a client-supplied path before matching: one that starts under the attachments dir but climbs
     // out lands in the workspace proper.

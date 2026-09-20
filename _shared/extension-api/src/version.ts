@@ -90,4 +90,8 @@
 // sandbox's own machine; the daemon's loopback lane now serves previews too, under `port-<slot>-<id>.localhost`, and
 // only the host knows which lane the app is on and whether that lane answers. An extension framing a forwarded port
 // (ONLYOFFICE's editor) had no way to ask. Additive: a view that keeps framing the public address gets what it got.
+// Under 2.15.0, `api.sandbox.role()` also answers `desk`: the tier below viewer, a member who talks to the persona
+// cards the owner handed them and is shown nothing else of the box. No member was added, so the recorded surface has
+// no entry for it; a view that gates on `viewer` and up keeps drawing what it drew, since the daemon refuses a desk
+// every read of the tree and of the fleet beyond its own conversations.
 export const extensionApiVersion = "2.15.0";

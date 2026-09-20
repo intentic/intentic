@@ -563,7 +563,7 @@ const readyToSend = computed(() => connected.value && staged.value && refusal.va
 const words = computed(() => ({ provider: providerName.value, onTrial: onTrial.value, editDropped: editDropped.value }));
 // A viewer's composer is present but inert (the daemon floors every route at collaborator); disabled-with-a-
 // reason, since a vanished input reads as broken.
-const { canDrive } = useRole();
+const { canDrive, isDesk } = useRole();
 const composerPlaceholder = computed(() => (canDrive.value ? placeholderFor(intent.value, words.value) : viewerPlaceholder()));
 const sendHint = computed(() => {
     if (!reachable.value) {
@@ -664,6 +664,19 @@ const pickPersona = (id: string | undefined): void => {
 // (personaRoute.ts). `beforeSend` is the wait the send holds for, so the card is on for the turn that decides the
 // conversation's tree; the chat says in its own transcript that the reading is happening.
 const personaRoute = usePersonaRoute(() => props.conversation);
+
+// A desk's chat wears one of its cards from the first word, since the daemon refuses it a turn that names none; the
+// list it is shown is already only its own cards.
+watch(
+    [personaCards, isDesk],
+    () => {
+        const first = personaCards.value[0];
+        if (isDesk.value && props.conversation.actsAs.value === undefined && first !== undefined) {
+            pickPersona(first.id);
+        }
+    },
+    { immediate: true },
+);
 
 // Which model an Auto chat runs on, asked once on the sent message (modelRoute.ts). Its own wait, chained after the
 // persona's, because the two answer different questions and the card's answer outranks this one.
@@ -897,7 +910,8 @@ const quickSources = computed<QuickPickSources>(() => {
     };
 });
 const quickOffered = computed(() => filesOffered.value || Object.values(quickSources.value).some((source) => source !== undefined));
-const mentionOpen = computed(() => activeMention.value !== undefined && !popoverDismissed.value && quickOffered.value);
+// A desk is shown no tree, so nothing to mention: the popover would only list what the daemon refuses it.
+const mentionOpen = computed(() => activeMention.value !== undefined && !popoverDismissed.value && quickOffered.value && !isDesk.value);
 const commandOpen = computed(() => !mentionOpen.value && commandMatches.value.length > 0 && !popoverDismissed.value);
 
 // Asks for the command list only when this composer has none (ensureProviderCommands is a no-op once known),

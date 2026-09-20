@@ -1,6 +1,7 @@
 import type { Activation, CapabilityFacts, Disposable, RepoFacts, ViewBadge, ViewRegistration } from "@intentic/extension-api";
 import { computed, shallowRef } from "vue";
 import { type Audience, useAudience } from "../app/useAudience";
+import { useRole } from "../features/sandbox/secrets/useRole";
 import { coreViews } from "./coreViews";
 import { badgeSpeaks } from "./viewBadge";
 import { t } from "@intentic/ui/i18n";
@@ -131,11 +132,15 @@ const railGroupsByAudience = (): Record<Audience, readonly RailGroup[]> => ({
 
 export const railGroupsFor = (audience: Audience): readonly RailGroup[] => railGroupsByAudience()[audience];
 
+// A desk's rail: the chat it drives and the board of its own conversations, whichever audience it answered. Every
+// other seat opens on a read the daemon refuses a desk, and a tile that only ever shows a refusal is not a seat.
+export const deskRailGroups = (): readonly RailGroup[] => [{ id: `work`, label: t(`views.registry.work`), items: [always(`chat`), always(`agents`)] }];
+
 // The developer's table, which is also what every surface read before there were two.
 export const railGroups = (): readonly RailGroup[] => railGroupsByAudience().developer;
 
 // The table for whoever is looking; reactive when read inside a computed, like everything below that reads it.
-const activeGroups = (): readonly RailGroup[] => railGroupsFor(useAudience().audience.value);
+const activeGroups = (): readonly RailGroup[] => (useRole().isDesk.value ? deskRailGroups() : railGroupsFor(useAudience().audience.value));
 
 const isRegistered = (id: string): boolean => views.value.some((entry) => entry.registration.id === id);
 

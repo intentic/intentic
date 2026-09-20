@@ -1,6 +1,5 @@
 import {
     REQUEST_ID_HEADER,
-    roleAtLeast,
     runnerTranslatorPath,
 } from "@intentic/sandbox-contract";
 import { sandboxIdFromToken } from "@intentic/sandbox-contract/tunnel-ids";
@@ -15,7 +14,7 @@ import { createPasskeyRoutes } from "./auth/passkeys/passkeys.routes.js";
 import { createAccessRoutes } from "./auth/access.routes.js";
 import { createControlTokenRoutes } from "./auth/control-tokens.routes.js";
 import { createMembersRoutes } from "./auth/members.routes.js";
-import { routeFloor } from "./auth/role-floor.js";
+import { memberRefusal } from "./auth/role-floor.js";
 import { admitByGrant, grantsOf } from "./auth/grants.js";
 import { createAutomationFireRoute } from "./automations/fire.routes.js";
 import { createCapabilityAskRoutes } from "./capabilities/ask.routes.js";
@@ -304,12 +303,12 @@ export const createApp = (services: Services): Hono<AppEnv> => {
                 });
                 c.set("identity", caller);
                 // The role floor (auth/role-floor.ts) applies here, after authentication, in one place: a member below
-                // a route's tier gets a 403 naming the tier.
+                // a route's tier gets a 403 naming the tier, and a desk gets one for any door off its own list.
                 // Owner-only routes still keep their own in-route gates besides; this floor only keeps a viewer
                 // read-only and a collaborator off ship controls.
-                const floor = routeFloor(c.req.method, c.req.path, c.req.query("path"));
-                if (!roleAtLeast(caller.role, floor)) {
-                    return c.json({ error: `${floor} access required`, floor }, 403);
+                const refused = memberRefusal(caller, c.req.method, c.req.path, c.req.query("path"));
+                if (refused !== undefined) {
+                    return c.json(refused, 403);
                 }
             } catch (error) {
                 // 403 is a verified identity that isn't the owner/member; 401 reads like any other unreachable daemon.

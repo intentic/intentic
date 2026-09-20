@@ -1,5 +1,6 @@
 import { type GrantedRole, GrantedRoleSchema } from "@intentic/sandbox-contract";
 import type { Context } from "hono";
+import { z } from "zod";
 import type { Services } from "../composition.js";
 import type { AppEnv } from "../app-env.js";
 import { ownershipDenied } from "./owner-gates.js";
@@ -8,7 +9,7 @@ import { ownershipDenied } from "./owner-gates.js";
 // Owner-gated by ownership rather than the maintainer-equivalent operating gate, since membership is the one thing a
 // revokable grant must not change.
 
-export type MembersRoutesDeps = Pick<Services, "auth" | "members" | "ownerEmail" | "wsTickets">;
+export type MembersRoutesDeps = Pick<Services, "auth" | "members" | "ownerEmail" | "wsTickets" | "personas">;
 
 // The lowercased email in a member-management request body, or undefined when absent/malformed.
 const memberEmail = async (c: Context): Promise<string | undefined> => {
@@ -16,15 +17,31 @@ const memberEmail = async (c: Context): Promise<string | undefined> => {
     return typeof body?.email === "string" ? body.email.toLowerCase() : undefined;
 };
 
-// A grant request's email + role, or undefined if either is missing or malformed.
+// A grant request's email + role (+ the desks a desk holds), or undefined if any is missing or malformed.
 // Role is required: a grant is a role decision, and a default here would be a policy nobody chose.
-const memberGrant = async (c: Context): Promise<{ email: string; role: GrantedRole } | undefined> => {
-    const body = (await c.req.json().catch(() => undefined)) as { email?: unknown; role?: unknown } | undefined;
-    const role = GrantedRoleSchema.safeParse(body?.role);
-    if (typeof body?.email !== "string" || !role.success) {
+const GrantBodySchema = z.object({ email: z.string(), role: GrantedRoleSchema, desks: z.array(z.string().min(1)).max(50).optional() });
+
+const memberGrant = async (c: Context): Promise<{ email: string; role: GrantedRole; desks?: readonly string[] } | undefined> => {
+    const body = GrantBodySchema.safeParse(await c.req.json().catch(() => undefined));
+    if (!body.success) {
         return undefined;
     }
-    return { email: body.email.toLowerCase(), role: role.data };
+    const { email, role, desks } = body.data;
+    return { email: email.toLowerCase(), role, ...(desks !== undefined ? { desks } : {}) };
+};
+
+// Why a desk grant cannot be written, or undefined when it can. A desk names at least one card, and every card it
+// names exists: a desk holding a card nobody wrote would sign in to a chat that refuses every message.
+const deskRefusal = async (services: Pick<Services, "personas">, grant: { role: GrantedRole; desks?: readonly string[] }): Promise<string | undefined> => {
+    if (grant.role !== "desk") {
+        return grant.desks === undefined ? undefined : "only a desk names personas";
+    }
+    if (grant.desks === undefined || grant.desks.length === 0) {
+        return "a desk needs at least one persona to act through";
+    }
+    const known = new Set((await services.personas.list()).map((card) => card.id));
+    const missing = grant.desks.filter((id) => !known.has(id));
+    return missing.length === 0 ? undefined : `no such persona: ${missing.join(", ")}`;
 };
 
 export const createMembersRoutes = (services: MembersRoutesDeps) => ({
@@ -50,7 +67,11 @@ export const createMembersRoutes = (services: MembersRoutesDeps) => ({
         if (grant === undefined) {
             return c.json({ error: "email and role required" }, 400);
         }
-        await services.members.add(grant.email, grant.role);
+        const refusal = await deskRefusal(services, grant);
+        if (refusal !== undefined) {
+            return c.json({ error: refusal }, 400);
+        }
+        await services.members.add(grant.email, grant.role, grant.desks);
         // A role is frozen into an open socket/ticket; closing both re-enters the authorizer with the new tier.
         services.auth?.connections.revoke(grant.email);
         services.wsTickets.revoke(grant.email);

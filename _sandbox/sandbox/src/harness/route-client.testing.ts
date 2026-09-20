@@ -42,7 +42,12 @@ export const rejectForbidden = async (): Promise<never> => {
 
 // A caller the bearer middleware would have produced: an identity, its tier, and the proof behind it (Google unless
 // the test says otherwise), for an `authorize` stub that admits everyone as this person.
-export const proven = (email: string, role: MemberRole, methods: readonly ProofMethod[] = ["google"]): ProvenCaller => ({ email, role, methods });
+export const proven = (email: string, role: MemberRole, methods: readonly ProofMethod[] = ["google"], desks?: readonly string[]): ProvenCaller => ({
+    email,
+    role,
+    methods,
+    ...(desks === undefined ? {} : { desks }),
+});
 
 // A JSON POST against the in-process app, for the plain (non-oRPC) routes.
 export const postJson = async (app: Hono<AppEnv>, path: string, body?: unknown): Promise<Response> =>

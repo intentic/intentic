@@ -47,6 +47,18 @@ describe(`routeNameForRequest`, () => {
         expect(routeNameForRequest(routes, `DELETE`, `/system/terminals/web-1`)).toBe(`system.killTerminal`);
     });
 
+    // Sorted by name, `agents.get` precedes `agents.search`, so first-match would read `/agents/search` as an id.
+    it(`prefers a literal segment over a parameter, whichever the sorted list holds first`, () => {
+        const siblings = contractRoutes({
+            agents: {
+                get: oc.route({ method: "GET", path: "/agents/{id}" }),
+                search: oc.route({ method: "GET", path: "/agents/search" }),
+            },
+        });
+        expect(routeNameForRequest(siblings, `GET`, `/agents/search`)).toBe(`agents.search`);
+        expect(routeNameForRequest(siblings, `GET`, `/agents/abc`)).toBe(`agents.get`);
+    });
+
     it(`strips the query string before matching`, () => {
         expect(routeNameForRequest(routes, `GET`, `/vpn?refresh=1`)).toBe(`vpn.list`);
     });

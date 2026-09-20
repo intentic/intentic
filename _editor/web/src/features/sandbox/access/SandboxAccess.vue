@@ -32,7 +32,9 @@ import { identityHue } from "../../../lib/identityHue";
 import { presenceActivity, presenceOthers } from "../../../shell/presence/usePresence";
 import { useAccessInventory } from "./useAccessInventory";
 import ControlTokensSection from "./ControlTokensSection.vue";
+import DeskPicker from "./DeskPicker.vue";
 import PasskeysSection from "./PasskeysSection.vue";
+import { type AccessGrant, grantBody, grantSendable } from "./accessGrant";
 import { useT } from "@intentic/ui/i18n";
 
 // Owner-only invites: daemon's enforced /members list first, fail-closed (sandboxJson throws on non-2xx), then the
@@ -66,8 +68,20 @@ const ROLE_OPTIONS = computed((): readonly PickerOption<GrantedRole>[] => [
         icon: `wrench`,
         hint: t(`sandbox.sandboxAccess.operateEverythingOwnerOwner`),
     },
+    // Below viewer: talks to the cards it holds and is shown nothing else. Listed last, since it is the narrowest.
+    {
+        label: t(`sandbox.sandboxAccess.desk`),
+        value: `desk`,
+        icon: `comments`,
+        hint: t(`sandbox.sandboxAccess.deskTalksToAssistants`),
+    },
 ]);
 const inviteRole = ref<GrantedRole>(`collaborator`);
+// The cards a desk invite hands over; kept when the tier flips away and back, sent only on a desk grant.
+const inviteDesks = ref<string[]>([]);
+// The daemon's own roster, the one copy that knows a desk's cards; the platform's records above carry the tier only.
+const grants = ref<readonly AccessGrant[]>([]);
+const desksOf = (address: string): readonly string[] => grants.value.find((grant) => grant.email === address.toLowerCase())?.desks ?? [];
 const busy = ref(false);
 // The one thing this tab has to say right now: a failure, or an invite whose link the owner must carry.
 const notice = ref<NoticeModel>();
@@ -127,7 +141,14 @@ const load = async (): Promise<void> => {
     }
     clearNotice();
     try {
-        members.value = (await apiClient.invite.list({ sandboxId: id })).members;
+        // Both rosters, since only the daemon's says which cards a desk holds; a daemon that isn't answering leaves the
+        // chips blank rather than the list.
+        const [invited, granted] = await Promise.all([
+            apiClient.invite.list({ sandboxId: id }),
+            sandboxJson<{ members: AccessGrant[] }>(`/members`).catch((): { members: AccessGrant[] } => ({ members: [] })),
+        ]);
+        members.value = invited.members;
+        grants.value = granted.members;
     } catch (err) {
         notice.value = noticeFrom(err, `Couldn't load the access list.`);
     } finally {
@@ -175,7 +196,7 @@ const showDelivery = (result: { link: string; delivery: InviteDelivery; reason?:
 const invite = async (): Promise<void> => {
     const id = sandbox.activeSandboxId.value;
     const value = email.value.trim().toLowerCase();
-    if (id === undefined || busy.value || !validEmail(value)) {
+    if (id === undefined || busy.value || !validEmail(value) || !grantSendable(inviteRole.value, inviteDesks.value)) {
         return;
     }
     busy.value = true;
@@ -183,10 +204,9 @@ const invite = async (): Promise<void> => {
     try {
         // Daemon push first, enforced; sandboxJson throws on non-2xx, so an unenforced grant is never recorded as sent.
         try {
-            await sandboxJson<{ members: { email: string; role: GrantedRole }[] }>(
-                `/members`,
-                jsonBody(`POST`, { email: value, role: inviteRole.value }),
-            );
+            grants.value = (
+                await sandboxJson<{ members: AccessGrant[] }>(`/members`, jsonBody(`POST`, grantBody(value, inviteRole.value, inviteDesks.value)))
+            ).members;
         } catch (err) {
             notice.value = noticeFrom(err, `Couldn't grant access on the sandbox: is it online?`);
             return;
@@ -255,10 +275,11 @@ const revokeSessions = async (): Promise<void> => {
     }
 };
 
-// Re-grades with the same two-write, daemon-first order as a grant; applies on the member's next request.
-const setRole = async (target: string, role: GrantedRole): Promise<void> => {
+// Re-grades with the same two-write, daemon-first order as a grant; applies on the member's next request. A row
+// re-graded to desk keeps the cards it last held, or waits for the picker below it to name one.
+const setRole = async (target: string, role: GrantedRole, desks: readonly string[] = desksOf(target)): Promise<void> => {
     const id = sandbox.activeSandboxId.value;
-    if (id === undefined || busy.value) {
+    if (id === undefined || busy.value || !grantSendable(role, desks)) {
         return;
     }
     busy.value = true;
@@ -266,7 +287,7 @@ const setRole = async (target: string, role: GrantedRole): Promise<void> => {
     try {
         // Same split as the grant: only the first of the two writes can be a sandbox that isn't answering.
         try {
-            await sandboxJson<{ members: { email: string; role: GrantedRole }[] }>(`/members`, jsonBody(`POST`, { email: target, role }));
+            grants.value = (await sandboxJson<{ members: AccessGrant[] }>(`/members`, jsonBody(`POST`, grantBody(target, role, desks)))).members;
         } catch (err) {
             notice.value = noticeFrom(err, `Couldn't change the role on the sandbox: is it online?`);
             return;
@@ -320,7 +341,8 @@ const revoke = async (target: string): Promise<void> => {
                         <SkeletonRows :rows="2" control />
                     </template>
                 </div>
-                <Row v-for="member in members" :key="member.email" icon="user" :title="member.email">
+                <template v-for="member in members" :key="member.email">
+                <Row icon="user" :title="member.email">
                     <!-- Status belongs in metadata, not the action slot. -->
                     <template #meta>
                         <StatusBadge
@@ -329,6 +351,8 @@ const revoke = async (target: string): Promise<void> => {
                             :dot="STATUS[member.status].dot"
                             size="xs"
                         />
+                        <!-- A desk's cards, named on the row: the whole of what that person reaches. -->
+                        <StatusBadge v-for="desk in desksOf(member.email)" :key="desk" variant="neutral" :label="desk" size="xs" />
                     </template>
                     <template #control>
                         <!-- Changeable in place, since a re-grade is routine and shouldn't cost a revoke + re-invite. -->
@@ -363,6 +387,11 @@ const revoke = async (target: string): Promise<void> => {
                         </Button>
                     </template>
                 </Row>
+                <!-- Which cards a desk holds, changed in place; a re-grade to desk lands here until it names one. -->
+                <RowNote v-if="member.role === 'desk'" variant="block">
+                    <DeskPicker :picked="desksOf(member.email)" :disabled="busy" @change="(desks) => setRole(member.email, `desk`, desks)" />
+                </RowNote>
+                </template>
 
                 <!-- Invite affordance as the group's footer row (mirrors the Secrets \"add\" pattern). -->
                 <RowNote variant="block">
@@ -403,7 +432,7 @@ const revoke = async (target: string): Promise<void> => {
                                         :label="t(`sandbox.sandboxAccess.invite2`)"
                                         size="small"
                                         :loading="busy"
-                                        :disabled="busy || !validEmail(email.trim().toLowerCase())"
+                                        :disabled="busy || !validEmail(email.trim().toLowerCase()) || !grantSendable(inviteRole, inviteDesks)"
                                         class="shrink-0"
                                     >
                                         <template #icon><Icon name="send" /></template>
@@ -414,6 +443,8 @@ const revoke = async (target: string): Promise<void> => {
                                 <Icon name="exclamation-triangle" class="text-2xs" />
                                 {{ t(`sandbox.sandboxAccess.enterValidEmailAddress`) }}
                             </span>
+                            <!-- A desk is nothing without its cards, so the pick sits on the invite itself. -->
+                            <DeskPicker v-if="inviteRole === 'desk'" :picked="inviteDesks" :disabled="busy" @change="(desks) => (inviteDesks = desks)" />
                         </form>
                     </div>
                 </RowNote>

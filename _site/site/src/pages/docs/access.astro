@@ -6,6 +6,11 @@ import DocsRelated from "../../components/docs/DocsRelated.astro";
 
 const roles = [
     {
+        name: `Desk`,
+        can: `Talk to the persona cards the owner picked for them, and only through those. See no files, no other conversations, nothing of the box.`,
+        why: `The tier for someone who needs answers from the workspace, not the workspace: what they reach is exactly what their cards carry.`,
+    },
+    {
         name: `Viewer`,
         can: `Watch everything: agents, chats, files, the workspace. Change nothing.`,
         why: `Safe to be generous with: every read is attributed and nothing it can do alters the sandbox.`,
@@ -59,8 +64,9 @@ const roles = [
             }
         </tbody>
     </table>
-    <p>They draw three real fences rather than mirroring the navigation:</p>
+    <p>They draw four real fences rather than mirroring the navigation:</p>
     <ul>
+        <li><strong>A desk sees only its own conversations.</strong> The fleet, the files and every other transcript are refused to it by the daemon, and each of its turns wears one of its cards.</li>
         <li><strong>Credentials stay with the owner.</strong> Invitees cannot see secrets, their names or their inventory.</li>
         <li><strong>What leaves the sandbox needs a maintainer.</strong> <a href="/docs/glossary/">Landing</a> into the main tree, publishing, the raw terminal.</li>
         <li><strong>Collaborators can drive agents.</strong> Viewers can watch the <a href="/docs/glossary/">fleet</a> and read files and transcripts.</li>

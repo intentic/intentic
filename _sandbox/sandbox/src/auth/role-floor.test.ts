@@ -1,6 +1,6 @@
 import { ATTACHMENTS_DIR } from "@intentic/sandbox-contract";
 import { describe, expect, test } from "vitest";
-import { routeFloor } from "./role-floor.js";
+import { deskReach, memberRefusal, routeFloor } from "./role-floor.js";
 
 describe("routeFloor", () => {
     test("reads floor at viewer: fleet, transcripts, workspace files, git log", () => {
@@ -74,5 +74,51 @@ describe("routeFloor", () => {
         // The require-passkey switch and its recovery codes keep the mutation default under their ownership gate.
         expect(routeFloor("POST", "/system/passkeys/policy")).toBe("maintainer");
         expect(routeFloor("POST", "/system/passkeys/recovery")).toBe("maintainer");
+    });
+});
+
+describe("deskReach", () => {
+    test("the chat a desk drives, the cards it holds, and the reads a composer needs", () => {
+        expect(deskReach("POST", "/agent")).toBe(true);
+        expect(deskReach("POST", "/agent/attach")).toBe(true);
+        expect(deskReach("POST", "/agent/reply")).toBe(true);
+        expect(deskReach("GET", "/agents")).toBe(true);
+        expect(deskReach("GET", "/agents/abc/transcript")).toBe(true);
+        expect(deskReach("GET", "/personas")).toBe(true);
+        expect(deskReach("GET", "/providers")).toBe(true);
+        expect(deskReach("GET", "/events")).toBe(true);
+        expect(deskReach("POST", "/system/session")).toBe(true);
+        expect(deskReach("POST", "/speech/transcribe")).toBe(true);
+        expect(deskReach("DELETE", "/members/self")).toBe(true);
+        expect(deskReach("DELETE", "/system/passkeys/abc_123")).toBe(true);
+        expect(deskReach("POST", "/workspace/upload", `${ATTACHMENTS_DIR}/u1/shot.png`)).toBe(true);
+    });
+
+    test("the tree, the past, the box, and every ship control stay shut, and so does anything unnamed", () => {
+        expect(deskReach("GET", "/workspace/tree")).toBe(false);
+        expect(deskReach("GET", "/workspace/file")).toBe(false);
+        expect(deskReach("POST", "/workspace/upload", "app/main.ts")).toBe(false);
+        expect(deskReach("POST", "/workspace/upload")).toBe(false);
+        expect(deskReach("GET", "/sessions")).toBe(false);
+        expect(deskReach("GET", "/agents/search")).toBe(false);
+        expect(deskReach("POST", "/personas/route")).toBe(false);
+        expect(deskReach("POST", "/personas")).toBe(false);
+        expect(deskReach("GET", "/secrets")).toBe(false);
+        expect(deskReach("POST", "/agents/abc/land")).toBe(false);
+        expect(deskReach("POST", "/agents/abc/request-land")).toBe(false);
+        expect(deskReach("POST", "/system/ws-ticket")).toBe(false);
+        expect(deskReach("GET", "/no/such/route")).toBe(false);
+    });
+});
+
+describe("memberRefusal", () => {
+    test("a tier below the floor is refused with the floor named; a desk off its list with its own sentence", () => {
+        expect(memberRefusal({ role: "viewer" }, "POST", "/agent")).toEqual({ error: "collaborator access required", floor: "collaborator" });
+        expect(memberRefusal({ role: "collaborator" }, "POST", "/agent")).toBeUndefined();
+        expect(memberRefusal({ role: "desk" }, "POST", "/agent")).toBeUndefined();
+        expect(memberRefusal({ role: "desk" }, "GET", "/workspace/tree")).toEqual({ error: "not open to a desk member", floor: "viewer" });
+        // A desk never clears a floor by rank: the list is the whole of its admission.
+        expect(memberRefusal({ role: "desk" }, "GET", "/no/such/route")).toEqual({ error: "not open to a desk member", floor: "viewer" });
+        expect(memberRefusal({ role: "viewer" }, "GET", "/no/such/route")).toBeUndefined();
     });
 });

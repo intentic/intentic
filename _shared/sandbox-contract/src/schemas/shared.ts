@@ -8,15 +8,17 @@ export const OkSchema = object({
     ok: literal(true)
         .describe("Always true. A route that answers this either did the thing or refused with a status; there is no third outcome to report."),
 });
-// Trust tiers, ordered low to high: viewer watches, collaborator's outward actions become requests, maintainer holds
-// the owner's authority but is revocable, owner is the one bound identity and not a grant.
-export const MemberRoleSchema = zEnum(["viewer", "collaborator", "maintainer", "owner"]);
+// Trust tiers, ordered low to high: desk talks to the persona cards it was handed and sees nothing else, viewer
+// watches, collaborator's outward actions become requests, maintainer holds the owner's authority but is revocable,
+// owner is the one bound identity and not a grant.
+export const MemberRoleSchema = zEnum(["desk", "viewer", "collaborator", "maintainer", "owner"]);
 export type MemberRole = z.infer<typeof MemberRoleSchema>;
 // Roles an invite can grant: everything but owner, which binds at first sign-in and is never granted.
-export const GrantedRoleSchema = zEnum(["viewer", "collaborator", "maintainer"]);
+export const GrantedRoleSchema = zEnum(["desk", "viewer", "collaborator", "maintainer"]);
 export type GrantedRole = z.infer<typeof GrantedRoleSchema>;
-// Single source for role order; every surface that gates on a role reads this ranking.
-const MEMBER_ROLE_RANK: Record<MemberRole, number> = { viewer: 0, collaborator: 1, maintainer: 2, owner: 3 };
+// Single source for role order; every surface that gates on a role reads this ranking. A desk is below every
+// floor: its routes are an allowlist of its own (auth/role-floor.ts deskReach), never a floor it can clear.
+const MEMBER_ROLE_RANK: Record<MemberRole, number> = { desk: 0, viewer: 1, collaborator: 2, maintainer: 3, owner: 4 };
 export const roleAtLeast = (role: MemberRole, floor: MemberRole): boolean => MEMBER_ROLE_RANK[role] >= MEMBER_ROLE_RANK[floor];
 // Rotating a door credential (event webhook, release gate, bug intake): the old value stops working immediately; the
 // new one is shown once to be saved.

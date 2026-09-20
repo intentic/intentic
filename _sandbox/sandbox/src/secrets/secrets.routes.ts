@@ -117,11 +117,12 @@ export const createSecretsRoutes = (services: SecretsRoutesDeps) => {
             throw new ORPCError("UNAUTHORIZED");
         }
     };
-    // Everybody who could be named an approver: the owner plus the Access roster. Checked against, so a typo'd address
-    // cannot produce a credential nobody can ever release.
+    // Everybody who could be named an approver: the owner plus the Access roster, less its desks, who never see a gate
+    // and so could never release one. Checked against, so a typo'd address cannot produce a credential nobody can ever
+    // release.
     const releasableBy = async (): Promise<readonly string[]> => {
         const [owner, members] = await Promise.all([services.ownerEmail(), services.members.list()]);
-        return [...(owner !== undefined ? [owner.toLowerCase()] : []), ...members.map((member) => member.email.toLowerCase())];
+        return [...(owner !== undefined ? [owner.toLowerCase()] : []), ...members.filter((member) => member.role !== "desk").map((member) => member.email.toLowerCase())];
     };
     // Refuses a gate naming somebody off the roster; compared lowercased since roster writes normalize case but a
     // Google claim may not.

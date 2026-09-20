@@ -3,6 +3,7 @@ import { implement, ORPCError } from "@orpc/server";
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../app-env.js";
 import { hasSession } from "../browser/sessions/session-store.js";
+import { heldPersonas } from "../auth/desk-scope.js";
 import {
     listPersonaSkills,
     readPersonaPrompt,
@@ -35,11 +36,16 @@ export const createPersonasRoutes = (services: Services, route: PersonaRouter) =
     };
 
     return {
-        list: i.list.handler(async () => {
-            const [personas, capabilities] = await Promise.all([services.personas.list(), services.capabilities.list()]);
+        list: i.list.handler(async ({ context }) => {
+            const [cards, capabilities] = await Promise.all([services.personas.list(), services.capabilities.list()]);
+            // A desk is shown the cards it holds and nothing about the others, down to the accounts they name.
+            const held = heldPersonas(context.identity);
+            const personas = held === undefined ? cards : cards.filter((persona) => held.has(persona.id));
+            const reachable = held === undefined ? undefined : new Set(personas.flatMap((persona) => persona.capabilities));
             // `hasSession`, not manifest presence: exists before login finishes, a cloned workspace's usual state.
             const connected = capabilities
                 .filter((capability) => capability.kind === "browser" && hasSession(services.workspace.root, capability.id))
+                .filter((capability) => reachable === undefined || reachable.has(capability.id))
                 .map((capability) => capability.id);
             return { personas, connected };
         }),

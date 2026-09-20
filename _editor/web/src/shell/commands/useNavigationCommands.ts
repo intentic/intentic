@@ -34,8 +34,9 @@ export function useNavigationCommands(): void {
     const router = useRouter();
     const { panels } = usePanels();
     const { capabilities } = useCapabilities();
-    // Maintainer-and-up rows: the sandbox hub hides the rest, and the daemon refuses them anyway.
-    const { canShip } = useRole();
+    // Maintainer-and-up rows: the sandbox hub hides the rest, and the daemon refuses them anyway. A desk keeps the two
+    // seats its rail has.
+    const { canShip, isDesk } = useRole();
     const { offered: planOffered } = useHostedPlan();
     const words = useVocabulary();
 
@@ -44,6 +45,9 @@ export function useNavigationCommands(): void {
     const shellAreas = computed<readonly NavCommand[]>(() => [
         { command: `view.chat`, title: t(`shell.useNavigationCommands.chat`), category: GO_TO, icon: `comments`, to: `/chat` },
         { command: `view.agents`, title: t(`shell.useNavigationCommands.agents`), category: GO_TO, icon: `robot`, to: `/agents` },
+        ...(isDesk.value ? [] : deskless.value),
+    ]);
+    const deskless = computed<readonly NavCommand[]>(() => [
         { command: `view.workspace`, title: words.value.workspace, category: GO_TO, icon: `file-tree`, to: `/workspace` },
         // Marks the preview as opened on the way, which a bare push would not.
         { command: `view.preview`, title: words.value.preview, category: GO_TO, icon: `eye`, to: `/preview`, run: () => openPreview(router) },
@@ -70,7 +74,7 @@ export function useNavigationCommands(): void {
     // The sandbox hub's sections, plus the ones extensions add to it — the same filter the hub applies, so a key that
     // collides with a built-in section is dropped here too rather than registering a row that opens something else.
     const sandboxDestinations = computed<readonly NavCommand[]>(() => [
-        ...sandboxSections(canShip.value).map((section) => ({
+        ...sandboxSections(canShip.value, isDesk.value).map((section) => ({
             command: `view.sandbox.${section.slug}`,
             title: section.label,
             category: SANDBOX,

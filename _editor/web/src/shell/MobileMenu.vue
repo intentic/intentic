@@ -101,10 +101,11 @@ const areaBands = computed(() =>
     ),
 );
 // Matches the desktop rail's tail (terminal, +); terminal needs ship tier since a PTY is the whole sandbox.
-const { canShip } = useRole();
+const { canShip, isDesk } = useRole();
 const { maker } = useAudience();
+// A desk connects nothing and runs no terminal; its Sandbox row opens on the one section it has.
 const sandboxRows = computed<readonly AreaRow[]>(() => [
-    { id: `capabilities`, to: `/capabilities`, label: t(`shell.mobileMenu.addCapability`), icon: `plus` },
+    ...(isDesk.value ? [] : [{ id: `capabilities`, to: `/capabilities`, label: t(`shell.mobileMenu.addCapability`), icon: `plus` } as const]),
     ...(canShip.value && !maker.value ? [{ id: `terminal`, to: `/terminal`, label: t(`shell.mobileMenu.terminal`), icon: `code` } as const] : []),
     { id: `sandbox`, to: `/sandbox`, label: t(`shell.mobileMenu.sandbox`), icon: `box` },
     { id: `settings`, to: `/settings`, label: t(`shell.mobileMenu.settings`), icon: `cog` },

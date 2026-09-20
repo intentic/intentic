@@ -17,6 +17,10 @@ const personas = ref<Persona[]>([
 ]);
 vi.mock(`../../sandbox/personas/usePersonas`, () => ({ usePersonas: () => ({ personas }) }));
 
+// A desk is never routed: its chat wears one of its own cards from the start.
+const isDesk = ref(false);
+vi.mock(`../../sandbox/secrets/useRole`, () => ({ useRole: () => ({ isDesk }) }));
+
 const sandboxJson = vi.fn<(path: string, init?: RequestInit) => Promise<unknown>>();
 vi.mock(`../../sandbox/client/sandboxClient`, () => ({ sandboxJson: (path: string, init?: RequestInit) => sandboxJson(path, init) }));
 
@@ -65,6 +69,7 @@ afterEach(() => {
     scope.stop();
     vi.useRealTimers();
     settings.value = SandboxSettingsSchema.parse({});
+    isDesk.value = false;
     sandboxJson.mockReset();
     wearModel.mockReset();
     notice.mockClear();

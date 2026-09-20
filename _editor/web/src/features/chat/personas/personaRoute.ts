@@ -4,6 +4,7 @@ import { jsonBody } from "../../sandbox/client/jsonBody";
 import { sandboxJson } from "../../sandbox/client/sandboxClient";
 import { usePersonas } from "../../sandbox/personas/usePersonas";
 import { useSandboxSettings } from "../../sandbox/overview/useSandboxSettings";
+import { useRole } from "../../sandbox/secrets/useRole";
 import type { Conversation } from "../session/conversation";
 import { roleSources } from "../accounts/roleModel";
 
@@ -86,9 +87,11 @@ const verdictLine = (card: Persona | undefined, route: PersonaRoute | undefined,
 export const usePersonaRoute = (conversation: () => Conversation): PersonaRouting => {
     const { settings } = useSandboxSettings();
     const { personas } = usePersonas();
+    const { isDesk } = useRole();
     // Off until settings load, so no call fires on a guess about a setting the owner may have turned off. With no
-    // cards there is nothing to route onto, and the round trip is skipped rather than answered `none`.
-    const on = computed(() => settings.value?.personaRouting === true && personas.value.length > 0);
+    // cards there is nothing to route onto, and the round trip is skipped rather than answered `none`. A desk is never
+    // routed: its chat wears one of its own cards from the start, and the daemon refuses it the reading anyway.
+    const on = computed(() => settings.value?.personaRouting === true && personas.value.length > 0 && !isDesk.value);
 
     const cardOf = (id: string | undefined): Persona | undefined => (id === undefined ? undefined : personas.value.find((persona) => persona.id === id));
 

@@ -9,19 +9,27 @@ import { useSandbox } from "../client/useSandbox";
 // reading here changes what renders, never what is allowed. Defaults to `owner` until the summary loads, corrected on
 // the first call.
 //
-//   canDrive, collaborator and up: start/steer agents, review, comment. A viewer watches.
-//   canShip , maintainer and up: full operating authority. Only ownership and its access roster stay separate.
+//   isDesk   , the tier below viewer: talks to the persona cards it holds, and is shown nothing else of the box.
+//   canDrive , a desk (its own chats) or collaborator and up: start/steer agents. A viewer watches.
+//   canReview, collaborator and up: review work and ask for a landing. A desk drives but never reviews.
+//   canShip  , maintainer and up: full operating authority. Only ownership and its access roster stay separate.
 export function useRole(): {
     role: ComputedRef<MemberRole>;
+    isDesk: ComputedRef<boolean>;
     canDrive: ComputedRef<boolean>;
+    canReview: ComputedRef<boolean>;
     canShip: ComputedRef<boolean>;
     isOwner: ComputedRef<boolean>;
 } {
     const { active } = useSandbox();
     const role = computed<MemberRole>(() => active.value?.role ?? `owner`);
+    const isDesk = computed(() => role.value === `desk`);
+    const canReview = computed(() => roleAtLeast(role.value, `collaborator`));
     return {
         role,
-        canDrive: computed(() => roleAtLeast(role.value, `collaborator`)),
+        isDesk,
+        canDrive: computed(() => isDesk.value || canReview.value),
+        canReview,
         canShip: computed(() => roleAtLeast(role.value, `maintainer`)),
         isOwner: computed(() => role.value === `owner`),
     };

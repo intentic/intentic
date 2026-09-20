@@ -9,6 +9,7 @@ import { openWorkspaceRef } from "../features/workspace/files/openFileRef";
 import { prefetchViewsAtIdle } from "../router/prefetch";
 import { useChat } from "../features/chat/run/useChat";
 import { mobileChatPath } from "./tabRoots";
+import { useDeskFence } from "./deskFence";
 
 // Persistent post-login chrome, split by form factor: ShellDesktop (rail, chat, terminal) under a
 // pointer, ShellMobile (tab bar, full-screen views) below 768px. State lives in module composables, so
@@ -20,6 +21,8 @@ const ShellMobile = defineAsyncComponent(() => import("./ShellMobile.vue"));
 const { mobile } = useDevice();
 // Boot installed third-party extensions once the sandbox is reachable (idempotent across shell remounts).
 useExtensionHost();
+// A desk is kept to the screens the daemon answers it on.
+useDeskFence();
 // Keeps other sandboxes live while the board's scope is wide; shared so both chromes need only one poll.
 watchAgentsScope();
 // Pulls every view's chunk in the background once the shell is up (idempotent); see router/prefetch.ts.

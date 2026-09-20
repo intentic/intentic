@@ -38,6 +38,7 @@ import { buildId } from "../version.js";
 import { manifestProblems } from "../store/manifest-problems.js";
 import { repairManifest } from "../store/manifest-repair.js";
 import { workspaceIdentity } from "./workspace-identity.js";
+import { deskEvent } from "../auth/desk-scope.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -74,8 +75,12 @@ async function* systemEvents(
     // Frames waiting to go out, stamped with production time; queue depth distinguishes a burst from a stalled
     // consumer.
     const queue: { readonly event: SystemEvent; readonly at: bigint }[] = [];
+    // A desk's stream is narrowed frame by frame (auth/desk-scope.ts): its own conversations, no paths.
     const enqueue = (event: SystemEvent): void => {
-        queue.push({ event, at: process.hrtime.bigint() });
+        const framed = deskEvent(identity, event);
+        if (framed !== undefined) {
+            queue.push({ event: framed, at: process.hrtime.bigint() });
+        }
     };
     // Resolves the current idle wait immediately on a change or abort, instead of stalling for the next heartbeat.
     let wake: (() => void) | undefined;

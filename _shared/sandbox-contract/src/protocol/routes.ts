@@ -156,10 +156,17 @@ const pathMatches = (template: string, path: string): boolean => {
 
 // The contract route a request belongs to, or undefined for a hand-written daemon route (/health, /workspace/raw) never
 // gated by the contract. Query string stripped first.
+// How many segments a template leaves open; the tie-breaker below prefers the template that leaves fewest.
+const paramCount = (template: string): number => template.split("/").filter((segment) => segment.startsWith("{") && segment.endsWith("}")).length;
+
 export const routeNameForRequest = (routes: readonly ContractRoute[], method: string, pathWithQuery: string): string | undefined => {
     const path = pathWithQuery.split("?")[0] ?? pathWithQuery;
     const upper = method.toUpperCase();
-    return routes.find((route) => route.method.toUpperCase() === upper && pathMatches(route.path, path))?.name;
+    // A literal segment outranks a parameter: `/agents/search` is the search route, not `get` with an id of "search",
+    // whichever of the two the sorted list happens to hold first.
+    return routes
+        .filter((route) => route.method.toUpperCase() === upper && pathMatches(route.path, path))
+        .toSorted((a, b) => paramCount(a.path) - paramCount(b.path))[0]?.name;
 };
 
 // The route a typed client call belongs to; oRPC addresses a procedure by contract position (`['git','stashApply']`),

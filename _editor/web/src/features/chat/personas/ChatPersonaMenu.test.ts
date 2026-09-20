@@ -10,6 +10,9 @@ import { IconStub } from "@intentic/ui/testing";
 
 const personas = ref<Persona[]>([]);
 const connected = ref<string[]>([]);
+// The reader's tier: a desk is offered its own cards and nothing wider.
+const isDesk = ref(false);
+vi.mock(`../../sandbox/secrets/useRole`, () => ({ useRole: () => ({ isDesk }) }));
 
 vi.mock(`../../sandbox/personas/usePersonas`, () => ({
     usePersonas: () => ({
@@ -52,6 +55,7 @@ const linkLabelled = (element: HTMLElement, label: string): HTMLAnchorElement | 
 beforeEach(() => {
     personas.value = [];
     connected.value = [];
+    isDesk.value = false;
     events.length = 0;
 });
 
@@ -113,4 +117,24 @@ it(`explains the empty workspace and offers the way in`, () => {
     expect(text(element)).toContain(`No personas yet`);
     // A real href, so the row can be hovered, copied, and opened in a new tab like any other link.
     expect(linkLabelled(element, `Set up a persona`)?.getAttribute(`href`)).toBe(`/sandbox/personas`);
+});
+
+// A desk holds cards, it does not manage them, and "Anyone" would reach every account: exactly what it is not handed.
+it(`offers a desk its cards alone: no Anyone, no way to the personas page`, () => {
+    isDesk.value = true;
+    personas.value = [{ id: `support`, label: `Support`, capabilities: [] }];
+    const element = mount(`support`);
+
+    expect(rowLabelled(element, `Anyone`)).toBeUndefined();
+    expect(linkLabelled(element, `Manage personas`)).toBeUndefined();
+    rowLabelled(element, `Support`)!.click();
+    expect(events).toEqual([`support`]);
+});
+
+it(`tells a desk with no card yet to ask the owner, rather than offering to set one up`, () => {
+    isDesk.value = true;
+    const element = mount();
+
+    expect(text(element)).toContain(`No assistant has been assigned to you yet`);
+    expect(linkLabelled(element, `Set up a persona`)).toBeUndefined();
 });

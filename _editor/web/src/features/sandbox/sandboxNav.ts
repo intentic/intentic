@@ -72,10 +72,16 @@ export const sandboxBuiltInSlugs = (): ReadonlySet<string> =>
             .map((section) => section.slug),
     );
 
-/** The sections this reader can actually open; anything else would land on a row the hub redirects away from. */
-export const sandboxSections = (canShip: boolean): readonly SandboxSection[] =>
+/** The one section a desk member has business in: their own passkeys, and giving their grant back. */
+export const DESK_SECTION = `access`;
+
+/**
+ * The sections this reader can actually open; anything else would land on a row the hub redirects away from. A desk
+ * sees one row, since the daemon refuses it every other section's reads.
+ */
+export const sandboxSections = (canShip: boolean, desk = false): readonly SandboxSection[] =>
     sandboxSectionGroups()
         .flatMap((group) => group.items)
-        .filter((section) => canShip || section.maintainer !== true);
+        .filter((section) => (desk ? section.slug === DESK_SECTION : canShip || section.maintainer !== true));
 
 export const sandboxSectionPath = (slug: string): string => (slug === SANDBOX_DEFAULT_SECTION ? `/sandbox` : `/sandbox/${slug}`);

@@ -115,7 +115,7 @@ vi.mock("./useAgentChanges", async () => {
 });
 
 vi.mock("../fleet/agentActions", () => ({ requestLandAgent: vi.fn(async () => {}), startAgent: vi.fn() }));
-vi.mock("../../sandbox/secrets/useRole", () => ({ useRole: () => ({ canDrive: true, canShip: true }) }));
+vi.mock("../../sandbox/secrets/useRole", () => ({ useRole: () => ({ canDrive: true, canReview: true, canShip: true }) }));
 
 const { default: AgentDetail } = await import("./AgentDetail.vue");
 

@@ -2,8 +2,13 @@ import type { CapabilityFacts, Disposable, IntenticApi, ViewBadge, ViewRegistrat
 import * as apps from "@intentic/ext-repo-apps";
 import * as preview from "@intentic/ext-preview";
 import type { PanelSummary } from "@intentic/api-contract";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import { ref } from "vue";
 import { useAudience } from "../app/useAudience";
+
+// The reader's tier, switched by the desk tests below; everyone else is read as the owner the app defaults to.
+const deskReader = vi.hoisted(() => ({ isDesk: false }));
+vi.mock(`../features/sandbox/secrets/useRole`, () => ({ useRole: () => ({ isDesk: ref(deskReader.isDesk) }) }));
 import {
     activationBadge,
     railBands,
@@ -502,5 +507,22 @@ describe(`the maker's rail`, () => {
         const tiles = [{ id: `chat` }, { id: `agents` }, { id: `approvals` }, { id: `live-status` }, { id: `stranger` }];
         const banded = railBands(tiles, (tile) => tile.id).flatMap((band) => band.items.map((item) => item.id));
         expect(banded.toSorted()).toEqual(tiles.map((tile) => tile.id).toSorted());
+    });
+});
+
+// A desk's rail is two seats whichever audience it answered: every other tile opens on a read the daemon refuses it.
+describe(`a desk's rail`, () => {
+    it(`seats only the chat and the board, and ranks nothing else`, () => {
+        deskReader.isDesk = true;
+        try {
+            expect(seatPolicy(`chat`)).toBe(`always`);
+            expect(seatPolicy(`agents`)).toBe(`always`);
+            expect(seatPolicy(`workspace`)).toBe(`signal`);
+            expect(seatPolicy(`preview`)).toBe(`signal`);
+            expect(railRank(`workspace`)).toBe(2);
+            expect(railBands([{ id: `chat` }, { id: `agents` }], (tile) => tile.id).map((band) => band.group.id)).toEqual([`work`]);
+        } finally {
+            deskReader.isDesk = false;
+        }
     });
 });

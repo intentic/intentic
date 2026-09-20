@@ -8,6 +8,7 @@ import {
     ForbiddenError,
     type IdTokenVerifier,
     type Member,
+    memberRow,
     type MembersStore,
     type OwnerStore,
     ownerTicketVerifier,
@@ -32,8 +33,8 @@ const memMembers = (initial: Member[] = []): MembersStore => {
     let members = [...initial];
     return {
         list: async () => members,
-        add: async (email, role) => {
-            members = [...members.filter((member) => member.email !== email), { email, role }];
+        add: async (email, role, desks) => {
+            members = [...members.filter((member) => member.email !== email), memberRow(email, role, desks)];
         },
         remove: async (email) => {
             members = members.filter((member) => member.email !== email);
@@ -84,6 +85,17 @@ describe("createAuthorizer (owner TOFU + shared access)", () => {
         });
         await expect(authz.authorize("tok-m", undefined)).resolves.toEqual({ email: "m@x.com", role: "collaborator", methods: ["google"] });
         await expect(authz.authorize("tok-x", undefined)).rejects.toBeInstanceOf(ForbiddenError);
+    });
+
+    // The cards ride on the caller, since every desk-scoped route reads them off the identity the middleware verified.
+    test("a desk member's cards reach the caller; every other tier carries none", async () => {
+        const authz = createAuthorizer({
+            verify: verifierFor({ "tok-d": "d@x.com", "tok-m": "m@x.com" }),
+            owner: memOwner("a@x.com"),
+            members: memMembers([{ email: "d@x.com", role: "desk", desks: ["support", "sales"] }, ...granted("m@x.com")]),
+        });
+        await expect(authz.authorize("tok-d", undefined)).resolves.toEqual({ email: "d@x.com", role: "desk", desks: ["support", "sales"], methods: ["google"] });
+        await expect(authz.authorize("tok-m", undefined)).resolves.not.toHaveProperty("desks");
     });
 
     test("a granted member is recognised whatever case the claim carries", async () => {

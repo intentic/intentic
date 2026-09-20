@@ -28,6 +28,7 @@ import { MAX_REACTION_KINDS } from "./registry/agents-registry.js";
 import { archivable, archiveAgents, purgeArchived } from "./registry/archive.js";
 import { landAgent, outstandingConflicts } from "./land/land.js";
 import { assignVerdict, isMemberAddress } from "./ownership.js";
+import { refuseUnlessVisible, visibleTo } from "../auth/desk-scope.js";
 import { syncBeforeLand } from "./land/sync.js";
 import { verifyLandedTree } from "./land/verify-landed.js";
 import { settleLandingInBackground } from "./land/version-landed.js";
@@ -41,6 +42,12 @@ export const createAgentsRoutes = (services: Services) => {
         if (entry === undefined) {
             throw new ORPCError("NOT_FOUND", { message: "unknown agent" });
         }
+        return entry;
+    };
+    // The same lookup for a route a desk may reach: theirs, or FORBIDDEN (auth/desk-scope.ts).
+    const entryFor = (id: string, context: OrpcContext): PersistedAgent => {
+        const entry = entryOf(id);
+        refuseUnlessVisible(context.identity, entry);
         return entry;
     };
     // Branch-only half of the registry, for routes that act on a worktree; a workspace conversation can't answer these,
@@ -141,14 +148,21 @@ export const createAgentsRoutes = (services: Services) => {
     return i.router({
         // Revision the roster was taken at, so the browser can tell this apart from a racing /events snapshot
         // (AgentsListSchema). Refreshes standings first, which is what makes a roster read self-healing.
-        list: i.list.handler(async () => {
+        list: i.list.handler(async ({ context }) => {
             await services.agents.refreshStandings();
-            // Approvals ride along as `held`; approve/reject stay the automations routes' own verbs.
-            return { agents: services.agents.list(), rev: services.agents.revision(), held: await services.heldWakes.list() };
+            // Approvals ride along as `held`; approve/reject stay the automations routes' own verbs. A desk sees its
+            // own conversations and no held wake: a wake is somebody else's automation.
+            const caller = context.identity;
+            const agents = services.agents.list().filter((agent) => visibleTo(caller, agent));
+            const held = caller?.role === "desk" ? [] : await services.heldWakes.list();
+            return { agents, rev: services.agents.revision(), held };
         }),
         // Off `list` by construction, pulled on demand since /events never carries it; newest-archived first
         // (registry.listArchived).
-        archived: i.archived.handler(() => ({ agents: services.agents.listArchived(), rev: services.agents.revision() })),
+        archived: i.archived.handler(({ context }) => ({
+            agents: services.agents.listArchived().filter((agent) => visibleTo(context.identity, agent)),
+            rev: services.agents.revision(),
+        })),
         // Answers over the live roster and the archive, since the board hides finished/archived agents from the live
         // list. Matches the title or either side's said lines; a title hit carries no snippet.
         search: i.search.handler(async ({ input }) => {
@@ -173,18 +187,19 @@ export const createAgentsRoutes = (services: Services) => {
             // `indexing`: true means the backfill hasn't indexed everything yet, so this result can still grow.
             return { matches, scanned: entries.length, indexing: services.saidIndex.indexing() };
         }),
-        get: i.get.handler(({ input }) => {
+        get: i.get.handler(({ input, context }) => {
             const summary = services.agents.get(input.id);
             if (summary === undefined) {
                 throw new ORPCError("NOT_FOUND", { message: "unknown agent" });
             }
+            refuseUnlessVisible(context.identity, summary);
             return summary;
         }),
         // Root-scoped: the workspace root is the working dir every turn saw, so restored paths match what streamed.
         // Answers for every agent from the daemon's own record (sessions/transcript-record.ts), not only ones a harness
         // keeps a readable session store for. `sessionId` is a separate lookup: which session the client should resume.
-        transcript: i.transcript.handler(async ({ input }) => {
-            const agent = entryOf(input.id);
+        transcript: i.transcript.handler(async ({ input, context }) => {
+            const agent = entryFor(input.id, context);
             const sessionId = sdkSessionIdOf(agent);
             // One page, newest turns first, walking back on each `before`, not the whole conversation every time.
             const { rows: messages, from, more } = await services.transcripts.page(agent, { ...opt("before", input.before), ...opt("turns", input.turns) });
@@ -251,8 +266,8 @@ export const createAgentsRoutes = (services: Services) => {
             return { ok: true } as const;
         }),
         // Legal mid-turn: a title touches no worktree state, and the registry re-reads the entry at begin/finish.
-        rename: i.rename.handler(async ({ input }) => {
-            entryOf(input.id);
+        rename: i.rename.handler(async ({ input, context }) => {
+            entryFor(input.id, context);
             const summary = await services.agents.setTitle(input.id, input.title, "user");
             if (summary === undefined) {
                 throw new ORPCError("BAD_REQUEST", { message: "title is empty" });
@@ -341,7 +356,7 @@ export const createAgentsRoutes = (services: Services) => {
         // reading the board, not about the work. Legal in every state — mid-turn, archived, conflicted — since it
         // touches none of it.
         react: i.react.handler(async ({ input, context }) => {
-            const entry = entryOf(input.id);
+            const entry = entryFor(input.id, context);
             if (context.identity === undefined) {
                 throw new ORPCError("UNAUTHORIZED", { message: "no verified identity to attribute the reaction to" });
             }
@@ -362,16 +377,25 @@ export const createAgentsRoutes = (services: Services) => {
             return summary;
         }),
         // Daemon-side read marker: the unread badge survives a browser cache wipe and clears on other devices too.
-        seen: i.seen.handler(async ({ input }) => {
+        seen: i.seen.handler(async ({ input, context }) => {
+            entryFor(input.id, context);
             const summary = await services.agents.markSeen(input.id, Date.now());
             if (summary === undefined) {
                 throw new ORPCError("NOT_FOUND", { message: "unknown agent" });
             }
             return summary;
         }),
-        seenAll: i.seenAll.handler(async () => {
-            await services.agents.markAllSeen(Date.now());
-            return { agents: services.agents.list(), rev: services.agents.revision() };
+        seenAll: i.seenAll.handler(async ({ context }) => {
+            const caller = context.identity;
+            if (caller?.role === "desk") {
+                // Only its own: "all" for a desk is the roster it can see.
+                for (const agent of services.agents.list().filter((entry) => visibleTo(caller, entry))) {
+                    await services.agents.markSeen(agent.id, Date.now());
+                }
+            } else {
+                await services.agents.markAllSeen(Date.now());
+            }
+            return { agents: services.agents.list().filter((agent) => visibleTo(caller, agent)), rev: services.agents.revision() };
         }),
         // The only user-initiated way to end a watch; every other exit is automatic (it fires, times out, or a later
         // turn stops it). Legal in every state, including mid-turn, since a watch is a timer, not turn state.
@@ -590,10 +614,10 @@ export const createAgentsRoutes = (services: Services) => {
         }),
         // Named ids archive what the user pointed at; no ids clears the whole Finished lane. Answers with what moved,
         // not the roster, so overlapping requests can't undo each other.
-        archive: i.archive.handler(async ({ input }) => {
+        archive: i.archive.handler(async ({ input, context }) => {
             if (input.ids !== undefined) {
                 for (const id of input.ids) {
-                    entryOf(id);
+                    entryFor(id, context);
                     notRunning(id);
                 }
             }
@@ -603,7 +627,7 @@ export const createAgentsRoutes = (services: Services) => {
                 await services.agents.refreshStandings();
                 return services.agents
                     .list()
-                    .filter(archivable)
+                    .filter((agent) => archivable(agent) && visibleTo(context.identity, agent))
                     .map((agent) => agent.id);
             };
             const targets = input.ids ?? (await archivableNow());
@@ -615,9 +639,9 @@ export const createAgentsRoutes = (services: Services) => {
                 rev: services.agents.revision(),
             };
         }),
-        unarchive: i.unarchive.handler(async ({ input }) => {
+        unarchive: i.unarchive.handler(async ({ input, context }) => {
             for (const id of input.ids) {
-                entryOf(id);
+                entryFor(id, context);
             }
             // No worktree restore: the next turn's ensure() rebuilds the checkout from the branch.
             await services.agents.clearArchived(input.ids);

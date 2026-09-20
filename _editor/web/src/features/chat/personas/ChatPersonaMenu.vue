@@ -4,6 +4,7 @@ import { browserOwnsClick, FACE_SIZES, PersonaFace, StatusBadge } from "@intenti
 import { computed } from "vue";
 import { RouterLink } from "vue-router";
 import { usePersonas } from "../../sandbox/personas/usePersonas";
+import { useRole } from "../../sandbox/secrets/useRole";
 import { useT } from "@intentic/ui/i18n";
 
 // The composer's persona picker: who this chat speaks as to the outside world. "Anyone" is a real row, not the absence
@@ -16,6 +17,9 @@ const { picked } = defineProps<{ picked?: string }>();
 const emit = defineEmits<{ picked: [persona: string | undefined] }>();
 
 const { personas, isConnected } = usePersonas();
+// A desk picks among the cards it holds and nothing wider: "Anyone" would reach every account, which is exactly what a
+// desk is not handed, and the cards are the owner's to manage.
+const { isDesk } = useRole();
 
 // True once any one of a persona's accounts is connected; only a card that reaches nothing is marked.
 const ready = (persona: Persona): boolean => persona.capabilities.some((id) => isConnected(id));
@@ -40,9 +44,10 @@ const closeMenu = (event: MouseEvent): void => {
         <!-- Not an error: the copy explains what an empty list means and where to fix it. -->
         <template v-if="empty">
             <p class="px-2.5 py-3 text-2xs text-subtle">
-                {{ t(`chat.chatPersonaMenu.noPersonasYetChat`) }}
+                {{ isDesk ? t(`chat.chatPersonaMenu.noDeskYet`) : t(`chat.chatPersonaMenu.noPersonasYetChat`) }}
             </p>
             <RouterLink
+                v-if="!isDesk"
                 to="/sandbox/personas"
                 class="ui-row-select flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-left max-md:py-3"
                 @click="closeMenu"
@@ -55,6 +60,7 @@ const closeMenu = (event: MouseEvent): void => {
         <template v-else>
             <!-- The tick marks the current pick, including Anyone: with none ticked, an unset persona would read as a broken menu. -->
             <button
+                v-if="!isDesk"
                 type="button"
                 class="ui-row-select flex items-start gap-2 rounded-lg px-2.5 py-1.5 text-left max-md:py-3"
                 :class="{ 'ui-row-select-on': picked === undefined }"
@@ -97,6 +103,7 @@ const closeMenu = (event: MouseEvent): void => {
 
             <!-- Link to the page that owns these cards, placed where a list's "manage" row always is. -->
             <RouterLink
+                v-if="!isDesk"
                 to="/sandbox/personas"
                 class="ui-row-select flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-left max-md:py-3"
                 @click="closeMenu"

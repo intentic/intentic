@@ -25,6 +25,9 @@ vi.mock(`../client/useSandbox`, () => ({
     }),
 }));
 vi.mock(`../overview/useSandboxOutline`, () => ({ useSandboxOutline: () => false }));
+// The cards a desk invite can hand over; the picker only mounts once Desk is the tier.
+const personas = ref([{ id: `support`, label: `Support`, capabilities: [] }]);
+vi.mock(`../personas/usePersonas`, () => ({ usePersonas: () => ({ personas, connected: ref([]), isConnected: () => false }) }));
 vi.mock(`../../../shell/presence/usePresence`, () => ({ presenceOthers: [], presenceActivity: () => `` }));
 // Session module touches GIS/localStorage at eval; needs only its expiry. Fixed date avoids timezone drift.
 const sessionExpiresAt = ref<number | undefined>(Date.parse(`2026-09-24T12:00:00.000Z`));

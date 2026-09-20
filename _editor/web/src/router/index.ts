@@ -11,6 +11,7 @@ import { restorePersistedQueries } from "../lib/queryPersistence";
 import { useAuth } from "../features/auth/useAuth";
 import { useGoogleIdentity } from "../features/auth/useGoogleIdentity";
 import { useSandbox } from "../features/sandbox/client/useSandbox";
+import { useRole } from "../features/sandbox/secrets/useRole";
 import { setupRedirect } from "./setupGate";
 import { signInAt } from "./signIn";
 import { isStaleChunkError, recoverStaleChunk } from "./staleChunk";
@@ -152,10 +153,17 @@ const routes: RouteRecordRaw[] = [
         children: [
             // Where setup lets go of the user: mobile lands on the agent fleet, desktop on the home seat, where its
             // chat is already docked: the file tree, or a maker's Project page once that extension has registered.
+            // A desk has no home seat but the chat: the tree and the Project page are reads the daemon refuses it.
             {
                 path: ``,
                 redirect: () =>
-                    useDevice().mobile.value ? `/agents` : homeViewId() === PROJECTS_VIEW_ID ? `/ext/${PROJECTS_VIEW_ID}` : `/workspace`,
+                    useRole().isDesk.value
+                        ? `/chat`
+                        : useDevice().mobile.value
+                          ? `/agents`
+                          : homeViewId() === PROJECTS_VIEW_ID
+                            ? `/ext/${PROJECTS_VIEW_ID}`
+                            : `/workspace`,
             },
             // Full-screen chat: the rail-docked chat's own surface, expanded. A route rather than a layout switch, so
             // the rail, back button and reload already know how to enter and leave it. On a phone, the Chat tab.

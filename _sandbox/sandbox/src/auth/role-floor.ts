@@ -1,5 +1,5 @@
 import type { MemberRole } from "@intentic/sandbox-contract";
-import { contractRoutes, isAttachmentPath, routeNameForRequest, sandboxContract } from "@intentic/sandbox-contract";
+import { contractRoutes, isAttachmentPath, roleAtLeast, routeNameForRequest, sandboxContract } from "@intentic/sandbox-contract";
 
 // Role floors: the minimum trust tier each route demands, one table, consulted by the bearer middleware right after the
 // caller's role resolves.
@@ -100,6 +100,82 @@ const PATH_FLOORS: Readonly<Record<string, MemberRole>> = {
 const passkeyRemoval = /^\/system\/passkeys\/[^/]+$/;
 
 const methodFloor = (method: string): MemberRole => (method === "GET" || method === "HEAD" ? "viewer" : "maintainer");
+
+// What a desk member may call at all, by contract route name: signing in and being present, the chat it drives,
+// the conversations it can see (each handler narrows to its own), the cards it holds, and the reads a composer
+// needs before it will send. An allowlist rather than a floor, since a desk is below every tier: what is not named
+// here is refused, so a route added later is closed to a desk until somebody decides otherwise.
+const DESK_NAMES: ReadonlySet<string> = new Set([
+    "system.info",
+    "system.session",
+    "system.events",
+    "system.presence",
+    "providers.list",
+    "providers.models",
+    "settings.get",
+    "agent.run",
+    "agent.attach",
+    "agent.reply",
+    "agent.steer",
+    "agent.stop",
+    "agent.resume",
+    "agent.rewind",
+    "agent.commands",
+    "agent.refusals",
+    "agents.list",
+    "agents.archived",
+    "agents.get",
+    "agents.transcript",
+    "agents.rename",
+    "agents.seen",
+    "agents.seenAll",
+    "agents.react",
+    "agents.archive",
+    "agents.unarchive",
+    "personas.list",
+]);
+
+// The hand-written routes a desk reaches: dictating a message, giving up its own access, its own passkeys.
+const DESK_PATHS: ReadonlySet<string> = new Set([
+    "/speech/transcribe",
+    "/speech/status",
+    "/members/self",
+    "/system/passkeys",
+    "/system/passkeys/register/options",
+    "/system/passkeys/register",
+]);
+
+// The one refusal the bearer middleware hands a verified member: the tier a route wants, or a desk asking for a door
+// not on its list. Undefined admits. `target` is the upload's `?path=`, the one route whose floor depends on where
+// the bytes land.
+export const memberRefusal = (
+    caller: { readonly role: MemberRole },
+    method: string,
+    path: string,
+    target?: string,
+): { readonly error: string; readonly floor: MemberRole } | undefined => {
+    if (caller.role === "desk") {
+        return deskReach(method, path, target) ? undefined : { error: "not open to a desk member", floor: "viewer" };
+    }
+    const floor = routeFloor(method, path, target);
+    return roleAtLeast(caller.role, floor) ? undefined : { error: `${floor} access required`, floor };
+};
+
+// Whether a desk member may reach this request at all. `target` is the upload's `?path=`: an attachment rides with
+// the message it belongs to, and is the one byte-write a desk makes.
+export const deskReach = (method: string, path: string, target?: string): boolean => {
+    if (path === "/workspace/upload") {
+        return target !== undefined && isAttachmentPath(target);
+    }
+    if (method === "DELETE" && passkeyRemoval.test(path)) {
+        return true;
+    }
+    const name = routeNameForRequest(ROUTES, method, path);
+    if (name !== undefined) {
+        return DESK_NAMES.has(name);
+    }
+    return DESK_PATHS.has(path);
+};
 
 // `target` is the workspace path a byte-write addresses (upload's `?path=`); absent for every other route.
 export const routeFloor = (method: string, path: string, target?: string): MemberRole => {

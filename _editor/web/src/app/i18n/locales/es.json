@@ -1022,6 +1022,7 @@
             "anyone": "Cualquiera",
             "everyAccountYouveConnected": "Todas las cuentas que has conectado están a mano, y la caja de herramientas completa.",
             "managePersonas": "Gestionar personas",
+            "noDeskYet": "No assistant has been assigned to you yet. Ask the sandbox owner for one.",
             "noPersonasYetChat": "Todavía no hay personas, así que este chat habla a través de todas las cuentas que has conectado. Crea una para enviar un mensaje como una sola persona: solo con sus cuentas a mano.",
             "notSignedInYet": ", sin sesión iniciada todavía",
             "setUpPersona": "Crear una persona"
@@ -2726,6 +2727,10 @@
             "ciNotifications": "Notificaciones de CI",
             "collaborator": "Colaborador",
             "copyLink": "Copiar el enlace",
+            "desk": "Desk",
+            "deskNeedsAssistant": "Pick at least one assistant for a desk.",
+            "deskPick": "Which assistants",
+            "deskTalksToAssistants": "Talks to the assistants you pick, and only through them. Sees no files, no other conversations, nothing of the box.",
             "driveAgentsReviewWork": "Puede dirigir agentes y revisar el trabajo. Los archivos cambian a través de agentes, no a mano; integrar y publicar se convierten en peticiones.",
             "eachHoldsOwnEnrollment": "Cada uno guarda su propia clave de alta, revocable por dispositivo en Dispositivos.",
             "enterValidEmailAddress": "Introduce una dirección de correo válida.",

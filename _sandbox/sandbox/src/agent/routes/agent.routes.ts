@@ -58,6 +58,7 @@ import { commandRuleFindings, touchedRepos, workspaceRelative } from "../../rule
 import { mentionsSpentAllowance } from "../providers/failure-sentences.js";
 import { conversationOf } from "../tools/agent-requests.js";
 import { actorOf, ownerOf, type TurnInput } from "../run/turn/turn-actor.js";
+import { refuseUnlessHeld, refuseUnlessVisible } from "../../auth/desk-scope.js";
 import { opt } from "../run/opt.js";
 import { registerTurn, SteeringQueue, steerTurn, stopTurn } from "../anchors/agent-steering.js";
 import { OUTAGE_MAX_ATTEMPTS, recordProviderFailure, recordProviderSuccess } from "../providers/provider-health.js";
@@ -1482,6 +1483,17 @@ async function* runTurn(
 
 export const createAgentRoutes = (services: Services) => {
     const i = implement(agentContract).$context<OrpcContext>();
+    // A desk drives only its own conversations (auth/desk-scope.ts); one the registry has never seen is nobody's
+    // yet, and becomes the caller's on its first turn.
+    const own = (context: OrpcContext, conversationId: string | undefined): void => {
+        const entry = conversationId === undefined ? undefined : services.agents.entry(conversationId);
+        if (entry !== undefined) {
+            refuseUnlessVisible(context.identity, entry);
+        }
+    };
+    // The conversation a parked request belongs to: held here, or minted on a runner. Undefined when neither knows it,
+    // which the reply below reports as NOT_FOUND on its own.
+    const conversationOfRequest = (requestId: string): string | undefined => conversationOf(requestId) ?? remoteRequestOf(requestId)?.conversationId;
     return {
         // Starts the turn detached: the ack carries the run id, and it keeps running regardless of this request.
         // CONFLICT means another window is already mid-turn.
@@ -1490,6 +1502,9 @@ export const createAgentRoutes = (services: Services) => {
                 throw new ORPCError("BAD_REQUEST", { message: "conversationId required" });
             }
             const conversationId = input.conversationId;
+            // A desk wears one of its cards, on a conversation of its own; checked before anything is started.
+            refuseUnlessHeld(context.identity, input.actsAs);
+            own(context, conversationId);
             // Who is asking, from what the middleware verified on this request, never from the body.
             const actor = actorOf(context.identity, context.principal);
             // Push rides the run's own lifecycle, not this request, since a tab may be asleep.
@@ -1502,7 +1517,8 @@ export const createAgentRoutes = (services: Services) => {
         // Re-runs a turn a spent allowance refused or a dead runtime cut short, with everything but who serves it,
         // renamed by the press. NOT_FOUND when nothing is held; never CONFLICT, since a running turn already cleared
         // the entry.
-        resume: i.resume.handler(async ({ input }) => {
+        resume: i.resume.handler(async ({ input, context }) => {
+            own(context, input.conversationId);
             const run = await fireHeldResume(services, streamAgent, input.conversationId, input.routing);
             if (run === undefined) {
                 throw new ORPCError("NOT_FOUND", { message: "no held turn to run again for that conversation" });
@@ -1510,7 +1526,8 @@ export const createAgentRoutes = (services: Services) => {
             return { run: run.id };
         }),
         // Renders the run: its head, then every change as it lands, `end` when it settles.
-        attach: i.attach.handler(async function* ({ input }) {
+        attach: i.attach.handler(async function* ({ input, context }) {
+            own(context, input.conversationId);
             const run = turnRunOf(input.conversationId);
             if (run === undefined) {
                 throw new ORPCError("NOT_FOUND", { message: "no live or recent turn for that conversation" });
@@ -1526,6 +1543,7 @@ export const createAgentRoutes = (services: Services) => {
         // dismissed question ends the turn here, synchronously, so the board never shows it running again.
         reply: i.reply.handler(async ({ input, context }) => {
             // The decision's own line, written before the reply ends the turn.
+            own(context, conversationOfRequest(input.requestId));
             const held = conversationOf(input.requestId);
             const run = held === undefined ? undefined : turnRunOf(held);
             if (input.kind === "question" && input.cancelled === true) {
@@ -1568,7 +1586,8 @@ export const createAgentRoutes = (services: Services) => {
         }),
         // Injects a message into a running turn, between tool calls; NOT_FOUND means the client queues it for later.
         // Composed exactly like a turn's own prompt, so a mid-turn attachment reads like one on a fresh message.
-        steer: i.steer.handler(async ({ input }) => {
+        steer: i.steer.handler(async ({ input, context }) => {
+            own(context, input.conversationId);
             // Remote turns get words uncomposed: paths only resolve in the runner's own workspace.
             const runnerId = services.agents.entry(input.conversationId)?.runner;
             if (runnerId !== undefined) {
@@ -1615,7 +1634,8 @@ export const createAgentRoutes = (services: Services) => {
             return { ok: true } as const;
         }),
         // Hard-cancels the conversation's running turn daemon-side; the browser's own fetch abort can't.
-        stop: i.stop.handler(async ({ input }) => {
+        stop: i.stop.handler(async ({ input, context }) => {
+            own(context, input.conversationId);
             const run = turnRunOf(input.conversationId);
             const stopped = stopTurn(input.conversationId);
             // A run can look gone while its pump still finishes cleanup; joining it avoids a race.
@@ -1630,7 +1650,8 @@ export const createAgentRoutes = (services: Services) => {
         }),
         // Rewinds a message, its files, transcript and session together. CONFLICT rather than queuing behind a running
         // turn: by the time it finished, the workspace would have moved on from what the user is looking at.
-        rewind: i.rewind.handler(async ({ input }) => {
+        rewind: i.rewind.handler(async ({ input, context }) => {
+            own(context, input.conversationId);
             const outcome = await rewindConversation(services, input.conversationId, input.index);
             if (outcome === "busy") {
                 throw new ORPCError("CONFLICT", { message: "This agent is running a turn, stop it before going back." });
