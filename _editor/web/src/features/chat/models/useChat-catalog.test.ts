@@ -27,7 +27,8 @@ vi.mock("../../sandbox/client/sandboxClient", () => ({
 const { sandboxJson, sandboxRequest, SandboxHttpError } = await import("../../sandbox/client/sandboxClient");
 const sandboxRequestMock = vi.mocked(sandboxRequest);
 const sandboxJsonMock = vi.mocked(sandboxJson);
-const { loadRunnableProviders, loadProviderModels } = await import("./useChat-catalog");
+const { loadActiveProviderModels, loadRunnableProviders, loadProviderModels } = await import("./useChat-catalog");
+const { NATIVE_PROVIDERS } = await import("@intentic/sandbox-contract");
 const { acpProviders, endpointProviders, endpointsLoaded } = await import("../accounts/providerCatalog");
 const { setConversations } = await import("../tabs/useChat-tabs");
 const { Conversation } = await import("../session/conversation");
@@ -144,6 +145,21 @@ test(`leaves a chat pinned to a model the catalog still offers exactly where it 
 
     expect(chat.model.value).toBe(PRO_LOW);
     expect(chat.displacedModel.value).toBeUndefined();
+});
+
+// The seam a reachable daemon runs (loadAccountStatus) used to warm the whole native list here, so a first paint asked
+// one request per provider for catalogs nothing was drawing, ahead of the reads the screen was waiting on.
+test(`the reachable seam reads the open chat's catalog, and no other provider's`, async () => {
+    const open = chatOn(`gemini`, PRO_LOW);
+    setConversations([open], open.conversationId, `catalog-test`);
+    serves([PRO_LOW]);
+
+    await loadActiveProviderModels();
+
+    const asked = sandboxRequestMock.mock.calls.map(([path]) => String(path));
+    expect(NATIVE_PROVIDERS.length, `with one native provider this pins nothing`).toBeGreaterThan(1);
+    expect(asked).toHaveLength(1);
+    expect(asked[0]).toContain(open.provider.value);
 });
 
 test(`reads one provider's catalog against that provider's chats only`, async () => {

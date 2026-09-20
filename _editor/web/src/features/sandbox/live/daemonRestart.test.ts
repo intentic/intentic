@@ -20,6 +20,7 @@ import type { AgentSummary } from "@intentic/sandbox-contract";
 import { resetAgents, useAgents } from "../../agents/fleet/useAgents";
 import { setAgents } from "../../agents/fleet/useAgents-registry";
 import { sandboxJson } from "../client/sandboxClient";
+import { queryClient } from "../../../lib/queryPersistence";
 import { applySystemEvent } from "./systemEvents";
 
 // A daemon restart resets the roster's revision counter; `setAgents` drops anything below this tab's mark, and the
@@ -81,4 +82,19 @@ it(`ignores a roster read answering for the daemon it has already left`, async (
     // The stale answer's revision 900 must not have become the mark the new daemon has to beat.
     roster([summary(`a1`, 2_000), summary(`a2`, 2_000)], 2);
     expect(ids()).toEqual([`a1`, `a2`]);
+});
+
+// Cached reads are taken as true between frames (staleTime, queryPersistence), which puts the whole weight of freshness
+// on the stream. A reconnect is the seam where that cache stops being evidence: frames sent while this browser was away
+// are gone, and one hydrated from disk can be hours old.
+it(`distrusts everything the cache holds when the stream reconnects`, () => {
+    const key = [`held-across-a-reconnect`];
+    queryClient.setQueryData(key, { from: `before the gap` });
+    expect(queryClient.getQueryState(key)?.isInvalidated, `nothing has happened to it yet`).toBe(false);
+
+    hello();
+
+    expect(queryClient.getQueryState(key)?.isInvalidated).toBe(true);
+    // Still held, so an active screen repaints from it while the refetch runs rather than blanking.
+    expect(queryClient.getQueryData(key)).toEqual({ from: `before the gap` });
 });

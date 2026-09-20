@@ -106,6 +106,41 @@ describe(`a pointer drag of an entry`, () => {
         expect(consumeSuppressedClick(), `a plain click`).toBe(false);
     });
 
+    it(`swallows the release that follows an Escape, since the press was a drag and not a click`, () => {
+        press();
+        move(30, 30);
+        window.dispatchEvent(new KeyboardEvent(`keydown`, { key: `Escape` }));
+        release();
+        expect(consumeSuppressedClick()).toBe(true);
+    });
+
+    // A drag released over nothing draggable leaves a click no row ever fires: over the editor, off the window, or
+    // taken by the OS. Nothing consumes the claim, so only the deadline can end it.
+    it(`lets an unrelated click through once the drag's own click never came`, () => {
+        vi.useFakeTimers();
+        try {
+            press();
+            move(30, 30);
+            release();
+            vi.advanceTimersByTime(1_000);
+            expect(consumeSuppressedClick(), `a click a second later is a new gesture`).toBe(false);
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
+    // Load-bearing for the callers: a row that cannot travel presses with no paths rather than returning early, and
+    // relies on the claim being ended ahead of that guard.
+    it(`ends the claim on a press that carries nothing`, () => {
+        press();
+        move(30, 30);
+        release();
+        current = { paths: [], onDrop: vi.fn<(dir: string) => void>() };
+        press();
+        release();
+        expect(consumeSuppressedClick(), `a locked row's own click`).toBe(false);
+    });
+
     it(`counts several, and refuses a secondary button or nothing to carry`, () => {
         current = { paths: [`a`, `b`, `c`], onDrop: vi.fn<(dir: string) => void>() };
         press();

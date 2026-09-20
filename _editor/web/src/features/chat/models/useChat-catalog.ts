@@ -151,6 +151,13 @@ export const loadAllProviderModels = async (): Promise<void> => {
     await Promise.all(NATIVE_PROVIDERS.map((target) => loadProviderModels(target)));
 };
 
+// The one catalog a first paint reads: the open chat's own, for the model its composer names. Every other provider's
+// list is fetched when something puts a chat on it (selectProvider, selectModel, a settled connect, a rejected model)
+// or when the picker opens and refreshes the lot, so warming the whole native list on the reachable seam spent a
+// request per provider on lists nothing was showing — against a daemon that has the first screen's reads queued
+// behind them.
+export const loadActiveProviderModels = (): Promise<void> => loadProviderModels(active.value.provider.value);
+
 // Reads the free trial's remaining allowance, separate from the capability read that discovers the trial exists
 // (different clocks). A failure keeps the previous figures rather than zeroing them.
 export const loadTrialStatus = async (): Promise<void> => {

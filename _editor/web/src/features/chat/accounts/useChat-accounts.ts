@@ -18,7 +18,7 @@ import { endpointProviders, trialStatus } from "./providerCatalog";
 import { turnDefaults } from "../run/turnDefaults";
 import { accessKnown, providerReady, providerReadyOn } from "../session/access";
 import { conversations } from "../tabs/useChat-tabs";
-import { loadAllProviderModels, loadRunnableProviders, loadProviderCommands, readOrKeep } from "../models/useChat-catalog";
+import { loadActiveProviderModels, loadRunnableProviders, loadProviderCommands, readOrKeep } from "../models/useChat-catalog";
 import { sandboxJson, sandboxRequest } from "../../sandbox/client/sandboxClient";
 import { jsonBody } from "../../sandbox/client/jsonBody";
 
@@ -215,8 +215,9 @@ export const loadAccountStatus = async (): Promise<void> => {
     await Promise.all([
         // Which accounts and subscriptions this sandbox is signed in with, the gate every provider surface reads.
         refreshConnections(),
-        // Model lists are daemon-owned too, load them on the same reachable seam so the pickers are ready.
-        loadAllProviderModels(),
+        // Model lists are daemon-owned too; the open chat's loads on the same reachable seam, so its composer can name
+        // the model it will send on. The other providers' lists are the picker's to fetch when it opens.
+        loadActiveProviderModels(),
         // Installed ACP agents and model endpoints are providers too, surface them on the same seam.
         loadRunnableProviders(),
         // Claude only, for a populated `/` popover on open; other providers load via ensureProviderCommands.

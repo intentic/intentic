@@ -32,7 +32,12 @@ const label = computed(() => {
 let spec: EntryDragSpec | undefined;
 let origin = { x: 0, y: 0 };
 let listeners: AbortController | undefined;
-let suppressClick = false;
+// When the drag that owns the pending click ended; `undefined` once no click is owed.
+let suppressedAt: number | undefined;
+// A click belongs to the pointerup before it, which the browser dispatches immediately after. Past this the claim is
+// stale — a drag released over nothing (or cancelled by the OS) leaves a click nobody ever fires, and without a
+// deadline that claim would swallow an unrelated row's click seconds later.
+const CLICK_CLAIM_MS = 250;
 
 // The folder the element at a point offers a drop into: its own, or the nearest ancestor's. "" is the root.
 export const dropDirAt = (x: number, y: number): string | undefined => {
@@ -57,7 +62,6 @@ const onMove = (event: PointerEvent): void => {
             return;
         }
         dragging.value = true;
-        suppressClick = true;
         // Or the press-and-drag paints a text selection across the tree.
         document.body.style.userSelect = `none`;
     }
@@ -66,11 +70,20 @@ const onMove = (event: PointerEvent): void => {
     over.value = dir !== undefined && movableInto(paths.value, dir).length > 0 ? dir : undefined;
 };
 
+// Ends a drag by whatever finished it — release, Escape, the OS taking the gesture — and claims the click the browser
+// still owes for it. Dated from the end, so a drag held for seconds still owns its own release.
+const endDrag = (): void => {
+    if (dragging.value) {
+        suppressedAt = Date.now();
+    }
+    settle();
+};
+
 const onUp = (): void => {
     const target = over.value;
     const current = spec;
     const moved = dragging.value;
-    settle();
+    endDrag();
     if (moved && target !== undefined && current !== undefined) {
         current.onDrop(target);
     }
@@ -78,7 +91,7 @@ const onUp = (): void => {
 
 const onKey = (event: KeyboardEvent): void => {
     if (event.key === `Escape`) {
-        settle();
+        endDrag();
     }
 };
 
@@ -86,8 +99,9 @@ const onKey = (event: KeyboardEvent): void => {
 // Mouse and pen only: a touch that lingers is a scroll or a long-press, not a drag.
 export const beginEntryDrag = (event: PointerEvent, next: EntryDragSpec): void => {
     // Ahead of every guard: a press on any row ends the previous drag's claim, or the suppression could outlive its
-    // drag and swallow the next row's first click.
-    suppressClick = false;
+    // drag and swallow the next row's first click. Callers reach this on every press, carrying no paths when the row
+    // cannot travel, so a locked or modified press ends the claim like any other.
+    suppressedAt = undefined;
     if (event.pointerType === `touch` || event.button !== 0 || next.paths.length === 0) {
         return;
     }
@@ -100,17 +114,18 @@ export const beginEntryDrag = (event: PointerEvent, next: EntryDragSpec): void =
     const { signal } = listeners;
     window.addEventListener(`pointermove`, onMove, { signal });
     window.addEventListener(`pointerup`, onUp, { signal });
-    window.addEventListener(`pointercancel`, settle, { signal });
+    window.addEventListener(`pointercancel`, endDrag, { signal });
     window.addEventListener(`keydown`, onKey, { signal });
 };
 
 // A drag's pointerup also lands as a click on the row it started on; the row asks this before selecting or opening.
 export const consumeSuppressedClick = (): boolean => {
-    if (!suppressClick) {
+    if (suppressedAt === undefined) {
         return false;
     }
-    suppressClick = false;
-    return true;
+    const owed = Date.now() - suppressedAt < CLICK_CLAIM_MS;
+    suppressedAt = undefined;
+    return owed;
 };
 
 export function useEntryDrag() {

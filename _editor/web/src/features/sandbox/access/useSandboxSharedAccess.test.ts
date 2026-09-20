@@ -32,11 +32,15 @@ const mounted = (): ReturnType<typeof useSandboxSharedAccess> => {
     return result;
 };
 
-beforeEach(async () => {
+beforeEach(() => {
+    // Unmounted and cleared, not reset: reset refetches whatever is still observing, which answered from the previous
+    // test's mock and left a read this test then finds fresh (staleTime) and never re-runs.
+    app?.unmount();
+    app = undefined;
+    queryClient.clear();
     active.value = { id: `sbx-1`, name: `Desk`, image: null, lastSeenAt: null, role: `owner` } as SandboxSummary;
     sandboxJson.mockReset();
     sandboxJson.mockResolvedValue({ members: [], owner: `owner@example.com` });
-    await queryClient.resetQueries();
 });
 
 describe("useSandboxSharedAccess", () => {

@@ -390,15 +390,14 @@ export function useDeskActions(ctx: DeskActionsContext) {
     // arrive by the platform's own drag, the one drag read natively, since one the page starts freezes the tab in Brave.
     const { dragging, paths: dragPaths, over, begin: beginEntryDrag, consumeSuppressedClick } = useEntryDrag();
     const onPointerDown = (event: PointerEvent, entry: WorkspaceTreeEntry): void => {
-        // A modified press is a selection gesture, and a press on the name field is the field's.
-        if (event.shiftKey || event.ctrlKey || event.metaKey || event.altKey || renaming.value === entry.path) {
-            return;
-        }
-        // Dragging a selected tile moves the whole selection; otherwise just that tile. Locked tiles never travel.
-        const targets = unlockedOnly(marked.value.has(entry.path) ? [...marked.value] : [entry.path]);
-        if (targets.length === 0) {
-            return;
-        }
+        // A modified press is a selection gesture, and a press on the name field is the field's; a locked tile never
+        // travels. Each carries nothing, rather than returning: every press has to reach beginEntryDrag, which is what
+        // ends the previous drag's claim on the pending click.
+        const targets =
+            event.shiftKey || event.ctrlKey || event.metaKey || event.altKey || renaming.value === entry.path
+                ? []
+                : // Dragging a selected tile moves the whole selection; otherwise just that tile.
+                  unlockedOnly(marked.value.has(entry.path) ? [...marked.value] : [entry.path]);
         beginEntryDrag(event, { paths: targets, onDrop: (dir) => void dragOnto(targets, dir) });
     };
     // Where a dragged tile lands. Out of an archive it is a copy: the member stays in the archive, since nothing here

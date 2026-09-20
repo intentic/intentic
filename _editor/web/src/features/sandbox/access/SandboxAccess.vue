@@ -24,6 +24,8 @@ import { computed, onMounted, ref } from "vue";
 import { sandboxJson } from "../client/sandboxClient";
 import { jsonBody } from "../client/jsonBody";
 import { apiClient } from "../../../lib/useApi";
+import { SANDBOX_MEMBERS } from "../../../lib/queryKeys";
+import { queryClient } from "../../../lib/queryPersistence";
 import { useAuth } from "../../auth/useAuth";
 import { useSandbox } from "../client/useSandbox";
 import { useSandboxSession } from "../session/sandboxSession";
@@ -50,6 +52,13 @@ const { sessionExpiresAt } = useSandboxSession();
 const isOwner = computed(() => sandbox.active.value?.role === `owner`);
 
 const members = ref<InviteRecord[]>([]);
+// A grant or revoke changes the roster for more than this page: the board's Everyone/Mine row reads the same list
+// through SANDBOX_MEMBERS. A cached read is re-run when something says it changed, never because a view mounted
+// again, so saying so here is what keeps the two surfaces telling the same story.
+const rosterChanged = (next: InviteRecord[]): void => {
+    members.value = next;
+    void queryClient.invalidateQueries({ queryKey: SANDBOX_MEMBERS.of() });
+};
 const email = ref(``);
 
 // Tiers an invite can grant, nested order, shared by the invite form and every roster row's <Picker>.
@@ -212,7 +221,7 @@ const invite = async (): Promise<void> => {
             return;
         }
         const result = await apiClient.invite.create({ sandboxId: id, email: value, role: inviteRole.value });
-        members.value = result.members;
+        rosterChanged(result.members);
         email.value = ``;
         emailTouched.value = false;
         showDelivery(result);
@@ -292,7 +301,7 @@ const setRole = async (target: string, role: GrantedRole, desks: readonly string
             notice.value = noticeFrom(err, `Couldn't change the role on the sandbox: is it online?`);
             return;
         }
-        members.value = (await apiClient.invite.setRole({ sandboxId: id, email: target, role })).members;
+        rosterChanged((await apiClient.invite.setRole({ sandboxId: id, email: target, role })).members);
     } catch (err) {
         void load();
         notice.value = noticeFrom(err, `The sandbox took the new role, but recording it failed.`);
@@ -316,7 +325,7 @@ const revoke = async (target: string): Promise<void> => {
             notice.value = noticeFrom(err, `Couldn't take access away on the sandbox: is it online?`);
             return;
         }
-        members.value = (await apiClient.invite.revoke({ sandboxId: id, email: target })).members;
+        rosterChanged((await apiClient.invite.revoke({ sandboxId: id, email: target })).members);
     } catch (err) {
         void load();
         notice.value = noticeFrom(err, `Access is gone on the sandbox, but clearing the record failed.`);

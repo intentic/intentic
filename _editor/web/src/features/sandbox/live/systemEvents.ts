@@ -53,6 +53,11 @@ const applyHello = (event: Extract<SystemEvent, { kind: `hello` }>, sandboxId: s
     setDaemonRoutes(event.routes, event.shapes);
     // Daemon boot state, needed before other daemon queries are allowed to fire this tick.
     setDaemonBoot(event.boot);
+    // Between events a cached read is taken as true (staleTime, queryPersistence), which makes a (re)connect the one
+    // moment that has to distrust every one of them: frames that landed while this browser was away are gone, and a
+    // cache hydrated from disk can be hours old. What is on screen refetches now; the rest is marked for its next
+    // mount. Ahead of the reset below, so a replaced workspace still gets the stronger treatment.
+    void queryClient.invalidateQueries({ refetchType: `active` });
     // Workspace replaced (recreated under the same id) or daemon rebuilt into a differently-shaped one; either makes the
     // cached workspace state stale.
     const replaced = workspaceReplaced(sandboxId, event.workspaceId);

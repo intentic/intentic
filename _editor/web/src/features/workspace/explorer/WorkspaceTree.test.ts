@@ -307,6 +307,31 @@ describe(`the rows the sandbox keeps to itself`, () => {
         expect(opened).toEqual([`.intentic/secrets/auth`]);
         expect(rows(el)).toEqual([`.intentic`, `capabilities.json`, `settings.json`, `auth`, `README.md`]);
     });
+
+    // A drag released where no row fires a click — over the editor, off the window, a gesture the OS took — leaves
+    // that click claimed but unspent. A locked row carries nothing, so its press has to end the claim anyway, or the
+    // row pays for a drag it had nothing to do with and the first press on it does nothing at all.
+    it(`opens it on the first press even after a drag elsewhere left its click unspent`, async () => {
+        const stateDir = LOCKED_TREE[0]!;
+        const auth = stateDir.children!.find((child) => child.name === `auth`)!;
+        restoreFrom([stateDir.path]);
+        const opened: string[] = [];
+
+        const el = await mount({ tree: LOCKED_TREE, onOpenFile: (path: string) => opened.push(path) });
+        const readme = [...el.querySelectorAll(`[role="treeitem"]`)].find((row) => row.textContent?.trim() === `README.md`) as HTMLElement;
+        document.elementFromPoint = () => null;
+        readme.dispatchEvent(new MouseEvent(`pointerdown`, { bubbles: true, button: 0, clientX: 10, clientY: 10 }));
+        window.dispatchEvent(new MouseEvent(`pointermove`, { bubbles: true, cancelable: true, clientX: 60, clientY: 60 }));
+        window.dispatchEvent(new MouseEvent(`pointerup`, { bubbles: true, clientX: 60, clientY: 60 }));
+        expect(useEntryDrag().dragging.value, `the drag ran and ended over nothing`).toBe(false);
+
+        const authRow = [...el.querySelectorAll(`[role="treeitem"]`)].find((row) => row.textContent?.trim() === `auth`) as HTMLElement;
+        authRow.dispatchEvent(new MouseEvent(`pointerdown`, { bubbles: true, button: 0, clientX: 10, clientY: 30 }));
+        authRow.click();
+        await nextTick();
+
+        expect(opened).toEqual([auth.path]);
+    });
 });
 
 // Click reports as a peek (the strip's one transient slot, replaced by the next peek); double-click
@@ -711,10 +736,15 @@ describe(`files still arriving`, () => {
         const opened: string[] = [];
 
         const el = await mount({ tree: TREE, onOpenFile: (path: string) => opened.push(path) });
-        rowNamed(el, `notes.md`).click();
+        const row = rowNamed(el, `notes.md`);
+        row.click();
         await nextTick();
 
         expect(opened).toEqual([]);
+        // And says as much before the press, rather than wearing `cursor: pointer` over a click that does nothing.
+        expect(row.getAttribute(`aria-disabled`)).toBe(`true`);
+        // The folder it arrived into still expands, so the state belongs to the row and not to the whole subtree.
+        expect(rowNamed(el, `src`).getAttribute(`aria-disabled`)).toBeNull();
     });
 
     it(`stands up the folders of a dropped folder, and opens into them`, async () => {

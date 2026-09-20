@@ -227,6 +227,11 @@ const byPath = computed(() => {
 // as provisional would say the folder itself was arriving.
 const pendingRow = (path: string): Provisional | undefined => (byPath.value.has(path) ? undefined : provisionalAt(path));
 const pending = (path: string): boolean => pendingRow(path) !== undefined;
+// An arriving row the listing hasn't caught up with, holding nothing a press can reach: `activate` refuses a pending
+// file, while a pending directory still expands. Said on the row, so the pointer stops promising an open that can't
+// happen; aria- rather than the attribute, since the row still selects, reveals and takes a context menu.
+const notYetOpenable = (row: Row): boolean => pending(row.entry.path) && !expandable(row);
+
 const pendingTooltip = (path: string): string | undefined => {
     const row = pendingRow(path);
     if (row === undefined) {
@@ -1029,16 +1034,15 @@ const dropTargetOf = (row: Row): string | undefined => (noDrops(dropDirOf(row)) 
 const { dragging: rowDragging, paths: dragPaths, over: dragOver, begin: beginEntryDrag, consumeSuppressedClick } = useEntryDrag();
 const onRowPointerDown = (event: PointerEvent, row: Row): void => {
     const path = row.entry.path;
-    // A modified press is a selection gesture, and a press on the name field is the field's.
-    if (event.shiftKey || event.ctrlKey || event.metaKey || event.altKey || renamingPath.value === path) {
-        return;
-    }
-    // Dragging a selected row moves the whole selection; otherwise just that row. Locked rows never travel.
-    const paths = unlockedOnly(selection.value.has(path) ? [...selection.value] : [path]);
-    if (paths.length === 0) {
-        return;
-    }
-    beginEntryDrag(event, { paths, onDrop: (dir) => void dragOnto(paths, dir) });
+    // A modified press is a selection gesture, and a press on the name field is the field's; a locked row never
+    // travels. Each carries nothing, rather than returning: every press has to reach beginEntryDrag, which is what
+    // ends the previous drag's claim on the pending click.
+    const held =
+        event.shiftKey || event.ctrlKey || event.metaKey || event.altKey || renamingPath.value === path
+            ? []
+            : // Dragging a selected row moves the whole selection; otherwise just that row.
+              unlockedOnly(selection.value.has(path) ? [...selection.value] : [path]);
+    beginEntryDrag(event, { paths: held, onDrop: (dir) => void dragOnto(held, dir) });
 };
 // Where a dragged row lands. Out of an archive it is a copy: the member stays in the archive, since nothing here
 // rewrites one, and a drag that silently deleted from a zip would be the wrong surprise either way.
@@ -1240,6 +1244,7 @@ const openMenu = (event: MouseEvent, entry: WorkspaceTreeEntry | undefined): voi
                         role="treeitem"
                         :aria-selected="selection.has(row.entry.path)"
                         :aria-expanded="expandable(row) ? row.isExpanded : undefined"
+                        :aria-disabled="notYetOpenable(row) || undefined"
                         :tabindex="tabbablePath === row.entry.path ? 0 : -1"
                         :data-drop-dir="dropTargetOf(row)"
                         class="ui-row-select group absolute inset-x-0 flex items-center gap-1.5 pr-2 text-left text-[0.8125rem]"
@@ -1265,12 +1270,13 @@ const openMenu = (event: MouseEvent, entry: WorkspaceTreeEntry | undefined): voi
                         @drop="onRowDrop($event, row)"
                     >
                         <!-- Locked and empty folders have no expandable child. -->
-                        <Icon
+                        <span
                             v-if="expandable(row)"
-                            class="w-[0.7rem] shrink-0 text-[0.6rem] text-subtle"
-                            :name="row.isExpanded ? 'chevron-down' : 'chevron-right'"
+                            class="tree-chevron relative flex w-[0.7rem] shrink-0 items-center justify-center self-stretch"
                             @click="onChevronClick($event, row)"
-                        />
+                        >
+                            <Icon class="text-[0.6rem] text-subtle" :name="row.isExpanded ? 'chevron-down' : 'chevron-right'" />
+                        </span>
                         <span v-else class="w-[0.7rem] shrink-0"></span>
                         <!-- Row icons use explorer sizing; locked rows show a padlock. -->
                         <span
@@ -1521,6 +1527,16 @@ const openMenu = (event: MouseEvent, entry: WorkspaceTreeEntry | undefined): voi
 /* States `.ui-row-select` doesn't cover: a changed-on-disk row, and one the sweep line points at. The drop tint sits in
    utilities.css beside `.ui-row-select-on`, since the desk's tiles and crumbs wear it too. */
 
+/* The chevron glyph is ~10px inside a 22px row, small enough that a trackpad press misses it and the row toggles
+   instead. The press target is the row's full height and a quarter rem either side of the glyph, taken from the row's
+   own padding and the gap that follows, so it reaches nothing else interactive and no row moves. */
+.tree-chevron::after {
+    content: "";
+    position: absolute;
+    inset-block: 0;
+    inset-inline: -0.25rem;
+}
+
 /* Pointed at from the sweep line, not hovered; an outline, not a fill, keeps it distinct from hover and selection. */
 .ui-row-select-pointed {
     box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-primary-500) 55%, transparent);
@@ -1535,5 +1551,10 @@ const openMenu = (event: MouseEvent, entry: WorkspaceTreeEntry | undefined): voi
    without moving. */
 .ui-row-select-arriving {
     background: color-mix(in srgb, var(--color-primary-500) 7%, transparent);
+}
+/* `.ui-row-select` promises a press with `cursor: pointer`; a row with nothing behind it yet takes that promise back
+   rather than accepting the click and doing nothing. */
+.ui-row-select-arriving[aria-disabled="true"] {
+    cursor: default;
 }
 </style>

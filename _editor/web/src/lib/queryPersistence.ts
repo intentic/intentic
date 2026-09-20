@@ -7,8 +7,8 @@ import { trackPerf } from "../app/perf";
 import { throttleTrailing } from "./throttleTrailing";
 
 // Persists the vue-query cache to IndexedDB so a reload paints the last-known workspace instantly, instead of blocking
-// on the daemon tunnel. staleTime stays 0, so hydrated data refetches once the SSE stream reconnects. `sandbox.list`
-// and auth state stay out of the persisted cache.
+// on the daemon tunnel. Hydrated data is distrusted when the stream says so rather than permanently: applyHello
+// invalidates on every (re)connect. `sandbox.list` and auth state stay out of the persisted cache.
 
 const IDB_KEY = `intentic-query-cache`;
 
@@ -22,7 +22,14 @@ export const UNPERSISTED = `unpersisted`;
 // to mirror). Split out so the rule is directly assertable rather than buried in the persister.
 export const mirrors = (queryKey: readonly unknown[]): boolean => queryKey[0] !== `sandbox` && !queryKey.includes(UNPERSISTED);
 
-export const queryClient = new QueryClient();
+// The daemon's /events stream is what keeps a cached read true (systemEvents.ts invalidates per contract-bound key,
+// and applyHello distrusts everything on a reconnect), so mounting a view again is not itself evidence that its reads
+// went stale. At 0 it was: one session's rail round trips cost ten /capabilities reads, the worst 4.9s, and fourteen
+// file-diffs. Long enough to cover leaving a view and coming back, short enough that an invalidation nobody sent
+// heals on the next visit.
+const NAVIGATION_STALE_MS = 30_000;
+
+export const queryClient = new QueryClient({ defaultOptions: { queries: { staleTime: NAVIGATION_STALE_MS } } });
 
 let uninstall: (() => void) | undefined;
 
