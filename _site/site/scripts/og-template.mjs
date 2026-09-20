@@ -140,7 +140,7 @@ export function ogCard({ pathname, title, description }) {
     // The platform renders the page title as the link's own heading, directly under this picture. Repeating it here
     // spends the card's only headline on a sentence the reader is already being shown, so the landing card says the
     // one thing nothing else on the post says.
-    const headline = landing ? "You delegate. Agents work. You approve." : title;
+    const headline = landing ? "More work. Less AI waste. Same subscriptions." : title;
     const sub = landing ? "A workspace for coding agents." : description;
     const board = dataUri(BOARD);
     const mark = dataUri(MARK);

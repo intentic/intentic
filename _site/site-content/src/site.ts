@@ -11,9 +11,9 @@ export const DEMO_PATH = "/demo/";
 export const DESK_PATH = "/desk/";
 export const ORG_NAME = "intentic";
 // Fixed nouns: "agent" for the actor, "sandbox" for the machine; the host machine is "laptop, desktop or VPS".
-export const ORG_TAGLINE = "You delegate. Agents work. You approve.";
+export const ORG_TAGLINE = "More work. Less AI waste. Same subscriptions.";
 export const ORG_DESCRIPTION =
-    "A workspace for coding agents. You delegate. Agents work. You approve. Each one works in a sandbox, in its own git worktree. It keeps running when you close the browser. Reopen from any device, steer the same fleet and review every change before it is merged. Free.";
+    "A workspace for coding agents. More work. Less AI waste. Same subscriptions. Each one works in a sandbox, in its own git worktree. It keeps running when you close the browser. Reopen from any device, steer the same fleet and review every change before it is merged. Free.";
 export const LOGO_URL = `${SITE_URL}/assets/intentic-logo-sized.png`;
 export const FOUNDER_NAME = "Artur Kurowski";
 

@@ -9,9 +9,8 @@ GitHub: the trust layer you can read and run yourself.
 
 > **One word for the thing.** The object is always a **sandbox**: that is what the app's own tab,
 > the API, the packages and the docs call it, without exception. No synonym is licensed anywhere,
-> including in the brand line, which names the **actor** ("agents", the app's own word for it) and
-> never the machine. The host machine is a "laptop, desktop or VPS", never a second word for the
-> sandbox. See the glossary below.
+> never a synonym for the sandbox. The host machine is a "laptop, desktop or VPS", never a second word
+> for the sandbox. See the glossary below.
 
 ## Rules of voice
 
@@ -118,12 +117,15 @@ and the model they built instead came off the loudest words on the page (Extensi
 registries): "a place to share snippets that LLM agents use". A stance needs a subject the reader
 already holds.
 
-The brand tagline is now "You delegate. Agents work. You approve."
+**"You delegate. Agents work. You approve."** is retired as the brand line (2026-09-20): the stance
+line did its job while the category was still missing from the fold; with the subhead now carrying
+`A workspace for coding agents.` the hero could carry the economic promise instead.
+
+The brand tagline is now "More work. Less AI waste. Same subscriptions."
 (org metadata, `_site/site-content/src/site.ts`), rendered as the hero
-`You delegate. Agents work. / You approve.`: three beats split 2 + 1, so the line that stands alone
-is the one the reader has to believe. It states the working stance in words nobody has to translate,
-and the single word it takes from the system is the app's own name for the actor, so it teaches a
-word the product answers to. It still licenses no second noun for the machine.
+`More work. Less AI waste. / Same subscriptions.`: three beats split 2 + 1, so the line that stands
+alone is the one the reader has to believe. It states what the product buys back: throughput from
+the model subscriptions you already pay for, without a second bill for metered cloud agents.
 
 **The hero subhead carries the category**: `A workspace for coding agents.` One sentence. Any
 statement of what the product *is* had been kept out of the first screen along with ownership, and that
@@ -261,12 +263,12 @@ free column is your machine, the other is ours (docs/design/pricing-model.md).
   browser tab and a pasted link are the three places a stranger meets this product with no page
   around it to explain it, so all three say what it is.
 - Org description (`_site/site-content/src/site.ts`, JSON-LD): the canonical product sentence; keep
-  the site and these docs in sync with it verbatim: `A workspace for coding agents. You delegate.
-  Agents work. You approve. Each one works in a sandbox, in its own git worktree.
+  the site and these docs in sync with it verbatim: `A workspace for coding agents. More work.
+  Less AI waste. Same subscriptions. Each one works in a sandbox, in its own git worktree.
   It keeps running when you close the browser. Reopen from any device, steer the same fleet, and read
   every diff before it lands. Free.`
-- Keywords to carry naturally: the title now carries the category phrase and the tagline carries
-  "agents"; the rest are earned by body copy, which says "sandbox": persistent coding
+- Keywords to carry naturally: the title and subhead carry the category phrase; the tagline carries
+  the economic promise; the rest are earned by body copy, which says "sandbox": persistent coding
   agent, self-hosted AI agent,
   run agents self-hosted, control agents from anywhere, remote agent control, coding
   agent, agent sandbox, specialized agent, autonomous agent, AI employee, agent workforce, Claude

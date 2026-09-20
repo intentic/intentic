@@ -46,7 +46,7 @@ reason. (What the subhead carries changed later the same day, see the hero in th
 is visibility now, not scale and persistence.)
 
 **Said what it is 2026-08-15 (recorded decision, supersedes the pronoun and the subhead above).** The
-brand line is now `You delegate. Agents work. / You approve.`, and the subhead leads with the
+brand line became `You delegate. Agents work. / You approve.`, and the subhead led with the
 category: `A workspace for coding agents. Nothing happens out of sight.` The trigger was readers, not
 taste: strangers who read the landing page, the About page, the docs and the demo still could not say
 what the product was, and the model they built instead came off the nav's loudest words: that
@@ -59,6 +59,11 @@ differentiator at all. The claim did not move and no band changed: the headline 
 stance, the subhead still carries visibility as its second beat, and the shot underneath is still the
 proof. The page title and meta description were re-cut the same way, category first, because a search
 result and a pasted link are the two places this product is met with no page around it.
+
+**Economic promise 2026-09-20 (recorded decision, supersedes the 2026-08-15 brand line).** The
+brand line is now `More work. Less AI waste. / Same subscriptions.`, and the subhead stays
+`A workspace for coding agents.` The stance line had done its job once the category sat in the
+subhead; the hero could name what the product buys back instead.
 
 **Plain words everywhere 2026-08-15 (recorded decision, same pass).** The hero was not the only band
 running on slogans, so every section was rewritten to the simplest wording that is still accurate. The
@@ -205,8 +210,8 @@ bands and a trust band**, down from fourteen. Section ids in parens; copy per se
 except `#trust`, whose copy is in `about.ts` because `/about/` shares it, and `#build`, whose handful of
 words are in `temple.ts`.
 
-1. **Hero (`#hero`)**: the greeting eyebrow, the brand line kept verbatim ("You delegate. Agents work.
-   You approve."), the one-sentence subhead `A workspace for coding agents.`, two CTAs, and **three frames
+1. **Hero (`#hero`)**: the greeting eyebrow, the brand line kept verbatim ("More work. Less AI waste.
+   Same subscriptions."), the one-sentence subhead `A workspace for coding agents.`, two CTAs, and **three frames
    on one axis**: the workspace wide on the centre line, a plan and a conversation leaning in from either
    side and overlapping its edges, with the press into the live demo covering the centre frame. The
    subhead **says what the product is**: nothing else above the fold did, and that is precisely what

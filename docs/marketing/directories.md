@@ -51,7 +51,7 @@ a new one. Character counts are exact.
 
 | Cap | Copy | Len |
 | --- | --- | --- |
-| Brand line / 40 | You delegate. Agents work. You approve. | 39 |
+| Brand line / 40 | More work. Less AI waste. Same subscriptions. | 45 |
 | 30 | A workspace for coding agents. | 30 |
 | 50 | A workspace for coding agents. Free, MIT. | 41 |
 | 60 | A workspace for coding agents. Free and open source. | 52 |
@@ -308,11 +308,10 @@ Rewrote `_site/site/scripts/og-template.mjs`:
 
 - **Light skin, not dark.** `#f5ede7`, the same value BaseLayout ships as the light `theme-color`. The desk
   palette's oklch tokens resolved to sRGB, so the card cannot drift from the site.
-- **The landing card says the brand line**, `You delegate. Agents work. You approve.`, instead of the page
+- **The landing card says the brand line**, `More work. Less AI waste. Same subscriptions.`, instead of the page
   title. Every other page still gets its own title, since for those the title is the useful thing.
 - **A real screenshot of the light app** runs off the bottom edge under the text: the fleet board, three lanes
-  of agents, and the plan with **Approve** under it, which is the brand line's third beat shown rather than
-  claimed. `marginTop: auto` pins it, so a three-line title eats the gap above the picture instead of pushing
+  of agents, and the plan with **Approve** under it — product proof rather than headline illustration. `marginTop: auto` pins it, so a three-line title eats the gap above the picture instead of pushing
   it off the card.
 - The assets it inlines live in `_site/site/scripts/og/`.
 

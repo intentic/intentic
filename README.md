@@ -6,7 +6,7 @@
 
 An open-source workspace for coding agents, running on your own machine.
 
-### You delegate. Agents work. You approve.
+### More work. Less AI waste. Same subscriptions.
 
 Run agents in parallel, each in its own git worktree.<br>
 Close the browser. Come back from any device. Review the work before it lands.

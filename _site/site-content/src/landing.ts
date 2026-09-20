@@ -101,7 +101,7 @@ export const landingContent: LandingContent = {
         description: "A workspace for coding agents. They keep running when you close the browser. Reopen anywhere and review every change. Free.",
     },
     hero: {
-        // Split 2+1 so line two lands the promise; "Agents" not "They" gives the pronoun a written antecedent.
+        // Split 2+1 so line two lands the promise; three beats, last one alone.
         headlineLines: ["More work. Less AI waste.", "Same subscriptions."],
         // Names the category; nothing else above the fold does. Visibility comes from the surfaces beside it, not text.
         subhead: "A workspace for coding agents.",
