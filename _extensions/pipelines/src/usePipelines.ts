@@ -1,4 +1,4 @@
-import { type CiFixResponse, CiFixResponseSchema, type FixResume, type PipelineRun, runPickOf } from "@intentic/sandbox-contract";
+import { type CiFixResponse, CiFixResponseSchema, type FixResume, isPipelineInFlight, type PipelineRun, runPickOf } from "@intentic/sandbox-contract";
 import type { AgentRunChoice } from "@intentic/extension-ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/vue-query";
 import { computed } from "vue";
@@ -9,6 +9,13 @@ import { host } from "./host";
 // vendors when stale). Runs are addressed by repo + vendor id; the daemon re-resolves the project and token per call.
 
 const POLL_MS = 30_000;
+// While anything is in flight somebody is watching it land, and a run that ended is pushed only where its repo's hook
+// reaches the daemon (runtime-state's `ci`); this is the floor under a board whose hook is silent.
+const POLL_IN_FLIGHT_MS = 10_000;
+
+/** The board's beat: what is on it decides it, since a board with nothing moving has nothing to be late about. */
+export const runsPollMs = (runs: readonly PipelineRun[] | undefined): number =>
+    runs?.some((run) => isPipelineInFlight(run.status)) === true ? POLL_IN_FLIGHT_MS : POLL_MS;
 
 const body = (run: PipelineRun): RequestInit => ({
     method: `POST`,
@@ -26,7 +33,7 @@ export function usePipelines() {
     const query = useQuery({
         ...spec,
         enabled,
-        refetchInterval: POLL_MS,
+        refetchInterval: ({ state }) => runsPollMs(state.data?.runs),
     });
     const invalidate = (): Promise<void> => queryClient.invalidateQueries({ queryKey });
 

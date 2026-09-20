@@ -349,10 +349,31 @@ test("github allJobs resolves needs from the run's own workflow file, pinned to 
     expect(urls.some((url) => url.includes("/contents/.github/workflows/verify.yml?ref=deadbee"))).toBe(true);
 });
 
+// A watched run is re-read every few seconds; its workflow files are fixed at its sha, so only the job list is fetched
+// again. Without this a polled row would spend a vendor call per reusable workflow, per beat.
+test("github allJobs reads the run's workflow source once, however often its jobs are re-read", async () => {
+    const { fetchFn, urls } = githubJobsFetch({ workflow: CI_YAML });
+    const client = ciClientFor("github", fetchFn);
+
+    await client.allJobs(githubProject, 71);
+    const afterFirst = urls.filter((url) => url.includes("/contents/")).length;
+    const second = await client.allJobs(githubProject, 71);
+
+    expect(afterFirst).toBeGreaterThan(0);
+    expect(urls.filter((url) => url.includes("/contents/"))).toHaveLength(afterFirst);
+    // Same graph as the first read: what was cached is the source, not the jobs.
+    expect(second.map((job) => job.needs)).toEqual([[], ["preflight"], ["verify-core / verify"]]);
+    expect(urls.filter((url) => url.includes("/jobs?"))).toHaveLength(2);
+});
+
 test("github allJobs still returns the jobs when the workflow file cannot be read", async () => {
     // Enrichment failure (no read access, deleted workflow) must not cost the caller the job list.
-    for (const options of [{}, { runOk: false }]) {
-        const jobs = await ciClientFor("github", githubJobsFetch(options).fetchFn).allJobs(githubProject, 7);
+    // A run id each, since a resolved source is remembered per run.
+    for (const [runId, options] of [
+        [72, {}],
+        [73, { runOk: false }],
+    ] as const) {
+        const jobs = await ciClientFor("github", githubJobsFetch(options).fetchFn).allJobs(githubProject, runId);
         expect(jobs).toHaveLength(3);
         expect(jobs.every((job) => job.needs === undefined)).toBe(true);
         expect(jobs[0]).toMatchObject({ name: "preflight", status: "success", durationSeconds: 60 });
@@ -376,7 +397,7 @@ test("github allJobs drops the started_at Actions reports for a job that never s
         return new Response("nope", { status: 404 });
     }) as FetchFn;
 
-    const [ran, waiting] = await ciClientFor("github", fetchFn).allJobs(githubProject, 7);
+    const [ran, waiting] = await ciClientFor("github", fetchFn).allJobs(githubProject, 74);
     expect(ran).toMatchObject({ name: "ci-audit", status: "success", startedAt: Date.parse(queuedAt), durationSeconds: 109 });
     expect(waiting?.status).toBe("queued");
     expect(waiting?.startedAt).toBeUndefined();

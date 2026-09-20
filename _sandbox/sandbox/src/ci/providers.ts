@@ -131,6 +131,25 @@ export const githubRun = (project: Pick<CiProject, "repo" | "project">, run: Git
 
 const githubApi = (project: CiProject, path: string): string => `${project.account.apiBase}/repos/${project.project}${path}`;
 
+interface WorkflowSource {
+    readonly root: string;
+    // Reusable workflows the root calls, by repository path; the graph needs their jobs too.
+    readonly called: Map<string, string>;
+}
+
+// A run's workflow files are read at its own head sha, so they never change once resolved: read once per run however
+// often its jobs are re-read. Only successes are kept, and the window is a board's worth of runs, not a history.
+const WORKFLOW_SOURCES_KEPT = 100;
+const workflowSources = new Map<string, WorkflowSource>();
+
+const rememberWorkflowSource = (key: string, source: WorkflowSource): void => {
+    workflowSources.set(key, source);
+    const oldest = workflowSources.size > WORKFLOW_SOURCES_KEPT ? workflowSources.keys().next().value : undefined;
+    if (oldest !== undefined) {
+        workflowSources.delete(oldest);
+    }
+};
+
 const githubClient = (fetchFn: FetchFn): CiClient => {
     // Resolves the run's workflow file at its exact sha, not HEAD, so an old run isn't drawn with the wrong graph.
     // Undefined, never a throw, for any legitimate empty case; the graph is enrichment only.
@@ -141,7 +160,12 @@ const githubClient = (fetchFn: FetchFn): CiClient => {
         });
         return file.ok ? await file.text() : undefined;
     };
-    const workflowSource = async (project: CiProject, runId: number): Promise<{ root: string; called: Map<string, string> } | undefined> => {
+    const workflowSource = async (project: CiProject, runId: number): Promise<WorkflowSource | undefined> => {
+        const cacheKey = `${project.account.apiBase}\n${project.project}\n${runId}`;
+        const remembered = workflowSources.get(cacheKey);
+        if (remembered !== undefined) {
+            return remembered;
+        }
         const runResponse = await fetchFn(githubApi(project, `/actions/runs/${runId}`), { headers: githubHeaders(project.account.token) });
         if (!runResponse.ok) {
             return undefined;
@@ -172,7 +196,9 @@ const githubClient = (fetchFn: FetchFn): CiClient => {
                 }
             }
         }
-        return { root, called };
+        const source: WorkflowSource = { root, called };
+        rememberWorkflowSource(cacheKey, source);
+        return source;
     };
     const post = async (project: CiProject, path: string, what: string, body?: object): Promise<void> => {
         await throwOn(

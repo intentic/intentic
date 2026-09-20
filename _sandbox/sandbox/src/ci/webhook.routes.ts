@@ -6,6 +6,7 @@ import type { WakeFn } from "../automations/scheduler.js";
 import { tokenEquals } from "../auth/auth.js";
 import type { Services } from "../composition.js";
 import type { AppEnv } from "../app-env.js";
+import { publishRuntimeChange } from "../system/runtime-watch.js";
 import { dispatchCiRun } from "./events.js";
 import { ciClientFor, type FetchFn, type GithubRun, githubRun, type GitlabPipelineHook, gitlabHookRun, gitlabStatus } from "./providers.js";
 import { ciProjects } from "./projects.js";
@@ -95,6 +96,8 @@ export const createCiWebhookRoute =
             run = failedJobs.length > 0 ? { ...run, failedJobs } : run;
         }
         services.ciRuns.upsert(run);
+        // The delivery is the only moment the daemon knows a run ended; without this an open board waits out its poll.
+        publishRuntimeChange("ci");
         await dispatchCiRun(services, run, author, wake);
         return c.json({ ok: true });
     };

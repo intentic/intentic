@@ -22,6 +22,11 @@ import { createRunsCache } from "./runs-cache.js";
 
 /* The fallback path: a repo whose webhook could NOT be registered still wakes its `ci` automations. */
 
+// The push half, recorded rather than fed to a live /events feed: subscribing for real would start the runtime
+// sampler (tmux, procfs) for a fact these tests state in one line.
+const { published } = vi.hoisted(() => ({ published: [] as string[] }));
+vi.mock("../system/runtime-watch.js", () => ({ publishRuntimeChange: (...domains: string[]) => published.push(...domains) }));
+
 const run = (id: number, conclusion: string, branch = "main") => ({
     id,
     display_title: `run ${id}`,
@@ -81,9 +86,12 @@ const harness = async (warned: boolean, narrow: { branch?: string } = {}) => {
 
 test("the first pass adopts what is already there without waking anything", async () => {
     const { services, prompts, poller } = await harness(true);
+    published.length = 0;
     await poller.poll();
     expect(await services.ciStore.announcedRuns("web")).toEqual([1]);
     expect(prompts).toEqual([]);
+    // Adoption is not news: nothing moved while anyone was watching, so no board is told to re-read.
+    expect(published).not.toContain("ci");
 });
 
 test("a run that appears after the first pass wakes the ci automation", async () => {
@@ -100,6 +108,8 @@ test("a run that appears after the first pass wakes the ci automation", async ()
     expect(await services.ciStore.announcedRuns("web")).toEqual([2, 1]);
     // Freshened for the Pipelines view too, so an unwired sandbox is not also a blank one.
     expect(services.ciRuns.sweep()).toMatchObject([{ repo: "web", runId: 2, status: "failed", failedJobs: ["lint"] }]);
+    // And announced, so the board re-reads on the push a webhook would have delivered rather than on its own poll.
+    expect(published).toContain("ci");
 });
 
 test("a repo whose webhook IS registered is never polled: the webhook owns it", async () => {

@@ -33,6 +33,8 @@ const THROTTLE_MS: Record<RuntimeDomain, number> = {
     hosts: 250,
     webext: 250,
     runners: 250,
+    // One push lands several runs: a commit sets off every workflow a repo has, and they end together.
+    ci: 250,
 };
 
 const subscribers = new Set<(domains: RuntimeDomain[]) => void>();

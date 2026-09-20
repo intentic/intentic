@@ -1,6 +1,7 @@
 import { CI_POLL_INTERVAL_MS } from "@intentic/sandbox-contract";
 import type { WakeFn } from "../automations/scheduler.js";
 import type { Services } from "../composition.js";
+import { publishRuntimeChange } from "../system/runtime-watch.js";
 import { ciResultOf, dispatchCiRun, rememberCiRun } from "./events.js";
 import { ciClientFor, type FetchFn } from "./providers.js";
 import { ciProjects } from "./projects.js";
@@ -44,6 +45,8 @@ export const createCiPoller = (services: Services, wake: WakeFn, fetchFn: FetchF
             const failedJobs = run.status === "failed" ? await client.failedJobs(project, run.runId).catch(() => []) : [];
             const announced = failedJobs.length > 0 ? { ...run, failedJobs } : run;
             services.ciRuns.upsert(announced);
+            // The webhook's stand-in for this repo, so an open board reads the same push either way.
+            publishRuntimeChange("ci");
             const author =
                 announced.authorName !== undefined
                     ? { id: announced.authorName, name: announced.authorName }

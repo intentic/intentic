@@ -23,6 +23,11 @@ import type { FetchFn } from "./providers.js";
 import { createRunsCache } from "./runs-cache.js";
 import { createCiWebhookRoute } from "./webhook.routes.js";
 
+// The push half, recorded rather than fed to a live /events feed: subscribing for real would start the runtime
+// sampler (tmux, procfs) for a fact these tests state in one line.
+const { published } = vi.hoisted(() => ({ published: [] as string[] }));
+vi.mock("../system/runtime-watch.js", () => ({ publishRuntimeChange: (...domains: string[]) => published.push(...domains) }));
+
 // The receiver touches ciStore/ciRuns/workspace/capabilities plus the listener dispatch path
 // (automations/activity/logger); `unstubbed` keeps the fake that small: the listeners.integration.test.ts convention.
 const harness = async (automationId: string, narrow: { eventType?: string; branch?: string; channelId?: string } = {}) => {
@@ -101,6 +106,16 @@ test("an unsigned or mis-signed delivery is refused", async () => {
     const { app } = await harness("wh-auth");
     const response = await deliver(app, "not-the-secret", workflowRun("failure"));
     expect(response.status).toBe(401);
+    // Nothing moved, so nothing is announced: a refused delivery must not make every open board re-read.
+    expect(published).not.toContain("ci");
+});
+
+// The delivery is the only moment the daemon knows a run ended; without the push an open board waits out its own poll.
+test("a delivery announces the ci domain, so an open board re-reads without waiting for its poll", async () => {
+    const { app, services } = await harness("wh-push");
+    published.length = 0;
+    expect((await deliver(app, await services.ciStore.secret(), workflowRun("success"))).status).toBe(200);
+    expect(published).toContain("ci");
 });
 
 test("a failed run freshens the cache with failed jobs and wakes the ci automation", async () => {

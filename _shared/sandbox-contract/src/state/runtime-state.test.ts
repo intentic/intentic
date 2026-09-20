@@ -23,6 +23,11 @@ describe(`staleRuntimeQueryKeys`, () => {
     it(`asks for nothing when nothing matched`, () => {
         expect(staleRuntimeQueryKeys([])).toEqual([]);
     });
+
+    it(`reaches an extension's own key, since the board that renders a run is not core's`, () => {
+        // The Pipelines board reads ["ci-runs", <sandbox>]; a prefix is what invalidation matches on.
+        expect(staleRuntimeQueryKeys([`ci`])).toEqual([[`ci-runs`]]);
+    });
 });
 
 describe(`runtimeBoundQueryKeys`, () => {
