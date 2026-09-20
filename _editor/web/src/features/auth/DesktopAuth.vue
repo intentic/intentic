@@ -194,10 +194,7 @@ onMounted(() => void hand());
             </h1>
 
             <!-- The reason this tab exists, at the size that answers it; it used to be the smallest print on the page. -->
-            <p class="hero-sub">
-                <template v-if="stage === `done` && !error">{{ t(`auth.desktopAuth.appWhatNeedsYoure`) }}</template>
-                <template v-else>{{ t(`auth.desktopAuth.appCantShowGoogles`) }}</template>
-            </p>
+            <p v-if="stage !== `done` || error" class="hero-sub">{{ t(`auth.desktopAuth.appCantShowGoogles`) }}</p>
 
             <!-- The one framed object, as on /login: whichever single thing this moment asks of the reader. -->
             <section class="entry-frame gate">

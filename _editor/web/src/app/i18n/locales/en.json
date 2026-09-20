@@ -368,7 +368,6 @@
             "appCantShowGoogles": "The app can't show Google's sign-in in its own window, so it opened this tab.",
             "appDidntComeForward": "If the app didn't come forward, make sure Intentic is running and send it again.",
             "appWaiting": "The app is waiting",
-            "appWhatNeedsYoure": "The app has what it needs. You're done here.",
             "backToApp": "Back to the app",
             "checkingWhatBrowserAlready": "Checking what this browser is already signed in to…",
             "closeTab": "You can close this tab.",

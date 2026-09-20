@@ -368,7 +368,6 @@
             "appCantShowGoogles": "L'application ne peut pas afficher la connexion Google dans sa propre fenêtre : elle a donc ouvert cet onglet.",
             "appDidntComeForward": "Si l'application ne s'est pas manifestée, vérifiez qu'Intentic tourne et renvoyez-le.",
             "appWaiting": "L'application attend",
-            "appWhatNeedsYoure": "L'application a ce qu'il lui faut. Vous avez terminé ici.",
             "backToApp": "Retour à l'application",
             "checkingWhatBrowserAlready": "Vérification des comptes auxquels ce navigateur est déjà connecté…",
             "closeTab": "Vous pouvez fermer cet onglet.",

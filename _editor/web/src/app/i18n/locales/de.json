@@ -368,7 +368,6 @@
             "appCantShowGoogles": "Die App kann Googles Anmeldung nicht in ihrem eigenen Fenster zeigen, deshalb hat sie diesen Tab geöffnet.",
             "appDidntComeForward": "Wenn die App sich nicht gemeldet hat, stellen Sie sicher, dass Intentic läuft, und senden Sie es erneut.",
             "appWaiting": "Die App wartet",
-            "appWhatNeedsYoure": "Die App hat, was sie braucht. Hier sind Sie fertig.",
             "backToApp": "Zurück zur App",
             "checkingWhatBrowserAlready": "Es wird geprüft, wo dieser Browser bereits angemeldet ist…",
             "closeTab": "Sie können diesen Tab schließen.",

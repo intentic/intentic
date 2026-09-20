@@ -368,7 +368,6 @@
             "appCantShowGoogles": "La aplicación no puede mostrar el inicio de sesión de Google en su propia ventana, así que ha abierto esta pestaña.",
             "appDidntComeForward": "Si la aplicación no ha dado señales, comprueba que Intentic esté en marcha y vuelve a enviarlo.",
             "appWaiting": "La aplicación está esperando",
-            "appWhatNeedsYoure": "La aplicación ya tiene lo que necesita. Aquí has terminado.",
             "backToApp": "Volver a la aplicación",
             "checkingWhatBrowserAlready": "Comprobando en qué tiene sesión iniciada este navegador…",
             "closeTab": "Puedes cerrar esta pestaña.",
