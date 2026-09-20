@@ -47,7 +47,7 @@ const STAGE_SIZES = "(min-width: 102rem) 1440px, (min-width: 84rem) calc(50vw + 
 
 <BaseLayout faq={faq} extraJsonLd={[buildDeskAppSchema()]} backdrop={false}>
     <div class="home flex flex-1 flex-col">
-        <Nav product="desk" />
+        <Nav product="desk" ctaManaged />
 
         <main class="flex-1">
             <section class="hero" id="hero">
@@ -399,7 +399,6 @@ const STAGE_SIZES = "(min-width: 102rem) 1440px, (min-width: 84rem) calc(50vw + 
         const bar = document.getElementById("site-bar");
         const heroCta = document.querySelector("[data-hero-cta]");
         if (bar && heroCta && "IntersectionObserver" in window) {
-            bar.setAttribute("data-cta-managed", "");
             // rootMargin takes px or % only: --bar-height is a viewport-scaled clamp, so the bar is measured instead,
             // and measured again whenever its height changes, because a margin set at construction never updates.
             let ctaObserver: IntersectionObserver | undefined;

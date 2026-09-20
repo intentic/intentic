@@ -17,14 +17,17 @@ import MobileNav from "./MobileNav.astro";
 // developer's by default; the pre-paint script (lib/variant.ts) points a desk reader's mark at /desk/ instead.
 interface Props {
     product?: "default" | "desk";
+    /** The page carries the same action above the fold. The bar's copy starts hidden and the page's script reveals it
+     * once the page's own has scrolled away — rendered here rather than set on load, or the button flashes once. */
+    ctaManaged?: boolean;
 }
 
-const { product = "default" } = Astro.props;
+const { product = "default", ctaManaged = false } = Astro.props;
 const home = product === "desk" ? DESK_PATH : "/";
 const currentPath = Astro.url.pathname;
 ---
 
-<header class="bar" id="site-bar">
+<header class="bar" id="site-bar" data-cta-managed={ctaManaged ? "" : undefined}>
     <div class="bar-inner">
         <a href={home} class="brand lockup" aria-label="intentic" data-brand>
             <Lotus size="lg" class="brand-mark" />
@@ -152,6 +155,18 @@ const currentPath = Astro.url.pathname;
         </div>
     </div>
 </header>
+
+{/* Nothing reveals the managed CTA without the observer, so a reader without scripts keeps it. `!important` is what
+    clears the scoped rule above, which carries the compiler's own attribute and so outweighs this selector. */}
+<noscript>
+    <style>
+        .bar[data-cta-managed] .bar-cta {
+            opacity: 1 !important;
+            transform: none !important;
+            pointer-events: auto !important;
+        }
+    </style>
+</noscript>
 
 <MobileNav product={product} />
 

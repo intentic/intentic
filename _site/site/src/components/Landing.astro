@@ -66,7 +66,7 @@ const machineStep = content.connect.steps.at(-1)!;
 >
     <div class="home flex flex-1 flex-col">
         {/* The home bar overlays the plate; other pages use PageBackdrop. */}
-        <Nav />
+        <Nav ctaManaged />
 
         <main class="flex-1">
             <!-- The first screen remains symmetric with its plate. -->
@@ -471,7 +471,6 @@ const machineStep = content.connect.steps.at(-1)!;
 /* The bar CTA hides while the hero CTA is visible. */
         const heroCta = document.querySelector("[data-hero-cta]");
         if (bar && heroCta && "IntersectionObserver" in window) {
-            bar.setAttribute("data-cta-managed", "");
             // rootMargin takes px or % only: --bar-height is a viewport-scaled clamp, so the bar is measured instead,
             // and measured again whenever its height changes, because a margin set at construction never updates.
             let ctaObserver: IntersectionObserver | undefined;
