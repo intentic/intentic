@@ -34,14 +34,11 @@ import { CODEX_ADVISORY, CODEX_MODEL_INVALID, CODEX_MODEL_RESUMED_ELSEWHERE } fr
 // usage, image-generation and compaction events. Approval requests stay disabled: the container is the isolation
 // boundary, as with the Claude path's bypassPermissions.
 
-// Codex's reasoning-effort scale uses "xhigh" where Intentic's shared scale uses "max".
-const EFFORT_LEVELS = new Set(["minimal", "low", "medium", "high", "xhigh"]);
-const reasoningEffort = (effort: string): CodexReasoningEffort | undefined => {
-    if (effort === "max") {
-        return "xhigh";
-    }
-    return EFFORT_LEVELS.has(effort) ? (effort as CodexReasoningEffort) : undefined;
-};
+// Codex names every rung of the shared scale, so a pick travels as picked; a level this build doesn't know is dropped
+// rather than guessed at, leaving the model's own default to answer.
+const EFFORT_LEVELS = new Set(["minimal", "low", "medium", "high", "xhigh", "max", "ultra"]);
+const reasoningEffort = (effort: string): CodexReasoningEffort | undefined =>
+    EFFORT_LEVELS.has(effort) ? (effort as CodexReasoningEffort) : undefined;
 
 // Explicit environment app-server inherits: undefined entries dropped, cli-kind credentials merged, CODEX_HOME pinned
 // to the workspace auth/session store. CODEX_API_KEY is dropped here; only a turn that resolves a codexEndpoint sets

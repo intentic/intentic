@@ -9,7 +9,7 @@ import { CODEX_BINARY_MISSING, codexBinary } from "./codex-path.js";
 // boundary. Event names are Intentic's own vocabulary, independent of JSON-RPC.
 
 export type CodexSandboxMode = "read-only" | "danger-full-access";
-export type CodexReasoningEffort = "minimal" | "low" | "medium" | "high" | "xhigh";
+export type CodexReasoningEffort = "minimal" | "low" | "medium" | "high" | "xhigh" | "max" | "ultra";
 
 export interface CodexThreadOptions {
     readonly workingDirectory: string;

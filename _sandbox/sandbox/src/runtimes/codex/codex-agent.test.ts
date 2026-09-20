@@ -95,8 +95,8 @@ test("the turn runs full-access with approvals off, resumes the session, and pin
         // untrusted on every turn: the standing floor means something could always refuse.
         approvalPolicy: "untrusted",
         model: "gpt-5-codex",
-        // Claude's top effort level maps onto Codex's scale ceiling.
-        modelReasoningEffort: "xhigh",
+        // Codex has its own `max`, so the pick travels as picked rather than being spent one rung down.
+        modelReasoningEffort: "max",
     });
     expect(turn.env["CODEX_HOME"]).toBe("/work/.intentic/secrets/auth/codex");
     expect(turn.env["DISCORD_BOT_TOKEN"]).toBe("tok");

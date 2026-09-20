@@ -35,7 +35,7 @@ export const createCodexSlice = (input: { readonly config: Config; readonly auth
     // Base dir for the sandbox-wide CODEX_HOME; also the adapter's OPENAI_API_KEY-fallback default home.
     const codexHome = join(input.authRoot, "codex");
     return {
-        codexModels: createCodexCatalog(input.config, join(codexHome, "models.json")),
+        codexModels: createCodexCatalog(input.config, codexHome),
         codexHome,
         codexThreadExists: (threadId) => codexThreadExists(codexHome, threadId),
         codexAgent: createCodexAgent({ codexHome }),

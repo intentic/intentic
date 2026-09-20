@@ -45,6 +45,19 @@ describe(`the effort scale`, () => {
         expect(values(effortsFor(`claude`, `claude-unlisted-model`, undefined))).toEqual([`low`, `medium`, `high`, `xhigh`, `max`]);
     });
 
+    // Codex's 5.6 line reaches two rungs above the floor (model/list publishes max, and ultra on Sol/Terra/Astra).
+    // A published scale is the model's own, so the picker draws every rung of it.
+    it(`draws the whole ladder a model publishes, up to Ultra`, () => {
+        providerModels.value = {
+            ...providerModels.value,
+            codex: [{ label: `GPT-5.6-Sol`, value: `gpt-5.6-sol`, efforts: [`low`, `medium`, `high`, `xhigh`, `max`, `ultra`] }],
+        };
+        expect(effortsFor(`codex`, `gpt-5.6-sol`, undefined).at(-1)).toEqual({ label: `Ultra`, value: `ultra` });
+        expect(clampEffort(`ultra`, `codex`, `gpt-5.6-sol`, undefined)).toBe(`ultra`);
+        // Ultra is above Max, so a model that stops at Max takes Max rather than the bottom of its own scale.
+        expect(clampEffort(`ultra`, `kimi`, `kimi-k3`, undefined)).toBe(`max`);
+    });
+
     // The daemon's live tier list doesn't know this turn's thinking setting, so it needs the same filter as the static
     // fallback.
     it(`filters the daemon's live tier list by thinking too`, () => {

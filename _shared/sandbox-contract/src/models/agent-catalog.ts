@@ -156,7 +156,7 @@ export const modelsFor = (provider: AgentProvider): CatalogOption[] => {
 // Every reasoning tier a catalog row's `efforts` may name, weakest first. One vocabulary for every provider, so the
 // picker can label and order a ladder it has never seen; a provider spelling a rung its own way translates on the way
 // in, at the adapter that read it.
-export const EFFORT_TIERS: readonly string[] = ["minimal", "low", "medium", "high", "xhigh", "max"];
+export const EFFORT_TIERS: readonly string[] = ["minimal", "low", "medium", "high", "xhigh", "max", "ultra"];
 
 // Filters exactly one pair: Claude's `max` with thinking explicitly false, the one combination Anthropic's API refuses
 // (400). Absent thinking is not off; the model's own default answers, every other tier or provider passes through.

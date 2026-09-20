@@ -5,7 +5,15 @@ import { providerModels } from "../../accounts/providerCatalog";
 // (Kimi K2.7 stops at 'high', K3 at 'max'). Read at every use (composer segments, Conversation.effort) rather than
 // written back, so a smaller model never ratchets the pick down.
 
-const EFFORT_LABELS: Record<string, string> = { minimal: `Minimal`, low: `Low`, medium: `Medium`, high: `High`, xhigh: `X-High`, max: `Max` };
+const EFFORT_LABELS: Record<string, string> = {
+    minimal: `Minimal`,
+    low: `Low`,
+    medium: `Medium`,
+    high: `High`,
+    xhigh: `X-High`,
+    max: `Max`,
+    ultra: `Ultra`,
+};
 
 // Default floor tiers, deliberately without 'max' (a provider must claim it); Claude's is the exception.
 const STATIC_EFFORTS: readonly string[] = [`low`, `medium`, `high`, `xhigh`];
