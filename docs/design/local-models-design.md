@@ -310,3 +310,14 @@ reads `Qwen3.8-27B-UD-Q4_K_M · 32k window, quick jobs only`; and `agent/context
 refusal on who owns the server — a card in this app gets "raise Conversation window on this model's card", a
 user's own endpoint keeps "raise the context size the server was started with", because sending the one person
 who can fix it in ten seconds to look for a command line they never typed is the same bug in prose.
+
+## 11. A second front door (Sep 2026)
+
+The card is no longer the only way in. `/connect` (`connect-experience.md`) offers a local model as a peer of the two
+account lanes, and it takes the §6 curation question off this document's open list by answering it in code: the
+daemon serves `GET /endpoints/local-model/fit`, which reads the container's own memory cap, the GPU's state, and the
+weights already in the cache, and names two models — one that downloads in a minute, one that is the heaviest this
+machine holds. It sizes against the same budget `admitModel` refuses on, so the offer and the refusal cannot disagree.
+Two things this design got wrong surfaced there and were fixed at the source: the curated weights were hand-written GB
+labels, two of them overstated by a third or more, and every figure was decimal where the machine they are compared
+against is binary. Both live in the contract now, as bytes, read by the card and the fit alike.

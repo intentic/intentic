@@ -4,42 +4,54 @@ import { type CapabilityContribution, type CapabilityField, contributionDiscrimi
 import {
     type CapabilityKind,
     type ExitPoint,
+    LOCAL_MODEL_KV_BYTES_PER_TOKEN,
     LOCAL_MODEL_WINDOW_DEFAULT,
     LOCAL_MODEL_WINDOWS,
+    LOCAL_MODELS,
+    localModelChoice,
     type LocalModelWindow,
     type ServiceKind,
     TOR_EXIT_COUNTRIES,
     VPNGATE_EXIT_COUNTRIES,
 } from "@intentic/sandbox-contract";
 
-// GB cost per rung (~1 GB/16k, q8_0 cache); typed against the rung list so a new one must price itself.
-const WINDOW_LABELS: Record<LocalModelWindow, string> = {
-    "16384": "16k · 1 GB",
-    "32768": "32k · 2 GB",
-    "65536": "64k · 4 GB",
-    "131072": "128k · 8 GB",
+// BINARY gigabytes, written "GB", because every number this feature prints is a memory quantity compared against a
+// machine's RAM, and RAM is sold and reported in powers of two. Decimal made the one figure a reader can check against
+// their own knowledge wrong — a 32 GB laptop read back "34 GB" — while the figures beside it (a download, a working
+// set) are only ever compared with that one.
+// One decimal under ten, whole above it: 1.2 against 2.5 decides whether somebody waits for a download; 15 against 16
+// decides nothing.
+const BYTES_PER_GB = 1024 ** 3;
+export const localModelGb = (bytes: number): string => {
+    const gb = bytes / BYTES_PER_GB;
+    return `${gb >= 10 ? Math.round(gb) : Math.round(gb * 10) / 10} GB`;
 };
 
-// Weights (GB) behind each model label; a custom GGUF has none, since its memory was the user's own choice.
-const LOCAL_MODEL_WEIGHTS_GB: Readonly<Record<string, number>> = {
-    "unsloth/Phi-4-mini-instruct-GGUF/Phi-4-mini-instruct-Q4_K_M.gguf": 3,
-    "unsloth/Qwen3.5-9B-GGUF/Qwen3.5-9B-Q4_K_M.gguf": 6,
-    "unsloth/gemma-4-12b-it-GGUF/gemma-4-12b-it-Q4_K_M.gguf": 14,
-    "unsloth/Qwen3.8-27B-GGUF/Qwen3.8-27B-UD-Q4_K_M.gguf": 22,
-};
+// Cache cost of a window, from the contract's measured q8_0 rate: a new rung prices itself rather than needing a row
+// here, which is what the hand-written table this replaced could not promise.
+const windowLabel = (tokens: LocalModelWindow): string => `${Number(tokens) / 1024}k · ${localModelGb(Number(tokens) * LOCAL_MODEL_KV_BYTES_PER_TOKEN)}`;
 
-// RAM ask computed from the form: ~1 GB cache per 16k window, on top of the chosen weights. Either half missing (custom
-// GGUF, unparsed window) leaves its figure and the total undefined; wrong is worse than none.
+// RAM ask computed from the form: the contract's KV rate per token, on top of the chosen weights. Either half missing
+// (custom GGUF, unparsed window) leaves its figure and the total undefined; wrong is worse than none.
 export interface LocalModelMemory {
     readonly weightsGb: number | undefined;
     readonly windowGb: number | undefined;
     readonly totalGb: number | undefined;
 }
+// Rounded once, at the end: adding two already-rounded halves is how "2.5 + 4 = 6" gets printed next to a 6.5 GB ask.
+const roundGb = (bytes: number): number => {
+    const gb = bytes / BYTES_PER_GB;
+    return gb >= 10 ? Math.round(gb) : Math.round(gb * 10) / 10;
+};
 export const localModelMemory = (config: Readonly<Record<string, string | undefined>>): LocalModelMemory => {
-    const weightsGb = LOCAL_MODEL_WEIGHTS_GB[config["model"] ?? ""];
+    const weightsBytes = localModelChoice(config["model"] ?? "")?.weightsBytes;
     const tokens = Number(config["context"] === "custom" ? config["contextTokens"] : config["context"]);
-    const windowGb = Number.isInteger(tokens) && tokens > 0 ? Math.max(1, Math.round(tokens / 16_384)) : undefined;
-    return { weightsGb, windowGb, totalGb: weightsGb !== undefined && windowGb !== undefined ? weightsGb + windowGb : undefined };
+    const windowBytes = Number.isInteger(tokens) && tokens > 0 ? tokens * LOCAL_MODEL_KV_BYTES_PER_TOKEN : undefined;
+    return {
+        weightsGb: weightsBytes === undefined ? undefined : roundGb(weightsBytes),
+        windowGb: windowBytes === undefined ? undefined : roundGb(windowBytes),
+        totalGb: weightsBytes === undefined || windowBytes === undefined ? undefined : roundGb(weightsBytes + windowBytes),
+    };
 };
 
 // One country in the geo-exit picker; the capacity share rides in the label so a thin exit doesn't look identical to a
@@ -886,16 +898,14 @@ export const CAPABILITY_CATALOG: readonly CapabilityCatalogEntry[] = [
                 key: "model",
                 label: "Model",
                 default: "unsloth/Qwen3.5-9B-GGUF/Qwen3.5-9B-Q4_K_M.gguf",
-                // Weights alone; the cache (~1 GB/16k) is priced on the window field below. Add both for the real RAM
-                // ask.
+                // Weights alone; the cache is priced on the window field below. Add both for the real RAM ask. Rows and
+                // sizes come from the contract's curated list, so the card cannot quote a size the fit arithmetic and
+                // the download estimate disagree with.
                 options: [
-                    { value: "unsloth/Phi-4-mini-instruct-GGUF/Phi-4-mini-instruct-Q4_K_M.gguf", label: "Phi-4-mini 3.8B, weights ~3 GB" },
-                    { value: "unsloth/Qwen3.5-9B-GGUF/Qwen3.5-9B-Q4_K_M.gguf", label: "Qwen3.5 9B, weights ~6 GB" },
-                    { value: "unsloth/gemma-4-12b-it-GGUF/gemma-4-12b-it-Q4_K_M.gguf", label: "Gemma 4 12B, weights ~14 GB" },
-                    {
-                        value: "unsloth/Qwen3.8-27B-GGUF/Qwen3.8-27B-UD-Q4_K_M.gguf",
-                        label: "Qwen3.8 27B, weights ~22 GB",
-                    },
+                    ...LOCAL_MODELS.map((choice) => ({
+                        value: choice.id,
+                        label: `${choice.label}, weights ${localModelGb(choice.weightsBytes)}${choice.tier === "instant" ? " · downloads in a minute, quick jobs only" : ""}`,
+                    })),
                     { value: "custom", label: "Custom GGUF (advanced)" },
                 ],
                 hint: "Downloads once into the workspace, then serves from this sandbox.",
@@ -915,7 +925,7 @@ export const CAPABILITY_CATALOG: readonly CapabilityCatalogEntry[] = [
                 label: "Conversation window",
                 default: LOCAL_MODEL_WINDOW_DEFAULT,
                 options: [
-                    ...LOCAL_MODEL_WINDOWS.map((tokens) => ({ value: tokens, label: WINDOW_LABELS[tokens] })),
+                    ...LOCAL_MODEL_WINDOWS.map((tokens) => ({ value: tokens, label: windowLabel(tokens) })),
                     { value: "custom", label: "Custom" },
                 ],
                 hint: "64k is the smallest that fits a full agent turn.",

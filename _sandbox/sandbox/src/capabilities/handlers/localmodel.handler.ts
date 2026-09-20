@@ -1,31 +1,25 @@
-import { execFile } from "node:child_process";
-import { createWriteStream, existsSync } from "node:fs";
-import { mkdir, readFile, rename, rm, stat } from "node:fs/promises";
-import { dirname } from "node:path";
-import { once } from "node:events";
+import { existsSync } from "node:fs";
 import { setTimeout as delay } from "node:timers/promises";
-import { promisify } from "node:util";
-import { downloadFile } from "@huggingface/hub";
 import { errorMessage } from "@intentic/base/errors";
 import type { Capability, CapabilityStatus, LocalModelConfig } from "@intentic/sandbox-contract";
 import { packFragment } from "../../environment/packs.js";
+import { estimatedModelMemory, fitsBudget, llamaServerMissing, localModelBudget, localModelGpu } from "../../endpoints/local-model-fit.js";
+import { abortWeights, ensureWeights, fileSize, weightsGb as gb, weightsProgress, weightsReady } from "../../endpoints/local-model-weights.js";
 import {
     fitsAgentTurn,
     localModelLabel,
     localModelPort,
     localModelSource,
+    localModelWeightsPath,
     localModelWindow,
     localModelWindowLabel,
     type LocalModelSource,
 } from "../../endpoints/local-model.js";
-import { statePath } from "../../workspace/layout/state-paths.js";
 import type { CapabilityCtx, CapabilityHandler } from "../capability.js";
 
 // A model the sandbox runs itself: the user picks weights, this downloads and serves them with the bundled
 // llama-server; the entry then IS an endpoint. Apply returns before the download finishes; a background job re-syncs
 // the translator once the server actually serves.
-
-const exec = promisify(execFile);
 
 // Tmux session for one entry's llama-server (`panel-model-<id>`); classified as a background process so it sits beside
 // extension gateways and dockerd, not as a visible panel tab.
@@ -36,137 +30,17 @@ export const localModelPanelKey = (id: string): string => `${LOCAL_MODEL_PREFIX}
 const GPU_DIRECTIVE = `# local model capability, gpu option: the host's NVIDIA GPUs for llama-server.
 # intentic:runtime --gpus=all`;
 
-// The ask is the config; what became of it is SANDBOX_GPU (all/unsupported/absent), read per call.
+// The ask is the config; what became of it is localModelGpu() (granted/unsupported/absent), read per call.
 const gpuAsked = (config: unknown): boolean => (config as LocalModelConfig | undefined)?.gpu === "on";
-const gpuState = (): string | undefined => process.env["SANDBOX_GPU"];
 
-// A bare dev run has no llama-server; /opt/sandbox is the in-image sentinel between "rebuild adds it" and "a real
-// sandbox has it".
-const serverMissing = async (): Promise<boolean> =>
-    exec("llama-server", ["--version"]).then(
-        () => false,
-        (error) => (error as NodeJS.ErrnoException).code === "ENOENT",
-    );
+const weightsPath = (ctx: CapabilityCtx, source: LocalModelSource): string => localModelWeightsPath(ctx.workspace.root, source);
 
-// Cached by file name, shared across entries on purpose: two cards naming the same model download it once.
-const weightsPath = (ctx: CapabilityCtx, source: LocalModelSource): string =>
-    statePath(ctx.workspace.root, ".intentic/local/cache/", "models", source.file);
-
-// Deterministic, not a fresh name per attempt: this file is the resume point the next attempt looks for.
-const stagedPath = (destination: string): string => `${destination}.part`;
-
-const fileSize = async (path: string): Promise<number> =>
-    stat(path).then(
-        (info) => info.size,
-        () => 0,
-    );
-
-const weightsReady = async (path: string): Promise<boolean> =>
-    stat(path).then(
-        () => true,
-        () => false,
-    );
-
-// downloads/fetches key by destination path (shared); jobs/failures key by entry id, cleared on each fresh job.
-const downloads = new Map<string, { received: number; total: number }>();
-const fetches = new Map<string, { readonly promise: Promise<void>; readonly abort: AbortController }>();
+// This handler's own ledgers, keyed by ENTRY, unlike the weights cache's, which are keyed by destination path: one
+// download can be what several entries are waiting on, while a job, a failure and the GPU's one owner belong to a card.
 const jobs = new Map<string, { readonly promise: Promise<void>; readonly abort: AbortController }>();
 const failures = new Map<string, string>();
 let selectedModelId: string | undefined;
 let serverSwitch = Promise.resolve();
-
-const gb = (bytes: number): string => `${(bytes / 1e9).toFixed(1)} GB`;
-
-// Both sources answer a range (hub's blob slices itself; a custom URL sends a Range header); a server that ignores it
-// answers 200 with the whole file, and `appending: false` says truncate rather than double-write.
-const openStream = async (
-    source: LocalModelSource,
-    from: number,
-    signal: AbortSignal,
-): Promise<{ body: ReadableStream<Uint8Array>; total: number; appending: boolean }> => {
-    if (source.repo !== undefined && source.path !== undefined) {
-        const blob = await downloadFile({
-            repo: source.repo,
-            path: source.path,
-            fetch: (input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => fetch(input, { ...init, signal }),
-        });
-        if (blob === null) {
-            throw new Error(`${source.repo} has no ${source.path}, check the model path on the card.`);
-        }
-        const resuming = from > 0 && from < blob.size;
-        return {
-            body: (resuming ? blob.slice(from) : blob).stream() as unknown as ReadableStream<Uint8Array>,
-            total: blob.size,
-            appending: resuming,
-        };
-    }
-    const response = await fetch(source.url ?? "", { signal, ...(from > 0 ? { headers: { range: `bytes=${from}-` } } : {}) });
-    if (!response.ok || response.body === null) {
-        throw new Error(`the model URL answered ${response.status}, check it serves a GGUF file.`);
-    }
-    // A 206 with no length leaves total 0, never `from`: equal-to-disk would wrongly mark a half file complete.
-    const length = Number(response.headers.get("content-length") ?? 0);
-    const appending = response.status === 206;
-    return { body: response.body, total: length > 0 ? (appending ? from + length : length) : 0, appending };
-};
-
-// Streamed to disk, renamed into place whole, so readiness is a stat. A full-size part finished but didn't rename; a
-// larger one isn't this file and is discarded; anything else resumes.
-const downloadWeights = async (source: LocalModelSource, destination: string, signal: AbortSignal): Promise<void> => {
-    await mkdir(dirname(destination), { recursive: true });
-    const staged = stagedPath(destination);
-    // Read once, shared by the range request and the arithmetic below; one download per destination stays safe.
-    const have = await fileSize(staged);
-    const stream = await openStream(source, have, signal);
-    if (stream.total > 0 && have > stream.total) {
-        await rm(staged, { force: true });
-        throw new Error(`the part file for ${source.file} is larger than the model, discarded it; press Update to download again.`);
-    }
-    if (stream.total > 0 && have === stream.total) {
-        await stream.body.cancel().catch(() => undefined);
-        await rename(staged, destination);
-        return;
-    }
-    const file = createWriteStream(staged, stream.appending ? { flags: "a" } : {});
-    const reader = stream.body.getReader();
-    let received = stream.appending ? have : 0;
-    downloads.set(destination, { received, total: stream.total });
-    try {
-        for (;;) {
-            const chunk = await reader.read();
-            if (chunk.done) {
-                break;
-            }
-            received += chunk.value.byteLength;
-            downloads.set(destination, { received, total: stream.total });
-            if (!file.write(chunk.value)) {
-                await once(file, "drain");
-            }
-        }
-        file.end();
-        await once(file, "close");
-        await rename(staged, destination);
-    } catch (error) {
-        file.destroy();
-        throw error;
-    } finally {
-        downloads.delete(destination);
-    }
-};
-
-// One download per destination, however many cards are waiting on it.
-const ensureWeights = (source: LocalModelSource, destination: string): Promise<void> => {
-    const running = fetches.get(destination);
-    if (running !== undefined) {
-        return running.promise;
-    }
-    const abort = new AbortController();
-    const promise = downloadWeights(source, destination, abort.signal).finally(() => {
-        fetches.delete(destination);
-    });
-    fetches.set(destination, { promise, abort });
-    return promise;
-};
 
 // serverCommand's flags, each pinned against a bug:
 //   --ctx-size the card's chosen window, never native (dwarfs the weights) or a flat number (may not fit a turn)
@@ -174,47 +48,18 @@ const ensureWeights = (source: LocalModelSource, destination: string): Promise<v
 //   --cache-type q8_0 halves the reservation at negligible quality cost
 //   --jinja curated models carry their own chat/tool template in the GGUF
 export const serverCommand = (path: string, port: number, window: number): string => {
-    const gpuFit = gpuState() === "all" ? " --gpu-layers auto --fit on" : "";
+    const gpuFit = localModelGpu() === "granted" ? " --gpu-layers auto --fit on" : "";
     return `llama-server -m '${path}' --host 127.0.0.1 --port ${port} --ctx-size ${window} --parallel 1 --cache-type-k q8_0 --cache-type-v q8_0 --jinja${gpuFit}`;
 };
 
-// Deliberately conservative admission check; the real per-device authority is llama.cpp's own fitter.
-const KV_BYTES_PER_32K = 2_000_000_000;
-const MODEL_RUNTIME_BYTES = 1_000_000_000;
-const MODEL_CAPACITY_SHARE = 0.8;
-
-export const estimatedModelMemory = (weightsBytes: number, window: number): number =>
-    weightsBytes + (window / 32_768) * KV_BYTES_PER_32K + MODEL_RUNTIME_BYTES;
-
-const hostMemoryCapacity = async (): Promise<number> => {
-    const cgroup = (await readFile("/sys/fs/cgroup/memory.max", "utf8").catch(() => "max")).trim();
-    if (/^\d+$/.test(cgroup)) {
-        return Number(cgroup);
-    }
-    const meminfo = await readFile("/proc/meminfo", "utf8");
-    return Number(/^MemTotal:\s+(\d+) kB$/m.exec(meminfo)?.[1] ?? 0) * 1024;
-};
-
-const gpuMemoryCapacity = async (): Promise<number> => {
-    if (gpuState() !== "all") {
-        return 0;
-    }
-    const result = await exec("nvidia-smi", ["--query-gpu=memory.total", "--format=csv,noheader,nounits"]).catch(() => undefined);
-    // Unreadable answer reads as 0 GPU memory, never a throw: that already means "size against host memory alone".
-    const devices = (result?.stdout ?? "")
-        .split("\n")
-        .map((line) => Number(line.trim()))
-        .filter(Number.isFinite);
-    return Math.max(0, ...devices) * 1024 * 1024;
-};
-
+// The same budget the connect view sizes its recommendation against (local-model-fit.ts): a view reading one number and
+// this check refusing on another is how a card recommends a model it then will not start.
 const admitModel = async (path: string, window: number): Promise<void> => {
-    const [weightsBytes, hostBytes, gpuBytes] = await Promise.all([fileSize(path), hostMemoryCapacity(), gpuMemoryCapacity()]);
+    const [weightsBytes, budget] = await Promise.all([fileSize(path), localModelBudget()]);
     const estimated = estimatedModelMemory(weightsBytes, window);
-    const budget = (hostBytes + gpuBytes) * MODEL_CAPACITY_SHARE;
-    if (budget > 0 && estimated > budget) {
+    if (!fitsBudget(budget.budgetBytes, weightsBytes, window)) {
         throw new Error(
-            `model start refused before it could exhaust the sandbox: ${gb(estimated)} estimated for weights + ${localModelWindowLabel(window)} KV cache, but the safe GPU/container budget is ${gb(budget)}. Reduce the conversation window or choose smaller weights.`,
+            `model start refused before it could exhaust the sandbox: ${gb(estimated)} estimated for weights + ${localModelWindowLabel(window)} KV cache, but the safe GPU/container budget is ${gb(budget.budgetBytes)}. Reduce the conversation window or choose smaller weights.`,
         );
     }
 };
@@ -368,7 +213,7 @@ const gpuStatus = (config: unknown): CapabilityStatus | undefined => {
     if (!gpuAsked(config)) {
         return undefined;
     }
-    const state = gpuState();
+    const state = localModelGpu();
     if (state === undefined) {
         return { state: "pending", detail: "GPU access: rebuild required" };
     }
@@ -421,7 +266,7 @@ export const localModelHandler: CapabilityHandler = {
                     : `"${model.model}" doesn't name a Hugging Face file (owner/repo/file.gguf), pick a model from the list or use a custom URL.`,
             );
         }
-        if (await serverMissing()) {
+        if (await llamaServerMissing()) {
             yield existsSync("/opt/sandbox")
                 ? {
                       kind: "log" as const,
@@ -430,7 +275,7 @@ export const localModelHandler: CapabilityHandler = {
                 : { kind: "log" as const, message: `Stored ${id}, no llama-server in this dev run; the model serves in a real sandbox container.` };
             return;
         }
-        if (gpuAsked(model) && gpuState() === undefined) {
+        if (gpuAsked(model) && localModelGpu() === "absent") {
             yield { kind: "log", message: "GPU access needs a one-time rebuild (Environment card), serving on CPU until then." };
         }
         const path = weightsPath(ctx, source);
@@ -455,7 +300,7 @@ export const localModelHandler: CapabilityHandler = {
         }
         const path = weightsPath(ctx, source);
         // Progress first, by path: the download is the long pole, and the reason this card polls at all.
-        const inFlight = downloads.get(path);
+        const inFlight = weightsProgress(path);
         if (inFlight !== undefined) {
             return { state: "pending", detail: inFlight.total > 0 ? `downloading ${gb(inFlight.received)} / ${gb(inFlight.total)}` : "downloading" };
         }
@@ -464,7 +309,7 @@ export const localModelHandler: CapabilityHandler = {
         if (failure !== undefined) {
             return { state: "error", detail: failure };
         }
-        if (await serverMissing()) {
+        if (await llamaServerMissing()) {
             return { state: "pending", detail: "rebuild required" };
         }
         if (await serverHealthy(localModelPort(id))) {
@@ -507,7 +352,7 @@ export const localModelHandler: CapabilityHandler = {
         }
         const path = weightsPath(ctx, source);
         if (!(await sharesWeights(ctx, id, path))) {
-            fetches.get(path)?.abort.abort();
+            abortWeights(path);
         }
     },
     // id keys the panel, port and catalog; weights key by file name and carry over untouched. Stops the old server and
@@ -527,7 +372,7 @@ export const localModelHandler: CapabilityHandler = {
 // resuming an unfinished download from its last byte. Best-effort: failures surface on the card, never the boot path.
 export const startLocalModelsIfEnabled = async (ctx: CapabilityCtx): Promise<void> => {
     const entries = (await ctx.capabilities.list()).flatMap((capability) => (capability.kind === "localmodel" ? [capability] : []));
-    if (entries.length === 0 || (await serverMissing())) {
+    if (entries.length === 0 || (await llamaServerMissing())) {
         return;
     }
     for (const entry of entries) {

@@ -2,7 +2,7 @@
 // The model picker replaces the old sign-in-wall card; everything it offered lives in the list now:
 // - the cheapest way in leads the locked rows, not sorted last by alphabet
 // - every locked row still states its price
-// - the accounts page link lives here, since nothing else offers it
+// - the door to connecting one lives here, since nothing else in the picker offers it
 import { TRIAL_PROVIDER } from "@intentic/sandbox-contract";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { type App, createApp, h, nextTick } from "vue";
@@ -104,18 +104,18 @@ it(`seats the working free trial above the locked rows, with its allowance rathe
     expect(element.textContent).toContain(`trial`);
 });
 
-// The door to everything this list can only badge: a second account, dropping one, sign-in mechanics. The
-// only route to the accounts page from chat.
-it(`carries the way out to the accounts page, and drops it while searching`, async () => {
+// The door to everything this list can only badge: connecting a first model, a second account, dropping one. A list
+// of locked rows has to end somewhere a reader can act, and this is it.
+it(`carries the way out to the connect view, and drops it while searching`, async () => {
     const element = mount();
 
-    const door = [...element.querySelectorAll(`a`)].find((link) => link.textContent?.includes(`All AI accounts`));
-    expect(door?.getAttribute(`href`)).toBe(`/sandbox/agent`);
+    const door = [...element.querySelectorAll(`a`)].find((link) => link.textContent?.includes(`Connect a model`));
+    expect(door?.getAttribute(`href`)).toBe(`/connect`);
 
     // Searching turns the panel into one flat result set, where a standing footer reads as a result.
     const search = element.querySelector(`input`)!;
     search.value = `opus`;
     search.dispatchEvent(new Event(`input`));
     await nextTick();
-    expect(element.textContent).not.toContain(`All AI accounts`);
+    expect(element.textContent).not.toContain(`Connect a model`);
 });

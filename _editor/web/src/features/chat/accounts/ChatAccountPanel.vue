@@ -1,101 +1,74 @@
 <script setup lang="ts">
 import { ui } from "@intentic/ui";
 import { computed } from "vue";
-import { type AgentProvider, PROVIDER_VENDOR } from "@intentic/sandbox-contract";
-import { accessKnown, connectPitch, trialExhausted } from "../session/access";
-import { providerDisplayLabel } from "./providerCatalog";
+import { RouterLink } from "vue-router";
+import { isTrialProvider, PROVIDER_VENDOR } from "@intentic/sandbox-contract";
+import { accessKnown, providerReady, trialExhausted } from "../session/access";
+import { connectIntroDismissed } from "../../connect/connectIntro";
+import { anythingConnected } from "../../connect/connectLanes";
+import { endpointProviders, providerDisplayLabel, trialStatus } from "./providerCatalog";
 import { turnDefaults } from "../run/turnDefaults";
 import { useChat } from "../run/useChat";
 import { usePaneView } from "../panel/useChat-view";
-import ConnectFlow from "../../sandbox/secrets/ConnectFlow.vue";
 import ChatChooseModelButton from "../models/ChatChooseModelButton.vue";
-import ProviderLogo from "./ProviderLogo.vue";
 import { useT } from "@intentic/ui/i18n";
 
-// The one line above the composer when this chat has nothing to send with. It sits beside a composer that
-// stands whatever it says — it never replaced the box and never pitches a subscription unasked; its one
-// action opens the model list. Silent until `accessKnown` (both accounts and endpoints): a spinner over a
-// usable composer is noise, and "not connected" is not a claim an unanswered read can make. Stands down for
-// a spent trial, which is connected but metered out.
+// The one line above the composer when this chat has nothing to send with. It sits beside a composer that stands
+// whatever it says — it never replaced the box and never pitches a subscription unasked. Silent until `accessKnown`
+// (both accounts and endpoints): a spinner over a usable composer is noise, and "not connected" is not a claim an
+// unanswered read can make. Stands down for a spent trial, which is connected but metered out.
+//
+// It does NOT host a sign-in. A handshake is two steps with a trip to another tab between them, and eighty pixels over
+// a composer is not where that belongs; /connect owns it, and this strip's job is to point at it — including when a
+// sign-in started there is still waiting to be finished.
 
 const t = useT();
 
 const view = usePaneView();
-const { connected, provider, harness } = view;
+const { connected, provider } = view;
 // Cannot-send from a spent trial is not a missing connection; not this strip's to report.
 const trialSpent = computed(() => trialExhausted(provider.value));
-const {
-    nativeConnectFlow,
-    translatorConnectFlow,
-    accountBusy,
-    translatorKey,
-    cancelConnect,
-    cancelTranslatorConnect,
-    setManagedProvider,
-    startConnect,
-    connectTranslator,
-} = useChat();
+const { nativeConnectFlow, translatorConnectFlow } = useChat();
 
-// Read from the store, not remembered, so a handshake started elsewhere is still finishable here.
-const live = computed<{ kind: `native` | `routed`; provider: AgentProvider } | undefined>(() => {
-    if (nativeConnectFlow.value !== undefined) {
-        return { kind: `native`, provider: nativeConnectFlow.value.provider };
-    }
-    if (translatorConnectFlow.value !== undefined) {
-        return { kind: `routed`, provider: translatorConnectFlow.value.provider };
-    }
-    return undefined;
-});
-const abandon = (): void => (live.value?.kind === `native` ? cancelConnect() : cancelTranslatorConnect());
-
-// What the user brought back is being redeemed: there is nothing left to abandon, and the strip's own panel
-// reports the wait.
-const finishing = computed(
-    () => live.value !== undefined && accountBusy.value === (live.value.kind === `native` ? live.value.provider : translatorKey(live.value.provider)),
-);
+// A handshake is live somewhere: this strip stops offering a new one and offers the way back to the one in flight.
+const live = computed(() => nativeConnectFlow.value ?? translatorConnectFlow.value);
 
 // Whether a vendor may be named at all: only a provider the owner actually chose. With nothing stored this chat is
 // sitting on a floor the app picked (turnDefaults.ts), and naming it would tell a first-run reader that some
 // particular vendor is missing from a sandbox where they never asked for one — the app is not any vendor's.
 const chosen = computed(() => turnDefaults.provider.value === provider.value);
-
-// Named as what to connect, not the runtime; `pitch` is absent where there's no account to connect.
 const providerName = computed(() => PROVIDER_VENDOR[provider.value as keyof typeof PROVIDER_VENDOR] ?? providerDisplayLabel(provider.value));
-// Only ever offered for a chosen provider: a sign-in nobody asked for is a pitch, which this strip does not make.
-const pitch = computed(() => (chosen.value ? connectPitch(provider.value, harness.value) : undefined));
 
-// Starts sign-in for the selected provider, and sets it on the account card too so the two agree on
-// what just connected. Which mechanism runs mirrors the daemon's own split: translator for
-// ChatGPT/Kimi/Google, a stored account otherwise.
-const connect = async (): Promise<void> => {
-    const target = provider.value;
-    setManagedProvider(target);
-    // Awaited so the button holds while the flow is being opened, rather than looking untouched.
-    await (target === `codex` || target === `kimi` || target === `gemini` ? connectTranslator(target) : startConnect());
-};
+// Said once, early, on a sandbox running on nothing but the trial: the alternative was meeting the question for the
+// first time at the moment the allowance ran out, mid-task, which is the worst possible moment to be asked to choose a
+// provider. Dismissed for good on the first press, and never shown to a sandbox that has a real connection — it is an
+// offer, not a nag, and the trial strip below already handles the running-low half.
+const localReady = computed(() => endpointProviders.value.some((endpoint) => endpoint.kind === `localmodel`));
+const showIntro = computed(
+    () =>
+        accessKnown.value &&
+        !connectIntroDismissed.value &&
+        isTrialProvider(provider.value) &&
+        trialStatus.value.available &&
+        // Only while there is still plenty left: past halfway the trial strip takes over and says the same thing louder.
+        trialStatus.value.remaining > trialStatus.value.allowance / 2 &&
+        !anythingConnected(providerReady, localReady.value),
+);
 </script>
 
 <template>
-    <!-- The sign-in, once running, takes the whole strip; Cancel is the only other control, and abandoning it restores the line below. -->
-    <div v-if="accessKnown && live" class="flex flex-col gap-2 rounded-2xl border border-line bg-card px-4 py-3">
-        <div class="flex items-center gap-2">
-            <ProviderLogo :provider="live.provider" class="shrink-0 text-link" />
-            <span class="min-w-0 flex-1 truncate text-left text-xs font-medium text-body">{{
-                t(`chat.chatAccountPanel.connecting`, { provider: providerDisplayLabel(live.provider) })
-            }}</span>
-            <button
-                type="button"
-                :disabled="finishing"
-                :class="ui.linkButton(`shrink-0 text-2xs text-subtle hover:text-content hover:no-underline`)"
-                @click="abandon"
-            >
-                {{ t(`ui.action.cancel`) }}
-            </button>
-        </div>
-        <ConnectFlow :kind="live.kind" :provider="live.provider" />
-    </div>
+    <!-- A sign-in already under way, wherever it was started: the one press is back to where it can be finished. -->
+    <RouterLink
+        v-if="accessKnown && live"
+        to="/connect"
+        class="flex flex-wrap items-center gap-x-2 gap-y-1.5 rounded-2xl border border-line bg-card px-4 py-3 text-2xs text-muted"
+    >
+        <Icon name="spinner" spin class="shrink-0 text-link" />
+        <span class="min-w-0 flex-1 text-left">{{ t(`chat.chatAccountPanel.signInWaiting`, { provider: providerDisplayLabel(live.provider) }) }}</span>
+        <span class="shrink-0 font-semibold text-link">{{ t(`chat.chatAccountPanel.finishSignIn`) }}</span>
+    </RouterLink>
 
-    <!-- The model list leads (free to look at, holds every option, costs nothing to open); a chosen provider's own sign-in follows it. -->
+    <!-- The model list leads (free to look at, holds every option, costs nothing to open); connecting one follows it. -->
     <div
         v-else-if="accessKnown && !connected && !trialSpent"
         class="flex flex-wrap items-center gap-x-2 gap-y-1.5 rounded-2xl border border-line bg-card px-4 py-3 text-2xs text-muted"
@@ -105,13 +78,24 @@ const connect = async (): Promise<void> => {
             chosen ? t(`chat.chatAccountPanel.isntConnectedInSandbox`, { providerName }) : t(`chat.chatAccountPanel.noModelYet`)
         }}</span>
         <ChatChooseModelButton />
-        <button
-            v-if="pitch"
-            type="button"
-            :class="ui.linkButton(`shrink-0 text-2xs text-subtle hover:text-content hover:no-underline`)"
-            @click="connect"
-        >
-            {{ pitch.action }}
+        <RouterLink to="/connect" :class="ui.linkButton(`shrink-0 text-2xs text-subtle hover:text-content hover:no-underline`)">
+            {{ t(`chat.chatAccountPanel.connectAModel`) }}
+        </RouterLink>
+    </div>
+
+    <!-- The early, quiet version of the question the spent trial asks loudly. Dismissible, because a reader happy on the
+         trial has answered it. -->
+    <div
+        v-else-if="showIntro"
+        class="flex flex-wrap items-center gap-x-2 gap-y-1.5 rounded-2xl border border-line bg-card px-4 py-3 text-2xs text-muted"
+    >
+        <Icon name="sparkles" class="shrink-0 text-link" />
+        <span class="min-w-[14rem] flex-1 text-left">{{ t(`chat.chatAccountPanel.introOffer`) }}</span>
+        <RouterLink to="/connect" :class="ui.linkButton(`shrink-0 text-2xs`)">
+            {{ t(`chat.chatAccountPanel.connectAModel`) }}
+        </RouterLink>
+        <button type="button" :class="ui.textAction(`shrink-0 text-2xs text-subtle`)" @click="connectIntroDismissed = true">
+            {{ t(`ui.action.dismiss`) }}
         </button>
     </div>
 </template>

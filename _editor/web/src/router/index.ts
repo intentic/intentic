@@ -211,6 +211,15 @@ const routes: RouteRecordRaw[] = [
                 beforeEnter: [mobileOnly],
                 component: asyncView(() => import(`../features/terminal/MobileTerminal.vue`)),
             },
+            // The one place a first model is connected. `?provider=` continues a press made somewhere else (a picker
+            // row, the trial strip), which is why it is a query rather than a segment: the lane is the page, the
+            // provider is only what it opens on.
+            {
+                path: `connect`,
+                name: `connect`,
+                meta: { title: () => t(`router.index.connect`) },
+                component: asyncView(() => import(`../features/connect/Connect.vue`)),
+            },
             {
                 path: `capabilities/:card?`,
                 name: `capabilities`,

@@ -1,4 +1,5 @@
 import { type Capability, type EndpointConfig, LOCAL_MODEL_WINDOW_DEFAULT, type LocalModelConfig } from "@intentic/sandbox-contract";
+import { statePath } from "../workspace/layout/state-paths.js";
 
 // A local model expressed as the endpoint it is: the catalog probe, translator reconciler and credential resolution all
 // take an EndpointConfig, and a localmodel entry becomes one only here. The URL is derived from the id rather than
@@ -57,6 +58,12 @@ export const localModelSource = (config: LocalModelConfig): LocalModelSource | u
     const path = segments.slice(2).join("/");
     return { repo, path, file: segments.at(-1) ?? "" };
 };
+
+// Cached by file name, shared across entries on purpose: two cards naming the same model download it once, and the
+// prefetch writes to the same place the handler later reads. Under `cache/` because weights ARE re-downloadable by
+// content, which keeps them out of exports and hands them to the state janitor.
+export const localModelWeightsPath = (root: string, source: LocalModelSource): string =>
+    statePath(root, ".intentic/local/cache/", "models", source.file);
 
 // Display name for the picker and card: the file name, minus extension.
 export const localModelLabel = (config: LocalModelConfig): string => (localModelSource(config)?.file ?? config.model).replace(/\.gguf$/i, "");

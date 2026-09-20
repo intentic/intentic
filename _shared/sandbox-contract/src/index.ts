@@ -50,7 +50,18 @@ export { automationsContract } from "./contracts/automations.contract.js";
 export { capabilitiesContract } from "./contracts/capabilities.contract.js";
 export { choresContract } from "./contracts/chores.contract.js";
 export { ciContract } from "./contracts/ci.contract.js";
-export { endpointsContract, type TrialHealth, TrialStatusSchema, type TrialStatusResponse } from "./contracts/endpoints.contract.js";
+export {
+    endpointsContract,
+    LocalModelFitSchema,
+    type LocalModelFitResponse,
+    type LocalModelGpu,
+    LocalModelGpuSchema,
+    type LocalModelPrefetch,
+    LocalModelPrefetchSchema,
+    type TrialHealth,
+    TrialStatusSchema,
+    type TrialStatusResponse,
+} from "./contracts/endpoints.contract.js";
 export { exitContract } from "./contracts/exit.contract.js";
 export { extensionsContract } from "./contracts/extensions.contract.js";
 export { personasContract } from "./contracts/personas.contract.js";

@@ -1,6 +1,6 @@
 import { expect, test } from "vitest";
 import { packFragment, readPack } from "../../environment/packs.js";
-import { estimatedModelMemory, serverCommand } from "./localmodel.handler.js";
+import { serverCommand } from "./localmodel.handler.js";
 import { registry } from "../registry.js";
 
 // Pins two contracts other code trusts: the fragment's directive (what rebuild executors allowlist) and the echo (what
@@ -47,11 +47,6 @@ test("llama-server leaves GPU layers on auto-fit instead of forcing every layer 
             process.env["SANDBOX_GPU"] = before;
         }
     }
-});
-
-test("the admission estimate accounts for weights, q8 KV cache and runtime headroom", () => {
-    expect(estimatedModelMemory(16_000_000_000, 32_768)).toBe(19_000_000_000);
-    expect(estimatedModelMemory(16_000_000_000, 98_304)).toBe(23_000_000_000);
 });
 
 // Every field must echo, `url` included: nothing here is a credential, and an incomplete echo would vault a field into

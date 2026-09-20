@@ -605,9 +605,9 @@
             "whatOffers": "what it offers…"
         },
         "hostConnectDialog": {
+            "callsItself": "This machine calls itself",
             "codeInCommandWorks": "The code in this command works once and expires in about ten minutes. This window updates by itself when the device connects.",
             "connect": "Connect {id}",
-            "callsItself": "This machine calls itself",
             "connectedAgentWorkOn": "is connected. The agent can work on it from its next turn.",
             "couldNotRename": "Could not take that name.",
             "in": ": in",
@@ -793,9 +793,12 @@
             "runEverythingWithoutAsking": "Run everything without asking."
         },
         "chatAccountPanel": {
-            "connecting": "Connecting {provider}",
+            "connectAModel": "Connect a model",
+            "finishSignIn": "Finish sign-in",
+            "introOffer": "Running on the free trial. An account you already pay for, or a model on this machine, runs without a daily cap.",
             "isntConnectedInSandbox": "{providerName} isn't connected in this sandbox.",
-            "noModelYet": "No model is connected in this sandbox yet."
+            "noModelYet": "No model is connected in this sandbox yet.",
+            "signInWaiting": "Signing in to {provider} — it is waiting for you."
         },
         "chatArea": {
             "bringBackHere": "Bring it back here",
@@ -991,11 +994,11 @@
             "archivedOffBoardSending": "Archived: off the board. Sending a message restores it.",
             "askPlatformAgainPick": "Ask the platform again, and pick this chat back up if the trial answers",
             "billing": "Billing",
-            "connectGoogle": "Connect Google",
+            "connectAModel": "Connect a model",
+            "connectTooltip": "A Google sign-in, a model on this machine, or a subscription you already pay for",
             "putAgentBackOn": "Put this agent back on the board now",
             "reconnect": "Reconnect",
-            "restore": "Restore",
-            "signInGoogleNo": "Sign in with Google: no daily cap, still no subscription"
+            "restore": "Restore"
         },
         "chatPaneStatus": {
             "context": "Context · {tokens} / {contextWindow} ({pct}%)",
@@ -1315,7 +1318,7 @@
         },
         "modelPicker": {
             "accountNeedsToReconnected": "This account needs to be reconnected",
-            "allAiAccounts": "All AI accounts",
+            "allAiAccounts": "Connect a model, or manage accounts",
             "allProviders": "All providers",
             "backAt": "Back at {at}",
             "couldntLoadModels": "Couldn't load models.",
@@ -1382,33 +1385,33 @@
             "work": "Work"
         },
         "turnBreak": {
-            "wait": "Wait for me",
-            "waitNote": "Nothing is sent for you. The turn stays here and one press finishes it.",
-            "resend": "Send again",
-            "resendNote": "Sends this turn again by itself, once the allowance comes back.",
+            "anotherAccount": "another account",
+            "backWhen": "back {when}",
+            "goesAt": "Goes by itself {when}",
+            "goesSoon": "Goes by itself shortly",
+            "limitEnding": "Usage limit spent",
+            "limitStatusKept": "Limit reached · work kept",
+            "limitStatusRefused": "Limit reached · nothing ran",
             "move": "Move to {account}",
             "moveNote": "Moves this turn to another account of the same provider that still has room, at once, and keeps the reset as its fallback.",
-            "anotherAccount": "another account",
+            "movingNow": "Moving to {account} now",
+            "next": "Next",
+            "nextQuestion": "What happens next",
+            "nextTry": "Next try {when} · try {attempt} of {maxAttempts}",
+            "outageEnding": "Provider outage",
+            "outageStatus": "Provider failed · work kept",
+            "resend": "Send again",
+            "resendNote": "Sends this turn again by itself, once the allowance comes back.",
             "retry": "Keep trying",
             "retryOutageNote": "Keeps re-running this turn while the provider is down, backing off between tries.",
             "retryStoppedNote": "Re-runs this turn on a short ladder, standing down after three tries that get nowhere.",
-            "limitEnding": "Usage limit spent",
-            "outageEnding": "Provider outage",
             "stoppedEnding": "Turn stopped short",
-            "limitStatusKept": "Limit reached · work kept",
-            "limitStatusRefused": "Limit reached · nothing ran",
-            "outageStatus": "Provider failed · work kept",
             "stoppedStatus": "Turn stopped short · work kept",
-            "backWhen": "back {when}",
             "tryOf": "try {attempt} of {maxAttempts}",
-            "whenNear": "{wait}",
+            "wait": "Wait for me",
+            "waitNote": "Nothing is sent for you. The turn stays here and one press finishes it.",
             "whenFar": "{clock}, {wait}",
-            "goesAt": "Goes by itself {when}",
-            "goesSoon": "Goes by itself shortly",
-            "nextTry": "Next try {when} · try {attempt} of {maxAttempts}",
-            "movingNow": "Moving to {account} now",
-            "next": "Next",
-            "nextQuestion": "What happens next"
+            "whenNear": "{wait}"
         }
     },
     "common": {
@@ -1480,6 +1483,57 @@
         },
         "workflowMark": {
             "step": "· step {index}/{total}"
+        }
+    },
+    "connect": {
+        "connect": {
+            "allAccounts": "Manage the accounts this sandbox already holds",
+            "connecting": "Connecting {provider}",
+            "description": "It is stored in your sandbox and never on the platform. Pick whichever of these you already have.",
+            "free": "Free",
+            "freeSubtitle": "A sign-in, no card, no subscription",
+            "freeTitle": "Free, with a Google account",
+            "landed": "Connected. This workspace can run turns now.",
+            "localSubtitle": "Free forever, private, works offline",
+            "localTitle": "On this machine",
+            "ownServer": "Already run Ollama or vLLM? Point at your server",
+            "startChatting": "Start a conversation",
+            "subscriptionSubtitle": "Claude, ChatGPT, Kimi, Grok, Cursor, Z.ai, Muse",
+            "subscriptionTitle": "A subscription you already pay for",
+            "title": "Give this workspace a model",
+            "whichPlan": "Which plan is this account on?"
+        },
+        "connectLane": {
+            "collapse": "Collapse",
+            "expand": "Expand"
+        },
+        "localModelLane": {
+            "alreadyDownloadedNeeds": "Already downloaded; holds about {total} while it runs.",
+            "bestHere": "best here",
+            "bestPitch": "The most this machine holds, with a {window}k conversation window.",
+            "downloadNeeds": "Downloads {download}, then holds about {total} while it runs.",
+            "gettingReady": "Getting it ready — {received} of {total}",
+            "gettingReadyPlain": "Getting it ready…",
+            "gpuGranted": "Its NVIDIA GPU is reachable, with {vram} of VRAM.",
+            "gpuOffered": "CPU only for now; the model's card can ask for an NVIDIA GPU.",
+            "gpuUnsupported": "No GPU here: this host's Docker has no nvidia runtime.",
+            "instantPitch": "Ready in about a minute. Good for commit messages, titles and trying the app out; too small to drive a full agent turn.",
+            "measuring": "Reading what this machine can run…",
+            "memoryCapped": "This sandbox may use {memory}.",
+            "memoryMachine": "This machine has {memory}.",
+            "moreModels": "Other models, a custom GGUF, or the GPU switch",
+            "needsRebuild": "This image does not carry llama-server yet. Rebuild the sandbox from the Environment card, then come back.",
+            "nothingFits": "Nothing on the curated list fits in {memory}. Give the sandbox more memory, or connect an account instead.",
+            "quickJobsOnly": "quick jobs only",
+            "runIt": "Run it",
+            "startNow": "Start now",
+            "stop": "Stop",
+            "windowUnderFloor": "This window is under what one agent turn costs, so it is a quick-jobs rung too. More memory would raise it."
+        },
+        "providerTile": {
+            "connected": "Connected",
+            "needsReconnect": "Needs reconnect",
+            "runs": "Runs {runs}"
         }
     },
     "extension-host": {
@@ -1597,6 +1651,7 @@
             "cantReachIntentic": "Can't reach Intentic",
             "capabilities": "Capabilities",
             "chat": "Chat",
+            "connect": "Connect a model",
             "designKit": "Design kit",
             "login": "Login",
             "menu": "Menu",
@@ -1752,9 +1807,9 @@
             "howToShow": "How to show {toLowerCase}",
             "nothingJudgingCommandsAt": "Nothing is judging commands at the moment, so this is not in use.",
             "safetyJudgeOffNot": "Safety judge is off, so it is not one of these and nothing here writes to it.",
-            "selected": "{count} selected",
             "selectEveryJobUnder": "Select every job under {toLowerCase}",
             "selectJobs": "Select jobs",
+            "selected": "{count} selected",
             "setModelAll": "Set a model for all…",
             "simple": "Simple",
             "turnJudgeOn": "Turn the judge on",

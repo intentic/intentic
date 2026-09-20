@@ -1,6 +1,7 @@
 import type { CapabilitySummary } from "@intentic/api-contract";
 import { builtinModules } from "@intentic/web/builtins";
-import type { Environment, EnvironmentContents, ExtensionSummary, PanelSummary, UsageRollupRow } from "@intentic/sandbox-contract";
+import type { Environment, EnvironmentContents, ExtensionSummary, LocalModelFitResponse, PanelSummary, UsageRollupRow } from "@intentic/sandbox-contract";
+import { LOCAL_MODEL_KV_BYTES_PER_TOKEN, LOCAL_MODEL_WINDOWS, LOCAL_MODELS } from "@intentic/sandbox-contract";
 import { deskEdition, enabledExtensions } from "../mode";
 import pins from "../../vendor/extensions.json";
 import { DESK_REPOS } from "./desk";
@@ -97,6 +98,52 @@ export const demoCapabilities = (): CapabilitySummary[] => [
         secrets: [`key`],
     },
 ];
+
+// A believable laptop for the connect view's local lane: 32 GB, no GPU passed through, nothing downloaded yet. Priced
+// with the daemon's own arithmetic rather than typed numbers, so the demo cannot show a machine the real fit route
+// would size differently.
+const DEMO_MEMORY_BYTES = 32 * 1024 * 1024 * 1024;
+const DEMO_RUNTIME_BYTES = 1_000_000_000;
+const DEMO_BUDGET_BYTES = Math.round(DEMO_MEMORY_BYTES * 0.8);
+const demoTotal = (weightsBytes: number, tokens: number): number => weightsBytes + tokens * LOCAL_MODEL_KV_BYTES_PER_TOKEN + DEMO_RUNTIME_BYTES;
+
+// Flipped by the connect view's own prefetch press: the demo has no download, but "started, halfway" is the state the
+// lane has the most to draw, and a fixture that stayed idle would hide the progress line and its Stop.
+let demoPrefetching = false;
+export const demoStartPrefetch = (start: boolean): LocalModelFitResponse["prefetch"] => {
+    demoPrefetching = start;
+    return demoLocalModelFit().prefetch;
+};
+
+export const demoLocalModelFit = (): LocalModelFitResponse => {
+    const instant = LOCAL_MODELS.find((choice) => choice.tier === `instant`)!;
+    const best = LOCAL_MODELS.findLast((choice) => choice.tier === `work` && demoTotal(choice.weightsBytes, 65_536) <= DEMO_BUDGET_BYTES)!;
+    return {
+        memoryBytes: DEMO_MEMORY_BYTES,
+        memoryCapped: false,
+        gpu: `absent`,
+        gpuMemoryBytes: 0,
+        budgetBytes: DEMO_BUDGET_BYTES,
+        serverReady: true,
+        options: LOCAL_MODELS.map((choice) => ({
+            model: choice.id,
+            label: choice.label,
+            tier: choice.tier,
+            weightsBytes: choice.weightsBytes,
+            held: false,
+            windows: LOCAL_MODEL_WINDOWS.map(Number).map((tokens) => ({
+                tokens,
+                totalBytes: demoTotal(choice.weightsBytes, tokens),
+                fits: demoTotal(choice.weightsBytes, tokens) <= DEMO_BUDGET_BYTES,
+            })),
+        })),
+        instant: { model: instant.id, context: `65536` },
+        best: { model: best.id, context: `65536` },
+        prefetch: demoPrefetching
+            ? { model: instant.id, state: `downloading`, receivedBytes: Math.round(instant.weightsBytes * 0.4), totalBytes: instant.weightsBytes }
+            : { model: instant.id, state: `idle`, receivedBytes: 0, totalBytes: 0 },
+    };
+};
 
 // No `enabled` here; `demoExtensions()` below applies demo mode's on/off once.
 const CONNECTOR_EXTENSIONS: Omit<ExtensionSummary, "enabled">[] = [

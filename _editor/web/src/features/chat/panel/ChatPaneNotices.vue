@@ -12,7 +12,6 @@ import { useSandbox } from "../../sandbox/client/useSandbox";
 import { hoursLeftLine } from "../../settings/hosted-plan/hostedHours";
 import { useHostedPlan } from "../../settings/hosted-plan/useHostedPlan";
 import ChatAccountPanel from "../accounts/ChatAccountPanel.vue";
-import ChatChooseModelButton from "../models/ChatChooseModelButton.vue";
 import { useT } from "@intentic/ui/i18n";
 
 // What this chat's standing is, above the composer: strips for a state the conversation arrived at by itself
@@ -56,22 +55,23 @@ const activeArchived = computed(() => {
 
 // What the trial strip says, or nothing off the trial: leads with the remaining count while there's allowance (it
 // counts model calls, not turns, so one turn can spend several), then discloses routing through intentic; once
-// spent, only the free Google sign-in matters.
+// spent, the only thing left to say is where the next model comes from.
 
 // Not answering is an interruption; working for it is not — conflating the two put "Failed messages are not
 // counted" over answers that had just worked. `unavailable` means no key answered (the turn is held and refunded,
 // Retry is real); `degraded` means the pool answered after failing over, the ladder working as designed.
 const trialUnavailable = computed(() => trialStatus.value.health === `unavailable`);
 // Spent is this strip's alone to say: the account gate would otherwise report the trial as "not connected", which
-// is false and contradicts the sentence under it. This strip takes over the gate's door to the model list once
-// spent.
+// is false and contradicts the sentence under it.
 const trialSpent = computed(() => trialExhausted(provider.value));
 const trialNotice = computed(() => {
     if (!isTrialProvider(provider.value)) {
         return undefined;
     }
     if (trialSpent.value) {
-        return `Free trial used up for today. Connect Google to keep going free.`;
+        // Names no single vendor: free-and-uncapped is a Google sign-in, a model on this machine, or a subscription the
+        // reader may already hold, and the view that offers all three is one press away.
+        return `Free trial used up for today. Connect a model to keep going — one of them is free.`;
     }
     if (trialUnavailable.value) {
         return `Free trial isn't answering right now. Failed messages are not counted.`;
@@ -156,24 +156,25 @@ const activeAccountReauth = computed(() => {
             >
                 {{ t(`ui.action.retry`) }}
             </Button>
-            <!-- The door the account gate used to hold, standing here while this strip does: spent, the model list is every other way to send. -->
-            <ChatChooseModelButton v-if="trialSpent" />
-            <!-- A place, so a link, drawn as a button: the sign-in has an address, and Ctrl/Cmd-click opens it in another tab rather than losing this conversation. -->
+            <!-- One action, not two: the spent trial's question is "what now", and the model list was the same answer
+                 arrived at sideways. Standing whenever this strip does, not only once spent — somebody halfway through
+                 the day's allowance who wants to connect now should not have to run out first. A place, so a link drawn
+                 as a button: Ctrl/Cmd-click keeps this conversation. -->
             <Button
                 :as="RouterLink"
-                :to="{ path: '/sandbox/agent', query: { connect: 'gemini' } }"
+                to="/connect"
                 size="small"
                 :text="true"
-                v-tooltip.top="t(`chat.chatPaneNotices.signInGoogleNo`)"
+                v-tooltip.top="t(`chat.chatPaneNotices.connectTooltip`)"
             >
-                {{ t(`chat.chatPaneNotices.connectGoogle`) }}
+                {{ t(`chat.chatPaneNotices.connectAModel`) }}
             </Button>
         </div>
     </div>
     <!-- Proactive re-auth: the credential exists but can no longer refresh, surfaced here (before an opaque mid-turn failure) with a jump to reconnect. -->
     <RouterLink
         v-if="activeAccountReauth"
-        :to="{ path: '/sandbox/agent', query: { connect: provider } }"
+        :to="{ path: '/connect', query: { provider } }"
         class="flex items-start gap-2 rounded-xl border border-warning/40 bg-card px-3 py-2 text-left text-2xs text-warning"
     >
         <Icon name="exclamation-triangle" class="mt-0.5 shrink-0" />

@@ -187,9 +187,9 @@ const isDisabled = (entry: PickerEntry): boolean => unpickable?.(entry) === true
 // hold a credential, so asking would lock a mode that is always available and make it read as refused.
 const isLocked = (entry: PickerEntry): boolean => !isLead(entry) && !providerReady(entry.provider);
 
-// Deep link to the handshake: `?connect=<provider>` opens the Agent tab on that card. A real link, not a button click,
-// so hover shows the destination and Ctrl/Cmd-click opens it in another tab.
-const connectTo = (target: AgentProvider) => ({ path: `/sandbox/agent`, query: { connect: target } });
+// Deep link to the connect view, opened on this provider's lane with its sign-in already starting. A real link, not a
+// button click, so hover shows the destination and Ctrl/Cmd-click opens it in another tab.
+const connectTo = (target: AgentProvider) => ({ path: `/connect`, query: { provider: target } });
 
 // A plain click closes the picker; a modified one opens elsewhere and must leave this list untouched.
 const closeOnPlainClick = (event: MouseEvent): void => {
@@ -523,10 +523,10 @@ onMounted(() => {
                         {{ t(`chat.modelPicker.searchAllProviders`) }}
                     </button>
                 </div>
-                <!-- The door to everything this list can only badge: a second account, dropping one, sign-in mechanics. -->
+                <!-- The door to everything this list can only badge: connecting a first model, a second account, dropping one. -->
                 <RouterLink
                     v-if="!searching"
-                    to="/sandbox/agent"
+                    to="/connect"
                     class="ui-row-select flex w-full items-center gap-2 border-t border-line px-3 py-2 text-2xs text-subtle hover:text-content max-md:min-h-11"
                     @click="closeOnPlainClick"
                 >

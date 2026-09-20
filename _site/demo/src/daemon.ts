@@ -50,6 +50,8 @@ import {
 import { demoRegistry } from "./fixture/registry";
 import {
     demoCapabilities,
+    demoLocalModelFit,
+    demoStartPrefetch,
     demoEnvironment,
     demoEnvironmentContents,
     demoExtensions,
@@ -442,6 +444,15 @@ const ROUTES: readonly (readonly [string, string, Handler])[] = [
     // The recording is a box with Claude connected, which is what its chats are addressed to; `native` is how a
     // reader who cannot open /accounts learns that.
     [`GET`, `/providers`, () => json({ native: [`claude`], agents: [], endpoints: [] })],
+    // What the connect view's local lane draws: a 32 GB laptop with no GPU passed through and nothing downloaded yet.
+    [`GET`, `/endpoints/local-model/fit`, () => json(demoLocalModelFit())],
+    // Nothing is really fetched here; the press flips the fixture so the lane draws the state it has the most to say
+    // about — a transfer under way, with the Stop that declines it.
+    [
+        `POST`,
+        `/endpoints/local-model/prefetch`,
+        async ({ request }) => json(demoStartPrefetch(((await request.json()) as { action?: string }).action === `start`)),
+    ],
 
     [`GET`, `/settings`, () => json(DEMO_SETTINGS)],
     [`GET`, `/settings/savings`, () => json(DEMO_SAVINGS)],

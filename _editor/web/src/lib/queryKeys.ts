@@ -83,6 +83,9 @@ export const ENVIRONMENT = family(`environment`);
 export const ENVIRONMENT_CONTENTS = family(`environment-contents`);
 export const EXTENSIONS = family(`extensions`);
 export const INVENTORY = family(`inventory`);
+// What this machine can run locally: memory, GPU, and which curated models fit. Its own family, not part of
+// CAPABILITIES, because it goes stale on a rebuild or a download rather than on the manifest changing.
+export const LOCAL_MODEL_FIT = family(`local-model-fit`);
 export const MANIFESTS = family(`manifests`);
 export const PANELS = family(`panels`);
 export const PERSONAS = family(`personas`);

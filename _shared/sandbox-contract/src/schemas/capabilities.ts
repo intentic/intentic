@@ -234,6 +234,43 @@ export const LOCAL_MODEL_WINDOW_DEFAULT: LocalModelWindow = "65536";
 // ceiling no shipped GGUF was trained for it.
 export const LOCAL_MODEL_WINDOW_MIN = 2048;
 export const LOCAL_MODEL_WINDOW_MAX = 1_048_576;
+// q8_0 KV cost per token, the rate every window price derives from: 64 KiB, so the rungs come out at exactly 1, 2, 4
+// and 8 GiB. One rate rather than a per-model one, because the true cost varies ~2x across the list (50–60 KB/token
+// measured) and a per-row figure is arithmetic somebody redoes by hand on every model added. Rounded UP into that band
+// rather than down: over-reserving costs a rung, under-reserving costs an allocation failure a card had promised
+// against.
+export const LOCAL_MODEL_KV_BYTES_PER_TOKEN = 65_536;
+// What a rung honestly serves. `instant` is the one the connect view prefetches — it downloads in under a minute and
+// cannot drive a full agent turn, so no surface may sell it as one; `work` is what that view recommends for real use.
+export type LocalModelTier = "instant" | "work";
+export interface LocalModelChoice {
+    // Hugging Face owner/repo/file.gguf, exactly as LocalModelConfig.model carries it.
+    readonly id: string;
+    readonly label: string;
+    // The published file's own size, not a rounded guess: the card's label, the fit arithmetic and the download
+    // estimate all read this, so a model cannot be priced two ways.
+    readonly weightsBytes: number;
+    readonly tier: LocalModelTier;
+}
+// The curated list, smallest first. ponytail: these bytes are the Hugging Face tree API's answer for each file — the
+// hand-written labels that predated them overstated gemma-4 12B by 2x and Qwen3.8 27B by a third, which is the class of
+// drift a machine-readable size exists to end.
+export const LOCAL_MODELS: readonly LocalModelChoice[] = [
+    { id: "unsloth/Qwen3.5-2B-GGUF/Qwen3.5-2B-Q4_K_M.gguf", label: "Qwen3.5 2B", weightsBytes: 1_280_835_840, tier: "instant" },
+    {
+        id: "unsloth/Phi-4-mini-instruct-GGUF/Phi-4-mini-instruct-Q4_K_M.gguf",
+        label: "Phi-4-mini 3.8B",
+        weightsBytes: 2_491_874_272,
+        tier: "work",
+    },
+    { id: "unsloth/Qwen3.5-9B-GGUF/Qwen3.5-9B-Q4_K_M.gguf", label: "Qwen3.5 9B", weightsBytes: 5_680_522_464, tier: "work" },
+    { id: "unsloth/gemma-4-12b-it-GGUF/gemma-4-12b-it-Q4_K_M.gguf", label: "Gemma 4 12B", weightsBytes: 7_121_861_440, tier: "work" },
+    { id: "unsloth/Qwen3.8-27B-GGUF/Qwen3.8-27B-UD-Q4_K_M.gguf", label: "Qwen3.8 27B", weightsBytes: 16_464_440_224, tier: "work" },
+];
+export const localModelChoice = (id: string): LocalModelChoice | undefined => LOCAL_MODELS.find((choice) => choice.id === id);
+// Exactly one row carries the instant tier; the fit module and the prefetch route take it from here rather than
+// repeating its id, so the prefetched bytes and the offered option cannot name different files.
+export const LOCAL_MODEL_INSTANT: LocalModelChoice = LOCAL_MODELS.find((choice) => choice.tier === "instant")!;
 export const LocalModelConfigSchema = z.object({
     model: z.string().min(1),
     gpu: z.enum(["on", "off"]).default("off"),

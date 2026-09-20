@@ -68,6 +68,7 @@ const { modelRequest, settleModelPick } = await import("../models/host/hostModel
 const { endpointProviders, trialStatus } = await import("./providerCatalog");
 // The stored pick itself, unmocked: whether a vendor may be named at all is exactly "did the owner name one".
 const { turnDefaults } = await import("../run/turnDefaults");
+const { connectIntroDismissed } = await import("../../connect/connectIntro");
 const { default: ChatAccountPanel } = await import("./ChatAccountPanel.vue");
 
 let app: App | undefined;
@@ -84,6 +85,9 @@ const mount = (): HTMLElement => {
 const buttonNamed = (element: HTMLElement, label: string): HTMLButtonElement | undefined =>
     [...element.querySelectorAll(`button`)].find((button) => button.textContent?.includes(label));
 
+const linkNamed = (element: HTMLElement, label: string): HTMLAnchorElement | undefined =>
+    [...element.querySelectorAll(`a`)].find((link) => link.textContent?.includes(label));
+
 beforeEach(() => {
     connected.value = false;
     accountsLoaded.value = true;
@@ -93,6 +97,9 @@ beforeEach(() => {
     turnDefaults.provider.value = undefined;
     trialStatus.value = { available: false, allowance: 0, used: 0, remaining: 0, health: `unknown` };
     endpointProviders.value = [];
+    // Persisted across mounts by design, so a suite that never reset it would let the dismiss test silence every one
+    // after it.
+    connectIntroDismissed.value = false;
     nativeConnectFlow.value = undefined;
     selectModel.mockClear();
     startConnect.mockClear();
@@ -113,9 +120,10 @@ it(`names what this chat is pointed at, and pitches nothing`, () => {
     expect(element.textContent).toContain(`Claude isn't connected in this sandbox`);
     expect(element.textContent).not.toContain(`Try free with Google`);
     expect(buttonNamed(element, `Continue with Google`)).toBeUndefined();
-    // What is offered instead: the model list, plus this provider's own sign-in.
+    // What is offered instead: the model list, plus the door to the view that connects one. No sign-in starts here —
+    // a handshake is a trip to another tab and back, which eighty pixels over a composer is the wrong host for.
     expect(buttonNamed(element, `Choose a model`)).toEqual(expect.any(Object));
-    expect(buttonNamed(element, `Connect Claude subscription`)).toEqual(expect.any(Object));
+    expect(linkNamed(element, `Connect a model`)?.getAttribute(`href`)).toBe(`/connect`);
 });
 
 // The reported bug: a brand-new sandbox told its owner that Claude was missing, and offered to connect a Claude
@@ -170,36 +178,38 @@ it(`opens the model list, anchored to its own button`, async () => {
     expect(selectModel).toHaveBeenCalledWith({ provider: `gemini`, value: `gemini-3-pro` });
 });
 
-// Picking a locked model starts its sign-in in place; a live sign-in takes the whole strip rather
-// than sitting under a "not connected" line.
-it(`runs the sign-in in place, and puts the line back when it is abandoned`, async () => {
+// A sign-in is never started from here, whichever mechanism the chat's provider uses: this strip's whole job is to
+// name the standing and point at the one place that holds a handshake.
+it(`starts no handshake of its own, for either credential mechanism`, () => {
+    for (const target of [`claude`, `gemini`] as const) {
+        provider.value = target;
+        turnDefaults.provider.value = target;
+        const element = mount();
+        expect(linkNamed(element, `Connect a model`)?.getAttribute(`href`)).toBe(`/connect`);
+        app?.unmount();
+        element.remove();
+    }
+    expect(startConnect).not.toHaveBeenCalled();
+    expect(connectTranslator).not.toHaveBeenCalled();
+});
+
+// A handshake started anywhere is finishable: the strip stops offering a new connection and carries the way back to
+// the one in flight, so a reader who wandered into a chat mid-sign-in is not stranded.
+it(`points back at a sign-in already under way instead of offering another`, async () => {
     turnDefaults.provider.value = `claude`;
     const element = mount();
-
-    buttonNamed(element, `Connect Claude subscription`)!.click();
-    expect(startConnect).toHaveBeenCalledTimes(1);
+    expect(element.textContent).toContain(`Claude isn't connected in this sandbox`);
 
     nativeConnectFlow.value = { provider: `claude`, url: `https://claude.ai/oauth`, code: `` };
     await nextTick();
-    expect(element.textContent).toContain(`Connecting Claude`);
+    expect(element.textContent).toContain(`it is waiting for you`);
     expect(element.textContent).not.toContain(`isn't connected`);
+    expect(linkNamed(element, `Finish sign-in`)?.getAttribute(`href`)).toBe(`/connect`);
 
-    buttonNamed(element, `Cancel`)!.click();
+    // Abandoned elsewhere, the line comes back rather than leaving a dead pointer.
+    nativeConnectFlow.value = undefined;
     await nextTick();
     expect(element.textContent).toContain(`Claude isn't connected in this sandbox`);
-});
-
-// Google authenticates through the bundled translator, not a daemon-stored account; one press starts
-// the matching handshake.
-it(`starts the routed handshake for a provider that authenticates through the translator`, () => {
-    provider.value = `gemini`;
-    turnDefaults.provider.value = `gemini`;
-    const element = mount();
-
-    expect(element.textContent).toContain(`Google isn't connected in this sandbox`);
-    buttonNamed(element, `Connect Google sign-in`)!.click();
-    expect(connectTranslator).toHaveBeenCalledWith(`gemini`);
-    expect(startConnect).not.toHaveBeenCalled();
 });
 
 // A spent trial is connected but out of allowance, not missing a connection, so this gate stands down
@@ -222,6 +232,43 @@ it(`still speaks when the trial is absent rather than spent`, () => {
     const element = mount();
     expect(element.textContent).toContain(`Free trial isn't connected in this sandbox`);
     expect(buttonNamed(element, `Connect`)).toBeUndefined();
+});
+
+// Said early and quietly, on a sandbox running on nothing but the trial. The alternative was meeting the question for
+// the first time at the moment the allowance ran out, mid-task.
+it(`offers the way off the trial while there is still plenty of it left`, async () => {
+    provider.value = TRIAL_PROVIDER;
+    connected.value = true;
+    trialStatus.value = { available: true, allowance: 10, used: 1, remaining: 9, health: `healthy` };
+
+    const element = mount();
+    expect(element.textContent).toContain(`Running on the free trial`);
+    expect(linkNamed(element, `Connect a model`)?.getAttribute(`href`)).toBe(`/connect`);
+
+    // Answered once, gone for good: a reader happy on the trial has made their choice.
+    buttonNamed(element, `Dismiss`)!.click();
+    await nextTick();
+    expect(element.textContent).toBe(``);
+});
+
+// Past halfway the trial strip takes over with the same offer and a count; two rows saying it at once is the crowding
+// this view was built to end.
+it(`stands down once the trial strip starts saying it`, () => {
+    provider.value = TRIAL_PROVIDER;
+    connected.value = true;
+    trialStatus.value = { available: true, allowance: 10, used: 6, remaining: 4, health: `healthy` };
+
+    expect(mount().textContent).toBe(``);
+});
+
+// An offer, not a nag: a sandbox with a real account connected has answered it, whatever this one chat points at.
+it(`says nothing once anything real is connected`, () => {
+    provider.value = TRIAL_PROVIDER;
+    connected.value = true;
+    trialStatus.value = { available: true, allowance: 10, used: 1, remaining: 9, health: `healthy` };
+    endpointProviders.value = [{ id: `endpoint/box`, label: `Qwen`, kind: `localmodel` }];
+
+    expect(mount().textContent).toBe(``);
 });
 
 it(`goes on its own the moment this chat can send`, async () => {

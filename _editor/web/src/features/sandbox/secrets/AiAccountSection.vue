@@ -11,8 +11,8 @@ import {
     providerSpec,
 } from "@intentic/sandbox-contract";
 import { Button, formatTokens, Notice, type NoticeModel, Row, RowGroup, SegmentedControl } from "@intentic/ui";
-import { computed, onMounted, onUnmounted, ref, watch } from "vue";
-import { useRoute } from "vue-router";
+import { computed, onMounted, ref, watch } from "vue";
+import { useRoute, useRouter } from "vue-router";
 import { hasSignIn, providerReady } from "../../chat/session/access";
 import { relativeTime } from "../../chat/models/catalog";
 import { providerTabs } from "../../chat/accounts/providerCatalog";
@@ -239,39 +239,19 @@ const visibleRoutedLimit = computed(() => {
 // Switcher's own label ("Kimi Code", not "Kimi") so the empty row matches the chip's wording.
 const managedLabel = computed(() => providerTabs.find((tab) => tab.value === managedProvider.value)?.label ?? providerLabel(managedProvider.value));
 
-// `?connect=<provider>` opens that provider's rows, flashes them, and starts its sign-in, continuing a click
-// already made elsewhere (unlike the switcher, which never auto-connects). Driven by a watch, not just onMounted, since
-// a query-only navigation doesn't remount this component.
+// `?connect=<provider>` used to open that provider's rows here AND start its sign-in. Starting one is /connect's job
+// now — a handshake is a trip to another tab and back, which a settings page reached by deep link is the wrong host
+// for — so the old link is forwarded there rather than broken. This card keeps what it is good at: what is connected,
+// under which identity, spending what, and how to drop it.
 const route = useRoute();
-const ringing = ref(false);
-let ringTimer: ReturnType<typeof setTimeout> | undefined;
-
-// Starts the deep-linked sign-in via whichever mechanism the provider uses; never a second one (a live flow
-// already answers) nor for an already-connected provider (a stale link isn't a new request).
-const connectRequested = (target: AgentProvider): void => {
-    if (nativeConnectFlow.value !== undefined || translatorConnectFlow.value !== undefined || providerReady(target)) {
-        return;
-    }
-    if (target === `codex` || target === `kimi` || target === `gemini`) {
-        void connectTranslator(target);
-        return;
-    }
-    connectHere();
-};
+const router = useRouter();
 
 const focusConnect = (): void => {
     const requested = providerTabs.find((tab) => tab.value === route.query[`connect`]);
     if (requested === undefined) {
         return;
     }
-    setManagedProvider(requested.value);
-    // Clears any prior timer so a repeat jump doesn't cut the flash short.
-    ringing.value = true;
-    clearTimeout(ringTimer);
-    ringTimer = setTimeout(() => (ringing.value = false), 2500);
-    // Let the card render, then bring it into view.
-    setTimeout(() => document.getElementById(`ai-account`)?.scrollIntoView({ behavior: `smooth`, block: `center` }), 50);
-    connectRequested(requested.value);
+    void router.replace({ path: `/connect`, query: { provider: requested.value } });
 };
 
 onMounted(() => {
@@ -283,14 +263,11 @@ onMounted(() => {
     focusConnect();
 });
 watch(() => route.query[`connect`], focusConnect);
-// No teardown here: leaving the tab must not cancel a sign-in happening elsewhere (see useChat.cancelConnect).
-onUnmounted(() => clearTimeout(ringTimer));
 </script>
 
 <template>
     <!-- RowGroup, not Card: wrapping an already-grouped list in a card added a bordered surface for no gain, the group label already carries the heading. -->
-    <!-- Deep-link rings stay outside the group to prevent layout shift. -->
-    <RowGroup id="ai-account" :label="t(`sandbox.aiAccountSection.aiAccount`)" :class="ringing ? '-m-1 rounded-xl p-1 ring-2 ring-info' : ''">
+    <RowGroup id="ai-account" :label="t(`sandbox.aiAccountSection.aiAccount`)">
         <!-- Each chip's dot has three states (checking / connected / not-connected), not two. -->
         <template #actions>
             <div class="flex flex-wrap items-center justify-end gap-1">

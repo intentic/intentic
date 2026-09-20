@@ -1,5 +1,5 @@
 import type { CapabilityContribution } from "@intentic/extension-manifest";
-import { LOCAL_MODEL_WINDOW_DEFAULT, LOCAL_MODEL_WINDOWS } from "@intentic/sandbox-contract";
+import { LOCAL_MODEL_INSTANT, LOCAL_MODEL_WINDOW_DEFAULT, LOCAL_MODEL_WINDOWS, LOCAL_MODELS, localModelChoice } from "@intentic/sandbox-contract";
 import { describe, expect, it } from "vitest";
 import { CAPABILITY_CATALOG, contributionCard } from "./index.js";
 
@@ -195,8 +195,24 @@ describe("the local model card", () => {
     // Weights only: folding the cache back in would recreate the coupling that made the window unofferable.
     it("quotes the weights on the model field, never a total", () => {
         for (const option of field("model")?.options?.filter((entry) => entry.value !== "custom") ?? []) {
-            expect(option.label).toMatch(/weights ~\d+ GB/);
+            expect(option.label).toMatch(/weights \d+(\.\d)? GB/);
         }
+    });
+
+    // The card offers the contract's list and nothing else: a row added there must not need a second edit here to be
+    // offerable, which is the drift that let the old hand-written labels overstate two models.
+    it("offers every curated model, plus the custom escape hatch last", () => {
+        expect(field("model")?.options?.map((option) => option.value)).toEqual([...LOCAL_MODELS.map((choice) => choice.id), "custom"]);
+        // The default is a curated row, and never the instant one: a default that downloads in a minute and cannot hold
+        // a full turn is the wrong thing to hand someone who accepted the form untouched.
+        expect(localModelChoice(String(field("model")?.default))?.tier).toBe("work");
+    });
+
+    // The instant rung is the one the connect view prefetches; it cannot hold a full turn, and its own label has to say
+    // so wherever it is offered.
+    it("marks the instant rung as quick jobs only", () => {
+        const instant = field("model")?.options?.find((option) => option.value === LOCAL_MODEL_INSTANT.id);
+        expect(instant?.label).toContain("quick jobs only");
     });
 
     it("asks for a typed window only when the rungs are declined", () => {

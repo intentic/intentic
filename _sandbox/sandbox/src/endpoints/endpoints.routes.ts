@@ -2,9 +2,11 @@ import { endpointsContract } from "@intentic/sandbox-contract";
 import { implement, ORPCError } from "@orpc/server";
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../app-env.js";
+import { localModelFit } from "./local-model-fit.js";
+import { localModelPrefetch, localModelPrefetchStatus } from "./local-model-weights.js";
 import { endpointConfigOf } from "./local-model.js";
 
-export type EndpointsRoutesDeps = Pick<Services, "capabilities" | "endpointModels" | "trial">;
+export type EndpointsRoutesDeps = Pick<Services, "capabilities" | "endpointModels" | "trial" | "workspace">;
 
 // The picker catalog for one endpoint-minting capability; unlike the four fixed provider routes it resolves its subject
 // first, so an id naming no capability is NOT_FOUND rather than an empty list.
@@ -38,5 +40,14 @@ export const createEndpointsRoutes = (services: EndpointsRoutesDeps) => {
                 ...(status.servedModel === undefined ? {} : { servedModel: status.servedModel }),
             };
         }),
+        // Measured per call, never cached: a rebuild that grants the GPU, a reshape that changes the memory cap and a
+        // download that lands all change the answer without anything here being told.
+        localModelFit: i.localModelFit.handler(async () =>
+            localModelFit(services.workspace.root, await localModelPrefetchStatus(services.workspace.root)),
+        ),
+        // The capability list rides along so a stop cannot cancel a transfer an added card is waiting on.
+        localModelPrefetch: i.localModelPrefetch.handler(async ({ input }) =>
+            localModelPrefetch(services.workspace.root, input.action, await services.capabilities.list()),
+        ),
     };
 };

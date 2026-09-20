@@ -12,7 +12,9 @@ import { useT } from "@intentic/ui/i18n";
 
 const t = useT();
 
-const { kind, provider } = defineProps<{ kind: `native` | `routed`; provider: AgentProvider }>();
+// `roomy` is the same panel given a page to stand on rather than a strip above a composer: full-size controls, and the
+// dead-end picture already open, since there the picture is reference beside the button instead of competing with it.
+const { kind, provider, roomy = false } = defineProps<{ kind: `native` | `routed`; provider: AgentProvider; roomy?: boolean }>();
 
 const { nativeConnectFlow, translatorConnectFlow, accountBusy, connectLabel, completeConnect, completeTranslator, connectSent } = useChat();
 
@@ -70,8 +72,13 @@ const pastePlaceholder = computed(() => (redirectFlow.value ? `Paste the address
 const deadEndAddress = computed(() => (kind === `routed` ? `localhost:8317/?code=4/0AX4…` : `127.0.0.1:8317/callback?authCode=eyJhb…`));
 
 // The picture of the dead-end page is reference, not an instruction, so it stays folded until asked for: at full
-// size it outweighs the real button ten to one and wears the emphasis ring, which is why it got clicked.
-const showDeadEnd = ref(false);
+// size it outweighs the real button ten to one and wears the emphasis ring, which is why it got clicked. On a roomy
+// host it opens with the panel, where there is width for it to sit beside the field instead of on top of it.
+const showDeadEnd = ref(roomy);
+
+// One size decision, read by every control here, so the two hosts cannot drift into two different panels.
+const controlSize = computed<`small` | undefined>(() => (roomy ? undefined : `small`));
+const bodyText = computed(() => (roomy ? `text-xs` : `text-2xs`));
 
 // True only for the paste-back flow: `connectLabel` is read solely by `completeConnect`. Every out-of-band flow
 // lands its account through a route that never sees the field; naming there happens as a rename afterward.
@@ -216,7 +223,7 @@ watch(flow, (live) => {
         namingAccount.value = false;
         pasted.value = ``;
         wentToProvider.value = false;
-        showDeadEnd.value = false;
+        showDeadEnd.value = roomy;
     }
 });
 </script>
@@ -228,11 +235,11 @@ watch(flow, (live) => {
         <!-- Out-of-band sign-in: the page finishes it, so the button and the wait are the whole panel. -->
         <template v-else-if="deviceFlow">
             <!-- `self-start`: without it the button stretches edge to edge, reading as a banner, not step one of three. -->
-            <Button as="a" class="self-start touch-target" size="small" :href="flow.url" target="_blank" rel="noopener" @click="openedProvider">
+            <Button as="a" class="self-start touch-target" :size="controlSize" :href="flow.url" target="_blank" rel="noopener" @click="openedProvider">
                 <ProviderLogo :provider="provider" />{{ t(`ui.action.open`) }} {{ destination }}<Icon name="external-link" />
             </Button>
             <!-- Placed above what it describes: an instruction read after the fact is read too late. -->
-            <p v-if="hint" class="text-2xs text-subtle">{{ hint }}</p>
+            <p v-if="hint" :class="[bodyText, `text-subtle`]">{{ hint }}</p>
             <!-- Device code is read, not typed: sized for a second screen, with copy as an icon, not a competing chip. -->
             <div v-if="flow.code" class="flex items-center justify-between gap-2 rounded-md border border-line bg-canvas px-3 py-1.5">
                 <span class="truncate font-mono text-base font-semibold tracking-[0.2em] text-content">{{ flow.code }}</span>
@@ -245,14 +252,14 @@ watch(flow, (live) => {
 
         <!-- Step one, and the only thing on the panel: what to come back with is said BEFORE the trip, since afterwards there are two tabs between the reader and this sentence. -->
         <template v-else-if="!broughtBack">
-            <p class="text-2xs text-muted">
+            <p :class="[bodyText, `text-muted`]">
                 {{ t(`sandbox.connectFlow.signInComeBack`) }} {{ grantNoun
                 }}<template v-if="redirectFlow">
                     {{ t(`sandbox.connectFlow.lastPage`) }} <span class="font-semibold text-content">{{ t(`sandbox.connectFlow.wontLoad`) }}</span
                     >{{ t(`sandbox.connectFlow.thatsExpected`) }}</template
                 >.
             </p>
-            <Button as="a" class="self-start touch-target" size="small" :href="flow.url" target="_blank" rel="noopener" @click="openedProvider">
+            <Button as="a" class="self-start touch-target" :size="controlSize" :href="flow.url" target="_blank" rel="noopener" @click="openedProvider">
                 <ProviderLogo :provider="provider" />{{ t(`ui.action.open`) }} {{ destination }}<Icon name="external-link" />
             </Button>
             <!-- The way in for someone who already made the trip (a reopened panel, a second tab); without it the only way out of step one was Cancel. -->
@@ -263,7 +270,7 @@ watch(flow, (live) => {
 
         <!-- Step two: the field is the subject now, so nothing else on the panel competes for the press. -->
         <template v-else>
-            <label :for="pasteFieldId" class="text-2xs text-muted">{{ t(`sandbox.connectFlow.paste`, { grantNoun }) }}</label>
+            <label :for="pasteFieldId" :class="[bodyText, `text-muted`]">{{ t(`sandbox.connectFlow.paste`, { grantNoun }) }}</label>
             <div class="flex gap-2">
                 <input
                     :id="pasteFieldId"
@@ -271,13 +278,13 @@ watch(flow, (live) => {
                     v-model="pasted"
                     name="connectCode"
                     :placeholder="pastePlaceholder"
-                    :class="ui.inputSm(`min-w-0 flex-1 font-mono`)"
+                    :class="roomy ? ui.input(`min-w-0 flex-1 font-mono`) : ui.inputSm(`min-w-0 flex-1 font-mono`)"
                     @keydown.enter="finish"
                 />
                 <Button
                     :label="t(`sandbox.connectFlow.finish`)"
                     class="touch-target"
-                    size="small"
+                    :size="controlSize"
                     :disabled="pasted.trim().length === 0"
                     @click="finish"
                 />

@@ -793,9 +793,12 @@
             "runEverythingWithoutAsking": "Ejecutarlo todo sin preguntar."
         },
         "chatAccountPanel": {
-            "connecting": "Conectando {provider}",
+            "connectAModel": "Connect a model",
+            "finishSignIn": "Finish sign-in",
+            "introOffer": "Running on the free trial. An account you already pay for, or a model on this machine, runs without a daily cap.",
             "isntConnectedInSandbox": "{providerName} no está conectado en este sandbox.",
-            "noModelYet": "No model is connected in this sandbox yet."
+            "noModelYet": "No model is connected in this sandbox yet.",
+            "signInWaiting": "Signing in to {provider} — it is waiting for you."
         },
         "chatArea": {
             "bringBackHere": "Tráelo de vuelta aquí",
@@ -991,11 +994,11 @@
             "archivedOffBoardSending": "Archivado: fuera del tablero. Enviar un mensaje lo restaura.",
             "askPlatformAgainPick": "Preguntar de nuevo a la plataforma y retomar este chat si la prueba responde",
             "billing": "Facturación",
-            "connectGoogle": "Conectar Google",
+            "connectAModel": "Connect a model",
+            "connectTooltip": "A Google sign-in, a model on this machine, or a subscription you already pay for",
             "putAgentBackOn": "Devolver este agente al tablero ahora",
             "reconnect": "Volver a conectar",
-            "restore": "Restaurar",
-            "signInGoogleNo": "Inicia sesión con Google: sin tope diario, y sigue sin suscripción"
+            "restore": "Restaurar"
         },
         "chatPaneStatus": {
             "context": "Contexto · {tokens} / {contextWindow} ({pct} %)",
@@ -1482,6 +1485,57 @@
             "step": "· paso {index}/{total}"
         }
     },
+    "connect": {
+        "connect": {
+            "allAccounts": "Manage the accounts this sandbox already holds",
+            "connecting": "Connecting {provider}",
+            "description": "It is stored in your sandbox and never on the platform. Pick whichever of these you already have.",
+            "free": "Free",
+            "freeSubtitle": "A sign-in, no card, no subscription",
+            "freeTitle": "Free, with a Google account",
+            "landed": "Connected. This workspace can run turns now.",
+            "localSubtitle": "Free forever, private, works offline",
+            "localTitle": "On this machine",
+            "ownServer": "Already run Ollama or vLLM? Point at your server",
+            "startChatting": "Start a conversation",
+            "subscriptionSubtitle": "Claude, ChatGPT, Kimi, Grok, Cursor, Z.ai, Muse",
+            "subscriptionTitle": "A subscription you already pay for",
+            "title": "Give this workspace a model",
+            "whichPlan": "Which plan is this account on?"
+        },
+        "connectLane": {
+            "collapse": "Collapse",
+            "expand": "Expand"
+        },
+        "localModelLane": {
+            "alreadyDownloadedNeeds": "Already downloaded; holds about {total} while it runs.",
+            "bestHere": "best here",
+            "bestPitch": "The most this machine holds, with a {window}k conversation window.",
+            "downloadNeeds": "Downloads {download}, then holds about {total} while it runs.",
+            "gettingReady": "Getting it ready — {received} of {total}",
+            "gettingReadyPlain": "Getting it ready…",
+            "gpuGranted": "Its NVIDIA GPU is reachable, with {vram} of VRAM.",
+            "gpuOffered": "CPU only for now; the model's card can ask for an NVIDIA GPU.",
+            "gpuUnsupported": "No GPU here: this host's Docker has no nvidia runtime.",
+            "instantPitch": "Ready in about a minute. Good for commit messages, titles and trying the app out; too small to drive a full agent turn.",
+            "measuring": "Reading what this machine can run…",
+            "memoryCapped": "This sandbox may use {memory}.",
+            "memoryMachine": "This machine has {memory}.",
+            "moreModels": "Other models, a custom GGUF, or the GPU switch",
+            "needsRebuild": "This image does not carry llama-server yet. Rebuild the sandbox from the Environment card, then come back.",
+            "nothingFits": "Nothing on the curated list fits in {memory}. Give the sandbox more memory, or connect an account instead.",
+            "quickJobsOnly": "quick jobs only",
+            "runIt": "Run it",
+            "startNow": "Start now",
+            "stop": "Stop",
+            "windowUnderFloor": "This window is under what one agent turn costs, so it is a quick-jobs rung too. More memory would raise it."
+        },
+        "providerTile": {
+            "connected": "Connected",
+            "needsReconnect": "Needs reconnect",
+            "runs": "Runs {runs}"
+        }
+    },
     "extension-host": {
         "loader": {
             "declaresUiAppBuild": "declara interfaz pero esta compilación de la aplicación no lleva ningún módulo para ella: la imagen del sandbox y la aplicación están en versiones distintas",
@@ -1597,6 +1651,7 @@
             "cantReachIntentic": "No se puede acceder a Intentic",
             "capabilities": "Capacidades",
             "chat": "Chat",
+            "connect": "Connect a model",
             "designKit": "Kit de diseño",
             "login": "Inicio de sesión",
             "menu": "Menú",

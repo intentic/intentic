@@ -113,20 +113,20 @@ it(`says nothing about the pool while it is answering cleanly`, () => {
     expect(named(element, `Retry`)).toBeUndefined();
 });
 
-// The first screen of a new account: a count plus "Connect Google" over an unanswered chat reads as an imminent
-// limit, so the strip stays down until half the allowance is gone.
+// The first screen of a new account: a count plus a connect press over an unanswered chat reads as an imminent limit,
+// so the strip stays down until half the allowance is gone.
 it(`stays down while more than half the allowance is left, and comes up at the halfway mark`, () => {
     trialStatus.value = { ...trialStatus.value, used: 2, remaining: 8 };
     let element = mount();
     expect(element.textContent).not.toContain(`free messages left`);
-    expect(named(element, `Connect Google`)).toBeUndefined();
+    expect(named(element, `Connect a model`)).toBeUndefined();
     app?.unmount();
     document.body.innerHTML = ``;
 
     trialStatus.value = { ...trialStatus.value, used: 5, remaining: 5 };
     element = mount();
     expect(element.textContent).toContain(`5 free messages left today`);
-    expect(named(element, `Connect Google`)).toEqual(expect.any(Object));
+    expect(named(element, `Connect a model`)).toEqual(expect.any(Object));
 });
 
 // A strained pool is worth a line at any count — someone watching a slow answer wants it explained.
@@ -153,15 +153,16 @@ it(`interrupts, with the press that sends the held turn, only when nothing answe
     expect(resume).toHaveBeenCalledTimes(1);
 });
 
-// Spent is the signpost, not a warning: the free sign-in and the model list are each one press away.
+// Spent is the signpost, not a warning, and it carries ONE press. The model list used to stand beside it, which was
+// the same answer reached sideways: every row in that list a spent reader could use is already behind this door.
 it(`turns into the way out once today's allowance is gone`, () => {
     trialStatus.value = { ...trialStatus.value, used: 10, remaining: 0 };
 
     const element = mount();
 
     expect(element.textContent).toContain(`Free trial used up for today`);
-    expect(named(element, `Choose a model`)).toEqual(expect.any(Object));
-    expect(named(element, `Connect Google`)).toEqual(expect.any(Object));
+    expect(named(element, `Connect a model`)?.getAttribute(`href`)).toBe(`/connect`);
+    expect(named(element, `Choose a model`)).toBeUndefined();
 });
 
 // Why the row looked broken: the actions were siblings of the sentence, each hung from its own box edge, and the
@@ -171,7 +172,7 @@ it(`hangs every action off one box, and gives the sentence a floor to wrap again
 
     const element = mount();
     const retry = named(element, `Retry`);
-    const connect = named(element, `Connect Google`);
+    const connect = named(element, `Connect a model`);
 
     expect(retry?.parentElement).toBe(connect?.parentElement);
     expect(retry?.parentElement?.className).toContain(`items-center`);

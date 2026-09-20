@@ -46,10 +46,10 @@ test(`states the grant in one line, from what is allowed`, () => {
 
 test(`does the local model's RAM sum so the reader doesn't`, () => {
     expect(localModelMemorySummary({ model: `unsloth/Qwen3.5-9B-GGUF/Qwen3.5-9B-Q4_K_M.gguf`, context: `65536` })).toBe(
-        `≈ 6 GB weights + 4 GB window: needs 10 GB of free RAM.`,
+        `≈ 5.3 GB weights + 4 GB window: needs 9.3 GB of free RAM.`,
     );
     expect(localModelMemorySummary({ model: `unsloth/Qwen3.5-9B-GGUF/Qwen3.5-9B-Q4_K_M.gguf`, context: `custom`, contextTokens: `98304` })).toBe(
-        `≈ 6 GB weights + 6 GB window: needs 12 GB of free RAM.`,
+        `≈ 5.3 GB weights + 6 GB window: needs 11 GB of free RAM.`,
     );
     // A custom GGUF has no known weight: no figure beats a wrong one.
     expect(localModelMemorySummary({ model: `custom`, context: `65536` })).toBeUndefined();
