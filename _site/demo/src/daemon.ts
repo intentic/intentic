@@ -26,6 +26,7 @@ import {
 } from "@intentic/sandbox-contract";
 import { KNOWLEDGE_BASE } from "../vendor/knowledge/wire-types";
 import { BROWSER_SESSIONS } from "./browser";
+import { type DemoGrant, grantAccess, grants, revokeAccess } from "./fixture/access";
 import { automationApprovals, automationCatalog, automationsList, deleteAutomation, resolveApproval, saveAutomation } from "./fixture/automations";
 import { demoDevices } from "./fixture/devices";
 import { demoLoops } from "./fixture/loops";
@@ -562,7 +563,10 @@ const ROUTES: readonly (readonly [string, string, Handler])[] = [
     [`GET`, `/extensions/{id}/settings`, () => json({ settings: {}, secretsSet: [] })],
     [`POST`, `/extensions/{id}/settings`, () => json({ ok: true })],
     [`GET`, `/approvals`, () => json({ approvals: [], invalid: [] })],
-    [`GET`, `/members`, () => json({ members: [] })],
+    // The enforced roster, mutable: the Access tab pushes its grant here first, and a desk's chips come back from it.
+    [`GET`, `/members`, () => json({ members: grants() })],
+    [`POST`, `/members`, grantMemberRoute],
+    [`DELETE`, `/members`, revokeMemberRoute],
     // Two tokens on the roster (one unused, one expiring) make the roster's states visible; a mint answers
     // the once-shown value.
     [
@@ -895,6 +899,26 @@ function ciJobsRoute({ request }: RouteContext): Promise<Response> {
 
 function saveAutomationRoute({ request }: RouteContext): Promise<Response> {
     return request.json().then((body) => okAfter(() => saveAutomation(Date.now(), body as Automation)));
+}
+
+// The refusal the real daemon makes on the spot (auth/members/members.routes.ts): a desk with no card to wear would
+// sign in to a chat that answers nothing, so the grant never lands.
+function grantMemberRoute({ request }: RouteContext): Promise<Response> {
+    return request.json().then((body) => {
+        const grant = body as DemoGrant;
+        if (grant.role === `desk` && (grant.desks?.length ?? 0) === 0) {
+            return json({ error: `a desk needs at least one persona to act through` }, 400);
+        }
+        grantAccess(grant.email, grant.role, grant.desks);
+        return json({ members: grants() });
+    });
+}
+
+function revokeMemberRoute({ request }: RouteContext): Promise<Response> {
+    return request.json().then((body) => {
+        revokeAccess((body as { email: string }).email);
+        return json({ members: grants() });
+    });
 }
 
 // Upsert by id, as the daemon's `/personas` does; the list is the store, so a saved card is in the next read.

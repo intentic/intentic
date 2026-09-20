@@ -1,4 +1,5 @@
 import type { HostedPlanState, SandboxSummary, User } from "@intentic/api-contract";
+import { inviteRecords } from "./fixture/access";
 import { DESK_SANDBOX_NAME } from "./fixture/desk";
 import { deskEdition } from "./mode";
 import { DEMO_DAEMON_ORIGIN, json } from "./transport";
@@ -54,12 +55,42 @@ const SESSION = {
     user: DEMO_USER,
 };
 
+// The accept link a demo invite hands back, pointing at the demo's own copy of that page.
+const INVITE_LINK = `${window.location.origin}${import.meta.env.BASE_URL}invite/demo-token`;
+
+// The platform's half of the Access tab. Its shape is the contract's (`members`, never `invites`), and its writes
+// are the mirror the real ones are: the tier and the cards were already pushed to the daemon by the owner's browser
+// before any of these is called, so each answers with the roster rather than writing it again.
+// A demo platform can't send mail, which is the `local-link` an owner is handed instead.
+const invite = (path: string): Response | undefined => {
+    switch (path) {
+        case `/rpc/invite/list`:
+        // `setRole` answers at /invite/role, and `create`/`resend` add the link to the same roster.
+        case `/rpc/invite/role`:
+        case `/rpc/invite/revoke`:
+            return json({ members: inviteRecords() });
+        case `/rpc/invite/create`:
+        case `/rpc/invite/resend`:
+            return json({ members: inviteRecords(), link: INVITE_LINK, delivery: `local-link` });
+        // What the standalone accept page (/demo/invite/:token) reads; a demo link is always the one still pending.
+        case `/rpc/invite/preview`:
+            return json({ status: `pending`, sandboxName: DEMO_SANDBOX.name, invitedEmail: `rin@acme.dev`, role: `viewer` });
+        default:
+            return undefined;
+    }
+};
+
 export const platform = async (request: Request, url: URL): Promise<Response> => {
     const path = url.pathname;
 
     if (path.startsWith(`/api/auth/`)) {
         // Only get-session matters; others must not 404 or better-auth reads it as signed-out.
         return json(path.endsWith(`/get-session`) ? SESSION : { ok: true });
+    }
+
+    const invited = invite(path);
+    if (invited !== undefined) {
+        return invited;
     }
 
     switch (path) {
@@ -70,8 +101,6 @@ export const platform = async (request: Request, url: URL): Promise<Response> =>
         // Plan's on/off answer decides whether Settings shows the Billing tab.
         case `/rpc/hosted-plan`:
             return json(DEMO_HOSTED_PLAN);
-        case `/rpc/invite/list`:
-            return json({ invites: [] });
         case `/rpc/me`:
             return json(DEMO_USER);
         default:

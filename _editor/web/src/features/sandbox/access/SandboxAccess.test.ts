@@ -12,8 +12,11 @@ const sandboxJson = vi.fn(async (..._args: unknown[]): Promise<unknown> => ({ me
 vi.mock(`../client/sandboxClient`, () => ({ sandboxJson: (...args: unknown[]) => sandboxJson(...(args as [])) }));
 
 const create = vi.fn();
-const list = vi.fn(async () => ({ members: [] }));
-vi.mock(`../../../lib/useApi`, () => ({ apiClient: { invite: { list: () => list(), create: (...a: unknown[]) => create(...a) } } }));
+const list = vi.fn(async (): Promise<{ members: unknown[] }> => ({ members: [] }));
+const setRole = vi.fn();
+vi.mock(`../../../lib/useApi`, () => ({
+    apiClient: { invite: { list: () => list(), create: (...a: unknown[]) => create(...a), setRole: (...a: unknown[]) => setRole(...a) } },
+}));
 
 vi.mock(`../../auth/useAuth`, () => ({ useAuth: () => ({ user: ref({ email: `owner@example.com` }) }) }));
 const role = ref<`owner` | `viewer`>(`owner`);
@@ -62,11 +65,36 @@ const inviteEmail = async (address: string): Promise<void> => {
 const buttonLabelled = (label: string): HTMLButtonElement | undefined =>
     [...document.body.querySelectorAll(`button`)].find((button) => button.textContent?.trim() === label);
 
+// Both rosters land on their own promise, so a row exists a few ticks after mount, not on the next one.
+const settle = async (): Promise<void> => {
+    for (let tick = 0; tick < 5; tick += 1) {
+        await nextTick();
+    }
+};
+
+// Opens a <Picker> by its accessible name and clicks the row whose label starts with `option`. The panel measures
+// itself against its trigger on the tick after opening and closes when that comes back empty, as it does in jsdom;
+// the pick has to land inside that one tick.
+const pick = async (ariaLabel: string, option: string): Promise<void> => {
+    document.body.querySelector<HTMLButtonElement>(`button[aria-label="${ariaLabel}"]`)?.click();
+    await nextTick();
+    [...document.body.querySelectorAll<HTMLButtonElement>(`button[role=option]`)].find((row) => row.textContent?.trim().startsWith(option))?.click();
+    await nextTick();
+    await nextTick();
+    await nextTick();
+};
+
+// The daemon roster's every read, and the grant a desk write answers with.
+const daemonMembers = vi.fn((): unknown[] => []);
+
 afterEach(() => {
     sandboxJson.mockReset();
     sandboxJson.mockResolvedValue({ members: [] });
     role.value = `owner`;
     create.mockReset();
+    setRole.mockReset();
+    daemonMembers.mockReset();
+    daemonMembers.mockReturnValue([]);
     list.mockReset();
     list.mockResolvedValue({ members: [] });
     sessionExpiresAt.value = Date.parse(`2026-09-24T12:00:00.000Z`);
@@ -209,6 +237,37 @@ it(`mints an API token as the owner and shows it once with its snippet`, async (
     const body = JSON.parse((mintCall[1] as { body: string }).body) as { scope: string; expiresAt?: number };
     expect(body.scope).toBe(`read`);
     expect(body.expiresAt).toBeGreaterThan(Date.now());
+});
+
+// A desk names at least one card or the daemon refuses the grant, and a re-grade away from desk drops the cards that
+// row held — so every arrival at desk starts with none, and picking the tier can't be the write.
+it(`holds a member's move to desk until a card is picked, then grants tier and card together`, async () => {
+    const member = (tier: string): unknown => ({ email: `guest@example.com`, role: tier, status: `accepted`, invitedAt: `2026-08-18T00:00:00.000Z` });
+    list.mockResolvedValue({ members: [member(`collaborator`)] });
+    setRole.mockResolvedValue({ members: [member(`desk`)] });
+    sandboxJson.mockImplementation(async (path: unknown) => (path === `/members` ? { members: daemonMembers() } : { members: [] }));
+    mount();
+    await settle();
+
+    await pick(`Role for guest@example.com`, `Desk`);
+    // Nothing granted yet: the row shows the cards it would need, and says why it is still a collaborator.
+    expect(sandboxJson).not.toHaveBeenCalledWith(`/members`, expect.objectContaining({ method: `POST` }));
+    expect(setRole).not.toHaveBeenCalled();
+    expect(shown()).toContain(`Which assistants`);
+    expect(shown()).toContain(`A desk is not granted until it holds one`);
+
+    daemonMembers.mockReturnValue([{ email: `guest@example.com`, role: `desk`, desks: [`support`] }]);
+    document.body.querySelector<HTMLInputElement>(`input[role=switch]`)?.click();
+    await settle();
+
+    const grant = (sandboxJson.mock.calls as unknown[][]).find(
+        ([path, init]) => path === `/members` && (init as { method?: string } | undefined)?.method === `POST`,
+    );
+    if (grant === undefined) {
+        throw new Error(`no desk grant reached the sandbox`);
+    }
+    expect(JSON.parse((grant[1] as { body: string }).body)).toEqual({ email: `guest@example.com`, role: `desk`, desks: [`support`] });
+    expect(setRole).toHaveBeenCalledWith({ sandboxId: `s1`, email: `guest@example.com`, role: `desk` });
 });
 
 it(`keeps the token surfaces off a member's tab`, async () => {

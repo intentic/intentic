@@ -30,6 +30,7 @@ import { useAuth } from "../../auth/useAuth";
 import { useSandbox } from "../client/useSandbox";
 import { useSandboxSession } from "../session/sandboxSession";
 import { useSandboxOutline } from "../overview/useSandboxOutline";
+import { usePersonas } from "../personas/usePersonas";
 import { identityHue } from "../../../lib/identityHue";
 import { presenceActivity, presenceOthers } from "../../../shell/presence/usePresence";
 import { useAccessInventory } from "./useAccessInventory";
@@ -91,6 +92,18 @@ const inviteDesks = ref<string[]>([]);
 // The daemon's own roster, the one copy that knows a desk's cards; the platform's records above carry the tier only.
 const grants = ref<readonly AccessGrant[]>([]);
 const desksOf = (address: string): readonly string[] => grants.value.find((grant) => grant.email === address.toLowerCase())?.desks ?? [];
+// A row on its way to desk. The tier can't be written on the pick alone: the daemon refuses a desk that names no
+// card, and a re-grade away from desk drops the cards that row held, so every arrival at desk starts with none.
+// The pick is held here, the picker under the row names a card, and that write is what makes the tier real.
+const deskDraft = ref<{ email: string; desks: readonly string[] }>();
+const draftOf = (address: string): readonly string[] | undefined => (deskDraft.value?.email === address ? deskDraft.value.desks : undefined);
+// What the row reads as: the staged tier while a desk is being composed, the granted one otherwise.
+const rowRole = (member: InviteRecord): GrantedRole => (draftOf(member.email) === undefined ? member.role : `desk`);
+const rowDesks = (address: string): readonly string[] => draftOf(address) ?? desksOf(address);
+// A card is named on the row the way it is named everywhere else. An id with no card behind it is one the owner has
+// since deleted, and reads as itself rather than disappearing: the desk still holds it.
+const { personas } = usePersonas();
+const deskLabel = (id: string): string => personas.value.find((persona) => persona.id === id)?.label ?? id;
 const busy = ref(false);
 // The one thing this tab has to say right now: a failure, or an invite whose link the owner must carry.
 const notice = ref<NoticeModel>();
@@ -284,12 +297,12 @@ const revokeSessions = async (): Promise<void> => {
     }
 };
 
-// Re-grades with the same two-write, daemon-first order as a grant; applies on the member's next request. A row
-// re-graded to desk keeps the cards it last held, or waits for the picker below it to name one.
-const setRole = async (target: string, role: GrantedRole, desks: readonly string[] = desksOf(target)): Promise<void> => {
+// Re-grades with the same two-write, daemon-first order as a grant; applies on the member's next request. Reports
+// whether both writes landed, since a staged desk clears only once its cards are really granted.
+const setRole = async (target: string, role: GrantedRole, desks: readonly string[] = desksOf(target)): Promise<boolean> => {
     const id = sandbox.activeSandboxId.value;
     if (id === undefined || busy.value || !grantSendable(role, desks)) {
-        return;
+        return false;
     }
     busy.value = true;
     clearNotice();
@@ -299,14 +312,35 @@ const setRole = async (target: string, role: GrantedRole, desks: readonly string
             grants.value = (await sandboxJson<{ members: AccessGrant[] }>(`/members`, jsonBody(`POST`, grantBody(target, role, desks)))).members;
         } catch (err) {
             notice.value = noticeFrom(err, `Couldn't change the role on the sandbox: is it online?`);
-            return;
+            return false;
         }
         rosterChanged((await apiClient.invite.setRole({ sandboxId: id, email: target, role })).members);
+        return true;
     } catch (err) {
         void load();
         notice.value = noticeFrom(err, `The sandbox took the new role, but recording it failed.`);
+        return false;
     } finally {
         busy.value = false;
+    }
+};
+
+// Picking desk stages the row instead of writing it; every other tier is a decision complete in itself.
+const pickRole = (member: InviteRecord, role: GrantedRole): void => {
+    if (role === `desk`) {
+        deskDraft.value = { email: member.email, desks: desksOf(member.email) };
+        return;
+    }
+    deskDraft.value = undefined;
+    void setRole(member.email, role);
+};
+
+// A card toggled on is what commits the desk tier. Toggling the last one off would be a desk with nothing to wear,
+// so the row stays staged and the picker says what it still needs.
+const pickDesks = async (address: string, desks: string[]): Promise<void> => {
+    deskDraft.value = { email: address, desks };
+    if (desks.length > 0 && (await setRole(address, `desk`, desks))) {
+        deskDraft.value = undefined;
     }
 };
 
@@ -317,6 +351,10 @@ const revoke = async (target: string): Promise<void> => {
     }
     busy.value = true;
     clearNotice();
+    // A staged desk on a row that is about to stop existing.
+    if (deskDraft.value?.email === target) {
+        deskDraft.value = undefined;
+    }
     try {
         // Enforcer drops access first; a rejecting/offline daemon errors instead of leaving access standing.
         try {
@@ -361,19 +399,19 @@ const revoke = async (target: string): Promise<void> => {
                             size="xs"
                         />
                         <!-- A desk's cards, named on the row: the whole of what that person reaches. -->
-                        <StatusBadge v-for="desk in desksOf(member.email)" :key="desk" variant="neutral" :label="desk" size="xs" />
+                        <StatusBadge v-for="desk in desksOf(member.email)" :key="desk" variant="neutral" :label="deskLabel(desk)" size="xs" />
                     </template>
                     <template #control>
                         <!-- Changeable in place, since a re-grade is routine and shouldn't cost a revoke + re-invite. -->
                         <Picker
-                            :model-value="member.role"
+                            :model-value="rowRole(member)"
                             :options="ROLE_OPTIONS"
                             variant="ghost"
                             :disabled="busy"
                             class="shrink-0"
                             :aria-label="t(`sandbox.sandboxAccess.role`, { email: member.email })"
                             :header="t(`sandbox.sandboxAccess.role`, { email: member.email })"
-                            @update:model-value="(role: GrantedRole | undefined) => role !== undefined && setRole(member.email, role)"
+                            @update:model-value="(role: GrantedRole | undefined) => role !== undefined && pickRole(member, role)"
                         />
                         <Button
                             v-if="member.status !== 'accepted'"
@@ -396,9 +434,9 @@ const revoke = async (target: string): Promise<void> => {
                         </Button>
                     </template>
                 </Row>
-                <!-- Which cards a desk holds, changed in place; a re-grade to desk lands here until it names one. -->
-                <RowNote v-if="member.role === 'desk'" variant="block">
-                    <DeskPicker :picked="desksOf(member.email)" :disabled="busy" @change="(desks) => setRole(member.email, `desk`, desks)" />
+                <!-- Which cards a desk holds, changed in place; a re-grade to desk waits here until it names one. -->
+                <RowNote v-if="rowRole(member) === 'desk'" variant="block">
+                    <DeskPicker :picked="rowDesks(member.email)" :disabled="busy" @change="(desks) => pickDesks(member.email, desks)" />
                 </RowNote>
                 </template>
 

@@ -2738,7 +2738,7 @@
             "collaborator": "Colaborador",
             "copyLink": "Copiar el enlace",
             "desk": "Desk",
-            "deskNeedsAssistant": "Pick at least one assistant for a desk.",
+            "deskNeedsAssistant": "Pick at least one assistant. A desk is not granted until it holds one.",
             "deskPick": "Which assistants",
             "deskTalksToAssistants": "Talks to the assistants you pick, and only through them. Sees no files, no other conversations, nothing of the box.",
             "driveAgentsReviewWork": "Puede dirigir agentes y revisar el trabajo. Los archivos cambian a través de agentes, no a mano; integrar y publicar se convierten en peticiones.",
