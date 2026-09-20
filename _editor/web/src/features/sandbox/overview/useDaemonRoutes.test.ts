@@ -1,16 +1,21 @@
 import { SANDBOX_ROUTE_NAMES, SANDBOX_ROUTE_SHAPES } from "@intentic/sandbox-contract";
 import { beforeEach, describe, expect, it } from "vitest";
 import {
+    appBehind,
+    comparedRouteCount,
     daemonBehind,
     daemonDrifted,
     driftedRouteReason,
     driftedRoutes,
+    driftScope,
     missingRoutes,
     resetDaemonRoutes,
     setDaemonRoutes,
     staleDaemonReason,
     supportsRoute,
+    unknownDaemonRoutes,
 } from "./useDaemonRoutes";
+import { resetContractFreshness } from "./contractFreshness";
 
 // This browser's full route set, and the same set with vpn routes removed (an older daemon).
 const LEVEL = [...SANDBOX_ROUTE_NAMES];
@@ -53,6 +58,21 @@ describe(`useDaemonRoutes`, () => {
         setDaemonRoutes([...LEVEL, `future.feature`]);
         expect(missingRoutes.value).toEqual([]);
         expect(daemonBehind.value).toBe(false);
+    });
+
+    it(`names the routes only the daemon has, so the older side can be the browser`, () => {
+        setDaemonRoutes([...LEVEL, `future.feature`]);
+        expect(unknownDaemonRoutes.value).toEqual([`future.feature`]);
+        expect(appBehind.value).toBe(true);
+        // Still not a warning by itself: an open tab against an updated sandbox is the ordinary case.
+        expect(daemonBehind.value).toBe(false);
+        expect(daemonDrifted.value).toBe(false);
+    });
+
+    it(`leans on neither side while the two are level`, () => {
+        setDaemonRoutes(LEVEL, SHAPES);
+        expect(unknownDaemonRoutes.value).toEqual([]);
+        expect(appBehind.value).toBe(false);
     });
 
     it(`forgets the previous sandbox's surface on switch`, () => {
@@ -102,11 +122,43 @@ describe(`driftedRoutes`, () => {
         expect(driftedRoutes.value).toEqual([]);
     });
 
-    it(`throws away a near-total disagreement rather than blaming every feature`, () => {
+    it(`calls a near-total disagreement wholesale instead of going quiet about it`, () => {
         const allDifferent = Object.fromEntries(Object.keys(SHAPES).map((name) => [name, `different`]));
         setDaemonRoutes(LEVEL, allDifferent);
-        expect(driftedRoutes.value).toEqual([]);
-        expect(daemonDrifted.value).toBe(false);
+        // Everything broken is the worst case there is, and it used to be the one case that warned about nothing.
+        expect(daemonDrifted.value).toBe(true);
+        expect(driftScope.value).toBe(`wholesale`);
+        expect(driftedRoutes.value).toHaveLength(Object.keys(SHAPES).length);
+    });
+
+    it(`scopes a handful of drifted routes as partial`, () => {
+        setDaemonRoutes(LEVEL, reshaped(`settings.get`, `usage.rollup`));
+        expect(driftScope.value).toBe(`partial`);
+    });
+
+    it(`scopes agreement as no drift at all`, () => {
+        setDaemonRoutes(LEVEL, SHAPES);
+        expect(driftScope.value).toBe(`none`);
+    });
+
+    it(`counts the routes a disagreement was actually read off, not every route there is`, () => {
+        const partial = Object.fromEntries(Object.entries(SHAPES).filter(([name]) => !name.startsWith(`vpn.`)));
+        setDaemonRoutes(LEVEL, partial);
+        expect(comparedRouteCount.value).toBe(Object.keys(partial).length);
+        expect(comparedRouteCount.value).toBeLessThan(Object.keys(SHAPES).length);
+    });
+
+    // A daemon old enough to publish few shapes is checked on few, and a couple of disagreements among them used to
+    // cross the discard threshold and silence the warning entirely.
+    it(`still names drift when only a few routes could be compared`, () => {
+        const few: Record<string, string> = Object.fromEntries(
+            Object.entries(SHAPES)
+                .slice(0, 4)
+                .map(([name, shape], index) => [name, index < 3 ? `different` : shape] as const),
+        );
+        setDaemonRoutes(LEVEL, few);
+        expect(driftedRoutes.value).toHaveLength(3);
+        expect(driftScope.value).toBe(`wholesale`);
     });
 
     it(`forgets the previous sandbox's shapes on switch`, () => {
@@ -118,7 +170,10 @@ describe(`driftedRoutes`, () => {
 });
 
 describe(`driftedRouteReason`, () => {
-    beforeEach(() => resetDaemonRoutes());
+    beforeEach(() => {
+        resetDaemonRoutes();
+        resetContractFreshness();
+    });
 
     it(`explains a call that reached a route the daemon shapes differently`, () => {
         setDaemonRoutes(LEVEL, reshaped(`settings.get`));
@@ -138,6 +193,21 @@ describe(`driftedRouteReason`, () => {
     it(`offers reloading the page too, because drift never says which side moved`, () => {
         setDaemonRoutes(LEVEL, reshaped(`settings.get`));
         expect(driftedRouteReason(`GET`, `/settings`)).toMatch(/reload this page/i);
+    });
+
+    it(`names the uncompiled contract as the cause, and rules the page reload out`, () => {
+        setDaemonRoutes(LEVEL, reshaped(`settings.get`));
+        resetContractFreshness([`settings.get`]);
+        const reason = driftedRouteReason(`GET`, `/settings`);
+        expect(reason).toMatch(/since it was last compiled/i);
+        expect(reason).toMatch(/dev-reload\.sh/);
+        // The page is the fresher of the two here, so offering its reload sends the reader the wrong way.
+        expect(reason).not.toMatch(/reload this page/i);
+    });
+
+    it(`blames this page when the daemon offers routes it has never heard of`, () => {
+        setDaemonRoutes([...LEVEL, `future.feature`], reshaped(`settings.get`));
+        expect(driftedRouteReason(`GET`, `/settings`)).toMatch(/page is running older code/i);
     });
 });
 

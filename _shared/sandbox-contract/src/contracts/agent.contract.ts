@@ -1,4 +1,5 @@
-import { eventIterator, oc } from "@orpc/contract";
+import { oc } from "@orpc/contract";
+import { streamOf } from "../protocol/routes.js";
 import { AgentCommandsQuerySchema, AgentCommandsSchema } from "../events/cards.js";
 import { AttachFrameSchema } from "../events/agent-events.js";
 import { AgentTurnSchema, AttachTurnSchema, StartedTurnSchema } from "../schemas/agent.js";
@@ -30,7 +31,7 @@ export const agentContract = {
                 "Streams everything the agent does: its words, the tools it reaches for, and the answers it gets. Give it the point you have already seen and it replays from there before going live, so a reload loses nothing. The window that started the turn holds no special claim, and any number of watchers on any number of devices see the same thing.",
         })
         .input(AttachTurnSchema)
-        .output(eventIterator(AttachFrameSchema)),
+        .output(streamOf(AttachFrameSchema)),
     reply: oc
         .route({
             method: "POST",

@@ -5,6 +5,7 @@ import { type Device, SANDBOX_ROUTE_NAMES, SANDBOX_ROUTE_SHAPES } from "@intenti
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { type App, createApp, defineComponent, h, ref } from "vue";
 import { resetDaemonRoutes, setDaemonRoutes } from "../useDaemonRoutes";
+import { resetContractFreshness } from "../contractFreshness";
 import { IconStub } from "@intentic/ui/testing";
 
 // Sandbox slug the printed reload command names, so it targets this machine's sandbox specifically, and the checkout
@@ -35,7 +36,7 @@ const { default: SandboxBehindCard } = await import("./SandboxBehindCard.vue");
 const LEVEL = [...SANDBOX_ROUTE_NAMES];
 const SHAPES = { ...SANDBOX_ROUTE_SHAPES };
 const withoutVpn = LEVEL.filter((name) => !name.startsWith(`vpn.`));
-const reshaped = (name: string): Record<string, string> => ({ ...SHAPES, [name]: `different` });
+const reshaped = (...names: string[]): Record<string, string> => ({ ...SHAPES, ...Object.fromEntries(names.map((name) => [name, `different`])) });
 
 let app: App | undefined;
 
@@ -68,6 +69,8 @@ const mount = (): HTMLElement => {
 
 beforeEach(() => {
     resetDaemonRoutes();
+    // Reset to "the dev server hasn't answered", so only the test that asks for it sees an uncompiled contract.
+    resetContractFreshness();
     hostId.value = undefined;
     fleet.value = [];
     severingCalls.length = 0;
@@ -96,9 +99,19 @@ it(`refuses to name a side when only the payloads disagree`, () => {
     setDaemonRoutes(LEVEL, reshaped(`settings.get`));
     const text = mount().textContent ?? ``;
     expect(text).toContain(`App and sandbox are out of sync`);
-    expect(text).toContain(`Settings may show blank values or fail to save.`);
+    expect(text).toContain(`1 route disagrees (Settings); it may show blank values or fail to save.`);
     expect(text).not.toContain(`Sandbox is behind the app`);
     expect(text).toMatch(/reload page/i);
+});
+
+// One shared schema reaches dozens of routes across areas that have nothing to do with each other, so the area list
+// alone reads as that many separate things being broken. The count is what tells those apart.
+it(`counts the drifted routes, not just the areas they land in`, () => {
+    const agentRoutes = Object.keys(SHAPES).filter((name) => name.startsWith(`agent.`));
+    expect(agentRoutes.length).toBeGreaterThan(1);
+    setDaemonRoutes(LEVEL, reshaped(...agentRoutes));
+    const text = mount().textContent ?? ``;
+    expect(text).toContain(`${agentRoutes.length} routes disagree (Agent); they may show blank values or fail to save.`);
 });
 
 it(`keeps the warning to the problem, impact, and fixes`, () => {
@@ -106,10 +119,55 @@ it(`keeps the warning to the problem, impact, and fixes`, () => {
     expect(agentRoute).toEqual(expect.any(String));
     setDaemonRoutes(LEVEL, reshaped(agentRoute!));
     const text = mount().textContent ?? ``;
-    expect(text).toContain(`Agent may show blank values or fail to save.`);
+    expect(text).toContain(`1 route disagrees (Agent); it may show blank values or fail to save.`);
     expect(text).not.toContain(`Everything else works`);
-    expect(text).not.toContain(`1 changed`);
     expect(text).not.toContain(`Still showing`);
+});
+
+// The case the old threshold answered with silence: every route disagreeing is a different build, not a feature list.
+it(`calls a total disagreement one mismatch rather than naming every area`, () => {
+    const allDifferent = Object.fromEntries(Object.keys(SHAPES).map((name) => [name, `different`]));
+    setDaemonRoutes(LEVEL, allDifferent);
+    const text = mount().textContent ?? ``;
+    expect(text).toContain(`App and sandbox are running different contracts`);
+    expect(text).toContain(`${Object.keys(SHAPES).length} of ${Object.keys(SHAPES).length} routes disagree`);
+    expect(text).toContain(`different builds rather than one changed field`);
+});
+
+// The dev case the card used to misdiagnose: this app bundles the contract from source, the sandbox loads it compiled,
+// and an edit that has not been rebuilt looks exactly like two versions disagreeing.
+it(`names an uncompiled contract as the cause and withholds the page reload`, () => {
+    setDaemonRoutes(LEVEL, reshaped(`settings.get`));
+    resetContractFreshness([`settings.get`]);
+    const el = mount();
+    const text = el.textContent ?? ``;
+    expect(text).toContain(`Sandbox is running an older compiled contract`);
+    expect(text).toContain(`1 route differs`);
+    expect(text).toContain(`Reloading this page won't help.`);
+    expect(text).not.toContain(`App and sandbox are out of sync`);
+    expect([...el.querySelectorAll(`button`)].some((button) => button.textContent === `Reload page`)).toBe(false);
+});
+
+// A tab left open across a sandbox update: harmless on its own, and the one direction the old card could never name.
+it(`names this page as the older side when the sandbox offers routes it has never heard of`, () => {
+    setDaemonRoutes([...LEVEL, `future.feature`], reshaped(`settings.get`));
+    expect(mount().textContent ?? ``).toContain(`This page is older than the sandbox.`);
+});
+
+// Each side holding routes the other lacks: two branches, not two points on one line, and no single reload fixes it.
+it(`calls a two-way gap a fork rather than naming either side as behind`, () => {
+    setDaemonRoutes([...withoutVpn, `future.feature`], SHAPES);
+    const text = mount().textContent ?? ``;
+    expect(text).toContain(`App and sandbox are on different builds`);
+    expect(text).toContain(`VPN won't work here, and the sandbox offers 1 route this page doesn't know`);
+    expect(text).toContain(`neither side is simply older`);
+    expect(text).not.toContain(`Sandbox is behind the app`);
+    expect(text).not.toContain(`This page is older than the sandbox.`);
+});
+
+it(`says nothing about a newer sandbox while the two still agree`, () => {
+    setDaemonRoutes([...LEVEL, `future.feature`], SHAPES);
+    expect(mount().textContent?.trim()).toBe(``);
 });
 
 it(`prints the reload for THIS sandbox, not an image rebuild, when nothing can reach that checkout`, () => {

@@ -1,4 +1,5 @@
-import { eventIterator, oc } from "@orpc/contract";
+import { oc } from "@orpc/contract";
+import { streamOf } from "../protocol/routes.js";
 import { IntenticLineSchema } from "../events/system-events.js";
 import {
     CapabilitiesListSchema,
@@ -38,7 +39,7 @@ export const capabilitiesContract = {
                 "Writes a connection and streams the work of applying it, because some kinds provision real infrastructure and take a while. Sending an id that already exists edits that connection: this is the edit as well as the create. Since a caller is never shown stored credentials, it marks the ones it is leaving alone and the daemon fills them in, which is the only way to change one setting without retyping a key.",
         })
         .input(CapabilitySchema)
-        .output(eventIterator(IntenticLineSchema)),
+        .output(streamOf(IntenticLineSchema)),
     // A credential the caller is keeping arrives as VAULTED here too, so an edit can be tested without retyping a key.
     probe: oc
         .route({

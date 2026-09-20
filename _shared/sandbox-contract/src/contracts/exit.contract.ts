@@ -1,4 +1,5 @@
-import { eventIterator, oc } from "@orpc/contract";
+import { oc } from "@orpc/contract";
+import { streamOf } from "../protocol/routes.js";
 import { IntenticLineSchema } from "../events/system-events.js";
 import { ExitCountriesSchema, ExitIdParamSchema, ExitListSchema, ExitObservationSchema, ExitUseInputSchema } from "../schemas/exit.js";
 import { OkSchema } from "../schemas/shared.js";
@@ -37,7 +38,7 @@ export const exitContract = {
                 "Starts the exit in the country it was configured for. Streamed, because a first start fetches a catalogue, raises a tunnel and then checks the address, which takes tens of seconds on the free providers and can fail at each step with something worth reading. Starting one that is already up simply says so.",
         })
         .input(ExitIdParamSchema)
-        .output(eventIterator(IntenticLineSchema)),
+        .output(streamOf(IntenticLineSchema)),
     use: oc
         .route({
             method: "POST",
@@ -47,7 +48,7 @@ export const exitContract = {
                 "Switches the exit's country, starting it first if it was down. It ends by checking where the world actually sees you and fails if that does not match what you asked for. A switch that quietly left your traffic where it was is the exact failure this whole feature exists to rule out.",
         })
         .input(ExitUseInputSchema)
-        .output(eventIterator(IntenticLineSchema)),
+        .output(streamOf(IntenticLineSchema)),
     // Cheap on tor (a control-port signal); a re-dial to another server for everything else.
     rotate: oc
         .route({
@@ -58,7 +59,7 @@ export const exitContract = {
                 "Swaps to another address in the country you are already in. Fails if the address does not actually change, which on a small pool it sometimes cannot.",
         })
         .input(ExitIdParamSchema)
-        .output(eventIterator(IntenticLineSchema)),
+        .output(streamOf(IntenticLineSchema)),
     check: oc
         .route({
             method: "POST",

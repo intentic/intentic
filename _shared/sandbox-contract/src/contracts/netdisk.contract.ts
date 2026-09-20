@@ -1,4 +1,5 @@
-import { eventIterator, oc } from "@orpc/contract";
+import { oc } from "@orpc/contract";
+import { streamOf } from "../protocol/routes.js";
 import { IntenticLineSchema } from "../events/system-events.js";
 import { NetdiskIdParamSchema, NetdiskListSchema } from "../schemas/netdisk.js";
 import { OkSchema } from "../schemas/shared.js";
@@ -28,7 +29,7 @@ export const netdiskContract = {
                 "Mounts a stored disk at its place under /mnt/netdisk, streaming progress. Mounting one that is already mounted simply says so. A read-only disk is mounted read-only; the kernel refuses writes to it.",
         })
         .input(NetdiskIdParamSchema)
-        .output(eventIterator(IntenticLineSchema)),
+        .output(streamOf(IntenticLineSchema)),
     unmount: oc
         .route({
             method: "POST",

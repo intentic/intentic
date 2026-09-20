@@ -1,5 +1,5 @@
-import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
+import { readFileSync, statSync } from "node:fs";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { LEAF_CRT, LEAF_KEY } from "@intentic/localhost-https/paths";
 import { defineConfig, type Plugin } from "vite";
 import { BUILD_ID, shared } from "./vite.shared.ts";
@@ -22,9 +22,45 @@ const buildStamp = (): Plugin => ({
     },
 });
 
+// The daemon loads the contract compiled; this app bundles it from source, and only the first of those follows an edit
+// immediately. So an uncompiled contract change reads, to every version check there is, as two builds disagreeing — and
+// the remedy that looks cheapest, reloading the page, cannot fix it. The browser already holds the source side; this
+// hands it the compiled one, which is what the sandbox would advertise if it restarted right now, and it diffs the two
+// itself. Dev only: a production build ships both sides compiled and serves no such route, which reads as no evidence.
+const CONTRACT_DIST = here(`../../_shared/sandbox-contract/dist/index.js`);
+
+// A shape map keyed by route name, which is all either side is read for here.
+type ShapeModule = { readonly SANDBOX_ROUTE_SHAPES: Readonly<Record<string, string>> };
+
+// Node caches a file: import for the process's life, so a rebuild would keep answering with the copy loaded before it.
+// The dist's own mtime in the specifier makes a rebuilt file a different module, and an untouched one a cache hit.
+const loadCompiledContract = async (): Promise<ShapeModule> =>
+    (await import(`${pathToFileURL(CONTRACT_DIST).href}?built=${statSync(CONTRACT_DIST).mtimeMs}`)) as ShapeModule;
+
+const contractFreshness = (): Plugin => ({
+    name: `intentic-contract-freshness`,
+    configureServer(server) {
+        server.middlewares.use(`/contract-freshness.json`, (_request, response) => {
+            void (async () => {
+                response.setHeader(`content-type`, `application/json`);
+                response.setHeader(`cache-control`, `no-store`);
+                try {
+                    const compiled = await loadCompiledContract();
+                    response.end(JSON.stringify({ compiled: compiled.SANDBOX_ROUTE_SHAPES }));
+                } catch {
+                    // A contract that has never been built, or one whose dist cannot load, leaves the question open
+                    // rather than answering "compiled and fine".
+                    response.statusCode = 503;
+                    response.end(`{}`);
+                }
+            })();
+        });
+    },
+});
+
 export default defineConfig(({ command }) => ({
     ...shared,
-    plugins: [...shared.plugins, buildStamp()],
+    plugins: [...shared.plugins, buildStamp(), contractFreshness()],
     server: {
         host: "localhost",
         // Must stay 47145: CORS, Better Auth's WEB_ORIGIN, and Google's OAuth client all trust this exact origin.

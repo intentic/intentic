@@ -1,4 +1,5 @@
-import { eventIterator, oc } from "@orpc/contract";
+import { oc } from "@orpc/contract";
+import { streamOf } from "../protocol/routes.js";
 import { z } from "zod";
 import { DeviceAgentFlowSchema, DeviceFlowLineSchema, DeviceSandboxFlowSchema } from "../schemas/devices.js";
 import { HostScopesSchema } from "../schemas/capabilities.js";
@@ -18,7 +19,7 @@ export const hostContract = {
     // One MCP JSON-RPC message forwarded verbatim in both directions, unmodified.
     mcp: oc.input(z.unknown()).output(z.unknown()),
     // Streamed for a person watching progress; the scope is checked on the machine, this only adds visibility.
-    runSandboxFlow: oc.input(DeviceSandboxFlowSchema).output(eventIterator(DeviceFlowLineSchema)),
+    runSandboxFlow: oc.input(DeviceSandboxFlowSchema).output(streamOf(DeviceFlowLineSchema)),
     // Spawns the work detached from the socket, so restarting the agent process cannot brick a swap in progress.
-    runAgentFlow: oc.input(DeviceAgentFlowSchema).output(eventIterator(DeviceFlowLineSchema)),
+    runAgentFlow: oc.input(DeviceAgentFlowSchema).output(streamOf(DeviceFlowLineSchema)),
 };

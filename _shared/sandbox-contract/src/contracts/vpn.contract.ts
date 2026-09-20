@@ -1,4 +1,5 @@
-import { eventIterator, oc } from "@orpc/contract";
+import { oc } from "@orpc/contract";
+import { streamOf } from "../protocol/routes.js";
 import { IntenticLineSchema } from "../events/system-events.js";
 import { OkSchema } from "../schemas/shared.js";
 import { ForticlientImportInputSchema, ForticlientImportSchema, VpnConnectInputSchema, VpnIdParamSchema, VpnListSchema } from "../schemas/vpn.js";
@@ -28,7 +29,7 @@ export const vpnContract = {
                 "Brings a stored tunnel up, streaming the client's progress as it authenticates and then sets up routing. Streamed because a dial takes seconds and can fail with something you have to read: a wrong password, a gateway certificate nobody trusts, a code it wants. Connecting one that is already up simply says so.",
         })
         .input(VpnConnectInputSchema)
-        .output(eventIterator(IntenticLineSchema)),
+        .output(streamOf(IntenticLineSchema)),
     // Drops a tunnel; tolerates one already down, since the contract is "not up," not "it was up."
     disconnect: oc
         .route({

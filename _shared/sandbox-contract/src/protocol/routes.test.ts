@@ -2,7 +2,7 @@ import { eventIterator, oc } from "@orpc/contract";
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
 import { SANDBOX_ROUTE_NAMES, SANDBOX_ROUTE_SHAPES, SANDBOX_ROUTES, sandboxRouteName } from "../index.js";
-import { contractRoutes, routeNameForRequest, routeShapes } from "./routes.js";
+import { contractRoutes, routeNameForRequest, routeShapes, streamOf } from "./routes.js";
 
 const fixture = {
     vpn: {
@@ -111,18 +111,38 @@ describe(`routeShapes`, () => {
         expect(routeShapes(shaped(z.object({ a: z.string() })))[`vpn.list`]).not.toBe(shapes[`vpn.list`]);
     });
 
-    it(`omits a route whose shape cannot be expressed rather than failing the walk`, () => {
-        // An oRPC event iterator wraps its output in an opaque type with no schema, so `watch` here keeps its name but
-        // no shape.
+    it(`fingerprints a stream through the frames it declares`, () => {
         const withStream = {
+            vpn: {
+                list: fixture.vpn.list,
+                watch: oc.route({ method: "GET", path: "/vpn/watch" }).output(streamOf(z.object({ a: z.string() }))),
+            },
+        };
+        expect(Object.keys(routeShapes(withStream)).toSorted()).toEqual([`vpn.list`, `vpn.watch`]);
+        // A changed frame is a changed route, which is the whole point of reaching past the iterator.
+        const reframed = { vpn: { watch: oc.route({ method: "GET", path: "/vpn/watch" }).output(streamOf(z.object({ a: z.number() }))) } };
+        expect(routeShapes(reframed)[`vpn.watch`]).not.toBe(routeShapes(withStream)[`vpn.watch`]);
+    });
+
+    it(`tells a stream of X apart from a route that answers X`, () => {
+        const frame = z.object({ a: z.string() });
+        const streamed = { vpn: { watch: oc.route({ method: "GET", path: "/vpn/watch" }).output(streamOf(frame)) } };
+        const answered = { vpn: { watch: oc.route({ method: "GET", path: "/vpn/watch" }).output(frame) } };
+        expect(routeShapes(streamed)[`vpn.watch`]).not.toBe(routeShapes(answered)[`vpn.watch`]);
+    });
+
+    it(`omits a route whose shape cannot be expressed rather than failing the walk`, () => {
+        // oRPC's own eventIterator hides its frames, which is why contracts declare streams with streamOf; one that
+        // slipped through keeps its name and loses only its shape, instead of breaking the walk for every other route.
+        const withRawIterator = {
             vpn: {
                 list: fixture.vpn.list,
                 watch: oc.route({ method: "GET", path: "/vpn/watch" }).output(eventIterator(z.object({ a: z.string() }))),
             },
         };
-        expect(Object.keys(routeShapes(withStream)).toSorted()).toEqual([`vpn.list`]);
+        expect(Object.keys(routeShapes(withRawIterator)).toSorted()).toEqual([`vpn.list`]);
         expect(
-            contractRoutes(withStream)
+            contractRoutes(withRawIterator)
                 .map((route) => route.name)
                 .toSorted(),
         ).toEqual([`vpn.list`, `vpn.watch`]);
@@ -130,34 +150,15 @@ describe(`routeShapes`, () => {
 });
 
 describe(`the real sandbox contract`, () => {
-    it(`fingerprints all but the streaming routes`, () => {
-        const unshaped = SANDBOX_ROUTE_NAMES.filter((name) => !(name in SANDBOX_ROUTE_SHAPES));
-        // oRPC gives an event iterator's output no schema, so these can't be fingerprinted; named rather than counted
-        // so a new one added here fails the test.
-        expect(unshaped.toSorted()).toEqual([
-            `agent.attach`,
-            `capabilities.add`,
-            // The three exit moves stream since bringing an exit up dials and verifies over tens of seconds, failing at
-            // any step.
-            `exit.rotate`,
-            `exit.start`,
-            `exit.use`,
-            `intentic.applyEvents`,
-            `intentic.run`,
-            // A mount dials a file server and can fail at any step with something to read, like a vpn dial.
-            `netdisk.mount`,
-            `system.events`,
-            `system.manageDeviceSandbox`,
-            // The device agent updates or restarts itself; the stream dies with the process, so lines arrive as they
-            // happen.
-            `system.runDeviceAgentFlow`,
-            `vpn.connect`,
-        ]);
+    it(`fingerprints every route, streams included`, () => {
+        // Nothing may opt out: a route with no fingerprint is a route the browser can never tell has drifted, and the
+        // streaming ones (system.events, agent.attach, the exit dials) carry the frames a stale daemon breaks first.
+        expect(SANDBOX_ROUTE_NAMES.filter((name) => !(name in SANDBOX_ROUTE_SHAPES))).toEqual([]);
     });
 
-    it(`fingerprints every other route exactly once`, () => {
+    it(`fingerprints every route exactly once`, () => {
         expect(Object.keys(SANDBOX_ROUTE_SHAPES).every((name) => SANDBOX_ROUTE_NAMES.includes(name))).toBe(true);
-        expect(Object.keys(SANDBOX_ROUTE_SHAPES).length).toBe(SANDBOX_ROUTE_NAMES.length - 12);
+        expect(Object.keys(SANDBOX_ROUTE_SHAPES).length).toBe(SANDBOX_ROUTE_NAMES.length);
     });
 
     it(`derives a route table with no duplicate names`, () => {

@@ -1,8 +1,22 @@
+import { eventIterator } from "@orpc/contract";
 import { z } from "zod";
 
 // Named route surface of the daemon's contract (`<group>.<route>`), derived automatically so nothing here is
 // hand-maintained. The daemon advertises which routes it implements (the /events hello frame); the browser diffs that
 // against its own contract so an old daemon's gap is a named feature check, not a silent 404.
+
+// Every streamed route declares its frames through this, never oRPC's `eventIterator` directly: that returns an opaque
+// standard-schema validator holding no reachable inner schema, so a stream's payload would be unfingerprintable and its
+// drift invisible. The frame schema rides along under a symbol, which oRPC never reads and JSON never serializes.
+// Typed as a plain `symbol`, not the inferred unique one: a unique symbol would ride into every contract's inferred
+// type and break declaration emit on a local name nothing outside can refer to.
+const FRAME: symbol = Symbol.for("intentic.contract.frame");
+
+export const streamOf = <T extends z.ZodType>(frame: T) => Object.assign(eventIterator(frame), { [FRAME]: frame });
+
+// The frame schema behind a streamed route's validator, or undefined for an ordinary request/response schema.
+const frameOf = (schema: unknown): z.ZodType | undefined =>
+    typeof schema === "object" && schema !== null && FRAME in schema ? ((schema as Record<symbol, unknown>)[FRAME] as z.ZodType) : undefined;
 
 // Structural shape of `~orpc.route`, the metadata oRPC attaches to every `oc.route(...)` procedure; read this way since
 // oRPC's internal types aren't public.
@@ -85,18 +99,24 @@ const fingerprint = (value: unknown): string => {
     return hash.toString(36);
 };
 
-// One route's wire shape, or undefined if it can't be expressed (a streaming route with no underlying schema). `io`
-// matters: a `.default()` field is optional in and required out, so both directions must be read separately.
+// One side of a route as JSON Schema. A streamed side is read through its frame and tagged, so "answers X" and "streams
+// frames of X" can never fingerprint alike. `io` matters: a `.default()` field is optional in and required out.
+const wireShape = (schema: unknown, io: "input" | "output"): unknown => {
+    if (schema === undefined) {
+        return undefined;
+    }
+    const frame = frameOf(schema);
+    return frame === undefined ? z.toJSONSchema(schema as z.ZodType, { io }) : { stream: z.toJSONSchema(frame, { io }) };
+};
+
+// One route's wire shape, or undefined if it can't be expressed at all.
 const procedureShape = (value: unknown): string | undefined => {
     if (typeof value !== "object" || value === null || !("~orpc" in value)) {
         return undefined;
     }
     const { inputSchema, outputSchema } = (value as ContractSchemasLike)["~orpc"];
     try {
-        return fingerprint({
-            in: inputSchema === undefined ? undefined : z.toJSONSchema(inputSchema as z.ZodType, { io: "input" }),
-            out: outputSchema === undefined ? undefined : z.toJSONSchema(outputSchema as z.ZodType, { io: "output" }),
-        });
+        return fingerprint({ in: wireShape(inputSchema, "input"), out: wireShape(outputSchema, "output") });
     } catch {
         return undefined;
     }

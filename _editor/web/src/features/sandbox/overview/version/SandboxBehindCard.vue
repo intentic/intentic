@@ -1,8 +1,18 @@
 <script setup lang="ts">
 import { machinesOf } from "@intentic/sandbox-contract";
 import { Button, Code, CopyButton, Notice, RowGroup, RowNote } from "@intentic/ui";
-import { computed, ref } from "vue";
-import { daemonBehind, daemonDrifted, driftedRoutes, missingRoutes } from "../useDaemonRoutes";
+import { computed, ref, watchEffect } from "vue";
+import {
+    appBehind,
+    comparedRouteCount,
+    daemonBehind,
+    daemonDrifted,
+    driftedRoutes,
+    driftScope,
+    missingRoutes,
+    unknownDaemonRoutes,
+} from "../useDaemonRoutes";
+import { contractUncompiled, readContractFreshness, uncompiledRoutes } from "../contractFreshness";
 import { useEnvironment } from "../../environment/useEnvironment";
 import { runSeveringDeviceCommand, useDevices, useHostHolding } from "../../devices/useDevices";
 import { useHubWork } from "../../../../shell/hub/hubWork";
@@ -79,12 +89,59 @@ const reloadOnDevice = async (): Promise<void> => {
     }
 };
 
-const heading = computed(() => (daemonBehind.value ? `Sandbox is behind the app` : `App and sandbox are out of sync`));
-const detail = computed(() =>
-    daemonBehind.value
-        ? `${missingLabel.value} won't work until the sandbox is reloaded.`
-        : `${driftedLabel.value} may show blank values or fail to save.`,
-);
+// Asked only once something already disagrees: with the two sides level there is no cause to explain, and the answer
+// costs the dev server a contract load.
+watchEffect(() => {
+    if (daemonBehind.value || daemonDrifted.value) {
+        void readContractFreshness();
+    }
+});
+
+const plural = (count: number, one: string, many: string): string => `${count} ${count === 1 ? one : many}`;
+
+// Each side lacking routes the other has: the two builds forked rather than one trailing the other, so neither "behind"
+// nor "out of sync" is true and no single reload is the answer.
+const forked = computed(() => daemonBehind.value && appBehind.value);
+
+// Five diagnoses, most specific first. An uncompiled contract explains missing routes and drifted ones alike — the
+// compiled copy the sandbox runs simply predates the edit — so it outranks the rest rather than being one more guess
+// about which side is older.
+const heading = computed(() => {
+    if (contractUncompiled.value) {
+        return `Sandbox is running an older compiled contract`;
+    }
+    if (forked.value) {
+        return `App and sandbox are on different builds`;
+    }
+    if (daemonBehind.value) {
+        return `Sandbox is behind the app`;
+    }
+    return driftScope.value === `wholesale` ? `App and sandbox are running different contracts` : `App and sandbox are out of sync`;
+});
+
+// Named as its own clause rather than folded into the heading: a newer sandbox than tab is ordinary, and only worth
+// saying once something else has proved the two disagree. Never on a fork, which says it better already.
+const leaning = computed(() => (appBehind.value && !forked.value && !contractUncompiled.value ? ` This page is older than the sandbox.` : ``));
+
+const detail = computed(() => {
+    if (contractUncompiled.value) {
+        return `The contract has changed since it was last compiled, and the sandbox loads the compiled copy: ${plural(uncompiledRoutes.value.length, `route differs`, `routes differ`)}. Reloading this page won't help.`;
+    }
+    if (forked.value) {
+        return `${missingLabel.value} won't work here, and the sandbox offers ${plural(unknownDaemonRoutes.value.length, `route`, `routes`)} this page doesn't know: neither side is simply older.`;
+    }
+    if (daemonBehind.value) {
+        return `${missingLabel.value} won't work until the sandbox is reloaded.`;
+    }
+    if (driftScope.value === `wholesale`) {
+        // The count, not the areas: naming most of the product as broken hides the one fact that matters here.
+        return `${driftedRoutes.value.length} of ${comparedRouteCount.value} routes disagree, so these are different builds rather than one changed field.${leaning.value}`;
+    }
+    // The count alongside the areas, because one shared schema reaches dozens of routes across unrelated areas, and the
+    // area list alone reads as that many separate things being broken.
+    const count = driftedRoutes.value.length;
+    return `${plural(count, `route disagrees`, `routes disagree`)} (${driftedLabel.value}); ${count === 1 ? `it` : `they`} may show blank values or fail to save.${leaning.value}`;
+});
 </script>
 
 <template>
@@ -105,8 +162,9 @@ const detail = computed(() =>
                         >
                             <template #icon><Icon name="bolt" /></template>
                         </Button>
+                        <!-- Withheld while the cause is an uncompiled contract: this page is the fresher of the two, so reloading it changes nothing. -->
                         <Button
-                            v-if="daemonDrifted || reloaded"
+                            v-if="(daemonDrifted && !contractUncompiled) || reloaded"
                             :label="t(`sandbox.sandboxBehindCard.reloadPage`)"
                             size="small"
                             severity="secondary"

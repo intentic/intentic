@@ -1,4 +1,5 @@
-import { eventIterator, oc } from "@orpc/contract";
+import { oc } from "@orpc/contract";
+import { streamOf } from "../protocol/routes.js";
 import { z } from "zod";
 import { SessionTranscriptSchema } from "../events/transcript.js";
 import { SystemEventSchema } from "../events/system-events.js";
@@ -78,7 +79,7 @@ export const systemContract = {
                 "A stream held open for as long as you want it, carrying heartbeats so a caller notices the sandbox dying at once, batches of file changes so a tree or an editor can refresh itself, and the roster of who else is looking. Give it an id for this connection to appear in that roster; leave it out and you watch without being seen.",
         })
         .input(z.object({ clientId: z.string().optional() }))
-        .output(eventIterator(SystemEventSchema)),
+        .output(streamOf(SystemEventSchema)),
     // A tab's activity self-report (view/session/file/idle), fanned back out to every member on /events.
     presence: oc
         .route({
@@ -191,7 +192,7 @@ export const systemContract = {
                 "Start, stop, restart, update, rebuild, roll back, reshape (its memory and CPU caps, privileged, GPU) or remove a sandbox running on a machine you own, relayed over the connection that machine holds open. The answer is a stream because the slowest of these takes minutes, and it is the same stream whichever you ask for. The daemon adds no opinion: the machine enforces its own permissions and a refusal arrives as the last line, in the machine's words, naming the switch to flip.",
         })
         .input(DeviceSandboxFlowInputSchema)
-        .output(eventIterator(DeviceFlowLineSchema)),
+        .output(streamOf(DeviceFlowLineSchema)),
     // Closed set of actions; the daemon builds the command line, not the caller. One sentence is the whole answer.
     runDeviceCommand: oc
         .route({
@@ -213,5 +214,5 @@ export const systemContract = {
                 "Updates a machine you own to the current intentic-machine agent, or restarts the loop it is running, over the connection that machine holds open. The answer is a stream of the run's own output — and it normally stops mid-run, because the agent's loop is what carries this connection: the work is detached from it first, so it finishes regardless, and the device's reported version is what confirms it. Takes the machine's \"Run commands\" permission, the same one a command typed there would.",
         })
         .input(DeviceAgentFlowInputSchema)
-        .output(eventIterator(DeviceFlowLineSchema)),
+        .output(streamOf(DeviceFlowLineSchema)),
 };

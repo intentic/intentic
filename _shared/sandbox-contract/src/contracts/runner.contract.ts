@@ -1,4 +1,5 @@
-import { eventIterator, oc } from "@orpc/contract";
+import { oc } from "@orpc/contract";
+import { streamOf } from "../protocol/routes.js";
 import { z } from "zod";
 import { AgentEventSchema } from "../events/agent-events.js";
 import { RunnerFactsSchema, RunnerSyncLineSchema, RunnerSyncSchema, RunnerTurnSchema } from "../protocol/runner-protocol.js";
@@ -13,9 +14,9 @@ export const runnerContract = {
     // Hardware facts, refreshed on demand; parity facts (image, overlay hash) ride the hello, not this call.
     describe: oc.output(RunnerFactsSchema),
     // `pull` updates the checkout, `push` returns a turn's result; streamed since a first sync clones repos.
-    syncWorkspace: oc.input(RunnerSyncSchema).output(eventIterator(RunnerSyncLineSchema)),
+    syncWorkspace: oc.input(RunnerSyncSchema).output(streamOf(RunnerSyncLineSchema)),
     // One turn in, the frames a local turn would produce out; the parent republishes them into the local pipeline.
-    runTurn: oc.input(RunnerTurnSchema).output(eventIterator(AgentEventSchema)),
+    runTurn: oc.input(RunnerTurnSchema).output(streamOf(AgentEventSchema)),
     // Returns `applied` rather than throwing: a missing id is an ordinary race, same as local NOT_FOUND.
     reply: oc.input(AgentReplySchema).output(z.object({ applied: z.boolean() })),
     // Attachments/editor context travel uncomposed: the note must build against the runner's own workspace root.

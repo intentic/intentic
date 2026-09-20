@@ -1,5 +1,6 @@
 import { SANDBOX_ROUTE_NAMES, SANDBOX_ROUTE_SHAPES, sandboxRouteName } from "@intentic/sandbox-contract";
 import { computed, ref } from "vue";
+import { contractUncompiled } from "./contractFreshness";
 
 // What the active daemon can do, from its /events hello frame. A newer browser than daemon is normal, not an
 // error; this turns a silent 404 into a named gap, so features can gate on `supportsRoute` instead of finding out
@@ -28,6 +29,9 @@ export const resetDaemonRoutes = (): void => {
 // An unknown daemon or route answers true; a feature only hides on positive evidence it's missing.
 export const supportsRoute = (name: string): boolean => advertised.value === undefined || advertised.value.has(name);
 
+// This build's own route names, as a set, for the two directions of comparison below.
+const OURS: ReadonlySet<string> = new Set(SANDBOX_ROUTE_NAMES);
+
 // The undivided true/false/undefined answer, for useSandboxSession's fallback: a definite yes clears
 // learned-by-404, a definite no skips probing.
 export const routeAdvertised = (name: string): boolean | undefined => advertised.value?.has(name);
@@ -44,18 +48,46 @@ export const missingRoutes = computed<string[]>(() => {
 // True when the daemon is demonstrably older; informational in production, actionable (rebuild) in dev.
 export const daemonBehind = computed(() => missingRoutes.value.length > 0);
 
-// Compared only where both sides published a fingerprint; an unexpressed or unpublished shape is no evidence.
-// Above this fraction disagreeing, it's cross-build schema rendering, not real drift, so the result is discarded.
-const DRIFT_IS_NOISE_ABOVE = 0.5;
+// Routes this daemon offers that this build has no name for: positive evidence the BROWSER is the older side. Ordinary
+// on its own — a tab left open across a sandbox update is exactly this — so it never raises a warning by itself. It
+// only says which way a disagreement leans once something else has already proved there is one.
+export const unknownDaemonRoutes = computed<string[]>(() => {
+    const known = advertised.value;
+    return known === undefined ? [] : [...known].filter((name) => !OURS.has(name)).toSorted();
+});
+
+export const appBehind = computed(() => unknownDaemonRoutes.value.length > 0);
+
+// Routes both sides published a fingerprint for: the only ones a disagreement can be read off. An unexpressed or
+// unpublished shape is no evidence, not a match.
+const comparableRoutes = computed<string[]>(() => {
+    const theirs = advertisedShapes.value;
+    return theirs === undefined ? [] : Object.keys(SANDBOX_ROUTE_SHAPES).filter((name) => theirs[name] !== undefined);
+});
+
+// The denominator a drift count is only meaningful against: "3 routes disagree" says nothing without how many were
+// checked, and an old daemon publishing few shapes is checked on few.
+export const comparedRouteCount = computed(() => comparableRoutes.value.length);
 
 export const driftedRoutes = computed<string[]>(() => {
     const theirs = advertisedShapes.value;
-    if (theirs === undefined) {
-        return [];
+    return theirs === undefined ? [] : comparableRoutes.value.filter((name) => theirs[name] !== SANDBOX_ROUTE_SHAPES[name]).toSorted();
+});
+
+// Above this fraction, the two contracts disagree as wholes rather than in places: a different build entirely, a
+// different zod, or a contract compiled from other source. Naming the areas then indicts most of the product for one
+// cause, so the scope is reported instead — never discarded, which is what the old threshold did and which answered
+// the worst case there is, everything broken, with silence.
+const WHOLESALE_ABOVE = 0.5;
+
+export type DriftScope = "none" | "partial" | "wholesale";
+
+export const driftScope = computed<DriftScope>(() => {
+    const drifted = driftedRoutes.value.length;
+    if (drifted === 0) {
+        return "none";
     }
-    const comparable = Object.keys(SANDBOX_ROUTE_SHAPES).filter((name) => theirs[name] !== undefined);
-    const drifted = comparable.filter((name) => theirs[name] !== SANDBOX_ROUTE_SHAPES[name]);
-    return comparable.length > 0 && drifted.length > comparable.length * DRIFT_IS_NOISE_ABOVE ? [] : drifted.toSorted();
+    return drifted > comparableRoutes.value.length * WHOLESALE_ABOVE ? "wholesale" : "partial";
 });
 
 // True when the daemon shapes a shared route differently; independent of `daemonBehind`.
@@ -68,12 +100,20 @@ const daemonOlderRemedy = (): string =>
         ? `This sandbox is running older code than this app: reload it with 'sh _sandbox/sandbox/scripts/dev-reload.sh'.`
         : `Update the sandbox to a newer image to use this feature.`;
 
-// Drift never says which side moved: a page open since before the change is as likely stale as the daemon.
-// Offers both remedies, cheapest first.
-const eitherSideOlderRemedy = (): string =>
-    import.meta.env.DEV
+// Drift says which side moved only when something else has proved it. The dev server's reading comes first because it
+// names a cause rather than a side, and rules the page reload out; then a route only this app knows leans the other
+// way; otherwise neither side can be named and both remedies are offered, cheapest first.
+const eitherSideOlderRemedy = (): string => {
+    if (contractUncompiled.value) {
+        return `The contract has changed since it was last compiled, and the sandbox runs the compiled copy: reload the sandbox with 'sh _sandbox/sandbox/scripts/dev-reload.sh', which rebuilds it. Reloading this page won't help.`;
+    }
+    if (appBehind.value) {
+        return `This page is running older code than the sandbox: reload it.`;
+    }
+    return import.meta.env.DEV
         ? `One of the two is running older code: reload this page, or the sandbox with 'sh _sandbox/sandbox/scripts/dev-reload.sh'.`
         : `Reload this page, or update the sandbox to a newer image.`;
+};
 
 // Why a request to `path` failed because this daemon predates the route; undefined for a non-contract path or one
 // the daemon advertises. A missing route is directional: only a daemon behind lacks a name this app has.
