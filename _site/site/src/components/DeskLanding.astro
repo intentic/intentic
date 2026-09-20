@@ -400,16 +400,23 @@ const STAGE_SIZES = "(min-width: 102rem) 1440px, (min-width: 84rem) calc(50vw + 
         const heroCta = document.querySelector("[data-hero-cta]");
         if (bar && heroCta && "IntersectionObserver" in window) {
             bar.setAttribute("data-cta-managed", "");
-            const barHeight = getComputedStyle(document.documentElement).getPropertyValue("--bar-height");
-            const ctaObserver = new IntersectionObserver(
-                (entries) => {
-                    for (const entry of entries) {
-                        bar.toggleAttribute("data-cta-shown", !entry.isIntersecting);
-                    }
-                },
-                { rootMargin: `-${barHeight} 0px 0px 0px`, threshold: 0 },
-            );
-            ctaObserver.observe(heroCta);
+            // rootMargin takes px or % only: --bar-height is a viewport-scaled clamp, so the bar is measured instead,
+            // and measured again whenever its height changes, because a margin set at construction never updates.
+            let ctaObserver: IntersectionObserver | undefined;
+            const watchHeroCta = () => {
+                ctaObserver?.disconnect();
+                ctaObserver = new IntersectionObserver(
+                    (entries) => {
+                        for (const entry of entries) {
+                            bar.toggleAttribute("data-cta-shown", !entry.isIntersecting);
+                        }
+                    },
+                    { rootMargin: `-${Math.round(bar.getBoundingClientRect().height)}px 0px 0px 0px`, threshold: 0 },
+                );
+                ctaObserver.observe(heroCta);
+            };
+            watchHeroCta();
+            new ResizeObserver(watchHeroCta).observe(bar);
         }
 
         /* One app frame is visible at a time. */

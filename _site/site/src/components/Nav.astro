@@ -724,7 +724,8 @@ const currentPath = Astro.url.pathname;
     }
 
     /* The bar CTA hides when the hero already exposes the same action. */
-    .bar[data-cta-managed] .bar-cta {
+    /* Global scope is required: on the developer bar the CTA is DownloadCta's root, which carries no scope of this file. */
+    .bar[data-cta-managed] :global(.bar-cta) {
         opacity: 0;
         transform: translateY(-0.45rem);
         pointer-events: none;
@@ -732,7 +733,7 @@ const currentPath = Astro.url.pathname;
             opacity 0.3s ease,
             transform 0.3s ease;
     }
-    .bar[data-cta-managed][data-cta-shown] .bar-cta {
+    .bar[data-cta-managed][data-cta-shown] :global(.bar-cta) {
         opacity: 1;
         transform: none;
         pointer-events: auto;
@@ -778,7 +779,7 @@ const currentPath = Astro.url.pathname;
     }
     /* Phones and small tablets use the hamburger instead of the bar CTA. */
     @media (max-width: 48rem) {
-        .bar-cta {
+        .bar :global(.bar-cta) {
             display: none;
         }
     }
@@ -817,7 +818,7 @@ const currentPath = Astro.url.pathname;
         .menu-item-icon {
             transition: color 0.2s ease;
         }
-        .bar[data-cta-managed] .bar-cta {
+        .bar[data-cta-managed] :global(.bar-cta) {
             transform: none;
             transition: opacity 0.3s ease;
         }
