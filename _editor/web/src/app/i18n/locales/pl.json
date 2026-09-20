@@ -840,14 +840,14 @@
             "freshSessionSizedHandoff": "A fresh session on their allowance, seeded with a ~{tokens}-token hand-off of the record and the measured state; detail not in the record is lost.",
             "keepsSessionRereading": "Keeps this session: the model keeps everything, and re-reads ~{tokens} tokens once on their allowance.",
             "keepsSessionUnmeasured": "Keeps this session: the model keeps everything, and re-reads all of it once on their allowance.",
-            "opensFreshSession": " It opens a fresh session with a ~{tokens}-token hand-off.",
+            "opensFreshSession": " Fresh session (~{tokens}-token hand-off).",
             "otherWaysOn": "Inne sposoby na",
             "pickUpWithoutRetyping": "Pick up where it left off, without retyping{keyHint}",
             "reopenAccountsSessionLimit": "Otwórz teraz ponownie limit sesji tego konta — zużywa to jeden z jego tygodniowych resetów. Twój tygodniowy przydział pozostaje nietknięty i wciąż obowiązuje",
-            "rereadsCold": " It re-reads ~{tokens} tokens of context, cold.",
+            "rereadsCold": " Re-reads ~{tokens} tokens.",
             "resetLimitNow": "Zresetuj limit teraz",
             "resetting": "Resetowanie…",
-            "sendTurnAgainExactly": "Send this turn again, exactly as it was: nothing is added to the chat.{pressCostLine} The reset is a due date, not a wall — an earlier press may get through{keyHint}",
+            "sendTurnAgainExactly": "Resend unchanged — nothing added to chat.{pressCostLine} May work before reset{keyHint}",
             "waitingNothingGetsThrough": "Waiting: nothing gets through until the allowance resets"
         },
         "chatDocumentBody": {
