@@ -52,10 +52,7 @@ const archiveNote = (): MenuItem => ({ label: t(`workspace.entryMenu.insideArchi
 
 const withSeparator = (items: readonly MenuItem[]): MenuItem[] => (items.length === 0 ? [] : [{ separator: true }, ...items]);
 
-const readOnlyMenu = ({ head = [], lead = [], tail = [] }: EntryMenuInput): MenuItem[] => {
-    const readable = [...head, ...lead, ...tail];
-    return [...readable, ...withSeparator([readOnlyNote()])];
-};
+const readOnlyMenu = ({ head = [], lead = [], tail = [] }: EntryMenuInput): MenuItem[] => joinGroups(head, lead, tail, [readOnlyNote()]);
 
 // Joins the groups that have rows, a rule between them, so a menu never opens or closes on a separator.
 const joinGroups = (...groups: readonly (readonly MenuItem[])[]): MenuItem[] =>

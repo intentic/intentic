@@ -96,6 +96,12 @@ describe(`the entry menu`, () => {
         expect(items.at(-1)?.disabled).toBe(true);
     });
 
+    it(`does not lead a read-only menu with a separator when nothing else is readable`, () => {
+        const items = entryMenuItems(input({ canEdit: false }));
+        expect(labels(items)).toEqual([`Read-only: changing files needs maintainer access`]);
+        expect(items[0]?.separator).not.toBe(true);
+    });
+
     it(`inside an archive keeps the read verbs and the one that gets something out`, () => {
         const items = entryMenuItems(input({ archived: true, head: [{ label: `Open` }], tail: [{ label: `Collapse Folders` }] }));
         expect(labels(items)).toEqual([`Open`, `—`, `Copy`, `—`, `Collapse Folders`, `—`, `Inside an archive: extract it to change anything`]);
