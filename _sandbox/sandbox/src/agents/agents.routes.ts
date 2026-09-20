@@ -27,8 +27,8 @@ import { type IsolatedAgent, isIsolated, type PersistedAgent } from "./registry/
 import { MAX_REACTION_KINDS } from "./registry/agents-registry.js";
 import { archivable, archiveAgents, purgeArchived } from "./registry/archive.js";
 import { landAgent, outstandingConflicts } from "./land/land.js";
-import { assignVerdict, isMemberAddress } from "./ownership.js";
-import { refuseUnlessVisible, visibleTo } from "../auth/desk-scope.js";
+import { assignVerdict, fenceVerdict, isMemberAddress } from "./ownership.js";
+import { refuseUnlessVisible, visibleTo } from "../auth/fleet-scope.js";
 import { syncBeforeLand } from "./land/sync.js";
 import { verifyLandedTree } from "./land/verify-landed.js";
 import { settleLandingInBackground } from "./land/version-landed.js";
@@ -44,7 +44,7 @@ export const createAgentsRoutes = (services: Services) => {
         }
         return entry;
     };
-    // The same lookup for a route a desk may reach: theirs, or FORBIDDEN (auth/desk-scope.ts).
+    // The same lookup for a route a desk may reach: theirs, or FORBIDDEN (auth/fleet-scope.ts).
     const entryFor = (id: string, context: OrpcContext): PersistedAgent => {
         const entry = entryOf(id);
         refuseUnlessVisible(context.identity, entry);
@@ -323,8 +323,14 @@ export const createAgentsRoutes = (services: Services) => {
             if (verdict.kind === "forbidden") {
                 throw new ORPCError("FORBIDDEN", { message: verdict.message });
             }
-            if (!isMemberAddress(input.to, await services.ownerEmail(), await services.members.list())) {
+            const members = await services.members.list();
+            if (!isMemberAddress(input.to, await services.ownerEmail(), members)) {
                 throw new ORPCError("BAD_REQUEST", { message: `${input.to} is not a member of this sandbox` });
+            }
+            // The recipient's own fence, as the roster holds it; the sandbox owner is on no row and is unfenced.
+            const fenced = fenceVerdict(entry.slices, members.find((member) => member.email === input.to)?.slices, input.to);
+            if (fenced.kind === "forbidden") {
+                throw new ORPCError("FORBIDDEN", { message: fenced.message });
             }
             // A name is known only for the caller's own sign-in; a colleague named by address gets theirs from presence
             // on the board.

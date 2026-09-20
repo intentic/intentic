@@ -34,6 +34,7 @@ import { sessionsContract } from "./contracts/sessions.contract.js";
 import { settingsContract } from "./contracts/settings.contract.js";
 import { shareContract } from "./contracts/share.contract.js";
 import { skillsContract } from "./contracts/skills.contract.js";
+import { slicesContract } from "./contracts/slices.contract.js";
 import { systemContract } from "./contracts/system.contract.js";
 import { translatorContract } from "./contracts/translator.contract.js";
 import { usageContract } from "./contracts/usage.contract.js";
@@ -93,6 +94,7 @@ export { sessionsContract } from "./contracts/sessions.contract.js";
 export { settingsContract } from "./contracts/settings.contract.js";
 export { shareContract } from "./contracts/share.contract.js";
 export { skillsContract } from "./contracts/skills.contract.js";
+export { slicesContract } from "./contracts/slices.contract.js";
 export { systemContract } from "./contracts/system.contract.js";
 export { translatorContract } from "./contracts/translator.contract.js";
 export { type PlanLimitsHeld, type PlanLimitsRefreshed, PlanLimitsRefreshedSchema, usageContract } from "./contracts/usage.contract.js";
@@ -195,6 +197,8 @@ export * from "./schemas/sessions.js";
 export * from "./schemas/settings.js";
 export * from "./schemas/share.js";
 export * from "./schemas/shared.js";
+export * from "./schemas/slices.js";
+export * from "./policy/slice-paths.js";
 export * from "./schemas/system.js";
 export * from "./schemas/terminal.js";
 export * from "./schemas/turn-break.js";
@@ -240,6 +244,7 @@ export const sandboxContract = {
     settings: settingsContract,
     share: shareContract,
     skills: skillsContract,
+    slices: slicesContract,
     intentic: intenticContract,
     git: gitContract,
     history: historyContract,

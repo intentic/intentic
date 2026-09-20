@@ -48,6 +48,7 @@ import {
     unattendedAccountsNote,
 } from "../../../personas/personas.js";
 import { personaScopeOf } from "../../../personas/persona-scope.js";
+import { conversationFence } from "../../../slices/slice-scope.js";
 import { jsExecutionPlanOf } from "../../../execution/js-runtime.js";
 import { resolveWithin } from "../../../workspace/files/workspace-files-paths.js";
 import { pluginDirsOf } from "../../../capabilities/plugin-dirs.js";
@@ -334,7 +335,7 @@ export const planTurn = async (services: Services, input: AgentTurn, context: Tu
     const conversationTurns = entry?.turns ?? 0;
     // Resolved before dispatch since the composition of this turn's instructions reads it (see `honoured` below).
     const settings = context.settings ?? (await services.perf.track("turn.plan.settings", {}, () => services.sandboxSettings.get()));
-    const [installed, setup, cast, skillCatalogNote, contextNote, declaredChecks, turnContext] = await Promise.all([
+    const [installed, setup, cast, sliceManifest, skillCatalogNote, contextNote, declaredChecks, turnContext] = await Promise.all([
         // cli/mcp/plugin/browser/agent-kind capabilities the owner installed; not the persona-filtered record, which
         // answers what the runtime can do instead.
         services.perf.track("turn.plan.capabilities", {}, () => services.capabilities.list()),
@@ -348,6 +349,9 @@ export const planTurn = async (services: Services, input: AgentTurn, context: Tu
         // Read unconditionally: gating it on `actsAs` would skip the one case that matters, an unattended wake naming
         // nobody, whose answer must still be "no accounts".
         services.perf.track("turn.plan.personas", {}, () => services.personas.list()),
+        // Read unconditionally for the same reason: this resolves both halves of the turn's fence (the conversation's
+        // own and its card's), and a turn with no card still carries the fence of whoever started it.
+        services.perf.track("turn.plan.slices", {}, () => services.slices.list()),
         // Native skill loaders read the filesystem themselves; everyone else gets this generated catalogue once, on the
         // opening request, with paths as the agent sees them. Rides the user preamble, not systemAppend, since Pi/ACP
         // have no system seam and a custom prompt must not hide tools.
@@ -376,7 +380,10 @@ export const planTurn = async (services: Services, input: AgentTurn, context: Tu
     const effective = underRepoChecks(settings, declaredChecks);
     // Resolved above the provider split so every runtime, not just the Claude Code plan, inherits the same account and
     // tool bounds instead of enforcing the card on only one dropdown's worth of sessions.
-    const persona = turnPersona({ personas: cast, actsAs: input.actsAs, unattended: input.unattended === true });
+    // The conversation's fence is resolved through the slice manifest every turn rather than frozen at birth: the ids
+    // are what was latched, so editing a slice moves its holders' conversations on the next turn, as it moves the
+    // people themselves on their next request.
+    const persona = turnPersona({ personas: cast, actsAs: input.actsAs, unattended: input.unattended === true, fence: conversationFence(sliceManifest, entry) });
     if (persona.reason === "unknown-persona") {
         // The turn asked to act as somebody this workspace has no card for, so it runs with nothing while the prompt
         // still reads as if it had everything.

@@ -1,13 +1,17 @@
 import type { HookCallbackMatcher, HookEvent, HookInput } from "@anthropic-ai/claude-agent-sdk";
-import { type Persona, PersonaPowersSchema } from "@intentic/sandbox-contract";
+import { type Fence, type Persona, PersonaPowersSchema } from "@intentic/sandbox-contract";
 import { expect, test } from "vitest";
 import { personaScopeHooks, personaScopeOf } from "./persona-scope.js";
 import { turnPersona } from "./personas.js";
 
 const ROOT = "/work";
 
-const scopeFor = (extra: Partial<Persona>) =>
-    personaScopeOf(turnPersona({ personas: [{ id: "card", capabilities: [], ...extra }], actsAs: "card", unattended: true }), ROOT);
+// `fence` is what the conversation was born with (its starter's own); undefined is an unfenced member.
+const scopeFor = (extra: Partial<Persona>, fence?: Fence) =>
+    personaScopeOf(
+        turnPersona({ personas: [{ id: "card", capabilities: [], ...extra }], actsAs: "card", unattended: true, fence }),
+        ROOT,
+    );
 
 // Drives the PreToolUse hook like the SDK does; returns the refusal reason, or undefined for allowed.
 const attempt = async (
@@ -62,6 +66,31 @@ test("a path outside the workspace entirely is not this setting's business", asy
 test("a search tool with no path is left alone", async () => {
     const hooks = personaScopeHooks(scopeFor({ workspace: { folders: ["apps/web"] } })!);
     expect(await attempt(hooks, "Grep", { pattern: "todo" })).toBeUndefined();
+});
+
+// The fence a conversation inherits from whoever started it
+
+// A card that names no folder used to mean "the whole workspace"; it now means "whatever the starter could see",
+// which is the whole point of inheritance — a fenced person cannot ask an unfenced card to fetch a file for them.
+test("a card naming no folder is still bounded by the fence its conversation was born with", async () => {
+    const scope = scopeFor({}, ["apps/web"]);
+    const hooks = personaScopeHooks(scope!);
+    expect(await attempt(hooks, "Read", { file_path: "/work/apps/web/src/main.ts" })).toBeUndefined();
+    expect(await attempt(hooks, "Read", { file_path: "/work/apps/api/secret.ts" })).toContain("apps/web");
+});
+
+test("a card's folders narrow the conversation's fence and can never widen it", async () => {
+    // The card asks for all of `apps`; the conversation was started by someone who only holds `apps/web`.
+    const hooks = personaScopeHooks(scopeFor({ workspace: { folders: ["apps"] } }, ["apps/web"])!);
+    expect(await attempt(hooks, "Read", { file_path: "/work/apps/web/main.ts" })).toBeUndefined();
+    expect(await attempt(hooks, "Read", { file_path: "/work/apps/api/main.ts" })).toEqual(expect.any(String));
+});
+
+// A member granted slices that resolve to no folder (every one deleted, or a slice file that will not parse) reaches
+// nothing. Fail-shut: the empty list is a real fence, not the absence of one.
+test("a fence that resolves to no folder admits nothing rather than everything", async () => {
+    const hooks = personaScopeHooks(scopeFor({}, [])!);
+    expect(await attempt(hooks, "Read", { file_path: "/work/apps/web/main.ts" })).toContain("no folder of this workspace");
 });
 
 // "Change the sandbox"

@@ -10,9 +10,9 @@ const storePath = async (): Promise<string> => join(await mkdtemp(join(tmpdir(),
 describe("fileMembersStore: desks", () => {
     test("a desk grant round-trips its cards; a re-grade away from desk drops them", async () => {
         const store = fileMembersStore(await storePath());
-        await store.add("d@x.com", "desk", ["support"]);
+        await store.add("d@x.com", { role: "desk", desks: ["support"] });
         await expect(store.list()).resolves.toEqual([{ email: "d@x.com", role: "desk", desks: ["support"] }]);
-        await store.add("d@x.com", "viewer", ["support"]);
+        await store.add("d@x.com", { role: "viewer", desks: ["support"] });
         await expect(store.list()).resolves.toEqual([{ email: "d@x.com", role: "viewer" }]);
     });
 

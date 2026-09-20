@@ -3,7 +3,7 @@ import { implement, ORPCError } from "@orpc/server";
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../app-env.js";
 import { hasSession } from "../browser/sessions/session-store.js";
-import { heldPersonas } from "../auth/desk-scope.js";
+import { heldPersonas } from "../auth/fleet-scope.js";
 import {
     listPersonaSkills,
     readPersonaPrompt,

@@ -42,11 +42,19 @@ export const rejectForbidden = async (): Promise<never> => {
 
 // A caller the bearer middleware would have produced: an identity, its tier, and the proof behind it (Google unless
 // the test says otherwise), for an `authorize` stub that admits everyone as this person.
-export const proven = (email: string, role: MemberRole, methods: readonly ProofMethod[] = ["google"], desks?: readonly string[]): ProvenCaller => ({
+export const proven = (
+    email: string,
+    role: MemberRole,
+    methods: readonly ProofMethod[] = ["google"],
+    desks?: readonly string[],
+    // The slices this caller is fenced to; absent is the whole workspace, which is what every unfenced tier holds.
+    slices?: readonly string[],
+): ProvenCaller => ({
     email,
     role,
     methods,
     ...(desks === undefined ? {} : { desks }),
+    ...(slices === undefined ? {} : { slices }),
 });
 
 // A JSON POST against the in-process app, for the plain (non-oRPC) routes.

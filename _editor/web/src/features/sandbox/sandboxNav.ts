@@ -52,6 +52,9 @@ export const sandboxSectionGroups = (): readonly SandboxSectionGroup[] => [
             // Who may use this box: members, invites, roles. `shield`, not `users` (Personas' glyph, one row below).
             // Access stays below maintainer: revoking your own grant is anyone's.
             { slug: `access`, label: t(`sandbox.sandboxNav.access`), icon: `shield` },
+            // What the folders behind a grant are. Beside Access rather than under Configuration: a slice is half of
+            // a grant, and reading it as configuration is how somebody edits one without noticing whose reach moved.
+            { slug: `slices`, label: t(`sandbox.sandboxNav.slices`), icon: `folder`, maintainer: true },
             // Who this box acts as outward; not beside `agent` in Configuration, easy to conflate, opposite in stakes.
             { slug: `personas`, label: t(`sandbox.sandboxNav.personas`), icon: `user`, maintainer: true },
             // "Devices", not "Sync": a machine is the thing that has folders, ports and sandboxes on it, and the

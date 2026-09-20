@@ -7,6 +7,9 @@ export type TurnInput = AgentTurn & {
     readonly actor?: string;
     // The member the conversation belongs to if this turn is its first; `since` is the registry's to stamp.
     readonly owner?: Pick<SessionOwner, "email" | "name">;
+    // The fence its starter holds, as slice ids, if this turn is its first; latched there and never re-read, or an
+    // unfenced person replying in a fenced conversation would widen it mid-thread.
+    readonly slices?: readonly string[];
 };
 
 export const actorOf = (identity: Caller | undefined, principal: Principal | undefined): string | undefined =>
@@ -16,6 +19,10 @@ export const actorOf = (identity: Caller | undefined, principal: Principal | und
 // claimable.
 export const ownerOf = (identity: Caller | undefined): Pick<SessionOwner, "email" | "name"> | undefined =>
     identity === undefined ? undefined : { email: identity.email, ...(identity.name !== undefined ? { name: identity.name } : {}) };
+
+// The fence a conversation is born with, from whoever opened it. Undefined for an unfenced member and for a program's
+// wake, which is the whole workspace; a fenced member hands over exactly the slices they hold.
+export const slicesOf = (identity: Caller | undefined): readonly string[] | undefined => identity?.slices;
 
 // A child's starter names its parent conversation, prefixed like a token's so an id can never read as a person.
 const CHILD_PREFIX = "agent:";

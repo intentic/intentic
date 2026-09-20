@@ -33,8 +33,8 @@ const memMembers = (initial: Member[] = []): MembersStore => {
     let members = [...initial];
     return {
         list: async () => members,
-        add: async (email, role, desks) => {
-            members = [...members.filter((member) => member.email !== email), memberRow(email, role, desks)];
+        add: async (email, grant) => {
+            members = [...members.filter((member) => member.email !== email), memberRow(email, grant)];
         },
         remove: async (email) => {
             members = members.filter((member) => member.email !== email);

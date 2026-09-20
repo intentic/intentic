@@ -36,6 +36,7 @@ import { createSafetyRoutes } from "./safety/safety.routes.js";
 import { createSettingsRoutes } from "./settings/settings.routes.js";
 import { createShareRoutes } from "./share/share.routes.js";
 import { createSkillsRoutes } from "./settings/skills.routes.js";
+import { createSlicesRoutes } from "./slices/slices.routes.js";
 import { createSystemRoutes } from "./system/system.routes.js";
 import { createUsageRoutes } from "./usage/usage.routes.js";
 import { createExitRoutes } from "./exit/exit.routes.js";
@@ -62,6 +63,7 @@ export const createRouter = (services: Services) => ({
     settings: createSettingsRoutes(services),
     share: createShareRoutes(services),
     skills: createSkillsRoutes(services),
+    slices: createSlicesRoutes(services),
     intentic: createIntenticRoutes(services),
     endpoints: createEndpointsRoutes(services),
     git: createGitRoutes(services),

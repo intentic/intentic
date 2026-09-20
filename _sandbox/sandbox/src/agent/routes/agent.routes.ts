@@ -57,8 +57,8 @@ import { nudgeUnverifiedWork } from "../verification/verify-nudge.js";
 import { commandRuleFindings, touchedRepos, workspaceRelative } from "../../rules/turn-ending.js";
 import { mentionsSpentAllowance } from "../providers/failure-sentences.js";
 import { conversationOf } from "../tools/agent-requests.js";
-import { actorOf, ownerOf, type TurnInput } from "../run/turn/turn-actor.js";
-import { refuseUnlessHeld, refuseUnlessVisible } from "../../auth/desk-scope.js";
+import { actorOf, ownerOf, slicesOf, type TurnInput } from "../run/turn/turn-actor.js";
+import { refuseUnlessHeld, refuseUnlessVisible } from "../../auth/fleet-scope.js";
 import { opt } from "../run/opt.js";
 import { registerTurn, SteeringQueue, steerTurn, stopTurn } from "../anchors/agent-steering.js";
 import { OUTAGE_MAX_ATTEMPTS, recordProviderFailure, recordProviderSuccess } from "../providers/provider-health.js";
@@ -337,6 +337,7 @@ async function* runConversationTurn(
             ...(input.origin !== undefined ? { origin: input.origin } : {}),
             ...opt("startedBy", input.actor),
             ...opt("owner", input.owner),
+            ...opt("slices", input.slices),
             ...opt("startIn", input.startIn),
             ...opt("actsAs", input.actsAs),
             // A fork names its source once; `keep` is the cut's index in the source's own record.
@@ -1547,7 +1548,7 @@ async function* runTurn(
 
 export const createAgentRoutes = (services: Services) => {
     const i = implement(agentContract).$context<OrpcContext>();
-    // A desk drives only its own conversations (auth/desk-scope.ts); one the registry has never seen is nobody's
+    // A desk drives only its own conversations (auth/fleet-scope.ts); one the registry has never seen is nobody's
     // yet, and becomes the caller's on its first turn.
     const own = (context: OrpcContext, conversationId: string | undefined): void => {
         const entry = conversationId === undefined ? undefined : services.agents.entry(conversationId);
@@ -1572,7 +1573,13 @@ export const createAgentRoutes = (services: Services) => {
             // Who is asking, from what the middleware verified on this request, never from the body.
             const actor = actorOf(context.identity, context.principal);
             // Push rides the run's own lifecycle, not this request, since a tab may be asleep.
-            const run = await startConversationTurn(services, streamAgent, { ...input, conversationId, ...opt("actor", actor), ...opt("owner", ownerOf(context.identity)) });
+            const run = await startConversationTurn(services, streamAgent, {
+                ...input,
+                conversationId,
+                ...opt("actor", actor),
+                ...opt("owner", ownerOf(context.identity)),
+                ...opt("slices", slicesOf(context.identity)),
+            });
             if (run === undefined) {
                 throw new ORPCError("CONFLICT", { message: "a turn is already running for this conversation" });
             }

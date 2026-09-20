@@ -2859,7 +2859,12 @@
             "viewer": "Viewer",
             "watchEverythingAgentsChats": "Can watch everything, agents, chats, files. Can't change anything.",
             "webhooks": "Webhooks",
-            "you": "you"
+            "you": "you",
+            "slicePick": "Which parts of the workspace they see",
+            "noSlicesToGrant": "This sandbox has no named slices yet, so everyone sees the whole workspace.",
+            "nameOne": "Name one",
+            "noSliceMeansWhole": "No slice picked: they see the whole workspace.",
+            "folders": "Folders"
         },
         "sandboxAgent": {
             "agentSettingsCategory": "Agent settings category",
@@ -2946,7 +2951,8 @@
             "personas": "Personas",
             "reach": "Reach",
             "secrets": "Secrets",
-            "usage": "Usage"
+            "usage": "Usage",
+            "slices": "Slices"
         },
         "sandboxOverview": {
             "addLogo": "Add a logo",
@@ -3242,6 +3248,22 @@
             "sandboxClosedConnection": "The sandbox closed the connection.",
             "sandboxNeverReportedAddress": "This sandbox has never reported an address.",
             "sandboxStoppedResponding": "The sandbox stopped responding."
+        },
+        "sandboxSlices": {
+            "slices": "Slices of the workspace",
+            "whatASliceIs": "A slice is a named part of this workspace. Access is granted in slices rather than in folder lists per person, so widening what a team sees is one edit here instead of one edit per member. Somebody granted a slice sees those folders and nothing else — in the file tree, in search, and in the conversations they open.",
+            "noSlicesYet": "No slices yet. Everyone with access sees the whole workspace.",
+            "newSlice": "New slice",
+            "newSliceName": "New slice",
+            "sliceName": "Slice name",
+            "folders": "Folders",
+            "pickFolders": "Pick the folders it holds",
+            "pickFoldersToFinish": "Pick at least one folder, then save. A slice holding none would be a grant with no reader.",
+            "needsFolder": "Pick at least one folder. A slice holding none would be a grant with no reader.",
+            "couldNotSave": "Couldn’t save the slice: is the sandbox online?",
+            "couldNotDelete": "Couldn’t delete the slice.",
+            "deleteSlice": "Delete slice",
+            "onlyOwnerEdits": "Only the sandbox owner decides who sees which folders."
         }
     },
     "settings": {

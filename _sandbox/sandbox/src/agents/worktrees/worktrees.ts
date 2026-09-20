@@ -9,6 +9,8 @@ import { discoverRepos } from "../../workspace/layout/repo-discovery.js";
 import type { WorkspacePaths } from "../../workspace/workspace.js";
 import { dropAgentRef, dropOrphanParkedRefs, parkAgentRefs, unparkAgentRef } from "../land/agent-refs.js";
 import { mirroredDirs, overlaysDir, overlaysRoot, type TurnIsolation } from "./isolation.js";
+import { coneFor, fencedComposition } from "./worktree-cone.js";
+import type { Fence } from "@intentic/sandbox-contract";
 
 // A conversation's isolated checkout: one git worktree per workspace repo, root at <worktreesRoot>/<id>/, nested repos
 // at <id>/<repo>/, mirroring the /work layout.
@@ -50,6 +52,10 @@ export interface AgentWorktrees {
         // - a recorded repo not named here leaves (remainder committed onto agent/<id>, branch parked)
         // - a name with no live repository is ignored
         selection?: readonly string[],
+        // The conversation's own fence, as workspace-relative folders; absent means the whole tree.
+        // Narrows the composition to the repositories it reaches, and cuts each of those to a sparse checkout, so the
+        // fence is enforced by ABSENCE rather than by a tool hook a shell can compute its way around.
+        fence?: Fence,
     ) => Promise<ConversationWorktree>;
     // Tear down: worktree remove before the ref (git refuses to delete a checked-out branch), then the dir.
     readonly remove: (id: string, recorded: readonly { repo: string; base: string }[]) => Promise<void>;
@@ -351,6 +357,34 @@ export const createAgentWorktrees = (
         await Promise.all(repos.map(({ repo }) => linkMirrors(id, repo, namespaced)));
     };
 
+    // Cuts one repo's checkout to the folders the conversation may touch. Cone mode, which git keeps per worktree, so
+    // this never reaches the shared tree or another conversation's.
+    // Honest about its own edge: cone mode always keeps a repository's ROOT-level files, so a fenced checkout still
+    // holds the README and package.json beside the folders it was given. Everything in a directory it was not given
+    // is genuinely absent.
+    // Not undone anywhere: a conversation's fence is latched at its first turn, so one born unfenced never becomes
+    // sparse and one born fenced stays that way. Re-applied every ensure, which is what makes an edited slice move an
+    // existing conversation's checkout.
+    const sparsen = async (id: string, repo: string, fence: Fence): Promise<void> => {
+        const cone = coneFor(fence, repo);
+        if (cone === undefined) {
+            return;
+        }
+        const worktree = worktreeDir(id, repo);
+        // Best-effort like the mirrors: a checkout that refuses to narrow is reported and left whole rather than
+        // failing the turn — the file-tool hook and the route fence still hold.
+        await git(worktree, ["sparse-checkout", "set", "--cone", ...cone]).catch((error: unknown) =>
+            logger.warn({ err: error, id, repo, cone }, "agents: could not narrow a fenced conversation's checkout"),
+        );
+    };
+
+    const sparsenComposition = async (id: string, repos: readonly { readonly repo: string }[], fence: Fence): Promise<void> => {
+        if (fence === undefined) {
+            return;
+        }
+        await Promise.all(repos.map(({ repo }) => sparsen(id, repo, fence)));
+    };
+
     // Commits what one checkout still holds onto its branch before the checkout goes (retire pass 1 / a leaving repo's
     // first half); no repo lock needed since this only touches the agent's own worktree.
     // The porcelain probe covers staged, unstaged and untracked, but the commit itself happens in
@@ -445,20 +479,24 @@ export const createAgentWorktrees = (
                 .filter((entry): entry is { repo: string; base: string } => entry.base !== undefined)
                 .map(({ repo, base }) => ({ repo, base }));
         },
-        ensure: async (id, recorded, base, namespaced, selection) => {
+        ensure: async (id, recorded, base, namespaced, selection, fence) => {
             const branch = `agent/${id}`;
-            // What the conversation should hold, root leading: every live repo, or the selected ones plus root.
+            // What the conversation should hold, root leading: every live repo, or the selected ones plus root, and
+            // in either case only the ones the fence reaches.
             // Read live, not off the record, so a repo cloned since the last turn is seen whether or not the
             // conversation is selected.
             const wanted = async (): Promise<readonly { repo: string; base: string | undefined }[]> => {
                 const live = base === undefined ? (await liveRepos()).map((repo) => ({ repo, base: undefined })) : base;
-                return selection === undefined ? live : live.filter(({ repo }) => repo === "root" || selection.includes(repo));
+                const picked = selection === undefined ? live : live.filter(({ repo }) => repo === "root" || selection.includes(repo));
+                const reachable = new Set(fencedComposition(fence, picked.map(({ repo }) => repo)));
+                return picked.filter(({ repo }) => reachable.has(repo));
             };
             if (recorded.length > 0) {
                 await eachRepo(recorded, "root-first", (repo) => withRepoLock(repo, () => repairOne(id, repo)));
-                // An unselected conversation keeps the composition it was born with; a selected one goes to its
-                // selection.
-                const repos = selection === undefined ? recorded : await reconcile(id, recorded, await wanted());
+                // An unselected, unfenced conversation keeps the composition it was born with; anything narrowed goes
+                // to what it should now hold, so an edited slice moves the checkout on the next turn.
+                const repos = selection === undefined && fence === undefined ? recorded : await reconcile(id, recorded, await wanted());
+                await sparsenComposition(id, repos, fence);
                 await linkComposition(id, repos, namespaced);
                 return { cwd: conversationDir(id), branch, repos };
             }
@@ -475,6 +513,9 @@ export const createAgentWorktrees = (
             // Read back in discovery order, not completion order: root leads the composition, recorded for later
             // repairs.
             const repos = live.map(({ repo }) => created.get(repo)).filter((entry): entry is { repo: string; base: string } => entry !== undefined);
+            // Narrowed before the mirrors go in: `worktree add` checks the repository out whole, so the window where
+            // a fenced conversation's folders exist on disk closes before its first turn can run.
+            await sparsenComposition(id, repos, fence);
             await linkComposition(id, repos, namespaced);
             return { cwd: conversationDir(id), branch, repos };
         },

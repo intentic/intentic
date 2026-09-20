@@ -30,6 +30,7 @@ import {
     memoryMintedStore,
     memoryPasskeyStore,
     memoryPersonasStore,
+    memorySlicesStore,
     memorySecretVault,
     memoryThreadSessionsStore,
 } from "./route-stores.testing.js";
@@ -231,6 +232,8 @@ export const services = (overrides: ServiceOverrides = {}): Services => {
         // No personas by default: an unattended turn reaches no logged-in account, since an unpinned wake is denied
         // rather than waved through. A suite wanting one builds the card and its browser capability.
         personas: memoryPersonasStore(),
+        // No slices by default: the unfenced workspace, which is what every member row without them already means.
+        slices: memorySlicesStore(),
         automations: memoryAutomationsStore(),
         // No held wakes: agents.list projects them as `held`, and no suite here holds one.
         heldWakes: {

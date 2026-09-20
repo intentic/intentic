@@ -71,6 +71,10 @@ export const PersistedAgentSchema = z.object({
     origin: AgentOriginSchema.optional(),
     // Who asked for the first turn, latched like `origin`; absent when the request carried no verified identity.
     startedBy: z.string().optional(),
+    // The fence this conversation was born with, as slice ids, from whoever started it. Latched at the first turn and
+    // never re-read: a conversation is the unit a fence binds to, so an unfenced member replying in a fenced thread
+    // cannot widen what it may touch. Absent means the whole workspace.
+    slices: z.array(z.string()).optional(),
     // Who answers for it: the member who started it, the parent's owner for a spawned child, or whoever it was handed
     // to since. Absent means unclaimed.
     owner: SessionOwnerSchema.optional(),

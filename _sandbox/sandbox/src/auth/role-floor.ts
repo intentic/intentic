@@ -145,25 +145,46 @@ const DESK_PATHS: ReadonlySet<string> = new Set([
     "/system/passkeys/register",
 ]);
 
+// What a FENCED desk reaches on top of the list above: the workspace, read-only, and only the part its slices name
+// (every route below applies the fence itself, workspace/layout/workspace-fence.ts).
+// Conditional on holding a fence rather than granted to every desk, because a desk without one would then reach the
+// whole tree — a widening of the narrowest tier that nobody asked for. Naming a slice is how somebody asks.
+const FENCED_DESK_NAMES: ReadonlySet<string> = new Set([
+    "workspace.tree",
+    "workspace.children",
+    "workspace.file",
+    "workspace.search",
+    "workspace.resolve",
+    "workspace.derived",
+    "workspace.derive",
+    "workspace.derivedStatus",
+    "workspace.mediaTicket",
+    "workspace.repos",
+    "slices.list",
+]);
+
+const FENCED_DESK_PATHS: ReadonlySet<string> = new Set(["/workspace/raw", "/workspace/thumb", "/workspace/media"]);
+
 // The one refusal the bearer middleware hands a verified member: the tier a route wants, or a desk asking for a door
 // not on its list. Undefined admits. `target` is the upload's `?path=`, the one route whose floor depends on where
 // the bytes land.
 export const memberRefusal = (
-    caller: { readonly role: MemberRole },
+    caller: { readonly role: MemberRole; readonly slices?: readonly string[] | undefined },
     method: string,
     path: string,
     target?: string,
 ): { readonly error: string; readonly floor: MemberRole } | undefined => {
     if (caller.role === "desk") {
-        return deskReach(method, path, target) ? undefined : { error: "not open to a desk member", floor: "viewer" };
+        return deskReach(method, path, target, caller.slices !== undefined) ? undefined : { error: "not open to a desk member", floor: "viewer" };
     }
     const floor = routeFloor(method, path, target);
     return roleAtLeast(caller.role, floor) ? undefined : { error: `${floor} access required`, floor };
 };
 
 // Whether a desk member may reach this request at all. `target` is the upload's `?path=`: an attachment rides with
-// the message it belongs to, and is the one byte-write a desk makes.
-export const deskReach = (method: string, path: string, target?: string): boolean => {
+// the message it belongs to, and is the one byte-write a desk makes. `fenced` is whether this desk holds slices,
+// which is what buys it the read-only workspace routes above.
+export const deskReach = (method: string, path: string, target?: string, fenced = false): boolean => {
     if (path === "/workspace/upload") {
         return target !== undefined && isAttachmentPath(target);
     }
@@ -171,11 +192,12 @@ export const deskReach = (method: string, path: string, target?: string): boolea
         return true;
     }
     const name = routeNameForRequest(ROUTES, method, path);
-    if (name !== undefined) {
-        return DESK_NAMES.has(name);
-    }
-    return DESK_PATHS.has(path);
+    return name === undefined ? deskAllows(DESK_PATHS, FENCED_DESK_PATHS, path, fenced) : deskAllows(DESK_NAMES, FENCED_DESK_NAMES, name, fenced);
 };
+
+// Every desk's list, plus a fenced one's, which it only reaches while it actually holds slices.
+const deskAllows = (always: ReadonlySet<string>, whenFenced: ReadonlySet<string>, key: string, fenced: boolean): boolean =>
+    always.has(key) || (fenced && whenFenced.has(key));
 
 // `target` is the workspace path a byte-write addresses (upload's `?path=`); absent for every other route.
 export const routeFloor = (method: string, path: string, target?: string): MemberRole => {

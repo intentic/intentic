@@ -10,19 +10,34 @@ import { isControlPlanePath, resolveWithin } from "./workspace-files-paths.js";
 import { MAX_UPLOAD_BYTES, UploadTooLargeError } from "./workspace-files-upload.js";
 import { THUMBNAIL_TYPE, thumbnailable, workspaceThumbnail } from "./workspace-thumbnail.js";
 import { insideArchive, scopedTarget } from "../layout/workspace-scope.js";
+import { fenceOpens, refuseFenced } from "../layout/workspace-fence.js";
+import type { Fence } from "@intentic/sandbox-contract";
+import { refuseUnlessVisible } from "../../auth/fleet-scope.js";
+import type { Caller } from "../../auth/auth.js";
+import { callerFence } from "../../slices/slice-scope.js";
 
 // Byte routes that stay off oRPC because their bodies are streamed: raw file read, ranged media read, and file/diff/tar
 // uploads. Registered before the oRPC catch-all, like /health.
 
-export type WorkspaceBytesRoutesDeps = Pick<Services, "workspaceScope" | "files" | "auth" | "mediaTickets" | "workspace" | "history">;
+export type WorkspaceBytesRoutesDeps = Pick<Services, "workspaceScope" | "files" | "auth" | "mediaTickets" | "workspace" | "history" | "slices" | "agents">;
 
 // Resolves path via scopedTarget and translates its ORPCError into this route's status shape; anything else propagates.
+// The same two questions the oRPC reads ask first — whose copy, and whether this caller may look there — since these
+// routes carry the bytes and would otherwise be the way around the fence the typed routes apply.
 const scopedFileTarget = async (
-    services: Pick<Services, "workspaceScope">,
+    services: Pick<Services, "workspaceScope" | "slices" | "agents">,
     path: string,
     agent: string | undefined,
-): Promise<{ target: string } | { error: string; status: 400 | 404 | 412 }> => {
+    caller: Caller | undefined,
+): Promise<{ target: string } | { error: string; status: 400 | 403 | 404 | 412 }> => {
     try {
+        if (agent !== undefined) {
+            const entry = services.agents.entry(agent);
+            if (entry !== undefined) {
+                refuseUnlessVisible(caller, entry);
+            }
+        }
+        refuseFenced(callerFence(await services.slices.list(), caller), path);
         return { target: (await scopedTarget(services.workspaceScope, agent, path)).target };
     } catch (error) {
         if (!(error instanceof ORPCError)) {
@@ -30,6 +45,9 @@ const scopedFileTarget = async (
         }
         if (error.code === "BAD_REQUEST") {
             return { error: error.message, status: 400 };
+        }
+        if (error.code === "FORBIDDEN") {
+            return { error: error.message, status: 403 };
         }
         if (error.code === "PRECONDITION_FAILED") {
             return { error: error.message, status: 412 };
@@ -39,13 +57,23 @@ const scopedFileTarget = async (
 };
 
 // Why an upload can't be written, or undefined when it can: the sandbox's own state is never writable through the
-// generic upload, and an archive is browsable rather than writable.
-const refusedUpload = (root: string, relPath: string | undefined, target: string): { error: string; status: 400 | 404 } | undefined => {
+// generic upload, an archive is browsable rather than writable, and nobody writes outside their own folders.
+// The attachment exemption `fenceOpens` carries is what keeps a fenced member able to put a file in front of the
+// agent they are allowed to talk to, which is the only write their tier has.
+const refusedUpload = (
+    root: string,
+    fence: Fence,
+    relPath: string | undefined,
+    target: string,
+): { error: string; status: 400 | 403 | 404 } | undefined => {
     if (isControlPlanePath(root, target)) {
         return { error: "not found", status: 404 };
     }
     if (insideArchive(root, relPath ?? "")) {
         return { error: "an archive's contents are read-only; extract it to change them", status: 400 };
+    }
+    if (!fenceOpens(fence, relPath ?? "")) {
+        return { error: "outside your access to this workspace", status: 403 };
     }
     return undefined;
 };
@@ -59,7 +87,7 @@ export const createWorkspaceBytesRoutes = (services: WorkspaceBytesRoutesDeps) =
             return c.json({ error: "invalid path" }, 400);
         }
         // Shared with the oRPC file route so an image previews from the same scope its text reads from.
-        const scoped = await scopedFileTarget(services, path, c.req.query("agent"));
+        const scoped = await scopedFileTarget(services, path, c.req.query("agent"), c.get("identity"));
         if ("error" in scoped) {
             return c.json({ error: scoped.error }, scoped.status);
         }
@@ -89,7 +117,7 @@ export const createWorkspaceBytesRoutes = (services: WorkspaceBytesRoutesDeps) =
             return c.json({ error: "invalid path" }, 400);
         }
         // Shared with the raw route, so a tile and the file it opens are read from the same scope.
-        const scoped = await scopedFileTarget(services, path, c.req.query("agent"));
+        const scoped = await scopedFileTarget(services, path, c.req.query("agent"), c.get("identity"));
         if ("error" in scoped) {
             return c.json({ error: scoped.error }, scoped.status);
         }
@@ -122,7 +150,7 @@ export const createWorkspaceBytesRoutes = (services: WorkspaceBytesRoutesDeps) =
         if (path === undefined) {
             return c.json({ error: "invalid path" }, 400);
         }
-        const scoped = await scopedFileTarget(services, path, c.req.query("agent"));
+        const scoped = await scopedFileTarget(services, path, c.req.query("agent"), c.get("identity"));
         if ("error" in scoped) {
             return c.json({ error: scoped.error }, scoped.status);
         }
@@ -171,7 +199,7 @@ export const createWorkspaceBytesRoutes = (services: WorkspaceBytesRoutesDeps) =
         if (target === undefined) {
             return c.json({ error: "invalid path" }, 400);
         }
-        const refused = refusedUpload(services.workspace.root, path, target);
+        const refused = refusedUpload(services.workspace.root, callerFence(await services.slices.list(), c.get("identity")), path, target);
         if (refused !== undefined) {
             return c.json({ error: refused.error }, refused.status);
         }
@@ -221,9 +249,13 @@ export const createWorkspaceBytesRoutes = (services: WorkspaceBytesRoutesDeps) =
     // POST /workspace/upload-diff: given a manifest of path+size+mtime, answers which are already identical on disk
     // (size + whole-second mtime).
     // Live-stats /work including `.git`, no entry cap; read-only, never writes.
+    // Answers about paths the caller named, so a fenced one is told only about their own folders: "already on disk"
+    // is a fact about a file, and a fenced caller learning it for `finance/payroll.csv` has learnt that it is there.
     uploadDiff: async (c: Context<AppEnv>): Promise<Response> => {
         const { files } = await c.req.json<{ files?: UploadManifestEntry[] }>();
-        return c.json({ skip: await computeUploadSkip(services.workspace.root, files ?? []) });
+        const fence = callerFence(await services.slices.list(), c.get("identity"));
+        const asked = (files ?? []).filter((entry) => fenceOpens(fence, entry.path));
+        return c.json({ skip: await computeUploadSkip(services.workspace.root, asked) });
     },
 
     // POST /workspace/upload-archive: extracts one streamed tar of a dropped tree into /work, entry-by-entry, streamed
@@ -234,6 +266,11 @@ export const createWorkspaceBytesRoutes = (services: WorkspaceBytesRoutesDeps) =
         const body = c.req.raw.body;
         if (body === null) {
             return c.json({ error: "empty body" }, 400);
+        }
+        // Refused outright rather than filtered entry by entry: a dropped tree lands where its own paths say, and a
+        // half-extracted archive is a worse answer to a fenced caller than a refusal they can act on.
+        if (callerFence(await services.slices.list(), c.get("identity")) !== undefined) {
+            return c.json({ error: "dropping a whole tree needs access to the whole workspace" }, 403);
         }
         try {
             await extractTarToWorkspace(services.workspace.root, body, MAX_UPLOAD_BYTES);

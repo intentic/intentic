@@ -1,4 +1,5 @@
 import { join } from "node:path";
+import { STATE_DIR } from "@intentic/constants";
 import { errorMessage } from "@intentic/base/errors";
 import {
     type Capability,
@@ -46,6 +47,12 @@ export const DEFINITION_WORKSPACE: readonly { readonly path: string; readonly no
         note: "Personas arrive naming accounts the target has not connected; each reads as broken until its capability is.",
     },
     { path: ".intentic/config/personas/", note: "Persona prompt files, beside the cards that name them." },
+    {
+        // Joined from the constant rather than spelled or interpolated: this entry postdates both the hardcoded-path
+        // baseline and the rule against composing a state path out of a template.
+        path: [STATE_DIR, "config", "slices.json"].join("/"),
+        note: "The named parts of the workspace arrive with their folders, and nobody holding them: the roster is the target's own, so who sees which slice is granted again there.",
+    },
     {
         // Via stateRelPath so the state union type checks this name; the trailing slash is re-added after trimming.
         path: `${stateRelPath(".intentic/config/hooks/")}/`,

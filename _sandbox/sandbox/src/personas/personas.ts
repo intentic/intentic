@@ -1,10 +1,12 @@
 import {
     type Capability,
+    type Fence,
     type Persona,
     type PersonaPowers,
     type PersonaWorkspace,
     type SystemPromptMode,
     type TurnNote,
+    fenceIntersection,
     FRONT_DESK_PERSONA,
     PersonaPowersSchema,
 } from "@intentic/sandbox-contract";
@@ -34,6 +36,10 @@ export interface TurnPersona {
     readonly powers: PersonaPowers;
     // Where the turn works, when the card says. Absent means the surface's own answer, unchanged.
     readonly workspace: PersonaWorkspace | undefined;
+    // Folders this turn's file tools may touch, already the tighter of the card's slices and the fence the
+    // conversation inherited from whoever started it. Undefined is the whole workspace.
+    // Resolved here rather than at each surface, so no caller can enforce one of the two halves and miss the other.
+    readonly fence: Fence;
     readonly reason: PersonaReason;
 }
 
@@ -43,6 +49,9 @@ export interface TurnPersonaInput {
     readonly actsAs: string | undefined;
     // AgentTurn.unattended, whether anyone is at a composer. The hinge the account rule turns on.
     readonly unattended: boolean;
+    // The fence the conversation carries, fixed when it was started from whoever started it. Undefined means its
+    // starter was unfenced, which is every conversation an owner or a maintainer opens.
+    readonly fence?: Fence;
 }
 
 // Every shelf open, what an unpinned turn gets, and the shape every caller can read without a fallback.
@@ -89,15 +98,15 @@ const allowsCapability = (capability: Capability, card: Persona, powers: Persona
     }
 };
 
-export const turnPersona = ({ personas, actsAs, unattended }: TurnPersonaInput): TurnPersona => {
+export const turnPersona = ({ personas, actsAs, unattended, fence }: TurnPersonaInput): TurnPersona => {
     if (actsAs === undefined) {
         return unattended
-            ? { persona: undefined, allows: ACCOUNTS_ONLY_DENIED, powers: FULL, workspace: undefined, reason: "unattended-unpinned" }
-            : { persona: undefined, allows: EVERYTHING, powers: FULL, workspace: undefined, reason: "attended-open" };
+            ? { persona: undefined, allows: ACCOUNTS_ONLY_DENIED, powers: FULL, workspace: undefined, fence, reason: "unattended-unpinned" }
+            : { persona: undefined, allows: EVERYTHING, powers: FULL, workspace: undefined, fence, reason: "attended-open" };
     }
     const card = personas.find((entry) => entry.id === actsAs);
     if (card === undefined) {
-        return { persona: undefined, allows: NOTHING, powers: NONE_POWERS, workspace: undefined, reason: "unknown-persona" };
+        return { persona: undefined, allows: NOTHING, powers: NONE_POWERS, workspace: undefined, fence, reason: "unknown-persona" };
     }
     // Parsed, not spread, so defaults come from the schema's one list instead of a second one that could go stale.
     const powers = PersonaPowersSchema.parse(card.powers ?? {});
@@ -106,6 +115,9 @@ export const turnPersona = ({ personas, actsAs, unattended }: TurnPersonaInput):
         allows: (capability) => allowsCapability(capability, card, powers),
         powers,
         ...(card.workspace !== undefined ? { workspace: card.workspace } : { workspace: undefined }),
+        // The card narrows the conversation's fence, never widens it: a card naming a folder its starter cannot see
+        // drops that folder here rather than opening it.
+        fence: fenceIntersection(fence, card.workspace?.folders),
         reason: "persona",
     };
 };
@@ -229,7 +241,9 @@ export const personaNote = (persona: TurnPersona): string | undefined => {
         return undefined;
     }
     const name = card.label ?? card.id;
-    const folders = card.workspace?.folders;
+    // The resolved fence, not the card's slice ids: the turn is told the folders it will actually be refused outside
+    // of, which is the card's slices already narrowed by whoever started the conversation.
+    const folders = persona.fence;
     const scope =
         folders === undefined || folders.length === 0
             ? ``

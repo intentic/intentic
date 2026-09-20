@@ -33,12 +33,13 @@ describe(`staleQueryKeys`, () => {
         expect(staleQueryKeys([`.intentic/config/capabilities.json`], [])).toEqual([`capabilities`, `environment`, `panels`, `manifests`]);
     });
 
-    it(`refreshes the unreadable-manifest notice for the three files a person hand-edits`, () => {
+    it(`refreshes the unreadable-manifest notice for the four files a person hand-edits`, () => {
         const carries = WORKSPACE_STATE_FILES.filter((file) => file.invalidates.includes(`manifests`)).map((file) => file.path);
         expect(carries.toSorted()).toEqual([
             `.intentic/config/capabilities.json`,
             `.intentic/config/personas.json`,
             `.intentic/config/settings.json`,
+            `.intentic/config/slices.json`,
         ]);
     });
 
@@ -353,6 +354,9 @@ describe(`VERSIONED_STATE_PATHS`, () => {
             `${STATE_DIR}/config/settings.json`,
             // Skills the owner wrote: text that changes agent behavior, worth a diff like the rules in settings.json.
             `${STATE_DIR}/config/skills/`,
+            // Which folders each named slice holds: editing one moves what everyone granted it can see, so the
+            // change belongs in a diff rather than only in a screen.
+            `${STATE_DIR}/config/slices.json`,
             `${STATE_DIR}/config/templates.json`,
             `${STATE_DIR}/config/workflows.json`,
             `${STATE_DIR}/config/workspace-extensions/`,

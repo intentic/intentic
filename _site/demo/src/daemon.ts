@@ -13,6 +13,7 @@ import {
     type TurnBreak,
     type TurnBreakPolicy,
     type Persona,
+    type Slice,
     type Model,
     type OauthAccount,
     type OauthAccountList,
@@ -572,6 +573,11 @@ const ROUTES: readonly (readonly [string, string, Handler])[] = [
     // is real (the fixture is the store), so the project persona New agent makes under a scope shows in the picker.
     [`GET`, `/personas`, () => json({ personas: demoPersonas, connected: [`gmail-support`, `intercom`, `x-brand`, `linkedin`, `github`, `stripe-ops`] })],
     [`POST`, `/personas`, savePersonaRoute],
+    // The named parts of the workspace a grant can be fenced to; a save is real, like a persona's, so the Slices
+    // page edits what the Access tab's picker then offers.
+    [`GET`, `/slices`, () => json({ slices: demoSlices })],
+    [`POST`, `/slices`, saveSliceRoute],
+    [`DELETE`, `/slices/{id}`, removeSliceRoute],
     // Every registry URL answers the same joined data; the real route would clone a repo and read two JSON
     // files from it.
     [`POST`, `/capabilities/marketplace`, () => json(demoRegistry())],
@@ -970,7 +976,12 @@ function grantMemberRoute({ request }: RouteContext): Promise<Response> {
         if (grant.role === `desk` && (grant.desks?.length ?? 0) === 0) {
             return json({ error: `a desk needs at least one persona to act through` }, 400);
         }
-        grantAccess(grant.email, grant.role, grant.desks);
+        // The other refusal the real daemon makes: a maintainer carries the owner's operating authority, so a folder
+        // fence over it would enforce nothing.
+        if (grant.role === `maintainer` && grant.slices !== undefined) {
+            return json({ error: `a maintainer holds the owner's operating authority and cannot be fenced to part of the workspace` }, 400);
+        }
+        grantAccess(grant.email, grant.role, grant.desks, grant.slices);
         return json({ members: grants() });
     });
 }
@@ -1000,6 +1011,35 @@ function savePersonaRoute({ request }: RouteContext): Promise<Response> {
             }
         }),
     );
+}
+
+// The named parts of the workspace, upserted like the personas above: two, so a picker shows both the fence and
+// what it leaves out.
+const demoSlices: Slice[] = [
+    { id: `support`, label: `Support desk`, brief: `Tickets, replies and the help centre.`, folders: [`web/support`] },
+    { id: `site`, label: `Marketing site`, folders: [`web/site`] },
+];
+function saveSliceRoute({ request }: RouteContext): Promise<Response> {
+    return request.json().then((body) =>
+        okAfter(() => {
+            const slice = body as Slice;
+            const index = demoSlices.findIndex((entry) => entry.id === slice.id);
+            if (index === -1) {
+                demoSlices.push(slice);
+            } else {
+                demoSlices[index] = slice;
+            }
+        }),
+    );
+}
+// Refused while a demo member still holds it, as the daemon refuses one: the demo roster is the fixture's own.
+function removeSliceRoute({ param }: RouteContext): Response {
+    return okAfter(() => {
+        const index = demoSlices.findIndex((entry) => entry.id === param(`id`));
+        if (index !== -1) {
+            demoSlices.splice(index, 1);
+        }
+    });
 }
 
 // A missing path answers "nothing there" in a 200 body, not a 404; several surfaces read a file just to

@@ -22,6 +22,20 @@ import { listTemplates, loadManifest, readTemplatesConfig } from "../scaffold/te
 import { isControlPlanePath, resolveWithin } from "./files/workspace-files-paths.js";
 import { UnknownArchiveError } from "./files/workspace-extract.js";
 import { childrenForRead, containedForRead, containedIn, insideArchive, scopedTarget, workspaceRootFor } from "./layout/workspace-scope.js";
+import {
+    fencedChildren,
+    fencedClassification,
+    fencedRepos,
+    fencedTo,
+    fencedTree,
+    fenceOpens,
+    refuseFenced,
+    refuseUnlistable,
+    searchPaths,
+} from "./layout/workspace-fence.js";
+import { refuseUnlessVisible } from "../auth/fleet-scope.js";
+import { callerFence } from "../slices/slice-scope.js";
+import type { Fence } from "@intentic/sandbox-contract";
 
 // Row cap for one /workspace/search page, sized to the virtualized list's visible rows.
 const GUI_SEARCH_HITS = 1_000;
@@ -55,45 +69,83 @@ export const createWorkspaceRoutes = (services: Services) => {
     const i = implement(workspaceContract).$context<OrpcContext>();
     // Resolves a write target inside the shared tree; no write route can ever target a conversation's checkout, and an
     // archive's contents are read-only: nothing here repacks a zip.
-    const contained = async (relPath: string): Promise<string> => {
+    const contained = async (context: OrpcContext, relPath: string): Promise<string> => {
         if (insideArchive(services.workspace.root, relPath)) {
             throw new ORPCError("BAD_REQUEST", { message: "an archive's contents are read-only; extract it to change them" });
         }
+        // Unreachable today, since every write here floors at maintainer and a maintainer cannot be fenced; kept so
+        // the fence does not depend on that floor staying where it is.
+        refuseFenced(await fenceFor(context), relPath);
         return containedIn(services.workspace.root, relPath);
     };
     // The same guard for a shadow's source, answering the canonical relative path a sidecar is filed under: `./a//b.pdf`
     // and `a/b.pdf` name one file and must not name two shadows. No archive refusal: a member simply has no shadow.
-    const derivedRel = async (relPath: string): Promise<string> => relative(services.workspace.root, await containedIn(services.workspace.root, relPath));
+    const derivedRel = async (relPath: string): Promise<string> =>
+        relative(services.workspace.root, await containedIn(services.workspace.root, relPath));
     // Read scope shared with the byte routes in app.ts; two resolvers here would disagree on a file's contents.
     const scope = services.workspaceScope;
+    // The caller's own fence, read per request so a slice edit lands on the very next one rather than at next sign-in.
+    const fenceFor = async (context: OrpcContext): Promise<Fence> => callerFence(await services.slices.list(), context.identity);
+    // A conversation's checkout is its own. A caller who may not see the conversation may not read out of it either,
+    // or every fence would have a second door marked with somebody else's id.
+    const refuseUnseenAgent = (context: OrpcContext, agent: string | undefined): void => {
+        if (agent === undefined) {
+            return;
+        }
+        const entry = services.agents.entry(agent);
+        // An unknown id stays NOT_FOUND from the scope resolver; saying FORBIDDEN here would answer whether it exists.
+        if (entry !== undefined) {
+            refuseUnlessVisible(context.identity, entry);
+        }
+    };
+    // Every scoped read asks both questions before a path reaches the resolver: whose copy, and whether this caller
+    // may look there at all.
+    const scopedRead = async (context: OrpcContext, agent: string | undefined, relPath: string) => {
+        refuseUnseenAgent(context, agent);
+        refuseFenced(await fenceFor(context), relPath);
+        return scopedTarget(scope, agent, relPath);
+    };
     // Zone and sandbox id used to build per-app preview URLs (preview-<panel>-<id>.<zone>).
     const zone = services.config.zone !== "" ? services.config.zone : zoneFromUrl(services.config.sandbox.publicUrl);
     const sandboxId = sandboxIdFromToken(services.config.connectToken);
     // Resolves and validates the {repo} path param for the apps extension's routes; the repo must already exist.
-    const monorepoOf = (repo: string): string => {
+    const monorepoOf = async (context: OrpcContext, repo: string): Promise<string> => {
         if (!isValidRepoName(repo)) {
             throw new ORPCError("BAD_REQUEST", { message: "missing or invalid repo" });
         }
         if (!existsSync(join(services.workspace.root, repo))) {
             throw new ORPCError("NOT_FOUND", { message: `no monorepo named "${repo}"` });
         }
+        refuseFenced(await fenceFor(context), repo);
         return repo;
     };
     return {
         // input.agent picks whose copy to walk, with no fallback; a file the walk misses can still be opened via
         // `file`.
-        tree: i.tree.handler(async ({ input }) => services.workspaceTree(await workspaceRootFor(scope, input.agent))),
+        // A fenced caller is shown their own folders and the ancestors leading to them, rather than the whole tree
+        // with most of it refusing on click.
+        tree: i.tree.handler(async ({ input, context }) => {
+            refuseUnseenAgent(context, input.agent);
+            const tree = await services.workspaceTree(await workspaceRootFor(scope, input.agent));
+            return fencedTree(await fenceFor(context), tree);
+        }),
         // Lazy-loads children of a dir the tree skipped (node_modules, .git, ...), or a bounded subtree for a consumer
         // avoiding per-directory requests. A zip or tar lists like the folder it holds, unpacked on first ask.
-        children: i.children.handler(async ({ input }) => {
+        children: i.children.handler(async ({ input, context }) => {
+            refuseUnseenAgent(context, input.agent);
+            // Reachable, not allowed: opening `finance` to reach the one report inside it is the point of a fence on
+            // `finance/reports`, and the listing below is pruned to what leads somewhere.
+            const fence = await fenceFor(context);
+            refuseUnlistable(fence, input.path);
             const root = await workspaceRootFor(scope, input.agent);
             const options = input.depth === undefined ? undefined : { depth: input.depth };
-            return (await childrenForRead(root, input.path, options)) ?? services.workspaceChildren(root, input.path, options);
+            const listed = (await childrenForRead(root, input.path, options)) ?? (await services.workspaceChildren(root, input.path, options));
+            return fencedChildren(fence, listed);
         }),
         // Returns a window of the file with its total size, not the whole file. An absent file is a 200 with
         // present:false, not a 404; scopedTarget still throws on an escape or control-plane path.
-        file: i.file.handler(async ({ input }) => {
-            const { target, shared } = await scopedTarget(scope, input.agent, input.path);
+        file: i.file.handler(async ({ input, context }) => {
+            const { target, shared } = await scopedRead(context, input.agent, input.path);
             const window = await services.files.readWindow(target, input.offset, input.limit);
             return window === undefined
                 ? { present: false as const, path: input.path }
@@ -101,15 +153,21 @@ export const createWorkspaceRoutes = (services: Services) => {
         }),
         // A file's markdown shadow as it stands. Shared tree only, since fileq refuses to shadow a checkout, and a
         // shared-tree shadow served under a conversation's scope would describe a different file than the one open.
-        derived: i.derived.handler(async ({ input }) => services.derived.read(services.workspace.root, await derivedRel(input.path))),
+        derived: i.derived.handler(async ({ input, context }) => {
+            refuseFenced(await fenceFor(context), input.path);
+            return services.derived.read(services.workspace.root, await derivedRel(input.path));
+        }),
         // The same convergence the background pass runs, for the one file someone is looking at.
-        derive: i.derive.handler(async ({ input }) => services.derived.derive(services.workspace.root, await derivedRel(input.path))),
+        derive: i.derive.handler(async ({ input, context }) => {
+            refuseFenced(await fenceFor(context), input.path);
+            return services.derived.derive(services.workspace.root, await derivedRel(input.path));
+        }),
         // In-memory state of a running service, not a disk read: no path to contain, nothing to scope.
         derivedStatus: i.derivedStatus.handler(() => services.derived.status()),
         // Mints the ticket presented to GET /workspace/media, guarded like a read so it can only name a file already
         // readable. Binds the resolved file, not its shared-tree namesake.
-        mediaTicket: i.mediaTicket.handler(async ({ input }) => {
-            const { target } = await scopedTarget(scope, input.agent, input.path);
+        mediaTicket: i.mediaTicket.handler(async ({ input, context }) => {
+            const { target } = await scopedRead(context, input.agent, input.path);
             if ((await services.files.size(target)) === undefined) {
                 throw new ORPCError("NOT_FOUND", { message: "not found" });
             }
@@ -117,10 +175,14 @@ export const createWorkspaceRoutes = (services: Services) => {
         }),
         // Resolves which workspace file a named reference means (chat prose, terminal output, a tool chip); wires
         // resolveReference to the workspace's guards and to iq's in-memory glob.
-        resolve: i.resolve.handler(async ({ input, signal }) => {
+        resolve: i.resolve.handler(async ({ input, signal, context }) => {
+            refuseUnseenAgent(context, input.agent);
+            // The fence applies to the ANSWER, not the question: the input is a fragment somebody wrote, and matching
+            // it against the tree is exactly how a fenced caller would learn a path outside their folders exists.
+            const fence = await fenceFor(context);
             // Checks the conversation's checkout for existence first; a file just written there exists nowhere else.
             const roots = [...new Set([await workspaceRootFor(scope, input.agent), services.workspace.root])];
-            return resolveReference(
+            const resolved = await resolveReference(
                 input.path,
                 services.workspace.root,
                 (relPath) =>
@@ -143,10 +205,17 @@ export const createWorkspaceRoutes = (services: Services) => {
                     return outcome.result.groups.map((group) => group.path);
                 },
             );
+            // Unresolvable, not refused: to a fenced reader a file outside their folders simply is not in the
+            // workspace, and a refusal here would confirm that it is.
+            return resolved.path !== undefined && !fenceOpens(fence, resolved.path) ? {} : resolved;
         }),
         // Runs the resident iq engine in-process, minus the per-query spawn and sweep. A GUI caller asks for a `list`
         // page (rows), skipping the capsule, symbol lookup and continuation spool.
-        search: i.search.handler(async ({ input, signal }) => {
+        search: i.search.handler(async ({ input, signal, context }) => {
+            // The index covers the whole tree, so a fenced caller searching it would get snippets out of folders they
+            // cannot open — the leak that makes a file fence decorative if it is left unsaid. The engine's own path
+            // scope is what closes it, narrowed to the caller's folders before the query runs.
+            const fence = await fenceFor(context);
             const verb = input.mode ?? "q";
             const ignored = input.includeIgnored === true;
             const options = {
@@ -159,13 +228,16 @@ export const createWorkspaceRoutes = (services: Services) => {
             // One subtree, normalized here the way the engine's own prefix filter normalizes it, so the scope and the
             // echo below can't disagree about the same folder.
             const dir = (input.dir ?? "").replace(/^\.\//, "").replace(/\/+$/, "");
+            // A named subtree meets the fence: outside it the search runs over nothing rather than over the folder,
+            // and inside it the narrower of the two wins.
+            const paths = searchPaths(fence, dir);
             const outcome = await services.iq.run(
                 {
                     verb,
                     query: input.query,
                     scope: {
                         ...(ignored ? { ignored: true } : {}),
-                        ...(dir !== "" ? { paths: [dir] } : {}),
+                        ...(paths !== undefined ? { paths } : {}),
                         ...(globs.length > 0 ? { globs } : {}),
                         ...(notGlobs.length > 0 ? { notGlobs } : {}),
                     },
@@ -183,10 +255,12 @@ export const createWorkspaceRoutes = (services: Services) => {
         }),
         // One repo's churn x complexity, index stats and import graph, keyed like the management panel and git-history
         // graph. An undiscovered repo is NOT_FOUND, not zeros reading as healthy.
-        health: i.health.handler(async ({ input }) => {
+        health: i.health.handler(async ({ input, context }) => {
             if (input.repo !== "root" && !isValidRepoId(input.repo)) {
                 throw new ORPCError("BAD_REQUEST", { message: "invalid repo" });
             }
+            // A repo's report is churn and complexity per file: the whole of it, for every path inside.
+            refuseFenced(await fenceFor(context), input.repo === "root" ? "" : input.repo);
             if (input.repo !== "root" && !(await discoverRepos(services.workspace.root)).includes(input.repo)) {
                 throw new ORPCError("NOT_FOUND", { message: `no repo named "${input.repo}"` });
             }
@@ -199,35 +273,41 @@ export const createWorkspaceRoutes = (services: Services) => {
         }),
         // Read-only classification of the workspace into coarse buckets, over the same filtered tree the file view
         // uses. Mutates nothing; the browser applies moves via `move`.
-        classify: i.classify.handler(async () => classifyWorkspace(services.workspace.root, await services.workspaceTree(services.workspace.root))),
+        classify: i.classify.handler(async ({ context }) =>
+            fencedClassification(
+                await fenceFor(context),
+                await classifyWorkspace(services.workspace.root, await services.workspaceTree(services.workspace.root)),
+            ),
+        ),
         // Direct file management over /work (byte writes go through POST /workspace/upload). Move/copy resolve both
         // endpoints through `contained`; every mutation pings history.
-        mkdir: i.mkdir.handler(async ({ input }) => {
-            await services.files.mkdir(await contained(input.path));
+        mkdir: i.mkdir.handler(async ({ input, context }) => {
+            await services.files.mkdir(await contained(context, input.path));
             services.history.notifyUserWrite();
             return { ok: true } as const;
         }),
-        delete: i.delete.handler(async ({ input }) => {
-            await services.files.remove(await contained(input.path));
+        delete: i.delete.handler(async ({ input, context }) => {
+            await services.files.remove(await contained(context, input.path));
             services.history.notifyUserWrite();
             return { ok: true } as const;
         }),
-        move: i.move.handler(async ({ input }) => {
-            await services.files.move(await contained(input.from), await contained(input.to));
+        move: i.move.handler(async ({ input, context }) => {
+            await services.files.move(await contained(context, input.from), await contained(context, input.to));
             services.history.notifyUserWrite();
             return { ok: true } as const;
         }),
         // The one write whose source may sit inside an archive: copying out is how a member reaches the workspace
         // without extracting the whole thing. The destination is a write target like any other.
-        copy: i.copy.handler(async ({ input }) => {
-            await services.files.copy(await containedForRead(services.workspace.root, input.from), await contained(input.to));
+        copy: i.copy.handler(async ({ input, context }) => {
+            refuseFenced(await fenceFor(context), input.from);
+            await services.files.copy(await containedForRead(services.workspace.root, input.from), await contained(context, input.to));
             services.history.notifyUserWrite();
             return { ok: true } as const;
         }),
         // Unpacks beside the archive, into a name nothing holds yet; the tool it spawns is picked by suffix, so a
         // format this sandbox has no tool for is a refusal rather than an empty folder.
-        extract: i.extract.handler(async ({ input }) => {
-            const archive = await contained(input.path);
+        extract: i.extract.handler(async ({ input, context }) => {
+            const archive = await contained(context, input.path);
             try {
                 const landed = await services.files.extract(archive);
                 services.history.notifyUserWrite();
@@ -241,8 +321,8 @@ export const createWorkspaceRoutes = (services: Services) => {
         }),
         // Dependency readiness per project; flattens the recipe and drops its `marker`. A stale project reports how
         // many names fail to resolve, not which, since that list is longest when least useful.
-        setup: i.setup.handler(async () => ({
-            projects: (await services.dependencies.status()).map((project) =>
+        setup: i.setup.handler(async ({ context }) => ({
+            projects: (await services.dependencies.status()).filter(fencedTo(await fenceFor(context), (project) => project.dir)).map((project) =>
                 Object.assign(
                     {
                         dir: project.dir,
@@ -258,18 +338,27 @@ export const createWorkspaceRoutes = (services: Services) => {
         })),
         // Queues the named projects on the coordinator an agent's install also uses, so two package managers never run
         // over one tree; an already-ready project is a no-op.
-        install: i.install.handler(async ({ input }) => {
+        install: i.install.handler(async ({ input, context }) => {
+            const fence = await fenceFor(context);
+            for (const dir of input.dirs) {
+                refuseFenced(fence, dir);
+            }
             const result = await services.dependencies.requestInstall(input.dirs, { kind: "request", title: "Workspace import" });
             return { queued: [...result.queued] };
         }),
-        repos: i.repos.handler(async () => ({ repos: await discoverRepos(services.workspace.root) })),
+        repos: i.repos.handler(async ({ context }) => ({
+            repos: fencedRepos(await fenceFor(context), await discoverRepos(services.workspace.root)),
+        })),
         // Every repo's modules in one read: 'root' (workspace root) plus each discovered repo, the same set the Changes
         // review scans.
-        modules: i.modules.handler(async () => {
-            const repoIds = await discoverRepos(services.workspace.root);
+        // Root's own modules ride only for an unfenced caller: its list spans the whole tree, which is the answer a
+        // fence exists to withhold.
+        modules: i.modules.handler(async ({ context }) => {
+            const fence = await fenceFor(context);
+            const repoIds = fencedRepos(fence, await discoverRepos(services.workspace.root));
             return {
                 repos: [
-                    { repo: "root", modules: readModules(services.workspace.root) },
+                    ...(fence === undefined ? [{ repo: "root", modules: readModules(services.workspace.root) }] : []),
                     ...repoIds.map((repo) => ({ repo, modules: readModules(join(services.workspace.root, repo)) })),
                 ],
             };
@@ -318,8 +407,8 @@ export const createWorkspaceRoutes = (services: Services) => {
         templates: i.templates.handler(async () => ({ templates: await listTemplates(services) })),
         // Adds named app instances to a monorepo as a one-shot job (key `<repo>--add_apps`, underscore so it can't
         // collide with an app panel key `<repo>--<app>`); a running job makes a second call a no-op.
-        addApps: i.addApps.handler(async ({ input }) => {
-            const repo = monorepoOf(input.repo);
+        addApps: i.addApps.handler(async ({ input, context }) => {
+            const repo = await monorepoOf(context, input.repo);
             const repoDir = join(services.workspace.root, repo);
             const { source, ref } = await readTemplatesConfig(services);
             const apps = input.apps.map((app) => (app.name === app.template ? app.template : `${app.template}:${app.name}`)).join(",");
@@ -329,8 +418,8 @@ export const createWorkspaceRoutes = (services: Services) => {
         }),
         // App instances in this monorepo with preview URL and live status, for the apps extension's list; scans
         // `_apps/` for scaffolded instances and dev-server packages.
-        appsList: i.appsList.handler(async ({ input }) => {
-            const repo = monorepoOf(input.repo);
+        appsList: i.appsList.handler(async ({ input, context }) => {
+            const repo = await monorepoOf(context, input.repo);
             const repoDir = join(services.workspace.root, repo);
             const manifest = await loadManifest(services);
             // Apps install at their monorepo's root, so one read of node_modules answers for every row.
@@ -358,10 +447,12 @@ export const createWorkspaceRoutes = (services: Services) => {
             return { apps };
         }),
         // Monorepo's workspace package dependency graph, for the apps extension's Dependencies view.
-        packageGraph: i.packageGraph.handler(({ input }) => readPackageGraph(join(services.workspace.root, monorepoOf(input.repo)))),
+        packageGraph: i.packageGraph.handler(async ({ input, context }) =>
+            readPackageGraph(join(services.workspace.root, await monorepoOf(context, input.repo))),
+        ),
         // Starts one app instance's dev server: its own process, port and preview-<repo>--<app>-<id>.<zone> host.
-        startApp: i.startApp.handler(async ({ input }) => {
-            const repo = monorepoOf(input.repo);
+        startApp: i.startApp.handler(async ({ input, context }) => {
+            const repo = await monorepoOf(context, input.repo);
             const repoDir = join(services.workspace.root, repo);
             const manifest = await loadManifest(services);
             const found = discoverApps(repoDir, manifest).find(({ app }) => app === input.app);
@@ -374,15 +465,15 @@ export const createWorkspaceRoutes = (services: Services) => {
             );
             return { ok: true } as const;
         }),
-        stopApp: i.stopApp.handler(async ({ input }) => {
-            const repo = monorepoOf(input.repo);
+        stopApp: i.stopApp.handler(async ({ input, context }) => {
+            const repo = await monorepoOf(context, input.repo);
             services.processes.stop(appPanelKey(repo, input.app));
             return { ok: true } as const;
         }),
         // Runs vitest for the given repo-relative dirs as a one-shot tmux session (panel-<repo>--<session>); `dirs` are
         // repo-contained ("" = repo root), the session exists before the process starts.
-        runTests: i.runTests.handler(async ({ input }) => {
-            const repo = monorepoOf(input.repo);
+        runTests: i.runTests.handler(async ({ input, context }) => {
+            const repo = await monorepoOf(context, input.repo);
             if (!/^[a-z0-9][a-z0-9_-]*$/.test(input.session)) {
                 throw new ORPCError("BAD_REQUEST", { message: "invalid session" });
             }

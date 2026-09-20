@@ -3,6 +3,7 @@ import { compactedSinceLastTurn, type Composition } from "../../agents/registry/
 import type { ConversationWorktree } from "../../agents/worktrees/worktrees.js";
 import type { Services } from "../../composition.js";
 import { discoverRepos } from "../../workspace/layout/repo-discovery.js";
+import { conversationFence } from "../../slices/slice-scope.js";
 import { contextNote } from "./context-note.js";
 
 // Composition is decided once, by the route, on the turn that creates the conversation's worktrees — the one moment it
@@ -40,7 +41,10 @@ export const ensureComposedWorktree = async (
     const recorded = services.agents.entry(conversationId)?.repos ?? [];
     const opening = recorded.length === 0;
     const composition = opening ? await decideComposition(services, input) : services.agents.entry(conversationId)?.composition;
-    const worktree = await services.agentWorktrees.ensure(conversationId, recorded, base, namespaced, composition?.repos);
+    // The conversation's own fence, from the slices its starter held. Resolved here rather than latched as folders,
+    // so editing a slice narrows an existing conversation's checkout on its next turn.
+    const fence = conversationFence(await services.slices.list(), services.agents.entry(conversationId));
+    const worktree = await services.agentWorktrees.ensure(conversationId, recorded, base, namespaced, composition?.repos, fence);
     if (opening || !sameRepos(recorded, worktree.repos)) {
         await services.agents.recordWorktree(conversationId, worktree.repos, composition);
     }

@@ -89,6 +89,7 @@ import { createTrialService, type TrialService } from "./trial/trial.js";
 import { withTrialEndpoint } from "./trial/trial-endpoint.js";
 import { type DismissalsStore, fileDismissalsStore } from "./capabilities/dismissals-store.js";
 import { filePersonasStore, type PersonasStore } from "./personas/personas-store.js";
+import { fileSlicesStore, type SlicesStore } from "./slices/slices-store.js";
 import { fileHeavyCommandsStore, type HeavyCommandsStore } from "./platform/resources/heavy-commands.js";
 import { type BlobSource, deriveBytes } from "./derived/derived-blob.js";
 import { deriveText, readDerivedText } from "./derived/derived-text.js";
@@ -393,6 +394,8 @@ export interface Services extends ClaudeSlice, CodexSlice, CursorSlice, GrokSlic
     readonly capabilityDismissals: DismissalsStore;
     // Named personas this sandbox shows outside; the turn path reads it to decide what a wake may act through.
     readonly personas: PersonasStore;
+    // Named parts of the workspace; every path fence resolves through it, for people and for the turns they start.
+    readonly slices: SlicesStore;
     // Which agent commands are heavy enough to queue; the Bash hook reads it per command, binding on the next one.
     readonly heavyCommands: HeavyCommandsStore;
     // Scheduled agent wake-ups; run history is a separate ledger joined on read, so callers see one store.
@@ -943,6 +946,9 @@ export const createServices = (config: Config, logger: Logger): Services => {
     const personas = filePersonasStore(statePath(workspace.root, ".intentic/config/personas.json"), (id, reason) =>
         logger.warn(`personas: skipping unreadable card "${id}" (${reason}), the rest are unaffected`),
     );
+    const slices = fileSlicesStore(statePath(workspace.root, ".intentic/config/slices.json"), (id, reason) =>
+        logger.warn(`slices: skipping unreadable slice "${id}" (${reason}); anyone fenced to it reaches nothing until it parses`),
+    );
     const heavyCommands = fileHeavyCommandsStore(statePath(workspace.root, ".intentic/config/heavy-commands.json"), (reason) =>
         logger.warn(`heavy-commands: ${reason}, falling back to the shipped rules`),
     );
@@ -1148,6 +1154,7 @@ export const createServices = (config: Config, logger: Logger): Services => {
         platformTunnel,
         capabilityDismissals: fileDismissalsStore(statePath(workspace.root, ".intentic/config/capability-dismissals.json")),
         personas,
+        slices,
         heavyCommands,
         ciStore,
         verifyStore,
@@ -1393,6 +1400,8 @@ export const createServices = (config: Config, logger: Logger): Services => {
     registerDaemonInvariants(invariants, {
         turnJournal,
         agents,
+        slices,
+        members,
         manifest: capabilityManifest,
         connectors: secretFieldConnectors,
         // The decorated store, since the exit checks read kind and a country code, never a credential.

@@ -66,6 +66,8 @@ const servicesIn = (root: string, settings: Partial<Record<string, unknown>>, ov
             get: async () => SandboxSettingsSchema.parse(settings),
         }),
         personas: unstubbed<Services["personas"]>("personas", { list: async () => [] }),
+        // No slices: the unfenced workspace, which is what a turn an owner started carries.
+        slices: unstubbed<Services["slices"]>("slices", { list: async () => [] }),
         perf: unstubbed<Services["perf"]>("perf", { track: (_op, _fields, run) => run() }),
         config: { ...testConfig, translator: { url: "http://127.0.0.1:8788", token: "local" } },
         cliProxy: unstubbed<Services["cliProxy"]>("cliProxy", {

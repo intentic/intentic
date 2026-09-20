@@ -76,27 +76,48 @@ export interface Member {
     readonly role: GrantedRole;
     // Persona ids a desk member may act through; present, and non-empty, only on a `desk` row.
     readonly desks?: readonly string[];
+    // Slice ids fencing what of the workspace this person reaches. Absent means the whole workspace, which is what
+    // every row written before slices existed keeps; empty means nothing at all.
+    readonly slices?: readonly string[];
+}
+
+// What a grant decides, in the shape both the store and the route pass it around in.
+export interface MemberGrant {
+    readonly role: GrantedRole;
+    readonly desks?: readonly string[] | undefined;
+    readonly slices?: readonly string[] | undefined;
 }
 
 export interface MembersStore {
     list(): Promise<Member[]>;
-    // Upsert: granting an email that already holds access re-grades its role, and replaces its desks.
-    add(email: string, role: GrantedRole, desks?: readonly string[]): Promise<void>;
+    // Upsert: granting an email that already holds access re-grades its role, and replaces its desks and slices.
+    add(email: string, grant: MemberGrant): Promise<void>;
     remove(email: string): Promise<void>;
 }
 
 // A desk row must name at least one card, and no other row may carry any: a desk with nothing to wear has nothing to
-// reach, and desks on a viewer would be a grant with no reader.
+// reach, and desks on a viewer would be a grant with no reader. Slices ride on any row, since where a person may look
+// is a question independent of what they may do there.
 const MemberSchema = z
-    .object({ email: z.string(), role: GrantedRoleSchema, desks: z.array(z.string().min(1)).optional() })
+    .object({
+        email: z.string(),
+        role: GrantedRoleSchema,
+        desks: z.array(z.string().min(1)).optional(),
+        slices: z.array(z.string().min(1)).optional(),
+    })
     .refine((member) => (member.role === "desk" ? (member.desks?.length ?? 0) > 0 : member.desks === undefined), {
         message: "a desk names at least one persona, and only a desk names any",
     });
 const MembersFileSchema = z.object({ members: z.array(z.unknown()) });
 
-// The row a grant writes: desks ride only on a desk, so a re-grade away from desk drops them.
-export const memberRow = (email: string, role: GrantedRole, desks: readonly string[] | undefined): Member =>
-    role === "desk" && desks !== undefined ? { email, role, desks: [...desks] } : { email, role };
+// The row a grant writes: desks ride only on a desk, so a re-grade away from desk drops them. A slice list is kept
+// whatever the tier, and its absence is the whole workspace, so an omitted field can never read as an empty fence.
+export const memberRow = (email: string, grant: MemberGrant): Member => ({
+    email,
+    role: grant.role,
+    ...(grant.role === "desk" && grant.desks !== undefined ? { desks: [...grant.desks] } : {}),
+    ...(grant.slices !== undefined ? { slices: [...grant.slices] } : {}),
+});
 
 // Same substrate as the owner store; the per-file update queue lets two grants landing together both survive instead of
 // one erasing the other.
@@ -111,7 +132,7 @@ export const fileMembersStore = (path: string): MembersStore => {
             return {
                 members: parsed.data.members.flatMap((entry) => {
                     const member = MemberSchema.safeParse(entry).data;
-                    return member === undefined ? [] : [memberRow(member.email, member.role, member.desks)];
+                    return member === undefined ? [] : [memberRow(member.email, member)];
                 }),
             };
         },
@@ -119,8 +140,8 @@ export const fileMembersStore = (path: string): MembersStore => {
     });
     return {
         list: async () => [...(await file.read()).members],
-        add: async (email, role, desks) => {
-            await file.update((current) => ({ members: [...current.members.filter((member) => member.email !== email), memberRow(email, role, desks)] }));
+        add: async (email, grant) => {
+            await file.update((current) => ({ members: [...current.members.filter((member) => member.email !== email), memberRow(email, grant)] }));
         },
         remove: async (email) => {
             await file.update((current) => {
@@ -158,6 +179,10 @@ export interface Caller extends VerifiedIdentity {
     readonly role: MemberRole;
     // The persona cards a desk member may act through; absent on every other tier.
     readonly desks?: readonly string[];
+    // Slice ids fencing what of the workspace this caller reaches; absent means the whole workspace, which is what the
+    // owner always holds. Carried as ids, not folders, so one read of the slice manifest per request answers it
+    // freshly: editing a slice narrows its holders on their very next call, like a re-grade does.
+    readonly slices?: readonly string[];
 }
 
 // What authorize() hands the middleware: the caller and the proof behind them, so a session renewal keeps its methods
@@ -261,7 +286,12 @@ export const createAuthorizer = (deps: {
         if (member === undefined) {
             throw new ForbiddenError("not authorized for this sandbox");
         }
-        return { ...proof, role: member.role, ...(member.desks !== undefined ? { desks: member.desks } : {}) };
+        return {
+            ...proof,
+            role: member.role,
+            ...(member.desks !== undefined ? { desks: member.desks } : {}),
+            ...(member.slices !== undefined ? { slices: member.slices } : {}),
+        };
     };
     // The require-passkey policy, read per request like the roster. A recovery code counts: it exists to get an owner
     // with no passkey left back to registering one.

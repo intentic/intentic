@@ -1,8 +1,9 @@
 import { isAbsolute, relative, resolve } from "node:path";
 import type { HookCallbackMatcher, HookEvent } from "@anthropic-ai/claude-agent-sdk";
+import type { Fence } from "@intentic/sandbox-contract";
 import type { TurnPersona } from "./personas.js";
 
-// Enforces a persona's `folders` and `sandbox` scope as a PreToolUse hook, the point a path is a fact, not an
+// Enforces a turn's fence and its `sandbox` scope as a PreToolUse hook, the point a path is a fact, not an
 // intention; it doesn't stop a shell, which computes its own paths (that's what `shell` gates). Hooks fire under
 // bypassPermissions, the only layer left for an unattended turn. Only paths inside the workspace are judged.
 
@@ -29,29 +30,34 @@ const inside = (target: string, folder: string): boolean => {
 };
 
 export interface PersonaScope {
-    // Turn's own root (worktree if isolated, else the workspace); card folders resolve against this.
+    // Turn's own root (worktree if isolated, else the workspace); fence folders resolve against this.
     readonly cwd: string;
-    // Workspace-relative folders the card allows. Empty ⇒ no folder limit (the whole workspace).
-    readonly folders: readonly string[];
+    // The turn's resolved fence: the card's slices already narrowed by the one its starter holds. Undefined is the
+    // whole workspace; an EMPTY list is a real fence that admits nothing, which is why this is not a plain array.
+    readonly fence: Fence;
     // Whether this persona may change the sandbox's own configuration and its public outbox.
     readonly sandbox: boolean;
 }
 
 // Scope a persona asks for; undefined when it asks for nothing, so an unconfigured workspace pays for no hook.
+// A conversation a fenced person opened is bounded here even when its card names no slice at all.
 export const personaScopeOf = (persona: TurnPersona, cwd: string): PersonaScope | undefined => {
-    const folders = persona.workspace?.folders ?? [];
-    if (folders.length === 0 && persona.powers.sandbox) {
+    if (persona.fence === undefined && persona.powers.sandbox) {
         return undefined;
     }
-    return { cwd, folders, sandbox: persona.powers.sandbox };
+    return { cwd, fence: persona.fence, sandbox: persona.powers.sandbox };
 };
 
 // Refusal reason worded for the agent to act on: naming the allowed folders turns a blind retry loop into either the
-// right path or an honest "this needs more than I have".
-const refusal = (scope: PersonaScope, sandboxPath: boolean): string =>
-    sandboxPath
-        ? `This persona may not change the sandbox's own configuration or its public outbox. If the task genuinely needs that, stop and say so rather than working around it.`
-        : `This persona works inside ${scope.folders.join(", ")}, that path is outside it. If the task genuinely needs a file elsewhere in the workspace, stop and say so rather than working around it.`;
+// right path or an honest "this needs more than I have". A fence admitting nothing says so rather than naming an
+// empty list, which would read as a bug in the message.
+const refusal = (scope: PersonaScope, sandboxPath: boolean): string => {
+    if (sandboxPath) {
+        return `This persona may not change the sandbox's own configuration or its public outbox. If the task genuinely needs that, stop and say so rather than working around it.`;
+    }
+    const where = (scope.fence ?? []).length === 0 ? `no folder of this workspace` : `inside ${(scope.fence ?? []).join(", ")}`;
+    return `This persona works ${where}, that path is outside it. If the task genuinely needs a file elsewhere in the workspace, stop and say so rather than working around it.`;
+};
 
 export const personaScopeHooks = (scope: PersonaScope): Partial<Record<HookEvent, HookCallbackMatcher[]>> => ({
     PreToolUse: [
@@ -81,7 +87,7 @@ export const personaScopeHooks = (scope: PersonaScope): Partial<Record<HookEvent
                         !scope.sandbox &&
                         WRITE_TOOLS.has(input.tool_name) &&
                         SANDBOX_PATHS.some((prefix) => inside(target, resolve(scope.cwd, prefix)));
-                    const outsideFolders = scope.folders.length > 0 && !scope.folders.some((folder) => inside(target, resolve(scope.cwd, folder)));
+                    const outsideFolders = scope.fence !== undefined && !scope.fence.some((folder) => inside(target, resolve(scope.cwd, folder)));
                     if (!sandboxPath && !outsideFolders) {
                         return {};
                     }

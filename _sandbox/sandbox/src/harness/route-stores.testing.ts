@@ -1,4 +1,5 @@
-import type { Automation, Capability, Persona } from "@intentic/sandbox-contract";
+import type { Automation, Capability, Persona, Slice } from "@intentic/sandbox-contract";
+import { type Member, type MembersStore, memberRow } from "../auth/auth.js";
 import type { PasskeyStore, StoredCredential, StoredRecoveryCode } from "../auth/passkeys/passkey-store.js";
 import type { AutomationRecord, AutomationsStore } from "../automations/automations-store.js";
 import type { CapabilitiesStore } from "../capabilities/capabilities-store.js";
@@ -6,6 +7,7 @@ import type { DismissalsStore, DismissedRecommendation } from "../capabilities/d
 import type { SecretVault } from "../capabilities/credentials/secret-vault.js";
 import { type MintedStore, type StoredKeyAccount, toMintedAccount } from "../runtimes/minted/minted-credentials.js";
 import type { PersonasStore } from "../personas/personas-store.js";
+import type { SlicesStore } from "../slices/slices-store.js";
 import type { ThreadSession, ThreadSessionsStore } from "../sessions/thread-sessions.js";
 
 // In-memory stores, one real implementation per persistence seam the routes and the turn read, so a suite can seed
@@ -65,6 +67,39 @@ export const memoryPersonasStore = (initial: Persona[] = []): PersonasStore => {
             const existed = next.length !== personas.length;
             personas = next;
             return existed;
+        },
+    };
+};
+
+// An in-memory slice manifest. Empty by default, which is the unfenced workspace: every member row is written without
+// slices, so every caller reaches the whole tree exactly as before slices existed.
+export const memorySlicesStore = (initial: Slice[] = []): SlicesStore => {
+    let slices = [...initial];
+    return {
+        list: async () => slices,
+        get: async (id) => slices.find((slice) => slice.id === id),
+        upsert: async (slice) => {
+            slices = [...slices.filter((existing) => existing.id !== slice.id), slice];
+        },
+        remove: async (id) => {
+            const next = slices.filter((slice) => slice.id !== id);
+            const existed = next.length !== slices.length;
+            slices = next;
+            return existed;
+        },
+    };
+};
+
+// An in-memory roster, the identities allowed besides the owner and what each was granted, without the fs.
+export const memoryMembersStore = (initial: Member[] = []): MembersStore => {
+    let members = [...initial];
+    return {
+        list: async () => members,
+        add: async (email, grant) => {
+            members = [...members.filter((member) => member.email !== email), memberRow(email, grant)];
+        },
+        remove: async (email) => {
+            members = members.filter((member) => member.email !== email);
         },
     };
 };

@@ -9,7 +9,7 @@ import { services } from "../harness/route-services.testing.js";
 import { runAgentTurn } from "../harness/route-turns.testing.js";
 
 // A desk over the daemon's own HTTP surface: it drives its own conversations through the cards it holds and is shown
-// nothing else. The rules are desk-scope.test.ts; what is pinned here is that every route a desk may reach applies
+// nothing else. The rules are fleet-scope.test.ts; what is pinned here is that every route a desk may reach applies
 // them, reading the verified caller and never the body.
 
 const board = (): {

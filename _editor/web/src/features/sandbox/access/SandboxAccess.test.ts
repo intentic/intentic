@@ -32,6 +32,11 @@ vi.mock(`../overview/useSandboxOutline`, () => ({ useSandboxOutline: () => false
 // The cards a desk invite can hand over; the picker only mounts once Desk is the tier.
 const personas = ref([{ id: `support`, label: `Support`, capabilities: [] }]);
 vi.mock(`../personas/usePersonas`, () => ({ usePersonas: () => ({ personas, connected: ref([]), isConnected: () => false }) }));
+// The named parts of the workspace a grant can be fenced to; one, so the picker has a row to toggle.
+const slices = ref([{ id: `support`, label: `Support desk`, folders: [`support`] }]);
+vi.mock(`../slices/useSlices`, () => ({
+    useSlices: () => ({ slices, labelOf: (id: string) => slices.value.find((slice) => slice.id === id)?.label ?? id }),
+}));
 vi.mock(`../../../shell/presence/usePresence`, () => ({ presenceOthers: [], presenceActivity: () => `` }));
 // Session module touches GIS/localStorage at eval; needs only its expiry. Fixed date avoids timezone drift.
 const sessionExpiresAt = ref<number | undefined>(Date.parse(`2026-09-24T12:00:00.000Z`));
@@ -272,6 +277,40 @@ it(`holds a member's move to desk until a card is picked, then grants tier and c
     }
     expect(JSON.parse((grant[1] as { body: string }).body)).toEqual({ email: `guest@example.com`, role: `desk`, desks: [`support`] });
     expect(setRole).toHaveBeenCalledWith({ sandboxId: `s1`, email: `guest@example.com`, role: `desk` });
+});
+
+// Fencing somebody is a re-grade at the same tier, so it travels the same two writes in the same order. The
+// absence of the field is the whole workspace, which is why an unfenced row sends no field rather than an empty list.
+it(`grants a slice on an existing row, at the tier that row already holds`, async () => {
+    const member = (tier: string): unknown => ({ email: `guest@example.com`, role: tier, status: `accepted`, invitedAt: `2026-08-18T00:00:00.000Z` });
+    list.mockResolvedValue({ members: [member(`collaborator`)] });
+    setRole.mockResolvedValue({ members: [member(`collaborator`)] });
+    sandboxJson.mockImplementation(async (path: unknown) => (path === `/members` ? { members: daemonMembers() } : { members: [] }));
+    mount();
+    await settle();
+
+    // Drawn on demand, not under every row: what a row holds is already on it as badges, and a picker under each
+    // of them would be most of the page. The one switch already drawn is the invite form's own.
+    const switches = (): HTMLInputElement[] => [...document.body.querySelectorAll<HTMLInputElement>(`input[role=switch]`)];
+    expect(switches()).toHaveLength(1);
+    buttonLabelled(`Folders`)?.click();
+    await nextTick();
+    // A collaborator row draws no desk picker, so the switch that just appeared is the slice it would be fenced to.
+    expect(switches()).toHaveLength(2);
+    expect(shown()).toContain(`No slice picked: they see the whole workspace.`);
+    daemonMembers.mockReturnValue([{ email: `guest@example.com`, role: `collaborator`, slices: [`support`] }]);
+    switches()[0]?.click();
+    await settle();
+
+    const grant = (sandboxJson.mock.calls as unknown[][]).find(
+        ([path, init]) => path === `/members` && (init as { method?: string } | undefined)?.method === `POST`,
+    );
+    if (grant === undefined) {
+        throw new Error(`no fenced grant reached the sandbox`);
+    }
+    expect(JSON.parse((grant[1] as { body: string }).body)).toEqual({ email: `guest@example.com`, role: `collaborator`, slices: [`support`] });
+    // The row now names what it holds, so the fence is readable without opening the picker.
+    expect(shown()).toContain(`Support desk`);
 });
 
 it(`keeps the token surfaces off a member's tab`, async () => {

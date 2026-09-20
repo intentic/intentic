@@ -37,10 +37,12 @@ export const jsExecutionPlanOf = (
     if (!powers.code) {
         return undefined;
     }
-    const folders = (persona.workspace?.folders ?? [])
+    const folders = (persona.fence ?? [])
         .map((folder) => resolveWithin(tree.root, folder))
         .filter((folder): folder is string => folder !== undefined);
-    const roots = folders.length === 0 ? [tree.root] : folders;
+    // Undefined fence is the whole tree; a fence that resolved to nothing is a real answer and stays empty, or a
+    // member fenced to a folder this checkout doesn't hold would get the workspace root instead.
+    const roots = persona.fence === undefined ? [tree.root] : folders;
     return {
         cwd: tree.cwd,
         env,

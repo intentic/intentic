@@ -622,3 +622,46 @@ test("a conversation with no selection keeps the composition it was born with", 
     expect(again.repos).toEqual(created.repos);
     expect(existsSync(join(again.cwd, "later"))).toBe(false);
 });
+
+// The fence a conversation inherits from whoever started it, as the checkout itself. The file-tool hook stops a
+// misread instruction, not a shell; what is not on disk cannot be read by a tool, a shell, or a script.
+test("a fenced conversation's checkout holds its own folders, and the repositories it never reaches are absent", async () => {
+    const { work, worktrees } = await setup();
+    for (const folder of ["support", "finance"]) {
+        await mkdir(join(work, folder), { recursive: true });
+        await writeFile(join(work, folder, "notes.md"), `${folder} v1\n`);
+    }
+    await sh(work, "add", "-A");
+    await sh(work, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "two folders");
+
+    const fenced = await worktrees.ensure("c1", [], undefined, false, undefined, ["support"]);
+
+    expect(await readFile(join(fenced.cwd, "support", "notes.md"), "utf8")).toBe("support v1\n");
+    expect(existsSync(join(fenced.cwd, "finance"))).toBe(false);
+    // The nested repo the fence never reaches leaves the composition entirely, rather than being checked out empty.
+    expect(fenced.repos.map(({ repo }) => repo)).toEqual(["root"]);
+    expect(existsSync(join(fenced.cwd, "intent"))).toBe(false);
+});
+
+// The one thing a partial checkout must not do: make the rest of the tree look deleted. Everything outside the cone
+// keeps its index entry, so the commit a fenced turn makes carries the whole tree with its own change on top, and a
+// land out of it applies as an edit rather than as a mass deletion.
+test("a commit out of a fenced checkout carries the folders it cannot see", async () => {
+    const { work, worktrees } = await setup();
+    for (const folder of ["support", "finance"]) {
+        await mkdir(join(work, folder), { recursive: true });
+        await writeFile(join(work, folder, "notes.md"), `${folder} v1\n`);
+    }
+    await sh(work, "add", "-A");
+    await sh(work, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "two folders");
+
+    const fenced = await worktrees.ensure("c1", [], undefined, false, undefined, ["support"]);
+    await writeFile(join(fenced.cwd, "support", "notes.md"), "support v2\n");
+    await sh(fenced.cwd, "add", "-A");
+    await sh(fenced.cwd, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "fenced edit");
+
+    const tree = await sh(fenced.cwd, "ls-tree", "-r", "--name-only", "HEAD");
+    expect(tree.split("\n")).toContain("finance/notes.md");
+    expect(await sh(fenced.cwd, "show", "HEAD:support/notes.md")).toBe("support v2");
+    expect(await sh(fenced.cwd, "show", "HEAD:finance/notes.md")).toBe("finance v1");
+});

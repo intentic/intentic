@@ -72,6 +72,13 @@ const STATE_FILES = [
     // capability catalog. `carry`: a card is a name and ids, never a credential.
     { path: ".intentic/config/personas.json", invalidates: ["personas", "capabilities", "manifests"], portability: "carry", versioned: true },
 
+    // Named parts of the workspace (SliceSchema), the unit a person's reach is granted in. `carry`: folder names, no
+    // credential, and a workspace that moves keeps the shape of its own fences. `versioned` because editing a slice
+    // changes what people already granted it can see, which is precisely a change a human should review. It stays
+    // agent-writable like personas.json, and is safe there for a reason worth stating: a fenced conversation's own
+    // fence has to admit `.intentic` before its agent can reach this file, so no fence can widen itself.
+    { path: ".intentic/config/slices.json", invalidates: ["slices", "manifests"], portability: "carry", versioned: true },
+
     // Four files split by portability, not just prefix: `custom` is the owner-approved source and the only one that
     // must travel; `approved` is composed from custom + capability fragments + the base image and is rebuilt on the
     // target's first boot (carrying it would ship a `FROM` naming an image the target may not have); the proposal and

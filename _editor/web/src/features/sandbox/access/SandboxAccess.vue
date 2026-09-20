@@ -31,11 +31,13 @@ import { useSandbox } from "../client/useSandbox";
 import { useSandboxSession } from "../session/sandboxSession";
 import { useSandboxOutline } from "../overview/useSandboxOutline";
 import { usePersonas } from "../personas/usePersonas";
+import { useSlices } from "../slices/useSlices";
 import { identityHue } from "../../../lib/identityHue";
 import { presenceActivity, presenceOthers } from "../../../shell/presence/usePresence";
 import { useAccessInventory } from "./useAccessInventory";
 import ControlTokensSection from "./ControlTokensSection.vue";
 import DeskPicker from "./DeskPicker.vue";
+import SlicePicker from "./SlicePicker.vue";
 import PasskeysSection from "./PasskeysSection.vue";
 import { type AccessGrant, grantBody, grantSendable } from "./accessGrant";
 import { useT } from "@intentic/ui/i18n";
@@ -89,9 +91,14 @@ const ROLE_OPTIONS = computed((): readonly PickerOption<GrantedRole>[] => [
 const inviteRole = ref<GrantedRole>(`collaborator`);
 // The cards a desk invite hands over; kept when the tier flips away and back, sent only on a desk grant.
 const inviteDesks = ref<string[]>([]);
+// The slices an invite is fenced to; undefined is the whole workspace, which is what an invite means unnarrowed.
+const inviteSlices = ref<string[] | undefined>(undefined);
 // The daemon's own roster, the one copy that knows a desk's cards; the platform's records above carry the tier only.
 const grants = ref<readonly AccessGrant[]>([]);
 const desksOf = (address: string): readonly string[] => grants.value.find((grant) => grant.email === address.toLowerCase())?.desks ?? [];
+// Undefined, not an empty list: a row with no slices reaches the whole workspace, which is what every grant means
+// until somebody narrows it.
+const slicesOf = (address: string): readonly string[] | undefined => grants.value.find((grant) => grant.email === address.toLowerCase())?.slices;
 // A row on its way to desk. The tier can't be written on the pick alone: the daemon refuses a desk that names no
 // card, and a re-grade away from desk drops the cards that row held, so every arrival at desk starts with none.
 // The pick is held here, the picker under the row names a card, and that write is what makes the tier real.
@@ -104,6 +111,10 @@ const rowDesks = (address: string): readonly string[] => draftOf(address) ?? des
 // since deleted, and reads as itself rather than disappearing: the desk still holds it.
 const { personas } = usePersonas();
 const deskLabel = (id: string): string => personas.value.find((persona) => persona.id === id)?.label ?? id;
+// A slice is named on the row the way it is on its own page; an id with no slice behind it reads as itself, since
+// the person still holds it.
+// Held for a desk with no fence, the one tier the daemon refuses this read to; every other tier may list the names.
+const { labelOf: sliceLabel } = useSlices(() => sandbox.active.value?.role !== `desk`);
 const busy = ref(false);
 // The one thing this tab has to say right now: a failure, or an invite whose link the owner must carry.
 const notice = ref<NoticeModel>();
@@ -227,7 +238,10 @@ const invite = async (): Promise<void> => {
         // Daemon push first, enforced; sandboxJson throws on non-2xx, so an unenforced grant is never recorded as sent.
         try {
             grants.value = (
-                await sandboxJson<{ members: AccessGrant[] }>(`/members`, jsonBody(`POST`, grantBody(value, inviteRole.value, inviteDesks.value)))
+                await sandboxJson<{ members: AccessGrant[] }>(
+                    `/members`,
+                    jsonBody(`POST`, grantBody(value, inviteRole.value, inviteDesks.value, inviteSlices.value)),
+                )
             ).members;
         } catch (err) {
             notice.value = noticeFrom(err, `Couldn't grant access on the sandbox: is it online?`);
@@ -299,7 +313,12 @@ const revokeSessions = async (): Promise<void> => {
 
 // Re-grades with the same two-write, daemon-first order as a grant; applies on the member's next request. Reports
 // whether both writes landed, since a staged desk clears only once its cards are really granted.
-const setRole = async (target: string, role: GrantedRole, desks: readonly string[] = desksOf(target)): Promise<boolean> => {
+const setRole = async (
+    target: string,
+    role: GrantedRole,
+    desks: readonly string[] = desksOf(target),
+    slices: readonly string[] | undefined = slicesOf(target),
+): Promise<boolean> => {
     const id = sandbox.activeSandboxId.value;
     if (id === undefined || busy.value || !grantSendable(role, desks)) {
         return false;
@@ -309,7 +328,7 @@ const setRole = async (target: string, role: GrantedRole, desks: readonly string
     try {
         // Same split as the grant: only the first of the two writes can be a sandbox that isn't answering.
         try {
-            grants.value = (await sandboxJson<{ members: AccessGrant[] }>(`/members`, jsonBody(`POST`, grantBody(target, role, desks)))).members;
+            grants.value = (await sandboxJson<{ members: AccessGrant[] }>(`/members`, jsonBody(`POST`, grantBody(target, role, desks, slices)))).members;
         } catch (err) {
             notice.value = noticeFrom(err, `Couldn't change the role on the sandbox: is it online?`);
             return false;
@@ -342,6 +361,16 @@ const pickDesks = async (address: string, desks: string[]): Promise<void> => {
     if (desks.length > 0 && (await setRole(address, `desk`, desks))) {
         deskDraft.value = undefined;
     }
+};
+
+// Which row has its fence open. On demand rather than always drawn: with a handful of slices and a handful of
+// members, a picker under every row is most of the page, and what each row HOLDS is already on it as badges.
+const fenceOpen = ref<string>();
+
+// Changing which slices a row holds is a re-grade at the same tier; a maintainer cannot be fenced, so the daemon
+// refuses one and the picker is not offered on that row.
+const pickSlices = (member: InviteRecord, slices: string[] | undefined): void => {
+    void setRole(member.email, rowRole(member), rowDesks(member.email), slices);
 };
 
 const revoke = async (target: string): Promise<void> => {
@@ -400,6 +429,8 @@ const revoke = async (target: string): Promise<void> => {
                         />
                         <!-- A desk's cards, named on the row: the whole of what that person reaches. -->
                         <StatusBadge v-for="desk in desksOf(member.email)" :key="desk" variant="neutral" :label="deskLabel(desk)" size="xs" />
+                        <!-- And which parts of the workspace they see; no badge at all is the whole of it. -->
+                        <StatusBadge v-for="slice in slicesOf(member.email) ?? []" :key="slice" variant="info" :label="sliceLabel(slice)" size="xs" />
                     </template>
                     <template #control>
                         <!-- Changeable in place, since a re-grade is routine and shouldn't cost a revoke + re-invite. -->
@@ -412,6 +443,16 @@ const revoke = async (target: string): Promise<void> => {
                             :aria-label="t(`sandbox.sandboxAccess.role`, { email: member.email })"
                             :header="t(`sandbox.sandboxAccess.role`, { email: member.email })"
                             @update:model-value="(role: GrantedRole | undefined) => role !== undefined && pickRole(member, role)"
+                        />
+                        <!-- Opens this row's fence; the badges above already say what it holds. -->
+                        <Button
+                            v-if="rowRole(member) !== 'maintainer'"
+                            :label="t(`sandbox.sandboxAccess.folders`)"
+                            size="small"
+                            severity="secondary"
+                            :text="true"
+                            :disabled="busy"
+                            @click="fenceOpen = fenceOpen === member.email ? undefined : member.email"
                         />
                         <Button
                             v-if="member.status !== 'accepted'"
@@ -437,6 +478,11 @@ const revoke = async (target: string): Promise<void> => {
                 <!-- Which cards a desk holds, changed in place; a re-grade to desk waits here until it names one. -->
                 <RowNote v-if="rowRole(member) === 'desk'" variant="block">
                     <DeskPicker :picked="rowDesks(member.email)" :disabled="busy" @change="(desks) => pickDesks(member.email, desks)" />
+                </RowNote>
+                <!-- Which parts of the workspace they reach. Not offered to a maintainer: that tier carries the
+                     owner's operating authority, so a folder fence over it would be a line on a screen. -->
+                <RowNote v-if="fenceOpen === member.email && rowRole(member) !== 'maintainer'" variant="block">
+                    <SlicePicker :picked="slicesOf(member.email)" :disabled="busy" @change="(slices) => pickSlices(member, slices)" />
                 </RowNote>
                 </template>
 
@@ -492,6 +538,8 @@ const revoke = async (target: string): Promise<void> => {
                             </span>
                             <!-- A desk is nothing without its cards, so the pick sits on the invite itself. -->
                             <DeskPicker v-if="inviteRole === 'desk'" :picked="inviteDesks" :disabled="busy" @change="(desks) => (inviteDesks = desks)" />
+                            <!-- What they will see of the workspace, decided with the invite rather than after it. -->
+                            <SlicePicker v-if="inviteRole !== 'maintainer'" :picked="inviteSlices" :disabled="busy" @change="(slices) => (inviteSlices = slices)" />
                         </form>
                     </div>
                 </RowNote>
