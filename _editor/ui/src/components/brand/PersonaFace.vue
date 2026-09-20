@@ -3,10 +3,10 @@
 import { Avatar, Style } from "@dicebear/core";
 import definition from "@dicebear/styles/adventurer.json";
 import { computed } from "vue";
-import type { PersonaLike } from "./personaFace.js";
+import { FACE_SIZES, type PersonaLike } from "./personaFace.js";
 
 // Defaults to the chat persona rail's card size; every other surface is a row in a list and names its own.
-const { persona, size = 56 } = defineProps<{ persona: PersonaLike; size?: number }>();
+const { persona, size = FACE_SIZES.card } = defineProps<{ persona: PersonaLike; size?: number }>();
 
 // The name somebody chose, or the id it was filed under.
 const seed = computed<string>(() => persona.label ?? persona.id);
@@ -72,6 +72,11 @@ const svg = computed<string>(() => {
         // Keys the SVG's clip-path ids; without it, every face on a rail would share one id and clip through the
         // others.
         seed: seed.value,
+        // Zooms past the margin the 762-unit frame reserves for its longest hair, which the median face (ink 547
+        // units wide) never reaches. The head's ink reaches 263 of the 381 units from centre, so no zoom under
+        // 1.45 can cut a face; the cost is paid by hair's outer edge — 27 of the 45 variants touch the frame here
+        // against 8 at 1, losing 2.8% of their span on average and 13 points at worst (long06, already cut at 1).
+        scale: 1.25,
         headVariant: `default`,
         skinColor: pick(SKIN_COLORS, bytes[0]!),
         detailsVariant: pick(DETAILS, bytes[1]!),

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { type Persona, personaBounds } from "@intentic/sandbox-contract";
-import { Button, ui, Modal, Notice, type NoticeModel, PersonaFace, StatusBadge } from "@intentic/ui";
+import { Button, ui, FACE_SIZES, Modal, Notice, type NoticeModel, PersonaFace, StatusBadge } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
 import { computed, ref, watch } from "vue";
 import { useCapabilities } from "../../capabilities/connect/useCapabilities";
@@ -205,11 +205,11 @@ const submit = async (): Promise<void> => {
                 <div
                     v-for="persona in cards"
                     :key="persona.id"
-                    class="flex items-center gap-2.5 rounded-lg border px-2.5 py-2 transition-colors"
+                    class="flex items-center gap-2.5 rounded-lg border px-2.5 py-1.5 transition-colors"
                     :class="editing === persona.id ? `border-link bg-link/10` : `border-line`"
                 >
-                    <!-- Smaller than a persona-focused list; this panel is about the folder, not about showing cards off. -->
-                    <PersonaFace :persona :size="32" />
+                    <!-- The list size: this panel is about the folder, but a face too small to read is no cheaper, just worse. -->
+                    <PersonaFace :persona :size="FACE_SIZES.row" />
                     <span class="min-w-0 flex-1 truncate text-sm text-content">{{ persona.label ?? persona.id }}</span>
                     <StatusBadge v-if="persona.powers !== undefined" variant="neutral" size="xs">{{ personaBounds(persona) }}</StatusBadge>
                     <button
@@ -260,13 +260,13 @@ const submit = async (): Promise<void> => {
                             v-for="persona in shown"
                             :key="persona.id"
                             type="button"
-                            class="flex items-center gap-2.5 rounded-lg border px-2.5 py-2 text-left transition-colors"
+                            class="flex items-center gap-2.5 rounded-lg border px-2.5 py-1.5 text-left transition-colors"
                             :class="chosen === persona.id ? `border-link bg-link/10` : `border-line hover:border-line-strong`"
                             :aria-label="t(`workspace.directoryPersonas.startHere`, { id: persona.label ?? persona.id })"
                             :aria-pressed="chosen === persona.id"
                             @click="chosen = persona.id"
                         >
-                            <PersonaFace :persona :size="32" />
+                            <PersonaFace :persona :size="FACE_SIZES.row" />
                             <span class="min-w-0 flex-1 truncate text-sm text-content">{{ persona.label ?? persona.id }}</span>
                             <span class="max-w-[45%] shrink-0 truncate text-xs text-subtle">
                                 {{

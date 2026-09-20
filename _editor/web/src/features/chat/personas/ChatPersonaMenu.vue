@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { type Persona, personaBounds } from "@intentic/sandbox-contract";
-import { browserOwnsClick, PersonaFace, StatusBadge } from "@intentic/ui";
+import { browserOwnsClick, FACE_SIZES, PersonaFace, StatusBadge } from "@intentic/ui";
 import { computed } from "vue";
 import { RouterLink } from "vue-router";
 import { usePersonas } from "../../sandbox/personas/usePersonas";
@@ -73,13 +73,13 @@ const closeMenu = (event: MouseEvent): void => {
                 v-for="persona in personas"
                 :key="persona.id"
                 type="button"
-                class="ui-row-select flex items-start gap-2 rounded-lg px-2.5 py-1.5 text-left max-md:py-3"
+                class="ui-row-select flex items-start gap-2 rounded-lg px-2.5 py-1 text-left max-md:py-3"
                 :class="{ 'ui-row-select-on': persona.id === picked }"
                 :aria-selected="persona.id === picked"
                 @click="emit(`picked`, persona.id)"
             >
-                <!-- Same face as this persona's own page and the chat rail. -->
-                <PersonaFace :persona :size="28" class="mt-0.5" />
+                <!-- Same face, at the same size, as this persona's row on its own page; the tighter `py` is what pays for it. -->
+                <PersonaFace :persona :size="FACE_SIZES.row" class="mt-0.5" />
                 <span class="flex min-w-0 flex-col">
                     <span class="flex min-w-0 items-baseline gap-1.5">
                         <span class="truncate text-sm text-content md:text-xs">{{ persona.label ?? persona.id }}</span>

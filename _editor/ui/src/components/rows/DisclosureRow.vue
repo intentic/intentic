@@ -1,6 +1,7 @@
 <!-- A record row, built on <Row>, that opens into its own evidence below. -->
 <script setup lang="ts">
 import { computed, useId } from "vue";
+import { FACE_SIZES } from "../brand/personaFace.js";
 import Icon from "../primitives/Icon.vue";
 import Row from "./Row.vue";
 import type { IconName } from "../../icons/iconSets.js";
@@ -9,6 +10,7 @@ import { ROW_DRAWER_PAD, ROW_TIERS, ROW_TOGGLE_GAPS, ROW_TOGGLE_SIZES, type RowD
 const {
     open = false,
     density,
+    lead = `icon`,
     hit = `header`,
     body = `rail`,
     tone = `default`,
@@ -19,6 +21,8 @@ const {
     open?: boolean;
     // Leave unset: the enclosing <RowGroup> publishes the tier, and a group defaults to compact. See <RowGroup>.
     density?: RowDensity;
+    /** Forwarded to <Row>: `face` sizes `#lead` for a <PersonaFace> and pays for it out of the row's padding. */
+    lead?: `icon` | `face`;
     // What the press target is (pressing the row always opens it; this only decides the button's edges).
     // `header`: chevron + lead + title + description are one button. `pair`: only chevron + lead are; the
     // headline's own controls (a link, a button) keep their own clicks (see <Row>'s `headlineGuard`).
@@ -84,7 +88,7 @@ const tier = useRowDensity(() => density);
 
 // Read from <Row>'s own tier table, so the hidden mirror below stays in step with what it mirrors.
 const gap = computed(() => ROW_TIERS[tier.value].gap);
-const mark = computed(() => ROW_TIERS[tier.value].mark);
+const mark = computed(() => (lead === `face` ? FACE_SIZES.row : ROW_TIERS[tier.value].mark));
 const toggleGap = computed(() => ROW_TOGGLE_GAPS[tier.value]);
 const chevronSize = computed(() => ROW_TOGGLE_SIZES[tier.value]);
 
@@ -114,6 +118,7 @@ const wrapperSelect = computed(() => (disabled ? `` : `ui-row-select`));
             <Row
                 :class="[$slots[`before`] ? `min-w-0 flex-1` : ``, open && body === `drawer` ? `!pb-0` : ``]"
                 :density="tier"
+                :lead="lead"
                 :tone="tone"
                 :icon="icon"
                 :title="title"

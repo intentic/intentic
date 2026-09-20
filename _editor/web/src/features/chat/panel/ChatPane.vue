@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Button, Icon, Notice, PersonaFace, ResponsiveOverlay, growTextarea, useDevice, useLoadingReveal } from "@intentic/ui";
+import { Button, FACE_SIZES, Icon, Notice, PersonaFace, ResponsiveOverlay, growTextarea, useDevice, useLoadingReveal } from "@intentic/ui";
 import { useNow } from "@intentic/ui/async";
 import { computed, nextTick, onBeforeUnmount, provide, ref, watch } from "vue";
 import { useRouter } from "vue-router";
@@ -1526,8 +1526,8 @@ watch(
                                             :aria-expanded="personaOpen"
                                             :aria-label="t(`chat.chatPane.acts`, { personaName })"
                                         >
-                                            <!-- The persona control shows its face when a persona is selected. -->
-                                            <PersonaFace v-if="pickedPersona !== undefined" :persona="pickedPersona" :size="16" />
+                                            <!-- The persona control shows its face when a persona is selected, at the pill size: it clears the row's `h-8`. -->
+                                            <PersonaFace v-if="pickedPersona !== undefined" :persona="pickedPersona" :size="FACE_SIZES.pill" />
                                             <Icon v-else name="users" class="text-2xs text-link" />
                                             <span class="max-w-32 truncate">{{ personaName }}</span>
                                             <Icon name="chevron-down" class="text-2xs text-subtle" />

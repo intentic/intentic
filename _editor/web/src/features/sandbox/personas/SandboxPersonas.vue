@@ -309,10 +309,11 @@ const confirmRemove = async (): Promise<void> => {
                     :key="persona.id"
                     hit="pair"
                     body="drawer"
+                    lead="face"
                     :open="isOpen(persona)"
                     @update:open="toggleOpen(persona)"
                 >
-                    <!-- Persona faces use the row tier's standard mark size. -->
+                    <!-- `lead="face"` is what makes `mark` the face size rather than a glyph's; the row's height is unchanged. -->
                     <template #lead="{ mark }">
                         <PersonaFace :persona :size="mark" />
                     </template>
@@ -373,10 +374,10 @@ const confirmRemove = async (): Promise<void> => {
                 </DisclosureRow>
 
                 <!-- Creation asks only for the persona name; other fields have defaults. -->
-                <RowNote v-if="newName !== undefined" v-slot="{ mark }" variant="block">
+                <RowNote v-if="newName !== undefined" v-slot="{ mark }" variant="block" lead="face">
                     <div class="flex flex-col gap-2">
                         <div class="flex flex-wrap items-center gap-2">
-                            <!-- The face this row will have once committed, drawn at the same tier size (`mark`) already. -->
+                            <!-- `lead="face"` for the same reason the rows above carry it: the preview must be the face it commits to. -->
                             <PersonaFace :persona="{ id: newId || `persona`, label: newName || undefined }" :size="mark" />
                             <!-- Capped width, since a name is a few words, not a paragraph; Enter commits, like a single-field form. -->
                             <input

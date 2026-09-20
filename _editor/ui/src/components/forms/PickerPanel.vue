@@ -2,6 +2,7 @@
 <script setup lang="ts" generic="T extends string">
 import { computed, nextTick, onMounted, ref } from "vue";
 import { useListNavigation } from "../../composables/useListNavigation.js";
+import { FACE_SIZES } from "../brand/personaFace.js";
 import PersonaFace from "../brand/PersonaFace.vue";
 import SearchBar from "./SearchBar.vue";
 import { nextPickerId, normalizePickerGroups, type PickerOption, type PickerOptions } from "./picker.js";
@@ -61,6 +62,7 @@ const flat = computed<readonly PickerOption<T>[]>(() => shown.value.flatMap((gro
 const hinted = computed(() => flat.value.some((option) => option.hint !== undefined));
 
 // Same rule for row height: any faced row makes the whole list use the taller height, evenly across filters.
+// It also buys the face its box out of the rows' own padding, so a faced list is no taller than `min-h-10` already made it.
 const faced = computed(() => flat.value.some((option) => option.face !== undefined));
 
 const { activeIndex, activeRow, move, setRowEl } = useListNavigation(flat, (option) => option.value);
@@ -155,16 +157,16 @@ onMounted(() => {
                     class="ui-row-select ui-off flex w-full gap-2 px-3 text-left max-md:min-h-11"
                     :class="[
                         { 'ui-row-select-on': row.index === activeIndex },
-                        hinted ? `items-start py-2` : `items-center py-1.5`,
-                        faced ? `min-h-10` : ``,
+                        hinted ? `items-start` : `items-center`,
+                        faced ? `min-h-10 py-0.5` : hinted ? `py-2` : `py-1.5`,
                     ]"
                     :disabled="row.option.disabled === true"
                     @click="pick(row.option)"
                     @mouseenter="activeIndex = row.index"
                 >
                     <slot name="icon" :option="row.option">
-                        <!-- A row naming a person wears their face, bigger than the trigger's: a form field must not grow. -->
-                        <PersonaFace v-if="row.option.face !== undefined" :persona="row.option.face" :size="28" />
+                        <!-- A row naming a person wears their face, bigger than the trigger's: a form field must not grow, a panel row can. -->
+                        <PersonaFace v-if="row.option.face !== undefined" :persona="row.option.face" :size="FACE_SIZES.row" />
                         <Icon
                             v-else-if="row.option.icon !== undefined"
                             :name="row.option.icon"

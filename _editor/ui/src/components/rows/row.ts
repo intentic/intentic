@@ -12,10 +12,13 @@ export type RowTone = `default` | `danger` | `warning` | `success` | `info`;
 // `headline` is the width the title column refuses to go below: it is the headline's flex-basis, so once the
 // trailing cluster can no longer sit beside that much text the cluster wraps to its own line instead of
 // squeezing the title into one word per line. A floor, not a size — with room the headline still takes the rest.
+// `facePad` is what the row pays when `#lead` draws a face instead of a glyph (FACE_SIZES.row, half again the
+// tier's `mark`): the extra box comes out of the row's own vertical padding, so a faced row is the same height.
 /* A tier is read in one place rather than reassembled from five ternaries down a template. */
 export const ROW_TIERS = {
     comfortable: {
         pad: `px-4.5 py-3.5`,
+        facePad: `px-4.5 py-2.5`,
         gap: `gap-3`,
         icon: `text-xl`,
         title: `font-semibold leading-tight`,
@@ -25,6 +28,7 @@ export const ROW_TIERS = {
     },
     compact: {
         pad: `px-4 py-2.5`,
+        facePad: `px-4 py-1`,
         gap: `gap-3`,
         icon: `text-lg`,
         title: `text-sm font-medium leading-tight`,
@@ -36,6 +40,7 @@ export const ROW_TIERS = {
     // wrap there would be the tier reflowing a column that was never short of room.
     dense: {
         pad: `px-2.5 py-2`,
+        facePad: `px-2.5 py-0.5`,
         gap: `gap-2.5`,
         icon: `text-base`,
         title: `text-xs font-medium leading-tight`,

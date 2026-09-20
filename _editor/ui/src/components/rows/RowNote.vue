@@ -1,14 +1,19 @@
 <!-- A non-record line on a <RowGroup>'s surface: an empty-state sentence, a fallback message, or an "add one" affordance. -->
 <script setup lang="ts">
+import { computed } from "vue";
+import { FACE_SIZES } from "../brand/personaFace.js";
 import type { IconName } from "../../icons/iconSets.js";
 import Icon from "../primitives/Icon.vue";
 import { ROW_BLOCK_PAD, ROW_TIERS, ROW_TOGGLE_GAPS, ROW_TOGGLE_SIZES, ROW_TONES, type RowTone, useRowDensity } from "./row.js";
 
-const { variant = `note`, tone = `default` } = defineProps<{
+const { variant = `note`, lead = `icon`, tone = `default` } = defineProps<{
     // `note`: a sentence in the group's padding. `empty`: centred "nothing here yet", with room for an empty surface.
     // `action`: a pressable line that adds one. `block`: arbitrary content (a form, a figure), padded like an
     // open row's drawer; brings no type or colour of its own.
     variant?: `note` | `empty` | `action` | `block`;
+    // `block` only, and it must match the `lead` of the rows this block previews, or the preview draws a face at
+    // a glyph's size and the row it commits to jumps.
+    lead?: `icon` | `face`;
     /** The leading glyph. `action` defaults to `plus`; a note draws none unless asked. */
     icon?: IconName;
     /** Tints the glyph, for the note that is a warning rather than a remark. */
@@ -30,6 +35,9 @@ const EMPTY_PAD = { comfortable: `px-4.5 py-7`, compact: `px-4 py-6`, dense: `px
 
 // Prose at the tier's title size, not its description size: a sentence to read, not an annotation under a name.
 const TEXT = { comfortable: `text-sm`, compact: `text-xs`, dense: `text-2xs` } as const;
+
+// The same number <Row> hands its own `#lead`, so a preview and the row it becomes draw the mark identically.
+const mark = computed(() => (lead === `face` ? FACE_SIZES.row : ROW_TIERS[tier.value].mark));
 </script>
 
 <template>
@@ -38,7 +46,7 @@ const TEXT = { comfortable: `text-sm`, compact: `text-xs`, dense: `text-2xs` } a
     </div>
 
     <!-- `mark` for the same reason <Row> hands it out: a block at the tail of a list often previews the row it's about to add. -->
-    <div v-else-if="variant === `block`" :class="ROW_BLOCK_PAD[tier]"><slot :mark="ROW_TIERS[tier].mark" /></div>
+    <div v-else-if="variant === `block`" :class="ROW_BLOCK_PAD[tier]"><slot :mark="mark" /></div>
 
     <!-- The pressable one; `ui-row-select` is the app's one hover-and-focus treatment for a row you can press. -->
     <button

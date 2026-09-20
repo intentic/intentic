@@ -171,7 +171,7 @@ export { type PageBack, providePageBack, usePageBack } from "./components/layout
 // <Avatar>'s counterpart when there's no photo: a cartoon assembled from the name, so a persona reads as the same
 // face on every surface.
 export { default as PersonaFace } from "./components/brand/PersonaFace.vue";
-export { type PersonaLike } from "./components/brand/personaFace.js";
+export { FACE_SIZES, type PersonaLike } from "./components/brand/personaFace.js";
 // Bordered surface: own header, own interrupting strips, one scrolling body (the min-h-0/overflow-hidden
 // contract). Named for the contract, not the shape; avoids the ambiguous `Panel` name used elsewhere in the app.
 export { default as ScrollFrame } from "./components/layout/ScrollFrame.vue";

@@ -1,5 +1,7 @@
 <!-- One row inside a <RowGroup> or <NavRail>: `#lead`, title + description, a `#meta` cluster of facts, and a `#control` cluster of actions. -->
 <script setup lang="ts">
+import { computed } from "vue";
+import { FACE_SIZES } from "../brand/personaFace.js";
 import type { IconName } from "../../icons/iconSets.js";
 import Icon from "../primitives/Icon.vue";
 import { ROW_TIERS as TIERS, ROW_TONES as TONES, type RowDensity, type RowTone, useRowDensity } from "./row.js";
@@ -10,6 +12,7 @@ const {
     chevron = false,
     tone = `default`,
     density,
+    lead = `icon`,
     selected = false,
     flush = false,
     wideControl = false,
@@ -28,6 +31,9 @@ const {
     // Leave unset inside a <RowGroup> (it publishes the tier); outside one this falls back to `comfortable`,
     // the masthead's tier.
     density?: RowDensity;
+    // What `#lead` draws: `face` hands the slot a face-sized mark and spends the tier's `facePad`, since a drawn
+    // face needs more box than a glyph to stay readable. The row's height is unchanged either way.
+    lead?: `icon` | `face`;
     /** Paints the app-wide selected tint; implies `interactive`, since a row you can pick is a row you can hover. */
     selected?: boolean;
     // Renders the title as a real heading, one step up in size (`text-lg`, since this app's `text-base` IS body size).
@@ -60,6 +66,10 @@ const emit = defineEmits<{ headerClick: [event: MouseEvent] }>();
 
 // The tier in force: this row's own `density` if given, else the enclosing <RowGroup>'s.
 const tier = useRowDensity(() => density);
+
+// The two numbers a face changes, read once so the row and its `#below` mirror cannot disagree about either.
+const mark = computed(() => (lead === `face` ? FACE_SIZES.row : TIERS[tier.value].mark));
+const pad = computed(() => (lead === `face` ? TIERS[tier.value].facePad : TIERS[tier.value].pad));
 
 // The header button eats its own click, or its press and the row's outer press (<DisclosureRow>) would
 // both fire and the row would toggle straight back.
@@ -105,7 +115,7 @@ const picked = as === `button`;
         :aria-current="selected ? `true` : undefined"
         class="group block w-full text-left"
         :class="[
-            flush ? `` : TIERS[tier].pad,
+            flush ? `` : pad,
             // The app's one hover tint and one selected tint (styles/utilities.css). This used to carry
             // its own `hover:bg-content/5`: the same 5% by luck rather than by reference.
             interactive || selected || href !== undefined || as !== `div` ? `ui-row-select` : ``,
@@ -135,7 +145,7 @@ const picked = as === `button`;
                         @click="onHeaderClick"
                     >
                         <!-- The lead mark's size, handed to the slot so callers don't look up or restate the tier's number. -->
-                        <slot name="lead" :mark="TIERS[tier].mark" :icon-class="TIERS[tier].icon" />
+                        <slot name="lead" :mark="mark" :icon-class="TIERS[tier].icon" />
                         <Icon
                             v-if="icon !== undefined"
                             :name="icon"
@@ -187,7 +197,7 @@ const picked = as === `button`;
                 <div v-if="spine" class="flex" :class="TIERS[tier].gap">
                     <div class="relative flex shrink-0 justify-center">
                         <span class="invisible flex items-center" :class="TIERS[tier].gap" inert aria-hidden="true">
-                            <slot name="lead" :mark="TIERS[tier].mark" :icon-class="TIERS[tier].icon" />
+                            <slot name="lead" :mark="mark" :icon-class="TIERS[tier].icon" />
                             <Icon v-if="icon !== undefined" :name="icon" :class="TIERS[tier].icon" />
                         </span>
                         <span class="absolute inset-y-0 w-px bg-line-strong" aria-hidden="true" />

@@ -226,7 +226,7 @@ it(`says what Auto will do and withholds every control over the model underneath
     const { element } = mount(ROUTED, { auto: true });
 
     expect(limitsOf(ROUTED).length).toBeGreaterThan(1);
-    expect(element.textContent).toContain(`reads your first message`);
+    expect(element.textContent).toContain(`Your first message picks what this chat runs on`);
     expect(element.textContent).toContain(`Choose which model does the reading`);
     expect(element.textContent).not.toContain(`Not available here`);
     expect(chips(element)).toEqual({});

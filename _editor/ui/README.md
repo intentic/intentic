@@ -35,6 +35,14 @@ and use the muted text colour, with the selected navigation mark taking the acti
 `DisclosureRow` pass `iconClass` alongside `mark` to custom lead slots, so selection checkboxes and icons
 can share a column without the icons losing their tier's size.
 
+A drawn face is not a glyph at the same size: in a tier's mark box a [PersonaFace](src/components/brand/PersonaFace.vue)
+renders its mouth about two CSS pixels tall, which is a smudge rather than an expression. So `lead="face"` on `Row`,
+`DisclosureRow` and `RowNote` hands the lead slot `FACE_SIZES.row` instead of the tier's `mark` and spends the tier's
+`facePad`, buying the bigger box out of the row's own vertical padding — a faced row is the same height as a glyph
+row, measured. [FACE_SIZES](src/components/brand/personaFace.ts) names the three boxes a face is ever drawn in
+(`pill`, `row`, `card`), and every surface that puts one where a glyph would go takes its size from there; `Picker`
+does it for any option carrying a `face`, trigger and panel alike.
+
 The [versioned dependency patches](patches/README.md) make PrimeVue's fallback controls use the globally
 registered native `Icon` and replace Mermaid's icon utilities with native SVG. The matching dependency
 overrides remove the unused icon packages from the lockfile. Keep these patches in step with library upgrades.
