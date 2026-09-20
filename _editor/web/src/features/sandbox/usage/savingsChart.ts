@@ -112,6 +112,9 @@ const METRICS = {
     openingSearches: { unit: `searches before the first file`, mean: `searches/turn`, total: `searches` },
     openingListings: { unit: `directory listings opening a conversation`, mean: `listings/turn`, total: `listings` },
     callsBeforeTarget: { unit: `calls before the file it edits`, mean: `calls`, total: `calls` },
+    // A call that came back an error, not a turn that failed: the field notes claim to prevent the first, and a turn
+    // that recovers from three of them still had three.
+    failedCalls: { unit: `tool calls that came back an error`, mean: `failures/turn`, total: `failures` },
 } satisfies Record<TurnMetricReading["metric"], { unit: string; mean: string; total: string }>;
 
 // What a reading's per-turn mean counts, for a surface drawing the two arms beside each other; the mean itself is

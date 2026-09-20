@@ -8,6 +8,7 @@ import { readInputSavings } from "../logs/filter-stats.js";
 import { declaredRepoChecks, readRepoDeclaration, summariesOf } from "../rules/repo-checks.js";
 import { ManifestUnreadableError } from "../store/json-file.js";
 import { readTurnExperiments } from "../usage/turn-experiments.js";
+import { fieldNotesStatus } from "./field-notes-status.js";
 import { reconcileBakedSkills } from "./skills.js";
 
 // `get` applies defaults when the manifest is absent, `set` overwrites it. `savings` reads whichever backend's ledger
@@ -29,6 +30,7 @@ export const createSettingsRoutes = (services: Services) => {
             await reconcileBakedSkills(services, input.skills).catch((error: unknown) => services.logger.warn({ err: error }, "skill reconcile failed"));
             return { ok: true } as const;
         }),
+        fieldNotes: i.fieldNotes.handler(() => fieldNotesStatus(services)),
         savings: i.savings.handler(async ({ input }) => {
             const [inputSavings, experiments] = await Promise.all([
                 readInputSavings(services.config.historyRoot, input),

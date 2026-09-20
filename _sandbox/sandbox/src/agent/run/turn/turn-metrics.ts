@@ -15,6 +15,9 @@ export interface TurnMetricsReading {
     // Calls before the first touch of an edited file; absent (not zero) when nothing was edited or the edit had no
     // located call.
     readonly callsBeforeTarget?: number;
+    // Calls that ended in error, counted once each: what a brief about this sandbox's traps either prevents or does
+    // not (field-notes.ts).
+    readonly failedCalls: number;
 }
 
 export interface TurnMetrics {
@@ -33,6 +36,9 @@ export const createTurnMetrics = (root: string): TurnMetrics => {
     let openingSearches = 0;
     let openingListings = 0;
     let reachedTheWork = false;
+    // By id, not a counter: `tool_call_update` is a SNAPSHOT of a call's state, so one failure can be reported more
+    // than once and a call can reach `error` only once however many updates say so.
+    const failed = new Set<string>();
     // First touch per path, kept for all of them since the eventual target is known only once editing finishes; keyed
     // like the proof ledger's edit paths.
     const firstTouch = new Map<string, number>();
@@ -42,30 +48,40 @@ export const createTurnMetrics = (root: string): TurnMetrics => {
             firstTouch.set(path, firstTouch.get(path) ?? calls - 1);
         }
     };
+    const noteCall = (event: Extract<AgentEvent, { kind: "tool_call" }>): void => {
+        calls += 1;
+        // A compound Bash call can both search and open a file, so these aren't exclusive: counting search state at
+        // call entry then closing orientation catches real file reads (cat/sed/head/tail) that exclusive branches
+        // missed.
+        const searched = isSearchCall(event);
+        if (searched) {
+            searchCalls += 1;
+        }
+        if (searched && !reachedTheWork && searchPrecedesFileWork(event)) {
+            openingSearches += 1;
+        }
+        // Counted only up to the first file, like openingSearches: a listing after work has started narrows to what
+        // the turn already found, which no map could have preempted, and shape alone can't tell the two apart.
+        if (!reachedTheWork && isRootListing(event, root)) {
+            openingListings += 1;
+        }
+        noteTouches(event.locations);
+        if (isFileWorkCall(event)) {
+            reachedTheWork = true;
+        }
+    };
     return {
         note: (event) => {
-            if (event.kind !== "tool_call") {
+            // The one reading taken off the LATER frame: a call's outcome is not known when it starts, so this is the
+            // only kind of frame that can carry it.
+            if (event.kind === "tool_call_update") {
+                if (event.status === "failed") {
+                    failed.add(event.id);
+                }
                 return;
             }
-            calls += 1;
-            // A compound Bash call can both search and open a file, so these aren't exclusive: counting search state at
-            // call entry then closing orientation catches real file reads (cat/sed/head/tail) that exclusive branches
-            // missed.
-            const searched = isSearchCall(event);
-            if (searched) {
-                searchCalls += 1;
-            }
-            if (searched && !reachedTheWork && searchPrecedesFileWork(event)) {
-                openingSearches += 1;
-            }
-            // Counted only up to the first file, like openingSearches: a listing after work has started narrows to what
-            // the turn already found, which no map could have preempted, and shape alone can't tell the two apart.
-            if (!reachedTheWork && isRootListing(event, root)) {
-                openingListings += 1;
-            }
-            noteTouches(event.locations);
-            if (isFileWorkCall(event)) {
-                reachedTheWork = true;
+            if (event.kind === "tool_call") {
+                noteCall(event);
             }
         },
         calls: () => calls,
@@ -75,6 +91,7 @@ export const createTurnMetrics = (root: string): TurnMetrics => {
                 searchCalls,
                 openingSearches,
                 openingListings,
+                failedCalls: failed.size,
                 ...(reached.length > 0 ? { callsBeforeTarget: Math.min(...reached) } : {}),
             };
         },

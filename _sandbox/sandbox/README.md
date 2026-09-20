@@ -49,7 +49,9 @@ The long form — every surface, and why each one lives here rather than in the 
   the image overlay that makes it real.
 
 A directory-by-directory tour is [docs/subsystems.md](docs/subsystems.md); the decisions and the traps are in
-[docs/gotchas.md](docs/gotchas.md).
+[docs/gotchas.md](docs/gotchas.md). The two measured prompt mechanisms have their own pages:
+[docs/output-cleaners.md](docs/output-cleaners.md) for what is cut out of a command's output, and
+[docs/field-notes.md](docs/field-notes.md) for the monthly brief carried into every turn.
 
 ## How it fits
 

@@ -1,7 +1,9 @@
+import { FIELD_NOTES_FILE } from "@intentic/constants";
 import { oc } from "@orpc/contract";
 import {
     BuiltinPromptSchema,
     BuiltinPromptTextSchema,
+    FieldNotesStatusSchema,
     REPO_CHECKS_FILE,
     RepoChecksAdoptSchema,
     RepoChecksListSchema,
@@ -73,6 +75,16 @@ export const settingsContract = {
             description: `Every repository that declares its own checks at \`${REPO_CHECKS_FILE}\`, what it declares, and whether you have switched it on. A repository declares what to run because the command belongs beside the scripts it names; nothing it declares runs until you say so.`,
         })
         .output(RepoChecksListSchema),
+    // Read off the file and the automation store rather than the settings manifest: nothing here is a choice anyone
+    // made, so storing it would only give it a second place to be wrong.
+    fieldNotes: oc
+        .route({
+            method: "GET",
+            path: "/settings/field-notes",
+            summary: "The state of this sandbox's field notes",
+            description: `Whether \`${FIELD_NOTES_FILE}\` exists, when it was last rewritten, how much of it the current budget reaches, and whether a monthly rewrite is scheduled.`,
+        })
+        .output(FieldNotesStatusSchema),
     adoptRepoChecks: oc
         .route({
             method: "POST",

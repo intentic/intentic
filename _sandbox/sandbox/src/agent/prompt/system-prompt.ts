@@ -3,6 +3,7 @@ import { HISTORY_ROOT } from "@intentic/constants";
 import { type AgentCapabilities, type SystemPromptMode, type TurnNote, windowsPathOf, wslPathOf } from "@intentic/sandbox-contract";
 import type { EnvironmentReach, HostDeviceReach, MachineReach } from "../../hosts/self-host.js";
 import { PERSONA_NOTE_TITLE } from "../../personas/personas.js";
+import { FIELD_NOTES_NOTE_TITLE } from "./field-notes.js";
 import { INTENTIC_PROMPT } from "./intentic-prompt.js";
 import { MEMORY_NOTE_TITLE } from "./workspace-memory.js";
 
@@ -271,6 +272,10 @@ export interface TurnPromptInput {
     // discovery. Same seams as the persona note, and the one thing a custom prompt does NOT drop: "nothing added" is
     // about this product's guidance, and these are the owner's own rules.
     readonly memoryNote?: string;
+    // What past sessions here had to learn the hard way (field-notes.ts). Rides the same seams as the two above, and is
+    // dropped by a custom prompt like the rest of this product's guidance: it is something Intentic worked out about
+    // the sandbox, not something the owner wrote.
+    readonly fieldNotesNote?: string;
 }
 
 export interface TurnPromptPlacement {
@@ -283,6 +288,14 @@ export interface TurnPromptPlacement {
     readonly userNotes?: readonly TurnNote[];
 }
 
+// Joined in the order given, absent and empty pieces alike falling out, so each branch below reads as the ORDER it
+// wants rather than as three spread-ternaries carrying it.
+const joined = (parts: readonly (string | undefined)[]): string => parts.filter((part) => part !== undefined && part !== "").join("\n\n");
+
+// The same list as notes, titled. Title and text travel as a pair so a note can never arrive under another's heading.
+const titled = (entries: readonly (readonly [string, string | undefined])[]): TurnNote[] =>
+    entries.flatMap(([title, text]) => (text === undefined ? [] : [{ title, text }]));
+
 // Decides where each composed piece goes. One function because the destinations are one decision: a note on the user
 // message must not also ride the append, and a custom prompt removes both choices at once.
 export const turnPromptPlacement = ({
@@ -292,6 +305,7 @@ export const turnPromptPlacement = ({
     stableSystemPrompt,
     personaNote,
     memoryNote,
+    fieldNotesNote,
 }: TurnPromptInput): TurnPromptPlacement => {
     const { instructions, runtime } = capabilities;
 
@@ -299,11 +313,12 @@ export const turnPromptPlacement = ({
     // (limitationsOf), rather than quietly pasting it into the user message. The persona note and the workspace's
     // standing instructions still have to arrive, so they go through the user message instead.
     if (instructions === "none") {
-        const userNotes = [
+        const userNotes = titled([
             // Who the turn is acting as comes first, as it does in the preamble: it decides what the rest is for.
-            ...(personaNote === undefined ? [] : [{ title: PERSONA_NOTE_TITLE, text: personaNote }]),
-            ...(memoryNote === undefined ? [] : [{ title: MEMORY_NOTE_TITLE, text: memoryNote }]),
-        ];
+            [PERSONA_NOTE_TITLE, personaNote],
+            [FIELD_NOTES_NOTE_TITLE, fieldNotesNote],
+            [MEMORY_NOTE_TITLE, memoryNote],
+        ]);
         return userNotes.length === 0 ? {} : { userNotes };
     }
 
@@ -311,18 +326,21 @@ export const turnPromptPlacement = ({
     // can only add, it's appended since the base can't be dropped anyway. "" with no memory on a replacing runtime is a
     // legal, deliberate empty prompt.
     if (mode === "custom") {
-        const own = [systemPrompt, ...(memoryNote === undefined ? [] : [memoryNote])].filter((text) => text !== "").join("\n\n");
+        const own = joined([systemPrompt, memoryNote]);
         return instructions === "replace" ? { systemPrompt: own } : own === "" ? {} : { systemAppend: own };
     }
 
-    const append = [
+    const append = joined([
         // Claude Code composes WORKSPACE_GUIDANCE itself (sdkSystemPrompt); repeating it here would double it there.
         ...(runtime === "claude-code" ? [] : WORKSPACE_GUIDANCE),
-        ...(personaNote === undefined ? [] : [personaNote]),
+        personaNote,
+        // Before the owner's rules and after this product's: what the sandbox learned about itself is context for the
+        // rules, not a rule, and anything claiming to outrank the owner's own words would be reading its own promotion.
+        fieldNotesNote,
         // Last, so the owner's rules sit closest to the conversation. Editing them mid-session mints a new prefix, the
         // same cost as changing the persona, which is why neither is held back by stableSystemPrompt.
-        ...(memoryNote === undefined ? [] : [memoryNote]),
-    ].join("\n\n");
+        memoryNote,
+    ]);
     return append === "" ? {} : { systemAppend: append };
 };
 

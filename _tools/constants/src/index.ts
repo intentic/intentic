@@ -30,6 +30,11 @@ export const PUBLIC_DIR = "public";
 // from the workspace root down to where the turn starts.
 export const MEMORY_FILE = "AGENTS.md";
 
+// The sandbox's own field notes: what past sessions here had to learn the hard way, ranked, rewritten monthly by an
+// automation rather than by hand. Sits with the owner's other composed-into-the-prompt file (safety.md) rather than at
+// the workspace root, because nothing outside this product reads it.
+export const FIELD_NOTES_FILE = ".intentic/config/field-notes.toon";
+
 // Per-service state root on a provisioned host reached over ssh, as opposed to inside a sandbox container.
 export const HOST_STATE_ROOT = "/opt/intentic";
 

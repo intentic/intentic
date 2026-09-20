@@ -81,6 +81,7 @@ import { watchServer } from "../../verification/watch-server.js";
 import type { WatcherTurnSeed } from "../../verification/watchers.js";
 import { seedFields } from "./turn-seed.js";
 import { resolveHarnessCredentials } from "../../providers/harness-credentials.js";
+import { type FieldNotes, fieldNotes } from "../../prompt/field-notes.js";
 import { turnPromptPlacement } from "../../prompt/system-prompt.js";
 import { type TurnBriefing, briefingOf } from "../../prompt/turn-briefing.js";
 import { composeWirePrompt, LITERAL_SLASH_NOTE, worktreeNote, worktreeReminder } from "../../prompt/turn-preamble.js";
@@ -165,6 +166,10 @@ export interface TurnContext {
     readonly conversationTurns?: number;
     readonly iqSearchEnabled?: boolean;
     readonly iqSearchNote?: string;
+    // The sandbox's own field notes, already narrowed to the owner's budget. Composed in planning rather than at
+    // placement so the SAME reading answers both questions the turn has about it — what to send, and which revision to
+    // stamp — and a control turn can name the revision it was withheld from without composing anything.
+    readonly fieldNotesNote?: string;
     // Generated skill catalogue for a runtime with no native skill loader; opening turn only, carried after by the
     // provider session.
     readonly skillCatalogNote?: string;
@@ -210,9 +215,40 @@ export const conversationExperimentArm = (experiment: string, conversationId: st
 };
 
 // Undefined means not measuring, which downstream treats as no experiment rather than a control turn. One function for
-// both experiments, since the same three conditions gate an arm each time.
+// every experiment, since the same three conditions gate an arm each time.
 const holdoutArm = (experiment: string, on: boolean, holdout: number, conversationId: string | undefined): boolean | undefined =>
     on && holdout > 0 && conversationId !== undefined ? conversationExperimentArm(experiment, conversationId, holdout) : undefined;
+
+// The field notes as one turn sees them: which arm it drew, which revision was in play, and what (if anything) it was
+// actually given. Three readings of one file, taken together so a control turn can name the revision it was withheld
+// from without opening it twice.
+interface TurnFieldNotes {
+    readonly arm: boolean | undefined;
+    readonly brief: FieldNotes | undefined;
+    readonly note: string | undefined;
+}
+
+// `localCwd` is the tree as the DAEMON reaches it, which for an isolated turn is its worktree and otherwise the
+// workspace root — the same root workspace-memory.ts reads the owner's rules from, so both files travel together.
+const fieldNotesFor = (services: Services, context: TurnContext, settings: SandboxSettings, conversationId: string | undefined): TurnFieldNotes => {
+    const arm = holdoutArm("field-notes", settings.fieldNotes, settings.fieldNotesHoldout, conversationId);
+    if (!settings.fieldNotes) {
+        return { arm, brief: undefined, note: undefined };
+    }
+    const brief = fieldNotes({
+        root: context.localCwd,
+        budget: settings.fieldNotesBudget,
+        onUnreadable: (why) => services.logger.warn({ why }, "field notes: the file is there but cannot be sent"),
+    });
+    // Read on both arms, sent on one. `arm ?? true` because an undefined arm means "not measuring", not "control".
+    return { arm, brief, note: (arm ?? true) ? brief?.text : undefined };
+};
+
+// One optional field, present only when it has a value. `exactOptionalPropertyTypes` forbids writing `undefined` into
+// an optional property, so absence has to be an absent KEY — which inline is a spread-ternary per field, and the stamps
+// below are one rule applied ten times, not ten decisions.
+const stamp = <K extends string, V>(key: K, value: V | undefined): { [P in K]?: V } =>
+    (value === undefined ? {} : { [key]: value }) as { [P in K]?: V };
 
 // Every field is omitted rather than defaulted, since absent is what readers treat as unmeasured and zero would look
 // like a measured nothing. Map size is read off the composed notes, not the decision to send one.
@@ -220,6 +256,7 @@ const experimentStamps = (
     turnIndex: number | undefined,
     search: { readonly arm: boolean | undefined; readonly cohort: string | undefined },
     map: { readonly arm: boolean | undefined; readonly notes: readonly TurnNote[] | undefined },
+    notes: TurnFieldNotes,
     retrieval: TurnContextOutcome | undefined,
 ): {
     turnIndex?: number;
@@ -227,19 +264,33 @@ const experimentStamps = (
     searchCohort?: string;
     mapArm?: boolean;
     mapChars?: number;
+    notesArm?: boolean;
+    notesChars?: number;
+    notesCohort?: string;
     turnContext?: TurnContextSkip | "delivered";
     turnContextMs?: number;
 } => {
     const chars = map.notes?.find((note) => note.title === WORKSPACE_MAP_NOTE_TITLE)?.text.length;
+    // Annotated, not inferred: a nested ternary over a literal and a union widens to `string`, which the stamp would
+    // then carry into a field typed as neither.
+    const delivery: TurnContextSkip | "delivered" | undefined =
+        retrieval === undefined ? undefined : "note" in retrieval ? "delivered" : retrieval.skipped;
     return {
-        ...(turnIndex !== undefined ? { turnIndex } : {}),
-        ...(search.arm !== undefined ? { searchArm: search.arm, ...(search.cohort !== undefined ? { searchCohort: search.cohort } : {}) } : {}),
-        ...(map.arm !== undefined ? { mapArm: map.arm } : {}),
-        ...(chars !== undefined ? { mapChars: chars } : {}),
+        ...stamp("turnIndex", turnIndex),
+        ...stamp("searchArm", search.arm),
+        // Only with its arm: a cohort on an unmeasured turn names a revision nothing was compared against.
+        ...stamp("searchCohort", search.arm === undefined ? undefined : search.cohort),
+        ...stamp("mapArm", map.arm),
+        ...stamp("mapChars", chars),
+        ...stamp("notesArm", notes.arm),
+        // What the prompt actually paid, so a turn that was READ a brief but not SENT one records no cost.
+        ...stamp("notesChars", notes.note === undefined ? undefined : notes.brief?.chars),
+        // Stamped on CONTROL turns too, off the file the turn would have been given: pairing an arm against the
+        // revision it was withheld from is the whole of what makes the two comparable.
+        ...stamp("notesCohort", notes.brief?.revision),
         // Delivery, not assignment: the reading that tells a mechanism with no effect from one that never arrived.
-        ...(retrieval === undefined
-            ? {}
-            : { turnContext: "note" in retrieval ? ("delivered" as const) : retrieval.skipped, turnContextMs: retrieval.durationMs }),
+        ...stamp("turnContext", delivery),
+        ...stamp("turnContextMs", retrieval?.durationMs),
     };
 };
 
@@ -372,6 +423,7 @@ export const planTurn = async (services: Services, input: AgentTurn, context: Tu
               })
             : undefined;
     const iqSearchNote = capabilities.runtime !== "claude-code" && iqSearchEnabled && conversationTurns === 0 ? teaching?.note : undefined;
+    const notes = fieldNotesFor(services, context, settings, input.conversationId);
     // Which prompt this turn runs on, the sandbox's or the persona's own (personaPrompt); the card's own text is read
     // only when it asked for one, so an ordinary turn (`inherit`) pays nothing.
     const prompt = personaPrompt(
@@ -387,6 +439,7 @@ export const planTurn = async (services: Services, input: AgentTurn, context: Tu
         conversationTurns,
         iqSearchEnabled,
         ...(iqSearchNote !== undefined ? { iqSearchNote } : {}),
+        ...stamp("fieldNotesNote", notes.note),
         ...(skillCatalogNote !== undefined ? { skillCatalogNote } : {}),
         ...(contextNote !== undefined ? { contextNote } : {}),
         ...(teaching !== undefined ? { iqSearchCohort: teaching.cohort } : {}),
@@ -457,6 +510,7 @@ export const planTurn = async (services: Services, input: AgentTurn, context: Tu
             input.conversationId === undefined ? undefined : conversationTurns,
             { arm: searchArm, cohort: teaching?.cohort },
             { arm: mapArm, notes: planned.base.notes },
+            notes,
             turnContext,
         ),
     };
@@ -520,6 +574,7 @@ const honoured = (
         stableSystemPrompt: settings.stableSystemPrompt,
         ...(actingNote === undefined ? {} : { personaNote: actingNote }),
         ...(memoryNote === undefined ? {} : { memoryNote }),
+        ...stamp("fieldNotesNote", context.fieldNotesNote),
     });
     // The project map, sent only on a conversation's opening message, here rather than in the harness arm since it's a
     // filesystem fact true of every runtime. A start folder outside the root is dropped by the escape guard, mapping the

@@ -104,6 +104,7 @@ export const SAFETY_LOG = family(`safety-log`);
 export const SANDBOX_INFO = family(`info`);
 export const SANDBOX_SETTINGS = family(`settings`);
 export const SANDBOX_SAVINGS = family(`settings-savings`);
+export const SANDBOX_FIELD_NOTES = family(`settings-field-notes`);
 // Seeds the background-rendering status; `derivedChanged` frames keep it current afterwards, so it is fetched once
 // rather than polled.
 export const DERIVED_STATUS = family(`derived-status`);

@@ -1,18 +1,22 @@
 <script setup lang="ts">
+import { FIELD_NOTES_FILE } from "@intentic/constants";
 import type { TurnExperiment } from "@intentic/sandbox-contract";
-import { Row, RowGroup } from "@intentic/ui";
+import { Row, RowGroup, ui } from "@intentic/ui";
+import { RouterLink } from "vue-router";
 import ToggleSwitch from "primevue/toggleswitch";
 import { computed } from "vue";
 import { useSavings } from "../../usage/useSavings";
 import { useSandboxSettings } from "../../overview/useSandboxSettings";
 import { useSidecarStatus } from "../../../workspace/files/useSidecarStatus";
-import { asPercent } from "../models/numberInputs";
+import { useFieldNotes } from "./useFieldNotes";
+import { commitCount,asPercent } from "../models/numberInputs";
 import { meanUnit, verdictsOf } from "../../usage/savingsChart";
 import MeasurementPanel, { type PanelReading } from "../models/MeasurementPanel.vue";
 import { useT } from "@intentic/ui/i18n";
 
-// Three composing settings, ordered by when each acts: iq search (on demand), the project map (before there's
-// a question), and document shadows (a background pass rendering non-text files so both others can reach them).
+// Four composing settings, ordered by when each acts: iq search (on demand), the project map (before there's
+// a question), the field notes (before the conversation, and for all of it), and document shadows (a background pass
+// rendering non-text files so the others can reach them).
 
 const t = useT();
 
@@ -44,6 +48,23 @@ const searchReadings = computed<PanelReading[]>(() => readingsOf(savings.value?.
 // Same holdout behaviour as the search teaching above: flips whole conversations, read on their opening turn.
 const mapHoldoutPercent = computed<number>(() => asPercent(settings.value?.workspaceMapHoldout));
 const mapReadings = computed<PanelReading[]>(() => readingsOf(savings.value?.map));
+
+// The field notes report two things no setting can: whether the file the switch composes exists at all, and whether
+// anything is scheduled to keep it current. A switch left on over a brief nothing maintains is the failure to show.
+const notesHoldoutPercent = computed<number>(() => asPercent(settings.value?.fieldNotesHoldout));
+const notesReadings = computed<PanelReading[]>(() => readingsOf(savings.value?.notes));
+const { status: notes } = useFieldNotes();
+const NOTES_BUDGET = { min: 500, max: 20000 } as const;
+// The pair, never the first number alone: "5 of 12" separates a tight budget from a short file, and "5" cannot.
+const notesReach = computed<string>(() =>
+    notes.value?.ranksTotal === undefined
+        ? ``
+        : t(`sandbox.agentCodeSearch.sendingRanks`, {
+              sent: notes.value.ranksSent ?? 0,
+              total: notes.value.ranksTotal,
+              chars: notes.value.chars ?? 0,
+          }),
+);
 
 // The background pass reports itself, since nothing else can: it makes no request and owns no page.
 const { status: shadowStatus } = useSidecarStatus();
@@ -113,6 +134,73 @@ const shadowSummary = computed<string>(() => {
                     on-label="mapped"
                     off-label="unmapped"
                     @commit="(workspaceMapHoldout: number) => patch({ workspaceMapHoldout })"
+                />
+            </template>
+        </Row>
+
+        <!-- The one composed piece that is written rather than derived: a monthly automation rewrites it off the session
+             record, so it can carry what no scan of the tree can. Rides the system prompt for the whole session, unlike
+             the map above, which is sent once with the opening message. -->
+        <Row
+            spine
+            icon="book"
+            :title="t(`sandbox.agentCodeSearch.fieldNotes`)"
+            :description="t(`sandbox.agentCodeSearch.whatSessionsLearned`)"
+        >
+            <template #control>
+                <ToggleSwitch
+                    :model-value="settings?.fieldNotes ?? false"
+                    :disabled="settings === undefined"
+                    @update:model-value="(value: boolean) => patch({ fieldNotes: value })"
+                />
+            </template>
+            <template v-if="settings?.fieldNotes === true" #below>
+                <!-- Two facts no setting can hold: whether the file this switch composes exists, and whether anything
+                     is scheduled to keep it current. A switch left on over a brief nothing maintains is the failure. -->
+                <p v-if="notes?.unreadable !== undefined" class="text-2xs text-warning">
+                    {{ t(`sandbox.agentCodeSearch.briefUnreadable`, { why: notes.unreadable }) }}
+                </p>
+                <!-- One line: what is being sent, and the way to the file it came from. Two lines read as two
+                     findings, and the link is not one. -->
+                <p v-else class="flex items-center gap-2 text-2xs text-subtle">
+                    <span>{{ notes?.present === false ? t(`sandbox.agentCodeSearch.noBriefYet`) : notesReach }}</span>
+                    <RouterLink v-if="notes?.present === true" :to="`/workspace/${FIELD_NOTES_FILE}`" class="underline">{{
+                        t(`sandbox.agentCodeSearch.openTheBrief`)
+                    }}</RouterLink>
+                </p>
+                <p v-if="notes?.automation === `missing`" class="text-2xs text-subtle">
+                    <RouterLink to="/ext/automations" class="underline">{{ t(`sandbox.agentCodeSearch.setUpTheAutomation`) }}</RouterLink>
+                </p>
+                <p v-else-if="notes?.automation === `disabled`" class="text-2xs text-warning">
+                    {{ t(`sandbox.agentCodeSearch.automationOff`) }}
+                </p>
+                <!-- Characters, not sections: the file's own ranking picks WHICH, this picks HOW MANY fit, and raising
+                     it buys more of the tail rather than a fuller version of the same thing. -->
+                <label class="flex items-center gap-2 text-2xs text-subtle">
+                    <span>{{ t(`sandbox.agentCodeSearch.budget`) }}</span>
+                    <input
+                        type="number"
+                        :min="NOTES_BUDGET.min"
+                        :max="NOTES_BUDGET.max"
+                        :step="100"
+                        :value="settings?.fieldNotesBudget ?? 4000"
+                        :disabled="settings === undefined"
+                        :class="ui.inputSm(`w-24 text-right`)"
+                        @change="
+                            (event: Event) =>
+                                commitCount(event, settings?.fieldNotesBudget ?? 4000, NOTES_BUDGET, (fieldNotesBudget: number) =>
+                                    patch({ fieldNotesBudget }),
+                                )
+                        "
+                    />
+                </label>
+                <MeasurementPanel
+                    :percent="notesHoldoutPercent"
+                    :readings="notesReadings"
+                    :note="t(`sandbox.agentCodeSearch.ofConversationsRunWithoutNotes`)"
+                    on-label="briefed"
+                    off-label="cold"
+                    @commit="(fieldNotesHoldout: number) => patch({ fieldNotesHoldout })"
                 />
             </template>
         </Row>

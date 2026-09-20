@@ -176,3 +176,40 @@ test("only turns inside the window count", async () => {
     await readTurnExperiments(spy, { from: "2026-07-01", to: "2026-07-29" });
     expect(seen).toEqual({ from: "2026-07-01", to: "2026-07-29" });
 });
+
+// The field notes' own design: every turn is evidence (the brief sits in the prompt all session), the headline is
+// failed calls, and a monthly rewrite is a NEW treatment rather than more of the old one.
+const notesArms = (revision: string, onFailures: number, offFailures: number, count = MIN_ARM_TURNS): UsageTurn[] => [
+    ...Array.from({ length: count }, (_, index) =>
+        turn({ conversationId: `${revision}-on-${index}`, notesArm: true, notesCohort: revision, failedCalls: onFailures }),
+    ),
+    ...Array.from({ length: count }, (_, index) =>
+        turn({ conversationId: `${revision}-off-${index}`, notesArm: false, notesCohort: revision, failedCalls: offFailures }),
+    ),
+];
+
+test("field notes are judged on failed calls, per conversation rather than per opening turn", async () => {
+    const { notes } = await readTurnExperiments(storeOf(notesArms("rev1", 1, 3)), {});
+    expect(notes?.metrics[0].metric).toBe("failedCalls");
+    expect(notes?.sampleUnit).toBe("conversations");
+    expect(notes?.metrics[0].on.mean).toBe(1);
+    expect(notes?.metrics[0].off.mean).toBe(3);
+    expect(notes?.metrics[0].deltaPct).toBeLessThan(0);
+});
+
+test("a later turn of a treated conversation counts too, unlike the map's opening-turn sample", async () => {
+    // Same conversations, all their evidence on turn 7: a design sampling opening turns alone would see nothing here.
+    const later = notesArms("rev1", 1, 3).map((row) => ({ ...row, turnIndex: 7 }));
+    expect((await readTurnExperiments(storeOf(later), {})).notes?.metrics[0].on.turns).toBe(MIN_ARM_TURNS);
+    expect((await readTurnExperiments(storeOf(later), {})).map).toBeUndefined();
+});
+
+test("a monthly rewrite is a new treatment: only the latest revision's turns are pooled", async () => {
+    const old = notesArms("rev1", 9, 9);
+    const fresh = notesArms("rev2", 1, 3).map((row) => ({ ...row, at: 2 }));
+    const { notes } = await readTurnExperiments(storeOf([...old, ...fresh]), {});
+    expect(notes?.cohort).toBe("rev2");
+    // The old revision's turns are excluded outright rather than averaged in, which would have pulled both arms to 9.
+    expect(notes?.metrics[0].on.mean).toBe(1);
+    expect(notes?.metrics[0].on.turns).toBe(MIN_ARM_TURNS);
+});

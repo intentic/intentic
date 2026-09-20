@@ -439,6 +439,22 @@ const ROUTES: readonly (readonly [string, string, Handler])[] = [
 
     [`GET`, `/settings`, () => json(DEMO_SETTINGS)],
     [`GET`, `/settings/savings`, () => json(DEMO_SAVINGS)],
+    // A brief that exists, is maintained, and does not entirely fit the budget: the state the row has the most to say
+    // about, and the only one where "ranks 1-5 of 12" means anything.
+    [
+        `GET`,
+        `/settings/field-notes`,
+        () =>
+            json({
+                present: true,
+                writtenAt: STARTED_AT - 19 * 24 * 60 * 60_000,
+                ranksSent: 5,
+                ranksTotal: 12,
+                chars: 2_784,
+                automation: `enabled`,
+                nextRunAt: STARTED_AT + 11 * 24 * 60 * 60_000,
+            }),
+    ],
     // No rule has ever fired in a recorded demo; an empty table is the honest answer.
     [`GET`, `/settings/rule-firings`, () => json({})],
     // Long enough to overflow its section, because that is the only state the policy's surface has a decision to make
@@ -734,6 +750,9 @@ const DEMO_SETTINGS = {
     iqSearchHoldout: 0.1,
     workspaceMap: true,
     workspaceMapHoldout: 0.1,
+    fieldNotes: true,
+    fieldNotesBudget: 4000,
+    fieldNotesHoldout: 0.2,
     sidecars: true,
 };
 
@@ -804,6 +823,18 @@ const DEMO_SAVINGS: SavingsReport = {
                 saved: 388,
             },
             { metric: `callsBeforeTarget`, on: { turns: 355, mean: 5.2 }, off: { turns: 100, mean: 5.4 }, marginPct: 17.8, controlTurnsNeeded: 640 },
+        ],
+    },
+    // The field notes in their third state, the one neither block above shows: not enough control conversations yet, so
+    // both arms are reported and no claim is made. `cohort` is the revision in play, which is what a monthly rewrite
+    // moves.
+    notes: {
+        minTurns: 30,
+        sampleUnit: `conversations`,
+        cohort: `a41f9c2e`,
+        metrics: [
+            { metric: `failedCalls`, on: { turns: 84, mean: 1.3 }, off: { turns: 21, mean: 2.1 } },
+            { metric: `callsBeforeTarget`, on: { turns: 84, mean: 4.9 }, off: { turns: 21, mean: 5.1 } },
         ],
     },
     dependencies: {

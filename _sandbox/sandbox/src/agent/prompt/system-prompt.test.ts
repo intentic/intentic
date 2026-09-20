@@ -390,3 +390,53 @@ test("says a connected machine has several environments, and how a command picks
     const lone = sdkSystemPrompt({ ...BASE, mode: "intentic", custom: undefined, hostDevices: { ids: ["ada-laptop"] } }) as string;
     expect(lone).not.toContain("ONE computer");
 });
+
+// The field notes sit between this product's guidance and the owner's own rules, on every seam the other two notes
+// take. Order is the claim: a brief about the sandbox is context for the owner's rules, never a rule that outranks them.
+const NOTES = "## Field notes for this sandbox\n\nmeta:\n  title: Field notes";
+
+test("field notes ride the append, after the persona and before the owner's rules", () => {
+    const append =
+        turnPromptPlacement({
+            capabilities: CODEX,
+            mode: "intentic",
+            systemPrompt: "",
+            stableSystemPrompt: false,
+            personaNote: PERSONA,
+            fieldNotesNote: NOTES,
+            memoryNote: MEMORY,
+        }).systemAppend ?? "";
+    expect(append.indexOf(PERSONA)).toBeLessThan(append.indexOf(NOTES));
+    expect(append.indexOf(NOTES)).toBeLessThan(append.indexOf(MEMORY));
+});
+
+test("a custom prompt drops the field notes and keeps the owner's own rules", () => {
+    const placement = turnPromptPlacement({
+        capabilities: CLAUDE,
+        mode: "custom",
+        systemPrompt: CUSTOM,
+        stableSystemPrompt: false,
+        fieldNotesNote: NOTES,
+        memoryNote: MEMORY,
+    });
+    // What Intentic worked out about the sandbox is this product's guidance, and "nothing added" means it too. The
+    // owner's standing rules are theirs, and stay.
+    expect(placement.systemPrompt).toContain(MEMORY);
+    expect(placement.systemPrompt).not.toContain(NOTES);
+});
+
+test("a runtime with no system seam gets the field notes through the user message instead", () => {
+    const placement = turnPromptPlacement({
+        capabilities: ACP,
+        mode: "intentic",
+        systemPrompt: "",
+        stableSystemPrompt: false,
+        fieldNotesNote: NOTES,
+        memoryNote: MEMORY,
+    });
+    expect(placement.systemAppend).toBeUndefined();
+    expect(placement.userNotes).toEqual([
+        { title: "Field notes for this sandbox", text: NOTES },
+        { title: "Standing instructions for this workspace", text: MEMORY },
+    ]);
+});

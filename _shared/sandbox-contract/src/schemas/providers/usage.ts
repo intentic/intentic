@@ -60,9 +60,18 @@ export const UsageTurnSchema = z.object({
     openingListings: z.number().optional(),
     // Tool calls before the turn first touched a file it later edited; absent (not zero) if it edited nothing.
     callsBeforeTarget: z.number().optional(),
+    // Calls that ended in error, counted once each however many updates reported it; absent means unmeasured, not a
+    // clean turn.
+    failedCalls: z.number().optional(),
     // Arm of the project-map experiment, stable per conversation; mapChars is the note's length when sent.
     mapArm: z.boolean().optional(),
     mapChars: z.number().optional(),
+    // Arm of the field-notes experiment, stable per conversation; notesChars is what the budget let through.
+    notesArm: z.boolean().optional(),
+    notesChars: z.number().optional(),
+    // Hash of the brief that was sent, recorded on control turns too. Load-bearing rather than decorative: the file is
+    // rewritten monthly, so a 30-day window holds two different treatments and pooling them would measure neither.
+    notesCohort: z.string().optional(),
     // What became of pre-turn retrieval on this turn, and how long it took. Assignment and DELIVERY are different
     // facts: the first version of this mechanism was assigned to every eligible turn and reached four in five of them,
     // which is the difference between a null result and a mechanism that never ran. Absent means the flag was off, so

@@ -270,6 +270,34 @@ export const SandboxSettingsSchema = z.object({
         .describe(
             "What share of conversations to open without the map, so the two can be compared. Whole conversations rather than individual turns, because the map is sent once and stays in the conversation's history afterwards.",
         ),
+    // The one composed piece that is WRITTEN rather than derived: a monthly automation rewrites it off the session
+    // corpus, so it carries what no scan of the tree can (which commands really work here, what the box can take, how
+    // the owner asks for things) and the map keeps carrying what a scan can.
+    fieldNotes: z
+        .boolean()
+        .default(false)
+        .describe(
+            "Open every turn with a brief on how work actually goes in this sandbox: the traps that cost past sessions calls, the commands that really verify, what the machine can take. Written once a month by an automation that reads back the sessions run here, rather than worked out per turn, because it is drawn from history rather than from the tree. Off by default, since it rides every turn of every conversation.",
+        ),
+    // Characters, not sections: the file's own ranking decides WHICH sections, this decides HOW MANY fit. Same unit as
+    // the project map's ceiling so the two costs read on one scale.
+    fieldNotesBudget: z
+        .number()
+        .int()
+        .min(500)
+        .max(20000)
+        .default(4000)
+        .describe(
+            "How much of that brief to send. Its sections are ranked, most costly-to-not-know first, and they are taken whole in that order until this runs out — so raising it buys more of the tail, never a fuller version of the same thing.",
+        ),
+    fieldNotesHoldout: z
+        .number()
+        .min(0)
+        .max(1)
+        .default(0)
+        .describe(
+            "What share of conversations to run without the brief, so the two can be compared. Whole conversations rather than individual turns, because the brief sits in the prompt for the whole session and withholding it from one turn would not take it back.",
+        ),
     // Only the eager background pass; the `fileq` CLI itself is always on PATH regardless, gated only by its own skill.
     sidecars: z
         .boolean()
@@ -465,9 +493,10 @@ export const SavingsArmSchema = z.object({ turns: z.number(), mean: z.number() }
 // openingSearches: same, narrowed to before the turn first touched a file.
 // openingListings: directory listings a turn ran to orient itself (the project map).
 // callsBeforeTarget: how far a turn walked before touching a file it went on to edit.
+// failedCalls: tool calls that ended in error (the field notes, whose largest section is a failure taxonomy).
 // Never cost: each mechanism moves one small part of a turn's work, inside the noise of the rest.
 export const TurnMetricReadingSchema = z.object({
-    metric: z.enum(["searchCalls", "openingSearches", "openingListings", "callsBeforeTarget"]),
+    metric: z.enum(["searchCalls", "openingSearches", "openingListings", "callsBeforeTarget", "failedCalls"]),
     on: SavingsArmSchema,
     off: SavingsArmSchema,
     // Additional control turns to reach a fixed target resolution, not today's delta (which inherits noise and always
@@ -518,11 +547,34 @@ export const DependencySavingsSchema = z.object({
     updatedAt: z.number().optional(),
 });
 export type DependencySavings = z.infer<typeof DependencySavingsSchema>;
+// What the settings row can say about the brief without opening it: whether there is one, how much of it this budget
+// reaches, and whether anything is scheduled to rewrite it. Read off the file and the automation store, never stored.
+export const FieldNotesStatusSchema = z.object({
+    // False means the automation has never run (or was never set up) — the ordinary state before the first month.
+    present: z.boolean(),
+    // Epoch ms the file was last written. Absent when there is no file.
+    writtenAt: z.number().optional(),
+    // How many ranked sections the current budget reaches, out of how many the file holds. The pair is the point: "5"
+    // alone cannot tell a generous budget from a short file.
+    ranksSent: z.number().optional(),
+    ranksTotal: z.number().optional(),
+    // What the brief costs the prompt, in characters, at the current budget.
+    chars: z.number().optional(),
+    // The monthly rewrite: absent until the owner creates it from the offered template, since an automation names the
+    // models it spends and nothing chooses those for them.
+    automation: z.enum(["missing", "enabled", "disabled"]),
+    // When it next runs, epoch ms; absent when there is nothing scheduled.
+    nextRunAt: z.number().optional(),
+    // Said out loud rather than shown as "no file": a brief that exists and cannot be read is a broken automation.
+    unreadable: z.string().optional(),
+});
+export type FieldNotesStatus = z.infer<typeof FieldNotesStatusSchema>;
 export const SavingsReportSchema = z.object({
     input: InputSavingsSchema,
     search: TurnExperimentSchema.optional(),
     // Same absence rule as `search`: not measured, never zero.
     map: TurnExperimentSchema.optional(),
+    notes: TurnExperimentSchema.optional(),
     dependencies: DependencySavingsSchema.optional(),
 });
 export type SavingsReport = z.infer<typeof SavingsReportSchema>;

@@ -1621,15 +1621,25 @@
             "verifyBeforeFinishing": "Zweryfikuj przed zakończeniem"
         },
         "agentCodeSearch": {
+            "automationOff": "Its monthly rewrite is switched off.",
+            "briefUnreadable": "The brief is there but cannot be sent: {why}",
+            "budget": "Budget",
             "codeSearch": "Wyszukiwanie kodu",
             "documentShadows": "Cienie dokumentów",
+            "fieldNotes": "Field notes",
             "iqCodeSearch": "Wyszukiwanie kodu iq",
             "keepDocumentsImagesAudio": "Trzymaj dokumenty, obrazy, audio i archiwa wstępnie wyrenderowane jako tekst, aktualizowane w miarę zmian plików. Otwórz dowolne z nich w przestrzeni roboczej, żeby przeczytać to, co czyta agent.",
+            "noBriefYet": "No brief yet. Set up the monthly Field notes automation and it writes the first one.",
             "ofConversationsOpenWithout": "of conversations open without the map, as a control.",
             "ofConversationsRunWithout": "of conversations run without iq, as a control.",
+            "ofConversationsRunWithoutNotes": "of conversations run without the brief, as a control.",
+            "openTheBrief": "Open the brief",
             "projectMap": "Mapa projektu",
             "provideProjectStructureOverview": "Dawaj nowym rozmowom przegląd struktury projektu.",
-            "useIqSearchCli": "Używaj CLI wyszukiwania iq zamiast grep/find/glob."
+            "sendingRanks": "Sending ranks 1-{sent} of {total} · {chars} characters",
+            "setUpTheAutomation": "Set up the automation",
+            "useIqSearchCli": "Używaj CLI wyszukiwania iq zamiast grep/find/glob.",
+            "whatSessionsLearned": "What sessions here had to learn the hard way, ranked and rewritten monthly, carried into every turn."
         },
         "agentCommandOutput": {
             "cleanCommandOutput": "Czyść wyjście poleceń",

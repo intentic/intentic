@@ -26,6 +26,9 @@ const OPENING_SEARCHES: Metric = { name: "openingSearches", of: (turn) => turn.o
 // The map's two readings: what it stops the turn doing, and whether it got there sooner.
 const ROOT_LISTINGS: Metric = { name: "openingListings", of: (turn) => turn.openingListings, round: round1 };
 const CALLS_BEFORE_TARGET: Metric = { name: "callsBeforeTarget", of: (turn) => turn.callsBeforeTarget, round: round1 };
+// The field notes' headline: the brief's largest section is a taxonomy of what fails here, so calls that ended in error
+// is the reading it either moves or does not.
+const FAILED_CALLS: Metric = { name: "failedCalls", of: (turn) => turn.failedCalls, round: round1 };
 
 interface Arm {
     readonly turns: number;
@@ -172,12 +175,28 @@ const MAP_DESIGN: Design = {
     sample: openingTurn,
 };
 
+// Sampled over every turn, not the opening one: the brief rides the system prefix for the whole session, so turn 40 is
+// as much evidence as turn 1. Cohorted, unlike the map, because the file is rewritten monthly and a window wide enough
+// to reach MIN_ARM_TURNS is wide enough to hold two revisions.
+const NOTES_DESIGN: Design = {
+    arm: (turn) => turn.notesArm,
+    cohort: (turn) => turn.notesCohort,
+    metrics: [FAILED_CALLS, CALLS_BEFORE_TARGET],
+    sampleUnit: "conversations",
+    sample: meanOfTurns,
+};
+
 export const readTurnExperiments = async (
     usage: UsageStore,
     window: DayWindowQuery,
-): Promise<{ readonly search?: TurnExperiment; readonly map?: TurnExperiment }> => {
+): Promise<{ readonly search?: TurnExperiment; readonly map?: TurnExperiment; readonly notes?: TurnExperiment }> => {
     const turns = (await usage.turns(window)).filter(measurable);
     const search = experimentOf(turns, SEARCH_DESIGN);
     const map = experimentOf(turns, MAP_DESIGN);
-    return { ...(search !== undefined ? { search } : {}), ...(map !== undefined ? { map } : {}) };
+    const notes = experimentOf(turns, NOTES_DESIGN);
+    return {
+        ...(search !== undefined ? { search } : {}),
+        ...(map !== undefined ? { map } : {}),
+        ...(notes !== undefined ? { notes } : {}),
+    };
 };

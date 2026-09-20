@@ -1621,15 +1621,25 @@
             "verifyBeforeFinishing": "Verify before finishing"
         },
         "agentCodeSearch": {
+            "automationOff": "Its monthly rewrite is switched off.",
+            "briefUnreadable": "The brief is there but cannot be sent: {why}",
+            "budget": "Budget",
             "codeSearch": "Code search",
             "documentShadows": "Document shadows",
+            "fieldNotes": "Field notes",
             "iqCodeSearch": "iq code search",
             "keepDocumentsImagesAudio": "Keep documents, images, audio and archives pre-rendered as text, updated as files change. Open any of them in Workspace to read what an agent reads.",
+            "noBriefYet": "No brief yet. Set up the monthly Field notes automation and it writes the first one.",
             "ofConversationsOpenWithout": "of conversations open without the map, as a control.",
             "ofConversationsRunWithout": "of conversations run without iq, as a control.",
+            "ofConversationsRunWithoutNotes": "of conversations run without the brief, as a control.",
+            "openTheBrief": "Open the brief",
             "projectMap": "Project map",
             "provideProjectStructureOverview": "Provide project structure overview to new conversations.",
-            "useIqSearchCli": "Use iq search CLI instead of grep/find/glob."
+            "sendingRanks": "Sending ranks 1-{sent} of {total} · {chars} characters",
+            "setUpTheAutomation": "Set up the automation",
+            "useIqSearchCli": "Use iq search CLI instead of grep/find/glob.",
+            "whatSessionsLearned": "What sessions here had to learn the hard way, ranked and rewritten monthly, carried into every turn."
         },
         "agentCommandOutput": {
             "cleanCommandOutput": "Clean command output",
