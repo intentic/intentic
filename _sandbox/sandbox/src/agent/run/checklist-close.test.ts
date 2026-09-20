@@ -18,7 +18,7 @@ const stored = (...rows: [string, StoredTask["status"], string][]): StoredTask[]
 const armed = (store: Record<string, readonly StoredTask[]>) => {
     const asked: string[] = [];
     const hooks = checklistCloseHooks({
-        workspaceRoot: ROOT,
+        sessionStore: ROOT,
         read: async (dir) => {
             asked.push(dir);
             return store[dir] ?? [];
@@ -72,7 +72,7 @@ describe("checklistCloseHooks", () => {
     // Never a failed Stop: an unreadable store contributes nothing, like the seed it is read for.
     it("treats a store it cannot read as empty", async () => {
         const hooks = checklistCloseHooks({
-            workspaceRoot: ROOT,
+            sessionStore: ROOT,
             read: async () => {
                 throw new Error("EACCES");
             },
@@ -82,7 +82,7 @@ describe("checklistCloseHooks", () => {
     });
 
     it("wires nothing without a tree to read the store under", () => {
-        expect(checklistCloseHooks({ workspaceRoot: undefined })).toEqual({});
+        expect(checklistCloseHooks({ sessionStore: undefined })).toEqual({});
     });
 
     it("counts a long list rather than re-pasting it", () => {

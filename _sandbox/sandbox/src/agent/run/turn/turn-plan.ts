@@ -529,6 +529,11 @@ export const planTurn = async (services: Services, input: AgentTurn, context: Tu
 // The one point every provider arm passes through: unhonoured controls are dropped, and every runtime-agnostic fact
 // (worktree location, pre-turn rebase, dependency readiness, persona shelves, standing instructions) is applied exactly
 // once here instead of risking silent drift per arm.
+// Where this conversation's checklist and transcripts live; a turn with no conversation behind it (a bench run) reads
+// the shared store, which is also the only one it could have written to.
+const sessionStoreOf = (services: Services, conversationId: string | undefined): string =>
+    services.agentWorktrees.sessionStore(conversationId === undefined ? undefined : services.agents.entry(conversationId));
+
 const honoured = (
     services: Services,
     context: TurnContext,
@@ -667,9 +672,9 @@ const honoured = (
         // How this runtime enforces the owner's command rulebook, read from the pair's own record rather than hardcoded
         // per adapter, so a lying row changes turn behavior, not just what the composer displays.
         rulebook: capabilities.rulebook,
-        // Set here since this is the last point that can still tell the workspace root from the turn's cwd, before a
-        // persona's start folder or an isolated worktree overwrites it.
-        workspaceRoot: services.workspace.root,
+        // Resolved here, where the conversation is still known: a fenced conversation's store is its own, and the
+        // shared path this would otherwise name is bound over inside its namespace.
+        sessionStore: sessionStoreOf(services, context.base.conversationId),
         dependencyIssue: (command) => services.dependencies.issueAt(dependencyDirForCommand(dependencyDir, services.workspace.root, command)),
         dependencyInstallAllowed,
         // Bound here for the same reason as the dependency answer above: the last point that still knows the workspace

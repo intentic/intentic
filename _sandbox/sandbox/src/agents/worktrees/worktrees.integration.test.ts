@@ -641,6 +641,10 @@ test("a fenced conversation's checkout holds its own folders, and the repositori
     // The nested repo the fence never reaches leaves the composition entirely, rather than being checked out empty.
     expect(fenced.repos.map(({ repo }) => repo)).toEqual(["root"]);
     expect(existsSync(join(fenced.cwd, "intent"))).toBe(false);
+    // Said back to the caller, since the turn's namespace is what has to keep `finance` out of reach: the checkout is
+    // bound over /work, but the workspace root is bound aside at the same time (isolation.ts).
+    expect(fenced.fenced).toBe(true);
+    expect((await worktrees.ensure("c2", [], undefined, false, undefined, undefined)).fenced).toBe(false);
 });
 
 // The one thing a partial checkout must not do: make the rest of the tree look deleted. Everything outside the cone

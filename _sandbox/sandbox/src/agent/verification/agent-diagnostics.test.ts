@@ -12,6 +12,7 @@ const PLAN: IsolationPlan = {
     root: WORKSPACE_ROOT,
     mirrors: ["intentic/node_modules"],
     overlays: `${HISTORY_ROOT}/overlays/c1`,
+    fence: undefined,
 };
 // A turn that got its namespace, which is the ordinary case wherever the container can build one.
 const ANCHORED: TurnPlacement = { plan: PLAN, anchor: { pid: 4321, cwd: WORKSPACE_ROOT, plan: PLAN, dispose: () => {} } };

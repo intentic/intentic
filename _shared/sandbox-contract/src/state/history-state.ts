@@ -19,6 +19,10 @@ export const HISTORY_STATE_FILES: readonly StateFile[] = [
     // Armed condition watches; carries safely: the journal holds no credential, only names re-derived on target.
     { path: "watches/", portability: "carry" },
     { path: "transcripts/", portability: "carry" },
+    // One runtime session store per fenced conversation, holding for it what `.intentic/records/sessions/claude/` holds
+    // for every other: its own transcripts, plans, backups and checklists, kept off /work so no other conversation's
+    // namespace can reach them. Carried for the same reason that one is.
+    { path: "sessions/", portability: "carry" },
     // What each message can restore to (a checkpoint or isolated commit); the join between transcripts and scopes.
     { path: "turn-anchors.json", portability: "carry" },
     // Index of published-page conversations; the pages travel with /work anyway, this makes one withdrawable.

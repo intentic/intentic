@@ -795,7 +795,7 @@ test("a question for a secret is refused without a card, because a card's answer
 });
 
 test("an anchored turn's app-server is born in the turn's mount namespace", async () => {
-    const plan = { worktree: "/history/worktrees/c1/work", root: WORKSPACE_ROOT, mirrors: [], overlays: "/history/overlays/c1" };
+    const plan = { worktree: "/history/worktrees/c1/work", root: WORKSPACE_ROOT, mirrors: [], overlays: "/history/overlays/c1", fence: undefined };
     const { runner, calls } = fakeCodexRunner([]);
 
     await collect(createTestAgent(runner), {
@@ -807,7 +807,7 @@ test("an anchored turn's app-server is born in the turn's mount namespace", asyn
 });
 
 test("an isolated turn the container could not anchor carries no namespace and runs cwd'd as before", async () => {
-    const plan = { worktree: "/history/worktrees/c1/work", root: WORKSPACE_ROOT, mirrors: [], overlays: "/history/overlays/c1" };
+    const plan = { worktree: "/history/worktrees/c1/work", root: WORKSPACE_ROOT, mirrors: [], overlays: "/history/overlays/c1", fence: undefined };
     const { runner, calls } = fakeCodexRunner([]);
 
     await collect(createTestAgent(runner), { ...request, cwd: plan.worktree, isolation: { plan } });

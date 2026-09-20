@@ -54,14 +54,14 @@ test("a store that is not there is an empty list, not a failure", async () => {
 test("the seed names the session it was read for, and is nothing for a first turn or an empty store", async () => {
     const root = mkdtempSync(join(tmpdir(), "task-store-"));
     storeAt(root, SESSION, { "1.json": task(1, "First", "completed") });
-    expect(await checklistSeedOf({ sessionId: SESSION, workspaceRoot: root })).toEqual({
+    expect(await checklistSeedOf({ sessionId: SESSION, sessionStore: root })).toEqual({
         sessionId: SESSION,
         tasks: [{ id: "1", subject: "First", status: "completed" }],
     });
     // A first turn has no session; a hand-built request has no root; a session that kept no list has no store.
-    expect(await checklistSeedOf({ workspaceRoot: root })).toBeUndefined();
+    expect(await checklistSeedOf({ sessionStore: root })).toBeUndefined();
     expect(await checklistSeedOf({ sessionId: SESSION })).toBeUndefined();
-    expect(await checklistSeedOf({ sessionId: "0000-never-kept-a-list", workspaceRoot: root })).toBeUndefined();
+    expect(await checklistSeedOf({ sessionId: "0000-never-kept-a-list", sessionStore: root })).toBeUndefined();
     // A session id is a directory name; one that is not a bare name is refused rather than joined into a path.
-    expect(await checklistSeedOf({ sessionId: "../../etc", workspaceRoot: root })).toBeUndefined();
+    expect(await checklistSeedOf({ sessionId: "../../etc", sessionStore: root })).toBeUndefined();
 });

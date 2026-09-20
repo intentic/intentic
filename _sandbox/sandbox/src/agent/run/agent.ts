@@ -96,8 +96,9 @@ export interface AgentRequest {
     readonly attachments?: readonly string[];
     // Working dir the agent edits, the workspace root; under `isolation` it's the root as seen inside the namespace.
     readonly cwd: string;
-    // Main checkout as the daemon sees it, unlike `cwd` under isolation or a subfolder; used for the real deps.
-    readonly workspaceRoot?: string;
+    // This conversation's runtime session store, where its checklist is read back from; outside the workspace when the
+    // conversation was born fenced (sessions/session-store.ts).
+    readonly sessionStore?: string;
     // Project-scoped dependency answer for the command-failure hook, so one project's error stays its own.
     readonly dependencyIssue?: (command: string) => Promise<DependencyIssue | undefined>;
     readonly dependencyInstallAllowed?: boolean;
@@ -541,7 +542,7 @@ const baseOptions = (
             }),
             // The harness's own ask beside the owner's rules: a checklist about to be left open is said back once, since
             // the board reads that list to tell a finished session from one that stopped short.
-            checklistCloseHooks({ workspaceRoot: request.workspaceRoot }),
+            checklistCloseHooks({ sessionStore: request.sessionStore }),
             // Apply worktree redirection only when no anchor already resolves paths.
             request.isolation !== undefined && request.isolation.anchor === undefined ? worktreeRedirectHooks(request.isolation.plan) : {},
             // Rewrites a model-named screenshot path into the tool-owned output directory before the tool sees it.

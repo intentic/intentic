@@ -106,7 +106,7 @@ test("agentSessionName derives the same agent-* name the hook routes commands th
 });
 
 test("an isolated turn's Bash joins the turn's namespace, inside the tmux wrapper", async () => {
-    const plan = { worktree: `${HISTORY_ROOT}/worktrees/abc`, root: WORKSPACE_ROOT, mirrors: [], overlays: `${HISTORY_ROOT}/overlays/abc` };
+    const plan = { worktree: `${HISTORY_ROOT}/worktrees/abc`, root: WORKSPACE_ROOT, mirrors: [], overlays: `${HISTORY_ROOT}/overlays/abc`, fence: undefined };
     const anchor = { pid: 4321, cwd: WORKSPACE_ROOT, plan, dispose: () => {} };
     const command = await rewritten({ command: "sed -i s/a/b/ x.ts", description: "edit" }, bashTmuxHooks([], { plan, anchor }));
     // tmux-run stays outside the namespace; only the command the pane runs crosses in, already demoted.
@@ -123,7 +123,7 @@ test("an isolated turn's Bash joins the turn's namespace, inside the tmux wrappe
 // `-c` carries the agent's own command, not the wrapped line the pane actually runs: the output filter matches cleaners
 // against and records that string.
 test("-c carries the agent's own command, never the wrapper the pane runs", async () => {
-    const plan = { worktree: "/wt", root: WORKSPACE_ROOT, mirrors: [], overlays: `${HISTORY_ROOT}/overlays/abc` };
+    const plan = { worktree: "/wt", root: WORKSPACE_ROOT, mirrors: [], overlays: `${HISTORY_ROOT}/overlays/abc`, fence: undefined };
     const anchor = { pid: 4321, cwd: WORKSPACE_ROOT, plan, dispose: () => {} };
     const command = await rewritten({ command: "grep -rn needle src", description: "search" }, bashTmuxHooks([], { plan, anchor }));
     expect(command?.startsWith("/usr/local/bin/tmux-run -c 'grep -rn needle src' ")).toBe(true);
@@ -134,7 +134,7 @@ test("-c carries the agent's own command, never the wrapper the pane runs", asyn
 // Unanchored isolation rewrites paths into the worktree; `-c` follows, since the redirected line is the one that
 // actually ran.
 test("-c carries the redirected command when an isolated turn has no namespace to join", async () => {
-    const plan = { worktree: `${HISTORY_ROOT}/worktrees/abc`, root: WORKSPACE_ROOT, mirrors: [], overlays: `${HISTORY_ROOT}/overlays/abc` };
+    const plan = { worktree: `${HISTORY_ROOT}/worktrees/abc`, root: WORKSPACE_ROOT, mirrors: [], overlays: `${HISTORY_ROOT}/overlays/abc`, fence: undefined };
     const command = await rewritten({ command: "wc -l /work/intentic/x.ts" }, bashTmuxHooks([], { plan }));
     expect(command?.startsWith("/usr/local/bin/tmux-run -c 'wc -l /history/worktrees/abc/intentic/x.ts' ")).toBe(true);
 });
@@ -147,6 +147,7 @@ test("without an anchor, an isolated turn's Bash has its main-tree paths rewritt
         root: WORKSPACE_ROOT,
         mirrors: ["intentic/node_modules"],
         overlays: `${HISTORY_ROOT}/overlays/abc`,
+        fence: undefined,
     };
     const command = await rewritten({ command: "sed -i s/a/b/ /work/intentic/x.ts" }, bashTmuxHooks([], { plan }));
     expect(command).toContain("/history/worktrees/abc/intentic/x.ts");
@@ -156,7 +157,7 @@ test("without an anchor, an isolated turn's Bash has its main-tree paths rewritt
 });
 
 test("the Bash rewrite leaves the shared subtrees and any path that merely starts with the root alone", async () => {
-    const plan = { worktree: "/wt", root: WORKSPACE_ROOT, mirrors: ["intentic/node_modules"], overlays: `${HISTORY_ROOT}/overlays/abc` };
+    const plan = { worktree: "/wt", root: WORKSPACE_ROOT, mirrors: ["intentic/node_modules"], overlays: `${HISTORY_ROOT}/overlays/abc`, fence: undefined };
     const rewrite = async (command: string): Promise<string | undefined> => rewritten({ command }, bashTmuxHooks([], { plan }));
     // Dependency trees and the untracked state dir resolve to the main checkout, not the worktree.
     expect(await rewrite("/work/intentic/node_modules/.bin/tsgo")).toContain("/work/intentic/node_modules/.bin/tsgo");
@@ -176,7 +177,7 @@ test("every command is born carrying the conversation that ran it, ahead of the 
     expect(await rewritten({ command: "echo hi" })).toContain(born("nice"));
 
     // An env assignment is a shell construct: placed after nsenter it would be exec'd as a program name.
-    const plan = { worktree: "/wt", root: WORKSPACE_ROOT, mirrors: [], overlays: "/ov" };
+    const plan = { worktree: "/wt", root: WORKSPACE_ROOT, mirrors: [], overlays: "/ov", fence: undefined };
     const anchored = await rewritten(
         { command: "pnpm exec tsx src/main.ts" },
         bashTmuxHooks([], { plan, anchor: { pid: 4242, cwd: WORKSPACE_ROOT, plan, dispose: () => {} } }),
@@ -216,7 +217,7 @@ test("a sandbox with no queue configured rewrites exactly as it always did", asy
 });
 
 test("the queue rides inside the namespace hop, so its slot is held in the tree the command runs in", async () => {
-    const plan = { worktree: "/wt", root: WORKSPACE_ROOT, mirrors: [], overlays: "/ov" };
+    const plan = { worktree: "/wt", root: WORKSPACE_ROOT, mirrors: [], overlays: "/ov", fence: undefined };
     const command = await rewritten(
         { command: "pnpm test" },
         bashTmuxHooks([], { plan, anchor: { pid: 4242, cwd: WORKSPACE_ROOT, plan, dispose: () => {} } }, undefined, undefined, heavy()),

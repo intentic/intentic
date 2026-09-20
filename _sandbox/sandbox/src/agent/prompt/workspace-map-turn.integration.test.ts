@@ -1,4 +1,5 @@
 import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
+import { claudeStoreOf } from "../../sessions/session-store.js";
 import { createCredentialGrants } from "../../secrets/credential-grants.js";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -68,6 +69,10 @@ const servicesIn = (root: string, settings: Partial<Record<string, unknown>>, ov
         personas: unstubbed<Services["personas"]>("personas", { list: async () => [] }),
         // No areas: the unfenced workspace, which is what a turn an owner started carries.
         areas: unstubbed<Services["areas"]>("areas", { list: async () => [] }),
+        // Where this turn's checklist is read back from; the shared store, matching the unfenced `areas` above.
+        agentWorktrees: unstubbed<Services["agentWorktrees"]>("agentWorktrees", {
+            sessionStore: (entry) => claudeStoreOf(root, testConfig.historyRoot, entry),
+        }),
         perf: unstubbed<Services["perf"]>("perf", { track: (_op, _fields, run) => run() }),
         config: { ...testConfig, translator: { url: "http://127.0.0.1:8788", token: "local" } },
         cliProxy: unstubbed<Services["cliProxy"]>("cliProxy", {

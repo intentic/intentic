@@ -8,6 +8,7 @@ import type { PerfTracker } from "../../platform/resources/perf.js";
 import { discoverRepos } from "../../workspace/layout/repo-discovery.js";
 import type { WorkspacePaths } from "../../workspace/workspace.js";
 import { dropAgentRef, dropOrphanParkedRefs, parkAgentRefs, unparkAgentRef } from "../land/agent-refs.js";
+import { claudeStoreOf, sessionsDir, sessionsRoot, type StoreOwner } from "../../sessions/session-store.js";
 import { mirroredDirs, overlaysDir, overlaysRoot, type TurnIsolation } from "./isolation.js";
 import { coneFor, fencedComposition } from "./worktree-cone.js";
 import type { Fence } from "@intentic/sandbox-contract";
@@ -24,12 +25,16 @@ export interface ConversationWorktree {
     readonly branch: string;
     // Each repo's full sha on the main line, updated by the pre-turn rebase (agents/sync.ts); not the start.
     readonly repos: readonly { repo: string; base: string }[];
+    // Whether this checkout was cut to a fence; what the turn's namespace must not hand back (isolation.ts).
+    readonly fenced: boolean;
 }
 
 export interface AgentWorktrees {
     readonly conversationDir: (id: string) => string;
     readonly worktreeDir: (id: string, repo: string) => string;
     readonly mainDir: (repo: string) => string;
+    // The conversation's runtime session store, wherever the fence it was born with puts it (sessions/session-store.ts).
+    readonly sessionStore: (entry: StoreOwner | undefined) => string;
     readonly exists: (id: string) => Promise<boolean>;
     // Is this repo's checkout actually on disk; `archivedAt` cannot answer it since a restored agent's checkout stays
     // retired until the next ensure().
@@ -470,6 +475,7 @@ export const createAgentWorktrees = (
         conversationDir,
         worktreeDir,
         mainDir,
+        sessionStore: (entry) => claudeStoreOf(workspace.root, historyRoot, entry),
         exists: (id) => pathExists(conversationDir(id)),
         attached: (id, repo) => pathExists(join(worktreeDir(id, repo), ".git")),
         snapshot: async () => {
@@ -498,7 +504,7 @@ export const createAgentWorktrees = (
                 const repos = selection === undefined && fence === undefined ? recorded : await reconcile(id, recorded, await wanted());
                 await sparsenComposition(id, repos, fence);
                 await linkComposition(id, repos, namespaced);
-                return { cwd: conversationDir(id), branch, repos };
+                return { cwd: conversationDir(id), branch, repos, fenced: fence !== undefined };
             }
             // Root first: its checkout creates the dir nested worktrees mount into (root excludes each repo dir).
             const live = await wanted();
@@ -517,7 +523,7 @@ export const createAgentWorktrees = (
             // a fenced conversation's folders exist on disk closes before its first turn can run.
             await sparsenComposition(id, repos, fence);
             await linkComposition(id, repos, namespaced);
-            return { cwd: conversationDir(id), branch, repos };
+            return { cwd: conversationDir(id), branch, repos, fenced: fence !== undefined };
         },
         remove: async (id, recorded) => {
             await eachRepo(recorded, "root-last", (repo) =>
@@ -584,6 +590,13 @@ export const createAgentWorktrees = (
             for (const name of await readdir(overlaysRoot(historyRoot)).catch(() => [])) {
                 if (!knownIds().includes(name)) {
                     await rm(overlaysFor(name), { recursive: true, force: true });
+                }
+            }
+            // A fenced conversation's own session store, swept on the same terms: it outlives the checkout too, and
+            // holds the one copy of that conversation's transcripts.
+            for (const name of await readdir(sessionsRoot(historyRoot)).catch(() => [])) {
+                if (!knownIds().includes(name)) {
+                    await rm(sessionsDir(historyRoot, name), { recursive: true, force: true });
                 }
             }
             for (const repo of await liveRepos()) {

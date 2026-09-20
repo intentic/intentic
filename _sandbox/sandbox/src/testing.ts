@@ -7,6 +7,7 @@ import type { ListenerContribution } from "@intentic/extension-manifest";
 import type { IsolatedAgent, PersistedAgent } from "./agents/registry/agents-store.js";
 import type { IsolationPlan, TurnIsolation } from "./agents/worktrees/isolation.js";
 import { overlaysDir } from "./agents/worktrees/isolation.js";
+import { sessionsDir } from "./sessions/session-store.js";
 import type { CodexEvent, CodexRunner, CodexTurn } from "./runtimes/codex/codex-app-server.js";
 import type { Config } from "./env.config.js";
 
@@ -98,11 +99,12 @@ export const syncHookOutput = (output: HookJSONOutput): SyncHookJSONOutput => {
 // answers WHERE the worktree sits since that is a layout fact, not a kernel one.
 export const noIsolation = (root: string, historyRoot: string = HISTORY_ROOT): TurnIsolation => ({
     available: async () => false,
-    planFor: async (worktree: string): Promise<IsolationPlan> => ({
+    planFor: async (worktree: string, fenced: boolean): Promise<IsolationPlan> => ({
         worktree,
         root,
         mirrors: [],
         overlays: overlaysDir(historyRoot, basename(worktree)),
+        fence: fenced ? { sessions: sessionsDir(historyRoot, basename(worktree)), hidden: [] } : undefined,
     }),
 });
 

@@ -6,7 +6,7 @@ import { dispatchRemoteTurn } from "./runner-dispatch.js";
 
 /* The dispatch's OFFLINE answer, the one path that needs no runner to exist: a machine asleep is a normal state. */
 
-const worktree: ConversationWorktree = { cwd: "/nowhere", branch: "agent/c1", repos: [{ repo: "root", base: "abc" }] };
+const worktree: ConversationWorktree = { cwd: "/nowhere", branch: "agent/c1", repos: [{ repo: "root", base: "abc" }], fenced: false };
 
 test("an offline runner is a readable error frame and a closed turn, not a hang", async () => {
     const services = { runnerHub: { client: () => undefined } } as unknown as Services;

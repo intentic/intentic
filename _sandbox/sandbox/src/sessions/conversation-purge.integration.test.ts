@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { STATE_DIR } from "@intentic/constants";
 import { afterEach, expect, test } from "vitest";
 import { purgeConversationState, type PurgeConversation } from "./conversation-purge.js";
+import { claudeStoreOf } from "./session-store.js";
 
 const roots: string[] = [];
 
@@ -54,4 +55,30 @@ test("purge removes owned transcripts, unshared attachments, and Claude session 
     await expect(readFile(join(projects, "removed-session.jsonl"), "utf8")).rejects.toThrow();
     await expect(readFile(join(projects, "removed-session", "tool.json"), "utf8")).rejects.toThrow();
     expect(await readFile(join(projects, "kept-session.jsonl"), "utf8")).toBe("kept");
+});
+
+test("a fenced conversation's own store goes with it, and another's is left alone", async () => {
+    const root = await mkdtemp(join(tmpdir(), "conversation-purge-"));
+    roots.push(root);
+    const workspace = join(root, "work");
+    const history = join(root, "history");
+    // Where a fenced conversation's transcripts actually are: the shared store under the workspace holds none of
+    // them, so a purge that only swept there would leave every word of them behind.
+    const mine = claudeStoreOf(workspace, history, { id: "removed", areas: ["finance"] });
+    const theirs = claudeStoreOf(workspace, history, { id: "other", areas: ["finance"] });
+    await Promise.all([mkdir(join(mine, "projects"), { recursive: true }), mkdir(join(theirs, "projects"), { recursive: true })]);
+    await Promise.all([
+        writeFile(join(mine, "projects", "removed-session.jsonl"), "removed"),
+        writeFile(join(theirs, "projects", "kept-session.jsonl"), "kept"),
+    ]);
+
+    await purgeConversationState(
+        workspace,
+        history,
+        [{ ...conversation("removed", "removed-session"), areas: ["finance"] }],
+        [{ ...conversation("other", "kept-session"), areas: ["finance"] }],
+    );
+
+    await expect(readFile(join(mine, "projects", "removed-session.jsonl"), "utf8")).rejects.toThrow();
+    expect(await readFile(join(theirs, "projects", "kept-session.jsonl"), "utf8")).toBe("kept");
 });

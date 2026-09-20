@@ -1,6 +1,7 @@
 import { type AgentTurn, DEFAULT_SAFETY_POLICY, SandboxSettingsSchema } from "@intentic/sandbox-contract";
 import { unstubbed } from "@intentic/testing";
 import { createCredentialGrants } from "../../../secrets/credential-grants.js";
+import { claudeStoreOf } from "../../../sessions/session-store.js";
 import type { Services } from "../../../composition.js";
 import { testConfig } from "../../../testing.js";
 import type { AgentRequest } from "../agent.js";
@@ -42,6 +43,10 @@ export const servicesWith = (overrides: Partial<Services> = {}): Services =>
         personas: unstubbed<Services["personas"]>("personas", { list: async () => [] }),
         // No areas: the unfenced workspace, which is what a turn started by an owner carries.
         areas: unstubbed<Services["areas"]>("areas", { list: async () => [] }),
+        // Where this turn's checklist is read back from; the shared store, matching the unfenced `areas` above.
+        agentWorktrees: unstubbed<Services["agentWorktrees"]>("agentWorktrees", {
+            sessionStore: (entry) => claudeStoreOf(ROOT, testConfig.historyRoot, entry),
+        }),
         // A measurement seam, not a behavioural one: runs the work, times nothing.
         perf: unstubbed<Services["perf"]>("perf", { track: (_op, _fields, run) => run() }),
         // Pre-turn retrieval asks this on every turn whose prompt carries search intent. Answers "nothing found", so a

@@ -518,7 +518,14 @@ async function* runConversationTurn(
             }
         };
         // Relay the turn while watching for error frames: a failed turn must not auto-land half-done work.
-        for await (const event of runTurn(services, input, signal, { id: conversationId, cwd: worktree.cwd, synced, resync }, steering, turn)) {
+        for await (const event of runTurn(
+            services,
+            input,
+            signal,
+            { id: conversationId, cwd: worktree.cwd, fenced: worktree.fenced, synced, resync },
+            steering,
+            turn,
+        )) {
             services.agents.observe(conversationId, event);
             if (event.kind === "error") {
                 failed = true;
@@ -989,7 +996,13 @@ async function* runTurn(
     input: TurnInput,
     signal: AbortSignal | undefined,
     worktree:
-        | { readonly id: string; readonly cwd: string; readonly synced: readonly RepoSync[]; readonly resync: () => Promise<AgentEvent | undefined> }
+        | {
+              readonly id: string;
+              readonly cwd: string;
+              readonly fenced: boolean;
+              readonly synced: readonly RepoSync[];
+              readonly resync: () => Promise<AgentEvent | undefined>;
+          }
         | undefined,
     steering: SteeringQueue | undefined,
     // Which conversation message this turn answers, for its checkpoint; undefined with no conversation.
@@ -1032,7 +1045,7 @@ async function* runTurn(
     const isolation: TurnPlacement | undefined =
         worktree === undefined || !entersNamespace(input)
             ? undefined
-            : await services.turnIsolation.planFor(localCwd).then(async (plan) => {
+            : await services.turnIsolation.planFor(localCwd, worktree.fenced).then(async (plan) => {
                   if (!(await services.turnIsolation.available())) {
                       return { plan };
                   }

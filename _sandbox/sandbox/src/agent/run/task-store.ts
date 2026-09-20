@@ -1,7 +1,6 @@
 import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { z } from "zod";
-import { statePath } from "../../workspace/layout/state-paths.js";
 
 // The CLI's own record of a session's checklist, read back on resume: task-checklist.ts's fold starts empty each turn,
 // so an update naming last turn's task would be dropped silently. Read before the CLI starts to seed the fold with
@@ -29,8 +28,9 @@ export interface ChecklistSeed {
 // A session id is the store directory's name, the CLI's own UUID; anything else is refused rather than joined.
 const SESSION_ID = /^[\w-]+$/;
 
-export const taskStoreDir = (workspaceRoot: string, sessionId: string): string =>
-    statePath(workspaceRoot, ".intentic/records/sessions/claude/", "tasks", sessionId);
+// `store` is the conversation's own session store (sessions/session-store.ts), not a workspace path: a fenced
+// conversation's is outside the workspace entirely.
+export const taskStoreDir = (store: string, sessionId: string): string => join(store, "tasks", sessionId);
 
 const readTask = async (dir: string, name: string): Promise<StoredTask | undefined> => {
     try {
@@ -49,12 +49,12 @@ export const readTaskStore = async (dir: string): Promise<StoredTask[]> => {
     return tasks.filter((task): task is StoredTask => task !== undefined).toSorted((a, b) => Number(a.id) - Number(b.id));
 };
 
-// The seed for a turn, or nothing: a first turn has no session to read, a hand-built request has no root to read it
-// under, and a session that kept no list seeds nothing.
-export const checklistSeedOf = async (turn: { readonly sessionId?: string; readonly workspaceRoot?: string }): Promise<ChecklistSeed | undefined> => {
-    if (turn.sessionId === undefined || turn.workspaceRoot === undefined || !SESSION_ID.test(turn.sessionId)) {
+// The seed for a turn, or nothing: a first turn has no session to read, a hand-built request has no store to read it
+// from, and a session that kept no list seeds nothing.
+export const checklistSeedOf = async (turn: { readonly sessionId?: string; readonly sessionStore?: string }): Promise<ChecklistSeed | undefined> => {
+    if (turn.sessionId === undefined || turn.sessionStore === undefined || !SESSION_ID.test(turn.sessionId)) {
         return undefined;
     }
-    const tasks = await readTaskStore(taskStoreDir(turn.workspaceRoot, turn.sessionId));
+    const tasks = await readTaskStore(taskStoreDir(turn.sessionStore, turn.sessionId));
     return tasks.length === 0 ? undefined : { sessionId: turn.sessionId, tasks };
 };

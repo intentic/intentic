@@ -1,4 +1,5 @@
 import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
+import { claudeStoreOf } from "../../../sessions/session-store.js";
 import { createCredentialGrants } from "../../../secrets/credential-grants.js";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -70,6 +71,10 @@ const servicesIn = (root: string, overrides: Partial<Services> = {}): Services =
         personas: unstubbed<Services["personas"]>("personas", { list: async () => [] }),
         // No areas: the unfenced workspace, which is what a turn an owner started carries.
         areas: unstubbed<Services["areas"]>("areas", { list: async () => [] }),
+        // Where this turn's checklist is read back from; the shared store, matching the unfenced `areas` above.
+        agentWorktrees: unstubbed<Services["agentWorktrees"]>("agentWorktrees", {
+            sessionStore: (entry) => claudeStoreOf(root, testConfig.historyRoot, entry),
+        }),
         // A measurement seam, not a behavioural one: runs the work, times nothing.
         perf: unstubbed<Services["perf"]>("perf", { track: (_op, _fields, run) => run() }),
         // Snapshotted for the judge on every planned turn, so every arm below needs it too.
@@ -116,7 +121,7 @@ test("a Claude turn gets the readiness tools instead of the paragraph, however f
     // And the daemon's own records, so "why did that fail" is a tool call, not a rebuild of the instrumentation.
     expect(Object.keys(request.sdkServers ?? {})).toContain("diagnostics");
     // Daemon-side readers still need the real tree: the isolated turn's cwd names a worktree with empty mounts.
-    expect(request.workspaceRoot).toBe(root);
+    expect(request.sessionStore).toBe(claudeStoreOf(root, testConfig.historyRoot, undefined));
 });
 
 // A persona that can't read the workspace can't read the daemon's log either: withheld whole, since half an answer

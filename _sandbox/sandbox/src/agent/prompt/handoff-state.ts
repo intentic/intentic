@@ -134,7 +134,7 @@ const readTree = async (deps: HandoffStateDeps, state: HandoffState): Promise<Tr
 // task updated in an earlier turn.
 const readChecklist = async (deps: HandoffStateDeps, state: HandoffState): Promise<readonly { readonly text: string; readonly status: StoredTask["status"] }[]> => {
     if (state.retiredSessionId !== undefined && /^[\w-]+$/.test(state.retiredSessionId)) {
-        const stored = await readTaskStore(taskStoreDir(deps.workspace.root, state.retiredSessionId));
+        const stored = await readTaskStore(taskStoreDir(deps.agentWorktrees.sessionStore(deps.agents.entry(state.conversationId)), state.retiredSessionId));
         if (stored.length > 0) {
             return stored.map((task) => ({ text: task.subject, status: task.status }));
         }

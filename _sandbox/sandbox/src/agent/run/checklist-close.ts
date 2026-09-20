@@ -7,8 +7,8 @@ import { readTaskStore, type StoredTask, taskStoreDir } from "./task-store.js";
 const NAMED_ITEMS = 5;
 
 export interface ChecklistCloseDeps {
-    // The tree whose `.intentic/records` holds the store; absent (a bench run, a hand-built request) wires no hook.
-    readonly workspaceRoot: string | undefined;
+    // The conversation's own session store; absent (a bench run, a hand-built request) wires no hook.
+    readonly sessionStore: string | undefined;
     // Injected for tests; the real read is the seed's own (task-store.ts).
     readonly read?: ((dir: string) => Promise<readonly StoredTask[]>) | undefined;
 }
@@ -33,8 +33,8 @@ export const checklistCloseNote = (open: readonly StoredTask[]): string => {
 // is the harness's own bookkeeping, not a rule the owner stood, so it neither counts against their follow-up rounds
 // nor waits on any standing here.
 export const checklistCloseHooks = (deps: ChecklistCloseDeps): Partial<Record<HookEvent, HookCallbackMatcher[]>> => {
-    const root = deps.workspaceRoot;
-    if (root === undefined) {
+    const store = deps.sessionStore;
+    if (store === undefined) {
         return {};
     }
     const read = deps.read ?? readTaskStore;
@@ -49,7 +49,7 @@ export const checklistCloseHooks = (deps: ChecklistCloseDeps): Partial<Record<Ho
                             return {};
                         }
                         // An unreadable store contributes nothing, like the seed it is read for; never a failed Stop.
-                        const tasks = await read(taskStoreDir(root, input.session_id)).catch((): readonly StoredTask[] => []);
+                        const tasks = await read(taskStoreDir(store, input.session_id)).catch((): readonly StoredTask[] => []);
                         const open = tasks.filter((task) => task.status !== "completed");
                         if (open.length === 0) {
                             return {};

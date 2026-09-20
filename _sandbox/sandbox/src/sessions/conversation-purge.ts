@@ -2,9 +2,12 @@ import { readdir, readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { capabilitiesOf, isConversationId } from "@intentic/sandbox-contract";
 import type { PersistedAgent } from "../agents/registry/agents-store.js";
+import { claudeStoreOf, sessionsDir } from "./session-store.js";
 import { statePath } from "../workspace/layout/state-paths.js";
 
-export type PurgeConversation = Pick<PersistedAgent, "id" | "provider" | "harness" | "sessionId">;
+// `areas` is what decides where this conversation's session state lives, so a purge that cannot read it leaves the
+// fenced copy behind.
+export type PurgeConversation = Pick<PersistedAgent, "id" | "provider" | "harness" | "sessionId" | "areas">;
 
 const ATTACHMENT_DIR = /\.intentic\/records\/artifacts\/attachments\/([a-zA-Z0-9_-]+)\//g;
 
@@ -15,11 +18,11 @@ const rawTranscript = async (path: string): Promise<string> => readFile(path, "u
 const attachmentDirs = (raw: string): Set<string> =>
     new Set([...raw.matchAll(ATTACHMENT_DIR)].flatMap((match) => (match[1] === undefined ? [] : [match[1]])));
 
-const purgeClaudeSession = async (workspaceRoot: string, sessionId: string): Promise<void> => {
+const purgeClaudeSession = async (store: string, sessionId: string): Promise<void> => {
     if (!isConversationId(sessionId)) {
         return;
     }
-    const projects = statePath(workspaceRoot, ".intentic/records/sessions/claude/", "projects");
+    const projects = join(store, "projects");
     const entries = await readdir(projects, { withFileTypes: true }).catch(() => []);
     await Promise.all(
         entries
@@ -51,14 +54,15 @@ export const purgeConversationState = async (
     const orphanedAttachments = new Set(removedRaw.flatMap((raw) => Array.from(attachmentDirs(raw))).filter((id) => !retainedAttachments.has(id)));
 
     const retainedSessions = new Set(retained.flatMap((entry) => (entry.sessionId === undefined ? [] : [entry.sessionId])));
-    const claudeSessions = new Set(
-        removed.flatMap((entry) =>
-            entry.sessionId !== undefined &&
-            !retainedSessions.has(entry.sessionId) &&
-            capabilitiesOf(entry.provider, entry.harness).runtime === "claude-code"
-                ? [entry.sessionId]
-                : [],
-        ),
+    // Which store to reach into is now per conversation: a fenced one keeps its own, and that store holds nothing but
+    // this conversation, so it goes whole rather than session by session.
+    const claudeSessions = removed.flatMap((entry) =>
+        entry.sessionId !== undefined &&
+        entry.areas === undefined &&
+        !retainedSessions.has(entry.sessionId) &&
+        capabilitiesOf(entry.provider, entry.harness).runtime === "claude-code"
+            ? [entry.sessionId]
+            : [],
     );
 
     await Promise.all([
@@ -66,6 +70,7 @@ export const purgeConversationState = async (
         ...[...orphanedAttachments].map((id) =>
             rm(statePath(workspaceRoot, ".intentic/records/artifacts/", "attachments", id), { recursive: true, force: true }),
         ),
-        ...[...claudeSessions].map((sessionId) => purgeClaudeSession(workspaceRoot, sessionId)),
+        ...[...new Set(claudeSessions)].map((sessionId) => purgeClaudeSession(claudeStoreOf(workspaceRoot, historyRoot, undefined), sessionId)),
+        ...removed.flatMap((entry) => (entry.areas === undefined ? [] : [rm(sessionsDir(historyRoot, entry.id), { recursive: true, force: true })])),
     ]);
 };

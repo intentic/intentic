@@ -9,6 +9,7 @@ const plan: IsolationPlan = {
     root: WORKSPACE_ROOT,
     mirrors: ["node_modules", "intentic/node_modules", "intentic/_editor/web/node_modules", "intentic/_editor/web/dist"],
     overlays: `${HISTORY_ROOT}/overlays/abc`,
+    fence: undefined,
 };
 
 // The tool input a PreToolUse hook returns, or undefined if it declined to rewrite anything.

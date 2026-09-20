@@ -30,6 +30,7 @@ const fakeDeps = (root: string, entry: PersistedAgent | undefined, worktree: str
         attached: async () => true,
         worktreeDir: () => worktree,
         mainDir: (repo: string) => (repo === "root" ? root : join(root, repo)),
+        sessionStore: () => root,
     }),
     workspace: unstubbed<Services["workspace"]>("workspace", { root }),
     logger: unstubbed<Services["logger"]>("logger", { warn: () => {} }),

@@ -9,6 +9,7 @@ import { SETTLES } from "@intentic/testing/vitest";
 import { createApp } from "../../app.js";
 
 import type { TranscriptRow } from "@intentic/sandbox-contract";
+import { claudeStoreOf } from "../../sessions/session-store.js";
 import type { AgentWorktrees } from "../../agents/worktrees/worktrees.js";
 import { clientFor, collect, errorCode } from "../../harness/route-client.testing.js";
 import { codexConnectedProxy, services, withTranslator } from "../../harness/route-services.testing.js";
@@ -49,10 +50,11 @@ const realCheckout = async (id: string): Promise<{ work: string; worktree: strin
             conversationDir: () => worktree,
             worktreeDir: () => worktree,
             mainDir: () => work,
+            sessionStore: (entry) => claudeStoreOf(work, root, entry),
             exists: async () => true,
             attached: async () => true,
             snapshot: async () => repos,
-            ensure: async () => ({ cwd: worktree, branch: `agent/${id}`, repos }),
+            ensure: async () => ({ cwd: worktree, branch: `agent/${id}`, repos, fenced: false }),
             remove: async () => {},
             retire: async () => {},
             reapRepoCheckout: async () => {},

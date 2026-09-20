@@ -39,6 +39,7 @@ import type { SecretUse } from "../secrets/secret-uses.js";
 import { deriveBytes } from "../derived/derived-blob.js";
 import { deriveText, readDerivedText } from "../derived/derived-text.js";
 import { sidecarStatus } from "../derived/sidecar-service.js";
+import { claudeStoreOf } from "../sessions/session-store.js";
 import { IN_MEMORY, openSearchIndex } from "../sessions/search-index.js";
 import { toolChildrenOf, transcriptPageOf } from "../sessions/agent-transcript.js";
 import { spokenLinesOf } from "../sessions/transcript-search.js";
@@ -423,10 +424,12 @@ export const services = (overrides: ServiceOverrides = {}): Services => {
             // Live checkout: routes read the worktree path, the steady state these fakes model.
             attached: async () => true,
             snapshot: async () => [{ repo: "root", base: "a".repeat(40) }],
+            sessionStore: (entry) => claudeStoreOf(ABSENT_MAIN, HISTORY_ROOT, entry),
             ensure: async (id) => ({
                 cwd: `${HISTORY_ROOT}/worktrees/${id}`,
                 branch: `agent/${id}`,
                 repos: [{ repo: "root", base: "a".repeat(40) }],
+                fenced: false,
             }),
             remove: async () => {},
             retire: async () => {},

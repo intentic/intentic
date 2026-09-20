@@ -32,9 +32,9 @@ const fakeQuery = (...messages: unknown[]): QueryFn =>
         }
     };
 
-const collect = async (workspaceRoot: string, queryFn: QueryFn): Promise<AgentEvent[]> => {
+const collect = async (sessionStore: string, queryFn: QueryFn): Promise<AgentEvent[]> => {
     const events: AgentEvent[] = [];
-    const request = { prompt: "carry on", cwd: WORKSPACE_ROOT, workspaceRoot, sessionId: SESSION, signal: new AbortController().signal };
+    const request = { prompt: "carry on", cwd: WORKSPACE_ROOT, sessionStore, sessionId: SESSION, signal: new AbortController().signal };
     for await (const event of runAgent(request, queryFn)) {
         events.push(event);
     }

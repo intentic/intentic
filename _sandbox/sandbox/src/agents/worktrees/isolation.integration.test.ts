@@ -8,9 +8,12 @@ import { MIRRORED_DIRS } from "@intentic/constants/mirror-roots";
 import { repoRoot } from "@intentic/constants/node";
 import { SHARED_STATE_PATHS } from "@intentic/sandbox-contract";
 import { shellQuote } from "@intentic/sandbox-run/quote";
+import type { Logger } from "pino";
 import { afterEach, expect, test } from "vitest";
+import { unstubbed } from "@intentic/testing";
 import {
     ANCHOR_READY,
+    createTurnIsolation,
     fromWorktree,
     inWorktree,
     type IsolationPlan,
@@ -20,6 +23,7 @@ import {
     nsenterArgv,
     nsenterPrefix,
 } from "./isolation.js";
+import { sessionsDir, sessionsRoot } from "../../sessions/session-store.js";
 
 // Pins the mount plan and path translation, not the real namespace (CAP_SYS_ADMIN is not guaranteed here); a wrong
 // order fails silently at runtime, which is what this catches instead.
@@ -36,7 +40,18 @@ const plan: IsolationPlan = {
     root: WORKSPACE_ROOT,
     mirrors: ["node_modules", "_apps/web/node_modules", "_apps/web/dist"],
     overlays: `${HISTORY_ROOT}/overlays/abc`,
+    fence: undefined,
 };
+
+// The same conversation, started by someone holding areas: its checkout is a sparse one (worktree-cone.ts) and its
+// namespace has to be what makes that cut true. Read from the real placement rather than written out, so the policy
+// is pinned once, where it is decided.
+const isolation = createTurnIsolation({
+    root: WORKSPACE_ROOT,
+    historyRoot: HISTORY_ROOT,
+    logger: unstubbed<Logger>("logger", { warn: () => {} }),
+});
+const fencedPlan = async (): Promise<IsolationPlan> => ({ ...(await isolation.planFor(plan.worktree, true)), mirrors: plan.mirrors });
 
 test("the namespace is made private before anything is mounted", () => {
     const lines = isolationScript(plan).split("\n");
@@ -72,6 +87,52 @@ test("shared state is re-bound from the aside mount, not from the shadowed path"
         .map((line) => line.split(" ").at(-1));
     expect(targets).not.toContain(shellQuote("/work/.intentic"));
     expect(targets).not.toContain(shellQuote("/work/.intentic/config"));
+});
+
+test("a fenced conversation's placement names its own session store and every directory holding another conversation's work", async () => {
+    const placed = await isolation.planFor(plan.worktree, true);
+    expect(placed.fence).toEqual({
+        sessions: sessionsDir(HISTORY_ROOT, "abc"),
+        // The checkouts, the daemon's transcripts, and the stores fenced conversations write to: each one is the
+        // whole workspace or the whole fleet's words, reachable from inside the namespace by an absolute path.
+        hidden: [`${HISTORY_ROOT}/worktrees`, `${HISTORY_ROOT}/transcripts`, sessionsRoot(HISTORY_ROOT)],
+    });
+    expect((await isolation.planFor(plan.worktree, false)).fence).toBeUndefined();
+});
+
+test("a fenced turn is left no path to the whole tree: the main mount is gone and the daemon's own directories are empty", async () => {
+    const lines = isolationScript(await fencedPlan()).split("\n");
+    // Unmounted rather than masked: it is a bind of the workspace root, and what a fenced checkout cut out is
+    // otherwise one `cat /mnt/intentic-main/...` away, for a shell and for a file tool alike.
+    expect(lines).toContain(`umount ${shellQuote(MAIN_MOUNT)}`);
+    for (const hidden of [`${HISTORY_ROOT}/worktrees`, `${HISTORY_ROOT}/transcripts`, sessionsRoot(HISTORY_ROOT)]) {
+        expect(lines).toContain(`if [ -d ${shellQuote(hidden)} ]; then mount -t tmpfs intentic-fenced ${shellQuote(hidden)}; fi`);
+    }
+    // An unfenced turn keeps the main mount and every directory: nothing above it is conditional on anything else.
+    const open = isolationScript(plan);
+    expect(open).not.toContain("umount");
+    expect(open).not.toContain("tmpfs");
+});
+
+test("a fenced turn's runtime session store is its own, bound over the shared one", async () => {
+    const script = isolationScript(await fencedPlan());
+    const store = `${WORKSPACE_ROOT}/.intentic/records/sessions/claude`;
+    // Every conversation's transcripts, plans and backups sit in that one shared store; the CLI reaches it through
+    // `~/.claude`, so the path is what has to differ, not the runtime's configuration.
+    expect(script).toContain(`mount --bind ${shellQuote(sessionsDir(HISTORY_ROOT, "abc"))} ${shellQuote(store)}`);
+});
+
+test("the fence's own mounts come last, after everything that reads from the main mount", async () => {
+    const script = isolationScript(await fencedPlan());
+    const gone = script.indexOf(`umount ${shellQuote(MAIN_MOUNT)}`);
+    // Shared state, the shelf and every mirror are bound FROM the main mount; unmounting it first would leave a
+    // namespace missing its records, its refs and its dependencies.
+    for (const line of script.split("\n").filter((entry) => entry.includes(MAIN_MOUNT) && entry !== `umount ${shellQuote(MAIN_MOUNT)}`)) {
+        expect(script.indexOf(line)).toBeLessThan(gone);
+    }
+    // And the store it binds comes from a directory it is about to mask: masked first, the bind would be of nothing.
+    const masked = `if [ -d ${shellQuote(sessionsRoot(HISTORY_ROOT))} ]; then mount -t tmpfs intentic-fenced ${shellQuote(sessionsRoot(HISTORY_ROOT))}; fi`;
+    expect(script.indexOf(`mount --bind ${shellQuote(sessionsDir(HISTORY_ROOT, "abc"))}`)).toBeLessThan(script.indexOf(masked));
 });
 
 test("the reference shelf comes back into the worktree, read-only, and only when the workspace has one", () => {
