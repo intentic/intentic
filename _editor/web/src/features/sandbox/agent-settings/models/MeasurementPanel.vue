@@ -27,7 +27,7 @@ import { useT } from "@intentic/ui/i18n";
 // The measured half of a setting that runs a holdout (iq search teaching, the project map, the output cleaners), in
 // one fixed order: what it found, the arms it found it over, the same experiment's other readings, then the holdout
 // that split them. The knob is last and quietest because it configures the method, and a method drawn at a setting's
-// weight reads as a second setting. Methodology itself belongs in the group's info card, not in this block.
+// weight reads as a second setting.
 
 const t = useT();
 

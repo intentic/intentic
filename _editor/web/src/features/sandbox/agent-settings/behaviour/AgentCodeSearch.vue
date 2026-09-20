@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { TurnExperiment } from "@intentic/sandbox-contract";
-import { InfoHint, Row, RowGroup } from "@intentic/ui";
+import { Row, RowGroup } from "@intentic/ui";
 import ToggleSwitch from "primevue/toggleswitch";
 import { computed } from "vue";
 import { useSavings } from "../../usage/useSavings";
@@ -68,13 +68,6 @@ const shadowSummary = computed<string>(() => {
 
 <template>
     <RowGroup :label="t(`sandbox.agentCodeSearch.codeSearch`)">
-        <!-- Where the method behind the readings below lives, so each one can be the answer alone. -->
-        <template #info>
-            <InfoHint :label="t(`sandbox.agentCodeSearch.howTheseAreMeasured`)">
-                <span class="block text-xs text-content">{{ t(`sandbox.agentCodeSearch.eachSwitchRunsOwn`) }}</span>
-            </InfoHint>
-        </template>
-
         <!-- Loads the iq plugin so the assistant searches with the iq CLI instead of grep/find/glob. -->
         <!-- `spine` hangs the measurement block off this row's name rather than the group's edge. -->
         <Row spine icon="search" :title="t(`sandbox.agentCodeSearch.iqCodeSearch`)" :description="t(`sandbox.agentCodeSearch.useIqSearchCli`)">
@@ -85,7 +78,6 @@ const shadowSummary = computed<string>(() => {
                     @update:model-value="(value: boolean) => patch({ iqSearch: value })"
                 />
             </template>
-            <!-- The rationale for why the arm must stay pinned for a whole conversation lives in the info tooltip, not inline. -->
             <template v-if="settings?.iqSearch === true" #below>
                 <MeasurementPanel
                     :percent="iqSearchHoldoutPercent"

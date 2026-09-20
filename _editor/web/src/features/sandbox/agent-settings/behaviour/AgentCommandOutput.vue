@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { formatTokens, InfoHint, Row, RowGroup, Verdict } from "@intentic/ui";
+import { formatTokens, Row, RowGroup, Verdict } from "@intentic/ui";
 import ToggleSwitch from "primevue/toggleswitch";
 import { computed } from "vue";
 import { relativeTime } from "../../../chat/models/catalog";
@@ -126,13 +126,6 @@ const savedTokens = computed(() => savedByCleaner(savings.value?.input));
 
 <template>
     <RowGroup :label="t(`sandbox.agentCommandOutput.commandOutput`)">
-        <!-- Same contract as the Code search group: the method sits with the group, the readings stay answers. -->
-        <template #info>
-            <InfoHint :label="t(`sandbox.agentCommandOutput.howThisIsMeasured`)">
-                <span class="block text-xs text-content">{{ t(`sandbox.agentCommandOutput.shareYouSetSkips`) }}</span>
-            </InfoHint>
-        </template>
-
         <Row
             spine
             icon="bolt"
