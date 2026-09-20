@@ -164,6 +164,8 @@ afterEach(() => {
     connected.value = [`codex`, `claude`];
     opened = undefined;
     answer = undefined;
+    doc = undefined;
+    saveDoc = undefined;
     patch.mockClear();
 });
 
@@ -215,10 +217,8 @@ test("draws one group per declared block, in order, holding exactly that block's
         expect(adders(section as HTMLElement), block.id).toEqual(block.roles.map((role) => `Add a model for ${role.label.toLowerCase()}`));
     }
 
-    // The blocks, and after them the one section that is not a job list: what Auto is told to weigh. Nothing else.
-    expect(sections).toHaveLength(MODEL_ROLE_BLOCKS.length + 1);
-    expect(sections.at(-1)?.querySelector(`.guidance-doc`)).not.toBeNull();
-    expect(adders(sections.at(-1) as HTMLElement)).toEqual([]);
+    // Every section is a block: this page is jobs and nothing else, and a job's own settings ride its row.
+    expect(sections).toHaveLength(MODEL_ROLE_BLOCKS.length);
 });
 
 test("a job's glyph and its tick share one slot", async () => {
@@ -870,10 +870,25 @@ test("a switched-off job offers no tick, and the group's master box writes witho
     );
 });
 
-/* THE ONE JOB THAT ALSO TAKES WORDS: Auto reads the owner's preferences alongside the list it may choose from. */
-test("the Auto guidance is handed over as it was saved, capped where the settings file itself would refuse it", () => {
+/* THE ONE JOB THAT ALSO TAKES WORDS: Auto reads the owner's preferences alongside the list it may choose from, so they
+   are edited from that job's own row rather than from a section of the page's own. */
+const ROUTER_ROW = MODEL_ROLES.find((role) => role.id === `model-router`)!.label;
+// Every chip on the router's row, in order: the job's own state chip is already one, so the question is what is beside it.
+const chipsOn = (host: HTMLElement, row: string): string[] =>
+    [...rowOf(host, row).querySelectorAll(`.ui-status-pill`)].map((pill) => pill.textContent?.trim() ?? ``);
+// Scoped to the router's row, since being ON that row rather than somewhere on the page is the point.
+const openGuidance = async (host: HTMLElement): Promise<void> => {
+    [...rowOf(host, ROUTER_ROW).querySelectorAll<HTMLButtonElement>(`button`)].find((button) => button.textContent?.trim() === `Guidance`)!.click();
+    await nextTick();
+};
+
+test("the guidance is opened from the router's own row, and handed over as it was saved", async () => {
     settings.value = { ...settings.value, autoModelGuidance: `Cheap work goes to Haiku.` };
-    mount();
+    const host = await mountJobs();
+
+    // Nothing of it is mounted until asked for: the row carries the setting, the page does not carry a section.
+    expect(doc).toBeUndefined();
+    await openGuidance(host);
 
     expect(doc?.stored).toBe(`Cheap work goes to Haiku.`);
     expect(doc?.modelValue).toBe(`Cheap work goes to Haiku.`);
@@ -883,10 +898,27 @@ test("the Auto guidance is handed over as it was saved, capped where the setting
     expect(SandboxSettingsSchema.safeParse({ autoModelGuidance: `x`.repeat(cap + 1) }).success).toBe(false);
 });
 
-test("saving the guidance writes the trimmed text, and nothing else on the page with it", () => {
-    mount();
+test("saving the guidance writes the trimmed text, and nothing else on the page with it", async () => {
+    const host = await mountJobs();
+    await openGuidance(host);
 
     saveDoc?.(`  Leave the work account alone.\n`);
 
     expect(patch).toHaveBeenLastCalledWith({ autoModelGuidance: `Leave the work account alone.` });
+});
+
+// Written guidance steers every chat that opens on Auto; no model list on this page would show that it exists.
+test("a job holding guidance says so on its row, and says nothing when it holds none", async () => {
+    const empty = await mountJobs();
+    // Its own "off" chip and nothing else: a job with no guidance claims none.
+    expect(chipsOn(empty, ROUTER_ROW)).toEqual([`off`]);
+    app?.unmount();
+    document.body.innerHTML = ``;
+
+    settings.value = { ...settings.value, autoModelGuidance: `Cheap work goes to Haiku.` };
+    const written = await mountJobs();
+    // The chip names the state; the button beside it names what it opens, so the row never says one word twice.
+    expect(chipsOn(written, ROUTER_ROW)).toEqual([`off`, `guided`]);
+    // The chip is this job's alone; a neighbour in the same block says nothing about guidance.
+    expect(chipsOn(written, MODEL_ROLES.find((role) => role.id === COMMIT)!.label)).toEqual([`off`]);
 });

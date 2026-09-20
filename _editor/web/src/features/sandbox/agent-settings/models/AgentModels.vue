@@ -7,7 +7,7 @@ import {
     type ModelRoleSpec,
     modelPinKey,
 } from "@intentic/sandbox-contract";
-import { Button, MarkdownDocument, RowGroup, SegmentedControl } from "@intentic/ui";
+import { Button, MarkdownDocument, Modal, RowGroup, SegmentedControl } from "@intentic/ui";
 import Checkbox from "primevue/checkbox";
 import { computed, ref, shallowRef, watch } from "vue";
 import { RouterLink } from "vue-router";
@@ -29,12 +29,22 @@ const t = useT();
 const { settings, patch, save } = useSandboxSettings();
 const loaded = computed(() => settings.value !== undefined);
 
-// The one job on this page that also takes words: Auto reads them once per chat, so the save is explicit and the cap
-// matches the schema's (SandboxSettingsSchema.autoModelGuidance), which is what the daemon would refuse past.
+// The one job on this page that is not answered by a model list alone: Auto also reads what it is told to weigh. It
+// lives on that job's own row rather than in a section of its own, since the catalog's blocks are kind partitions
+// (model-roles.test.ts) and a job's settings belong where its models are.
+// Explicit save, and a cap matching the schema's (SandboxSettingsSchema.autoModelGuidance) — what the daemon refuses past.
+const ROUTER = `model-router`;
 const GUIDANCE_MAX = 2000;
 const guidance = useDraft(() => settings.value?.autoModelGuidance);
 const storedGuidance = computed(() => settings.value?.autoModelGuidance);
+const guidanceSet = computed(() => (storedGuidance.value ?? ``).trim() !== ``);
 const saveGuidance = (text: string): void => patch({ autoModelGuidance: text.trim() });
+// Written guidance is silent state: it steers every chat that opens on Auto and no model list on this page shows it.
+// The chip says the job's state, not the button's name — the two sit an inch apart and must not read as one word twice.
+const guidanceBadge = computed(() =>
+    guidanceSet.value ? { label: t(`sandbox.agentModels.guided`), hint: t(`sandbox.agentModels.autoReadsThisAlongside`) } : undefined,
+);
+const guidanceOpen = ref(false);
 
 // Sends the whole `modelRoles` record every time: the settings patch merges only at the top level, so writing one
 // role's key alone would drop the others. The bulk editor batches several keys through here in one patch.
@@ -367,12 +377,25 @@ const setPickerOpen = (open: boolean): void => {
                     :role="row.role"
                     :icon="row.role.icon"
                     :list="row.list"
+                    :badge="row.role.id === ROUTER ? guidanceBadge : undefined"
                     :selected="isSelected(row.role.id)"
                     :disabled="!loaded || (row.role.id === JUDGE && judgeOff)"
                     :loaded="loaded"
                     @select="(on: boolean) => selectRole(row.role.id, on)"
                     @open="(index: number | undefined, anchor: HTMLElement) => openRowPicker(row.list, index, anchor)"
                 >
+                    <!-- The router is the one job with a second setting: what it should weigh, in the owner's words. -->
+                    <template v-if="row.role.id === ROUTER" #control>
+                        <Button
+                            size="small"
+                            severity="secondary"
+                            :text="!guidanceSet"
+                            :label="t(`sandbox.agentModels.guidance`)"
+                            :disabled="!loaded"
+                            @click="guidanceOpen = true"
+                        />
+                    </template>
+
                     <!-- Only the judge row receives this explanatory slot. -->
                     <template v-if="row.role.id === JUDGE" #note>
                         <!-- The judge row explains why its feature may be unavailable. -->
@@ -394,25 +417,26 @@ const setPickerOpen = (open: boolean): void => {
             </template>
         </RowGroup>
 
-        <!-- The one model choice made by reading rather than by a pin, so it is the one that takes words as well as a
-             list. Its own group, below every block, because it is about what Auto weighs, not about which model reads. -->
-        <RowGroup :label="t(`sandbox.agentModels.howAutoChooses`)">
-            <MarkdownDocument
-                v-model="guidance"
-                frame="section"
-                :editable="loaded"
-                :stored="storedGuidance"
-                :saving="save.isPending.value"
-                save="explicit"
-                :label="t(`sandbox.agentModels.howAutoChooses`)"
-                :max-chars="GUIDANCE_MAX"
-                :placeholder="t(`sandbox.agentModels.whatYoudTellSomebody`)"
-                @save="saveGuidance"
-            >
-                <template #note>{{ t(`sandbox.agentModels.readOnceChatOpens`) }}</template>
-            </MarkdownDocument>
-        </RowGroup>
     </div>
+
+    <!-- The router's second setting, opened from its own row: a document, so it takes the dialog rather than a field
+         shell inside a drawer — the same surface the system prompt is written on. -->
+    <Modal :open="guidanceOpen" size="lg" :header="t(`sandbox.agentModels.howAutoChooses`)" @update:open="guidanceOpen = $event">
+        <!-- A writing surface, not a field: it opens at the height of something you would compose rather than snapping
+             shut around one line of placeholder. -->
+        <MarkdownDocument
+            v-model="guidance"
+            class="min-h-40"
+            :editable="loaded"
+            :stored="storedGuidance"
+            :saving="save.isPending.value"
+            save="explicit"
+            :label="t(`sandbox.agentModels.howAutoChooses`)"
+            :max-chars="GUIDANCE_MAX"
+            :placeholder="t(`sandbox.agentModels.whatYoudTellSomebody`)"
+            @save="saveGuidance"
+        />
+    </Modal>
 
     <!-- Mount once so the picker can place itself on open. -->
     <ModelPinPicker

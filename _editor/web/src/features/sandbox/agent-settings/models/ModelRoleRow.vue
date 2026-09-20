@@ -15,7 +15,7 @@ import { useT } from "@intentic/ui/i18n";
 
 const t = useT();
 
-const { role, icon, list, selected, disabled, loaded } = defineProps<{
+const { role, icon, list, selected, disabled, loaded, badge } = defineProps<{
     role: ModelRoleSpec;
     // Crosses the wire as an open string; checked, not asserted, and falls back if this build's icon set lacks it.
     icon: string;
@@ -25,6 +25,8 @@ const { role, icon, list, selected, disabled, loaded } = defineProps<{
     disabled: boolean;
     // Whether settings have landed; the chip claims what this job will do, so it can't draw before that's true.
     loaded: boolean;
+    /** A job carrying state its model list cannot show; drawn beside the row's own chip, never instead of it. */
+    badge?: { readonly label: string; readonly hint: string };
 }>();
 
 const emit = defineEmits<{ select: [boolean]; open: [number | undefined, HTMLElement] }>();
@@ -89,15 +91,20 @@ const chip = computed<{ readonly label: string; readonly hint: string } | undefi
             <span class="flex flex-wrap items-center gap-x-2 gap-y-0.5">
                 <span class="min-w-0">{{ role.label }}</span>
                 <StatusBadge v-if="chip !== undefined" v-tooltip.top="chip.hint" variant="neutral" size="xs" :label="chip.label" />
+                <StatusBadge v-if="badge !== undefined" v-tooltip.top="badge.hint" variant="neutral" size="xs" :label="badge.label" />
             </span>
         </template>
 
+        <!-- A job's own control, ahead of the one every job has: the Add button stays the row's last word. -->
         <template #control>
-            <AddModelButton
-                :label="t(`sandbox.modelRoleRow.addModel`, { toLowerCase: role.label.toLowerCase() })"
-                :disabled="disabled"
-                @open="(anchor: HTMLElement) => emit(`open`, undefined, anchor)"
-            />
+            <div class="flex items-center gap-1.5">
+                <slot name="control" />
+                <AddModelButton
+                    :label="t(`sandbox.modelRoleRow.addModel`, { toLowerCase: role.label.toLowerCase() })"
+                    :disabled="disabled"
+                    @open="(anchor: HTMLElement) => emit(`open`, undefined, anchor)"
+                />
+            </div>
         </template>
 
         <!-- Controls inside the label must not toggle the role. -->
