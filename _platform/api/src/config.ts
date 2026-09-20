@@ -119,6 +119,9 @@ export const configSchema = z.object({
             // machine.
             canaryMinutes: z.coerce.number().int().nonnegative().default(0),
             canaryEmail: z.string().default(``),
+            // Whether the canary also moves its own machine up a rung and back, which is the only continuous proof
+            // that the migration engine still matches the provider. Off by default: it roughly doubles a run's cost.
+            canaryMigrate: z.stringbool().default(false),
             // This deployment's identity to the provider; only its own machines are destroyed. Sharing it shares a
             // fleet.
             instanceId: z.string().default(``),

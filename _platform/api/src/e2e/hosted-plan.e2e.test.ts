@@ -6,6 +6,7 @@ import { repoRoot } from "@intentic/constants/node";
 import { PrismaClient } from "@intentic/prisma";
 import { FREE_TIER, type HostedTier, PAID_TIERS } from "@intentic/constants";
 import { e2eTier } from "@intentic/testing/e2e";
+import { type FakeFly, installFakeFly } from "@intentic/testing/fly-fake";
 import { type FakeStripe, startFakeStripe } from "@intentic/testing/stripe-fake";
 import { PrismaPg } from "@prisma/adapter-pg";
 import type { Logger } from "pino";
@@ -111,20 +112,10 @@ const seedHostedSandbox = async (prisma: PrismaClient, owner: Person, name: stri
     return sandbox;
 };
 
-// Fly, stubbed to answer started to everything past the gate under test; every other fetch goes through untouched.
-const stubFly = (): string[] => {
-    const realFetch = globalThis.fetch;
-    const calls: string[] = [];
-    vi.stubGlobal(`fetch`, (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
-        const url = typeof input === `string` ? input : input instanceof URL ? input.href : input.url;
-        if (!url.startsWith(`https://api.machines.dev/`)) {
-            return realFetch(input, init);
-        }
-        calls.push(`${init?.method ?? `GET`} ${new URL(url).pathname}`);
-        return Promise.resolve(new Response(JSON.stringify({ id: `m1`, state: `started` }), { headers: { "content-type": `application/json` } }));
-    });
-    return calls;
-};
+/* The shared in-memory Fly (@intentic/testing/fly-fake), with everything else — Stripe's stand-in, the api's own
+ * requests — passed through to the real fetch it replaced. A local stub answered `started` to every call, which is
+ * fine until a case moves a machine and needs the volume it landed on to exist. */
+const stubFly = (): FakeFly => installFakeFly((name, value) => vi.stubGlobal(name, value), { passThrough: globalThis.fetch });
 
 type App = ReturnType<typeof createApp>[`app`];
 
@@ -169,7 +160,7 @@ describe.skipIf(!tier.runs)(tier.title, () => {
     let config: Config;
     let app: App;
     let auth: Auth;
-    let flyCalls: string[];
+    let fly: FakeFly;
     let alice: Person;
     let sandboxId: string;
     let subscriptionId: string;
@@ -204,7 +195,7 @@ describe.skipIf(!tier.runs)(tier.title, () => {
         config = configFor(databaseUrl, stripe.url);
         prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });
         ({ app, auth } = createApp(config, prisma, logger));
-        flyCalls = stubFly();
+        fly = stubFly();
 
         alice = await seedPerson(prisma, `alice`);
         const session = await auth.api.getSession({ headers: new Headers({ cookie: alice.cookie }) });
@@ -239,7 +230,7 @@ describe.skipIf(!tier.runs)(tier.title, () => {
         const refused = await wake();
         expect(refused.status).toBe(402);
         expect(refused.body.code).toBe(`PAYMENT_REQUIRED`);
-        expect(flyCalls).toEqual([]);
+        expect(fly.calls).toEqual([]);
 
         const offered = await offer();
         expect(offered.body).toEqual({ enabled: true, remaining: 0, hours: { allowance: MONTHLY_HOURS, remaining: 0 } });
@@ -312,11 +303,14 @@ describe.skipIf(!tier.runs)(tier.title, () => {
             cpus: ENTRY.cpus,
             memoryMb: ENTRY.memoryMb,
         });
-        flyCalls.length = 0;
+        fly.calls.length = 0;
         const woken = await wake();
         expect(woken.status).toBe(200);
         expect(woken.body).toEqual({ ok: true });
-        expect(flyCalls).toEqual([expect.stringMatching(/^POST \/v1\/apps\/e2e-[0-9a-f]+\/machines\/m-[0-9a-f]+\/start$/)]);
+        // One call, and it is the start: the wake flips power and nothing else.
+        expect(fly.calls.map((call) => `${call.method} ${call.path}`)).toEqual([
+            expect.stringMatching(/^POST \/v1\/apps\/e2e-[0-9a-f]+\/machines\/m-[0-9a-f]+\/start$/u),
+        ]);
         expect((await state(alice)).body.hosted?.machines).toEqual([
             expect.objectContaining({ sandboxId, name: `alice-box`, region: `iad`, wokeAt: expect.any(String) }),
         ]);

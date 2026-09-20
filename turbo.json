@@ -172,6 +172,10 @@
                 // plan's test-mode price. The one tier that meets Stripe itself.
                 "HOSTED_PLAN_E2E_STRIPE_SECRET_KEY",
                 "HOSTED_PLAN_E2E_STRIPE_PRICE_ID",
+                // The migration tier (hosted-migrate.e2e, @intentic/api): the one that moves a real disk between
+                // real Fly machines. Spends machines, volumes and snapshots on the org this credential names.
+                "HOSTED_FLY_API_TOKEN",
+                "HOSTED_FLY_ORG",
                 // Points the sandbox-daemon tier at a published image instead of a source build (e2e:browser
                 // passes the same variable through for the same reason).
                 "SANDBOX_E2E_IMAGE"

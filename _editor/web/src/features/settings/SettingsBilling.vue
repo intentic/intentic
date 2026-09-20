@@ -468,6 +468,17 @@ const HOSTED_SETUP = { name: `setup`, query: { machine: `hosted` } } as const;
                                         }}
                                     </template>
                                 </span>
+                                <!-- The one upgrade prompt on this page, and it is a fact the provider reported rather
+                                     than a pitch: this machine was killed for memory, this many times, at this size. -->
+                                <span v-if="machine.oomsThisWeek > 0" class="text-2xs text-warning">
+                                    {{
+                                        t(
+                                            `settings.settingsBilling.ranOutOfMemory`,
+                                            { count: machine.oomsThisWeek, memory: machine.shape.memoryMb / 1024 },
+                                            machine.oomsThisWeek,
+                                        )
+                                    }}
+                                </span>
                                 <!-- Moving is its own act: the slot is already bought, and this puts the machine on it. -->
                                 <span v-if="hosted" class="flex flex-wrap items-center gap-1.5">
                                     <Button

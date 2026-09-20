@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { FREE_TIER } from "@intentic/constants";
+import { FREE_TIER, PAID_TIERS } from "@intentic/constants";
 import type { PrismaClient } from "@intentic/prisma";
 import { sleep as pause } from "@intentic/base/async";
 import { previewUrl, STARTER_APP, STARTER_REPO } from "@intentic/sandbox-contract";
@@ -10,6 +10,7 @@ import { JOB_HOSTED_CANARY, runExclusive } from "../../jobs-lock.js";
 import { linkEmail, sendMail } from "../../mail.js";
 import { HostedAtCapacity, hostedCapacity } from "./hosted-capacity.js";
 import { destroyHosted, hostedEnabled, provisionHosted } from "./hosted.js";
+import { migrateHosted } from "./migrate/hosted-migrate.js";
 import { HOUR_MS } from "../../durations.js";
 
 // Runs the real provisioning path on its own sandbox and waits for the daemon's announce: the health sweep catches a
@@ -34,6 +35,11 @@ export interface CanaryResult {
     readonly starterServingInMs: number | undefined;
     // Where the machine came from, so a slow run can be read against its origin's own promise.
     readonly warm: boolean;
+    /* HOW THE MIGRATION LEG WENT, or undefined where it was not asked for (`hosted.canaryMigrate` off). The engine
+     * that moves somebody's disk is the one thing here nobody would notice was broken until they needed it, and a
+     * suite that only ever runs against a stand-in cannot say the provider still behaves the way it did. This leg
+     * runs it on the platform's OWN machine, minutes before that machine is destroyed anyway. */
+    readonly migratedInMs?: number;
     readonly detail: string;
 }
 
@@ -173,26 +179,7 @@ export const runHostedCanary = async (
                 detail: `a ${warm ? `warm` : `cold`} machine was provisioned but never checked in within ${DEADLINE_MS / 60_000} minutes`,
             };
         }
-        /* WHAT THE PERSON SEES NEXT at the address their browser opens: the starter site, or isn't running. */
-        const { tunnelId } = await prisma.sandbox.findUniqueOrThrow({ where: { id: sandbox.id }, select: { tunnelId: true } });
-        const starterUrl = previewUrl(`${STARTER_REPO}--${STARTER_APP}`, config.ingress.zone, tunnelId);
-        const serving = starterUrl === undefined ? false : await waitForStarter(starterUrl, STARTER_DEADLINE_MS, sleep);
-        const starterServingInMs = Date.now() - startedAt;
-        return serving
-            ? {
-                  ok: true,
-                  announcedInMs,
-                  starterServingInMs,
-                  warm,
-                  detail: `provisioned, checked in, starter serving after ${Math.round(starterServingInMs / 1000)}s`,
-              }
-            : {
-                  ok: false,
-                  announcedInMs,
-                  starterServingInMs: undefined,
-                  warm,
-                  detail: `a ${warm ? `warm` : `cold`} machine checked in after ${Math.round(announcedInMs / 1000)}s but its starter site never served within ${STARTER_DEADLINE_MS / 60_000} more minutes`,
-              };
+        return await afterAnnounce(prisma, config, logger, { sandboxId: sandbox.id, warm, announcedInMs, startedAt }, sleep);
     } catch (error) {
         return {
             ok: false,
@@ -209,6 +196,92 @@ export const runHostedCanary = async (
         };
     } finally {
         await teardown(prisma, config, logger, sandbox.id);
+    }
+};
+
+/* WHAT THE PERSON SEES NEXT at the address their browser opens, and then the leg nobody sees: the starter site
+ * answering, and the machine moved up a rung and back. */
+const afterAnnounce = async (
+    prisma: PrismaClient,
+    config: Config,
+    logger: Logger,
+    run: { sandboxId: string; warm: boolean; announcedInMs: number; startedAt: number },
+    sleep: (ms: number) => Promise<void>,
+): Promise<CanaryResult> => {
+    const { sandboxId, warm, announcedInMs } = run;
+    const { tunnelId } = await prisma.sandbox.findUniqueOrThrow({ where: { id: sandboxId }, select: { tunnelId: true } });
+    const starterUrl = previewUrl(`${STARTER_REPO}--${STARTER_APP}`, config.ingress.zone, tunnelId);
+    const serving = starterUrl === undefined ? false : await waitForStarter(starterUrl, STARTER_DEADLINE_MS, sleep);
+    const starterServingInMs = Date.now() - run.startedAt;
+    if (!serving) {
+        return {
+            ok: false,
+            announcedInMs,
+            starterServingInMs: undefined,
+            warm,
+            detail: `a ${warm ? `warm` : `cold`} machine checked in after ${Math.round(announcedInMs / 1000)}s but its starter site never served within ${STARTER_DEADLINE_MS / 60_000} more minutes`,
+        };
+    }
+    const migration = await migrationLeg(prisma, config, logger, sandboxId, sleep);
+    return migration.ok
+        ? {
+              ok: true,
+              announcedInMs,
+              starterServingInMs,
+              warm,
+              ...(migration.tookMs === undefined ? {} : { migratedInMs: migration.tookMs }),
+              detail: `provisioned, checked in, starter serving after ${Math.round(starterServingInMs / 1000)}s${migration.detail}`,
+          }
+        : {
+              ok: false,
+              announcedInMs,
+              starterServingInMs,
+              warm,
+              detail: `the sandbox came up, but moving it to another rung failed:${migration.detail}`,
+          };
+};
+
+/* MOVES THE CANARY'S OWN MACHINE UP A RUNG AND BACK DOWN, which is the only way to learn that the provider still
+ * behaves the way the engine assumes. Off by default: the up leg alone doubles what a canary run costs, and a
+ * deployment that never migrates anybody has nothing to prove. A failure here is the run's failure, but never an
+ * exception: the teardown below must still happen. */
+const migrationLeg = async (
+    prisma: PrismaClient,
+    config: Config,
+    logger: Logger,
+    sandboxId: string,
+    sleep: (ms: number) => Promise<void>,
+): Promise<{ ok: boolean; tookMs?: number; detail: string }> => {
+    const target = PAID_TIERS[0];
+    if (!config.hosted.canaryMigrate || target === undefined) {
+        return { ok: true, detail: `` };
+    }
+    const at = Date.now();
+    const machine = await prisma.hostedMachine.findUnique({
+        where: { sandboxId },
+        include: { sandbox: { select: { token: true, owner: { select: { email: true } } } } },
+    });
+    if (machine === null) {
+        return { ok: false, detail: ` the machine row was gone before it could be moved` };
+    }
+    try {
+        // Up a rung, then back to free: the machine is destroyed moments later either way, and coming back down is
+        // the half that proves a downgrade keeps the disk it grew.
+        const up = await migrateHosted(prisma, config, logger, machine, { tier: target.id }, `platform`, sleep);
+        if (up.state !== `done`) {
+            return { ok: false, tookMs: Date.now() - at, detail: ` moving to ${target.id} ended ${up.state}: ${up.error ?? `no reason given`}` };
+        }
+        const moved = await prisma.hostedMachine.findUniqueOrThrow({
+            where: { sandboxId },
+            include: { sandbox: { select: { token: true, owner: { select: { email: true } } } } },
+        });
+        const down = await migrateHosted(prisma, config, logger, moved, { tier: FREE_TIER.id }, `platform`, sleep);
+        const tookMs = Date.now() - at;
+        return down.state === `done`
+            ? { ok: true, tookMs, detail: `, moved up a rung and back in ${Math.round(tookMs / 1000)}s` }
+            : { ok: false, tookMs, detail: ` moving back to free ended ${down.state}: ${down.error ?? `no reason given`}` };
+    } catch (error) {
+        return { ok: false, tookMs: Date.now() - at, detail: ` ${error instanceof Error ? error.message : `the move failed`}` };
     }
 };
 

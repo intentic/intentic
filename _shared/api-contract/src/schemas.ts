@@ -407,6 +407,9 @@ export const HostedPlanMachineSchema = z.object({
     // This machine's own month: the ceiling belongs to its rung, so an account with two machines has two meters.
     usedMinutes: z.number().int().nonnegative(),
     allowanceMinutes: z.number().int().nonnegative().nullable(),
+    // Times the kernel killed this machine for memory in the last week. A fact, and the only honest reason to put a
+    // bigger machine in front of somebody; 0 says nothing and shows nothing.
+    oomsThisWeek: z.number().int().nonnegative(),
 });
 export type HostedPlanMachine = z.infer<typeof HostedPlanMachineSchema>;
 
@@ -1033,6 +1036,19 @@ export const AdminCostsSchema = z.object({
         monthMinutes: z.number(),
         monthlyHoursCap: z.number(),
         topOwners: z.array(z.object({ email: z.email(), minutes: z.number() })),
+        /* WHAT EACH RUNG IS ACTUALLY COSTING, which is the only thing that can say whether its price is right.
+         * `minutes` is this month's awake time on machines currently on that rung; `flyUsd` prices it at the
+         * ladder's own published hourly rate plus the disks standing under it, whether awake or not. */
+        byTier: z.array(
+            z.object({
+                tier: z.string(),
+                machines: z.number(),
+                minutes: z.number(),
+                flyUsd: z.number(),
+                // What the rung charges a month, times the machines on it; 0 for the free rung.
+                priceUsd: z.number(),
+            }),
+        ),
         pool: z.array(
             z.object({
                 region: z.string(),

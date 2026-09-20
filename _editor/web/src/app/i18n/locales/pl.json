@@ -3418,6 +3418,7 @@
             "planEnds": "Twój plan kończy się {periodEnd}",
             "planNeedsWorkingCard": "Twój plan potrzebuje działającej karty",
             "platformDoesntSellHosted": "Ta platforma nie sprzedaje planu hostowanego.",
+            "ranOutOfMemory": "Ran out of memory once this week on {memory} GB | Ran out of memory {count} times this week on {memory} GB",
             "readingPlan": "Odczytywanie Twojego planu…",
             "removeHostedSandboxFirst": "Najpierw usuń jeden hostowany sandbox",
             "removeSlot": "Usuń miejsce",

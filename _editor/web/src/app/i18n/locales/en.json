@@ -3418,6 +3418,7 @@
             "planEnds": "Your plan ends {periodEnd}",
             "planNeedsWorkingCard": "Your plan needs a working card",
             "platformDoesntSellHosted": "This platform doesn't sell a hosted plan.",
+            "ranOutOfMemory": "Ran out of memory once this week on {memory} GB | Ran out of memory {count} times this week on {memory} GB",
             "readingPlan": "Reading your plan…",
             "removeHostedSandboxFirst": "Remove a hosted sandbox first",
             "removeSlot": "Remove a slot",

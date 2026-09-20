@@ -2,9 +2,9 @@ import { sleep as pause } from "@intentic/base/async";
 import { type HostedShape, type HostedTierId, hostedShapeLine } from "@intentic/constants";
 import type { HostedMigration, PrismaClient } from "@intentic/prisma";
 import type { Logger } from "pino";
-import type { Config } from "../../config.js";
-import { decryptSecret } from "../../crypto.js";
-import { MINUTE_MS } from "../../durations.js";
+import type { Config } from "../../../config.js";
+import { decryptSecret } from "../../../crypto.js";
+import { MINUTE_MS } from "../../../durations.js";
 import {
     createMachine,
     createVolume,
@@ -18,11 +18,11 @@ import {
     listVolumeSnapshots,
     stopMachine,
     updateMachine,
-} from "./fly/fly.js";
-import { HostedAtCapacity, AT_CAPACITY_MESSAGE, noteProviderAtCapacity, providerWords } from "./hosted-capacity.js";
-import { withHostedAppLock } from "./hosted-app-lock.js";
-import { hostedEnabled, hostedInstanceId, hostedMachineConfig, type HostedProvisionArgs, startAfterUpdate } from "./hosted.js";
-import { hostedShapeFor, sameShape, shapeOfRow, tierOfRow } from "./hosted-shape.js";
+} from "../fly/fly.js";
+import { HostedAtCapacity, AT_CAPACITY_MESSAGE, noteProviderAtCapacity, providerWords } from "../hosted-capacity.js";
+import { withHostedAppLock } from "../hosted-app-lock.js";
+import { hostedEnabled, hostedInstanceId, hostedMachineConfig, type HostedProvisionArgs, startAfterUpdate } from "../hosted.js";
+import { hostedShapeFor, sameShape, shapeOfRow, tierOfRow } from "../hosted-shape.js";
 
 /* MOVING A SANDBOX FROM ONE MACHINE TO ANOTHER, and being able to undo it.
  *

@@ -1,3 +1,4 @@
+import { installFakeFly } from "@intentic/testing/fly-fake";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { PrismaClient } from "@intentic/prisma";
 import type { Config } from "../../config.js";
@@ -40,17 +41,15 @@ const prismaWith = (rows: ReturnType<typeof machine>[], over: Record<string, Rec
         ...over,
     }) as unknown as PrismaClient;
 
-// Fly's read of the machine, plus a recorder for any app-teardown call the sweep follows it with.
+/* The shared in-memory Fly, seeded with the one machine this sweep looks at. What these cases turn on is whether
+ * the app was torn down, so the fake's own call log is the assertion and its state is the setup. */
 const stubFly = (state: string) => {
-    const calls: { method: string; url: string }[] = [];
-    vi.stubGlobal(`fetch`, (url: URL | string, init?: RequestInit) => {
-        calls.push({ method: init?.method ?? `GET`, url: String(url) });
-        if ((init?.method ?? `GET`) === `DELETE`) {
-            return Promise.resolve(new Response(``, { status: 202 }));
-        }
-        return Promise.resolve(new Response(JSON.stringify({ id: `m1`, state })));
-    });
-    return calls;
+    const fly = installFakeFly((name, value) => vi.stubGlobal(name, value));
+    const seeded = fly.seedSandbox(`intentic-sbx-a`);
+    // The fake names its own machine; the row under test names `m1`, so this one answers to both.
+    fly.machines.set(`m1`, { ...seeded.machine, id: `m1`, state });
+    fly.machines.delete(seeded.machine.id);
+    return fly;
 };
 
 afterEach(() => {
@@ -59,10 +58,10 @@ afterEach(() => {
 
 describe(`collecting the machines nobody came back to`, () => {
     it(`destroys a non-member's machine once it is past the deadline, and drops only its row`, async () => {
-        const calls = stubFly(`stopped`);
+        const fly = stubFly(`stopped`);
         const prisma = prismaWith([machine({ idleWarnedAt: daysAgo(8) })]);
         expect(await reapIdleHosted(prisma, config(), logger)).toEqual({ warned: 0, destroyed: 1, dropped: 0 });
-        expect(calls.filter((entry) => entry.method === `DELETE`)).toHaveLength(1);
+        expect(fly.calls.filter((entry) => entry.method === `DELETE`)).toHaveLength(1);
         expect(prisma.hostedMachine.delete).toHaveBeenCalledWith({ where: { id: `h1` } });
         // The address goes with the machine, since it was only ever the machine's; the edge would replay to a dead app.
         expect(prisma.sandbox.update).toHaveBeenCalledWith({ where: { id: `s1` }, data: { daemonUrl: null } });
@@ -92,10 +91,10 @@ describe(`collecting the machines nobody came back to`, () => {
     });
 
     it(`warns once inside the notice period and destroys nothing`, async () => {
-        const calls = stubFly(`stopped`);
+        const fly = stubFly(`stopped`);
         const prisma = prismaWith([machine({ sandbox: { ...machine().sandbox, lastSeenAt: daysAgo(15) } })]);
         expect(await reapIdleHosted(prisma, config(), logger)).toEqual({ warned: 1, destroyed: 0, dropped: 0 });
-        expect(calls.filter((entry) => entry.method === `DELETE`)).toHaveLength(0);
+        expect(fly.calls.filter((entry) => entry.method === `DELETE`)).toHaveLength(0);
         expect(prisma.hostedMachine.update).toHaveBeenCalledWith({ where: { id: `h1` }, data: { idleWarnedAt: expect.any(Date) } });
     });
 
@@ -111,34 +110,34 @@ describe(`collecting the machines nobody came back to`, () => {
      * to be reached on the clock alone — so the mail promising notice was never sent and the owner's first news
      * was an empty sandbox. It is warned instead, and collected a notice period later. */
     it(`warns a machine already past the deadline rather than collecting one nobody was told about`, async () => {
-        const calls = stubFly(`stopped`);
+        const fly = stubFly(`stopped`);
         const prisma = prismaWith([machine({ sandbox: { ...machine().sandbox, lastSeenAt: daysAgo(40) } })]);
         expect(await reapIdleHosted(prisma, config(), logger)).toEqual({ warned: 1, destroyed: 0, dropped: 0 });
-        expect(calls.filter((entry) => entry.method === `DELETE`)).toHaveLength(0);
+        expect(fly.calls.filter((entry) => entry.method === `DELETE`)).toHaveLength(0);
         expect(prisma.hostedMachine.update).toHaveBeenCalledWith({ where: { id: `h1` }, data: { idleWarnedAt: expect.any(Date) } });
     });
 
     // The notice has to have STOOD for the notice period (21 - 14 here), not merely to have been sent at some point.
     it(`holds a machine past the deadline while its notice is younger than the notice period`, async () => {
-        const calls = stubFly(`stopped`);
+        const fly = stubFly(`stopped`);
         const prisma = prismaWith([machine({ idleWarnedAt: daysAgo(2) })]);
         expect(await reapIdleHosted(prisma, config(), logger)).toEqual({ warned: 0, destroyed: 0, dropped: 0 });
-        expect(calls.filter((entry) => entry.method === `DELETE`)).toHaveLength(0);
+        expect(fly.calls.filter((entry) => entry.method === `DELETE`)).toHaveLength(0);
     });
 
     it(`never touches a member's machine`, async () => {
-        const calls = stubFly(`stopped`);
+        const fly = stubFly(`stopped`);
         const prisma = prismaWith([machine()], { hostedPlan: { findUnique: vi.fn().mockResolvedValue({ status: `active`, items: [] }) } });
         expect(await reapIdleHosted(prisma, config(), logger)).toEqual({ warned: 0, destroyed: 0, dropped: 0 });
-        expect(calls).toHaveLength(0);
+        expect(fly.calls).toHaveLength(0);
     });
 
     // lastSeenAt is the daemon's boot announce, not a heartbeat; a long-lived machine looks stale but runs fine.
     it(`spares a machine that is actually running, however stale its last announce`, async () => {
-        const calls = stubFly(`started`);
+        const fly = stubFly(`started`);
         const prisma = prismaWith([machine({ idleWarnedAt: daysAgo(2) })]);
         expect(await reapIdleHosted(prisma, config(), logger)).toEqual({ warned: 0, destroyed: 0, dropped: 0 });
-        expect(calls.filter((entry) => entry.method === `DELETE`)).toHaveLength(0);
+        expect(fly.calls.filter((entry) => entry.method === `DELETE`)).toHaveLength(0);
         // Notice is withdrawn too, so a full warning period runs again whenever it does stop.
         expect(prisma.hostedMachine.update).toHaveBeenCalledWith({ where: { id: `h1` }, data: { idleWarnedAt: null } });
     });
@@ -150,10 +149,10 @@ describe(`collecting the machines nobody came back to`, () => {
     });
 
     it(`leaves a machine inside the notice period alone entirely`, async () => {
-        const calls = stubFly(`stopped`);
+        const fly = stubFly(`stopped`);
         const prisma = prismaWith([machine({ createdAt: daysAgo(5), sandbox: { ...machine().sandbox, lastSeenAt: daysAgo(5) } })]);
         expect(await reapIdleHosted(prisma, config(), logger)).toEqual({ warned: 0, destroyed: 0, dropped: 0 });
-        expect(calls).toHaveLength(0);
+        expect(fly.calls).toHaveLength(0);
     });
 
     // Either day at zero switches the whole sweep off.

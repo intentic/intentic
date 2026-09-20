@@ -3418,6 +3418,7 @@
             "planEnds": "Votre offre prend fin {periodEnd}",
             "planNeedsWorkingCard": "Votre offre a besoin d'une carte valide",
             "platformDoesntSellHosted": "Cette plateforme ne vend pas d'offre hébergée.",
+            "ranOutOfMemory": "Ran out of memory once this week on {memory} GB | Ran out of memory {count} times this week on {memory} GB",
             "readingPlan": "Lecture de votre offre…",
             "removeHostedSandboxFirst": "Supprimez d'abord un sandbox hébergé",
             "removeSlot": "Retirer une place",

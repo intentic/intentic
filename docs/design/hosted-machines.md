@@ -83,7 +83,7 @@ never hands over a machine that is not what it was sold as).
 
 ## 4. Two operations, one safety rule
 
-[hosted-migrate.ts](../../_platform/api/src/sandbox/hosted/hosted-migrate.ts). The kind is decided by whether the
+[hosted-migrate.ts](../../_platform/api/src/sandbox/hosted/migrate/hosted-migrate.ts). The kind is decided by whether the
 region changes.
 
 **`resize`** — same app, same volume, same host. Snapshot the disk, grow it if the target rung has more, replace the
@@ -166,13 +166,60 @@ runs its own hardware; a paid rung's shape is the ladder's and not a deployment'
   and a Standard one nowhere near its hours loses only the first.
 - **The offer card** states the free lane's hours to subscribers too, because the machine it offers is a free one.
 
-## 9. Not decided here
+## 9. What proves it
+
+Three readers, each the cheapest one that can see what it is for.
+
+**Hermetically, on every commit.** `migrate/hosted-migrate.test.ts` asserts the ORDERING rather than the outcome —
+the snapshot before anything is touched, the old disk destroyed only after the new machine announces, the guest put
+back on a rollback, `failed` rather than `rolledBack` when nothing was changed. The hermetic e2e drives checkout →
+slot → `changeTier` → a finished migration through the real api on real Postgres.
+
+Both run against [`@intentic/testing/fly-fake`](../../_tools/testing/src/fly-fake.ts), a Fly that remembers what it
+was told. That matters more here than for most seams: the engine is written around the provider's *constraints* —
+a fork cannot be smaller than its source, a snapshot must finish before it can be restored from, a machine somebody
+stopped does not answer `started` — and a stub that answers each request in isolation cannot express any of them, so
+it agrees with whatever the code does. Six suites had grown one each, true about a different third of the provider,
+and none noticed when the client learned to extend a volume.
+
+**Against real Fly, when somebody asks.** [hosted-migrate.e2e.test.ts](../../_platform/api/src/e2e/hosted-migrate.e2e.test.ts),
+gated on `INTENTIC_E2E` plus `HOSTED_FLY_API_TOKEN` and `HOSTED_FLY_ORG`, is the one suite that moves a real disk. A
+stand-in cannot say that Fly still forks a volume, still restores a snapshot into another region, or still places a
+machine where its volume is; only Fly can.
+
+Its trick is the sentinel. There is no network path into a sandbox from a test, but a machine's config can override
+its entrypoint and its **exit code is readable off the machine**, so a one-line shell script mounting the volume is
+both the pen and the eye: one run writes a random value to the volume, a later run greps for it, and the exit code
+is the answer. That proves the DISK moved, which is a different and stronger claim than the product coming back up.
+Everything it makes lives in one Fly app, destroyed in `afterAll` whatever happened, because a leaked volume bills
+forever and nobody is watching that org's console.
+
+**Continuously, in production.** The canary already provisions and destroys a real machine every interval. With
+`hosted.canaryMigrate` on it also moves that machine up a rung and back down before tearing it down — the up leg
+proves a resize, the down leg proves a downgrade keeps the disk it grew. Off by default, because it roughly doubles
+what a canary run costs and a deployment that never migrates anybody has nothing to prove.
+
+## 10. Watching for the machine that was too small
+
+Fly stamps `oom_killed` on the exit event of a machine the kernel took down, and the hour meter already asks Fly how
+every stopped machine ended — so the settle reads the machine's DETAIL instead of its bare state, which is the same
+round trip carrying more. A kill becomes a `HostedOom` row with the rung and memory the machine **had**, because a
+later resize is exactly what makes the old figure the interesting one.
+
+It is two things at once. First a reliability signal: a rung that OOMs is one sized too small, and the product looks
+broken to whoever it happens to. Second, the only honest upgrade prompt there is. The Billing page shows a line on a
+machine that was killed this week, and it states what happened rather than what to buy: *"ran out of memory twice
+this week on 4 GB"* is a fact; *"you might want more RAM"* is a pitch.
+
+The admin panel's cost-by-rung (`adminCosts.hosted.byTier`) is the other half of the same question, from the other
+end: what each rung actually cost against what it charged, priced from the ladder rather than typed.
+
+## 11. Not decided here
 
 - Whether the prices are right in a year. The admin panel's cost-by-rung is what answers that; the ladder module is
   what makes either number legible.
 - A dedicated-CPU rung. `performance-2x` doubles the volume's IOPs ceiling (16000 against 8000) and would be a real
   differentiator for install-heavy work, at roughly $99 a month. It is a fourth row in the table and one Stripe
   price; the invariant test will judge it.
-- Watching the sandbox machine for OOM. Fly reports `oom_killed` on a machine's exit event and `getMachineDetail`
-  already reads it, but only the overlay builder looks. It is first a reliability signal and second the only honest
-  upgrade prompt there is: "this machine ran out of memory twice this week" is a fact, not a pitch.
+- Whether a rung that OOMs repeatedly should be resized without being asked. The signal is recorded and shown; acting
+  on it is a decision about somebody else's bill, and the panel has to have seen the tail before that is a rule.

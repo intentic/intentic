@@ -27,6 +27,10 @@
             "types": "./src/e2e.ts",
             "default": "./src/e2e.ts"
         },
+        "./fly-fake": {
+            "types": "./src/fly-fake.ts",
+            "default": "./src/fly-fake.ts"
+        },
         "./stripe-fake": {
             "types": "./src/stripe-fake.ts",
             "default": "./src/stripe-fake.ts"

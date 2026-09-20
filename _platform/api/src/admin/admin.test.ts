@@ -1,4 +1,4 @@
-import { type HostedTier, hostedTier, PAID_TIERS } from "@intentic/constants";
+import { FLY_VOLUME_GB_USD, FREE_TIER, type HostedTier, hostedTier, PAID_TIERS } from "@intentic/constants";
 import { OpenAPIHandler } from "@orpc/openapi/fetch";
 import type { ORPCError } from "@orpc/server";
 import { describe, expect, it, vi } from "vitest";
@@ -27,6 +27,9 @@ const NOW = new Date(`2026-08-25T10:30:00Z`);
 
 // The rung a slot is counted at when the overview totals what Stripe is charging.
 const ENTRY = PAID_TIERS[0] as HostedTier;
+
+// The panel rounds to the cent; the expectation derives the same way rather than transcribing a figure.
+const round2 = (value: number): number => Math.round(value * 100) / 100;
 
 // The slice of Config the admin modules read, cast whole rather than parsed, so tests stay decoupled from unrelated
 // knobs' defaults.
@@ -314,15 +317,28 @@ describe(`adminCosts`, () => {
         const prisma = {
             hostedMachine: {
                 count: async (args?: { where?: Record<string, unknown> }) => (args?.where?.[`wokeAt`] ? 2 : args?.where?.[`idleWarnedAt`] ? 1 : 6),
+                groupBy: async () => [
+                    { tier: FREE_TIER.id, _count: { _all: 4 } },
+                    { tier: ENTRY.id, _count: { _all: 2 } },
+                ],
+                // Which rung each machine is on, and the disk standing under it whether it is awake or not.
+                findMany: async () => [
+                    { sandboxId: `s1`, tier: FREE_TIER.id, volumeGb: FREE_TIER.volumeGb },
+                    { sandboxId: `s2`, tier: ENTRY.id, volumeGb: ENTRY.volumeGb },
+                ],
             },
             hostedUsage: {
                 aggregate: async (args: { where: unknown }) => {
                     captured.usageWhere = args.where;
                     return { _sum: { minutes: 480 } };
                 },
+                groupBy: async () => [
+                    { sandboxId: `s1`, _sum: { minutes: 180 } },
+                    { sandboxId: `s2`, _sum: { minutes: 300 } },
+                ],
                 findMany: async () => [
-                    { minutes: 300, userId: `u1` },
-                    { minutes: 180, userId: `gone` },
+                    { minutes: 300, ownerId: `u1` },
+                    { minutes: 180, ownerId: `gone` },
                 ],
             },
             hostedPoolMachine: {
@@ -356,6 +372,25 @@ describe(`adminCosts`, () => {
             monthlyHoursCap: 40,
             // The unresolvable owner is dropped, never invented: the schema promises real addresses.
             topOwners: [{ email: `heavy@example.com`, minutes: 300 }],
+            /* What each rung actually cost, priced from the ladder rather than typed: awake hours at that rung's
+             * published rate, plus every disk on it whether its machine was awake or not. Dearest first, because
+             * that is the row an operator is looking for. */
+            byTier: [
+                {
+                    tier: ENTRY.id,
+                    machines: 2,
+                    minutes: 300,
+                    flyUsd: round2((300 / 60) * ENTRY.flyHourUsd + ENTRY.volumeGb * FLY_VOLUME_GB_USD),
+                    priceUsd: ENTRY.priceUsd * 2,
+                },
+                {
+                    tier: FREE_TIER.id,
+                    machines: 4,
+                    minutes: 180,
+                    flyUsd: round2((180 / 60) * FREE_TIER.flyHourUsd + FREE_TIER.volumeGb * FLY_VOLUME_GB_USD),
+                    priceUsd: 0,
+                },
+            ],
             pool: [
                 { region: `arn`, building: 0, ready: 0, claimed: 1, staleImage: 0 },
                 { region: `iad`, building: 1, ready: 1, claimed: 0, staleImage: 1 },

@@ -1,3 +1,4 @@
+import { installFakeFly } from "@intentic/testing/fly-fake";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Config } from "../config.js";
 import { RECOVERY_WINDOW_MS } from "../durations.js";
@@ -80,13 +81,16 @@ afterEach(() => {
     vi.unstubAllGlobals();
 });
 
+/* The shared in-memory Fly, holding the machine a trashed sandbox left behind. A restore must land on THAT machine
+ * and that volume, so the fake is seeded with them under the ids the trash row names. */
 const stubFly = () => {
-    const calls: { method: string; url: string }[] = [];
-    vi.stubGlobal(`fetch`, (url: string, init?: RequestInit) => {
-        calls.push({ method: init?.method ?? `GET`, url });
-        return Promise.resolve(new Response(JSON.stringify({ id: `m1` }), { status: 200, headers: { "content-type": `application/json` } }));
-    });
-    return calls;
+    const fly = installFakeFly((name, value) => vi.stubGlobal(name, value));
+    const seeded = fly.seedSandbox(`intentic-sbx-a`);
+    fly.machines.set(`m1`, { ...seeded.machine, id: `m1`, state: `stopped` });
+    fly.machines.delete(seeded.machine.id);
+    fly.volumes.set(`vol1`, { ...seeded.volume, id: `vol1` });
+    fly.volumes.delete(seeded.volume.id);
+    return fly;
 };
 
 describe(`listTrash`, () => {
@@ -122,7 +126,7 @@ describe(`restoreSandbox`, () => {
     });
 
     it(`reattaches the preserved machine and pushes the new identity onto it without starting it`, async () => {
-        const calls = stubFly();
+        const fly = stubFly();
         const create = vi.fn().mockResolvedValue({ region: `iad`, warm: false });
         const drop = vi.fn().mockResolvedValue({});
         const prisma = fakePrisma({ hostedMachine: { create, count: vi.fn().mockResolvedValue(0) }, sandboxTrash: { delete: drop } });
@@ -134,8 +138,8 @@ describe(`restoreSandbox`, () => {
         // The overlay it was built on, so it comes back as the environment it had.
         expect(row.data).toMatchObject({ image: `registry/overlay:1`, environmentHash: `abc123` });
         // A config replacement carries the new connect token; a start would cost uptime the owner did not ask for.
-        expect(calls.some((entry) => entry.method === `POST` && entry.url.endsWith(`/machines/m1`))).toBe(true);
-        expect(calls.some((entry) => entry.url.endsWith(`/machines/m1/start`))).toBe(false);
+        expect(fly.called(`POST`, `/machines/m1`)).toHaveLength(1);
+        expect(fly.called(`POST`, `/machines/m1/start`)).toEqual([]);
         expect(drop).toHaveBeenCalledExactlyOnceWith({ where: { id: `t1` } });
     });
 
@@ -150,12 +154,12 @@ describe(`restoreSandbox`, () => {
     });
 
     it(`brings back an own-machine sandbox as a name and a setup to re-run, touching no provider`, async () => {
-        const calls = stubFly();
+        const fly = stubFly();
         const ownMachine = { ...trashRow, appName: null, machineId: null, volumeId: null, region: null };
         const drop = vi.fn().mockResolvedValue({});
         const prisma = fakePrisma({ sandboxTrash: { findUnique: vi.fn().mockResolvedValue(ownMachine), delete: drop } });
         await restoreSandbox(prisma, config(), `u1`, `t1`);
-        expect(calls).toHaveLength(0);
+        expect(fly.calls).toHaveLength(0);
         expect(drop).toHaveBeenCalledExactlyOnceWith({ where: { id: `t1` } });
     });
 });

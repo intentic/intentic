@@ -170,12 +170,12 @@ export const SPEC_GROUPS: readonly SpecGroup[] = [
         description: "The ports something is answering on, and giving one an address on the outside or taking that away.",
     },
     {
-        name: "slices",
+        name: "areas",
         shelf: "workspace",
-        label: "Slices",
+        label: "Areas",
         summary: "The named parts of the workspace a teammate's reach is granted in",
         description:
-            "A slice is a name over a set of folders, and it is the unit access is handed out in: widening what a team sees is one edit here rather than one edit per person. Reading them is anybody's, since a fenced person is shown the name of the fence they are behind; writing one changes who sees what on their next request, so both writes are the sandbox owner's. A slice people still hold cannot be deleted, because a grant pointing at nothing is a fence with no answer.",
+            "An area is a name over a set of folders, and it is the unit access is handed out in: widening what a team sees is one edit here rather than one edit per person. Reading them is anybody's, since a fenced person is shown the name of the fence they are behind; writing one changes who sees what on their next request, so both writes are the sandbox owner's. An area people still hold cannot be deleted, because a grant pointing at nothing is a fence with no answer.",
     },
 
     // Agent setup

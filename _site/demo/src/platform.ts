@@ -62,6 +62,8 @@ const DEMO_HOSTED_PLAN: HostedPlanState = {
                 shape: DEMO_MACHINE_TIER,
                 usedMinutes: 12_720,
                 allowanceMinutes: DEMO_MACHINE_TIER.monthlyHours * 60,
+                // A machine that has not been killed for memory; the page shows nothing at 0, which is the point.
+                oomsThisWeek: 0,
             },
         ],
         usage: { month: new Date().toISOString().slice(0, 7), usedMinutes: 12_720, allowanceMinutes: null, resetsAt: `2026-10-01T00:00:00.000Z` },

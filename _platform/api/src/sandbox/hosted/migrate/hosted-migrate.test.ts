@@ -2,8 +2,9 @@ import { FREE_TIER, hostedTier } from "@intentic/constants";
 import type { PrismaClient } from "@intentic/prisma";
 import type { Logger } from "pino";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { type Config, configSchema } from "../../config.js";
-import { testIngressConfig } from "../../testing.js";
+import { type Config, configSchema } from "../../../config.js";
+import { installFakeFly } from "@intentic/testing/fly-fake";
+import { testIngressConfig } from "../../../testing.js";
 import {
     hostedMigrationsOf,
     HostedMigrationRefused,
@@ -15,7 +16,7 @@ import {
     sweepHostedMigrations,
 } from "./hosted-migrate.js";
 
-vi.mock(`./hosted-app-lock.js`, async () => ({ withHostedAppLock: (await import(`../../testing.js`)).fakeHostedAppLock }));
+vi.mock(`../hosted-app-lock.js`, async () => ({ withHostedAppLock: (await import(`../../../testing.js`)).fakeHostedAppLock }));
 
 /* WHAT THIS SUITE IS FOR. A migration is the one operation that can lose somebody's work, so the cases below are
  * about ordering rather than about arithmetic: the pre-flight snapshot happens before anything else, the old disk is
@@ -123,69 +124,42 @@ const fakePrisma = (seed: { machine?: MigratableMachine; announces?: boolean } =
     return { prisma: prisma as unknown as PrismaClient, migrations, state };
 };
 
-// Routes Fly by method and URL, recording every call so the ORDER of a teardown can be asserted, not just the fact.
-const stubFly = (over: { snapshotStatus?: string } = {}) => {
-    const calls: { method: string; url: string; body?: unknown }[] = [];
-    // Power is tracked rather than answered `started` always: a move stops the original, and whether the rollback
-    // actually starts it again is exactly the thing one of these cases is about.
-    const power = new Map<string, string>([[`m1`, `started`]]);
-    const machineId = (href: string): string => href.split(`/machines/`)[1]?.split(`/`)[0] ?? ``;
-    const snapshot = { id: `vs_1`, status: over.snapshotStatus ?? `created`, created_at: `2026-09-20T09:30:00Z`, size: 1 };
+/** The id of the only snapshot the fake holds, which is the one the run under test just took. */
+const takenSnapshot = (fly: ReturnType<typeof stubFly>): string => [...fly.snapshots.keys()][0] ?? ``;
 
-    // Matched on the URL's suffix, never `includes`: `/volumes/vol_1/snapshots` contains `/volumes`, and reading it
-    // as a volume create is how a stub quietly answers the wrong call.
-    const routes: { method: string; ends: RegExp; answer: (href: string) => unknown }[] = [
-        { method: `POST`, ends: /\/snapshots$/u, answer: () => ({ id: `vs_1`, status: `waiting` }) },
-        { method: `GET`, ends: /\/snapshots$/u, answer: () => [snapshot] },
-        { method: `PUT`, ends: /\/extend$/u, answer: () => ({ volume: { id: `vol_1`, size_gb: 25, state: `created` }, needs_restart: true }) },
-        { method: `POST`, ends: /\/volumes$/u, answer: () => ({ id: `vol_2` }) },
-        {
-            method: `POST`,
-            ends: /\/machines$/u,
-            answer: () => {
-                power.set(`m2`, `started`);
-                return { id: `m2`, state: `started` };
-            },
-        },
-        {
-            method: `POST`,
-            ends: /\/stop$/u,
-            answer: (href) => {
-                power.set(machineId(href), `stopped`);
-                return { ok: true };
-            },
-        },
-        {
-            method: `POST`,
-            ends: /\/start$/u,
-            answer: (href) => {
-                power.set(machineId(href), `started`);
-                return { ok: true };
-            },
-        },
-        { method: `GET`, ends: /\/machines\/[^/]+$/u, answer: (href) => ({ id: machineId(href), state: power.get(machineId(href)) ?? `stopped` }) },
-    ];
+/** The volume and machine a move built, which are the ones the fake holds that the seed did not. */
+const built = (fly: ReturnType<typeof stubFly>, seeded: { machineId: string; volumeId: string }) => ({
+    volumeId: [...fly.volumes.keys()].find((id) => id !== seeded.volumeId) ?? ``,
+    machineId: [...fly.machines.keys()].find((id) => id !== seeded.machineId) ?? ``,
+});
 
-    vi.stubGlobal(`fetch`, (url: URL | string, init?: RequestInit): Promise<Response> => {
-        const method = init?.method ?? `GET`;
-        const href = String(url);
-        calls.push({ method, url: href, ...(typeof init?.body === `string` ? { body: JSON.parse(init.body) } : {}) });
-        const route = routes.find((candidate) => candidate.method === method && candidate.ends.test(href));
-        return Promise.resolve(new Response(JSON.stringify(route === undefined ? { ok: true } : route.answer(href)), { status: 200 }));
+/* Fly is the shared in-memory one (@intentic/testing/fly-fake), seeded with this machine's app, volume and machine
+ * under the ids the row names. A local stub could answer each call, but not the rules these cases turn on: that a
+ * fork carries the source's bytes, that a snapshot must finish before it can be restored from, and that a machine
+ * somebody stopped does not answer `started`. */
+const stubFly = (over: { snapshotNeverFinishes?: boolean } = {}) => {
+    const fly = installFakeFly((name, value) => vi.stubGlobal(name, value), (over.snapshotNeverFinishes === true ? { faults: { snapshotNeverFinishes: true } } : {}));
+    const seeded = machine();
+    fly.apps.add(seeded.appName);
+    fly.volumes.set(seeded.volumeId, {
+        id: seeded.volumeId,
+        app: seeded.appName,
+        region: seeded.region,
+        sizeGb: seeded.volumeGb,
+        state: `created`,
+        usedBytes: 2 * 1024 ** 3,
     });
-    return calls;
+    fly.machines.set(seeded.machineId, {
+        id: seeded.machineId,
+        app: seeded.appName,
+        region: seeded.region,
+        state: `started`,
+        config: {},
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+    });
+    return fly;
 };
-
-type Call = { method: string; url: string; body?: unknown };
-
-// Both helpers match the end of the URL's PATH, with the query dropped. A path that merely contains another is the
-// trap these calls set — `/volumes/vol_1/snapshots` is not a volume create, `/machines/m1/stop` is not a config
-// replacement — and a forced destroy carries `?force=true`, which an end-of-URL match would miss entirely.
-const hits = (call: Call, method: string, ends: string): boolean => call.method === method && new URL(call.url).pathname.endsWith(ends);
-
-const calledWith = (calls: Call[], method: string, ends: string): Call[] => calls.filter((call) => hits(call, method, ends));
-
-const indexOf = (calls: Call[], method: string, ends: string): number => calls.findIndex((call) => hits(call, method, ends));
 
 afterEach(() => {
     vi.unstubAllGlobals();
@@ -214,38 +188,44 @@ describe(`planning a migration`, () => {
 
 describe(`resizing where the machine stands`, () => {
     it(`snapshots, grows the disk, replaces the guest, waits to be told it is up, then records the new machine`, async () => {
-        const calls = stubFly();
+        const fly = stubFly();
         const { prisma, migrations, state } = fakePrisma();
         const result = await migrateHosted(prisma, config(), logger, machine(), { tier: `standard` }, `owner@example.test`, noSleep);
 
         expect(result.state).toBe(`done`);
         // The snapshot is taken before the disk or the guest is touched: it is the only thing that survives a rollback.
-        expect(indexOf(calls, `POST`, `/snapshots`)).toBeLessThan(indexOf(calls, `PUT`, `/extend`));
-        expect(indexOf(calls, `PUT`, `/extend`)).toBeLessThan(indexOf(calls, `POST`, `/machines/m1`));
-        expect(calls.find((call) => call.method === `PUT` && call.url.endsWith(`/extend`))?.body).toEqual({ size_gb: STANDARD.volumeGb });
-        const replaced = calls.find((call) => call.method === `POST` && call.url.endsWith(`/machines/m1`))?.body as {
+        expect(fly.indexOf(`POST`, `/snapshots`)).toBeLessThan(fly.indexOf(`PUT`, `/extend`));
+        expect(fly.indexOf(`PUT`, `/extend`)).toBeLessThan(fly.indexOf(`POST`, `/machines/m1`));
+        expect(fly.called(`PUT`, `/extend`)[0]?.body).toEqual({ size_gb: STANDARD.volumeGb });
+        const replaced = fly.called(`POST`, `/machines/m1`)[0]?.body as {
             config: { guest: Record<string, unknown> };
         };
         expect(replaced.config.guest).toEqual({ cpu_kind: STANDARD.cpuKind, cpus: STANDARD.cpus, memory_mb: STANDARD.memoryMb });
         // Nothing is forked or destroyed: a resize is one machine on one disk throughout.
-        expect(calledWith(calls, `POST`, `/volumes`)).toEqual([]);
-        expect(calls.filter((call) => call.method === `DELETE` && new URL(call.url).pathname.includes(`/volumes/`))).toEqual([]);
+        expect(fly.called(`POST`, `/volumes`)).toEqual([]);
+        expect(fly.calls.filter((call) => call.method === `DELETE` && call.path.includes(`/volumes/`))).toEqual([]);
 
         expect(state).toMatchObject({ tier: STANDARD.id, cpus: STANDARD.cpus, memoryMb: STANDARD.memoryMb, volumeGb: STANDARD.volumeGb });
         // The lock the row holds is released, and the migration remembers the disk it saved first.
         expect(state[`migratingId`]).toBeNull();
-        expect(migrations[0]).toMatchObject({ kind: `resize`, state: `done`, snapshotId: `vs_1`, fromTier: FREE_TIER.id, toTier: STANDARD.id });
+        expect(migrations[0]).toMatchObject({
+            kind: `resize`,
+            state: `done`,
+            snapshotId: takenSnapshot(fly),
+            fromTier: FREE_TIER.id,
+            toTier: STANDARD.id,
+        });
     });
 
     it(`puts the old guest back and says so when the sandbox never announces itself`, async () => {
-        const calls = stubFly();
+        const fly = stubFly();
         const { prisma, migrations, state } = fakePrisma({ announces: false });
         await expect(migrateHosted(prisma, config(), logger, machine(), { tier: `standard` }, `owner@example.test`, noSleep)).rejects.toThrow(
             /did not announce itself/u,
         );
 
         // Two config replacements: the one that failed and the one that undid it, the second carrying the old guest.
-        const replacements = calls.filter((call) => call.method === `POST` && call.url.endsWith(`/machines/m1`));
+        const replacements = fly.called(`POST`, `/machines/m1`);
         expect(replacements).toHaveLength(2);
         const undone = replacements[1] as { body: { config: { guest: Record<string, unknown> } } };
         expect(undone.body.config.guest).toEqual({
@@ -253,7 +233,7 @@ describe(`resizing where the machine stands`, () => {
             cpus: FREE_TIER.cpus,
             memory_mb: FREE_TIER.memoryMb,
         });
-        expect(migrations[0]).toMatchObject({ state: `rolledBack`, snapshotId: `vs_1` });
+        expect(migrations[0]).toMatchObject({ state: `rolledBack`, snapshotId: takenSnapshot(fly) });
         expect(migrations[0]?.error).toMatch(/did not announce itself/u);
         // The machine row is exactly as it was, and free again for another attempt.
         expect(state).toMatchObject({ tier: FREE_TIER.id, cpus: FREE_TIER.cpus, migratingId: null });
@@ -261,13 +241,13 @@ describe(`resizing where the machine stands`, () => {
 
     // Nothing is spent before the snapshot exists, which is what makes this failure cost the owner nothing at all.
     it(`stops before touching the machine when the snapshot never finishes`, async () => {
-        const calls = stubFly({ snapshotStatus: `running` });
+        const fly = stubFly({ snapshotNeverFinishes: true });
         const { prisma, migrations } = fakePrisma();
         await expect(migrateHosted(prisma, config(), logger, machine(), { tier: `standard` }, `owner@example.test`, noSleep)).rejects.toThrow(
-            /snapshot vs_1 was still not finished/u,
+            /pre-flight snapshot .+ was still not finished/u,
         );
-        expect(calledWith(calls, `PUT`, `/extend`)).toEqual([]);
-        expect(calledWith(calls, `POST`, `/machines/m1`)).toEqual([]);
+        expect(fly.called(`PUT`, `/extend`)).toEqual([]);
+        expect(fly.called(`POST`, `/machines/m1`)).toEqual([]);
         // `failed`, not `rolledBack`: nothing was changed, so nothing was put back, and the machine never restarted.
         expect(migrations[0]?.state).toBe(`failed`);
     });
@@ -275,54 +255,65 @@ describe(`resizing where the machine stands`, () => {
 
 describe(`moving to another machine`, () => {
     it(`forks the disk, builds beside the original, and destroys the original only once the new one has answered`, async () => {
-        const calls = stubFly();
+        const fly = stubFly();
         const { prisma, migrations, state } = fakePrisma();
         const result = await migrateHosted(prisma, config(), logger, machine(), { tier: `standard`, region: `arn` }, `platform`, noSleep);
 
         expect(result.state).toBe(`done`);
         // Stopped first, so the copy is taken from a filesystem nobody is writing to.
-        expect(indexOf(calls, `POST`, `/machines/m1/stop`)).toBeLessThan(indexOf(calls, `POST`, `/volumes`));
-        const volume = calls.find((call) => call.method === `POST` && call.url.endsWith(`/volumes`))?.body as Record<string, unknown>;
+        expect(fly.indexOf(`POST`, `/machines/m1/stop`)).toBeLessThan(fly.indexOf(`POST`, `/volumes`));
+        const volume = fly.called(`POST`, `/volumes`)[0]?.body as Record<string, unknown>;
         // Another region cannot fork: it restores the pre-flight snapshot instead, onto a host sized for the new guest.
         expect(volume).toMatchObject({
             region: `arn`,
             size_gb: STANDARD.volumeGb,
-            snapshot_id: `vs_1`,
+            snapshot_id: takenSnapshot(fly),
             snapshot_retention: 7,
             compute: { cpu_kind: STANDARD.cpuKind, cpus: STANDARD.cpus, memory_mb: STANDARD.memoryMb },
         });
         expect(volume[`source_volume_id`]).toBeUndefined();
 
         /* THE ORDERING THIS WHOLE MODULE EXISTS FOR: the old disk goes after the swap, never before it. */
-        expect(indexOf(calls, `POST`, `/machines`)).toBeLessThan(indexOf(calls, `DELETE`, `/machines/m1`));
-        expect(indexOf(calls, `DELETE`, `/machines/m1`)).toBeLessThan(indexOf(calls, `DELETE`, `/volumes/vol_1`));
+        expect(fly.indexOf(`POST`, `/machines`)).toBeLessThan(fly.indexOf(`DELETE`, `/machines/m1`));
+        expect(fly.indexOf(`DELETE`, `/machines/m1`)).toBeLessThan(fly.indexOf(`DELETE`, `/volumes/vol_1`));
 
-        expect(state).toMatchObject({ machineId: `m2`, volumeId: `vol_2`, region: `arn`, tier: STANDARD.id, migratingId: null });
-        expect(migrations[0]).toMatchObject({ kind: `move`, state: `done`, oldMachineId: `m1`, oldVolumeId: `vol_1`, newMachineId: `m2`, newVolumeId: `vol_2` });
+        const made = built(fly, machine());
+        expect(state).toMatchObject({ ...made, region: `arn`, tier: STANDARD.id, migratingId: null });
+        expect(migrations[0]).toMatchObject({
+            kind: `move`,
+            state: `done`,
+            oldMachineId: machine().machineId,
+            oldVolumeId: machine().volumeId,
+            newMachineId: made.machineId,
+            newVolumeId: made.volumeId,
+        });
     });
 
     it(`forks in place when the region is not changing, rather than waiting on a restore`, async () => {
-        const calls = stubFly();
+        const fly = stubFly();
         const { prisma } = fakePrisma();
         // A move within the region: asked for directly, which is how a host with no room for the bigger guest is escaped.
         await migrateHosted(prisma, config(), logger, machine(), { tier: `standard`, region: `iad` }, `platform`, noSleep).catch(() => undefined);
         // Same region resizes rather than moving, so nothing was forked; the region is what decides.
-        expect(calledWith(calls, `POST`, `/volumes`)).toEqual([]);
+        expect(fly.called(`POST`, `/volumes`)).toEqual([]);
     });
 
     it(`takes away everything it built and starts the original again when the new machine never answers`, async () => {
-        const calls = stubFly();
+        const fly = stubFly();
         const { prisma, migrations, state } = fakePrisma({ announces: false });
         await expect(
             migrateHosted(prisma, config(), logger, machine(), { tier: `standard`, region: `arn` }, `platform`, noSleep),
         ).rejects.toThrow(/did not announce itself/u);
 
         // The new volume is this run's alone, so it goes; the original's is never touched.
-        expect(calledWith(calls, `DELETE`, `/volumes/vol_2`)).toHaveLength(1);
-        expect(calledWith(calls, `DELETE`, `/volumes/vol_1`)).toEqual([]);
-        expect(calledWith(calls, `DELETE`, `/machines/m1`)).toEqual([]);
+        /* Exactly one volume was destroyed and it was not the original's. Stated as the calls rather than as the
+         * fake's leftover state, because the volume in question no longer exists to be named. */
+        const destroyed = fly.calls.filter((call) => call.method === `DELETE` && call.path.includes(`/volumes/`));
+        expect(destroyed).toHaveLength(1);
+        expect(destroyed[0]?.path).not.toContain(machine().volumeId);
+        expect(fly.called(`DELETE`, `/machines/m1`)).toEqual([]);
         // The original is started again, and the row still names it.
-        expect(calledWith(calls, `POST`, `/machines/m1/start`).length).toBeGreaterThan(0);
+        expect(fly.called(`POST`, `/machines/m1/start`).length).toBeGreaterThan(0);
         expect(state).toMatchObject({ machineId: `m1`, volumeId: `vol_1`, region: `iad`, tier: FREE_TIER.id, migratingId: null });
         expect(migrations[0]?.state).toBe(`rolledBack`);
     });
@@ -330,6 +321,7 @@ describe(`moving to another machine`, () => {
 
 describe(`what a migration refuses before spending anything`, () => {
     it(`refuses a second one while the first is running, and one while an environment build is`, async () => {
+        // Installed but never asked anything: the refusals below happen before a single call reaches the provider.
         stubFly();
         const busy = fakePrisma({ machine: machine({ migratingId: `mig0` }) });
         await expect(migrateHosted(busy.prisma, config(), logger, machine(), { tier: `standard` }, `x`, noSleep)).rejects.toThrow(
@@ -342,10 +334,10 @@ describe(`what a migration refuses before spending anything`, () => {
     });
 
     it(`refuses a change to the machine it already is, rather than restarting it for nothing`, async () => {
-        const calls = stubFly();
+        const fly = stubFly();
         const { prisma } = fakePrisma();
         await expect(migrateHosted(prisma, config(), logger, machine(), { tier: FREE_TIER.id }, `x`, noSleep)).rejects.toThrow(/already on/u);
-        expect(calls).toEqual([]);
+        expect(fly.calls).toEqual([]);
     });
 
     it(`refuses on a platform that runs no machines at all`, async () => {
@@ -359,7 +351,7 @@ describe(`what a migration refuses before spending anything`, () => {
 
 describe(`the sweep over runs that stopped`, () => {
     it(`frees the machine and collects what a dead run had built`, async () => {
-        const calls = stubFly();
+        const fly = stubFly();
         const stuck = {
             id: `mig9`,
             state: `verifying`,
@@ -380,8 +372,8 @@ describe(`the sweep over runs that stopped`, () => {
 
         expect(await sweepHostedMigrations(prisma, config(), logger, new Date(`2026-09-20T10:00:00Z`))).toBe(1);
         // Both halves of the half-built pair go: they sit inside a live app, which the orphan reaper never touches.
-        expect(calledWith(calls, `DELETE`, `/machines/m2`)).toHaveLength(1);
-        expect(calledWith(calls, `DELETE`, `/volumes/vol_2`)).toHaveLength(1);
+        expect(fly.called(`DELETE`, `/machines/m2`)).toHaveLength(1);
+        expect(fly.called(`DELETE`, `/volumes/vol_2`)).toHaveLength(1);
         expect(state[`migratingId`]).toBeNull();
         expect(stuck).toMatchObject({ state: `failed` });
     });

@@ -119,3 +119,26 @@ WHERE "stripeItemId" <> '';
 
 ALTER TABLE "hosted_plan" DROP COLUMN "stripeItemId";
 ALTER TABLE "hosted_plan" DROP COLUMN "quantity";
+
+-- The provider reports a machine the kernel killed for memory on its exit event, and the hour meter already asks how
+-- every stopped machine ended — so this is a row rather than a round trip. It is the reliability signal for a rung
+-- sized too small, and the only honest thing to show somebody before offering them a bigger one.
+CREATE TABLE "hosted_oom" (
+    "id" TEXT NOT NULL,
+    "hostedMachineId" TEXT NOT NULL,
+    "sandboxId" TEXT NOT NULL,
+    "tier" TEXT NOT NULL,
+    "memoryMb" INTEGER NOT NULL,
+    "at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "hosted_oom_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateIndex
+CREATE INDEX "hosted_oom_sandboxId_at_idx" ON "hosted_oom"("sandboxId", "at");
+
+-- CreateIndex
+CREATE INDEX "hosted_oom_at_idx" ON "hosted_oom"("at");
+
+-- AddForeignKey
+ALTER TABLE "hosted_oom" ADD CONSTRAINT "hosted_oom_hostedMachineId_fkey" FOREIGN KEY ("hostedMachineId") REFERENCES "hosted_machine"("id") ON DELETE CASCADE ON UPDATE CASCADE;

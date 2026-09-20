@@ -286,6 +286,7 @@ export const createMachine = async (
 const machineDetailSchema = z.object({
     id: z.string(),
     state: z.string(),
+    updated_at: z.string().optional(),
     image_ref: z.object({ digest: z.string().optional() }).optional(),
     events: z
         .array(
@@ -302,6 +303,8 @@ const machineDetailSchema = z.object({
 
 export interface FlyMachineDetail {
     readonly state: string;
+    // Fly's last-transition stamp, which for a stopped machine is when it stopped.
+    readonly updatedAt: Date | undefined;
     readonly imageDigest: string | undefined;
     readonly exitCode: number | undefined;
     readonly oomKilled: boolean;
@@ -315,6 +318,7 @@ export const getMachineDetail = async (token: string, app: string, machineId: st
         .find((event) => event !== undefined);
     return {
         state: parsed.state,
+        updatedAt: parsedDate(parsed.updated_at),
         imageDigest: parsed.image_ref?.digest,
         exitCode: exit?.exit_code,
         oomKilled: exit?.oom_killed === true,

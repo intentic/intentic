@@ -6,10 +6,11 @@ import type { OrpcContext } from "../../context.js";
 import { requireUser } from "../../guards.js";
 import { hostedEnabled } from "./hosted.js";
 import { applySubscription, entryTier, hostedPlanEnabled, hostedPrices, hostedSlotsOf, isComped, isOnPlan, slotsAtTier } from "./hosted-plan.js";
-import { HostedMigrationRefused, type MigrationRefusal, migrateHosted } from "./hosted-migrate.js";
+import { HostedMigrationRefused, type MigrationRefusal, migrateHosted } from "./migrate/hosted-migrate.js";
 import { StripeError, type StripeGateway, stripeGateway } from "./hosted-plan-stripe.js";
 import { hostedShapeFor, shapeOfRow, tierOfRow } from "./hosted-shape.js";
-import { hostedArrivalBudget, hostedBudgetOf, usageMonth, usageResetsAt } from "./hosted-usage.js";
+import { hostedArrivalBudget, hostedBudgetOf, hostedOomsSince, usageMonth, usageResetsAt } from "./hosted-usage.js";
+import { DAY_MS } from "../../durations.js";
 
 const os = implement(apiContract).$context<OrpcContext>();
 
@@ -40,15 +41,21 @@ const hostedFor = async (context: OrpcContext, userId: string): Promise<HostedPl
         }),
         hostedArrivalBudget(prisma, config, userId, now),
     ]);
-    // Each machine's own month, read one at a time because each rung has its own ceiling.
+    // Each machine's own month and its own week of out-of-memory kills; both are the machine's, not the account's.
+    const weekAgo = new Date(now.getTime() - 7 * DAY_MS);
     const meters = await Promise.all(
-        machines.map(async (machine) => hostedBudgetOf(prisma, config, { sandboxId: machine.sandbox.id, tier: machine.tier, ownerId: userId }, now)),
+        machines.map(async (machine) =>
+            Promise.all([
+                hostedBudgetOf(prisma, config, { sandboxId: machine.sandbox.id, tier: machine.tier, ownerId: userId }, now),
+                hostedOomsSince(prisma, machine.sandbox.id, weekAgo),
+            ]),
+        ),
     );
     return {
         slots: slots.total,
         slotsByTier: Object.fromEntries([[FREE_TIER.id, slots.free], ...slots.paid]),
         machines: machines.map((machine, index) => {
-            const meter = meters[index] as (typeof meters)[number];
+            const [meter, oomsThisWeek] = meters[index] as (typeof meters)[number];
             return {
                 sandboxId: machine.sandbox.id,
                 name: machine.sandbox.name,
@@ -59,6 +66,7 @@ const hostedFor = async (context: OrpcContext, userId: string): Promise<HostedPl
                 shape: shapeOfRow(config, tierOfRow(machine.tier), machine),
                 usedMinutes: meter.usedMinutes,
                 allowanceMinutes: meter.metered ? meter.allowanceMinutes : null,
+                oomsThisWeek,
             };
         }),
         usage: {

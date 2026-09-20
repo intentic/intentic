@@ -4,7 +4,7 @@ import type { Logger } from "pino";
 import type { Config } from "../../config.js";
 import { DAY_MS } from "../../durations.js";
 import { tierOfRow } from "./hosted-shape.js";
-import { getMachine, isFlyGone, LIVE_STATES } from "./fly/fly.js";
+import { getMachineDetail, isFlyGone, LIVE_STATES } from "./fly/fly.js";
 
 // The hour meter: what a machine costs its month, and whether any of it is left to wake it with. A stretch opens at
 // wake (the platform's own stamp) and closes later by asking Fly, since a machine stops itself from inside. Counts
@@ -177,13 +177,15 @@ export const settleHostedStretch = async (
     prisma: PrismaClient,
     config: Config,
     logger: Logger,
-    machine: { id: string; sandboxId: string; ownerId: string; appName: string; machineId: string; wokeAt: Date | null },
+    machine: { id: string; sandboxId: string; ownerId: string; appName: string; machineId: string; wokeAt: Date | null; tier?: string; memoryMb?: number },
 ): Promise<void> => {
     // Falsy, not `=== null`: no column means no open stretch, and reading it as open would bill from the epoch.
     if (!machine.wokeAt) {
         return;
     }
-    const state = await getMachine(config.hosted.flyApiToken, machine.appName, machine.machineId).catch((error: unknown) => {
+    // The DETAIL rather than the bare state: the same round trip, and it also carries how the machine ended. A
+    // machine the kernel killed for memory is the one fact nothing else on the platform can see.
+    const state = await getMachineDetail(config.hosted.flyApiToken, machine.appName, machine.machineId).catch((error: unknown) => {
         // Gone means stopped at destruction, not unreachable; reading it as the latter left stretches open forever.
         if (isFlyGone(error)) {
             return `gone` as const;
@@ -195,11 +197,40 @@ export const settleHostedStretch = async (
     if (state === undefined || (state !== `gone` && LIVE_STATES.has(state.state))) {
         return;
     }
+    if (state !== `gone` && state.oomKilled) {
+        await recordHostedOom(prisma, logger, machine);
+    }
     // Fly's stamp of the last transition is when it stopped. A destroyed machine has no stamp left to read at
     // all, so it takes the honest ceiling closeHostedStretch falls back to: now.
     const minutes = await closeHostedStretch(prisma, machine, state === `gone` ? undefined : state.updatedAt);
     logger.info({ app: machine.appName, minutes }, `hosted meter: stretch settled`);
 };
+
+/* THE MACHINE WAS KILLED FOR MEMORY, as the provider reported it. Written once per stretch, since a machine ends a
+ * stretch once; the rung and memory are the ones it HAD, because a later resize is exactly what makes the old figure
+ * the interesting one. Never throws: a meter that can fall over on a bookkeeping row would leave the stretch open. */
+const recordHostedOom = async (
+    prisma: PrismaClient,
+    logger: Logger,
+    machine: { id: string; sandboxId: string; tier?: string; memoryMb?: number },
+): Promise<void> => {
+    const row = await prisma.hostedMachine
+        .findUnique({ where: { id: machine.id }, select: { tier: true, memoryMb: true } })
+        .catch(() => null);
+    const tier = machine.tier ?? row?.tier;
+    const memoryMb = machine.memoryMb ?? row?.memoryMb;
+    if (tier === undefined || memoryMb === undefined) {
+        return;
+    }
+    await prisma.hostedOom
+        .create({ data: { hostedMachineId: machine.id, sandboxId: machine.sandboxId, tier, memoryMb } })
+        .then(() => logger.warn({ sandboxId: machine.sandboxId, tier, memoryMb }, `hosted meter: the machine was killed for running out of memory`))
+        .catch((error: unknown) => logger.error({ err: error, sandboxId: machine.sandboxId }, `hosted meter: recording an OOM failed`));
+};
+
+/** How many times this sandbox's machine has been killed for memory since `since`; what the upgrade line states. */
+export const hostedOomsSince = async (prisma: PrismaClient, sandboxId: string, since: Date): Promise<number> =>
+    prisma.hostedOom.count({ where: { sandboxId, at: { gte: since } } });
 
 /* CLOSE AN OPEN STRETCH WITHOUT ASKING THE PROVIDER, for the paths that already know how the machine ended: the settle above (which just asked). */
 export const closeHostedStretch = async (
@@ -229,7 +260,7 @@ export const openHostedStretch = async (prisma: PrismaClient, machineRowId: stri
 export const settleHostedStretches = async (prisma: PrismaClient, config: Config, logger: Logger): Promise<void> => {
     const open = await prisma.hostedMachine.findMany({
         where: { wokeAt: { not: null } },
-        select: { id: true, sandboxId: true, appName: true, machineId: true, wokeAt: true, sandbox: { select: { ownerId: true } } },
+        select: { id: true, sandboxId: true, tier: true, memoryMb: true, appName: true, machineId: true, wokeAt: true, sandbox: { select: { ownerId: true } } },
     });
     for (const machine of open) {
         // oxlint-disable-next-line eslint/no-await-in-loop -- sequential, gentle on the Fly API

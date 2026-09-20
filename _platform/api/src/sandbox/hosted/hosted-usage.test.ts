@@ -33,6 +33,7 @@ const prismaWith = (over: Record<string, Record<string, ReturnType<typeof vi.fn>
         },
         // No open stretch unless a test says so: the live half of the meter reads the machine's own wake stamp.
         hostedMachine: { update: vi.fn().mockResolvedValue({}), findUnique: vi.fn().mockResolvedValue(null), findMany: vi.fn().mockResolvedValue([]) },
+        hostedOom: { create: vi.fn().mockResolvedValue({}), count: vi.fn().mockResolvedValue(0) },
         ...over,
     }) as unknown as PrismaClient;
 
@@ -200,7 +201,16 @@ describe(`the hosted hour meter`, () => {
     });
 
     describe(`closing a stretch`, () => {
-        const machine = (wokeAt: Date | null) => ({ id: `h1`, sandboxId: `s1`, ownerId: `u1`, appName: `a`, machineId: `m1`, wokeAt });
+        const machine = (wokeAt: Date | null) => ({
+            id: `h1`,
+            sandboxId: `s1`,
+            ownerId: `u1`,
+            tier: FREE_TIER.id,
+            memoryMb: FREE_TIER.memoryMb,
+            appName: `a`,
+            machineId: `m1`,
+            wokeAt,
+        });
 
         it(`bills a stopped machine from its wake to Fly's own stop stamp, then closes the stretch`, async () => {
             stubMachine(`stopped`, `2026-08-13T10:30:00.000Z`);
@@ -254,6 +264,59 @@ describe(`the hosted hour meter`, () => {
             const prisma = prismaWith({});
             await settleHostedStretch(prisma, config(), logger, machine(new Date()));
             expect(prisma.hostedUsage.upsert).not.toHaveBeenCalled();
+            expect(prisma.hostedMachine.update).toHaveBeenCalledWith({ where: { id: `h1` }, data: { wokeAt: null } });
+        });
+    });
+
+    /* THE SETTLE IS WHERE AN OUT-OF-MEMORY KILL IS SEEN, because it is already asking the provider how the machine
+     * ended. Nothing else on the platform can see inside a machine, and this costs no extra round trip. */
+    describe(`a machine the kernel killed`, () => {
+        const oomKilled = (state: string) => {
+            vi.stubGlobal(`fetch`, () =>
+                Promise.resolve(
+                    new Response(
+                        JSON.stringify({
+                            id: `m1`,
+                            state,
+                            updated_at: `2026-08-13T10:30:00.000Z`,
+                            events: [{ timestamp: 2, request: { exit_event: { exit_code: 137, oom_killed: true } } }],
+                        }),
+                    ),
+                ),
+            );
+        };
+
+        const machine = { id: `h1`, sandboxId: `s1`, ownerId: `u1`, tier: FREE_TIER.id, memoryMb: FREE_TIER.memoryMb, appName: `a`, machineId: `m1` };
+
+        it(`writes the kill with the rung and memory the machine HAD, and still settles the stretch`, async () => {
+            oomKilled(`stopped`);
+            const create = vi.fn().mockResolvedValue({});
+            const prisma = prismaWith({ hostedOom: { create }, hostedMachine: { update: vi.fn(), findUnique: vi.fn().mockResolvedValue(null) } });
+            await settleHostedStretch(prisma, config(), logger, { ...machine, wokeAt: new Date(`2026-08-13T10:00:00.000Z`) });
+            expect(create).toHaveBeenCalledWith({
+                data: { hostedMachineId: `h1`, sandboxId: `s1`, tier: FREE_TIER.id, memoryMb: FREE_TIER.memoryMb },
+            });
+            // Thirty minutes from the wake to Fly's stop stamp, billed as usual: the kill is a note beside it.
+            expect(prisma.hostedUsage.upsert).toHaveBeenCalledWith(
+                expect.objectContaining({ create: { sandboxId: `s1`, ownerId: `u1`, month: `2026-08`, minutes: 30 } }),
+            );
+        });
+
+        // A machine still running has not ended, so its last exit event is an older life's and says nothing about now.
+        it(`writes nothing for a machine that is still up`, async () => {
+            oomKilled(`started`);
+            const create = vi.fn();
+            const prisma = prismaWith({ hostedOom: { create } });
+            await settleHostedStretch(prisma, config(), logger, { ...machine, wokeAt: new Date() });
+            expect(create).not.toHaveBeenCalled();
+        });
+
+        // A bookkeeping row must never be the thing that leaves a stretch open and a machine billing forever.
+        it(`settles the stretch even when the kill cannot be written down`, async () => {
+            oomKilled(`stopped`);
+            const create = vi.fn().mockRejectedValue(new Error(`write failed`));
+            const prisma = prismaWith({ hostedOom: { create }, hostedMachine: { update: vi.fn(), findUnique: vi.fn().mockResolvedValue(null) } });
+            await settleHostedStretch(prisma, config(), logger, { ...machine, wokeAt: new Date(`2026-08-13T10:00:00.000Z`) });
             expect(prisma.hostedMachine.update).toHaveBeenCalledWith({ where: { id: `h1` }, data: { wokeAt: null } });
         });
     });

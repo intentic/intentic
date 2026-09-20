@@ -5,7 +5,7 @@ import { JOB_HOSTED_METER, JOB_HOSTED_MIGRATE, runExclusive } from "../../jobs-l
 import { getMachine, isFlyGone, LIVE_STATES, stopMachine } from "./fly/fly.js";
 import { hostedEnabled } from "./hosted.js";
 import { hostedBudgetOf, settleHostedStretches } from "./hosted-usage.js";
-import { sweepHostedMigrations } from "./hosted-migrate.js";
+import { sweepHostedMigrations } from "./migrate/hosted-migrate.js";
 
 // Hourly: settles the stretch of every machine that stopped since last look, then stops a metered owner's machines once
 // their month is spent past `hosted.overBudgetGraceMinutes`, and a suspended owner's whatever the month says. Backstops

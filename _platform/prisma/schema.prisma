@@ -259,6 +259,7 @@ model HostedMachine {
      * reason at most one build may (buildingId above), and the row is the lock. */
     migratingId String?
     migrations  HostedMigration[]
+    ooms        HostedOom[]
     createdAt DateTime @default(now())
     updatedAt DateTime @updatedAt
 
@@ -501,6 +502,33 @@ model HostedStrike {
     @@index([userId, createdAt])
     @@index([createdAt])
     @@map("hosted_strike")
+}
+
+/* ONE TIME A HOSTED MACHINE WAS KILLED FOR RUNNING OUT OF MEMORY, as the provider reported it.
+ *
+ * Fly stamps `oom_killed` on the exit event of a machine the kernel took down, and the hour meter already asks Fly
+ * how every stopped machine ended — so this costs no extra round trip, only a row. It is two things at once: the
+ * reliability signal for a rung sized too small (a machine that OOMs is one the product looks broken on), and the
+ * only honest thing to put in front of somebody before offering them a bigger one. "This machine ran out of memory
+ * twice this week" is a fact; "you might want more RAM" is a pitch.
+ *
+ * `memoryMb` is what the machine had when it died, recorded here rather than read back off the row, because a
+ * later resize is exactly the thing that makes the old figure the interesting one. Cascades with the machine, and
+ * retention.ts sweeps it on the same window as the strikes. */
+model HostedOom {
+    id              String        @id @default(cuid())
+    hostedMachineId String
+    machine         HostedMachine @relation(fields: [hostedMachineId], references: [id], onDelete: Cascade)
+    sandboxId       String
+    // The rung and memory the machine had at the moment it was killed.
+    tier            String
+    memoryMb        Int
+    at              DateTime      @default(now())
+
+    // The one question asked of this table: how often lately, for this sandbox.
+    @@index([sandboxId, at])
+    @@index([at])
+    @@map("hosted_oom")
 }
 
 // One sign-in, carried from the user's REAL BROWSER into the desktop app's webview (_editor/desktop-app).

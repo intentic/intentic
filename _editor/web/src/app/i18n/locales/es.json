@@ -3418,6 +3418,7 @@
             "planEnds": "Tu plan termina {periodEnd}",
             "planNeedsWorkingCard": "Tu plan necesita una tarjeta que funcione",
             "platformDoesntSellHosted": "Esta plataforma no vende un plan alojado.",
+            "ranOutOfMemory": "Ran out of memory once this week on {memory} GB | Ran out of memory {count} times this week on {memory} GB",
             "readingPlan": "Leyendo tu plan…",
             "removeHostedSandboxFirst": "Elimina antes un sandbox alojado",
             "removeSlot": "Quitar una plaza",

@@ -3418,6 +3418,7 @@
             "planEnds": "Ihr Tarif endet {periodEnd}",
             "planNeedsWorkingCard": "Ihr Tarif braucht eine funktionierende Karte",
             "platformDoesntSellHosted": "Diese Plattform verkauft keinen gehosteten Tarif.",
+            "ranOutOfMemory": "Ran out of memory once this week on {memory} GB | Ran out of memory {count} times this week on {memory} GB",
             "readingPlan": "Ihr Tarif wird gelesen…",
             "removeHostedSandboxFirst": "Entfernen Sie zuerst eine gehostete Sandbox",
             "removeSlot": "Einen Platz entfernen",
