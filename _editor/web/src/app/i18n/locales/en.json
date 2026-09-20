@@ -1270,9 +1270,6 @@
             "refusalUploading": "Waiting for the attachment to finish uploading…",
             "viewerPlaceholder": "You’re viewing: ask the owner for a collaborator role to drive agents"
         },
-        "composerEffort": {
-            "auto": "Auto"
-        },
         "composerModelPill": {
             "auto": "Auto",
             "model": "Model: {modelLabelText}"

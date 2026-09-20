@@ -1,12 +1,9 @@
 <!-- Binds <EffortMeter> to a Conversation: which effort rungs the current model offers, which one is set, and where a click writes. -->
 <script setup lang="ts">
 import { computed } from "vue";
-import { useT } from "@intentic/ui/i18n";
 import type { Conversation } from "../session/conversation";
 import { effortsFor } from "../models/run-settings/effortScale";
 import EffortMeter from "./EffortMeter.vue";
-
-const t = useT();
 
 const {
     conversation,
@@ -22,20 +19,19 @@ const {
 
 const { provider, model, thinking, effort, capabilities, auto } = conversation;
 
-// Nothing to offer when the runtime takes no effort at all: an ACP agent owns its own reasoning settings, and
-// OpenCode drops the field entirely.
-const efforts = computed(() => (capabilities.value.effort ? effortsFor(provider.value, model.value, thinking.value) : []));
-// While Auto is armed the ladder under it belongs to the fallback model and the reading answers for effort itself,
-// so no rung is lit and none can be pressed: the same rule the picker's footer keeps (ChatModelPicker.vue).
-const shown = computed(() => (auto.value ? `` : effort.value));
+// Nothing to offer when the runtime takes no effort at all (an ACP agent owns its own reasoning settings, and
+// OpenCode drops the field entirely), and nothing while Auto is armed: that ladder is the FALLBACK model's, and the
+// reading answers for effort itself — the rule the picker's footer already keeps (ChatModelPicker.vue).
+const efforts = computed(() =>
+    capabilities.value.effort && !auto.value ? effortsFor(provider.value, model.value, thinking.value) : [],
+);
 </script>
 
 <template>
     <EffortMeter
         :efforts="efforts"
-        :effort="shown"
-        :disabled="disabled || auto"
-        :empty-label="auto ? t(`chat.composerEffort.auto`) : ``"
+        :effort="effort"
+        :disabled="disabled"
         :label-class="labelClass"
         @pick="(level: string) => conversation.setEffort(level)"
     />

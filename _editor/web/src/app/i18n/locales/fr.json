@@ -1245,9 +1245,6 @@
             "retryingIn": "nouvelle tentative dans {seconds} s",
             "waitingOnSubagents": "En attente de {count} sous-agent | En attente de {count} sous-agents"
         },
-        "composerEffort": {
-            "auto": "Auto"
-        },
         "composerIntent": {
             "hintEditMany": "Remplacer ce message et les {count} en dessous",
             "hintEditOne": "Remplacer ce message",

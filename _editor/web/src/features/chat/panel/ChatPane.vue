@@ -891,7 +891,7 @@ const quickSources = computed<QuickPickSources>(() => {
                   isReady: providerReady,
               },
         effort:
-            steered || !conversation.capabilities.value.effort
+            steered || conversation.auto.value || !conversation.capabilities.value.effort
                 ? undefined
                 : { options: effortsFor(provider.value, model.value, conversation.thinking.value), picked: conversation.effort.value },
     };

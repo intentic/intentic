@@ -6,7 +6,7 @@ import { t } from "@intentic/ui/i18n";
 
 // One rule for the composer row vs overflow: a control at its default is a named row in the overflow
 // menu; set to anything else, it becomes a chip on the row. A pure, testable table; placement, model
-// and effort aren't here since the row always shows them unconditionally.
+// and effort aren't here since the row places them itself (effort draws nothing at all under Auto).
 
 export type ComposerControl = `mode` | `persona` | `runThrough` | `voice`;
 

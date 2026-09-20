@@ -1245,9 +1245,6 @@
             "retryingIn": "ponawia za {seconds} s",
             "waitingOnSubagents": "Czeka na {count} podagenta | Czeka na {count} podagenty | Czeka na {count} podagentów"
         },
-        "composerEffort": {
-            "auto": "Auto"
-        },
         "composerIntent": {
             "hintEditMany": "Zastąp tę wiadomość i {count} poniżej | Zastąp tę wiadomość i {count} poniżej | Zastąp tę wiadomość i {count} poniżej",
             "hintEditOne": "Zastąp tę wiadomość",
