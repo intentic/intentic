@@ -948,7 +948,7 @@
             "wroteInAgentsVoice": "You wrote this in the agent's voice: the agent reads it as its own words"
         },
         "chatModelPicker": {
-            "autoArmed": "Nothing is chosen yet. When you send, one model reads your first message and picks the model, effort and account this chat runs on, from what is connected and still has allowance. Every turn after that stays on it, and you can change it whenever you like.",
+            "autoArmed": "Your first message picks what this chat runs on; change it anytime.",
             "autoDescription": "Let a model read your first message and pick what this chat runs on",
             "autoLabel": "Auto",
             "chooseWhichModelReads": "Choose which model does the reading",

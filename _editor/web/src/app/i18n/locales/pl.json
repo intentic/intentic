@@ -948,7 +948,7 @@
             "wroteInAgentsVoice": "Napisałeś to głosem agenta: agent czyta to jako własne słowa"
         },
         "chatModelPicker": {
-            "autoArmed": "A model reads your first message and picks what this chat runs on. Every turn after that stays on it, and you can change it whenever you like.",
+            "autoArmed": "Your first message picks what this chat runs on; change it anytime.",
             "autoDescription": "Let a model choose from what's connected and still has allowance",
             "autoLabel": "Auto",
             "chooseWhichModelReads": "Choose which model does the reading",
