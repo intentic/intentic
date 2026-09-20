@@ -114,6 +114,7 @@ const loadProviderModelsOnce = async (target: AgentProvider): Promise<void> => {
             ...(entry.efforts !== undefined ? { efforts: entry.efforts } : {}),
             ...(entry.description !== undefined ? { description: entry.description } : {}),
             ...(entry.badges !== undefined ? { badges: entry.badges } : {}),
+            ...(entry.availableAt !== undefined ? { availableAt: entry.availableAt } : {}),
         })),
     };
     providerDefaultModel.value = { ...providerDefaultModel.value, [target]: body.default };

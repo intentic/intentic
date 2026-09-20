@@ -1328,6 +1328,7 @@
             "accountNeedsToReconnected": "To konto trzeba podłączyć ponownie",
             "allAiAccounts": "Wszystkie konta AI",
             "allProviders": "Wszyscy dostawcy",
+            "backAt": "Wraca o {at}",
             "couldntLoadModels": "Nie udało się wczytać modeli.",
             "filterByProvider": "Filtruj po dostawcy",
             "loadingModels": "Wczytywanie modeli…",

@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { browserOwnsClick, SearchBar, useDevice, useListNavigation } from "@intentic/ui";
-import { computed, nextTick, onMounted, ref } from "vue";
+import { computed, nextTick, onMounted, onUnmounted, ref } from "vue";
 import { RouterLink } from "vue-router";
 import { type AgentProvider, capabilitiesOf, PROVIDERS } from "@intentic/sandbox-contract";
 import { accessBadge, accessStateFor, providerReady, trialBadge } from "../session/access";
+import { formatReset } from "../session/usageStatus";
 import { badgeMeta } from "./catalog";
 import { acpProviders, type CatalogLoadState, endpointProviders, providerModelsState } from "../accounts/providerCatalog";
 import {
@@ -230,8 +231,27 @@ const railTo = (target: string | undefined): void => {
     }
 };
 
-const rowAriaLabel = (entry: PickerEntry): string =>
-    `${entry.label}${isSelected(entry) ? `, current model` : ``}${isLocked(entry) ? `, ${accessBadge(entry.provider) ?? `not connected`}` : ``}`;
+// Ticks while the picker is open, so a row stops reading "back at 15:04" the moment it is 15:04.
+const now = ref(Date.now());
+onMounted(() => {
+    const timer = setInterval(() => (now.value = Date.now()), 30_000);
+    onUnmounted(() => clearInterval(timer));
+});
+
+// Every credential that serves this model is refused until the named instant. Dimmed and stamped, never hidden and
+// never disabled: the model comes back on its own, the wait is the whole answer, and a reader may still queue a turn on
+// it. Distinct from `isLocked`, which is a provider with no credential at all.
+const isCooling = (entry: PickerEntry): boolean => entry.availableAt !== undefined && entry.availableAt * 1000 > now.value;
+const coolingBadge = (entry: PickerEntry): string | undefined =>
+    entry.availableAt === undefined || !isCooling(entry) ? undefined : t(`chat.modelPicker.backAt`, { at: formatReset(entry.availableAt, now.value) });
+
+const rowAriaLabel = (entry: PickerEntry): string => {
+    const cooling = coolingBadge(entry);
+    return (
+        `${entry.label}${isSelected(entry) ? `, current model` : ``}` +
+        `${isLocked(entry) ? `, ${accessBadge(entry.provider) ?? `not connected`}` : ``}${cooling === undefined ? `` : `, ${cooling}`}`
+    );
+};
 
 // A provider whose connected account can no longer be refreshed; badged so a broken credential isn't mistaken for a
 // healthy one.
@@ -424,7 +444,10 @@ onMounted(() => {
                             :aria-selected="row.index === activeIndex"
                             :aria-label="rowAriaLabel(row.entry)"
                             class="ui-row-select ui-off flex w-full items-center gap-2 px-3 py-1.5 text-left max-md:min-h-11"
-                            :class="{ 'ui-row-select-on': row.index === activeIndex, 'opacity-60': isLocked(row.entry) }"
+                            :class="{
+                                'ui-row-select-on': row.index === activeIndex,
+                                'opacity-60': isLocked(row.entry) || isCooling(row.entry),
+                            }"
                             :disabled="isDisabled(row.entry)"
                             @click="pick(row.entry)"
                             @mouseenter="activeIndex = row.index"
@@ -441,6 +464,10 @@ onMounted(() => {
                                 {{ row.entry.label }}
                             </span>
                             <span class="min-w-0 flex-1 truncate text-2xs text-subtle">{{ row.entry.description }}</span>
+                            <!-- Every credential for this model is refused until then; the instant, not a dot, since the wait is the decision. -->
+                            <span v-if="isCooling(row.entry)" class="shrink-0 whitespace-nowrap text-2xs text-warning">
+                                {{ coolingBadge(row.entry) }}
+                            </span>
                             <Icon
                                 v-for="badge in (row.entry.badges ?? []).slice(0, 3)"
                                 :key="badge"

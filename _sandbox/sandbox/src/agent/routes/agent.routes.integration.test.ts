@@ -151,6 +151,55 @@ test("a spent allowance on a native runtime carries the reset the translator alr
     );
 });
 
+// The bug behind a picker full of green rings over a model that refuses on sight: the translator picks the credential
+// itself and benches each one per MODEL, so a routed refusal is a fact about the model that no account ring can carry.
+test("a routed spent allowance benches the model it refused, to the reset the frame resolved", async () => {
+    const reopensAt = Math.floor(Date.now() / 1000) + 7_200;
+    const filed: { provider: string; model: string; until: number }[] = [];
+    const client = clientFor(
+        createApp(
+            services({
+                config: withTranslator,
+                cliProxy: { ...codexConnectedProxy, turnLimit: async () => ({ spent: 1, withHeadroom: 0, reopensAt }) },
+                modelCooldowns: {
+                    cooling: async () => new Map(),
+                    record: async (provider, model, cooldown) => void filed.push({ provider, model, until: cooldown.until }),
+                },
+                async *codexAgent() {
+                    yield { kind: "error", code: "rate_limit", message: "429 You've hit your usage limit." };
+                    yield { kind: "done" };
+                },
+            }),
+        ),
+    );
+
+    await runAgentTurn(client, { prompt: "carry on", conversationId: "conv-model-cooldown", agent: "codex", model: "gpt-5.6-sol" });
+
+    // Epoch seconds on the frame, epoch ms in the store, since this one is read against Date.now().
+    expect(filed).toEqual([{ provider: "codex", model: "gpt-5.6-sol", until: reopensAt * 1000 }]);
+});
+
+// A native provider's accounts are picked by the daemon, so one account's spent allowance says nothing about the
+// sibling's. Benching the model there would take a runnable rung off every account at once.
+test("a spent allowance on a natively-picked provider benches no model", async () => {
+    const filed: string[] = [];
+    const client = clientFor(
+        createApp(
+            services({
+                modelCooldowns: { cooling: async () => new Map(), record: async (_p, model) => void filed.push(model) },
+                async *agent() {
+                    yield { kind: "error", code: "rate_limit", message: "Claude usage limit reached." };
+                    yield { kind: "done" };
+                },
+            }),
+        ),
+    );
+
+    await runAgentTurn(client, { prompt: "carry on", conversationId: "conv-native-no-cooldown", agent: "claude", model: "opus" });
+
+    expect(filed).toEqual([]);
+});
+
 test("a spent allowance goes out bare when the pool reading names no reset", async () => {
     const client = clientFor(
         createApp(

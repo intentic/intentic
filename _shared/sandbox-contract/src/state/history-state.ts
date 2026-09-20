@@ -32,6 +32,9 @@ export const HISTORY_STATE_FILES: readonly StateFile[] = [
     { path: "provider-refusals.json", portability: "carry" },
     // Models refused to this sandbox's credentials; expires daily, same subscriptions apply elsewhere.
     { path: "model-refusals.json", portability: "carry" },
+    // When a model every credential is benched on reopens. Carried for the same reason as the refusals around it: the
+    // wait belongs to the subscription, not to the machine that hit it, and entries past their instant are inert.
+    { path: "model-cooldowns.json", portability: "carry" },
     // What each account has run out of, for a plan publishing no allowance to poll — the refusal is the reading.
     // Carried like the refusals above: an allowance belongs to the account, not to the machine that spent it.
     { path: "observed-limits.json", portability: "carry" },

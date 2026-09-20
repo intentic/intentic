@@ -13,7 +13,7 @@ import {
     windowPeriod,
     type WindowPeriod,
 } from "@intentic/sandbox-contract";
-import { formatWeekdayTime, timeAgo } from "@intentic/ui/format";
+import { formatWhen, timeAgo } from "@intentic/ui/format";
 import { lookupUsage, providerAccounts, providerRefusals, translatorAccounts } from "../accounts/providerAccounts";
 
 // Re-exported so callers get the contract's binding-pool rule from this module too.
@@ -230,8 +230,9 @@ export const planHeadroom = (usage: AccountUsage | undefined, model?: ModelRef):
     return { percent, tone: usageTone(percent), stale: isStale(usage), measuredAt: usage.measuredAt, pools, binding };
 };
 
-// Epoch-seconds reset instant as a short local weekday + time (e.g. "Mon 15:20"); no ticking relative clock.
-export const formatReset = (epochSeconds: number): string => formatWeekdayTime(epochSeconds * 1000);
+// Epoch-seconds reset instant as a short local label: a weekday + time inside the coming week ("Mon 15:20"), the date
+// beyond it ("Oct 20, 11:59"), since a monthly pool's weekday reads as two days away. No ticking relative clock.
+export const formatReset = (epochSeconds: number, now: number = Date.now()): string => formatWhen(epochSeconds * 1000, now);
 
 // Relative wait for an outage retry (seconds to minutes out), where a wall-clock time forces arithmetic a
 // reader shouldn't need. Deliberately coarse ("about"), not a live countdown — polling has its own jitter.

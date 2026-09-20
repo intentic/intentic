@@ -226,6 +226,27 @@ const recordModelRefusal = (
         .catch((error: unknown) => services.logger.warn({ err: error }, "model refusal: write failed"));
 };
 
+// Files when a model comes back, for the refusal no account ring can show. ROUTED PROVIDERS ONLY, and that is the whole
+// of its soundness: there the translator picks the credential itself and benches each one per model, so a refusal is a
+// fact about the model — which is how every account can read 2% while the model they all refuse stays on the picker
+// looking runnable. On a native provider the daemon picks the account, and one account's spent allowance says nothing
+// about the sibling's (that is observedLimits' job, per account).
+// Needs the instant: a refusal with no published reset says nothing a wait can act on.
+const recordModelCooldown = (
+    services: Pick<Services, "modelCooldowns" | "logger">,
+    provider: AgentProvider,
+    model: string | undefined,
+    resetsAt: number | undefined,
+    message: string,
+): void => {
+    if (!KeyedProviderSchema.safeParse(provider).success || model === undefined || model === "" || resetsAt === undefined) {
+        return;
+    }
+    void services.modelCooldowns
+        .record(provider, model, { until: resetsAt * 1000, message })
+        .catch((error: unknown) => services.logger.warn({ err: error }, "model cooldown: write failed"));
+};
+
 // Files a spent allowance as a READING, for a plan that publishes none to poll (usage/observed-limits.ts). Scoped to
 // the one account that was serving and the one model it was asked for: without that, one account's spent model reads as
 // the whole fleet's, which is what leaves a separately metered model (Cursor's Composer) unused beside it.
@@ -1320,6 +1341,9 @@ async function* runTurn(
                 if (rateLimited) {
                     limitHit = input.conversationId !== undefined;
                     limitReopens = resetsAt;
+                    // Filed here, not up with the other refusal writes: this needs the RESOLVED instant, which is the
+                    // frame's own reset where the translator published one and the account's pool where it did not.
+                    recordModelCooldown(services, provider, request.model, resetsAt, event.message);
                     // The way on, decided once here like `ran`, recorded on the held entry.
                     limitWay = await limitWayOf(services, {
                         turn: input,

@@ -24,6 +24,9 @@ export interface PickerEntry extends TurnPick {
     readonly label: string;
     readonly description?: string;
     readonly badges?: readonly ModelBadge[];
+    // Epoch seconds; set only while every credential that serves this model is refused. Still pickable: the wait is
+    // what a reader needs, and a row that disappeared for an hour would teach them to distrust the list.
+    readonly availableAt?: number;
 }
 
 // The picker's own row for "let a model choose", in the list's grammar so it can be searched and arrowed to like any
@@ -43,6 +46,7 @@ const entryFor = (provider: AgentProvider, option: ModelOption): PickerEntry => 
     label: option.label,
     ...(option.description !== undefined ? { description: option.description } : {}),
     ...(option.badges !== undefined ? { badges: option.badges } : {}),
+    ...(option.availableAt !== undefined ? { availableAt: option.availableAt } : {}),
 });
 
 // Every pickable model across providers, in PROVIDERS order, then endpoint providers' full catalogs, then one row

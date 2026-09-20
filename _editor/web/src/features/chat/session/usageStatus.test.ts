@@ -192,6 +192,26 @@ describe(`usageDetail`, () => {
     });
 });
 
+// A weekday only names an instant while there is one of it ahead. A monthly pool's reset printed as "Tue 11:59" is the
+// bug this closes: it reads as two days out when it is a month.
+describe(`formatReset`, () => {
+    const now = Date.UTC(2026, 8, 20, 12, 0, 0);
+
+    it(`names the weekday for a reset inside the coming week`, () => {
+        const reset = Math.round((now + 2 * 86_400_000) / 1000);
+        const printed = formatReset(reset, now);
+        expect(printed).toMatch(/^[A-Za-z]{3}\s/u);
+        expect(printed).not.toMatch(/\d+,/u);
+    });
+
+    it(`names the date once the reset is past the coming week, so a monthly pool stops reading as two days away`, () => {
+        const reset = Math.round((now + 30 * 86_400_000) / 1000);
+        const printed = formatReset(reset, now);
+        expect(printed).toContain(`Oct`);
+        expect(printed).toContain(`20`);
+    });
+});
+
 // Outage retry's wait: seconds to minutes out, where a wall clock would misreport. Deliberately coarse —
 // the daemon's own schedule has jitter.
 describe(`formatWait`, () => {

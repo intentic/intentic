@@ -1328,6 +1328,7 @@
             "accountNeedsToReconnected": "Dieses Konto muss neu verbunden werden",
             "allAiAccounts": "Alle KI-Konten",
             "allProviders": "Alle Anbieter",
+            "backAt": "Wieder um {at}",
             "couldntLoadModels": "Die Modelle ließen sich nicht laden.",
             "filterByProvider": "Nach Anbieter filtern",
             "loadingModels": "Modelle werden geladen…",

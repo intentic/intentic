@@ -294,6 +294,8 @@ export const services = (overrides: ServiceOverrides = {}): Services => {
         },
         // Nothing refused yet; both writes sit on the turn path, so any turn-running test touches this store.
         providerRefusals: { read: async () => ({}), record: async () => {}, clear: async () => {}, onChange: () => () => {} },
+        // Nothing cooling; the write sits on the routed rate-limit path, so any refused routed turn touches this store.
+        modelCooldowns: { cooling: async () => new Map(), record: async () => {} },
         // Nothing connected in the translator by default; the Codex subscription suite overrides this.
         cliProxy: unstubbed("cliProxy", {
             accounts: async () => ({ codex: [], grok: [], kimi: [], gemini: [] }),

@@ -7,11 +7,13 @@ export {
     formatDate,
     formatDateTime,
     formatDayMonth,
+    formatDayMonthTime,
     formatDuration,
     formatTime,
     formatTimestamp,
     formatTokens,
     formatWeekdayTime,
+    formatWhen,
     freshness,
     timeAgo,
 } from "@intentic/ui/format";

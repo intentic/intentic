@@ -161,11 +161,13 @@ export {
     formatDate,
     formatDateTime,
     formatDayMonth,
+    formatDayMonthTime,
     formatDuration,
     formatTime,
     formatTimestamp,
     formatTokens,
     formatWeekdayTime,
+    formatWhen,
     freshness,
     timeAgo,
 } from "./format.js";

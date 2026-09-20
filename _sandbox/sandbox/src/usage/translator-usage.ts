@@ -128,6 +128,49 @@ const appendCodexLimit = (
     }
 };
 
+// Models the plan will not serve right now, each as its own pool. Without these an account reads only its plan pool,
+// which is gated `all` and says nothing about entitlement: a ChatGPT plan sitting at 2% of a monthly allowance still
+// refuses a model its seat has no credits for, and a ring drawn off that 2% offers headroom the turn cannot spend.
+// `entitlement:` rather than `model:`, since this is not a metered slice of the plan and must not be labelled as one.
+const appendCodexModelUsage = (windows: UsageWindow[], value: unknown): void => {
+    const models = asRecord(value);
+    if (models === undefined) {
+        return;
+    }
+    for (const [model, entry] of Object.entries(models)) {
+        const reading = asRecord(entry);
+        // Only an explicit `false`: a model the payload says nothing about is one this reader knows nothing about.
+        if (reading === undefined || (reading[`available`] !== false && reading[`isAvailable`] !== false)) {
+            continue;
+        }
+        const resetsAt = resetFromIso(reading[`available_at`] ?? reading[`availableAt`]);
+        windows.push({
+            kind: `entitlement:${model}`,
+            label: model,
+            // The vocabulary every surface already reads as "this cannot run"; the plan publishes no figure of its own.
+            utilization: 100,
+            ...(resetsAt === undefined ? {} : { resetsAt }),
+            gates: { models: [model] },
+        });
+    }
+};
+
+// The plan's named extra allowances (a metered feature, a pilot). Shown under the plan's own name for each, gated
+// `none`: they are visible to the account and never bind a turn.
+const appendCodexAdditional = (windows: UsageWindow[], value: unknown, measuredAt: number): void => {
+    if (!Array.isArray(value)) {
+        return;
+    }
+    for (const [index, item] of value.entries()) {
+        const entry = asRecord(item);
+        if (entry === undefined) {
+            continue;
+        }
+        const name = asString(entry[`limit_name`] ?? entry[`limitName`] ?? entry[`metered_feature`] ?? entry[`meteredFeature`]) ?? `Additional limit`;
+        appendCodexLimit(windows, entry[`rate_limit`] ?? entry[`rateLimit`], measuredAt, name, `additional-${index + 1}`, "none");
+    }
+};
+
 export const codexUsageFromPayload = (payload: unknown, measuredAt: number = Date.now()): AccountUsage | undefined => {
     const body = asRecord(payload);
     if (body === undefined) {
@@ -135,20 +178,9 @@ export const codexUsageFromPayload = (payload: unknown, measuredAt: number = Dat
     }
     const windows: UsageWindow[] = [];
     appendCodexLimit(windows, body[`rate_limit`] ?? body[`rateLimit`], measuredAt, undefined, "codex", "all");
+    appendCodexModelUsage(windows, body[`model_usage`] ?? body[`modelUsage`]);
     appendCodexLimit(windows, body[`code_review_rate_limit`] ?? body[`codeReviewRateLimit`], measuredAt, "Code review", "code-review", "none");
-
-    const additional = body[`additional_rate_limits`] ?? body[`additionalRateLimits`];
-    if (Array.isArray(additional)) {
-        for (const [index, item] of additional.entries()) {
-            const entry = asRecord(item);
-            if (entry === undefined) {
-                continue;
-            }
-            const name =
-                asString(entry[`limit_name`] ?? entry[`limitName`] ?? entry[`metered_feature`] ?? entry[`meteredFeature`]) ?? `Additional limit`;
-            appendCodexLimit(windows, entry[`rate_limit`] ?? entry[`rateLimit`], measuredAt, name, `additional-${index + 1}`, "none");
-        }
-    }
+    appendCodexAdditional(windows, body[`additional_rate_limits`] ?? body[`additionalRateLimits`], measuredAt);
     return windows.length === 0 ? undefined : { windows, measuredAt };
 };
 

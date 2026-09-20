@@ -50,21 +50,32 @@ export const providerCatalogsOf = (services: () => Services): Record<NativeProvi
 
 // Catalog minus models this sandbox's credentials can't run; a refusal (agent.routes.ts) removes a row until it's no
 // longer refused. Never empties the list or leaves the default on a refused row.
+// A cooling model is marked, not removed: it comes back on its own, and a row that vanishes for an hour teaches a
+// reader to distrust the list. Only a model the plan does not cover at all is dropped.
 export const servedModels = async (
-    services: Pick<Services, "modelRefusals">,
+    services: Pick<Services, "modelRefusals" | "modelCooldowns">,
     provider: NativeProvider,
     catalog: Promise<{ models: Model[]; default: string }>,
 ): Promise<{ models: Model[]; default: string }> => {
-    const [served, refused] = await Promise.all([catalog, services.modelRefusals.refused(provider)]);
+    const [served, refused, cooling] = await Promise.all([
+        catalog,
+        services.modelRefusals.refused(provider),
+        services.modelCooldowns.cooling(provider),
+    ]);
+    const marked = cooling.size === 0 ? served.models : served.models.map((model) => withCooldown(model, cooling.get(model.id)));
     if (refused.size === 0) {
-        return served;
+        return { ...served, models: marked };
     }
-    const models = served.models.filter((model) => !refused.has(model.id));
+    const models = marked.filter((model) => !refused.has(model.id));
     if (models.length === 0) {
-        return served;
+        return { ...served, models: marked };
     }
     return { models, default: refused.has(served.default) ? models[0]!.id : served.default };
 };
+
+// Epoch ms on the store, epoch seconds on the wire, like every other instant a client draws.
+const withCooldown = (model: Model, cooldown: { readonly until: number } | undefined): Model =>
+    cooldown === undefined ? model : { ...model, availableAt: Math.ceil(cooldown.until / 1000) };
 
 // Report readiness for every native provider guarded by initialization.
 export const providerReadiness = async (services: Services): Promise<Record<NativeProvider, boolean>> => {

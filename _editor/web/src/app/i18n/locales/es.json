@@ -1328,6 +1328,7 @@
             "accountNeedsToReconnected": "Esta cuenta necesita volver a conectarse",
             "allAiAccounts": "Todas las cuentas de IA",
             "allProviders": "Todos los proveedores",
+            "backAt": "Vuelve a las {at}",
             "couldntLoadModels": "No se pudieron cargar los modelos.",
             "filterByProvider": "Filtrar por proveedor",
             "loadingModels": "Cargando modelos…",

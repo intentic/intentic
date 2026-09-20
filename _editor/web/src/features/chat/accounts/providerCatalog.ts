@@ -26,6 +26,9 @@ export interface ModelOption extends CatalogOption {
     readonly efforts?: readonly string[];
     readonly description?: string;
     readonly badges?: readonly ModelBadge[];
+    // Epoch seconds: every credential that serves this model is refused until then. A fact about the model, which is
+    // why no account ring can show it — a routed provider picks the credential itself.
+    readonly availableAt?: number;
 }
 
 // Seeds one slot per native provider; a missing key would silently read as undefined since

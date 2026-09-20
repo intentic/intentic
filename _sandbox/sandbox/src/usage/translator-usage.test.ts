@@ -58,6 +58,63 @@ test("reads a fully spent ChatGPT plan from its single live window", () => {
     ).toEqual({ measuredAt, windows: [{ kind: "seven_day", utilization: 100, resetsAt: 1_786_019_642, gates: "all" }] });
 });
 
+// The whole reason a 2% ring sat over a refused turn: a plan pool is gated `all` and says nothing about entitlement.
+// ChatGPT publishes the missing fact as `model_usage`, and each unavailable model has to become a pool of its own,
+// scoped to that model, or the account's plan pool answers for it.
+test("files a model the plan will not serve as its own spent pool, gating that model alone", () => {
+    const measuredAt = 1_800_000_000_000;
+    const usage = codexUsageFromPayload(
+        {
+            rate_limit: {
+                allowed: false,
+                limit_reached: true,
+                primary_window: { used_percent: 100, limit_window_seconds: 18_000, reset_at: 1_789_916_642 },
+                secondary_window: { used_percent: 44, limit_window_seconds: 604_800, reset_at: 1_790_419_137 },
+            },
+            model_usage: {
+                "gpt-6-astra": { available: false, available_at: "2026-09-20T15:04:03.154758Z", credits_would_enable: true },
+                "gpt-5.6-terra": { available: true },
+            },
+        },
+        measuredAt,
+    );
+
+    expect(usage).toEqual({
+        measuredAt,
+        windows: [
+            { kind: "five_hour", utilization: 100, resetsAt: 1_789_916_642, gates: "all" },
+            { kind: "seven_day", utilization: 44, resetsAt: 1_790_419_137, gates: "all" },
+            // Not `model:`: this is an entitlement, not a metered slice of the plan, and must not be labelled as one.
+            {
+                kind: "entitlement:gpt-6-astra",
+                label: "gpt-6-astra",
+                utilization: 100,
+                resetsAt: Math.floor(Date.parse("2026-09-20T15:04:03.154758Z") / 1000),
+                gates: { models: ["gpt-6-astra"] },
+            },
+        ],
+    });
+});
+
+// A plan that publishes only a long allowance (ChatGPT free: one 30-day window, no per-model list) must not have an
+// entitlement invented for it. Silence about a model is not a reading that it is unavailable.
+test("files nothing per model when the plan publishes no per-model availability", () => {
+    const measuredAt = 1_800_000_000_000;
+    expect(
+        codexUsageFromPayload(
+            {
+                plan_type: "free",
+                rate_limit: { allowed: true, primary_window: { used_percent: 2, limit_window_seconds: 2_592_000 }, secondary_window: null },
+                model_usage: {},
+            },
+            measuredAt,
+        ),
+    ).toEqual({
+        measuredAt,
+        windows: [{ kind: "monthly", label: "Monthly · all models", utilization: 2, gates: "all" }],
+    });
+});
+
 test("inverts Google's remaining fractions and preserves each named quota bucket", () => {
     const measuredAt = 1_800_000_000_000;
     const usage = geminiUsageFromPayload(

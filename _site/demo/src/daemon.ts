@@ -692,9 +692,11 @@ const CLAUDE_MODELS: Model[] = [
     { id: `claude-haiku-4-5-20251001`, label: `Claude Haiku 4.5`, badges: [`fast`] },
 ];
 
+// One model cooling: every credential the translator holds is refused for it until then. Relative to load, since an
+// absolute instant in a fixture is a state that reads as expired by the next time anyone opens this.
 const CODEX_MODELS: Model[] = [
     { id: `gpt-5.2-codex`, label: `GPT-5.2 Codex`, efforts: [`low`, `medium`, `high`], badges: [`reasoning`] },
-    { id: `gpt-5.2`, label: `GPT-5.2`, efforts: [`low`, `medium`, `high`] },
+    { id: `gpt-5.2`, label: `GPT-5.2`, efforts: [`low`, `medium`, `high`], availableAt: Math.floor(Date.now() / 1000) + 45 * 60 },
 ];
 
 // Google's routed lane serves other makers' models, so its catalog is mixed rather than Gemini-only.

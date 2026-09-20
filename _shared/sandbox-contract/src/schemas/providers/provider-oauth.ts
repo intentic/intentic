@@ -141,6 +141,15 @@ export const ModelSchema = z.object({
     // The served window, not the training length — memory can clamp it lower. Turns are refused against this. Absent
     // means unknown, never unlimited.
     contextWindow: z.number().optional().describe("How many tokens this model will accept in one request, where the server publishes it."),
+    // Epoch seconds. A fact about the MODEL, not about any one account: a routed provider balances across credentials,
+    // so a model every one of them is benched on is unrunnable however much headroom their rings show. Absent is the
+    // ordinary case and means runnable, never "unknown".
+    availableAt: z
+        .number()
+        .optional()
+        .describe(
+            "When this model can be asked again, where every credential that serves it is currently refused. Absent means it can be asked now. A model here is still worth showing, unlike one the plan does not cover at all: the wait is the whole answer.",
+        ),
 });
 export type Model = z.infer<typeof ModelSchema>;
 export const ModelsSchema = z.object({

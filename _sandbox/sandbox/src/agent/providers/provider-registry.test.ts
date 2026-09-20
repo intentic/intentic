@@ -48,9 +48,13 @@ test("every minted provider has a generated module, and it contributes no adapte
 // models the plan refuses.
 const catalogOf = (ids: readonly string[], fallback = ids[0]!): Promise<{ models: Model[]; default: string }> =>
     Promise.resolve({ models: ids.map((id) => ({ id, label: id })), default: fallback });
-const refusing = (...ids: readonly string[]): { modelRefusals: { refused: () => Promise<ReadonlySet<string>>; record: () => Promise<void> } } => ({
-    modelRefusals: { refused: () => Promise.resolve(new Set(ids)), record: () => Promise.resolve() },
+
+type RegistryStores = Parameters<typeof servedModels>[0];
+const stores = (refused: readonly string[], cooling: ReadonlyMap<string, { until: number; message: string }> = new Map()): RegistryStores => ({
+    modelRefusals: { refused: () => Promise.resolve(new Set(refused)), record: () => Promise.resolve() },
+    modelCooldowns: { cooling: () => Promise.resolve(cooling), record: () => Promise.resolve() },
 });
+const refusing = (...ids: readonly string[]): RegistryStores => stores(ids);
 
 test("a refused model comes off the catalog it was refused from", async () => {
     const served = await servedModels(refusing("kimi-k2.7-code-highspeed"), "kimi", catalogOf(["kimi-k3", "kimi-k2.7-code-highspeed"]));
@@ -71,6 +75,20 @@ test("a provider whose every model is refused keeps its catalog whole", async ()
 test("the filter only drops what the asked-for provider was refused", async () => {
     const served = await servedModels(refusing(), "codex", catalogOf(["gpt-6-astra"]));
     expect(served.models.map((model) => model.id)).toEqual(["gpt-6-astra"]);
+});
+
+// A cooling model is not a refused one: every credential is out of allowance for it right now, and it comes back on
+// its own. Dropping the row would leave a reader with no way to tell "gone" from "back in five minutes".
+test("a cooling model stays on the catalog, carrying when it can be asked again", async () => {
+    const until = 1_789_916_642_000;
+    const cooling = new Map([["gpt-5.6-sol", { until, message: "All credentials for model gpt-5.6-sol are cooling down" }]]);
+    const served = await servedModels(stores([], cooling), "codex", catalogOf(["gpt-5.6-sol", "gpt-5.6-terra"]));
+    expect(served.models.map((model) => model.id)).toEqual(["gpt-5.6-sol", "gpt-5.6-terra"]);
+    // Epoch ms on the store, epoch seconds on the wire, like every other instant a client draws.
+    expect(served.models.find((model) => model.id === "gpt-5.6-sol")?.availableAt).toBe(until / 1000);
+    expect(served.models.find((model) => model.id === "gpt-5.6-terra")?.availableAt).toBeUndefined();
+    // Still the default: a wait is not a reason to re-point every fresh conversation.
+    expect(served.default).toBe("gpt-5.6-sol");
 });
 
 test("every minted provider seeds a non-empty floor whose head survives the catalog's own ordering", () => {

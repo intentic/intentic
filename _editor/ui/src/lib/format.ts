@@ -59,6 +59,7 @@ const DATE_STYLES = {
     time: { hour: `2-digit`, minute: `2-digit`, second: `2-digit`, hour12: false },
     clock: { hour: `2-digit`, minute: `2-digit`, hour12: false },
     weekdayTime: { weekday: `short`, hour: `2-digit`, minute: `2-digit`, hour12: false },
+    dayMonthTime: { month: `short`, day: `numeric`, hour: `2-digit`, minute: `2-digit`, hour12: false },
 } as const satisfies Record<string, Intl.DateTimeFormatOptions>;
 
 type DateStyle = keyof typeof DATE_STYLES;
@@ -153,6 +154,21 @@ export const formatClock = (at: number): string => dateFormat(`clock`).format(at
 
 /** A weekday and time, for instants within the coming week: "Tue 15:45". */
 export const formatWeekdayTime = (at: number): string => dateFormat(`weekdayTime`).format(at);
+
+/** A day and time with the year left to context: "Oct 20, 11:59". For instants past the coming week. */
+export const formatDayMonthTime = (at: number): string => dateFormat(`dayMonthTime`).format(at);
+
+// A weekday names an instant only while there is one of it ahead; past that "Tue" is a month away and reads as two
+// days. Seven days, not six: a reset exactly a week out is the next same-named day, which the weekday alone can't
+// separate from today.
+const WEEKDAY_HORIZON_MS = 7 * 24 * 60 * 60_000;
+
+/**
+ * An instant a reader has to act on: the weekday inside the coming week, the date beyond it. One function, because
+ * the two spellings are only correct over their own ranges and a caller holding an epoch can't be asked to know which.
+ */
+export const formatWhen = (at: number, now: number = Date.now()): string =>
+    at - now < WEEKDAY_HORIZON_MS ? formatWeekdayTime(at) : formatDayMonthTime(at);
 
 // Coarse relative time ("now", "5m ago", "3h ago"), always rounded down since an age is a floor. `days` switches
 // the day-and-beyond case between a rolling "2d ago" and the absolute timestamp; `now` is injectable for tests.

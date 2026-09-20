@@ -1328,6 +1328,7 @@
             "accountNeedsToReconnected": "This account needs to be reconnected",
             "allAiAccounts": "All AI accounts",
             "allProviders": "All providers",
+            "backAt": "Back at {at}",
             "couldntLoadModels": "Couldn't load models.",
             "filterByProvider": "Filter by provider",
             "loadingModels": "Loading models…",

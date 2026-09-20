@@ -117,6 +117,7 @@ import { type AccountUsageStore, fileAccountUsageStore } from "./usage/account-u
 import { claudeHeadroomSource } from "./usage/claude-usage.js";
 import { createHeadroomService, type HeadroomService } from "./usage/headroom.js";
 import { fileUsageParkStore } from "./usage/usage-parks.js";
+import { fileModelCooldownStore, type ModelCooldownStore } from "./usage/model-cooldowns.js";
 import { fileModelRefusalStore, type ModelRefusalStore } from "./usage/model-refusals.js";
 import { fileObservedLimitStore, type ObservedLimitStore } from "./usage/observed-limits.js";
 import { fileProviderRefusalStore, type ProviderRefusalStore } from "./usage/provider-refusals.js";
@@ -469,6 +470,9 @@ export interface Services extends ClaudeSlice, CodexSlice, CursorSlice, GrokSlic
     readonly providerRefusals: ProviderRefusalStore;
     // Which models this sandbox was refused on, finer-grained than providerRefusals; the picker drops them.
     readonly modelRefusals: ModelRefusalStore;
+    // Which models every credential is benched on right now, and when each reopens; the picker marks them, since
+    // unlike a modelRefusal this one comes back on its own.
+    readonly modelCooldowns: ModelCooldownStore;
     // What each account has run out of, per model, for a plan that publishes no allowance to poll: the refusal itself
     // is the reading, and the only one Cursor ever gives.
     readonly observedLimits: ObservedLimitStore;
@@ -1201,6 +1205,7 @@ export const createServices = (config: Config, logger: Logger): Services => {
         headroom,
         providerRefusals: fileProviderRefusalStore(join(config.historyRoot, "provider-refusals.json")),
         modelRefusals: fileModelRefusalStore(join(config.historyRoot, "model-refusals.json")),
+        modelCooldowns: fileModelCooldownStore(join(config.historyRoot, "model-cooldowns.json")),
         observedLimits,
         // Late-bound through the same holder the extension backend uses; the thunks only run per request.
         providerCatalogs: providerCatalogsOf(() => {
