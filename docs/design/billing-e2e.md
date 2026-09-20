@@ -82,8 +82,8 @@ platform throws are all in oRPC's table.
 
 ## 4. The three tiers
 
-**Hermetic** (`pnpm e2e:hermetic`, every merge request, the CI sidecar the CLI's hermetic tier already runs
-in): [hosted-plan.e2e.test.ts](../../_platform/api/src/e2e/hosted-plan.e2e.test.ts). The real api
+**Hermetic** (`pnpm turbo run e2e:hermetic --filter=@intentic/api`, the `e2e-billing` job, on pull requests and
+on pushes to main): [hosted-plan.e2e.test.ts](../../_platform/api/src/e2e/hosted-plan.e2e.test.ts). The real api
 (`createApp`: the real router, Better Auth's real session and its real deletion hook) on a Postgres
 testcontainer with the real migrations replayed, and Stripe stood in for by
 [stripe-fake.ts](../../_tools/testing/src/stripe-fake.ts) at the client's one seam. In order: the offer as a
@@ -96,6 +96,14 @@ a cancel mirrored as "ends"; a failed charge pausing the plan and bringing the m
 signed and stale-signed webhooks refused; events in any order and the same event twice; an ended plan and the
 same customer buying again (one row, the unique columns holding); the account deleted through Better Auth
 with the subscription cancelled on Stripe first; the comp list. A Docker daemon is the whole requirement.
+
+It **gates the platform deploy**: `images-platform`, the job that pushes the platform images and rolls the
+Komodo stack, names `e2e-billing` in its `needs`, so a red chain stops production rolling. That is what the
+unit tests cannot do — each of them checks a piece of the money path against a shape we wrote ourselves, and
+all of them stay green while the connections between them are broken. It is allowed to gate for the reason
+`verify-providers` is: nothing here talks to a vendor, so it has no way to be red for a reason that is not
+ours. The CLI's hermetic tier stays non-blocking in `e2e-hermetic`, on its own reliability case — it boots
+Docker-in-Docker and drives a CLI over SSH, and a landing should not be held by a sandbox-boot flake.
 
 **Browser** (`pnpm e2e:browser`, a dev machine):
 [hosted-plan-billing.spec.ts](../../_tools/e2e/specs/hosted-plan-billing.spec.ts). global-setup starts the

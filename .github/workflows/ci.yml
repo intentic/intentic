@@ -919,6 +919,44 @@ jobs:
       artifact-name: windows-desktop-artifacts
       installer: Intentic-*-x64-setup.exe
 
+  # The money path end to end, and the one suite that gates the platform deploy (`images-platform` needs it).
+  # The real api on a Postgres testcontainer with the migration history replayed, Stripe stood in for at the
+  # client's one seam: a paid checkout becomes a webhook, the webhook a plan row, and the row every consequence
+  # the platform reads off it — Billing state, the offer's `plan: true`, an unmetered meter, the slot count, a
+  # wake that reaches the provider. The unit tests check those pieces; nothing else checks they are connected.
+  #
+  # It is allowed to gate because it is hermetic, the argument verify-providers makes for itself: no vendor, so
+  # no way to be red for a reason that is not ours, and its one container is addressed through testcontainers'
+  # host/port mapping rather than a published port — the assumption that keeps `e2e:browser` out of CI.
+  #
+  # Separate from `e2e-hermetic` because that tier boots Docker-in-Docker and drives a CLI over SSH on
+  # 120-second waits: gating a landing on it would attach a sandbox-boot flake to the money path. Each job names
+  # its own filter, because the root script runs both tiers.
+  #
+  # Platform-gated and rooted like `migrations`, so the fork boundary follows from an empty `changes` output
+  # rather than from a guard this job restates.
+  e2e-billing:
+    needs: [changes, preflight]
+    if: ${{ !cancelled() && needs.changes.outputs.platform == 'true' && needs.preflight.result == 'success' }}
+    runs-on: [self-hosted, intentic]
+    container:
+      image: ghcr.io/intentic/ci-base:latest
+      volumes:
+        - /ci-cache:/ci-cache
+        # Postgres comes up through the host's daemon; testcontainers resolves the address it answers on.
+        - /var/run/docker.sock:/var/run/docker.sock
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          clean: false
+      - uses: ./.github/actions/pnpm-setup
+      - run: pnpm turbo run e2e:hermetic --filter=@intentic/api
+
   # Hermetic infra e2e on pull requests — a NON-BLOCKING sidecar. Boots a Docker-in-Docker host via
   # testcontainers and drives the real CLI (resolve -> targeted apply -> adopt -> readiness diagnostics), no
   # external services and no secrets. Needing nothing at all is what earns it a run per pull request.
@@ -948,7 +986,8 @@ jobs:
           persist-credentials: false
           clean: false
       - uses: ./.github/actions/pnpm-setup
-      - run: pnpm e2e:hermetic
+      # The CLI tier alone: the api's billing tier is `e2e-billing`, which gates. The root script runs both.
+      - run: pnpm turbo run e2e:hermetic --filter=@intentic/cli
       - uses: ./.github/actions/upload-artifact-retry
         if: failure()
         with:
@@ -1149,12 +1188,18 @@ jobs:
   # and the Dockerfiles are pure COPY. docker:release's TURBO_HASH tag makes the release content-addressed, so
   # the path filter is deliberately COARSE: a push that didn't change an app's actual inputs just re-tags the
   # existing image registry-side.
+  #
+  # `e2e-billing` gates here because verify-platform's unit tests can all stay green while the chain between
+  # them is broken, and this job rolls the Komodo stack — the last point at which a plan that takes payments and
+  # grants nothing is still ours to stop. It skips on the same `platform == 'true'` this job does, so it never
+  # withholds a deploy that should have happened.
   images-platform:
-    needs: [changes, verify-platform]
+    needs: [changes, verify-platform, e2e-billing]
     if: |
       !cancelled() && github.event_name == 'push' && github.ref == 'refs/heads/main'
       && needs.changes.outputs.platform == 'true'
       && needs.verify-platform.result == 'success'
+      && needs.e2e-billing.result == 'success'
     runs-on: [self-hosted, intentic]
     container:
       image: ghcr.io/intentic/ci-base:latest
