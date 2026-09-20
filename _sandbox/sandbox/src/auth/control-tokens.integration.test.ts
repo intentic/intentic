@@ -111,7 +111,7 @@ test("drive is the collaborator tier: it makes an agent work but cannot move cod
     expect(controlScoped("drive", "POST", "/agent/stop")).toBe(true);
     expect(controlScoped("drive", "POST", "/agents/abc/rename")).toBe(true);
     expect(controlScoped("drive", "POST", "/agents/abc/seen")).toBe(true);
-    expect(controlScoped("drive", "POST", "/agents/abc/resume-after-outage")).toBe(true);
+    expect(controlScoped("drive", "POST", "/agents/abc/break-policy")).toBe(true);
     // A collaborator's landing is a request, and so is a drive token's.
     expect(controlScoped("drive", "POST", "/agents/abc/request-land")).toBe(true);
     // Archiving is reversible and collaborator-floored, so it sits here rather than on the land rung.

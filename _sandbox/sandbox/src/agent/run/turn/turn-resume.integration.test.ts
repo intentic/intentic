@@ -7,6 +7,8 @@ import {
     type ParkedCard,
     type Persona,
     RESUME_NOTES,
+    RETRY_LADDER_MS,
+    RETRY_LADDER_TRIES,
     type SandboxSettings,
     SandboxSettingsSchema,
     type TranscriptRow,
@@ -32,6 +34,7 @@ import { fileTurnJournal, type JournalledTurn } from "./turn-journal.js";
 import { turnRunOf } from "./turn-runs.js";
 import {
     clearPendingResume,
+    clearStopLadder,
     createTurnResumeScheduler,
     fireHeldResume,
     pendingOutageFailure,
@@ -66,8 +69,8 @@ const fakeServices = (
                 armed.has(id) || limitArmed.has(id)
                     ? ({
                           id,
-                          ...(armed.has(id) ? { resumeAfterOutage: armed.get(id) } : {}),
-                          ...(limitArmed.has(id) ? { resumeAfterLimit: limitArmed.get(id) } : {}),
+                          ...(armed.has(id) ? { outagePolicy: armed.get(id) === true ? "retry" : "wait" } : {}),
+                          ...(limitArmed.has(id) ? { limitPolicy: limitArmed.get(id) === true ? "resend" : "wait" } : {}),
                       } as PersistedAgent)
                     : undefined,
         }),
@@ -462,7 +465,7 @@ const outage = (conversationId: string, provider: string, extra: Record<string, 
     ...extra,
 });
 
-// resumeAfterOutage is the sandbox default; armed is the per-conversation override that takes precedence.
+// `outagePolicy` is the sandbox-wide answer; `armed` is the per-conversation override that takes precedence.
 const outageServices = async (
     root: string,
     resumeAfterOutage = true,
@@ -471,7 +474,7 @@ const outageServices = async (
 ): Promise<Services> => {
     const services = fakeServices(root, abandoned, () => true, armed);
     const settings = await services.sandboxSettings.get();
-    await services.sandboxSettings.set({ ...settings, resumeAfterOutage });
+    await services.sandboxSettings.set({ ...settings, outagePolicy: resumeAfterOutage ? "retry" : "wait" });
     return services;
 };
 
@@ -542,7 +545,7 @@ test("with the toggle off the turn is remembered, not resumed: turning it on arm
     expect(pendingOutageFailure("toggle-1")).toEqual(expect.any(Object));
 
     const settings = await services.sandboxSettings.get();
-    await services.sandboxSettings.set({ ...settings, resumeAfterOutage: true });
+    await services.sandboxSettings.set({ ...settings, outagePolicy: "retry" });
     await scheduler.tick(retryAt);
     await settle("toggle-1");
     expect(prompts).toHaveLength(1);
@@ -1386,7 +1389,7 @@ test("an unarmed conversation is never fired for, however long the window has be
 test("the sandbox setting arms a conversation that has said nothing itself", async () => {
     const services = fakeServices(mkdtempSync(join(tmpdir(), "limit-")));
     const settings = await services.sandboxSettings.get();
-    await services.sandboxSettings.set({ ...settings, resumeAfterLimit: true });
+    await services.sandboxSettings.set({ ...settings, limitPolicy: "resend" });
     const turns: AgentTurn[] = [];
     recordHeldTurn(
         { reason: "limit", input: { prompt: "ship the parser", conversationId: "lim-auto-4", isolated: true }, ran: false, reopensAt: REOPENS },
@@ -1523,4 +1526,105 @@ test("a held turn with no booked move and no arming stays held", async () => {
     await scheduler.tick(REOPENS * 1000 + 1);
     expect(turns).toHaveLength(0);
     clearPendingResume("lim-unbooked");
+});
+
+// A turn that stopped short with nothing to repair: the ladder that re-runs it used to live in a browser tab, where it
+// could not fire with the tab closed and read as a second, differently-named automation beside the daemon's own. Its
+// rungs, its cap and its stand-down are the daemon's now.
+
+// `stopArmed` is the sandbox-wide answer for this ending, since a stopped turn's entry carries no per-conversation
+// override in these fixtures.
+const stopServices = async (root: string, retry: boolean, abandoned: string[] = [], takes: () => boolean = () => true): Promise<Services> => {
+    const services = fakeServices(root, abandoned, takes);
+    const settings = await services.sandboxSettings.get();
+    await services.sandboxSettings.set({ ...settings, stopPolicy: retry ? "retry" : "wait" });
+    return services;
+};
+
+const stopHeld = (conversationId: string, at: number): void => {
+    recordHeldTurn({ reason: "stopped", input: { prompt: "ship the parser", conversationId, isolated: true }, ran: true }, at);
+};
+
+test("a stopped turn waits for a press unless this sandbox says otherwise", async () => {
+    const services = await stopServices(mkdtempSync(join(tmpdir(), "stop-")), false);
+    const turns: AgentTurn[] = [];
+    stopHeld("stop-1", RECORDED);
+
+    await createTurnResumeScheduler(services, heldWake(turns)).tick(RECORDED + 60_000);
+    expect(turns).toHaveLength(0);
+    clearPendingResume("stop-1");
+    clearStopLadder("stop-1");
+});
+
+test("an armed stop climbs its ladder rung by rung, and re-runs the held turn rather than saying anything", async () => {
+    const services = await stopServices(mkdtempSync(join(tmpdir(), "stop-")), true);
+    const turns: AgentTurn[] = [];
+    const scheduler = createTurnResumeScheduler(services, heldWake(turns));
+
+    // RETRY_LADDER_MS, read from the contract rather than transcribed, so a change to the rungs moves this with it.
+    for (const [rung, delay] of RETRY_LADDER_MS.entries()) {
+        const recordedAt = RECORDED + rung * 60_000;
+        stopHeld("stop-2", recordedAt);
+        // A second short of the rung: nothing fires, so the wait is the ladder's and not the poll interval's.
+        await scheduler.tick(recordedAt + delay - 1);
+        expect(turns, `rung ${rung}`).toHaveLength(rung);
+        await scheduler.tick(recordedAt + delay);
+        await settle("stop-2");
+        expect(turns, `rung ${rung}`).toHaveLength(rung + 1);
+        // The fire's own turn start would clear the entry; these fixtures never reach it.
+        clearPendingResume("stop-2");
+    }
+    expect(turns).toHaveLength(RETRY_LADDER_TRIES);
+    expect(turns[0]!.prompt).toContain("ship the parser");
+    clearStopLadder("stop-2");
+});
+
+test("a spent ladder stands down and says so, rather than leaving the card promising a return", async () => {
+    const abandoned: string[] = [];
+    const services = await stopServices(mkdtempSync(join(tmpdir(), "stop-")), true, abandoned);
+    const turns: AgentTurn[] = [];
+    const scheduler = createTurnResumeScheduler(services, heldWake(turns));
+
+    for (const [rung, delay] of RETRY_LADDER_MS.entries()) {
+        const recordedAt = RECORDED + rung * 60_000;
+        stopHeld("stop-3", recordedAt);
+        await scheduler.tick(recordedAt + delay);
+        await settle("stop-3");
+        clearPendingResume("stop-3");
+    }
+    expect(turns).toHaveLength(RETRY_LADDER_TRIES);
+
+    // One more hold, with the ladder spent: nothing fires, and the conversation is told why.
+    const lastAt = RECORDED + RETRY_LADDER_TRIES * 60_000;
+    stopHeld("stop-3", lastAt);
+    await scheduler.tick(lastAt + 24 * 60 * 60 * 1000);
+    expect(turns).toHaveLength(RETRY_LADDER_TRIES);
+    expect(abandoned).toEqual(["stop-3"]);
+    clearStopLadder("stop-3");
+});
+
+// The one proof the run is getting somewhere. Without it a run that keeps dying would climb forever, and with too
+// broad a reset it would never reach the cap.
+test("a turn that settles with nothing held puts the ladder back at its first rung", async () => {
+    const services = await stopServices(mkdtempSync(join(tmpdir(), "stop-")), true);
+    const turns: AgentTurn[] = [];
+    const scheduler = createTurnResumeScheduler(services, heldWake(turns));
+
+    stopHeld("stop-4", RECORDED);
+    await scheduler.tick(RECORDED + RETRY_LADDER_MS[0]!);
+    await settle("stop-4");
+    clearPendingResume("stop-4");
+    expect(turns).toHaveLength(1);
+
+    // Second rung next, had nothing intervened.
+    const afterProgress = RECORDED + 60_000;
+    clearStopLadder("stop-4");
+    stopHeld("stop-4", afterProgress);
+    await scheduler.tick(afterProgress + RETRY_LADDER_MS[0]! - 1);
+    expect(turns).toHaveLength(1);
+    await scheduler.tick(afterProgress + RETRY_LADDER_MS[0]!);
+    await settle("stop-4");
+    expect(turns).toHaveLength(2);
+    clearPendingResume("stop-4");
+    clearStopLadder("stop-4");
 });

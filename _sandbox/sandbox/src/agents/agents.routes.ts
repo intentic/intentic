@@ -283,33 +283,16 @@ export const createAgentsRoutes = (services: Services) => {
             }
             return summary;
         }),
-        // Uses `entryOf`, not `isolatedEntryOf`: an outage can hit a workspace chat too. The resume pass re-polls
-        // often, so arming it just after a dying turn arms the very turn that bounced.
-        resumeAfterOutage: i.resumeAfterOutage.handler(async ({ input }) => {
+        // Uses `entryOf`, not `isolatedEntryOf`: every one of these walls hits a workspace chat too. The resume pass
+        // re-polls often, so answering just after a dying turn answers for the very turn that bounced, and a limit's
+        // window can be hours out, which is why the control also lives on the card and not only in an open transcript.
+        // A NOT_FOUND covers both misses the registry can report: an unknown conversation, and an answer this ending
+        // does not allow.
+        breakPolicy: i.breakPolicy.handler(async ({ input }) => {
             entryOf(input.id);
-            const summary = await services.agents.setResumeAfterOutage(input.id, input.resumeAfterOutage);
+            const summary = await services.agents.setBreakPolicy(input.id, input.ending, input.policy);
             if (summary === undefined) {
-                throw new ORPCError("NOT_FOUND", { message: "unknown agent" });
-            }
-            return summary;
-        }),
-        // Uses `entryOf` for the same reason: a spent allowance can refuse a workspace chat too. The window this arms
-        // can be hours out, which is why the offer lives on the card and not only in an open transcript.
-        resumeAfterLimit: i.resumeAfterLimit.handler(async ({ input }) => {
-            entryOf(input.id);
-            const summary = await services.agents.setResumeAfterLimit(input.id, input.resumeAfterLimit);
-            if (summary === undefined) {
-                throw new ORPCError("NOT_FOUND", { message: "unknown agent" });
-            }
-            return summary;
-        }),
-        // Whether a spent allowance moves this conversation's held turn to another account with room
-        // (SandboxSettingsSchema.moveAfterLimit).
-        moveAfterLimit: i.moveAfterLimit.handler(async ({ input }) => {
-            entryOf(input.id);
-            const summary = await services.agents.setMoveAfterLimit(input.id, input.moveAfterLimit);
-            if (summary === undefined) {
-                throw new ORPCError("NOT_FOUND", { message: "unknown agent" });
+                throw new ORPCError("NOT_FOUND", { message: "unknown agent, or an answer that ending cannot take" });
             }
             return summary;
         }),

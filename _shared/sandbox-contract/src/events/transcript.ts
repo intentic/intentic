@@ -228,7 +228,7 @@ export const TranscriptRowSchema = z.object({
         ),
     // The one-press follow-up this notice offers, by name; the chat decides what it does, and whether it stands.
     noticeAction: z
-        .enum(["landHold", "outageOptOut", "depsInstall", "watchStop"])
+        .enum(["landHold", "depsInstall", "watchStop"])
         .optional()
         .describe("A one-press follow-up this notice offers, by name. The chat decides what it does and whether it still applies."),
     // An unfinished wait this notice describes, by name; whether it's still running is live state, not stored here.
@@ -329,6 +329,14 @@ export const TurnEndingSchema = z.object({
         .boolean()
         .optional()
         .describe("Whether something other than the user is already booked to send this turn again, so the surface reports the wait instead of offering a press."),
+    // `resetsAt` is the provider's fact about the allowance; this is the daemon's own appointment, and the two differ
+    // whenever a ladder rung falls short of the reset, or an ending with no allowance at all is armed.
+    nextAt: z
+        .number()
+        .optional()
+        .describe(
+            "When the booked send actually fires, in epoch seconds. Present only with `scheduled`; absent for a booking that fires on the next pass, which is 'now' to a reader.",
+        ),
 });
 export type TurnEnding = z.infer<typeof TurnEndingSchema>;
 

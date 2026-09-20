@@ -18,10 +18,10 @@ const fakeServices = (params: {
     claudeStore: unstubbed<Services["claudeStore"]>("claudeStore", { list: async () => [...params.accounts] }),
     accountUsage: unstubbed<Services["accountUsage"]>("accountUsage", { read: async () => params.usage }),
     agents: unstubbed<Services["agents"]>("agents", {
-        entry: () => (params.override === undefined ? undefined : ({ id: "c", moveAfterLimit: params.override } as PersistedAgent)),
+        entry: () => (params.override === undefined ? undefined : ({ id: "c", limitPolicy: params.override ? "move" : "wait" } as PersistedAgent)),
     }),
     sandboxSettings: unstubbed<Services["sandboxSettings"]>("sandboxSettings", {
-        get: async () => ({ moveAfterLimit: params.moveAfterLimit ?? false, limitMoveCarryUnder: params.limitMoveCarryUnder ?? 100_000 }) as never,
+        get: async () => ({ limitPolicy: params.moveAfterLimit === true ? "move" : "wait", limitMoveCarryUnder: params.limitMoveCarryUnder ?? 100_000 }) as never,
     }),
 });
 

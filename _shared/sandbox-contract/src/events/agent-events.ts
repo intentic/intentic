@@ -250,7 +250,10 @@ export const AgentEventSchema = z.discriminatedUnion("kind", [
         resetsAt: z.number().optional(),
         // Gated codes only: "scheduled" if this conversation arms the resume, "available" if one exists but isn't.
         autoResume: z.enum(["scheduled", "available"]).optional(),
-        // rate_limit only: how re-running the exact held turn would go, and what it would cost.
+        // "scheduled" only: epoch seconds the booked send actually fires. Distinct from `resetsAt` (the provider's fact
+        // about the allowance) since a ladder rung can fall short of it, and a stopped turn has no allowance at all.
+        nextAt: z.number().optional(),
+        // A held turn, whatever wall stopped it: how re-running the exact turn would go, and what it would cost.
         held: z
             .object({
                 ran: z.boolean(),

@@ -30,7 +30,6 @@ import { trackPerf } from "../../../app/perf";
 import { sandboxError, sandboxRequestVia } from "../../sandbox/client/sandboxClient";
 import { jsonBody } from "../../sandbox/client/jsonBody";
 import { invalidateAgentTranscript, olderTranscriptPage } from "../transcript/agentTranscript";
-import { AUTO_CONTINUE_TRIES, autoContinueDelay } from "../run/autoContinue";
 import type { PickUp } from "../run/pickUp";
 import { clampEffort } from "../models/run-settings/effortScale";
 import { isAutoPick } from "../models/modelPickerState";
@@ -111,12 +110,6 @@ export class Conversation {
     // Whether the daemon has accepted the current turn; false before its ack, true through an adopted reattach.
     private turnAccepted = false;
 
-    // Standing instruction to re-run this chat whenever a turn ends `resumable`, persisted with the tab.
-    readonly autoContinue = ref(false);
-    readonly autoContinueAt = ref<number | undefined>();
-    private autoContinueTimer: ReturnType<typeof setTimeout> | undefined;
-    // Consecutive automatic continuations that bought nothing; reset by a turn that got somewhere or by re-arming.
-    private autoContinueTries = 0;
     // True while a transcript read is in flight and nothing is painted, so the panel shows loading instead.
     readonly loading = ref(false);
     // Position of the oldest drawn message, and whether more sits above it; passed back as `before` to page further.
@@ -1070,7 +1063,6 @@ export class Conversation {
         this.error.value = null;
         // A turn is running, so nothing stopped is left to pick up; it supersedes any scheduled continuation.
         this.pickUp.value = undefined;
-        this.cancelAutoContinue();
         // A live turn supersedes the waits a failed one opened, whether the scheduler fired it or another window did.
         this.failures.clear();
         this.turnStartedAt.value = startedAt;
@@ -1091,7 +1083,6 @@ export class Conversation {
         this.noticeMidTurnSwitch();
         this.persist();
         this.dropStaleRemoteTranscript();
-        this.scheduleAutoContinue();
         void this.drainQueue();
     }
 
@@ -1100,91 +1091,6 @@ export class Conversation {
     private dropStaleRemoteTranscript(): void {
         if (this.box.value !== undefined) {
             invalidateAgentTranscript(this.conversationId, this.box.value);
-        }
-    }
-
-    // The standing press, scheduled at the end of every turn; does nothing unless auto-continue is armed, the turn
-    // ended in a resumable shape, and nothing interrupted it.
-    private scheduleAutoContinue(): void {
-        if (!this.autoContinue.value || this.interrupted) {
-            return;
-        }
-        const pickUp = this.pickUp.value;
-        // A turn that ends on its own is the only proof the run is getting anywhere, so it alone resets the ladder.
-        // Never how long a turn ran: a hang reads as progress by that measure, and a run that hangs then dies is
-        // exactly the one the ladder has to be able to stand down from.
-        if (pickUp === undefined) {
-            this.autoContinueTries = 0;
-            return;
-        }
-        // Something else is already bringing this turn back (the daemon's own breaker); the automation stands down.
-        if (pickUp.automatic !== undefined) {
-            return;
-        }
-        this.armAutoContinue();
-    }
-
-    // Put the next continuation on the clock at this chat's rung; ordinary stops have three rungs then stand down,
-    // limits repeat until the allowance opens.
-    private armAutoContinue(): void {
-        const blocker = this.pickUp.value?.reason === `limit` ? `limit` : `transient`;
-        const delay = autoContinueDelay(this.autoContinueTries, blocker);
-        if (delay === undefined) {
-            // The ladder is spent: stand down and say so, rather than leaving the user waiting on a dead automation.
-            this.autoContinue.value = false;
-            this.transcript.notice(
-                `Auto-continue stopped: ${AUTO_CONTINUE_TRIES} turns in a row ended without getting anywhere. Press Continue to carry on.`,
-            );
-            this.persist();
-            return;
-        }
-        this.autoContinueTries += 1;
-        // The ladder sets a floor, not the wait: a pick-up naming a ready instant sleeps through it instead.
-        const readyAt = this.pickUp.value?.readyAt;
-        const wait = Math.max(delay, readyAt === undefined ? 0 : readyAt - Date.now());
-        this.autoContinueAt.value = Date.now() + wait;
-        this.autoContinueTimer = setTimeout(() => {
-            this.autoContinueAt.value = undefined;
-            this.autoContinueTimer = undefined;
-            // Somebody at the keyboard outranks the timer: a draft, staged file, or queued message answers first.
-            if (this.draft.value.trim() !== `` || this.attachments.value.length > 0 || this.queued.value.length > 0 || this.streaming.value) {
-                return;
-            }
-            void this.autoContinueNow();
-        }, wait);
-    }
-
-    // What the timer does, which is never what the button does: re-run the held turn, and nothing else. It types no
-    // message, since words nobody said belong in no transcript, so with nothing held it stands down and says why.
-    private async autoContinueNow(): Promise<void> {
-        if (await this.resumeHeldTurn()) {
-            return;
-        }
-        this.autoContinue.value = false;
-        this.transcript.notice(`Auto-continue stopped: this turn is no longer held, so there is nothing to send again. Press Continue to carry on.`);
-        this.persist();
-    }
-
-    // Canceling auto-continue leaves the ladder in its current state.
-    private cancelAutoContinue(): void {
-        clearTimeout(this.autoContinueTimer);
-        this.autoContinueTimer = undefined;
-        this.autoContinueAt.value = undefined;
-    }
-
-    // The switch itself: turning it off drops whatever was scheduled, turning it on starts the ladder from the front.
-    // Schedules nothing by itself; the next turn that stops short is what does that.
-    setAutoContinue(on: boolean): void {
-        this.autoContinue.value = on;
-        this.autoContinueTries = 0;
-        // No persist(): this mirrors the transcript and nothing was said; the switch itself rides the tab snapshot.
-        if (!on) {
-            this.cancelAutoContinue();
-            return;
-        }
-        // Arming on an already-stopped chat takes that stop too, since the press means "and get on with it".
-        if (this.pickUp.value !== undefined && this.pickUp.value.automatic === undefined && !this.streaming.value) {
-            this.armAutoContinue();
         }
     }
 
@@ -1437,9 +1343,9 @@ export class Conversation {
     // This side of a turn ending on the user's say-so: hold the queue and arm the way back; shared with a dismissal,
     // which has no request of its own.
     private ended(): void {
-        // Hold the queue back from the settle flush and drop any continuation: a stopped agent must not restart.
+        // Hold the queue back from the settle flush: a stopped agent must not restart. Nothing to disarm here — a turn
+        // the user stopped is never held by the daemon, so no policy of this conversation's has anything to act on.
         this.interrupted = true;
-        this.cancelAutoContinue();
         // Armed here, not in abort(): only a turn the daemon accepted gets a way back, else there's nothing to pick up.
         this.pickUp.value = this.turnAccepted ? { reason: `stopped` } : undefined;
         this.persist();
@@ -1466,9 +1372,9 @@ export class Conversation {
     // Aborts this tab's attach stream; whatever streamed stays in the transcript, the run keeps running detached.
     // Called bare when the tab closes: the turn lands its work, and reopening reattaches to it.
     abort(): void {
-        // Ending on someone's say-so, not its own: hold the queue and drop any scheduled continuation.
+        // Ending on someone's say-so, not its own: hold the queue. Whatever the daemon has booked keeps its own clock;
+        // closing a tab was never a reason to cancel work the conversation was told to carry on with.
         this.interrupted = true;
-        this.cancelAutoContinue();
         this.transcript.settle();
         this.probe?.abort();
         this.inflight?.abort();

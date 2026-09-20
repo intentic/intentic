@@ -983,8 +983,9 @@ const main = async (): Promise<void> => {
         services.driftSweep.start();
     }
 
-    // Re-runs a turn killed by a credential refusal or provider outage. A spent usage limit re-runs only if the owner
-    // opted in: resumeAfterLimit (retry at reset) or moveAfterLimit (another account), both off by default.
+    // Re-runs a turn killed by something the daemon can undo on its own (a rotated credential). The three walls the
+    // reader answers for — a spent allowance, a provider outage, a turn that stopped short — re-run only on that
+    // conversation's own policy, and every one of them starts at `wait`.
     const turnResume = createTurnResumeScheduler(services, streamAgent);
     shutdown.push(() => turnResume.stop());
     if (role.roots) {

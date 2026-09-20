@@ -51,8 +51,9 @@ export const limited = (agent: AgentStanding): boolean => agent.status === `erro
 export const limitClosed = (agent: AgentStanding, now: number = Date.now()): boolean =>
     limited(agent) && agent.limitResetsAt !== undefined && agent.limitResetsAt * 1_000 > now;
 
-// A booked fire needs no person: the held turn goes again at the reset either way. Off by default
-// (`resumeAfterLimit` defaults false), so on an ordinary board every spent allowance lands in Attention.
+// A booked fire needs no person: the held turn goes again at the reset either way. Only where this conversation's
+// answer for the limit says so, and that answer starts at `wait`, so on an ordinary board every spent allowance lands
+// in Attention.
 export const limitScheduled = (agent: AgentStanding): boolean => limited(agent) && agent.limitScheduled === true;
 
 // A refused land nothing the agent does can clear: every blocker left is a file the user has uncommitted edits on,
@@ -433,18 +434,8 @@ const endingActions = (): Partial<Record<AgentStatus | ClientAgentStatus, string
 export const effectiveAutoLand = (agent: { readonly autoLand?: boolean } | undefined, sandboxDefault: boolean | undefined): boolean =>
     agent?.autoLand ?? sandboxDefault ?? false;
 
-// Same two-level fold as `effectiveAutoLand`, for whether a provider-killed turn resumes itself. The agent's own
-// override wins over the sandbox default; a press inside one chat speaks only for that chat.
-export const effectiveOutageResume = (agent: { readonly resumeAfterOutage?: boolean } | undefined, sandboxDefault: boolean | undefined): boolean =>
-    agent?.resumeAfterOutage ?? sandboxDefault ?? false;
-
-// Third fold of the same shape: whether a spent-allowance turn resumes itself once the window reopens.
-export const effectiveLimitResume = (agent: { readonly resumeAfterLimit?: boolean } | undefined, sandboxDefault: boolean | undefined): boolean =>
-    agent?.resumeAfterLimit ?? sandboxDefault ?? false;
-
-// Fourth fold: whether a held turn moves to another account of the same provider once one has room.
-export const effectiveLimitMove = (agent: { readonly moveAfterLimit?: boolean } | undefined, sandboxDefault: boolean | undefined): boolean =>
-    agent?.moveAfterLimit ?? sandboxDefault ?? false;
+// The same two-level fold for what happens when a turn breaks lives in chat/run/turnBreak.ts (`effectivePolicy`),
+// beside the words for each answer: one question per ending, asked in one vocabulary by every surface.
 
 // Sources an agent can be opened by, keyed on `AgentOrigin.provider` (an open string; listener sources are
 // extension-declared), so an unrecognized one falls back to its own name rather than disappearing.

@@ -1,15 +1,40 @@
 <script setup lang="ts">
-import { Row, RowGroup } from "@intentic/ui";
+import type { LimitPolicy, RetryPolicy, TurnBreak, TurnBreakPolicy } from "@intentic/sandbox-contract";
+import { Row, RowGroup, SegmentedControl } from "@intentic/ui";
 import ToggleSwitch from "primevue/toggleswitch";
+import { computed } from "vue";
+import { breakAnswers, breakLabel } from "../../../chat/run/turnBreak";
 import { useSandboxSettings } from "../../overview/useSandboxSettings";
 import { useT } from "@intentic/ui/i18n";
 
-// Who resumes a turn that died through no fault of its own, and who stops one that will only die again.
-// Every resume defaults to off: a re-run spends the owner's allowance on a turn already sent once.
+// The standing answer to each ending's one question, in the same words the chat asks it in (chat/run/turnBreak.ts).
+// One answer per row, never a set of switches over the same wall: two independent booleans over a spent allowance
+// spelled a fourth posture ("move, else hold") nobody would choose, and left every surface guessing which of them was
+// the one in force. Every ending starts at `wait`: a re-run spends the owner's allowance on a turn already sent once.
 
 const t = useT();
 
 const { settings, patch } = useSandboxSettings();
+
+// Built in a computed, not a table at import: `t` reads the active language when it is CALLED
+// (docs/architecture/languages.md).
+const rowsFor = (ending: TurnBreak) => computed(() => breakAnswers(ending).map((answer) => ({ label: answer.label, value: answer.value, title: answer.note })));
+const limitRows = rowsFor(`limit`);
+const outageRows = rowsFor(`outage`);
+const stoppedRows = rowsFor(`stopped`);
+
+const limitPolicy = computed<TurnBreakPolicy>({
+    get: () => settings.value?.limitPolicy ?? `wait`,
+    set: (value) => patch({ limitPolicy: value as LimitPolicy }),
+});
+const outagePolicy = computed<TurnBreakPolicy>({
+    get: () => settings.value?.outagePolicy ?? `wait`,
+    set: (value) => patch({ outagePolicy: value as RetryPolicy }),
+});
+const stopPolicy = computed<TurnBreakPolicy>({
+    get: () => settings.value?.stopPolicy ?? `wait`,
+    set: (value) => patch({ stopPolicy: value as RetryPolicy }),
+});
 
 // 0 is a real value (never carry); an emptied field clamps to the bound rather than falling back to the saved
 // number, and the input is written back so a refused value doesn't linger.
@@ -36,45 +61,20 @@ const setAutomationFailureLimit = (event: Event): void => {
 
 <template>
     <RowGroup :label="t(`sandbox.agentRecovery.turnBreaks`)">
-        <!-- The default; a chat's own retry banner doesn't touch this switch, since "finish this turn" and "this is how the board behaves" are different questions. -->
-        <Row
-            icon="refresh"
-            :title="t(`sandbox.agentRecovery.resumeAfterProviderOutages`)"
-            :description="t(`sandbox.agentRecovery.retryTurnsFailedBy`)"
-        >
+        <!-- The default for every conversation; a chat's own control writes an override for that chat alone. -->
+        <Row icon="clock" :title="breakLabel(`limit`)" :description="t(`sandbox.agentRecovery.limitPolicyNote`)">
             <template #control>
-                <ToggleSwitch
-                    :model-value="settings?.resumeAfterOutage ?? false"
-                    :disabled="settings === undefined"
-                    @update:model-value="(value: boolean) => patch({ resumeAfterOutage: value })"
-                />
-            </template>
-        </Row>
-
-        <!-- Known provider reopen times are shown as "send again". -->
-        <Row icon="clock" :title="t(`sandbox.agentRecovery.sendAgainAllowanceComes`)" :description="t(`sandbox.agentRecovery.reRunTurnsSpent`)">
-            <template #control>
-                <ToggleSwitch
-                    :model-value="settings?.resumeAfterLimit ?? false"
-                    :disabled="settings === undefined"
-                    @update:model-value="(value: boolean) => patch({ resumeAfterLimit: value })"
-                />
-            </template>
-        </Row>
-
-        <!-- The non-waiting answer to the same limit: moves to another connected account of the same provider with room. -->
-        <Row icon="user" :title="t(`sandbox.agentRecovery.continueOnAnotherAccount`)" :description="t(`sandbox.agentRecovery.moveRefusedTurnTo`)">
-            <template #control>
-                <ToggleSwitch
-                    :model-value="settings?.moveAfterLimit ?? false"
-                    :disabled="settings === undefined"
-                    @update:model-value="(value: boolean) => patch({ moveAfterLimit: value })"
-                />
+                <SegmentedControl v-model="limitPolicy" :options="limitRows" size="xs" :wrap="true" :class="{ 'pointer-events-none opacity-60': settings === undefined }" />
             </template>
         </Row>
 
         <!-- Carrying re-reads the whole context once and keeps what the model knew; starting fresh costs the measured brief plus a capped copy and loses the rest. -->
-        <Row icon="clock" :title="t(`sandbox.agentRecovery.carrySessionContextUnder`)" :description="t(`sandbox.agentRecovery.tokensUnderMoveKeeps`)">
+        <Row
+            v-if="limitPolicy === `move`"
+            icon="user"
+            :title="t(`sandbox.agentRecovery.carrySessionContextUnder`)"
+            :description="t(`sandbox.agentRecovery.tokensUnderMoveKeeps`)"
+        >
             <template #control>
                 <input
                     type="number"
@@ -89,7 +89,20 @@ const setAutomationFailureLimit = (event: Event): void => {
             </template>
         </Row>
 
-        <!-- Covers a turn killed by the sandbox's own restart: an update, an environment approval, or an image rebuild. -->
+        <Row icon="refresh" :title="breakLabel(`outage`)" :description="t(`sandbox.agentRecovery.outagePolicyNote`)">
+            <template #control>
+                <SegmentedControl v-model="outagePolicy" :options="outageRows" size="xs" :wrap="true" :class="{ 'pointer-events-none opacity-60': settings === undefined }" />
+            </template>
+        </Row>
+
+        <Row icon="pause" :title="breakLabel(`stopped`)" :description="t(`sandbox.agentRecovery.stopPolicyNote`)">
+            <template #control>
+                <SegmentedControl v-model="stopPolicy" :options="stoppedRows" size="xs" :wrap="true" :class="{ 'pointer-events-none opacity-60': settings === undefined }" />
+            </template>
+        </Row>
+
+        <!-- The one ending with nobody watching it, so it asks no question in chat and stays a switch: an update, an
+             environment approval, or an image rebuild recreating the container under a running turn. -->
         <Row icon="refresh" :title="t(`sandbox.agentRecovery.resumeTurnsAfterRestart`)" :description="t(`sandbox.agentRecovery.pickUpInFlight`)">
             <template #control>
                 <ToggleSwitch

@@ -40,11 +40,9 @@ export const conversationView = (conversation: ComputedRef<Conversation>) => ({
         }
         return conversation.value.continueTurn(options);
     },
-    // The standing version of continueTurn: whether this chat keeps continuing itself, and when the next one fires. The
-    // instant must stay visible, or a scheduled continue looks like nothing is happening.
-    autoContinue: computed(() => conversation.value.autoContinue.value),
-    autoContinueAt: computed(() => conversation.value.autoContinueAt.value),
-    setAutoContinue: (on: boolean): void => conversation.value.setAutoContinue(on),
+    // The standing version of continueTurn is not here: it is this conversation's answer to the ending's one question
+    // (turnBreak.ts), owned by the daemon and read through the agent roster, so it survives this tab closing and
+    // cannot disagree with the same switch on the board.
     // Undelivered messages sent mid-turn, and whether the running turn can actually take one right now.
     queued: computed(() => conversation.value.queued.value),
     removeQueued: (id: string): void => conversation.value.removeQueued(id),

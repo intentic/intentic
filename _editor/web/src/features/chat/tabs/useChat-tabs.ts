@@ -184,10 +184,6 @@ const restoreTurnPicks = (conversation: Conversation, tab: StoredTab): void => {
     if (tab.auto !== undefined) {
         conversation.auto.value = tab.auto;
     }
-    // Restored because it governs unattended runs; a reload must not quietly disarm one still in progress.
-    if (tab.autoContinue !== undefined) {
-        conversation.autoContinue.value = tab.autoContinue;
-    }
     // The stopped-turn offer itself doesn't restore here; only the daemon knows if it's still held (see adoptEnding).
     if (tab.effort !== undefined) {
         conversation.effortPick.value = tab.effort;

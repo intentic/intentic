@@ -2048,10 +2048,10 @@ describe(`opening a session whose last turn stopped short`, () => {
         await vi.waitFor(() => expect(conversation.pickUp.value).toEqual({ reason: `limit`, readyAt: 4_200_000, held: { ran: false } }));
     });
 
-    // An already-scheduled resume reads as a report, not an offer; `scheduled` without `resetsAt` must not become a
-    // countdown to nothing.
-    it(`counts down instead of offering when the daemon has already booked the resend`, async () => {
-        daemonReads({ ...STOPPED, ending: { reason: `limit`, resetsAt: 9_000, held: { ran: true }, scheduled: true } });
+    // A booking the daemon already made rides the record as its own instant, so a tab reopened hours later counts down
+    // to what will actually happen rather than re-deriving it from the allowance.
+    it(`carries the daemon's own booking on a chat reopened after it was armed`, async () => {
+        daemonReads({ ...STOPPED, ending: { reason: `limit`, resetsAt: 9_000, nextAt: 9_000, held: { ran: true }, scheduled: true } });
 
         const conversation = openAgentConversation({ id: `booked-for-the-reset`, provider: `claude`, harness: `native` });
         hydrateOnce(conversation);
@@ -2061,8 +2061,8 @@ describe(`opening a session whose last turn stopped short`, () => {
             expect(conversation.pickUp.value).toEqual({
                 reason: `limit`,
                 readyAt: 9_000_000,
+                nextAt: 9_000_000,
                 held: { ran: true },
-                automatic: { at: 9_000_000 },
             }),
         );
     });

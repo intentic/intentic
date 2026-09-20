@@ -3,7 +3,7 @@
 Written 2026-09-08 from the source as it stands. The question asked: a session pinned to Claude Opus 4.6
 (Thinking) on the Google channel kept moving itself to Gemini 3.1 Pro (Low) — in the composer, and then in the
 turn auto-continue sent — whenever Google was out of capacity for Opus. Nothing in the product claims to move
-a turn between models: `moveAfterLimit` is same-provider-and-account by construction. The answer, stated once
+a turn between models: the limit posture's `move` is same-provider-and-account by construction. The answer, stated once
 here and argued below: **a model
 missing from one catalog read is a state that ends, not a decision; the catalog holds it for a grace window,
 the composer only ever borrows a pick and owes it back, and a pin the provider genuinely no longer serves ends

@@ -1,6 +1,8 @@
 <script setup lang="ts">
+import type { TurnBreakPolicy } from "@intentic/sandbox-contract";
 import { computed } from "vue";
-import { effectiveAutoLand, effectiveLimitMove, effectiveLimitResume, landedAway, limited, writingNow } from "../../fleet/agentStatus";
+import { effectiveAutoLand, landedAway, limited, writingNow } from "../../fleet/agentStatus";
+import { breakAnswers, effectivePolicy, sandboxPolicy } from "../../../chat/run/turnBreak";
 import type { useAgentChanges } from "../../review/useAgentChanges";
 import { useAgents } from "../../fleet/useAgents";
 import { useRole } from "../../../sandbox/secrets/useRole";
@@ -35,7 +37,7 @@ const { changes, agentId, phone, renameable, sessionName } = defineProps<{
 // and `identity` are the header's own presses, handed back to it.
 const emit = defineEmits<{ selected: []; discard: []; forceLand: []; rename: []; identity: []; handOver: [] }>();
 
-const { agentById, restore, busyIds, setResumeAfterLimit, setMoveAfterLimit } = useAgents();
+const { agentById, restore, busyIds, setBreakPolicy } = useAgents();
 const archived = computed(() => agentById(agentId)?.archivedAt !== undefined);
 // Whose the session is, and what that lets this reader do about it. Claim and take over both make it the reader's
 // own; hand over goes up as a dialog, since it needs a name.
@@ -71,29 +73,21 @@ const toggleAutoLand = async (): Promise<void> => {
     await changes.setAutoLand(next === sandboxLands.value ? null : next);
 };
 
-// Shown only on a card actually waiting on a spent allowance, unlike the always-present hold toggle.
-// Same three-state grammar as the hold toggle: flipping back to the sandbox's value clears the override rather than
-// freezing a copy of it.
+// Shown only on a card actually waiting on a spent allowance, unlike the always-present hold toggle. One question with
+// one answer, exactly as the chat asks it (ChatContinueStrip), so a card and an open transcript cannot describe the
+// same conversation differently. Same three-state grammar as the hold toggle: choosing the sandbox's own value clears
+// the override rather than freezing a copy of it.
 const limitedCard = computed(() => {
     const agent = agentById(agentId);
     return agent !== undefined && limited(agent) ? agent : undefined;
 });
-const sandboxSendsAgain = computed(() => sandboxSettings.value?.resumeAfterLimit ?? false);
-const sendsAgainOn = computed(() => effectiveLimitResume(agentById(agentId), sandboxSendsAgain.value));
-const toggleSendsAgain = async (): Promise<void> => {
-    const next = !sendsAgainOn.value;
+const limitAnswer = computed(() => effectivePolicy(`limit`, agentById(agentId), sandboxSettings.value));
+// Every row is a press, so the answers are rows: one per option, the current one marked. No `move` row without a named
+// account to move to — the card cannot see the sibling with room, so the chat's own control owns that choice.
+const limitRows = computed(() => breakAnswers(`limit`).filter((answer) => answer.value !== `move`));
+const chooseLimit = async (policy: TurnBreakPolicy): Promise<void> => {
     emit(`selected`);
-    await setResumeAfterLimit(agentId, next === sandboxSendsAgain.value ? null : next);
-};
-
-// The other answer to the same wall: moves the held turn to another account of the same provider with room, instead of
-// waiting for reset.
-const sandboxMoves = computed(() => sandboxSettings.value?.moveAfterLimit ?? false);
-const movesOn = computed(() => effectiveLimitMove(agentById(agentId), sandboxMoves.value));
-const toggleMoves = async (): Promise<void> => {
-    const next = !movesOn.value;
-    emit(`selected`);
-    await setMoveAfterLimit(agentId, next === sandboxMoves.value ? null : next);
+    await setBreakPolicy(agentId, `limit`, policy === sandboxPolicy(`limit`, sandboxSettings.value) ? null : policy);
 };
 
 // Ship-tier items are hidden below maintainer, not shown disabled: a collaborator's request lives on the card instead.
@@ -211,29 +205,30 @@ const ITEM = `flex w-full items-start gap-2 rounded-lg px-2.5 py-1.5 text-left t
                 </span>
             </span>
         </button>
-        <!-- The allowance posture, shown only on a card actually waiting on one. -->
-        <button v-if="limitedCard !== undefined" type="button" :class="ITEM" :disabled="archived" @click="toggleSendsAgain">
-            <Icon :name="sendsAgainOn ? 'clock' : 'refresh'" class="mt-0.5 text-xs" :class="sendsAgainOn ? 'text-link' : 'text-subtle'" />
-            <span class="flex min-w-0 flex-col">
-                <span class="text-sm text-content md:text-xs">{{
-                    sendsAgainOn ? t(`agents.agentSessionMenu.stopSendingAgainBy`) : t(`agents.agentSessionMenu.sendAgainAllowanceBack`)
-                }}</span>
-                <span class="text-2xs text-subtle">
-                    {{ sendsAgainOn ? t(`agents.agentSessionMenu.turnGoesAgainBy`) : t(`agents.agentSessionMenu.nothingSendsArmTurn`) }}
+        <!-- What happens next for a spent allowance, shown only on a card actually waiting on one: one question, one
+             answer, the same words the chat uses. -->
+        <template v-if="limitedCard !== undefined">
+            <span class="px-2.5 pt-2 pb-1 text-2xs text-subtle">{{ t(`chat.turnBreak.limitEnding`) }}</span>
+            <button
+                v-for="row in limitRows"
+                :key="row.value"
+                type="button"
+                :class="ITEM"
+                :disabled="archived"
+                :aria-pressed="limitAnswer === row.value"
+                @click="chooseLimit(row.value)"
+            >
+                <Icon
+                    :name="limitAnswer === row.value ? 'check' : row.icon"
+                    class="mt-0.5 text-xs"
+                    :class="limitAnswer === row.value ? 'text-link' : 'text-subtle'"
+                />
+                <span class="flex min-w-0 flex-col">
+                    <span class="text-sm md:text-xs" :class="limitAnswer === row.value ? 'text-link' : 'text-content'">{{ row.label }}</span>
+                    <span class="text-2xs text-subtle">{{ row.note }}</span>
                 </span>
-            </span>
-        </button>
-        <button v-if="limitedCard !== undefined" type="button" :class="ITEM" :disabled="archived" @click="toggleMoves">
-            <Icon name="user" class="mt-0.5 text-xs" :class="movesOn ? 'text-link' : 'text-subtle'" />
-            <span class="flex min-w-0 flex-col">
-                <span class="text-sm text-content md:text-xs">{{
-                    movesOn ? t(`agents.agentSessionMenu.stopMovingToAnother`) : t(`agents.agentSessionMenu.moveToAnotherAccount`)
-                }}</span>
-                <span class="text-2xs text-subtle">
-                    {{ movesOn ? t(`agents.agentSessionMenu.refusedTurnMovesTo`) : t(`agents.agentSessionMenu.spendsSecondAccountOn`) }}
-                </span>
-            </span>
-        </button>
+            </button>
+        </template>
         <!-- Archive keeps everything and only removes the agent from the board; discard actually throws work away. -->
         <button
             v-if="!archived"

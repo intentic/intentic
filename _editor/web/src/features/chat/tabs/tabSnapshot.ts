@@ -39,8 +39,6 @@ export interface StoredTab {
     readonly thinking?: boolean;
     // Persisted per tab, not remembered globally: a reload keeps this chat's setting, but a new chat starts off.
     readonly fast?: boolean;
-    // Persisted per tab like `fast`: armed for unattended stops, so a reload must not silently end the run.
-    readonly autoContinue?: boolean;
     // The stopped-turn offer itself isn't persisted: a cached copy can't know if the daemon still holds the turn,
     // and the daemon already answers that on every hydrate (AgentTranscriptSchema.ending).
     // Chat is on Auto with its model still unchosen. Per tab, since it describes this chat's unanswered question, and
@@ -84,7 +82,6 @@ export const snapshotTab = (conversation: Conversation): StoredTab => ({
     actsAs: conversation.actsAs.value,
     thinking: conversation.thinking.value,
     fast: conversation.fast.value,
-    autoContinue: conversation.autoContinue.value,
     auto: conversation.auto.value,
     harness: conversation.harness.value,
     // Session ref verbatim, never rebuilt field by field: the two must match exactly until something is switched.
@@ -238,7 +235,6 @@ const readTab = (raw: Record<string, unknown>): StoredTab | undefined => {
         ...readText(`actsAs`, raw[`actsAs`]),
         ...readFlag(`thinking`, raw[`thinking`]),
         ...readFlag(`fast`, raw[`fast`]),
-        ...readFlag(`autoContinue`, raw[`autoContinue`]),
         ...readFlag(`peek`, raw[`peek`]),
         ...readFlag(`standIn`, raw[`standIn`]),
         ...readStanding(raw[`standing`]),

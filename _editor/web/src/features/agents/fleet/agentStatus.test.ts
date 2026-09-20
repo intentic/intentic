@@ -18,7 +18,6 @@ import {
     unregistered,
     watchLine,
     watching,
-    effectiveLimitMove,
 } from "./agentStatus";
 
 // No mocks: agentStatus is a pure-function leaf, apart from the fleet store's chain through useChat and the router.
@@ -468,13 +467,8 @@ describe("a spent allowance", () => {
     });
 });
 
-// The fourth fold of the two-level posture, same precedence as its three neighbours.
-it(`effectiveLimitMove reads the conversation's override over the sandbox default`, () => {
-    expect(effectiveLimitMove(undefined, undefined)).toBe(false);
-    expect(effectiveLimitMove(undefined, true)).toBe(true);
-    expect(effectiveLimitMove({ moveAfterLimit: false }, true)).toBe(false);
-    expect(effectiveLimitMove({ moveAfterLimit: true }, false)).toBe(true);
-});
+// The same two-level fold for what happens when a turn breaks now lives in chat/run/turnBreak.ts, one question per
+// ending rather than a boolean per switch; turnBreak.test.ts covers its precedence.
 
 // The identity tile's rim: which of the two readings it draws, how far round, and in what ink. One function, because
 // the board card and the rail card render from it and may not disagree.

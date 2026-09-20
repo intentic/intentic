@@ -5,6 +5,7 @@ import { z } from "zod";
 import { CommandJudgeModeSchema } from "../policy/safety-policy.js";
 import { ModelRoleSchema } from "../models/model-roles.js";
 import { AdmissionPolicySchema, AdmissionRuleSchema, ModelPinSchema } from "./agent.js";
+import { LimitPolicySchema, RetryPolicySchema } from "./turn-break.js";
 // Which prompt base the agent runs before this turn composes anything on top: Intentic's own (default), Claude Code's
 // preset, or the owner's text. Declared out here since both the daemon and the browser branch on it.
 export const SystemPromptModeSchema = z.enum(["intentic", "claude", "custom"]);
@@ -359,30 +360,20 @@ export const SandboxSettingsSchema = z.object({
         .describe(
             "How many days a finished conversation stays on the board before being put away. Zero means never. The one setting here that defaults on, because each card left behind is a real working copy on disk, not just a row.",
         ),
-    // Off still records the failure, so the per-conversation resume offer arms normally; nothing is lost, just not
-    // automatic.
-    resumeAfterOutage: z
-        .boolean()
-        .default(false)
-        .describe(
-            "Whether a turn killed by the model provider failing is re-run automatically, backing off between attempts. The sandbox-wide default; any one conversation can say otherwise. Off to begin with, because a retry spends your allowance on a turn you sent once and only you can say whether it was worth paying for twice. Worth turning on for a sandbox whose work mostly happens with nobody in the room.",
-        ),
-    // The one resume that waits for a published instant rather than guessing; a limit with no published reset (Grok,
-    // Cursor) never fires this way at all.
-    resumeAfterLimit: z
-        .boolean()
-        .default(false)
-        .describe(
-            "Whether a turn a spent usage limit refused is sent again by itself once the allowance reopens. The sandbox-wide default; any one conversation can say otherwise. Off to begin with, because the allowance is your budget and a turn that spends it the second it comes back is not a decision to make for you. Worth turning on for a sandbox whose work mostly happens with nobody in the room.",
-        ),
-    // Same provider only; a different provider would retire the session for a saving that isn't one. Composes with
-    // `resumeAfterLimit` into four postures: hold, wait for reset, move-or-hold, move-or-wait.
-    moveAfterLimit: z
-        .boolean()
-        .default(false)
-        .describe(
-            "Whether a turn a spent usage limit refused is moved to another connected account of the same provider that still has room, as soon as the refusal lands. The sandbox-wide default; any one conversation can say otherwise. Off to begin with, because it spends a second account on your behalf. With no account that has room the turn waits as the setting above says.",
-        ),
+    // One answer per ending, never a set of switches over the same event: the chat's own question and these rows are
+    // the same question at two scopes. Every ending defaults to `wait`, because a re-run spends the reader's allowance
+    // on a turn they sent once.
+    limitPolicy: LimitPolicySchema.default("wait").describe(
+        "What happens to a turn a spent usage limit refused. `wait` holds it for a press. `resend` sends it again by itself once the allowance reopens, which needs a provider that publishes a reset (Grok and Cursor publish none). `move` also tries another connected account of the same provider that still has room, as soon as the refusal lands, and keeps the reset as its fallback. The sandbox-wide default; any one conversation can say otherwise.",
+    ),
+    // Off still records the failure, so the per-conversation offer arms normally; nothing is lost, just not automatic.
+    outagePolicy: RetryPolicySchema.default("wait").describe(
+        "What happens to a turn the model provider's own failure killed. `wait` holds it for a press. `retry` re-runs it on the shared per-provider breaker, backing off between attempts. The sandbox-wide default; any one conversation can say otherwise. Worth `retry` for a sandbox whose work mostly happens with nobody in the room.",
+    ),
+    // The posture that used to live only in a browser tab; moving it here is what lets it fire with nothing open.
+    stopPolicy: RetryPolicySchema.default("wait").describe(
+        "What happens to a turn that stopped short with nothing to repair — a hung runtime, a crashed harness. `wait` holds it for a press. `retry` re-runs the held turn on a short ladder, standing down after three tries that got nowhere rather than looping forever.",
+    ),
     limitMoveCarryUnder: z
         .number()
         .int()
@@ -397,7 +388,7 @@ export const SandboxSettingsSchema = z.object({
         .boolean()
         .default(false)
         .describe(
-            "Whether a turn killed by the sandbox restarting is re-run once it comes back. Off to begin with, for the same reason: it would spend your allowance on work you are not watching and edit files while you are still waiting for the sandbox to return. Either way the interruption is recorded rather than silently lost.",
+            "Whether a turn killed by the sandbox restarting is re-run once it comes back. A switch rather than one of the policies above, because a restart is the one ending with nobody watching it, so there is no in-chat question to answer. Off to begin with: it would spend your allowance on work you are not watching and edit files while you are still waiting for the sandbox to return. Either way the interruption is recorded rather than silently lost.",
         ),
     // Which repositories' own declarations (`<repo>/.intentic/checks.json`) the owner has switched on, each against the
     // fingerprint of what was declared when they did. A declaration that has since changed no longer matches its

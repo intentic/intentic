@@ -96,18 +96,14 @@ const errorRow = (event: Extract<AgentEvent, { kind: "error" }>): TranscriptRow 
     switch (code) {
         case "provider-outage":
             return event.outage === undefined
-                ? { role: "notice", text: `${message} Nothing is retrying it, so the turn is waiting: keep this chat going and it continues from here.` }
-                : {
-                      role: "notice",
-                      text: `${message} Retrying by itself: attempt ${event.outage.attempt} of ${event.outage.maxAttempts}.`,
-                      ...(event.autoResume === "scheduled" ? { noticeAction: "outageOptOut" } : {}),
-                  };
+                ? { role: "notice", text: `${message} Nothing is retrying it, so the turn is waiting here.` }
+                : { role: "notice", text: `${message} Retrying by itself: attempt ${event.outage.attempt} of ${event.outage.maxAttempts}.` };
         case "claude-token-refused":
             return event.autoResume === "scheduled"
                 ? { role: "notice", text: `${message} The credential is being renewed and this turn continues automatically.`, noticeWait: "credentialRenewal" }
                 : { role: "notice", text: `${message} Reconnect the account to pick this conversation back up.` };
         case "rate_limit":
-            return { role: "notice", text: event.autoResume === "scheduled" ? `${message} This chat sends it again once the allowance comes back.` : message };
+            return { role: "notice", text: message };
         // Refused before the model saw it; the composer holds the message so the user can resend it.
         case "claude-reauth":
         case "unknown-command":

@@ -1780,173 +1780,9 @@ describe(`Conversation`, () => {
         }
     });
 
-    it(`continues itself after a turn that stopped short, once its wait is up`, async () => {
-        vi.useFakeTimers();
-        try {
-            const conversation = new Conversation(`c1`);
-            conversation.setAutoContinue(true);
-            sandboxRequestMock.mockImplementation(sseResponse([{ kind: `error`, message: `agent did not complete`, held: { ran: true } }]));
-            await conversation.send(`ship the parser`, settings);
-
-            // Scheduled, not sent immediately: the wait gives a person a chance to intervene.
-            expect(conversation.pickUp.value).toEqual({ reason: `stopped`, held: { ran: true } });
-            expect(conversation.autoContinueAt.value).toBeGreaterThan(Date.now());
-            expect(turnBodies()).toHaveLength(1);
-
-            sandboxRequestMock.mockImplementation(sseResponse([{ kind: `delta`, text: `carrying on` }, { kind: `done` }]));
-            await vi.advanceTimersByTimeAsync(6_000);
-
-            // The held turn is re-run through the daemon; the transcript gains no word the user did not type.
-            expect(sandboxRequestMock.mock.calls.filter(([path]) => path === `/agent/resume`)).toHaveLength(1);
-            expect(turnBodies().map((body) => body[`prompt`])).toEqual([`ship the parser`]);
-            expect(conversation.messages.value.map((message) => message.text)).not.toContain(CONTINUATIONS.plain);
-            expect(conversation.autoContinueAt.value).toBeUndefined();
-        } finally {
-            vi.useRealTimers();
-        }
-    });
-
-    // The automation only ever re-runs a turn the daemon still holds. With nothing held there is nothing mechanical
-    // left to do, and typing the word for the user is what this whole path exists to stop.
-    it(`stands itself down rather than typing a continuation, when nothing is held`, async () => {
-        vi.useFakeTimers();
-        try {
-            const conversation = new Conversation(`c1`);
-            conversation.setAutoContinue(true);
-            sandboxRequestMock.mockImplementation(sseResponse([{ kind: `error`, message: `agent did not complete` }]));
-            await conversation.send(`ship the parser`, settings);
-            expect(conversation.pickUp.value).toEqual({ reason: `stopped` });
-
-            await vi.advanceTimersByTimeAsync(6_000);
-
-            expect(turnBodies()).toHaveLength(1);
-            expect(conversation.messages.value.filter((message) => message.role === `user`)).toMatchObject([{ text: `ship the parser` }]);
-            expect(conversation.autoContinue.value).toBe(false);
-            expect(conversation.messages.value.at(-1)).toMatchObject({
-                role: `notice`,
-                text: expect.stringContaining(`no longer held`),
-            });
-        } finally {
-            vi.useRealTimers();
-        }
-    });
-
-    // Carry an already-stopped turn into auto-continue.
-    it(`takes the stop it was armed in front of`, async () => {
-        vi.useFakeTimers();
-        try {
-            const conversation = new Conversation(`c1`);
-            sandboxRequestMock.mockImplementation(sseResponse([{ kind: `error`, message: `agent did not complete`, held: { ran: true } }]));
-            await conversation.send(`ship the parser`, settings);
-            expect(conversation.autoContinueAt.value).toBeUndefined();
-
-            conversation.setAutoContinue(true);
-            expect(conversation.autoContinueAt.value).toBeGreaterThan(Date.now());
-            sandboxRequestMock.mockImplementation(sseResponse([{ kind: `delta`, text: `carrying on` }, { kind: `done` }]));
-            await vi.advanceTimersByTimeAsync(5_000);
-            expect(sandboxRequestMock.mock.calls.filter(([path]) => path === `/agent/resume`)).toHaveLength(1);
-            expect(turnBodies().map((body) => body[`prompt`])).toEqual([`ship the parser`]);
-        } finally {
-            vi.useRealTimers();
-        }
-    });
-
-    // A user Stop must never be auto-continued: it is the opposite of what they asked. Waits for the agent's own
-    // text, not `streaming` (true before the daemon has even taken the turn).
-    it(`stays out of the way of a turn the user stopped`, async () => {
-        vi.useFakeTimers();
-        try {
-            const conversation = new Conversation(`c1`);
-            conversation.setAutoContinue(true);
-            sandboxRequestMock.mockImplementation(sseResponse([{ kind: `delta`, text: `working` }], { stayOpen: true }));
-            const turn = conversation.send(`ship the parser`, settings);
-            await vi.waitFor(() => expect(conversation.messages.value.some((message) => message.text === `working`)).toBe(true));
-            await conversation.stop();
-            await turn;
-
-            expect(conversation.pickUp.value).toEqual({ reason: `stopped` });
-            expect(conversation.autoContinueAt.value).toBeUndefined();
-            await vi.advanceTimersByTimeAsync(60_000);
-            expect(turnBodies()).toHaveLength(1);
-        } finally {
-            vi.useRealTimers();
-        }
-    });
-
-    // Turns that die in seconds mean something is actually wrong; retrying unattended forever would make that
-    // expensive, so each wait grows and it gives up after three, saying why.
-    it(`backs off, then gives up and says so, when nothing it continues gets anywhere`, async () => {
-        vi.useFakeTimers();
-        try {
-            const conversation = new Conversation(`c1`);
-            conversation.setAutoContinue(true);
-            sandboxRequestMock.mockImplementation(sseResponse([{ kind: `error`, message: `agent did not complete` }]));
-
-            const waits: number[] = [];
-            for (let attempt = 0; attempt < 3; attempt += 1) {
-                await conversation.send(attempt === 0 ? `ship the parser` : CONTINUATIONS.plain, settings);
-                waits.push(conversation.autoContinueAt.value! - Date.now());
-                await vi.advanceTimersByTimeAsync(0);
-            }
-            expect(waits).toEqual([5_000, 15_000, 45_000]);
-
-            // The fourth stop is declined: auto-continue turns itself off and says so.
-            await conversation.send(CONTINUATIONS.plain, settings);
-            expect(conversation.autoContinue.value).toBe(false);
-            expect(conversation.autoContinueAt.value).toBeUndefined();
-            expect(conversation.messages.value.at(-1)).toMatchObject({
-                role: `notice`,
-                text: expect.stringContaining(`Auto-continue stopped`),
-            });
-        } finally {
-            vi.useRealTimers();
-        }
-    });
-
-    // Only a turn that ends on its own resets the ladder, never how long one ran: a run whose turns each hang for
-    // minutes and then die reads as all progress by duration, and never reaches the stand-down it exists for.
-    it(`climbs the ladder however long each dying turn takes, and resets only on a turn that ends`, async () => {
-        vi.useFakeTimers();
-        try {
-            const conversation = new Conversation(`c1`);
-            conversation.setAutoContinue(true);
-            const stops = sseResponse([{ kind: `error`, message: `agent did not complete`, held: { ran: true } }]);
-            // Burns a minute inside the request: the shape of a runtime that hangs, then dies.
-            const hangs: typeof stops = (path, init) => {
-                if (path === `/agent` || path === `/agent/resume`) {
-                    vi.setSystemTime(Date.now() + 60_000);
-                }
-                return stops(path, init);
-            };
-            sandboxRequestMock.mockImplementation(hangs);
-            await conversation.send(`ship the parser`, settings);
-            // Advances exactly the scheduled wait, so the next delay is read precisely rather than
-            // delay-minus-overshoot.
-            expect(conversation.autoContinueAt.value! - Date.now()).toBe(5_000);
-            await vi.advanceTimersByTimeAsync(5_000);
-            expect(conversation.autoContinueAt.value! - Date.now()).toBe(15_000);
-            await vi.advanceTimersByTimeAsync(15_000);
-            expect(conversation.autoContinueAt.value! - Date.now()).toBe(45_000);
-
-            // The fourth stop spends the ladder, however long each of them took.
-            await vi.advanceTimersByTimeAsync(45_000);
-            expect(conversation.autoContinue.value).toBe(false);
-            expect(conversation.messages.value.at(-1)).toMatchObject({
-                role: `notice`,
-                text: expect.stringContaining(`Auto-continue stopped`),
-            });
-
-            // A turn that ends on its own puts the ladder back at its first rung.
-            conversation.setAutoContinue(true);
-            sandboxRequestMock.mockImplementation(sseResponse([{ kind: `delta`, text: `done` }, { kind: `done` }]));
-            await conversation.send(`and the rest`, settings);
-            sandboxRequestMock.mockImplementation(stops);
-            await conversation.send(`and again`, settings);
-            expect(conversation.autoContinueAt.value! - Date.now()).toBe(5_000);
-        } finally {
-            vi.useRealTimers();
-        }
-    });
+    // The ladder that re-runs a held turn is the daemon's now (agent/run/turn/turn-resume.ts, runStopRung), not this
+    // window's: it has to fire with no tab open, and a browser timer could not. Its rungs, its cap and its stand-down
+    // notice are covered by turn-resume.integration.test.ts.
 
     // A bare "continue" after a denied tool reads as "run it anyway", so the continuation must name the refusal. It
     // must also fold into the turn, so pressing it matches typing the words.
@@ -2146,8 +1982,8 @@ describe(`Conversation`, () => {
         expect(conversation.pickUp.value).toEqual({ reason: `limit`, readyAt: resetsAt * 1_000 });
     });
 
-    // Once armed, the daemon fires the held turn at the published reset hour, and the chat must say so instead of
-    // still offering a press. `automatic` marks it, same as an armed outage, and keeps local auto-continue's hands off.
+    // Once armed, the daemon fires the held turn at the published reset hour and says so on the frame. `nextAt` is the
+    // booking it will actually keep — distinct from `resetsAt`, which is only the provider's fact about the allowance.
     it(`reports a scheduled send when the conversation is armed for the reset`, async () => {
         const conversation = new Conversation(`c1`);
         const resetsAt = Math.floor(Date.now() / 1000) + 3_600;
@@ -2158,6 +1994,7 @@ describe(`Conversation`, () => {
                     code: `rate_limit`,
                     message: `Claude usage limit reached.`,
                     resetsAt,
+                    nextAt: resetsAt,
                     autoResume: `scheduled`,
                     held: { ran: false },
                 },
@@ -2169,12 +2006,14 @@ describe(`Conversation`, () => {
         expect(conversation.pickUp.value).toEqual({
             reason: `limit`,
             readyAt: resetsAt * 1_000,
+            nextAt: resetsAt * 1_000,
             held: { ran: false },
-            automatic: { at: resetsAt * 1_000 },
         });
         // Still a notice rather than the red line: an armed wait is the least alarming state this failure has.
         expect(conversation.error.value).toBeNull();
-        expect(conversation.messages.value.at(-1)!.text).toContain(`sends it again`);
+        // The row states the provider's own sentence and nothing more: what happens next, and the way to change it,
+        // are the card's above the composer, said once.
+        expect(conversation.messages.value.at(-1)!.text).toBe(`Claude usage limit reached.`);
     });
 
     // An allowance the daemon can't date still offers the press immediately: there's nothing to wait for and the
@@ -2290,104 +2129,8 @@ describe(`Conversation`, () => {
         expect(conversation.messages.value.at(-1)).toMatchObject({ role: `assistant`, text: `on it` });
     });
 
-    // An interval ladder alone fails here: every rung before the quota reopens is a guaranteed miss. The named reset
-    // instant is a floor under the wait, so an armed chat sleeps through it.
-    it(`waits for the reset before continuing itself through a spent allowance`, async () => {
-        vi.useFakeTimers();
-        try {
-            const conversation = new Conversation(`c1`);
-            conversation.setAutoContinue(true);
-            const resetsAt = Math.floor(Date.now() / 1000) + 3_600;
-            sandboxRequestMock.mockImplementation(
-                sseResponse([
-                    { kind: `error`, code: `rate_limit`, message: `Claude usage limit reached.`, resetsAt, held: { ran: false } },
-                    { kind: `done` },
-                ]),
-            );
-            await conversation.send(`ship the parser`, settings);
-
-            // Scheduled for the reset, not for the front of the ladder.
-            expect(conversation.autoContinueAt.value).toBe(resetsAt * 1_000);
-            sandboxRequestMock.mockImplementation(sseResponse([{ kind: `delta`, text: `carrying on` }, { kind: `done` }]));
-            // A rung's worth of waiting buys nothing: the allowance is what the chat is waiting on.
-            await vi.advanceTimersByTimeAsync(60_000);
-            expect(sandboxRequestMock.mock.calls.filter(([path]) => path === `/agent/resume`)).toHaveLength(0);
-
-            await vi.advanceTimersByTimeAsync(3_600_000);
-            expect(sandboxRequestMock.mock.calls.filter(([path]) => path === `/agent/resume`)).toHaveLength(1);
-            expect(turnBodies().map((body) => body[`prompt`])).toEqual([`ship the parser`]);
-        } finally {
-            vi.useRealTimers();
-        }
-    });
-
-    // An unknown reset backs off by rung count regardless of how long each refusal takes, growing to a one-day
-    // ceiling instead of resetting on wall time or retrying forever.
-    it(`backs an unknown usage reset off from seconds to a daily probe even when every refusal is slow`, async () => {
-        vi.useFakeTimers();
-        try {
-            const conversation = new Conversation(`c1`);
-            conversation.setAutoContinue(true);
-            const refused = { kind: `error`, code: `rate_limit`, message: `Provider usage limit reached.` } as const;
-            sandboxRequestMock.mockImplementation(
-                sseResponse([refused, { kind: `done` }], {
-                    // Slow refusal, not progress.
-                    head: () => ({ startedAt: Date.now() - 60_000 }),
-                }),
-            );
-
-            const waits: number[] = [];
-            for (let attempt = 0; attempt < 10; attempt += 1) {
-                await conversation.send(attempt === 0 ? `ship the parser` : CONTINUATIONS.plain, settings);
-                waits.push(conversation.autoContinueAt.value! - Date.now());
-            }
-
-            expect(waits).toEqual([
-                5_000,
-                15_000,
-                45_000,
-                5 * 60_000,
-                30 * 60_000,
-                2 * 60 * 60_000,
-                6 * 60 * 60_000,
-                12 * 60 * 60_000,
-                24 * 60 * 60_000,
-                24 * 60 * 60_000,
-            ]);
-            expect(conversation.autoContinue.value).toBe(true);
-        } finally {
-            vi.useRealTimers();
-        }
-    });
-
-    // Unattended, appending "Continue" on each short rung would pile up messages; re-running the held turn instead
-    // costs refused requests without touching the transcript.
-    it(`re-runs the held turn when it continues itself, then moves beyond the short retry rungs`, async () => {
-        vi.useFakeTimers();
-        try {
-            const conversation = new Conversation(`c1`);
-            conversation.setAutoContinue(true);
-            const refused = { kind: `error`, code: `rate_limit`, message: `Claude usage limit reached.`, held: { ran: false } } as const;
-            sandboxRequestMock.mockImplementation(sseResponse([refused, { kind: `done` }]));
-            await conversation.send(`ship the parser`, settings);
-
-            sandboxRequestMock.mockImplementation(
-                sseResponse([refused, { kind: `done` }], {
-                    head: () => ({ prompt: withResumeNote(`ship the parser`, RESUME_NOTES.refused), startedAt: Date.now() }),
-                }),
-            );
-            // The short end of the ladder: 5s, 15s, 45s, then the next retry is five minutes away.
-            await vi.advanceTimersByTimeAsync(70_000);
-
-            expect(sandboxRequestMock.mock.calls.filter(([path]) => path === `/agent/resume`)).toHaveLength(3);
-            expect(turnBodies()).toHaveLength(1);
-            expect(conversation.messages.value.filter((message) => message.role === `user`)).toMatchObject([{ text: `ship the parser` }]);
-            expect(conversation.autoContinue.value).toBe(true);
-            expect(conversation.autoContinueAt.value! - Date.now()).toBe(295_000);
-        } finally {
-            vi.useRealTimers();
-        }
-    });
+    // What an armed chat does through a spent allowance is the daemon's appointment now (runLimitRung), fired at the
+    // provider's own reset rather than guessed at by a browser timer; turn-resume.integration.test.ts covers it.
 
     // A provider outage reads like a limit but isn't: no reset instant, an escalating wait, bounded tries. Renders as
     // a notice (the turn is coming back), with the wait naming an instant.
@@ -2412,8 +2155,8 @@ describe(`Conversation`, () => {
         const notice = conversation.messages.value.at(-1)!;
         expect(notice.role).toBe(`notice`);
         expect(notice.text).toContain(`attempt 2 of 6`);
-        // The moment-of-regret opt-out rides the notice the automation's own firing produced.
-        expect(notice.noticeAction).toBe(`outageOptOut`);
+        // No second switch on the row: what happens next is one question, asked once, on the card above the composer.
+        expect(notice.noticeAction).toBeUndefined();
         expect(conversation.failures.outageResume.value).toEqual({ retryAt, attempt: 2, maxAttempts: 6, scheduled: true });
         expect(conversation.error.value).toBeNull();
         expect(conversation.status.value).not.toBe(`error`);
@@ -2668,23 +2411,16 @@ describe(`Conversation`, () => {
         await conversation.send(`hello`, settings);
 
         expect(conversation.failures.outageResume.value).toEqual({ retryAt, attempt: 1, maxAttempts: 6, scheduled: false });
-        // Nothing is armed, so no opt-out is offered: there is nothing to opt out of yet.
-        expect(conversation.messages.value.at(-1)!.noticeAction).toBeUndefined();
 
-        // Arming this conversation arms the turn that bounced, daemon-side; the notice states the scope (this chat
-        // only,
-        // distinct from the sandbox-wide default).
-        conversation.failures.armOutageResume();
+        // Answering `retry` starts this window watching for the run the daemon will bring back; answering `wait`
+        // stands that watch down. Nothing is written to the transcript either way — a toggle's state belongs on the
+        // toggle, and six notices about arming and disarming were six rows nobody could act on.
+        const rows = conversation.messages.value.length;
+        conversation.failures.watchOutage(true);
         expect(conversation.failures.outageResume.value?.scheduled).toBe(true);
-        expect(conversation.messages.value.at(-1)!.text).toContain(`Only this chat`);
-
-        // Disarming stops the countdown, restores the offer (still re-armable), and stands the resume-hunting probe
-        // down.
-        const armed = conversation.messages.value.at(-1)!.text;
-        conversation.failures.disarmOutageResume();
+        conversation.failures.watchOutage(false);
         expect(conversation.failures.outageResume.value?.scheduled).toBe(false);
-        expect(conversation.messages.value.at(-1)!.text).not.toEqual(armed);
-        expect(conversation.messages.value.at(-1)!.text).toContain(`no longer`);
+        expect(conversation.messages.value).toHaveLength(rows);
         conversation.abort();
     });
 

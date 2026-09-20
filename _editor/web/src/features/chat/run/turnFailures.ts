@@ -5,25 +5,13 @@ import { markAccountReauth } from "../accounts/providerAccounts";
 import type { TranscriptClock } from "../transcript/transcriptClock";
 import type { SessionRef } from "./turnRequest";
 import type { TurnContext } from "./turnStream";
-import { bindingWindow, formatWait, usageStatusFor } from "../session/usageStatus";
+import { bindingWindow, usageStatusFor } from "../session/usageStatus";
 
 // Maps a turn failure's code to what this window does: whether the user is needed (red line) or merely informed,
 // whether the message is held for retry, and whether the turn returns on its own. The daemon owns the failure's
 // transcript line; recovery state for the two auto-resuming codes lives here.
 
 type TurnError = Extract<TurnFact, { kind: "error" }>;
-
-// True when the daemon will resend this turn itself: a booked move fires now, a scheduled reset fires at
-// `resetsAt`. Undefined if nothing is armed or the provider gave no reset instant.
-const limitAutomatic = (error: TurnError, now: number = Date.now()): { readonly at: number } | undefined => {
-    if (error.autoResume !== `scheduled`) {
-        return undefined;
-    }
-    if (error.held?.moving !== undefined) {
-        return { at: now };
-    }
-    return error.resetsAt === undefined ? undefined : { at: error.resetsAt * 1_000 };
-};
 
 // A provider outage in progress: next retry time, attempts used and allowed, and whether it is armed to fire
 // automatically. Drives the composer's outage banner.
@@ -182,19 +170,17 @@ export class TurnFailures {
         markAccountReauth(this.host.provider.value, this.host.account.value, detail);
     }
 
-    // A spent allowance is a wait, not a crash: muted, not red, and not auto-resent unless `resumeAfterLimit` is
-    // on. `held` means continuing resends the same turn, not a new message.
+    // A spent allowance is a wait, not a crash: muted, not red, and nothing is resent unless this conversation's
+    // answer for the ending says so. `held` means continuing resends the same turn, not a new message.
     private applyLimitError(error: TurnError): void {
         const model = this.host.model.value === `` ? undefined : { id: this.host.model.value };
         const resetsAt = error.resetsAt ?? bindingWindow(usageStatusFor(this.host.provider.value, this.host.account.value, model), model)?.resetsAt;
-        // `automatic` mirrors the outage case, so local auto-continue defers to what the daemon already armed.
-        // `resetsAt` always comes from the frame, never the store's fallback.
-        const automatic = limitAutomatic(error);
         this.host.pickUp.value = {
             reason: `limit`,
+            // `resetsAt` always comes from the frame, never the store's fallback; `nextAt` is the daemon's own booking.
             ...(resetsAt === undefined ? {} : { readyAt: resetsAt * 1_000 }),
+            ...(error.nextAt === undefined ? {} : { nextAt: error.nextAt * 1_000 }),
             ...(error.held === undefined ? {} : { held: error.held }),
-            ...(automatic === undefined ? {} : { automatic }),
         };
     }
 
@@ -209,9 +195,8 @@ export class TurnFailures {
         }
         const scheduled = error.autoResume === `scheduled`;
         this.outageResume.value = { ...outage, scheduled };
-        // Same pickUp shape every failure leaves, so the strip is one strip. Scheduled: automatic mark tells local
-        // auto-continue to stand down; the manual press stays live regardless.
-        this.host.pickUp.value = { reason: `outage`, ...(scheduled ? { automatic: { at: outage.retryAt * 1_000 } } : {}) };
+        // Same pickUp shape every failure leaves, so the card is one card; the press stays live whatever is booked.
+        this.host.pickUp.value = { reason: `outage`, ...(error.nextAt === undefined ? {} : { nextAt: error.nextAt * 1_000 }) };
         if (scheduled) {
             this.scheduleReattach(outage.retryAt * 1000, OUTAGE_PROBE);
         }
@@ -238,62 +223,21 @@ export class TurnFailures {
         this.scheduleReattach(Date.now(), RENEWAL_PROBE, () => this.giveUpOnRenewal());
     }
 
-    // The daemon already holds this turn regardless of posture; the press only has to reflect that state locally.
-    // Notice names the scope ("this chat") since the standing default lives in Sandbox ▸ Agent.
-    armOutageResume(): void {
+    // The outage is the one ending with a second party already retrying it, so this window has to watch for the run
+    // the daemon brings back — or a resumed turn streams into nothing. Everything else about the answer (what is
+    // armed, what the card says, what the countdown reads) comes from the policy itself; there is nothing to mirror
+    // here, and no notice to write, because a toggle's state belongs on the toggle.
+    watchOutage(on: boolean): void {
         const pending = this.outageResume.value;
         if (pending === undefined) {
             return;
         }
-        this.outageResume.value = { ...pending, scheduled: true };
-        this.host.pickUp.value = { reason: `outage`, automatic: { at: pending.retryAt * 1_000 } };
-        this.host.transcript.notice(
-            `This chat picks itself back up in ${formatWait(pending.retryAt)} and keeps doing so through provider outages. Only this chat: Sandbox ▸ Agent sets the default for the rest.`,
-        );
+        this.outageResume.value = { ...pending, scheduled: on };
+        if (!on) {
+            this.cancelProbe();
+            return;
+        }
         this.scheduleReattach(pending.retryAt * 1000, OUTAGE_PROBE);
-        this.host.persist();
-    }
-
-    // Mirror of armOutageResume for the limit wait: the daemon already holds the turn, so `automatic` only marks
-    // it locally. Hidden entirely when there's no `readyAt`, since there's no appointment to arm.
-    armLimitResume(): void {
-        const pending = this.host.pickUp.value;
-        if (pending?.reason !== `limit` || pending.readyAt === undefined) {
-            return;
-        }
-        this.host.pickUp.value = { ...pending, automatic: { at: pending.readyAt } };
-        this.host.transcript.notice(
-            `This chat sends the turn again by itself once the allowance comes back. Only this chat: Sandbox ▸ Agent sets the default for the rest.`,
-        );
-        this.host.persist();
-    }
-
-    // Clears only the appointment, never the turn: the daemon still holds it, so the press and countdown stay
-    // available after this.
-    disarmLimitResume(): void {
-        const pending = this.host.pickUp.value;
-        if (pending?.reason !== `limit`) {
-            return;
-        }
-        const { automatic: _stopped, ...held } = pending;
-        this.host.pickUp.value = held;
-        this.host.transcript.notice(`Stopped: nothing sends this turn for you. It is still here to send by hand whenever you like.`);
-        this.host.persist();
-    }
-
-    // Reverts the banner to an offer, not a cancellation: the daemon still holds the turn for the outage window
-    // regardless. Also stands the reattach probe down, since nothing is coming to look for.
-    disarmOutageResume(): void {
-        const pending = this.outageResume.value;
-        if (pending === undefined) {
-            return;
-        }
-        this.cancelProbe();
-        this.outageResume.value = { ...pending, scheduled: false };
-        // Turn is still stranded and pickable; only the automatic mark and countdown go.
-        this.host.pickUp.value = { reason: `outage` };
-        this.host.transcript.notice(`Stopped: this chat no longer picks itself back up. The turn is still here to resume by hand.`);
-        this.host.persist();
     }
 
     // Called when a turn starts on this conversation: both waits are over, by resume or by the user's own send.

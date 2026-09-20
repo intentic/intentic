@@ -6,6 +6,8 @@ import {
     ForkedFromSchema,
     LandConflictSchema,
     type LandedMessage,
+    LimitPolicySchema,
+    RetryPolicySchema,
     SessionOwnerSchema,
     UnfinishedWorkSchema,
 } from "@intentic/sandbox-contract";
@@ -114,12 +116,12 @@ export const PersistedAgentSchema = z.object({
     limitMoving: z.string().optional(),
     // Override of the sandbox-wide autoLand default (absent inherits); must govern turns that finish unattended.
     autoLand: z.boolean().optional(),
-    // Same override for outages; the whole point of arming it is a resume with nobody watching.
-    resumeAfterOutage: z.boolean().optional(),
-    // Same override for limits, more so: the reopening is often hours past the tab that armed it.
-    resumeAfterLimit: z.boolean().optional(),
-    // Same override for moving accounts on a spent limit.
-    moveAfterLimit: z.boolean().optional(),
+    // This conversation's own answer to each ending's one question (absent inherits the sandbox-wide policy). The whole
+    // point of arming any of them is a resume with nobody watching, and a limit's reopening is often hours past the tab
+    // that armed it, so all three are persisted rather than held in a window.
+    limitPolicy: LimitPolicySchema.optional(),
+    outagePolicy: RetryPolicySchema.optional(),
+    stopPolicy: RetryPolicySchema.optional(),
     // A collaborator's standing ask to land; persisted so it survives a restart.
     landRequested: z.object({ email: z.string(), name: z.string().optional(), at: z.number() }).optional(),
     // Every mark anyone left, flat and in press order; summaryOf groups them per emoji for the card. Flat here because

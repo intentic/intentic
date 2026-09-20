@@ -188,11 +188,9 @@ describe("foldTurn", () => {
                 outage: { retryAt: 1, attempt: 2, maxAttempts: 6 },
             },
         ];
-        expect(foldOf("hi", outage).at(-1)).toEqual({
-            role: "notice",
-            text: "Anthropic is down. Retrying by itself: attempt 2 of 6.",
-            noticeAction: "outageOptOut",
-        });
+        // The row states what happened and nothing more: what happens next, and the one control that changes it, are
+        // the chat card's, asked once (ChatContinueStrip), not a second switch on a transcript line.
+        expect(foldOf("hi", outage).at(-1)).toEqual({ role: "notice", text: "Anthropic is down. Retrying by itself: attempt 2 of 6." });
         const renewal: AgentEvent[] = [{ kind: "error", code: "claude-token-refused", message: "Token refused.", autoResume: "scheduled" }];
         expect(foldOf("hi", renewal).at(-1)).toEqual({
             role: "notice",

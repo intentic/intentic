@@ -27,7 +27,7 @@ unfinished", which is what a hand-off that loses the checklist looks like from t
 
 `agent/run/turn/turn-resume.ts` already held a refused turn whole (`pendingHeld`), re-ran it on a press
 (`fireHeldResume`, with a `routing` so the press could name another account), and fired it by itself at the
-provider's reset when `resumeAfterLimit` said so, per conversation or for the sandbox. `agent.routes.ts`
+provider's reset when the limit posture said so, per conversation or for the sandbox. `agent.routes.ts`
 dressed the failure frame with the reset instant and the hold. A turn that resumed no session was seeded from
 the conversation's record by `runtime-history.ts`: a capped envelope of the transcript with tool names and
 the user's decisions, no tool output.
@@ -85,12 +85,14 @@ render them, counted at four characters a token. Both ride the failure frame and
 reopened tab says the same numbers. The strip puts them where they are read: on the press ("re-reads ~85k
 tokens of context, cold"), on the appointment, and on the two rows the other account now gets.
 
-### The policy (`moveAfterLimit`, `limitMoveCarryUnder`)
+### The policy (`limitPolicy: "move"`, `limitMoveCarryUnder`)
 
-`SandboxSettings.moveAfterLimit` (default off, per-conversation override like its neighbours) moves a held
-turn to another connected account of the same provider that still has room, as soon as the refusal lands.
-Composed with `resumeAfterLimit` it spells the four postures: hold for a press, send again at the reset, move
-or else hold, move or else send at the reset. `sibling-account.ts` makes the daemon's judgement the way the
+The move was built as `SandboxSettings.moveAfterLimit`, a second boolean beside `resumeAfterLimit`, which
+composed into four postures — one of them ("move, else hold") nobody would choose. It is now one answer to one
+question, `SandboxSettings.limitPolicy` (`wait` | `resend` | `move`, default `wait`, per-conversation override
+like its neighbours); see `turn-break-policy.md`. `move` moves a held turn to another connected account of the
+same provider that still has room, as soon as the refusal lands, and keeps the reset appointment as its
+fallback. `sibling-account.ts` makes the daemon's judgement the way the
 chat's `limitFallback.ts` makes it: a reading with room, never the absence of one, emptiest first, a dead
 credential is not room. Claude only, because Claude is the provider whose accounts the daemon picks between;
 a routed provider balances its own credentials before it refuses, and a different provider is never a move.

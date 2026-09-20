@@ -31,7 +31,7 @@ describe("routeFloor", () => {
         expect(routeFloor("POST", "/agents/abc/assign")).toBe("collaborator");
         // Resuming is the same turn again, so it belongs to whoever may start one; arming auto-land does not.
         expect(routeFloor("POST", "/agent/resume")).toBe("collaborator");
-        expect(routeFloor("POST", "/agents/abc/resume-after-outage")).toBe("collaborator");
+        expect(routeFloor("POST", "/agents/abc/break-policy")).toBe("collaborator");
         expect(routeFloor("POST", "/agents/abc/auto-land")).toBe("maintainer");
         // An attachment is part of the message it travels with, so the upload route answers at this tier for
         // the address attachments land at — and only for that one (the workspace write below).

@@ -9,6 +9,9 @@ import {
     type CiJobsResponse,
     type DevicesList,
     type Info,
+    isTurnBreakPolicy,
+    type TurnBreak,
+    type TurnBreakPolicy,
     type Persona,
     type Model,
     type OauthAccount,
@@ -348,6 +351,7 @@ const ROUTES: readonly (readonly [string, string, Handler])[] = [
     [`POST`, `/agents/{id}/react`, reactToAgent],
     [`POST`, `/agents/{id}/assign`, assignAgent],
     [`POST`, `/agents/{id}/auto-land`, ({ param }) => agentResponse(patchAgent(param(`id`), {}))],
+    [`POST`, `/agents/{id}/break-policy`, setBreakPolicy],
     [`POST`, `/agents/{id}/land`, ({ param }) => land(param(`id`))],
     [`POST`, `/agents/{id}/discard`, () => refuse(`This is the demo workspace: there is no worktree to discard.`)],
     [`POST`, `/agents/archive`, archiveAgents],
@@ -854,6 +858,19 @@ const DEMO_SAVINGS: SavingsReport = {
 };
 
 const agentResponse = (agent: AgentSummary | undefined): Response => (agent === undefined ? refuse(`No such agent.`, 404) : json(agent));
+
+// One answer per ending, as the daemon stores it: `null` clears the override back to the sandbox-wide policy.
+// Real, not a stub, so the chat's own control and the card's menu behave here exactly as they do against a daemon.
+function setBreakPolicy({ request, param }: RouteContext): Promise<Response> {
+    return request.json().then((body) => {
+        const { ending, policy } = body as { ending?: TurnBreak; policy?: TurnBreakPolicy | null };
+        if (ending === undefined || (policy !== null && policy !== undefined && !isTurnBreakPolicy(ending, policy))) {
+            return agentResponse(undefined);
+        }
+        const key = ending === `limit` ? `limitPolicy` : ending === `outage` ? `outagePolicy` : `stopPolicy`;
+        return agentResponse(patchAgent(param(`id`), { [key]: policy ?? undefined }));
+    });
+}
 
 // The demo's own reader is Ada (the session this daemon mints), so a press here joins or leaves her from the chip,
 // exactly as the real one attributes a mark to the verified caller rather than to anything the browser sent.

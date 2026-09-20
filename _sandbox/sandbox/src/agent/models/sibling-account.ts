@@ -1,6 +1,6 @@
 import { type AccountUsage, type AgentProvider, bindingWindow, type ModelRef, type OauthAccount, SPENT_UTILIZATION } from "@intentic/sandbox-contract";
 import type { Services } from "../../composition.js";
-import { moveAfterLimitArmed } from "../run/turn/turn-resume.js";
+import { breakPolicyFor } from "../run/turn/turn-resume.js";
 
 // Claude-only: a routed provider balances its own credentials before refusing, so a refusal there already means nothing
 // is left. Picks the emptiest account with an actual reading, skipping the refused, unmeasured, and dead ones.
@@ -50,7 +50,7 @@ export const bookLimitMove = async (
         readonly carryRefused?: boolean | undefined;
     },
 ): Promise<{ readonly account: string; readonly carry: boolean } | undefined> => {
-    if (!(await moveAfterLimitArmed(services, params.conversationId))) {
+    if ((await breakPolicyFor(services, params.conversationId, "limit")) !== "move") {
         return undefined;
     }
     const account = await siblingWithRoom(services, params);

@@ -1,20 +1,23 @@
-import type { TurnEnding } from "@intentic/sandbox-contract";
+import type { TurnBreak, TurnBreakPolicy, TurnEnding } from "@intentic/sandbox-contract";
+import { t } from "@intentic/ui/i18n";
 import { formatReset, formatWait } from "../session/usageStatus";
 
-// One state for every turn ending that leaves finished work behind a live session. `reason` is the sentence, `readyAt`
-// a spent allowance's honest reopen time, `automatic` flags something else already bringing the turn back. Excludes
-// endings that need a real fix (a dead credential, an unsupported model): those re-fail on press by construction, so no
-// offer beats a bad one.
-
-export type PickUpReason = `stopped` | `limit` | `outage`;
+// One state for every turn ending that leaves finished work behind a live session. `reason` is the wall, `readyAt` a
+// spent allowance's honest reopen time, `nextAt` the instant the daemon's own booking fires. Excludes endings that need
+// a real fix (a dead credential, an unsupported model): those re-fail on press by construction, so no offer beats a bad
+// one.
+//
+// What is deliberately NOT here: whether anything is armed. That is the conversation's answer to this ending's one
+// question (turnBreak.ts), read the same way by every surface — which is what stops a frame saying "scheduled" while a
+// switch elsewhere says off.
 
 export interface PickUp {
-    /** Which ending left the work here; read only for its sentence. */
-    readonly reason: PickUpReason;
+    /** Which wall left the work here. */
+    readonly reason: TurnBreak;
     /** When the named allowance is due to reopen (ms); only a spent allowance has one. */
     readonly readyAt?: number;
-    /** Something other than this window is already bringing the turn back, and when (ms). */
-    readonly automatic?: { readonly at: number };
+    /** When the daemon's own booking fires (ms), as the failure frame stated it; absent means it fires on the next pass. */
+    readonly nextAt?: number;
     // The daemon is holding the turn itself, so the press re-runs it rather than sending a message. `ran` says whether
     // the held turn got anywhere before it was refused, since a blanket "work kept" was wrong for the common case of a
     // turn refused before its first request.
@@ -47,33 +50,32 @@ export const pressCost = (held: HeldTurn | undefined): PressCost | undefined => 
 
 // Same state as the daemon's own record (AgentTranscriptSchema.ending), for a window that didn't watch the turn die
 // live. A projection, not a second reading: the stream and the record reach the identical value from either end,
-// converting the wire's seconds to the client's milliseconds once, here. `automatic` only appears with an instant to
-// aim at; a booking with no hour isn't an appointment.
-export const pickUpOf = (ending: TurnEnding, now: number = Date.now()): PickUp => {
-    const readyAt = ending.resetsAt === undefined ? undefined : ending.resetsAt * 1_000;
-    // A booked move has no hour to aim at: it goes on the next pass, "now" to a reader.
-    const moving = ending.held?.moving !== undefined;
-    const at = moving ? now : readyAt;
-    return {
-        reason: ending.reason,
-        ...(readyAt === undefined ? {} : { readyAt }),
-        ...(ending.held === undefined ? {} : { held: ending.held }),
-        ...(ending.scheduled === true && at !== undefined ? { automatic: { at } } : {}),
-    };
-};
+// converting the wire's seconds to the client's milliseconds once, here.
+export const pickUpOf = (ending: TurnEnding): PickUp => ({
+    reason: ending.reason,
+    ...(ending.resetsAt === undefined ? {} : { readyAt: ending.resetsAt * 1_000 }),
+    ...(ending.nextAt === undefined ? {} : { nextAt: ending.nextAt * 1_000 }),
+    ...(ending.held === undefined ? {} : { held: ending.held }),
+});
 
 // Past this, a wall-clock time reads better than a countdown nobody can act on; under it, the relative wait wins.
 const CLOCK_FROM_MS = 90 * 60 * 1_000;
 
 // A held turn is always pressable, whatever the reset says: disabling it protected against a re-fail that costs nothing
-// (fireLimitResume is idempotent), while a dead button next to a countdown just pushed the user to type the word by
-// hand instead. Only endings with nothing held still gate on the reset, where a press really would append a message.
+// (the daemon's own fire is idempotent), while a dead button next to a countdown just pushed the user to type the word
+// by hand instead. Only endings with nothing held still gate on the reset, where a press really would append a message.
 export const pickUpReady = (pickUp: PickUp, now: number = Date.now()): boolean =>
     pickUp.held !== undefined || pickUp.readyAt === undefined || pickUp.readyAt <= now;
 
-/** An instant as the strip says it: a countdown while close, a weekday and time once far off. */
-const pickUpWhen = (at: number, now: number = Date.now()): string =>
-    at - now >= CLOCK_FROM_MS ? `at ${formatReset(Math.round(at / 1_000))}` : `in ${formatWait(Math.round(at / 1_000), now)}`;
+/**
+ * An instant as every surface says it: a countdown while close, the weekday and time plus the wait once far off. One
+ * helper, because the same reset rendered two ways in two rows of the same card ("back at Sun 08:20" over "in about 244
+ * min") is how a reader concludes there are two different waits.
+ */
+export const pickUpWhen = (at: number, now: number = Date.now()): string =>
+    at - now >= CLOCK_FROM_MS
+        ? t(`chat.turnBreak.whenFar`, { clock: formatReset(Math.round(at / 1_000), now), wait: formatWait(Math.round(at / 1_000), now) })
+        : t(`chat.turnBreak.whenNear`, { wait: formatWait(Math.round(at / 1_000), now) });
 
 /** How many tries the daemon's outage breaker has left. */
 export interface PickUpAttempts {
@@ -81,43 +83,57 @@ export interface PickUpAttempts {
     readonly maxAttempts: number;
 }
 
-// Builds the strip's one status line here rather than in the template, so wording is tested directly and the several
-// endings can't drift apart. Always three facts in order: what happened, what survived (work kept vs. nothing ran), and
-// when — everything else moved onto the control it's about (e.g. the press's own tooltip).
-
-// Said out loud since an automation spending the user's allowance unwatched owes an account of itself.
-const attemptsSaid = (attempts: PickUpAttempts | undefined): string =>
-    attempts === undefined ? `` : ` · try ${attempts.attempt} of ${attempts.maxAttempts}`;
-
-// Two waits that look alike but aren't: an outage retry is a guess (hence the attempt count), a limit's reopening is a
-// one-shot appointment from the provider with nothing to retry and nothing to count.
-const automaticStatus = (pickUp: PickUp, at: number, attempts: PickUpAttempts | undefined, now: number): string => {
-    if (pickUp.reason !== `limit`) {
-        return `Provider failed · retrying ${pickUpWhen(at, now)}${attemptsSaid(attempts)}`;
-    }
-    // A move names where the turn is going; it fires at once, so there's no hour to state.
-    return pickUp.held?.moving === undefined
-        ? `Limit reached · sending again ${pickUpWhen(at, now)}`
-        : `Limit reached · ${survivedOf(pickUp)} · moving to ${pickUp.held.moving} now`;
-};
+// The strip's one status line: what happened, and what survived. Built here rather than in the template so the wording
+// is tested directly and the several endings can't drift apart. What happens NEXT is deliberately not in it — that is
+// the control's own business, one line below, and saying it twice is what put two clocks on one card.
 
 // The one thing a reader can't check themselves: whether the held turn got anywhere before the wall.
-const survivedOf = (pickUp: PickUp): string => (pickUp.held?.ran === false ? `nothing ran` : `work kept`);
+const survived = (pickUp: PickUp): boolean => pickUp.held?.ran !== false;
 
 export const pickUpStatus = (pickUp: PickUp, attempts: PickUpAttempts | undefined, now: number = Date.now()): string => {
-    if (pickUp.automatic !== undefined) {
-        return automaticStatus(pickUp, pickUp.automatic.at, attempts, now);
-    }
     if (pickUp.reason === `outage`) {
-        return `Provider failed · work kept`;
+        // Said out loud since a breaker spending the user's allowance unwatched owes an account of itself.
+        const tries = attempts === undefined ? `` : ` · ${t(`chat.turnBreak.tryOf`, { ...attempts })}`;
+        return `${t(`chat.turnBreak.outageStatus`)}${tries}`;
     }
     if (pickUp.reason === `limit`) {
         // Limit reached comes in two shapes: work kept (hit mid-flight) or nothing ran (spent before the first
         // request); claiming survival for both undermines trust in this line. The reset instant is stated, not promised
-        // ("back at", not "not before"): it's the provider's own guess and is routinely wrong in the useful direction,
+        // ("back", not "not before"): it's the provider's own guess and is routinely wrong in the useful direction,
         // which is why the press stays live ahead of it.
-        const due = pickUp.readyAt === undefined || pickUp.readyAt <= now ? `` : ` · back ${pickUpWhen(pickUp.readyAt, now)}`;
-        return `Limit reached · ${survivedOf(pickUp)}${due}`;
+        const head = survived(pickUp) ? t(`chat.turnBreak.limitStatusKept`) : t(`chat.turnBreak.limitStatusRefused`);
+        const due = pickUp.readyAt === undefined || pickUp.readyAt <= now ? `` : ` · ${t(`chat.turnBreak.backWhen`, { when: pickUpWhen(pickUp.readyAt, now) })}`;
+        return `${head}${due}`;
     }
-    return `Turn stopped short · work kept`;
+    return t(`chat.turnBreak.stoppedStatus`);
+};
+
+/**
+ * What the chosen answer will actually do, in one line under the control, or nothing while the answer is `wait` — the
+ * selected chip already says that, and a line repeating it is the second strip all over again. Reads the answer rather
+ * than the frame, so it changes the instant the reader changes their mind.
+ */
+export const pickUpNext = (
+    pickUp: PickUp,
+    policy: TurnBreakPolicy,
+    attempts: PickUpAttempts | undefined,
+    now: number = Date.now(),
+): string | undefined => {
+    // A booked move fires on the next pass and names its destination instead of an hour.
+    if (pickUp.held?.moving !== undefined) {
+        return t(`chat.turnBreak.movingNow`, { account: pickUp.held.moving });
+    }
+    if (policy === `wait`) {
+        return undefined;
+    }
+    const at = pickUp.nextAt ?? pickUp.readyAt;
+    if (at === undefined || at <= now) {
+        return t(`chat.turnBreak.goesSoon`);
+    }
+    // An outage retry is a guess and says how many it has left; an allowance reopening is a one-shot appointment from
+    // the provider, with nothing to count.
+    if (pickUp.reason === `outage` && attempts !== undefined) {
+        return t(`chat.turnBreak.nextTry`, { when: pickUpWhen(at, now), ...attempts });
+    }
+    return t(`chat.turnBreak.goesAt`, { when: pickUpWhen(at, now) });
 };

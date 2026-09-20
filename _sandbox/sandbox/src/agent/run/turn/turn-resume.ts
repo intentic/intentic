@@ -6,7 +6,11 @@ import {
     type ParkedCard,
     RESUME_NOTES,
     type ResumeRouting,
+    RETRY_LADDER_TRIES,
+    retryLadderDelay,
     type TodoItem,
+    type TurnBreak,
+    type TurnBreakPolicy,
     withoutResumeNote,
     withResumeNote,
 } from "@intentic/sandbox-contract";
@@ -26,9 +30,11 @@ import { startTurnRun, type TurnRun } from "./turn-runs.js";
 import type { TurnInput } from "./turn-actor.js";
 import type { VerificationStanding } from "../../verification/agent-verification.js";
 
-// Re-runs a turn once its blocker clears: auth (token rotated), provider outage, or a daemon restart; a spent usage
-// limit is excluded by default, since it is the user's own budget, not a bug. Keyed by conversationId; a new turn on
-// the conversation supersedes any pending resume.
+// Re-runs a turn once its blocker clears. Two kinds live here and should not be confused: the daemon's own bookkeeping
+// (a rotated token, a restart), which needs nobody's permission, and the three walls the reader answers for — a spent
+// allowance, a provider outage, a turn that stopped short — each of which fires only on that conversation's own policy
+// (turn-break.ts), because a re-run spends the reader's budget on a turn they sent once. Keyed by conversationId; a new
+// turn on the conversation supersedes any pending resume.
 
 // The attempt budget spends in under an hour; past this a resume is worse than staying dead.
 const OUTAGE_STALE_AFTER_MS = 60 * 60_000;
@@ -98,8 +104,9 @@ export const recordOutageFailure = (failure: OutageFailure, now: number = Date.n
 
 export const pendingOutageFailure = (conversationId: string): OutageFailure | undefined => pendingOutage.get(conversationId);
 
-// A turn a spent allowance stranded, held for a press or, if resumeAfterLimit/moveAfterLimit is set, an automatic fire
-// at the reopen instant. No staleness sweep: a press is a deliberate pick-up regardless of how long it's been.
+// A turn a wall stranded, held for a press or, where the conversation's policy says so, an automatic fire: at the
+// reopen instant for a spent allowance, on a bounded ladder for one that stopped short. No staleness sweep: a press is
+// a deliberate pick-up regardless of how long it's been.
 export interface HeldTurn {
     readonly input: AgentTurn & { conversationId: string };
     // What killed it: a spent allowance, or anything else that left nothing to repair (a hung runtime, a crash).
@@ -122,13 +129,28 @@ export interface HeldTurn {
     readonly carryRefused?: boolean | undefined;
 }
 
-// recordedAt and fired are the pass's bookkeeping, kept on the map entry rather than on HeldTurn itself.
-const pendingHeld = new Map<string, HeldTurn & { readonly recordedAt: number; readonly fired: boolean }>();
+// recordedAt, fired and tries are the pass's bookkeeping, kept on the map entry rather than on HeldTurn itself.
+type PendingHeld = HeldTurn & { readonly recordedAt: number; readonly fired: boolean; readonly tries: number };
+
+const pendingHeld = new Map<string, PendingHeld>();
+
+// Rungs this conversation's stop ladder has spent without the run getting anywhere. Kept apart from the entry above
+// because every turn start wipes that entry (clearPendingResume), including the ladder's own resume — so a count held
+// there would reset itself on the very fire it is meant to bound. Only a turn that settles with nothing held clears
+// this, which is the one proof the run is getting somewhere; a fresh message that dies held again inherits the count,
+// erring towards standing down rather than climbing forever.
+const stopTries = new Map<string, number>();
+
+/** Called where a turn settles without being held: the run got somewhere, so the ladder starts from the front again. */
+export const clearStopLadder = (conversationId: string): void => {
+    stopTries.delete(conversationId);
+};
 
 // Recorded from the turn's exit, like its neighbours. Unconditional even for a turn that is itself a resume, since an
-// allowance refusing twice is ordinary, not hopeless, and regardless of posture, so arming afterwards still finds it.
+// allowance refusing twice is ordinary, not hopeless, and regardless of policy, so answering afterwards still finds it.
 export const recordHeldTurn = (failure: HeldTurn, now: number = Date.now()): void => {
-    pendingHeld.set(failure.input.conversationId, { ...failure, recordedAt: now, fired: false });
+    const tries = failure.reason === "stopped" ? (stopTries.get(failure.input.conversationId) ?? 0) : 0;
+    pendingHeld.set(failure.input.conversationId, { ...failure, recordedAt: now, fired: false, tries });
 };
 
 /** Whether a press on this conversation has a held turn to re-run. */
@@ -200,36 +222,23 @@ export const fireHeldResume = async (
     );
 };
 
-// Two callers ask this about the same turn and must agree: the failure frame promises a retry, and this pass performs
-// it. Per-conversation override wins; absent, the sandbox default answers.
-export const outageResumeArmed = async (services: Services, conversationId: string): Promise<boolean> => {
-    const override = services.agents.entry(conversationId)?.resumeAfterOutage;
+// The one reader for every ending's question. Two callers must agree about the same turn — the failure frame promises
+// what happens next, and the pass below performs it — so both come through here. Per-conversation override wins;
+// absent, the sandbox-wide policy answers. Asked fresh at the moment it matters (the window opening, the rung falling
+// due), never snapshotted at the failure, so a mind changed in between is honoured; the one exception is the limit's
+// move, booked once at the failure (agent.routes) so the card's message and the fire cannot disagree.
+export const breakPolicyFor = async (
+    services: Pick<Services, "agents" | "sandboxSettings">,
+    conversationId: string,
+    ending: TurnBreak,
+): Promise<TurnBreakPolicy> => {
+    const entry = services.agents.entry(conversationId);
+    const override = ending === "limit" ? entry?.limitPolicy : ending === "outage" ? entry?.outagePolicy : entry?.stopPolicy;
     if (override !== undefined) {
         return override;
     }
-    const { resumeAfterOutage } = await services.sandboxSettings.get();
-    return resumeAfterOutage;
-};
-
-// Same two-level precedence as outageResumeArmed, asked again when the window opens rather than at the failure.
-export const limitResumeArmed = async (services: Services, conversationId: string): Promise<boolean> => {
-    const override = services.agents.entry(conversationId)?.resumeAfterLimit;
-    if (override !== undefined) {
-        return override;
-    }
-    const { resumeAfterLimit } = await services.sandboxSettings.get();
-    return resumeAfterLimit;
-};
-
-// Same two-level precedence, but asked once at the failure when the move is booked (agent.routes); the pass only
-// performs it, so the card's message and the fire can't disagree.
-export const moveAfterLimitArmed = async (services: Pick<Services, "agents" | "sandboxSettings">, conversationId: string): Promise<boolean> => {
-    const override = services.agents.entry(conversationId)?.moveAfterLimit;
-    if (override !== undefined) {
-        return override;
-    }
-    const { moveAfterLimit } = await services.sandboxSettings.get();
-    return moveAfterLimit;
+    const settings = await services.sandboxSettings.get();
+    return ending === "limit" ? settings.limitPolicy : ending === "outage" ? settings.outagePolicy : settings.stopPolicy;
 };
 
 // `fresh` drops a session that holds only one unanswered message, for a record-seeded handoff instead of replaying
@@ -398,8 +407,8 @@ const runOutagePass = async (services: Services, wake: WakeFn, now: number): Pro
             }
             continue;
         }
-        // Cheap synchronous breaker check first, posture read second: an unarmed chat costs the armed ones nothing.
-        if (!outageRetryDue(failure.provider, now) || !(await outageResumeArmed(services, conversationId))) {
+        // Cheap synchronous breaker check first, policy read second: an unarmed chat costs the armed ones nothing.
+        if (!outageRetryDue(failure.provider, now) || (await breakPolicyFor(services, conversationId, "outage")) !== "retry") {
             continue;
         }
         // Counted at dispatch, before the turn starts, so it closes the window even if starting this one conflicts.
@@ -429,47 +438,94 @@ const fireBookedMove = async (
     }
 };
 
+// A spent allowance names an instant to keep; a stopped turn has none, so its rung is measured from when the hold was
+// recorded.
+const stopRungAt = (recordedAt: number, tries: number): number | undefined => {
+    const delay = retryLadderDelay(tries);
+    return delay === undefined ? undefined : recordedAt + delay;
+};
+
+// When the next rung would fire for this conversation, or undefined once the ladder is spent. Asked by the failure
+// frame, which runs a moment before the hold is recorded, so it passes its own `now` as the rung's origin and states
+// the very instant the pass will then act on. Keeps every piece of ladder arithmetic in this module.
+export const stopResumeAt = (conversationId: string, now: number = Date.now()): number | undefined =>
+    stopRungAt(now, stopTries.get(conversationId) ?? 0);
+
+// Said out loud rather than going quiet: a ladder that stopped without a word is indistinguishable from one still
+// climbing, and the reader is owed the count it spent on their allowance.
+const STOP_LADDER_GAVE_UP = `This turn was picked back up ${RETRY_LADDER_TRIES} times and got nowhere each time, so nothing more is sent automatically. Send again to carry on.`;
+
+// One rung of the stop ladder, or the end of it. Unlike the limit's single appointment this fires repeatedly, which is
+// exactly why it is bounded: three tries that achieve nothing, then it stands down and says so.
+const runStopRung = async (services: Services, wake: WakeFn, held: PendingHeld, now: number): Promise<void> => {
+    const conversationId = held.input.conversationId;
+    if (held.fired || (await breakPolicyFor(services, conversationId, "stopped")) !== "retry") {
+        return;
+    }
+    const dueAt = stopRungAt(held.recordedAt, held.tries);
+    if (dueAt === undefined) {
+        if (await services.agents.abandonResume(conversationId, now, STOP_LADDER_GAVE_UP)) {
+            pendingHeld.delete(conversationId);
+            stopTries.delete(conversationId);
+        }
+        return;
+    }
+    if (dueAt > now) {
+        return;
+    }
+    // Both stamped before the fire, like the outage pass's dispatch count, so they hold even if starting conflicts.
+    pendingHeld.set(conversationId, { ...held, fired: true });
+    stopTries.set(conversationId, held.tries + 1);
+    if ((await fireHeldResume(services, wake, conversationId)) !== undefined) {
+        services.logger.info({ conversationId, attempt: held.tries + 1, maxAttempts: RETRY_LADDER_TRIES }, "stopped-turn auto-resume fired");
+    }
+};
+
 // Fires the held turn at reopen, only when armed: an absent or already-past instant is never scheduled (avoiding an
 // infinite loop on a stale one). `fired` marks the one dispatch without deleting the entry, keeping a press idempotent
 // after.
-const runLimitPass = async (services: Services, wake: WakeFn, now: number): Promise<void> => {
-    // Every hold lives in one map; a stopped one names no instant and books no move, so it falls through both gates
-    // below and waits for a press.
+const runLimitRung = async (services: Services, wake: WakeFn, held: PendingHeld, now: number): Promise<void> => {
+    const conversationId = held.input.conversationId;
+    // A booked move goes first, at once; `fired` is stamped before the start so it holds even if starting conflicts.
+    if (!held.fired && held.move !== undefined) {
+        pendingHeld.set(conversationId, { ...held, fired: true });
+        await fireBookedMove(services, wake, held.input, held.move);
+        return;
+    }
+    const reopensAt = held.reopensAt;
+    if (held.fired || reopensAt === undefined || reopensAt * 1000 > now || reopensAt * 1000 <= held.recordedAt) {
+        return;
+    }
+    // `move` implies the appointment: an account with room was tried at once, and this is the fallback it keeps.
+    if ((await breakPolicyFor(services, conversationId, "limit")) === "wait") {
+        return;
+    }
+    pendingHeld.set(conversationId, { ...held, fired: true });
+    if ((await fireHeldResume(services, wake, conversationId)) !== undefined) {
+        services.logger.info({ conversationId, reopensAt }, "usage-limit auto-resume fired: the allowance window reopened");
+    }
+};
+
+// Every hold lives in one map, whichever wall put it there, so the two shapes of wait are routed by reason rather than
+// by one of them quietly falling through the other's gates.
+const runHeldPass = async (services: Services, wake: WakeFn, now: number): Promise<void> => {
+    // Snapshotted, not iterated live: every branch below stamps or deletes the very map this walks.
     const stranded = [...pendingHeld.values()];
     for (const held of stranded) {
-        const conversationId = held.input.conversationId;
-        // A booked move goes first, at once; `fired` is stamped before the start so it holds even if starting
-        // conflicts.
-        if (!held.fired && held.move !== undefined) {
-            pendingHeld.set(conversationId, { ...held, fired: true });
-            await fireBookedMove(services, wake, held.input, held.move);
-            continue;
-        }
-        const reopensAt = held.reopensAt;
-        if (held.fired || reopensAt === undefined || reopensAt * 1000 > now || reopensAt * 1000 <= held.recordedAt) {
-            continue;
-        }
-        if (!(await limitResumeArmed(services, conversationId))) {
-            continue;
-        }
-        // Stamped before the fire, like the outage pass's dispatch count, so it holds even if the start conflicts.
-        pendingHeld.set(conversationId, { ...held, fired: true });
-        if ((await fireHeldResume(services, wake, conversationId)) !== undefined) {
-            services.logger.info({ conversationId, reopensAt }, "usage-limit auto-resume fired: the allowance window reopened");
-        }
+        await (held.reason === "stopped" ? runStopRung(services, wake, held, now) : runLimitRung(services, wake, held, now));
     }
 };
 
 // Polls all three pending maps. Auth has no gate, it's the daemon's own bookkeeping, not the user's budget; outage
-// waits on the shared per-provider breaker; limit is the only one with a real appointment, and the only one that needs
-// arming.
+// waits on the shared per-provider breaker; the held pass covers the two the reader answers for, a limit's one
+// appointment and a stopped turn's bounded ladder.
 export const createTurnResumeScheduler = (services: Services, wake: WakeFn, intervalMs = 5_000): TurnResumeScheduler => {
     let timer: NodeJS.Timeout | undefined;
 
     const tick = async (now: number = Date.now()): Promise<void> => {
         await runAuthPass(services, wake, now);
         await runOutagePass(services, wake, now);
-        await runLimitPass(services, wake, now);
+        await runHeldPass(services, wake, now);
     };
 
     return {

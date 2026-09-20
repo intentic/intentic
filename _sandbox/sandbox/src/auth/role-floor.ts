@@ -52,7 +52,7 @@ const NAME_FLOORS: Readonly<Record<string, MemberRole>> = {
     // Auto-land is deliberately not here: arming it is a landing decision, and a collaborator's landings are only
     // requests.
     "agent.resume": "collaborator",
-    "agents.resumeAfterOutage": "collaborator",
+    "agents.breakPolicy": "collaborator",
     "agents.rename": "collaborator",
     "agents.seen": "collaborator",
     "agents.seenAll": "collaborator",

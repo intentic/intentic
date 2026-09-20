@@ -2,6 +2,7 @@
 import { z } from "zod";
 import { AgentHarnessSchema, AgentOriginSchema, AgentProviderSchema, ForkedFromSchema } from "./agent.js";
 import { LoopStateSchema } from "./loops.js";
+import { LimitPolicySchema, RetryPolicySchema, TurnBreakPolicySchema, TurnBreakSchema } from "./turn-break.js";
 import { EMOJI_MAX_LENGTH, isSingleEmoji } from "../text/emoji.js";
 // A fleet agent is any conversation with a registry entry, keyed by conversationId. Isolated ones own a git worktree
 // (branch agent/<id>); workspace conversations have none, but both share one status/activity/cost lifecycle.
@@ -252,15 +253,11 @@ export const AgentSummarySchema = z.object({
         .describe(
             "This conversation's own answer to whether its work merges automatically. Absent means it follows the sandbox-wide setting, which is the common case.",
         ),
-    // Per-conversation override, written by the in-chat retry press (not the settings toggle) so one late-night click
-    // can't arm every agent; absent inherits the sandbox setting.
-    resumeAfterOutage: z.boolean().optional(),
-    // Off by default, unlike its neighbors: firing the moment a spent allowance reopens spends a window the user may be
-    // saving.
-    resumeAfterLimit: z.boolean().optional(),
-    // Per-conversation override for moving a held turn to another account with room the moment it's refused; absent
-    // inherits.
-    moveAfterLimit: z.boolean().optional(),
+    // This conversation's own answer to each ending's one question, written by the in-chat control (not the settings
+    // row) so one late-night click can't arm every agent; absent inherits the sandbox-wide policy.
+    limitPolicy: LimitPolicySchema.optional(),
+    outagePolicy: RetryPolicySchema.optional(),
+    stopPolicy: RetryPolicySchema.optional(),
     // A collaborator's ask to land (collaborators can't merge themselves); cleared by whichever merge or discard
     // answers it.
     landRequested: z
@@ -619,33 +616,15 @@ export const AgentAutoLandSchema = z.object({
             "Whether its work merges automatically when a turn finishes. Null clears the override and goes back to following the sandbox-wide setting, so a conversation does not sit holding a frozen copy of a default it has quietly stopped following.",
         ),
 });
-// Same `null`-clears-the-override shape as autoLand, for this conversation's own outage-resume posture.
-export const AgentResumeAfterOutageSchema = z.object({
+// Same `null`-clears-the-override shape as autoLand, for this conversation's own answer to one ending's question.
+// One route rather than one per ending: they are the same decision asked about different walls, and three near-identical
+// verbs is how the surfaces drifted apart in the first place.
+export const AgentBreakPolicySchema = z.object({
     id: z.string().min(1).describe("Which conversation."),
-    resumeAfterOutage: z
-        .boolean()
-        .nullable()
-        .describe("Whether it retries by itself when the model provider was what failed. Null clears the override back to the sandbox-wide setting."),
-});
-// Same three-state override, for the limit blocker; written by the card's own offer when a limit strands a turn.
-export const AgentResumeAfterLimitSchema = z.object({
-    id: z.string().min(1).describe("Which conversation."),
-    resumeAfterLimit: z
-        .boolean()
-        .nullable()
-        .describe(
-            "Whether the turn a spent allowance refused is sent again by itself once the window reopens. Null clears the override back to the sandbox-wide setting.",
-        ),
-});
-// Same three-state override, for moving a held turn to another account with room.
-export const AgentMoveAfterLimitSchema = z.object({
-    id: z.string().min(1).describe("Which conversation."),
-    moveAfterLimit: z
-        .boolean()
-        .nullable()
-        .describe(
-            "Whether the turn a spent allowance refused is moved to another connected account of the same provider that has room, as soon as the refusal lands. Null clears the override back to the sandbox-wide setting.",
-        ),
+    ending: TurnBreakSchema.describe("Which wall this answers for: a spent usage limit, a provider outage, or a turn that stopped short."),
+    policy: TurnBreakPolicySchema.nullable().describe(
+        "What happens next for that ending. `wait` holds the turn for a press; `retry` re-runs it on a bounded ladder (outage, stop); `resend` sends it again at the published reset and `move` also tries another account with room (limit only). An answer the ending does not allow is refused. Null clears the override and goes back to following the sandbox-wide policy, so a conversation does not sit holding a frozen copy of a default it has quietly stopped following.",
+    ),
 });
 export const AgentFileDiffQuerySchema = z.object({
     id: z.string().min(1).describe("Which conversation."),

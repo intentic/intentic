@@ -1,20 +1,25 @@
 <script setup lang="ts">
-import { Button, formatTokens, Icon, type IconName, ResponsiveOverlay, useDevice } from "@intentic/ui";
+import type { TurnBreakPolicy } from "@intentic/sandbox-contract";
+import { Button, formatTokens, Icon, type IconName, ResponsiveOverlay, SegmentedControl, useDevice } from "@intentic/ui";
 import { useNow } from "@intentic/ui/async";
 import { computed, ref, watch } from "vue";
 import { useAgents } from "../../agents/fleet/useAgents";
 import { fallbackAccount, fallbackLabel } from "../session/limitFallback";
 import { askLimitReset, claimLimitReset, limitResetFor, limitResetNote } from "../session/limitReset";
-import { pickUpStatus, pressCost } from "../run/pickUp";
-import { formatWait } from "../session/usageStatus";
+import { pickUpNext, pickUpStatus, pressCost } from "../run/pickUp";
+import { breakAnswers, effectivePolicy, sandboxPolicy } from "../run/turnBreak";
 import { usePaneView } from "./useChat-view";
 import { useSandbox } from "../../sandbox/client/useSandbox";
+import { useSandboxSettings } from "../../sandbox/overview/useSandboxSettings";
 import { useT } from "@intentic/ui/i18n";
 
-// One strip for every ending that leaves work behind (a dead turn, an outage, a spent allowance): finished work
-// behind a live session, and a press that finishes it. The row is ranked — state, this ending's wait, then the
-// press with its variants folded into a menu beside it. An armed automation stays visible, with an off switch,
-// for as long as it runs.
+// One card for every ending that leaves work behind a live session (a dead turn, an outage, a spent allowance), and it
+// asks exactly one question: what happens next. Three lines, in the order a reader needs them — what happened, what
+// will happen and when, and the press that skips the waiting.
+//
+// The answers are mutually exclusive on purpose. Before this, four independent switches could be armed at once over
+// the same event, each with its own off button and its own clock, and a chat could show two cards counting down to the
+// same instant in two different formats. One question with one answer cannot do that.
 
 const t = useT();
 
@@ -26,18 +31,14 @@ const props = defineProps<{
 // The press, and whether it keeps the provider session across an account change (the menu's carrying variant).
 const emit = defineEmits<{ (event: "continue", options?: { readonly carry?: boolean }): void }>();
 
-const { conversation, connected, pickUp, autoContinue, autoContinueAt, setAutoContinue, provider, model, account, accounts, selectAccount } =
-    usePaneView();
+const { conversation, connected, pickUp, provider, model, account, accounts, selectAccount } = usePaneView();
 const { reachable } = useSandbox();
+const { settings } = useSandboxSettings();
 const { mobile } = useDevice();
-const { agentById, setResumeAfterOutage, setResumeAfterLimit } = useAgents();
+const { agentById, setBreakPolicy } = useAgents();
 
-// The clock runs only while something on screen counts down (a reset, an outage retry, an armed continuation).
-const counting = computed(
-    () =>
-        (props.visible && pickUp.value !== undefined && (pickUp.value.readyAt !== undefined || pickUp.value.automatic !== undefined)) ||
-        autoContinueAt.value !== undefined,
-);
+// The clock runs only while something on screen counts down: a reset, a breaker's next try, a booked rung.
+const counting = computed(() => props.visible && pickUp.value !== undefined && (pickUp.value.readyAt !== undefined || pickUp.value.nextAt !== undefined));
 const now = useNow(() => counting.value);
 
 // The daemon's breaker names the outage's remaining tries; the line spends them out loud.
@@ -45,6 +46,7 @@ const attempts = computed(() => {
     const outage = conversation.value.failures.outageResume.value;
     return outage === undefined ? undefined : { attempt: outage.attempt, maxAttempts: outage.maxAttempts };
 });
+const ending = computed(() => pickUp.value?.reason);
 const status = computed(() => (pickUp.value === undefined ? `` : pickUpStatus(pickUp.value, attempts.value, now.value)));
 
 // A held turn resends unchanged: nothing is added to the conversation, so pressing it twice is free. The reset
@@ -57,104 +59,67 @@ const pressCostLine = computed(() => {
         return ``;
     }
     return cost.kind === `reread`
-        ? ` It re-reads ~${formatTokens(cost.tokens)} tokens of context, cold.`
-        : ` It opens a fresh session with a ~${formatTokens(cost.tokens)}-token hand-off.`;
+        ? t(`chat.chatContinueStrip.rereadsCold`, { tokens: formatTokens(cost.tokens) })
+        : t(`chat.chatContinueStrip.opensFreshSession`, { tokens: formatTokens(cost.tokens) });
 });
 const continueHint = computed(() => {
-    const keyHint = !mobile.value && props.ready ? ` (Enter)` : ``;
+    const keyHint = !mobile.value && props.ready ? t(`chat.chatContinueStrip.enterKey`) : ``;
     if (pickUp.value?.held !== undefined) {
-        return `Send this turn again, exactly as it was: nothing is added to the chat.${pressCostLine.value} The reset is a due date, not a wall — an earlier press may get through${keyHint}`;
+        return t(`chat.chatContinueStrip.sendTurnAgainExactly`, { pressCostLine: pressCostLine.value, keyHint });
     }
-    return props.ready ? `Pick up where it left off, without retyping${keyHint}` : `Waiting: nothing gets through until the allowance resets`;
+    return props.ready ? t(`chat.chatContinueStrip.pickUpWithoutRetyping`, { keyHint }) : t(`chat.chatContinueStrip.waitingNothingGetsThrough`);
 });
 
-// The outage's own arm/disarm pair: no other ending has a second party already retrying it, and this arms only
-// this chat, not the sandbox-wide default (Settings ▸ Agent).
-const outage = computed(() => (pickUp.value?.reason === `outage` ? pickUp.value : undefined));
-const arming = ref(false);
-const setOutageResume = async (resume: boolean): Promise<void> => {
-    if (!reachable.value || arming.value) {
-        return;
-    }
-    arming.value = true;
-    try {
-        await setResumeAfterOutage(conversation.value.conversationId, resume);
-        if (resume) {
-            conversation.value.failures.armOutageResume();
-            return;
-        }
-        conversation.value.failures.disarmOutageResume();
-    } catch {
-        // Left as it stands either way: a strip that vanished on a failed write would claim a resume nobody armed.
-    } finally {
-        arming.value = false;
-    }
-};
-
-// Same pair for the allowance wait: it earns a slot of its own, not the menu, since the wish to arm it happens the
-// moment the line appears, hours before it fires. Only shown with an instant to aim at — an armed limit is a
-// one-time appointment.
-// Never beside a booked move: that wait is the policy's, not the appointment's, and Stop disarms the wrong one.
-const limitWait = computed(() =>
-    pickUp.value?.reason === `limit` && pickUp.value.readyAt !== undefined && pickUp.value.held?.moving === undefined ? pickUp.value : undefined,
-);
-const setLimitResume = async (resume: boolean): Promise<void> => {
-    if (!reachable.value || arming.value) {
-        return;
-    }
-    arming.value = true;
-    try {
-        await setResumeAfterLimit(conversation.value.conversationId, resume);
-        if (resume) {
-            conversation.value.failures.armLimitResume();
-            return;
-        }
-        conversation.value.failures.disarmLimitResume();
-    } catch {
-        // Left as it stands, both ways, for the same reason as its outage twin.
-    } finally {
-        arming.value = false;
-    }
-};
-
-// The wait's one slot: outage before allowance, arm or disarm, never two filled at once.
-const waitAction = computed(() => {
-    if (outage.value !== undefined) {
-        return outage.value.automatic !== undefined
-            ? { label: t(`ui.action.stop`), hint: t(`chat.chatContinueStrip.stopChatPickingTurn`), press: () => setOutageResume(false) }
-            : {
-                  label: t(`chat.chatContinueStrip.keepChatGoing`),
-                  hint: t(`chat.chatContinueStrip.keepTryingTurnUntil`),
-                  press: () => setOutageResume(true),
-              };
-    }
-    if (limitWait.value !== undefined) {
-        return limitWait.value.automatic !== undefined
-            ? { label: t(`ui.action.stop`), hint: t(`chat.chatContinueStrip.stopChatSendingTurn`), press: () => setLimitResume(false) }
-            : {
-                  label: t(`chat.chatContinueStrip.sendBack`),
-                  hint: t(`chat.chatContinueStrip.sendTurnAgainBy`, { pressCostLine: pressCostLine.value }),
-                  press: () => setLimitResume(true),
-              };
-    }
-    return undefined;
-});
-
-// The way on that skips waiting entirely, offered where the wait is announced: read off the reason (not
-// `limitWait`, which also needs a reset instant) since this needs only another pool. limitFallback.ts judges which
-// account may be offered.
-const spentLimit = computed(() => (pickUp.value?.reason === `limit` ? pickUp.value : undefined));
+// The way on that skips waiting entirely: read off the reason since this needs only another pool with room.
+// limitFallback.ts judges which account may be offered, and the same reading names the `move` answer below.
 const fallback = computed(() =>
-    spentLimit.value === undefined
+    ending.value !== `limit`
         ? undefined
         : fallbackAccount(provider.value, account.value, accounts.value, model.value === `` ? undefined : { id: model.value }),
 );
+
+// The one question, and this conversation's current answer to it. Read through the same fold every other surface uses
+// (this agent's override, else the sandbox-wide policy), so the card, the settings row and this control cannot
+// disagree about what is armed.
+const answers = computed(() => (ending.value === undefined ? [] : breakAnswers(ending.value, fallback.value === undefined ? undefined : fallbackLabel(fallback.value))));
+const answerOptions = computed(() => answers.value.map((answer) => ({ label: answer.label, value: answer.value, icon: answer.icon, title: answer.note })));
+
+// Held while a write is in flight, so the pill moves under the finger rather than after the round trip; cleared either
+// way, so a refused write snaps back to what the daemon actually holds.
+const pending = ref<TurnBreakPolicy>();
+const answer = computed<TurnBreakPolicy>({
+    get: () => pending.value ?? (ending.value === undefined ? `wait` : effectivePolicy(ending.value, agentById(conversation.value.conversationId), settings.value)),
+    set: (next) => void choose(next),
+});
+const choose = async (next: TurnBreakPolicy): Promise<void> => {
+    const wall = ending.value;
+    if (wall === undefined || !reachable.value) {
+        return;
+    }
+    pending.value = next;
+    try {
+        // Writing the sandbox's own answer clears the override instead of freezing a copy of a default this
+        // conversation would then quietly stop following.
+        await setBreakPolicy(conversation.value.conversationId, wall, next === sandboxPolicy(wall, settings.value) ? null : next);
+        // The outage is the one ending with a second party already retrying it: this window has to start (or stop)
+        // watching for the run the daemon brings back, or a resumed turn streams into nothing.
+        conversation.value.failures.watchOutage(next === `retry`);
+    } catch {
+        // Left as it stands: a control that moved on a failed write would claim an automation nobody armed.
+    } finally {
+        pending.value = undefined;
+    }
+};
+
+// What that answer will actually do, and when. Absent while the answer is `wait`, where the selected pill has already
+// said it and a line repeating it is the second strip all over again.
+const nextLine = computed(() => (pickUp.value === undefined ? undefined : pickUpNext(pickUp.value, answer.value, attempts.value, now.value)));
 
 // The only control here that changes whether a press can work, rather than when: reopens the account's five-hour
 // window on demand (once a week), leaving the weekly pool alone. Asked about the conversation's own account pick
 // when it has one, since the chat may have been re-pointed since the refusal; limitReset.ts holds the mechanism.
 const limitAccount = computed(() =>
-    spentLimit.value === undefined ? undefined : (account.value ?? agentById(conversation.value.conversationId)?.account),
+    ending.value !== `limit` ? undefined : (account.value ?? agentById(conversation.value.conversationId)?.account),
 );
 // Asked once, when the strip appears: the probe claims the account is at the wall, true only while shown.
 watch(limitAccount, (id) => void askLimitReset(id, conversation.value.box.value), { immediate: true });
@@ -185,20 +150,13 @@ const useLimitReset = async (): Promise<void> => {
     }
 };
 
-// Standing version of the press, offered only while off (armed, the strip below carries the state and the way
-// out) and never while the daemon is already retrying. Lives in the menu since it's a preference outliving the
-// failure, not an answer about this turn. Withheld with nothing held: the automation only ever re-runs a held
-// turn, so offering it over an ending it cannot act on promises a press it would stand straight back down from.
-const offerAutoContinue = computed(() => !autoContinue.value && outage.value?.automatic === undefined && pickUp.value?.held !== undefined);
-
-// Row vs. menu is a ranking: the row holds state, this ending's wait, and the press; everything else is a press
-// variant. Auto-continue rides inline only in the two-action case; the reset is never a variant, since it removes
-// the wall rather than routing around it.
-const showInlineAutoContinue = computed(() => fallback.value === undefined && !canReset.value && offerAutoContinue.value);
-const hasMenu = computed(() => fallback.value !== undefined || (canReset.value && offerAutoContinue.value));
+// The caret holds press VARIANTS only, never an automation: those are answers to the question above, and a way to arm
+// one from two places is how the surfaces drifted apart before. Two rows at most, and only when a sibling account with
+// room exists.
 const waysOpen = ref(false);
 const waysAnchor = ref<HTMLElement>();
-// Both things that can empty the menu also close it: an empty strip shouldn't leave a floating panel behind.
+const hasMenu = computed(() => fallback.value !== undefined);
+// An emptied menu also closes it: an empty strip shouldn't leave a floating panel behind.
 watch(
     () => props.visible && hasMenu.value,
     (open) => {
@@ -224,26 +182,25 @@ const canCarry = computed(() => pickUp.value?.held?.ran === true);
 const carryLine = computed(() => {
     const tokens = pickUp.value?.held?.contextTokens;
     return tokens === undefined
-        ? `Keeps this session: the model keeps everything, and re-reads all of it once on their allowance.`
-        : `Keeps this session: the model keeps everything, and re-reads ~${formatTokens(tokens)} tokens once on their allowance.`;
+        ? t(`chat.chatContinueStrip.keepsSessionUnmeasured`)
+        : t(`chat.chatContinueStrip.keepsSessionRereading`, { tokens: formatTokens(tokens) });
 });
 const freshLine = computed(() => {
     const tokens = pickUp.value?.held?.handoffTokens;
-    const cost = tokens === undefined ? `a short hand-off` : `a ~${formatTokens(tokens)}-token hand-off`;
-    return `A fresh session on their allowance, seeded with ${cost} of the record and the measured state; detail not in the record is lost.`;
+    return tokens === undefined
+        ? t(`chat.chatContinueStrip.freshSessionShortHandoff`)
+        : t(`chat.chatContinueStrip.freshSessionSizedHandoff`, { tokens: formatTokens(tokens) });
 });
 
-const armAutoContinue = (): void => {
-    waysOpen.value = false;
-    setAutoContinue(true);
-};
-
-// The menu's rows, in the order they are offered: the other account (twice when the session is worth carrying —
-// same press, two prices), then the standing version of the press.
+// The menu's rows, in the order they are offered: the other account twice when the session is worth carrying — one
+// press, two prices.
 const waysRows = computed((): readonly { key: string; icon: IconName; title: string; note: string; press: () => void }[] => {
     const target = fallback.value;
+    if (target === undefined) {
+        return [];
+    }
     return [
-        ...(target !== undefined && canCarry.value
+        ...(canCarry.value
             ? [
                   {
                       key: `carry`,
@@ -254,112 +211,79 @@ const waysRows = computed((): readonly { key: string; icon: IconName; title: str
                   },
               ]
             : []),
-        ...(target !== undefined
-            ? [
-                  {
-                      key: `fresh`,
-                      icon: `user` as IconName,
-                      title: canCarry.value
-                          ? t(`chat.chatContinueStrip.continueOnFresh`, { model: fallbackLabel(target) })
-                          : t(`chat.chatContinueStrip.continueOn`, { model: fallbackLabel(target) }),
-                      note: freshLine.value,
-                      press: () => continueOnFallback(false),
-                  },
-              ]
-            : []),
-        ...(offerAutoContinue.value
-            ? [
-                  {
-                      key: `auto`,
-                      icon: `repeat` as IconName,
-                      title: t(`chat.chatContinueStrip.autoContinue`),
-                      note: t(`chat.chatContinueStrip.keepsContinuingWheneverTurn`),
-                      press: armAutoContinue,
-                  },
-              ]
-            : []),
+        {
+            key: `fresh`,
+            icon: `user` as IconName,
+            title: canCarry.value
+                ? t(`chat.chatContinueStrip.continueOnFresh`, { model: fallbackLabel(target) })
+                : t(`chat.chatContinueStrip.continueOn`, { model: fallbackLabel(target) }),
+            note: freshLine.value,
+            press: () => continueOnFallback(false),
+        },
     ];
 });
-
-const autoContinueStrip = computed(() => autoContinue.value && connected.value);
-const autoContinueLine = computed(() =>
-    autoContinueAt.value === undefined
-        ? `Auto-continue is on: this chat picks itself back up when a turn stops short.`
-        : `Auto-continue is on, continuing in ${formatWait(autoContinueAt.value / 1000, now.value)}.`,
-);
 </script>
 
 <template>
-    <div
-        v-if="visible"
-        class="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-xl border border-line-strong bg-card px-3 py-2 text-2xs text-muted"
-    >
-        <Icon :name="ready ? `pause` : `clock`" class="shrink-0" />
-        <!-- Status text has a minimum width beside shrinkable controls. -->
-        <span class="min-w-[11rem] flex-1">{{ status }}</span>
-        <!-- This ending's wait: one slot, four possible fillings, never two at once. The words say what the press
-             does ("this chat", "keep going"), not the setting's name; the allowance's pair is named as an
-             appointment (fires once, at the published hour) rather than a retry. -->
-        <Button
-            v-if="waitAction !== undefined"
-            size="small"
-            severity="secondary"
-            :text="true"
-            class="shrink-0"
-            :disabled="!reachable || arming"
-            v-tooltip.top="waitAction.hint"
-            @click="waitAction.press"
-        >
-            {{ waitAction.label }}
-        </Button>
-        <!-- The press and its variants: the reset when offered, Continue, inline Auto-continue in the two-action case, or a caret menu otherwise. -->
-        <div ref="waysAnchor" class="flex shrink-0 items-center gap-1">
-            <!-- What the press spends, said on the control that spends it: a once-a-week grant, worth telling the user about before it's gone. -->
-            <Button
-                v-if="canReset"
-                size="small"
-                severity="secondary"
-                :text="true"
-                :disabled="!reachable || resetting"
-                v-tooltip.top="t(`chat.chatContinueStrip.reopenAccountsSessionLimit`)"
-                @click="useLimitReset"
-            >
-                <Icon name="refresh" class="mr-1 text-2xs" />{{
-                    resetting ? t(`chat.chatContinueStrip.resetting`) : t(`chat.chatContinueStrip.resetLimitNow`)
-                }}
-            </Button>
-            <Button
-                v-if="showInlineAutoContinue"
-                size="small"
-                severity="secondary"
-                :text="true"
-                :disabled="!reachable"
-                v-tooltip.top="t(`chat.chatContinueStrip.keepContinuingAutomaticallyWhenever`)"
-                @click="armAutoContinue"
-            >
-                <Icon name="repeat" class="mr-1 text-2xs" />{{ t(`chat.chatContinueStrip.autoContinue`) }}
-            </Button>
-            <Button size="small" :text="true" :disabled="!reachable || !ready" v-tooltip.top="continueHint" @click="emit(`continue`)">
-                {{ t(`ui.action.continue`) }}
-            </Button>
-            <Button
-                v-if="hasMenu"
-                size="small"
-                severity="secondary"
-                :text="true"
-                :disabled="!reachable"
-                :aria-label="t(`chat.chatContinueStrip.otherWaysOn`)"
-                :aria-expanded="waysOpen"
-                v-tooltip.top="t(`chat.chatContinueStrip.otherWaysOn`)"
-                @click="waysOpen = !waysOpen"
-            >
-                <Icon name="chevron-down" class="text-2xs" />
-            </Button>
+    <div v-if="visible" class="flex flex-col gap-1.5 rounded-xl border border-line-strong bg-card px-3 py-2 text-2xs text-muted">
+        <!-- What happened, and the press that skips whatever is booked below. -->
+        <div class="flex flex-wrap items-center gap-x-2 gap-y-1">
+            <Icon :name="ready ? `pause` : `clock`" class="shrink-0" />
+            <!-- Status text has a minimum width beside shrinkable controls. -->
+            <span class="min-w-[11rem] flex-1">{{ status }}</span>
+            <div ref="waysAnchor" class="flex shrink-0 items-center gap-1">
+                <!-- What the press spends, said on the control that spends it: a once-a-week grant, worth telling the user about before it's gone. -->
+                <Button
+                    v-if="canReset"
+                    size="small"
+                    severity="secondary"
+                    :text="true"
+                    :disabled="!reachable || resetting"
+                    v-tooltip.top="t(`chat.chatContinueStrip.reopenAccountsSessionLimit`)"
+                    @click="useLimitReset"
+                >
+                    <Icon name="refresh" class="mr-1 text-2xs" />{{
+                        resetting ? t(`chat.chatContinueStrip.resetting`) : t(`chat.chatContinueStrip.resetLimitNow`)
+                    }}
+                </Button>
+                <!-- The card's one solid press: every other control here decides WHEN, this one does it now. -->
+                <Button size="small" :disabled="!reachable || !ready" v-tooltip.top="continueHint" @click="emit(`continue`)">
+                    {{ t(`ui.action.continue`) }}
+                </Button>
+                <Button
+                    v-if="hasMenu"
+                    size="small"
+                    severity="secondary"
+                    :text="true"
+                    :disabled="!reachable"
+                    :aria-label="t(`chat.chatContinueStrip.otherWaysOn`)"
+                    :aria-expanded="waysOpen"
+                    v-tooltip.top="t(`chat.chatContinueStrip.otherWaysOn`)"
+                    @click="waysOpen = !waysOpen"
+                >
+                    <Icon name="chevron-down" class="text-2xs" />
+                </Button>
+            </div>
         </div>
-        <!-- What came back when the reset changed nothing, on its own line (`basis-full`, not a row slot): these are full sentences. -->
-        <span v-if="resetNote !== undefined" class="basis-full text-2xs text-subtle">{{ resetNote }}</span>
+        <!-- The one question. Exactly one answer is selected, so nothing on this card can promise two automations. -->
+        <div v-if="answerOptions.length > 1" class="flex flex-wrap items-center gap-x-2 gap-y-1">
+            <span class="shrink-0 text-subtle">{{ t(`chat.turnBreak.next`) }}</span>
+            <SegmentedControl
+                v-model="answer"
+                :options="answerOptions"
+                size="xs"
+                :wrap="true"
+                :aria-label="t(`chat.turnBreak.nextQuestion`)"
+                class="shrink-0"
+                :class="{ 'pointer-events-none opacity-60': !reachable || !connected }"
+            />
+            <!-- What that answer does, and when: one clock, stated once, on the line the answer sits on. -->
+            <span v-if="nextLine !== undefined" class="min-w-0 flex-1 text-subtle">{{ nextLine }}</span>
+        </div>
+        <!-- What came back when the reset changed nothing: these are full sentences, so they get their own line. -->
+        <span v-if="resetNote !== undefined" class="text-2xs text-subtle">{{ resetNote }}</span>
     </div>
-    <!-- The press's variants, shown in the dropdown when more than one alternative way on exists. -->
+    <!-- The press's variants, shown in the dropdown when another account could take this turn. -->
     <ResponsiveOverlay v-model="waysOpen" :anchor="waysAnchor" cross="end" :header="t(`chat.chatContinueStrip.otherWaysOn`)" panel-class="w-80 p-1">
         <div class="flex flex-col p-1">
             <button
@@ -377,21 +301,4 @@ const autoContinueLine = computed(() =>
             </button>
         </div>
     </ResponsiveOverlay>
-    <!-- What an armed chat looks like while it waits on itself; stays on screen for as long as the automation runs, since a switch with no off is a trap. -->
-    <div
-        v-if="autoContinueStrip"
-        class="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-xl border border-line-strong bg-card px-3 py-2 text-2xs text-muted"
-    >
-        <Icon name="repeat" class="shrink-0" />
-        <span class="min-w-0 flex-1">{{ autoContinueLine }}</span>
-        <Button
-            size="small"
-            :text="true"
-            class="shrink-0"
-            v-tooltip.top="t(`chat.chatContinueStrip.stopContinuingChatBy`)"
-            @click="setAutoContinue(false)"
-        >
-            {{ t(`chat.chatContinueStrip.turnOff`) }}
-        </Button>
-    </div>
 </template>

@@ -303,22 +303,28 @@ describe("agents registry", () => {
         expect(await registry.setAutoLand("nope", true)).toBeUndefined();
     });
 
-    it("holds the resumeAfterOutage override across turns and clears it on null", async () => {
+    it("holds an ending's own answer across turns and clears it on null", async () => {
         const registry = createAgentsRegistry(memoryStore(), standings(), presences());
         await registry.init();
         await registry.begin(turn(), 1_000);
         // Set mid-turn: the offer is typically pressed while the dead turn is still unwinding.
-        expect((await registry.setResumeAfterOutage("c1", true))?.resumeAfterOutage).toBe(true);
+        expect((await registry.setBreakPolicy("c1", "outage", "retry"))?.outagePolicy).toBe("retry");
         await registry.finish("c1", 2_000);
         await registry.begin(turn({ prompt: "keep going" }), 3_000);
-        expect(registry.get("c1")?.resumeAfterOutage).toBe(true);
+        expect(registry.get("c1")?.outagePolicy).toBe("retry");
         await registry.finish("c1", 4_000);
-        // `false` is a real answer ('stop resuming'), distinct from the default, which may itself be resume.
-        expect((await registry.setResumeAfterOutage("c1", false))?.resumeAfterOutage).toBe(false);
-        // null is what hands the conversation back to the default.
-        expect((await registry.setResumeAfterOutage("c1", null))?.resumeAfterOutage).toBeUndefined();
-        expect(registry.entry("c1")?.resumeAfterOutage).toBeUndefined();
-        expect(await registry.setResumeAfterOutage("nope", true)).toBeUndefined();
+        // `wait` is a real answer ('stop resuming'), distinct from the default, which may itself be `retry`.
+        expect((await registry.setBreakPolicy("c1", "outage", "wait"))?.outagePolicy).toBe("wait");
+        // Only the named ending moves; the other two keep whatever this conversation already said.
+        await registry.setBreakPolicy("c1", "limit", "move");
+        expect((await registry.setBreakPolicy("c1", "outage", "retry"))?.limitPolicy).toBe("move");
+        // null is what hands that one ending back to the default.
+        expect((await registry.setBreakPolicy("c1", "outage", null))?.outagePolicy).toBeUndefined();
+        expect(registry.entry("c1")?.outagePolicy).toBeUndefined();
+        expect(await registry.setBreakPolicy("nope", "outage", "retry")).toBeUndefined();
+        // An answer the ending cannot take is refused rather than stored: no pass would ever read it.
+        expect(await registry.setBreakPolicy("c1", "outage", "move")).toBeUndefined();
+        expect(registry.entry("c1")?.outagePolicy).toBeUndefined();
     });
 
     it("begin is a mutex: a second concurrent turn is refused until finish", async () => {

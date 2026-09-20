@@ -1,4 +1,4 @@
-import { open, rename, resumeHeldTurn, setAutoLand, setMoveAfterLimit, setResumeAfterLimit, setResumeAfterOutage, stopWatching } from "./useAgents-actions";
+import { open, rename, resumeHeldTurn, setAutoLand, setBreakPolicy, stopWatching } from "./useAgents-actions";
 import { archive, archivedFlash, busyIds, dismissNotice, notice, purgeArchived, restore, undoable, undoArchive } from "./useAgents-archive";
 import { agentById, attention, blocking, fleet, forgetFleet, lanes, unread } from "./useAgents-fleet";
 import { archived, archiveLoading, desyncRegistry, heldWakes, loadArchived, markAllSeen, markSeen, refresh, releaseHeld } from "./useAgents-registry";
@@ -41,9 +41,7 @@ export function useAgents() {
         markAllSeen,
         rename,
         setAutoLand,
-        setResumeAfterOutage,
-        setResumeAfterLimit,
-        setMoveAfterLimit,
+        setBreakPolicy,
         resumeHeldTurn,
         stopWatching,
         agentById,

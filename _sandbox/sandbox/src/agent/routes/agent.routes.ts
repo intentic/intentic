@@ -64,16 +64,17 @@ import { registerTurn, SteeringQueue, steerTurn, stopTurn } from "../anchors/age
 import { OUTAGE_MAX_ATTEMPTS, recordProviderFailure, recordProviderSuccess } from "../providers/provider-health.js";
 import {
     authResumable,
+    breakPolicyFor,
     clearPendingResume,
+    clearStopLadder,
     fireHeldResume,
     type HeldTurn,
     heldTurn,
-    limitResumeArmed,
-    outageResumeArmed,
     recordAuthFailure,
     recordHeldTurn,
     recordOutageFailure,
     startConversationTurn,
+    stopResumeAt,
 } from "../run/turn/turn-resume.js";
 import { dispatchRemoteTurn } from "../../runners/runner-dispatch.js";
 import { forgetRemoteRequest, remoteRequestOf } from "../../runners/runner-requests.js";
@@ -731,7 +732,8 @@ const limitFrame = async (
 ): Promise<Extract<AgentEvent, { kind: "error" }>> => {
     const { conversationId, resetsAt, held, ran, way } = params;
     const schedulable = held && resetsAt !== undefined && conversationId !== undefined;
-    const armed = schedulable ? await limitResumeArmed(services, conversationId) : false;
+    // `move` implies the appointment, so anything but `wait` keeps it.
+    const armed = schedulable ? (await breakPolicyFor(services, conversationId, "limit")) !== "wait" : false;
     // A booked move needs no instant to count as scheduled: the card leaves Attention either way.
     const moving = held ? way?.move?.account : undefined;
     const autoResume = autoResumeOf(moving !== undefined, schedulable, armed);
@@ -740,6 +742,46 @@ const limitFrame = async (
         ...(held ? { held: heldOf(ran, way, moving) } : {}),
         ...(resetsAt !== undefined ? { resetsAt } : {}),
         ...opt("autoResume", autoResume),
+        ...opt("nextAt", limitNextAt(moving, armed, resetsAt)),
+    };
+};
+
+// The appointment the frame names: the reset itself. A booked move fires on the next pass, which is "now" to a reader,
+// so it names no instant.
+const limitNextAt = (moving: string | undefined, armed: boolean, resetsAt: number | undefined): number | undefined =>
+    moving === undefined && armed ? resetsAt : undefined;
+
+// The outage's own frame: same three facts as the limit's, over the breaker's clock rather than a published reset.
+const outageFrame = (
+    event: Extract<AgentEvent, { kind: "error" }>,
+    armed: boolean,
+    outage: { readonly retryAt: number; readonly attempt: number },
+): Extract<AgentEvent, { kind: "error" }> => {
+    const retryAt = Math.round(outage.retryAt / 1000);
+    return {
+        ...event,
+        autoResume: armed ? "scheduled" : "available",
+        ...(armed ? { nextAt: retryAt } : {}),
+        outage: { retryAt, attempt: outage.attempt + 1, maxAttempts: OUTAGE_MAX_ATTEMPTS },
+    };
+};
+
+// A turn that stopped short with nothing to repair. The window watching it die has to learn two things: that the press
+// re-runs the held turn rather than appending a message the user never typed, and whether a rung is already booked.
+const stoppedFrame = async (
+    services: Services,
+    event: Extract<AgentEvent, { kind: "error" }>,
+    params: { readonly conversationId: string; readonly ran: boolean; readonly contextTokens: number | undefined },
+): Promise<Extract<AgentEvent, { kind: "error" }>> => {
+    const { conversationId, ran, contextTokens } = params;
+    const armed = (await breakPolicyFor(services, conversationId, "stopped")) === "retry";
+    // Spent ladder: armed, but with nothing left to book, so it reports the offer rather than a rung that never comes.
+    const nextAt = armed ? stopResumeAt(conversationId) : undefined;
+    return {
+        ...event,
+        held: { ran, ...opt("contextTokens", contextTokens) },
+        autoResume: nextAt === undefined ? "available" : "scheduled",
+        ...opt("nextAt", nextAt === undefined ? undefined : Math.round(nextAt / 1000)),
     };
 };
 
@@ -848,7 +890,11 @@ const recordTurnHold = (params: {
             ...opt("checklist", params.checklist),
             ...opt("contextTokens", params.contextTokens),
         });
+        return;
     }
+    // Nothing held: the turn either finished or named its own remedy, and either way the run got somewhere, which is
+    // the one thing that puts the stop ladder back at its first rung.
+    clearStopLadder(input.conversationId);
 };
 
 // The session to resume, or none if the runtime no longer holds it, which opens a fresh session seeded from the record
@@ -1306,17 +1352,8 @@ async function* runTurn(
                 const outage = event.code === "provider-outage" && input.conversationId !== undefined ? recordProviderFailure(provider) : undefined;
                 if (outage !== undefined && outage.attempt < OUTAGE_MAX_ATTEMPTS && input.conversationId !== undefined) {
                     outageHit = true;
-                    // This conversation's own posture, checked the same way the resume pass will.
-                    const armed = await outageResumeArmed(services, input.conversationId);
-                    yield {
-                        ...event,
-                        autoResume: armed ? "scheduled" : "available",
-                        outage: {
-                            retryAt: Math.round(outage.retryAt / 1000),
-                            attempt: outage.attempt + 1,
-                            maxAttempts: OUTAGE_MAX_ATTEMPTS,
-                        },
-                    };
+                    // This conversation's own answer for this ending, read the same way the resume pass will read it.
+                    yield outageFrame(event, (await breakPolicyFor(services, input.conversationId, "outage")) === "retry", outage);
                     continue;
                 }
                 // Says on the frame whether the daemon will re-mint and re-run this credential.
@@ -1368,10 +1405,13 @@ async function* runTurn(
                     });
                     continue;
                 }
-                // The same promise for an uncoded death the exit is about to hold: the window watching this turn die
-                // has to learn the press re-runs it, or it falls back to appending a message the user never typed.
+                // The same promise for an uncoded death the exit is about to hold.
                 if (input.conversationId !== undefined && holdsAsStopped(input.prompt, providerAnswered, failure)) {
-                    yield { ...event, held: { ran: providerAnswered, ...opt("contextTokens", context?.tokens) } };
+                    yield await stoppedFrame(services, event, {
+                        conversationId: input.conversationId,
+                        ran: providerAnswered,
+                        contextTokens: context?.tokens,
+                    });
                     continue;
                 }
             }

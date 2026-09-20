@@ -25,21 +25,43 @@ vi.hoisted(() => {
     globalThis.Element.prototype.scrollIntoView = function scrollIntoView(): void {};
 });
 
-// Fleet roster and workflow ledger the pane queries on mount; irrelevant here, so answered empty.
+// This conversation's own answer for each ending, as the roster carries it, plus the writer the control calls. A ref
+// so a test can start from an armed conversation and watch the write go out. Carries the full card shape, not just the
+// policies: the tab strip lanes the same entry (agentStatus.laneOf) and reads its attention flags.
+const NO_ATTENTION = { plan: false, question: false, permission: false, capability: false, credential: false, conflict: false };
+const rosterEntry = (policies: Record<string, unknown> = {}): Record<string, unknown> => ({
+    id: `c1`,
+    status: `error`,
+    attention: { ...NO_ATTENTION },
+    ...policies,
+});
+const { agentEntry, setBreakPolicy, sandboxSettings } = await vi.hoisted(async () => {
+    const { ref: vueRef } = await import(`vue`);
+    return {
+        agentEntry: vueRef<Record<string, unknown> | undefined>(undefined),
+        setBreakPolicy: vi.fn(),
+        sandboxSettings: vueRef<Record<string, unknown> | undefined>({}),
+    };
+});
+// Fleet roster and workflow ledger the pane queries on mount; irrelevant here beyond the break policy, so answered empty.
 vi.mock(`../../agents/fleet/useAgents`, async () => {
     const { computed } = await import(`vue`);
     return {
         useAgents: () => ({
             fleet: computed(() => []),
-            agentById: () => undefined,
+            agentById: () => agentEntry.value,
             archived: ref([]),
             loadArchived: () => {},
             restore: () => {},
             busyIds: ref([]),
-            setResumeAfterOutage: vi.fn().mockResolvedValue(undefined),
+            setBreakPolicy,
         }),
     };
 });
+vi.mock(`../../sandbox/overview/useSandboxSettings`, async (importOriginal) => ({
+    ...(await importOriginal<Record<string, unknown>>()),
+    useSandboxSettings: () => ({ settings: sandboxSettings, patch: vi.fn() }),
+}));
 vi.mock(`../../agents/fleet/useWorkflowRuns`, async (importOriginal) => ({
     ...(await importOriginal<Record<string, unknown>>()),
     useWorkflowRuns: () => ({ runs: ref([]), designs: ref([]), start: () => undefined, stop: () => undefined }),
@@ -123,6 +145,11 @@ const openWays = async (): Promise<void> => {
     caret.click();
     await settle();
 };
+// The one question's answers, as the segmented control draws them: role="tab", one selected at a time.
+const answerPills = (): HTMLButtonElement[] => [...document.querySelectorAll<HTMLButtonElement>(`.chat-pane button[role="tab"]`)];
+const answerPill = (label: string): HTMLButtonElement | undefined =>
+    answerPills().find((element) => element.textContent?.trim().startsWith(label));
+const armedAnswer = (): string | undefined => answerPills().find((element) => element.getAttribute(`aria-selected`) === `true`)?.textContent?.trim();
 const composerText = (): string => document.querySelector(`.chat-pane`)?.textContent ?? ``;
 const composer = (): HTMLTextAreaElement => document.querySelector<HTMLTextAreaElement>(`.chat-pane textarea`)!;
 
@@ -154,6 +181,16 @@ beforeEach(async () => {
     // Baseline: no grant offered, the state every test but the reset tests itself runs in.
     resetOffer.value = undefined;
     claimReset.mockReset();
+    // Baseline posture: nothing armed anywhere, which is what every ending ships as.
+    agentEntry.value = rosterEntry();
+    sandboxSettings.value = {};
+    setBreakPolicy.mockReset();
+    // Mirrors the real writer's optimistic echo into the roster (useAgents-actions.setBreakPolicy); without it the
+    // control would snap back to the old answer and the test would assert a state the app never shows.
+    setBreakPolicy.mockImplementation(async (_id: string, ending: string, policy: string | null) => {
+        const field = ending === `limit` ? `limitPolicy` : ending === `outage` ? `outagePolicy` : `stopPolicy`;
+        agentEntry.value = { ...agentEntry.value, [field]: policy ?? undefined } as Record<string, unknown>;
+    });
     await nextTick();
 });
 
@@ -205,52 +242,61 @@ it(`stands down the moment the user types something of their own`, async () => {
     expect(enqueue).toHaveBeenCalledWith(`actually, run the tests first`, [], undefined);
 });
 
-// When only Continue and Auto-continue exist, Auto-continue shows directly as a button, not behind the caret.
-// The automation only ever re-runs a held turn, so the offer rides a held stop; an unheld one gets the press alone.
-it(`offers to keep continuing by itself, and says so once it is on`, async () => {
+// The question the card exists to ask. One answer is selected at all times, so no state of this card can promise two
+// automations over the same wall — the defect this shape replaced, where an "Auto-continue is on, continuing in about
+// 244 min" strip stacked under a limit strip still offering to send the turn at that very reset.
+it(`asks one question with one answer, and arms it for this conversation alone`, async () => {
     const conversation = stoppedChat();
     conversation.pickUp.value = { reason: `stopped`, held: { ran: true } };
     await mountPanel();
 
-    expect(button(`Auto-continue`)).toEqual(expect.any(Object));
-    button(`Auto-continue`)!.click();
+    expect(armedAnswer()).toBe(`Wait for me`);
+    answerPill(`Keep trying`)!.click();
     await settle();
 
-    expect(conversation.autoContinue.value).toBe(true);
-    expect(composerText()).toContain(`Auto-continue is on`);
-    expect(button(`Auto-continue`)).toBeUndefined();
-    expect(waysButton()).toBeUndefined();
-    expect(continueButton()).toEqual(expect.any(Object));
+    expect(setBreakPolicy).toHaveBeenCalledWith(conversation.conversationId, `stopped`, `retry`);
+    expect(armedAnswer()).toBe(`Keep trying`);
+});
 
-    button(`Turn off`)!.click();
+// A chat that answers the way the sandbox already does holds no override, rather than a frozen copy of a default it
+// would then quietly stop following.
+it(`clears the override when the answer is the sandbox's own`, async () => {
+    const conversation = stoppedChat();
+    conversation.pickUp.value = { reason: `stopped`, held: { ran: true } };
+    agentEntry.value = rosterEntry({ stopPolicy: `retry` });
+    sandboxSettings.value = { stopPolicy: `retry` };
+    await mountPanel();
+
+    expect(armedAnswer()).toBe(`Keep trying`);
+    answerPill(`Wait for me`)!.click();
     await settle();
-    expect(conversation.autoContinue.value).toBe(false);
-    expect(composerText()).not.toContain(`Auto-continue is on`);
+
+    expect(setBreakPolicy).toHaveBeenCalledWith(conversation.conversationId, `stopped`, `wait`);
 });
 
-// Arming it over an ending the daemon is not holding promises a press the automation would stand straight back down
-// from, since it re-runs held turns and refuses to type a continuation for the user.
-it(`withholds the standing offer when there is no held turn to re-run`, async () => {
-    stoppedChat();
+// One clock, on the line the answer sits on. Nothing counts down while nothing is armed.
+it(`counts down only what the chosen answer will actually do`, async () => {
+    const conversation = stoppedChat();
+    conversation.pickUp.value = { reason: `stopped`, held: { ran: true }, nextAt: Date.now() + 15_000 };
     await mountPanel();
 
-    expect(continueButton()).toEqual(expect.any(Object));
-    expect(button(`Auto-continue`)).toBeUndefined();
+    expect(composerText()).not.toContain(`Goes by itself`);
+
+    agentEntry.value = rosterEntry({ stopPolicy: `retry` });
+    await settle();
+
+    expect(composerText()).toContain(`Goes by itself about 15s`);
+    // One countdown, not two: the wait is stated on the answer and nowhere else.
+    expect(composerText().match(/about 15s/gu)).toHaveLength(1);
 });
 
-it(`keeps the armed line up on a chat with nothing to continue`, async () => {
-    const chat = useChat();
-    const conversation = chat.active.value;
-    conversation.restoreMessages([
-        { role: `user`, text: `clean the sandbox` },
-        { role: `assistant`, text: `done` },
-    ]);
-    conversation.setAutoContinue(true);
+// The answers are the ending's own; a turn nobody can move has no move to offer.
+it(`offers only the answers this ending can take`, async () => {
+    const conversation = stoppedChat();
+    conversation.pickUp.value = { reason: `stopped`, held: { ran: true } };
     await mountPanel();
 
-    expect(continueButton()).toBeUndefined();
-    expect(composerText()).toContain(`Auto-continue is on`);
-    expect(button(`Turn off`)).toEqual(expect.any(Object));
+    expect(answerPills().map((pill) => pill.textContent?.trim())).toEqual([`Wait for me`, `Keep trying`]);
 });
 
 // An unheld allowance means the daemon has no copy of the refused turn, so nothing can be resumed before it resets.
@@ -313,24 +359,27 @@ it(`hands the press over once the allowance has reset`, async () => {
     expect(enqueue).toHaveBeenCalledWith(CONTINUATIONS.plain);
 });
 
-it(`carries the outage in the same strip, with the way out of its automatic retry`, async () => {
+// The outage asks the same question in the same words, in the same card: nothing about it is a second shape.
+it(`carries the outage in the same card, counting the retry the answer books`, async () => {
     const conversation = stoppedChat();
-    conversation.pickUp.value = { reason: `outage`, automatic: { at: Date.now() + 120_000 } };
+    conversation.pickUp.value = { reason: `outage`, nextAt: Date.now() + 120_000 };
+    agentEntry.value = rosterEntry({ outagePolicy: `retry` });
     await mountPanel();
 
-    expect(composerText()).toContain(`Provider failed · retrying in about 2 min`);
-    expect(composerText()).toContain(`Stop`);
+    expect(composerText()).toContain(`Provider failed · work kept`);
+    expect(armedAnswer()).toBe(`Keep trying`);
+    expect(composerText()).toContain(`about 2 min`);
     expect(waysButton()).toBeUndefined();
-    expect(button(`Auto-continue`)).toBeUndefined();
     expect(continueButton()?.disabled).toBe(false);
 });
 
-it(`offers to keep the chat going when nothing is retrying the outage`, async () => {
+it(`leaves the outage waiting until somebody answers for it`, async () => {
     const conversation = stoppedChat();
     conversation.pickUp.value = { reason: `outage` };
     await mountPanel();
 
-    expect(button(`Keep this chat going`)).toEqual(expect.any(Object));
+    expect(armedAnswer()).toBe(`Wait for me`);
+    expect(composerText()).not.toContain(`Next try`);
     expect(continueButton()?.disabled).toBe(false);
 });
 
@@ -436,26 +485,27 @@ it(`offers no second account when the only other connection is spent too`, async
     limitChat();
     await mountPanel();
 
-    const labels = [...document.querySelectorAll<HTMLButtonElement>(`button`)].map((element) => element.textContent?.trim() ?? ``);
-    expect(labels).toContainEqual(expect.stringContaining(`Send it when it's back`));
+    // The wait and the resend are always askable; the move is not, with nowhere to move to.
+    expect(answerPills().map((pill) => pill.textContent?.trim())).toEqual([`Wait for me`, `Send again`]);
     expect(button(`Continue on`)).toBeUndefined();
-    expect(button(`Auto-continue`)).toEqual(expect.any(Object));
 });
 
-it(`keeps the press's variants behind the caret rather than in the row`, async () => {
+// The caret holds press VARIANTS only. An automation behind it would be a second place to arm the same thing, which
+// is exactly how the old surfaces drifted into saying different things about one conversation.
+it(`keeps the press's variants behind the caret, and every automation on the question`, async () => {
     twoAccounts(99, 10);
     limitChat();
     await mountPanel();
 
-    expect(button(`Send it when it's back`)).toEqual(expect.any(Object));
+    expect(answerPill(`Move to`)).toEqual(expect.any(Object));
     expect(continueButton()).toEqual(expect.any(Object));
     expect(button(`Continue on`)).toBeUndefined();
-    expect(button(`Auto-continue`)).toBeUndefined();
 
     await openWays();
 
     expect(button(`Continue on`)).toEqual(expect.any(Object));
-    expect(button(`Auto-continue`)).toEqual(expect.any(Object));
+    // The overlay carries no answers: it is two prices for one press.
+    expect([...document.querySelectorAll(`button[role="tab"]`)].length).toBe(answerPills().length);
 });
 
 // Anthropic can reopen a spent 5-hour session on demand, once a week, leaving the weekly pool untouched. The offer must
@@ -488,7 +538,6 @@ it(`offers the reset in the row when the provider is granting one, and re-runs t
 
     const reset = button(`Reset limit now`);
     expect(reset).toEqual(expect.any(Object));
-    expect(button(`Auto-continue`)).toBeUndefined();
 
     reset?.click();
     await settle();
@@ -505,8 +554,8 @@ it(`offers no reset when the provider is not granting one, whatever the meters s
     await mountPanel();
 
     expect(button(`Reset limit now`)).toBeUndefined();
-    expect(button(`Send it when it's back`)).toEqual(expect.any(Object));
-    expect(button(`Auto-continue`)).toEqual(expect.any(Object));
+    // The question still stands; only the grant that would remove the wall is missing.
+    expect(answerPill(`Send again`)).toEqual(expect.any(Object));
 });
 
 it(`says why nothing happened when a claim changes nothing, and does not re-run the turn`, async () => {
@@ -586,20 +635,18 @@ it(`offers only the fresh session when nothing ran`, async () => {
     expect(resume).toHaveBeenCalledWith({ carry: false });
 });
 
-// The appointment's own Stop stays out of this row; showing it here would look like it cancels the wrong thing.
-it(`reports a booked move by name and keeps the appointment's control out of the row`, async () => {
+// A move the owner's policy already booked fires on the next pass, so it names its destination rather than an hour —
+// and says so even while the selected answer is `wait`, because it is a fact about the turn, not a plan for it.
+it(`reports a booked move by name instead of a countdown`, async () => {
     twoAccounts(99, 10);
     const conversation = limitChat();
     conversation.pickUp.value = {
         reason: `limit`,
         readyAt: Date.now() + 3_600_000,
         held: { ran: true, contextTokens: 85_000, moving: `second` },
-        automatic: { at: Date.now() },
     };
     await mountPanel();
 
-    expect(composerText()).toContain(`moving to second now`);
-    const labels = [...document.querySelectorAll<HTMLButtonElement>(`button`)].map((element) => element.textContent?.trim() ?? ``);
-    expect(labels).not.toContainEqual(expect.stringContaining(`Send it when it's back`));
-    expect(labels).not.toContainEqual(expect.stringContaining(`Stop`));
+    expect(composerText()).toContain(`Moving to second now`);
+    expect(composerText()).not.toContain(`Goes by itself`);
 });

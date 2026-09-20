@@ -227,6 +227,15 @@ describe(`formatWait`, () => {
         expect(formatWait(now / 1000 + 1_200, now)).toBe(`about 20 min`);
     });
 
+    // A four-hour allowance reset read as "about 244 min" on the chat's own card: arithmetic a reader should not have
+    // to do, beside a second line stating the same instant as a clock time.
+    it(`carries units up to hours and days rather than stating four hours in minutes`, () => {
+        expect(formatWait(now / 1000 + 244 * 60, now)).toBe(`about 4h`);
+        expect(formatWait(now / 1000 + 270 * 60, now)).toBe(`about 4.5h`);
+        expect(formatWait(now / 1000 + 20 * 3_600, now)).toBe(`about 20h`);
+        expect(formatWait(now / 1000 + 7 * 24 * 3_600, now)).toBe(`about 7 days`);
+    });
+
     it(`never counts backwards past zero, a due-but-unfired retry reads as imminent, not overdue`, () => {
         expect(formatWait(now / 1000 - 60, now)).toBe(`about 5s`);
     });

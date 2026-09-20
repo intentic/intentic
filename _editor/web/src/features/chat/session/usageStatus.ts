@@ -234,14 +234,26 @@ export const planHeadroom = (usage: AccountUsage | undefined, model?: ModelRef):
 // beyond it ("Oct 20, 11:59"), since a monthly pool's weekday reads as two days away. No ticking relative clock.
 export const formatReset = (epochSeconds: number, now: number = Date.now()): string => formatWhen(epochSeconds * 1000, now);
 
-// Relative wait for an outage retry (seconds to minutes out), where a wall-clock time forces arithmetic a
-// reader shouldn't need. Deliberately coarse ("about"), not a live countdown — polling has its own jitter.
+// Relative wait, where a wall-clock time forces arithmetic a reader shouldn't need. Deliberately coarse ("about"), not
+// a live countdown — polling has its own jitter. Carries units all the way up: a wait stated in minutes stops being
+// readable somewhere around the hour ("about 244 min" is four hours nobody should have to divide), and a spent weekly
+// allowance is days out, not minutes.
 export const formatWait = (epochSeconds: number, now: number = Date.now()): string => {
     const seconds = Math.max(0, Math.round((epochSeconds * 1000 - now) / 1000));
     if (seconds < 90) {
         return `about ${Math.max(5, Math.round(seconds / 5) * 5)}s`;
     }
-    return `about ${Math.round(seconds / 60)} min`;
+    const minutes = Math.round(seconds / 60);
+    if (minutes < 90) {
+        return `about ${minutes} min`;
+    }
+    const hours = seconds / 3_600;
+    // One decimal under ten hours, so 4h and 4.5h are different sentences; whole hours past that, where the half no
+    // longer changes what anyone does.
+    if (hours < 36) {
+        return `about ${hours < 10 ? Math.round(hours * 2) / 2 : Math.round(hours)}h`;
+    }
+    return `about ${Math.round(hours / 24)} days`;
 };
 
 // Age of a reading in the kit's day-based words, not an absolute date, so staleness reads the same at any

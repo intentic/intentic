@@ -6,10 +6,13 @@ import {
     type AgentSummary,
     type AgentTurn,
     deriveTitle,
+    isTurnBreakPolicy,
     type LandConflictReason,
     type LandedMessageDraft,
     planParts,
     type TodoItem,
+    type TurnBreak,
+    type TurnBreakPolicy,
     type UnfinishedWork,type SessionOwner
 } from "@intentic/sandbox-contract";
 import { isFailureSentence, isSelfIdentityAnswer, isToolCallStandIn } from "../../agent/providers/failure-sentences.js";
@@ -285,12 +288,25 @@ const reportedFailure = (
           };
 
 // The four per-conversation overrides of a sandbox-wide default (absent means inherit), projected together since the
-// card's menu and the chat's offers read them together.
-const postures = (entry: PersistedAgent): Partial<Pick<AgentSummary, "autoLand" | "resumeAfterOutage" | "resumeAfterLimit" | "moveAfterLimit">> => ({
+// card's menu and the chat's control read them together.
+// Which stored key an ending's answer lives under. A table rather than string arithmetic, so the one place that maps
+// ending to field is greppable from both.
+const POLICY_KEY = { limit: "limitPolicy", outage: "outagePolicy", stopped: "stopPolicy" } as const satisfies Record<TurnBreak, keyof PersistedAgent>;
+
+// What survives a rebuild, for the same reason the land posture does: a standing choice about the conversation, and the
+// next turn is exactly when it matters. All three, so a rebuild is not a reason to forget which wall this conversation
+// was told to answer for itself.
+const carriedPolicies = (existing: PersistedAgent | undefined): Pick<Partial<PersistedAgent>, "limitPolicy" | "outagePolicy" | "stopPolicy"> => ({
+    ...opt("limitPolicy", existing?.limitPolicy),
+    ...opt("outagePolicy", existing?.outagePolicy),
+    ...opt("stopPolicy", existing?.stopPolicy),
+});
+
+const postures = (entry: PersistedAgent): Partial<Pick<AgentSummary, "autoLand" | "limitPolicy" | "outagePolicy" | "stopPolicy">> => ({
     ...(entry.autoLand !== undefined ? { autoLand: entry.autoLand } : {}),
-    ...(entry.resumeAfterOutage !== undefined ? { resumeAfterOutage: entry.resumeAfterOutage } : {}),
-    ...(entry.resumeAfterLimit !== undefined ? { resumeAfterLimit: entry.resumeAfterLimit } : {}),
-    ...(entry.moveAfterLimit !== undefined ? { moveAfterLimit: entry.moveAfterLimit } : {}),
+    ...(entry.limitPolicy !== undefined ? { limitPolicy: entry.limitPolicy } : {}),
+    ...(entry.outagePolicy !== undefined ? { outagePolicy: entry.outagePolicy } : {}),
+    ...(entry.stopPolicy !== undefined ? { stopPolicy: entry.stopPolicy } : {}),
 });
 
 // How many different emoji one conversation may carry. Bounded by kinds, not by presses: a hundred people agreeing is
@@ -477,14 +493,10 @@ export interface AgentsRegistry {
     // Set/clear the autoLand override (null inherits the sandbox setting); read at turn completion, so a mid-turn flip
     // holds only this turn's work.
     readonly setAutoLand: (id: string, autoLand: boolean | null) => Promise<AgentSummary | undefined>;
-    // Same grammar as `setAutoLand`; read by the resume pass after the turn has already died, so arming it mid-unwind
-    // is the ordinary case.
-    readonly setResumeAfterOutage: (id: string, resumeAfterOutage: boolean | null) => Promise<AgentSummary | undefined>;
-    // Same grammar again, for a fire that can be scheduled hours out: the press is often made on a card whose turn died
-    // hours ago.
-    readonly setResumeAfterLimit: (id: string, resumeAfterLimit: boolean | null) => Promise<AgentSummary | undefined>;
-    // Third of the same grammar, for a spent allowance that moves accounts instead of waiting.
-    readonly setMoveAfterLimit: (id: string, moveAfterLimit: boolean | null) => Promise<AgentSummary | undefined>;
+    // Same grammar as `setAutoLand`, once for all three endings: read by the resume pass after the turn has already
+    // died, so arming it mid-unwind is the ordinary case, and a limit's press is often made on a card whose turn died
+    // hours ago. Refuses an answer the ending does not allow rather than persisting one no pass would ever read.
+    readonly setBreakPolicy: (id: string, ending: TurnBreak, policy: TurnBreakPolicy | null) => Promise<AgentSummary | undefined>;
     // Stamps a collaborator's ask to land; leaves `updatedAt` alone. Re-asking re-stamps rather than queuing; the land
     // or discard that answers it clears the ask.
     readonly requestLand: (id: string, by: { email: string; name?: string }, at: number) => Promise<AgentSummary | undefined>;
@@ -899,9 +911,7 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
                 // `archivedAt` is dropped: messaging an archived agent un-archives it, and `ensure()` re-attaches the
                 // checkout. `autoLand` survives, as a standing choice about the conversation.
                 ...(existing?.autoLand !== undefined ? { autoLand: existing.autoLand } : {}),
-                // Survives for the same reason as the land posture: a standing choice the next turn is exactly when it
-                // matters.
-                ...(existing?.resumeAfterOutage !== undefined ? { resumeAfterOutage: existing.resumeAfterOutage } : {}),
+                ...carriedPolicies(existing),
                 // Omission is deletion, and here it had teeth: only `recordLanded` may retire a conflict report, and
                 // dropping it here retired one on the very follow-up turn meant to resolve it.
                 ...(existing?.conflicts !== undefined ? { conflicts: existing.conflicts } : {}),
@@ -1045,39 +1055,21 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
             broadcast();
             return summaryOf(next);
         },
-        setResumeAfterOutage: async (id, resumeAfterOutage) => {
+        setBreakPolicy: async (id, ending, policy) => {
             const entry = entryOf(id);
             if (entry === undefined) {
                 return undefined;
             }
-            // Same as `setAutoLand`: null strips the key, since absent is the only state that means inherit.
-            const { resumeAfterOutage: _cleared, ...carried } = entry;
-            const next = { ...carried, ...(resumeAfterOutage !== null ? { resumeAfterOutage } : {}) };
-            replace(next);
-            await persist();
-            broadcast();
-            return summaryOf(next);
-        },
-        setResumeAfterLimit: async (id, resumeAfterLimit) => {
-            const entry = entryOf(id);
-            if (entry === undefined) {
+            // An answer the ending cannot take is refused here rather than stored: no pass would ever read it, and a
+            // card showing a policy nothing acts on is worse than one showing none.
+            if (policy !== null && !isTurnBreakPolicy(ending, policy)) {
                 return undefined;
             }
-            // Same three states as its neighbors: on, off, or (absent) inherit.
-            const { resumeAfterLimit: _cleared, ...carried } = entry;
-            const next = { ...carried, ...(resumeAfterLimit !== null ? { resumeAfterLimit } : {}) };
-            replace(next);
-            await persist();
-            broadcast();
-            return summaryOf(next);
-        },
-        setMoveAfterLimit: async (id, moveAfterLimit) => {
-            const entry = entryOf(id);
-            if (entry === undefined) {
-                return undefined;
-            }
-            const { moveAfterLimit: _cleared, ...carried } = entry;
-            const next = { ...carried, ...(moveAfterLimit !== null ? { moveAfterLimit } : {}) };
+            // Same as `setAutoLand`: null strips the key, since absent is the only state that means inherit. Only the
+            // named ending's key moves; the other two carry through untouched.
+            const key = POLICY_KEY[ending];
+            const { [key]: _cleared, ...carried } = entry;
+            const next = policy === null ? carried : { ...carried, [key]: policy };
             replace(next);
             await persist();
             broadcast();

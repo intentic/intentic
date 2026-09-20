@@ -10,7 +10,7 @@ import { computed, ref, useTemplateRef, watch } from "vue";
 import { useRouter } from "vue-router";
 import { useQueryClient } from "@tanstack/vue-query";
 import { attachmentPreview } from "../drafts/attachmentPreviews";
-import { effectiveAutoLand, effectiveOutageResume, formatElapsed } from "../../agents/fleet/agentStatus";
+import { effectiveAutoLand, formatElapsed } from "../../agents/fleet/agentStatus";
 import { useAgents } from "../../agents/fleet/useAgents";
 import { errandOf } from "../run/errands";
 import { personaRouteWait } from "../personas/personaRoute";
@@ -116,7 +116,7 @@ const capabilityDescription = computed(() => {
 const { mobile } = useDevice();
 
 // landHold's one-press opt-out from future auto-land, scoped per-agent and gated on the current effective posture.
-const { agentById, setAutoLand, setResumeAfterOutage, stopWatching } = useAgents();
+const { agentById, setAutoLand, stopWatching } = useAgents();
 const { settings: sandboxSettings } = useSandboxSettings();
 const holdOffer = computed(
     () =>
@@ -128,15 +128,9 @@ const holdFutureLands = async (): Promise<void> => {
     await setAutoLand(conversation.value.conversationId, false).catch(() => undefined);
 };
 
-// Outage opt-out, same pattern as landHold; sets `false` rather than null so it can't fall back to a resuming default.
-const outageOptOutOffer = computed(
-    () =>
-        props.message.noticeAction === `outageOptOut` &&
-        effectiveOutageResume(agentById(conversation.value.conversationId), sandboxSettings.value?.resumeAfterOutage),
-);
-const stopResumingOutages = async (): Promise<void> => {
-    await setResumeAfterOutage(conversation.value.conversationId, false).catch(() => undefined);
-};
+// No opt-out link here for a resuming outage: what happens next is one question with one answer, asked on the card
+// above the composer (ChatContinueStrip), and a second way to arm or disarm it from a transcript row is how the two
+// drifted into saying different things.
 
 // Reveals the terminal for a daemon-started dependency install; gated on the install still running.
 const { rows: liveWork } = useWorkTerminals();
@@ -576,12 +570,6 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
                     {{ t(`chat.chatMessageView.keepFutureWorkOn`) }}
                 </button>
                 <span class="shrink-0">{{ t(`chat.chatMessageView.waitsReadyToLand`) }}</span>
-            </template>
-            <template v-if="outageOptOutOffer">
-                <button type="button" class="shrink-0 font-medium text-link hover:underline" @click="stopResumingOutages">
-                    {{ t(`chat.chatMessageView.stopResumingChat`) }}
-                </button>
-                <span class="shrink-0">{{ t(`chat.chatMessageView.turnProviderKillsStops`) }}</span>
             </template>
             <template v-if="depsInstallOffer">
                 <button type="button" class="shrink-0 font-medium text-link hover:underline" @click="watchDepsInstall">

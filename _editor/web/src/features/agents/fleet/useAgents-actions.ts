@@ -1,4 +1,4 @@
-import type { AgentSummary } from "@intentic/sandbox-contract";
+import type { AgentSummary, TurnBreak, TurnBreakPolicy } from "@intentic/sandbox-contract";
 import { standingFrom, unregistered } from "./agentStatus";
 import { useChat } from "../../chat/run/useChat";
 import { agentTabOf, type AgentTabSeed } from "../../chat/panel/useChat-reveal";
@@ -66,71 +66,40 @@ export const setAutoLand = async (id: string, autoLand: boolean | null): Promise
     }
 };
 
-// Sets or clears this conversation's outage-resume override; deliberately a sibling of setAutoLand rather than a
-// settings call, since the press is about one dead turn, not the sandbox-wide default.
-export const setResumeAfterOutage = async (id: string, resumeAfterOutage: boolean | null): Promise<void> => {
+// Sets or clears this conversation's answer for one ending (null goes back to following the sandbox-wide policy).
+// One writer for all three, deliberately a sibling of setAutoLand rather than a settings call, since the choice is
+// about one dead turn and not the sandbox-wide default. Reachable from the board as well as the chat: a limit reopens
+// hours later, so the person deciding is often looking at a lane of stranded cards rather than one transcript.
+export const setBreakPolicy = async (id: string, ending: TurnBreak, policy: TurnBreakPolicy | null): Promise<void> => {
     const previous = registry.value.find((agent) => agent.id === id);
-    const revert = previous?.resumeAfterOutage;
+    const revert = previous === undefined ? {} : policyPatch(ending, effectiveOn(previous, ending));
     if (previous !== undefined) {
-        previous.resumeAfterOutage = resumeAfterOutage ?? undefined;
+        Object.assign(previous, policyPatch(ending, policy ?? undefined));
     }
     try {
-        const summary = await sandboxJson<AgentSummary>(
-            `/agents/${encodeURIComponent(id)}/resume-after-outage`,
-            jsonBody(`POST`, { resumeAfterOutage }),
-        );
+        const summary = await sandboxJson<AgentSummary>(`/agents/${encodeURIComponent(id)}/break-policy`, jsonBody(`POST`, { ending, policy }));
         registry.value = registry.value.map((agent) => (agent.id === id ? summary : agent));
     } catch (error) {
         const target = registry.value.find((agent) => agent.id === id);
         if (target !== undefined) {
-            target.resumeAfterOutage = revert;
+            Object.assign(target, revert);
         }
         throw error;
     }
 };
 
-// The same override for a clock-based blocker: whether a spent-allowance refusal resends itself when the window
-// reopens. Reachable from the board too, since the person deciding is often looking at a lane of stranded cards rather
-// than one transcript.
-export const setResumeAfterLimit = async (id: string, resumeAfterLimit: boolean | null): Promise<void> => {
-    const previous = registry.value.find((agent) => agent.id === id);
-    const revert = previous?.resumeAfterLimit;
-    if (previous !== undefined) {
-        previous.resumeAfterLimit = resumeAfterLimit ?? undefined;
-    }
-    try {
-        const summary = await sandboxJson<AgentSummary>(
-            `/agents/${encodeURIComponent(id)}/resume-after-limit`,
-            jsonBody(`POST`, { resumeAfterLimit }),
-        );
-        registry.value = registry.value.map((agent) => (agent.id === id ? summary : agent));
-    } catch (error) {
-        const target = registry.value.find((agent) => agent.id === id);
-        if (target !== undefined) {
-            target.resumeAfterLimit = revert;
-        }
-        throw error;
-    }
-};
+// This agent's own answer for one ending, before the write, so a refusal puts back exactly what was there.
+const effectiveOn = (agent: AgentSummary, ending: TurnBreak): TurnBreakPolicy | undefined =>
+    ending === `limit` ? agent.limitPolicy : ending === `outage` ? agent.outagePolicy : agent.stopPolicy;
 
-// The third posture of the same grammar: whether a spent allowance moves this conversation's held turn to another
-// account with room, the moment the refusal lands.
-export const setMoveAfterLimit = async (id: string, moveAfterLimit: boolean | null): Promise<void> => {
-    const previous = registry.value.find((agent) => agent.id === id);
-    const revert = previous?.moveAfterLimit;
-    if (previous !== undefined) {
-        previous.moveAfterLimit = moveAfterLimit ?? undefined;
+// The optimistic echo, narrowed to what the ending's field can hold: an answer that ending cannot take echoes as
+// inherit, which is what the daemon refuses it as too.
+const policyPatch = (ending: TurnBreak, policy: TurnBreakPolicy | undefined): Partial<AgentSummary> => {
+    if (ending === `limit`) {
+        return { limitPolicy: policy === `retry` ? undefined : policy };
     }
-    try {
-        const summary = await sandboxJson<AgentSummary>(`/agents/${encodeURIComponent(id)}/move-after-limit`, jsonBody(`POST`, { moveAfterLimit }));
-        registry.value = registry.value.map((agent) => (agent.id === id ? summary : agent));
-    } catch (error) {
-        const target = registry.value.find((agent) => agent.id === id);
-        if (target !== undefined) {
-            target.moveAfterLimit = revert;
-        }
-        throw error;
-    }
+    const retry = policy === `retry` || policy === `wait` ? policy : undefined;
+    return ending === `outage` ? { outagePolicy: retry } : { stopPolicy: retry };
 };
 
 // Sends a stranded turn again by re-running it, rather than appending a "carry on" message. Not optimistic, unlike its

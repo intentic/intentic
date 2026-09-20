@@ -4,6 +4,7 @@ import {
     AgentArchiveSchema,
     AgentAssignSchema,
     AgentAutoLandSchema,
+    AgentBreakPolicySchema,
     AgentFileDiffQuerySchema,
     AgentIdSchema,
     AgentToolChildrenQuerySchema,
@@ -13,10 +14,7 @@ import {
     AgentPlaceSchema,
     AgentReactSchema,
     AgentRenameSchema,
-    AgentResumeAfterLimitSchema,
     AgentStopWatchingSchema,
-    AgentMoveAfterLimitSchema,
-    AgentResumeAfterOutageSchema,
     AgentsArchivedSchema,
     AgentSearchQuerySchema,
     AgentSearchResultSchema,
@@ -125,37 +123,16 @@ export const agentsContract = {
         .input(AgentAutoLandSchema)
         .output(AgentSummarySchema),
     // Legal for a workspace conversation too (unlike autoLand): an outage kills a main-tree chat just as readily.
-    resumeAfterOutage: oc
+    // Also offered on the card, not just in chat: a limit reopens hours later, so the decider is usually at a board.
+    breakPolicy: oc
         .route({
             method: "POST",
-            path: "/agents/{id}/resume-after-outage",
-            summary: "Whether this conversation retries after a provider outage",
+            path: "/agents/{id}/break-policy",
+            summary: "What this conversation does when a turn stops before it finished",
             description:
-                "Overrides the sandbox-wide setting for one conversation; clear it to follow the default again. This is what the offer shown when a turn dies writes, because the press happens inside one conversation and honestly means finish this piece of work.",
+                "One answer per ending — a spent usage limit, a provider outage, a turn that stopped short — overriding the sandbox-wide policy for one conversation; clear it to follow the default again. The answers are mutually exclusive by construction, so nothing here can arm two automations over the same wall. Every ending starts at `wait` unless asked otherwise, because a re-run spends the user's own allowance on a turn they sent once.",
         })
-        .input(AgentResumeAfterOutageSchema)
-        .output(AgentSummarySchema),
-    // Also offered on the card, not just chat: a limit reopens hours later, so the decider is usually at a board.
-    resumeAfterLimit: oc
-        .route({
-            method: "POST",
-            path: "/agents/{id}/resume-after-limit",
-            summary: "Whether this conversation sends itself again when its allowance comes back",
-            description:
-                "Overrides the sandbox-wide setting for one conversation; clear it to follow the default again. Off unless asked for, because the allowance is the user's own budget and a turn that spends it the moment it reopens is not a decision to make on their behalf.",
-        })
-        .input(AgentResumeAfterLimitSchema)
-        .output(AgentSummarySchema),
-    // Moves the held turn the moment the refusal lands, not on the next attempt.
-    moveAfterLimit: oc
-        .route({
-            method: "POST",
-            path: "/agents/{id}/move-after-limit",
-            summary: "Whether this conversation moves to another account when its allowance is spent",
-            description:
-                "Overrides the sandbox-wide setting for one conversation; clear it to follow the default again. A move spends a second account of the same provider on this conversation's behalf, so it is off unless asked for.",
-        })
-        .input(AgentMoveAfterLimitSchema)
+        .input(AgentBreakPolicySchema)
         .output(AgentSummarySchema),
     seen: oc
         .route({
