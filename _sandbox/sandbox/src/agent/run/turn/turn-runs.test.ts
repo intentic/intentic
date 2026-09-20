@@ -57,7 +57,8 @@ describe(`turn runs`, () => {
     it(`opens with the turn's rows, streams changes to them and facts about it with 1-based seqs, and settles at the turn's end`, async () => {
         const { turnFn, push, close } = crankedTurn();
         const run = startTurnRun(turnFn, turn(`c-live`), { opening })!;
-        expect(run.rows).toEqual([{ role: `user`, text: `do the thing`, sentAt: 1 }]);
+        // Every row the run emits says which run it is, so a client redrawing it knows where it already sits.
+        expect(run.rows).toEqual([{ role: `user`, text: `do the thing`, sentAt: 1, run: run.id }]);
 
         const followed = collect(`c-live`);
         push({ kind: `session`, sessionId: `s1` });
@@ -71,23 +72,23 @@ describe(`turn runs`, () => {
             run: run.id,
             startedAt: run.startedAt,
             seq: 0,
-            rows: [{ role: `user`, text: `do the thing`, sentAt: 1 }],
+            rows: [{ role: `user`, text: `do the thing`, sentAt: 1, run: run.id }],
         });
         expect(entries).toEqual([
             { kind: `fact`, seq: 1, fact: { kind: `session`, sessionId: `s1` } },
-            { kind: `patch`, seq: 2, patch: { op: `append`, row: { role: `assistant`, text: `` } } },
+            { kind: `patch`, seq: 2, patch: { op: `append`, row: { role: `assistant`, text: ``, run: run.id } } },
             { kind: `patch`, seq: 3, patch: { op: `text`, index: 1, text: `a` } },
         ]);
         expect(run.done).toBe(true);
         expect(run.rows).toEqual([
-            { role: `user`, text: `do the thing`, sentAt: 1 },
-            { role: `assistant`, text: `a` },
+            { role: `user`, text: `do the thing`, sentAt: 1, run: run.id },
+            { role: `assistant`, text: `a`, run: run.id },
         ]);
     });
 
     it(`hands a late attach the rows so far and the facts, then only what follows`, async () => {
         const { turnFn, push, close } = crankedTurn();
-        startTurnRun(turnFn, turn(`c-replay`), { opening });
+        const run = startTurnRun(turnFn, turn(`c-replay`), { opening })!;
         push({ kind: `session`, sessionId: `s1` });
         push({ kind: `delta`, text: `a` });
         push({ kind: `delta`, text: `b` });
@@ -99,8 +100,8 @@ describe(`turn runs`, () => {
         const { head, entries } = await followed;
         expect(head.seq).toBe(4);
         expect(head.rows).toEqual([
-            { role: `user`, text: `do the thing`, sentAt: 1 },
-            { role: `assistant`, text: `ab` },
+            { role: `user`, text: `do the thing`, sentAt: 1, run: run.id },
+            { role: `assistant`, text: `ab`, run: run.id },
         ]);
         expect(entries).toEqual([
             { kind: `fact`, seq: 1, fact: { kind: `session`, sessionId: `s1` } },
@@ -177,14 +178,14 @@ describe(`turn runs`, () => {
         startTurnRun(turnFn, turn(`c-throw`), { opening });
         fail(new Error(`adapter exploded`));
         await vi.waitFor(() => expect(turnRunOf(`c-throw`)!.done).toBe(true));
-        expect(turnRunOf(`c-throw`)!.rows.at(-1)).toEqual({ role: `notice`, text: `adapter exploded` });
+        expect(turnRunOf(`c-throw`)!.rows.at(-1)).toEqual({ role: `notice`, text: `adapter exploded`, run: turnRunOf(`c-throw`)!.id });
         expect((await collect(`c-throw`)).entries).toEqual([{ kind: `fact`, seq: 2, fact: { kind: `error`, message: `adapter exploded` } }]);
 
         const { turnFn: abortFn, fail: abort } = crankedTurn();
         startTurnRun(abortFn, turn(`c-abort`), { opening });
         abort(new DOMException(`aborted`, `AbortError`) as unknown as Error);
         await vi.waitFor(() => expect(turnRunOf(`c-abort`)!.done).toBe(true));
-        expect(turnRunOf(`c-abort`)!.rows.at(-1)).toEqual({ role: `notice`, text: `Stopped.` });
+        expect(turnRunOf(`c-abort`)!.rows.at(-1)).toEqual({ role: `notice`, text: `Stopped.`, run: turnRunOf(`c-abort`)!.id });
         expect((await collect(`c-abort`)).entries).toEqual([]);
     });
 
@@ -195,9 +196,10 @@ describe(`turn runs`, () => {
         await vi.waitFor(() => expect(turnRunOf(`c-park-stop`)!.rows).toHaveLength(2));
         fail(new DOMException(`aborted`, `AbortError`) as unknown as Error);
         await vi.waitFor(() => expect(turnRunOf(`c-park-stop`)!.done).toBe(true));
-        expect(turnRunOf(`c-park-stop`)!.rows.slice(1)).toEqual([
-            { role: `assistant`, text: ``, question: { requestId: `q1`, questions: [], status: `cancelled` } },
-            { role: `notice`, text: `Stopped.` },
+        const parkStop = turnRunOf(`c-park-stop`)!;
+        expect(parkStop.rows.slice(1)).toEqual([
+            { role: `assistant`, text: ``, question: { requestId: `q1`, questions: [], status: `cancelled` }, run: parkStop.id },
+            { role: `notice`, text: `Stopped.`, run: parkStop.id },
         ]);
     });
 
@@ -218,10 +220,10 @@ describe(`turn runs`, () => {
                 patch: {
                     op: `replace`,
                     index: 1,
-                    row: { role: `assistant`, text: ``, plan: { requestId: `p1`, text: `the plan`, status: `approved` } },
+                    row: { role: `assistant`, text: ``, plan: { requestId: `p1`, text: `the plan`, status: `approved` }, run: run.id },
                 },
             },
-            { kind: `patch`, seq: 4, patch: { op: `append`, row: { role: `notice`, text: `Plan approved.` } } },
+            { kind: `patch`, seq: 4, patch: { op: `append`, row: { role: `notice`, text: `Plan approved.`, run: run.id } } },
         ]);
     });
 
@@ -278,16 +280,18 @@ describe(`turn runs`, () => {
     it(`hands the settled rows and the steered positions to the transcript sink`, async () => {
         const { turnFn, push, close } = crankedTurn();
         const transcript = vi.fn(async () => true);
-        startTurnRun(turnFn, turn(`c-sink`), { opening, transcript });
+        const run = startTurnRun(turnFn, turn(`c-sink`), { opening, transcript })!;
         push({ kind: `delta`, text: `a` });
         push({ kind: `steer`, text: `and`, sentAt: 2 });
         close();
         await vi.waitFor(() => expect(transcript).toHaveBeenCalledOnce());
+        // The run rides into the record with its rows: a run stays attachable for a while after it settles, and a
+        // window that redrew from the record has to recognise those rows when its head arrives.
         expect(transcript).toHaveBeenCalledWith(
             [
-                { role: `user`, text: `do the thing`, sentAt: 1 },
-                { role: `assistant`, text: `a` },
-                { role: `user`, text: `and`, sentAt: 2 },
+                { role: `user`, text: `do the thing`, sentAt: 1, run: run.id },
+                { role: `assistant`, text: `a`, run: run.id },
+                { role: `user`, text: `and`, sentAt: 2, run: run.id },
             ],
             [2],
         );

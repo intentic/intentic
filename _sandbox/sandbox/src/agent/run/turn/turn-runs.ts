@@ -110,8 +110,10 @@ export class TurnRun {
     }
 
     // The transcript as it stands, live: what the record keeps once whole, and what a reopened tab draws meanwhile.
+    // Stamped on the way out, the one place a row leaves this run, so every copy of it says which run made it and a
+    // client redrawing the run knows where it already sits.
     get rows(): readonly TranscriptRow[] {
-        return this.fold.rows;
+        return this.fold.rows.map((row) => ({ ...row, run: this.id }));
     }
 
     // Rows where the user's mid-turn messages landed, for the anchors filed under them at settlement.
@@ -173,7 +175,13 @@ export class TurnRun {
     // are taken in one synchronous step, so nothing lands between the snapshot and the first live entry.
     attach(): { readonly head: AttachHead; readonly entries: AsyncGenerator<AttachEntry> } {
         const mailbox = new Mailbox<AttachEntry>(this.facts);
-        const head: AttachHead = { kind: "attached", run: this.id, startedAt: this.startedAt, seq: this.seq, rows: structuredClone(this.fold.rows) };
+        const head: AttachHead = {
+            kind: "attached",
+            run: this.id,
+            startedAt: this.startedAt,
+            seq: this.seq,
+            rows: this.rows.map((row) => structuredClone(row)),
+        };
         if (this.done) {
             mailbox.close();
         } else {
@@ -194,9 +202,15 @@ export class TurnRun {
         return mailbox.drain(() => this.listeners.delete(mailbox));
     }
 
+    // The delta half of the same stamp the `rows` getter puts on the snapshot: a row reaching a client by patch is no
+    // less this run's, and one arriving unmarked would leave a gap in what a redraw can recognise.
+    private stamped(patch: TranscriptPatch): TranscriptPatch {
+        return patch.op === "append" || patch.op === "replace" ? { ...patch, row: { ...patch.row, run: this.id } } : patch;
+    }
+
     private publish(patches: readonly TranscriptPatch[], fact?: TurnFact): void {
         for (const patch of patches) {
-            this.deliver({ kind: "patch", seq: ++this.seq, patch });
+            this.deliver({ kind: "patch", seq: ++this.seq, patch: this.stamped(patch) });
         }
         if (fact !== undefined) {
             const entry: AttachEntry = { kind: "fact", seq: ++this.seq, fact };

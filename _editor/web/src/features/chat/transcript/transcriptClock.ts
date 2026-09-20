@@ -188,7 +188,13 @@ export class TranscriptClock {
     prepend(rows: readonly TranscriptRow[]): void {
         const state = this.state.value;
         const older = rows.reduce((built, row) => appendMessage(built, row), { ...emptyTranscriptState, nextId: state.nextId });
-        this.state.value = { ...state, messages: [...older.messages, ...state.messages], nextId: older.nextId };
+        this.state.value = {
+            ...state,
+            messages: [...older.messages, ...state.messages],
+            nextId: older.nextId,
+            // Every row moved down by the page just inserted above it, so a live run's patch cursor moves with them.
+            ...(state.attached === undefined ? {} : { attached: { ...state.attached, base: state.attached.base + older.messages.length } }),
+        };
     }
 
     // Keeps existing ids from the local mirror; the allocator resumes above them so a notice can't collide.

@@ -107,6 +107,8 @@ interface LiveRun {
     readonly fold: TranscriptFold;
     seq: number;
     readonly queue: AgentEvent[];
+    // Stamped onto every row this run emits, head and patches alike, as TurnRun does (turn-runs.ts).
+    readonly run: string;
 }
 const sseResponse = (
     events: AgentEvent[],
@@ -132,7 +134,8 @@ const sseResponse = (
     const ok = (): Promise<Response> => Promise.resolve({ ok: true, json: () => Promise.resolve({ run: runId }) } as Response);
     const emit = (state: LiveRun, patches: ReturnType<TranscriptFold[`apply`]>): void => {
         for (const patch of patches) {
-            state.controller.enqueue(sseFrame({ kind: `patch`, seq: (state.seq += 1), patch }));
+            const stamped = patch.op === `append` || patch.op === `replace` ? { ...patch, row: { ...patch.row, run: state.run } } : patch;
+            state.controller.enqueue(sseFrame({ kind: `patch`, seq: (state.seq += 1), patch: stamped }));
         }
     };
     const end = (state: LiveRun, ending: `settled` | `stopped`): void => {
@@ -222,8 +225,10 @@ const sseResponse = (
                 const replay = served === undefined;
                 const fold = served ?? new TranscriptFold(opening);
                 served = fold;
-                controller.enqueue(sseFrame({ kind: `attached`, run, startedAt, seq: 0, rows: structuredClone(fold.rows) }));
-                const state: LiveRun = { controller, fold, seq: 0, queue: replay ? [...events] : [] };
+                controller.enqueue(
+                    sseFrame({ kind: `attached`, run, startedAt, seq: 0, rows: structuredClone(fold.rows).map((row) => ({ ...row, run })) }),
+                );
+                const state: LiveRun = { controller, fold, seq: 0, queue: replay ? [...events] : [], run };
                 live = state;
                 init?.signal?.addEventListener(`abort`, () => {
                     if (live === state) {
@@ -249,14 +254,12 @@ const openingOf = (prompt: string, sentAt: number, attachments: readonly string[
     return [resume?.kind === `note` ? { ...row, notes: [resume.note] } : row];
 };
 
-// The head frame of an attach stream: the run's identity and its rows so far.
-const head = (overrides?: Partial<{ run: string; prompt: string; startedAt: number; seq: number; rows: TranscriptRow[] }>): AttachHead => ({
-    kind: `attached`,
-    run: overrides?.run ?? `r1`,
-    startedAt: overrides?.startedAt ?? 0,
-    seq: overrides?.seq ?? 0,
-    rows: overrides?.rows ?? openingOf(overrides?.prompt ?? `hi`, overrides?.startedAt ?? 0),
-});
+// The head frame of an attach stream: the run's identity and its rows so far, each row carrying that identity.
+const head = (overrides?: Partial<{ run: string; prompt: string; startedAt: number; seq: number; rows: TranscriptRow[] }>): AttachHead => {
+    const run = overrides?.run ?? `r1`;
+    const rows = overrides?.rows ?? openingOf(overrides?.prompt ?? `hi`, overrides?.startedAt ?? 0);
+    return { kind: `attached`, run, startedAt: overrides?.startedAt ?? 0, seq: overrides?.seq ?? 0, rows: rows.map((row) => ({ ...row, run })) };
+};
 
 // Serves a run one frame at a time for tests that hold the stream open and feed it by hand; `head()` gives the
 // rows at that moment, as a re-attach would be handed.
@@ -3227,10 +3230,15 @@ describe(`Conversation`, () => {
         ]);
     });
 
-/* THE WHOLE CHAT, TWICE, AND THEN FIVE TIMES. */
+/* THE WHOLE CHAT, TWICE, AND THEN FIVE TIMES. A run stays attachable for a while after it settles, so a window that
+   redrew from the record can still be handed that run's own rows back. They carry the run that wrote them, which is
+   how the head lands over them rather than under. */
     it(`reattach reclaims the rows already on screen instead of drawing the run a second time`, async () => {
         const conversation = new Conversation(`c1`);
-        const rows: TranscriptRow[] = [userRow(`fix the limit reset`, 1_000, []), { role: `assistant`, text: `Tracing the retries.` }];
+        const rows: TranscriptRow[] = [
+            { ...userRow(`fix the limit reset`, 1_000, []), run: `r1` },
+            { role: `assistant`, text: `Tracing the retries.`, run: `r1` },
+        ];
         conversation.restoreMessages(rows);
         sandboxRequestMock.mockImplementation(sseResponse([], { head: () => ({ rows: structuredClone(rows) }) }));
 
@@ -3242,10 +3250,14 @@ describe(`Conversation`, () => {
         ]);
     });
 
-/* And the same run STILL GOING: the record holds what settled, the head carries that plus what has landed since. */
+/* And the same run STILL GOING: what this window redrew is older than the run is now, so the head carries rows it has
+   never seen under ones it is already showing. Both halves land where they belong, in one pass. */
     it(`reattach draws only the part of the run the transcript is not already showing`, async () => {
         const conversation = new Conversation(`c1`);
-        const shown: TranscriptRow[] = [userRow(`fix the limit reset`, 1_000, []), { role: `assistant`, text: `Tracing the retries.` }];
+        const shown: TranscriptRow[] = [
+            { ...userRow(`fix the limit reset`, 1_000, []), run: `r1` },
+            { role: `assistant`, text: `Tracing the retries.`, run: `r1` },
+        ];
         conversation.restoreMessages(shown);
         sandboxRequestMock.mockImplementation(
             sseResponse([], { head: () => ({ rows: [...structuredClone(shown), { role: `assistant`, text: `Found it.` }] }) }),
@@ -3257,6 +3269,23 @@ describe(`Conversation`, () => {
             { role: `user`, text: `fix the limit reset` },
             { role: `assistant`, text: `Tracing the retries.` },
             { role: `assistant`, text: `Found it.` },
+        ]);
+    });
+
+/* THE BUG AS REPORTED: the same prompt again on every refresh. Each attach mirrors what it drew and the next paints
+   that back before attaching again, so an alignment that misses does not merely double the chat, it adds a copy per
+   reload — and the run's last row has grown every time, which is exactly when a match on content cannot land. */
+    it(`keeps one copy of a growing run however many times it is reattached`, async () => {
+        const conversation = new Conversation(`c1`);
+        for (const answer of [`Tracing the retries.`, `Tracing the retries. Found it.`, `Tracing the retries. Found it. Fixed.`]) {
+            const rows: TranscriptRow[] = [userRow(`fix the limit reset`, 1_000, []), { role: `assistant`, text: answer }];
+            sandboxRequestMock.mockImplementation(sseResponse([], { head: () => ({ rows: structuredClone(rows) }) }));
+            await expect(conversation.reattach()).resolves.toBe(true);
+        }
+
+        expect(conversation.messages.value.map(({ role, text }) => ({ role, text }))).toEqual([
+            { role: `user`, text: `fix the limit reset` },
+            { role: `assistant`, text: `Tracing the retries. Found it. Fixed.` },
         ]);
     });
 

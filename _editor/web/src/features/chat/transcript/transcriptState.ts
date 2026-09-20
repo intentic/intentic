@@ -1,4 +1,4 @@
-import type { AttachFrame, TranscriptPatch, TranscriptRow } from "@intentic/sandbox-contract";
+import type { AttachFrame, TranscriptPatch } from "@intentic/sandbox-contract";
 import { upsertTool } from "@intentic/sandbox-contract/transcript-fold";
 import type { ChatMessage } from "./transcript";
 
@@ -17,7 +17,8 @@ export interface TranscriptState {
     // Monotonic id allocator kept in state, since allocating an id is itself a replayable transition.
     readonly nextId: number;
     readonly pending: PendingText | undefined;
-    // Where the attached run's rows start; keyed by run id so re-attaching replaces, not duplicates, them.
+    // The cursor a patch's index counts from: where the attached run's rows start. Re-derived from those rows on
+    // every head (baseFor), so it can only ever restate what the rows themselves already say.
     readonly attached?: { readonly run: string; readonly base: number };
 }
 
@@ -40,31 +41,26 @@ const mapMessage = (state: TranscriptState, id: number, fn: (message: ChatMessag
 
 // The attached run.
 
-/* A ROW'S CONTENT AS ONE COMPARABLE VALUE, without the two fields this window adds on top of the daemon's row: the id it hands out. */
-const rowKey = (row: TranscriptRow | ChatMessage): string =>
-    JSON.stringify(
-        Object.entries(row)
-            .filter(([key, value]) => value !== undefined && key !== `id` && key !== `local`)
-            .sort(([left], [right]) => (left < right ? -1 : 1)),
-    );
-
-/* WHAT OF THIS RUN THE TRANSCRIPT IS ALREADY SHOWING, as the base its rows should be drawn over. */
-const reclaimedBase = (messages: readonly ChatMessage[], rows: readonly TranscriptRow[]): number => {
-    const most = Math.min(messages.length, rows.length);
-    const shown = messages.slice(messages.length - most).map(rowKey);
-    const arriving = rows.slice(0, most).map(rowKey);
-    for (let taken = most; taken > 0; taken -= 1) {
-        if (shown.slice(most - taken).every((key, index) => key === arriving[index])) {
-            return messages.length - taken;
-        }
+/* WHERE A RUN'S ROWS BELONG, as the base its head should be drawn over.
+   Read off the rows themselves (TranscriptRow.run, stamped by the run that made them), never inferred from their
+   content: a live run's last row keeps growing, so a content match fails exactly when it matters and the head lands
+   BELOW rows it should have replaced — the prompt again, and its answer again, once per attach, mirrored to disk and
+   compounding on the next paint.
+   `drawn` covers the one moment no row can: the bubble a send drew ahead of that run's first head. */
+const baseFor = (messages: readonly ChatMessage[], run: string, drawn: number | undefined): number => {
+    const stamped = messages.findIndex((message) => message.run === run);
+    if (stamped >= 0) {
+        return stamped;
     }
-    return messages.length;
+    const drawnAt = drawn === undefined ? -1 : messages.findIndex((message) => message.id === drawn);
+    return drawnAt >= 0 ? drawnAt : messages.length;
 };
 
-/* TAKE A RUN'S ROWS, WHOLE. */
+/* TAKE A RUN'S ROWS, WHOLE, from where that run begins: everything below the base is this run's and the head is the
+   authority on it, so a transcript that somehow ended up holding the run twice is repaired by the next attach rather
+   than carried forward. */
 export const attachRun = (state: TranscriptState, head: AttachHead, drawn?: number): TranscriptState => {
-    const drawnAt = drawn === undefined ? -1 : state.messages.findIndex((message) => message.id === drawn);
-    const base = state.attached?.run === head.run ? state.attached.base : drawnAt >= 0 ? drawnAt : reclaimedBase(state.messages, head.rows);
+    const base = baseFor(state.messages, head.run, drawn);
     const kept = state.messages.slice(0, base);
     let nextId = state.nextId;
     const rows = head.rows.map((row, index): ChatMessage => {

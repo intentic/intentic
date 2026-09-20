@@ -166,6 +166,15 @@ export const TranscriptRowSchema = z.object({
             "Who said it. A notice is neither side: it is something that happened to the turn, recorded so a reopened conversation can say it. Without those, a turn a provider refused ends on the user's message and reads as broken.",
         ),
     text: z.string().describe("The words."),
+    // Which run produced this row, carried on every copy of it: the live head's, the record's, a client's mirror.
+    // It is how a client says "I am already showing this run" without comparing content, which cannot answer that
+    // while the run's last row is still growing.
+    run: z
+        .string()
+        .optional()
+        .describe(
+            "The run that produced this row. Present on everything a turn produced, absent on rows written outside one. A client draws a run's rows over whatever it already holds for that run, which is what this identifies; content cannot, because the last row of a live run keeps growing.",
+        ),
     // The turn's send time (user rows only), not settlement; the only row-moment the daemon actually knows.
     sentAt: z
         .number()

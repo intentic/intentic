@@ -105,9 +105,11 @@ test("a started turn records its settled transcript, whatever provider ran it", 
     });
     expect(started).toEqual(expect.any(Object));
     await vi.waitFor(async () => expect(await record.read("tr-record")).toHaveLength(2), SETTLES);
+    // The run each row came from is part of the record: within its retention window that run is still attachable, and
+    // a window redrawing from here has to recognise its rows when the head arrives.
     expect(await record.read("tr-record")).toEqual([
-        { role: "user", text: "ship it", sentAt: expect.any(Number) },
-        { role: "assistant", text: "shipped" },
+        { role: "user", text: "ship it", sentAt: expect.any(Number), run: started!.id },
+        { role: "assistant", text: "shipped", run: started!.id },
     ]);
 });
 
