@@ -117,6 +117,17 @@
                 "default": "./dist/protocol/ingress-contract.js"
             }
         },
+        "./time": {
+            "types": "./dist/time/zone.d.ts",
+            "import": {
+                "@intentic/src": "./src/time/zone.ts",
+                "default": "./dist/time/zone.js"
+            },
+            "require": {
+                "@intentic/src": "./src/time/zone.ts",
+                "default": "./dist/time/zone.js"
+            }
+        },
         "./owner-ticket": {
             "types": "./dist/policy/owner-ticket.d.ts",
             "import": {

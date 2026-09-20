@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { ZoneSchema } from "@intentic/sandbox-contract/time";
 import { cronOf, defaultSchedule, nextIn, parseCron, type ScheduleState, scheduleLabel, scheduleTriggerLabel, since } from "./cronSchedule";
 
 const schedule = (overrides: Partial<ScheduleState>): ScheduleState => ({ ...defaultSchedule(), ...overrides });
@@ -57,26 +58,52 @@ describe(`parseCron`, () => {
     });
 });
 
+// A reader on the same clock as the rule, which is the common case and the one that must stay unqualified.
+const HOME = ZoneSchema.parse(`Europe/Warsaw`);
+const AWAY = ZoneSchema.parse(`America/New_York`);
+
 describe(`scheduleLabel`, () => {
     it(`labels every recognized shape`, () => {
-        expect(scheduleLabel(`*/5 * * * *`)).toBe(`Every 5 min`);
-        expect(scheduleLabel(`0 * * * *`)).toBe(`Hourly`);
-        expect(scheduleLabel(`0 9 * * *`)).toBe(`Daily 09:00`);
-        expect(scheduleLabel(`0 9 * * 1-5`)).toBe(`Weekdays 09:00`);
-        expect(scheduleLabel(`0 9 * * 0,1,2,3,4,5,6`)).toBe(`Every day 09:00`);
-        expect(scheduleLabel(`0 9 * * 1,3,5`)).toBe(`Mon, Wed, Fri 09:00`);
-        expect(scheduleLabel(`0 9 * * 0,6`)).toBe(`Sat, Sun 09:00`);
-        expect(scheduleLabel(`0 9 1 * *`)).toBe(`Monthly 1st 09:00`);
-        expect(scheduleLabel(`30 8 22 * *`)).toBe(`Monthly 22nd 08:30`);
+        expect(scheduleLabel(`*/5 * * * *`, HOME, HOME)).toBe(`Every 5 min`);
+        expect(scheduleLabel(`0 * * * *`, HOME, HOME)).toBe(`Hourly`);
+        expect(scheduleLabel(`0 9 * * *`, HOME, HOME)).toBe(`Daily 09:00`);
+        expect(scheduleLabel(`0 9 * * 1-5`, HOME, HOME)).toBe(`Weekdays 09:00`);
+        expect(scheduleLabel(`0 9 * * 0,1,2,3,4,5,6`, HOME, HOME)).toBe(`Every day 09:00`);
+        expect(scheduleLabel(`0 9 * * 1,3,5`, HOME, HOME)).toBe(`Mon, Wed, Fri 09:00`);
+        expect(scheduleLabel(`0 9 * * 0,6`, HOME, HOME)).toBe(`Sat, Sun 09:00`);
+        expect(scheduleLabel(`0 9 1 * *`, HOME, HOME)).toBe(`Monthly 1st 09:00`);
+        expect(scheduleLabel(`30 8 22 * *`, HOME, HOME)).toBe(`Monthly 22nd 08:30`);
+    });
+
+    /* THE ONE THAT MATTERS: "Daily 20:43" said nothing about whose 20:43, and the answer was the container's. */
+    it(`names the rule's zone to a reader who is not on that clock`, () => {
+        expect(scheduleLabel(`43 20 * * *`, AWAY, HOME)).toBe(`Daily 20:43 Europe/Warsaw`);
+        expect(scheduleLabel(`0 9 1 * *`, AWAY, HOME)).toBe(`Monthly 1st 09:00 Europe/Warsaw`);
+        expect(scheduleLabel(`0 9 * * 1-5`, AWAY, HOME)).toBe(`Weekdays 09:00 Europe/Warsaw`);
+    });
+
+    it(`stays quiet for a reader already on the rule's clock`, () => {
+        expect(scheduleLabel(`43 20 * * *`, HOME, HOME)).toBe(`Daily 20:43`);
+    });
+
+    /* An interval means the same thing on every clock, so qualifying it would be false precision. */
+    it(`never qualifies a shape that names no hour`, () => {
+        expect(scheduleLabel(`*/5 * * * *`, AWAY, HOME)).toBe(`Every 5 min`);
+        expect(scheduleLabel(`0 * * * *`, AWAY, HOME)).toBe(`Hourly`);
     });
 
     it(`carries a sessions bar on the phrase, and only then`, () => {
-        expect(scheduleTriggerLabel({ cron: `0 5 * * *`, afterSessions: 30 })).toBe(`Daily 05:00 · after 30 sessions`);
-        expect(scheduleTriggerLabel({ cron: `0 5 * * *` })).toBe(`Daily 05:00`);
+        expect(scheduleTriggerLabel({ cron: `0 5 * * *`, afterSessions: 30 }, HOME, HOME)).toBe(`Daily 05:00 · after 30 sessions`);
+        expect(scheduleTriggerLabel({ cron: `0 5 * * *` }, HOME, HOME)).toBe(`Daily 05:00`);
+    });
+
+    it(`takes the trigger's own zone over the sandbox's, and the sandbox's when it has none`, () => {
+        expect(scheduleTriggerLabel({ cron: `0 5 * * *`, tz: `Asia/Tokyo` }, HOME, HOME)).toBe(`Daily 05:00 Asia/Tokyo`);
+        expect(scheduleTriggerLabel({ cron: `0 5 * * *` }, AWAY, HOME)).toBe(`Daily 05:00 Europe/Warsaw`);
     });
 
     it(`passes unrecognized crons through raw`, () => {
-        expect(scheduleLabel(`7 3 * 2 *`)).toBe(`7 3 * 2 *`);
+        expect(scheduleLabel(`7 3 * 2 *`, HOME, HOME)).toBe(`7 3 * 2 *`);
     });
 });
 

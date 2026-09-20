@@ -1,6 +1,7 @@
 import { readdir } from "node:fs/promises";
 import { join } from "node:path";
 import type { EnvironmentDrift, RuntimeInstall, RuntimeInstallsFile } from "@intentic/sandbox-contract";
+import { utcDayOf } from "@intentic/sandbox-contract";
 import { installLive } from "./drift.js";
 import { statePath } from "../workspace/layout/state-paths.js";
 
@@ -68,14 +69,15 @@ export const draftFileName = (tool: string): string | undefined => {
     return name === "" ? undefined : `${name}.Dockerfile`;
 };
 
-const date = (at: number): string => new Date(at).toISOString().slice(0, 10);
+// UTC day, the same bucket the rest of the daemon files things under; a draft is stamped, not scheduled.
+const utcDate = utcDayOf;
 
 export const draftContent = (entry: RuntimeInstall, step: string): string => {
     const times = entry.sessions.length === 2 ? "twice" : `in ${entry.sessions.length} sessions`;
     const command = entry.commands.at(-1);
     return (
         `${AUTO_MARKER} ${entry.tool}\n` +
-        `# ${entry.tool} — installed at runtime ${times} (first ${date(entry.firstAt)}, last ${date(entry.lastAt)}) and\n` +
+        `# ${entry.tool} — installed at runtime ${times} (first ${utcDate(entry.firstAt)}, last ${utcDate(entry.lastAt)}) and\n` +
         `# lost on every container recreate. Drafted by the daemon from the runtime-install ledger; last installed by:\n${
             command === undefined ? "" : `#   ${command.replaceAll("\n", " ")}\n`
         }# Approve to bake it into the image; reject to stop it being proposed.\n${step}\n`

@@ -1,5 +1,5 @@
 import type { ArrivalItem, Automation, Capability, SkillDraft } from "@intentic/sandbox-contract";
-import { AutomationSchema, CapabilitySchema, SkillDraftSchema } from "@intentic/sandbox-contract";
+import { asZone, AutomationSchema, CapabilitySchema, SkillDraftSchema } from "@intentic/sandbox-contract";
 import { Cron } from "croner";
 import { isBakedSkill } from "../settings/skills.js";
 import { parseSkillFile } from "../settings/skill-file.js";
@@ -189,24 +189,40 @@ export const secretPlanner = (
     };
 };
 
+// A cron's zone has to travel WITH it or the job lands at a different hour here than it ran at there. Every source
+// ecosystem spells the field as one of these three. An id ICU does not know is dropped rather than stored, and the
+// automation then follows this sandbox's own setting, which is the same answer it would have had anyway.
+const entryZone = (entry: Record<string, unknown>, override?: string): string | undefined =>
+    asZone(override ?? asString(entry["tz"]) ?? asString(entry["timezone"]) ?? asString(entry["timeZone"]));
+
+// The other two tolerant readers, named for the same reason: each ecosystem spells the field differently, and keeping
+// the fallback chains out here is what keeps the planner itself readable.
+const entryCron = (entry: Record<string, unknown>, override?: string): string | undefined =>
+    override ?? asString(entry["schedule"]) ?? asString(entry["cron"]) ?? asString(entry["expression"]);
+
+const entryPrompt = (entry: Record<string, unknown>, override?: string): string | undefined =>
+    override ?? asString(entry["prompt"]) ?? asString(entry["message"]) ?? asString(entry["task"]) ?? asString(entry["text"]);
+
 // One source cron job becomes one held-for-approval automation: `requireApproval` is always on, since these prompts
 // were written for a different agent on a different machine. `enabled` follows the source job's own switch.
 export const automationPlanner = (
     sourcePrefix: string,
     planned: PlannedItem[],
     refused: string[],
-): ((rawName: string, entry: Record<string, unknown>, origin: string, override?: { cron?: string; prompt?: string }) => void) => {
+): ((rawName: string, entry: Record<string, unknown>, origin: string, override?: { cron?: string; prompt?: string; tz?: string }) => void) => {
     const nextId = idPool();
     return (rawName, entry, origin, override) => {
-        const cron = override?.cron ?? asString(entry["schedule"]) ?? asString(entry["cron"]) ?? asString(entry["expression"]);
-        const prompt =
-            override?.prompt ?? asString(entry["prompt"]) ?? asString(entry["message"]) ?? asString(entry["task"]) ?? asString(entry["text"]);
+        const cron = entryCron(entry, override?.cron);
+        const tz = entryZone(entry, override?.tz);
+        const prompt = entryPrompt(entry, override?.prompt);
         if (cron === undefined || prompt === undefined) {
             return;
         }
         // Uses the job's own declared name; a refusal naming "cron-2" would force the owner to count list entries.
         const name = asString(entry["name"]) ?? asString(entry["id"]) ?? rawName;
         try {
+            // zone-checked: parseability only — whether croner can read the expression at all. The answer cannot
+            // depend on a zone, which is why this one call carries none; the stored `tz` below decides the hour.
             new Cron(cron).nextRun();
         } catch {
             refused.push(`${origin}: "${name}" (cron expression "${cron}" is not readable)`);
@@ -217,7 +233,7 @@ export const automationPlanner = (
         // (MigratedAutomation).
         const automation = AutomationSchema.omit({ models: true }).safeParse({
             id,
-            trigger: { kind: "schedule", cron },
+            trigger: { kind: "schedule", cron, ...(tz === undefined ? {} : { tz }) },
             prompt,
             requireApproval: true,
             enabled: entry["enabled"] !== false,

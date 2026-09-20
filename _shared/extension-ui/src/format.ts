@@ -5,6 +5,7 @@
 export {
     formatBytes,
     formatDate,
+    formatDateLong,
     formatDateTime,
     formatDayMonth,
     formatDayMonthTime,

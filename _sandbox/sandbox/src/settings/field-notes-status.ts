@@ -1,5 +1,6 @@
-import type { FieldNotesStatus } from "@intentic/sandbox-contract";
+import { asZone, cronOptions, type FieldNotesStatus, UTC, type Zone } from "@intentic/sandbox-contract";
 import { Cron } from "croner";
+import { zoneOf } from "../automations/schedule-zone.js";
 import { fieldNotes } from "../agent/prompt/field-notes.js";
 import { FIELD_NOTES_AUTOMATION_ID } from "../automations/catalog.js";
 import type { Services } from "../composition.js";
@@ -10,12 +11,12 @@ import type { Services } from "../composition.js";
 
 // Absent for anything but a cron: a listener or workspace trigger has no next time, and a one-off that has fired has no
 // next one either.
-const nextRunAt = (trigger: { readonly kind: string; readonly cron?: string }): number | undefined => {
+const nextRunAt = (trigger: { readonly kind: string; readonly cron?: string | undefined; readonly tz?: string | undefined }, sandbox: Zone): number | undefined => {
     if (trigger.kind !== "schedule" || trigger.cron === undefined) {
         return undefined;
     }
     try {
-        return new Cron(trigger.cron).nextRun()?.getTime();
+        return new Cron(trigger.cron, cronOptions(zoneOf(trigger, sandbox))).nextRun()?.getTime();
     } catch {
         // A cron hand-edited into invalidity silences its own automation; the row says "nothing scheduled" rather than
         // failing the whole settings screen over it.
@@ -38,7 +39,7 @@ export const fieldNotesStatus = async (services: FieldNotesDeps): Promise<FieldN
         },
     });
     const automation = await services.automations.get(FIELD_NOTES_AUTOMATION_ID);
-    const scheduled = automation === undefined ? undefined : nextRunAt(automation.trigger);
+    const scheduled = automation === undefined ? undefined : nextRunAt(automation.trigger, asZone(settings.timezone) ?? UTC);
     return {
         // A file that exists and cannot be indexed is PRESENT and broken, not missing: "set one up" would be the wrong
         // advice, and it is the advice the row gives when this is false.

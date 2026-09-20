@@ -53,6 +53,8 @@ export const initialsOf = (name: string): string | undefined => {
 // app is in: `setFormatLocale` below is called by the i18n layer, in the same tick the visible language changes.
 const DATE_STYLES = {
     date: { year: `numeric`, month: `short`, day: `numeric` },
+    // Spelled-out month, for the few places a date is a sentence rather than a column ("renews on October 1, 2026").
+    dateLong: { year: `numeric`, month: `long`, day: `numeric` },
     dayMonth: { month: `short`, day: `numeric` },
     dateTime: { year: `numeric`, month: `short`, day: `numeric`, hour: `2-digit`, minute: `2-digit`, hour12: false },
     timestamp: { year: `numeric`, month: `short`, day: `numeric`, hour: `2-digit`, minute: `2-digit`, second: `2-digit`, hour12: false },
@@ -135,6 +137,13 @@ export const setFormatLocale = (tag: string): void => {
 
 /** A calendar day on its own: "Jul 28, 2026". */
 export const formatDate = (at: number): string => dateFormat(`date`).format(at);
+
+/**
+ * A calendar day written out: "July 28, 2026". For prose — "renews on", "ends on" — where an abbreviated month reads
+ * as a table cell. TAKES AN INSTANT, like every formatter here: a `YYYY-MM-DD` handed to `new Date()` is UTC midnight,
+ * which renders as the previous day for every reader behind UTC.
+ */
+export const formatDateLong = (at: number | string): string => dateFormat(`dateLong`).format(new Date(at));
 
 /** A day where the year is already implied by its surroundings: "Jul 28". */
 export const formatDayMonth = (at: number): string => dateFormat(`dayMonth`).format(at);

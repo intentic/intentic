@@ -241,6 +241,8 @@ export const whoAnchor = async (
         if (line.startsWith("author ")) {
             current.author = line.slice(7);
         } else if (line.startsWith("author-time ")) {
+            // UTC day of the author time. Git's own author-time carries an offset this parser drops; keeping the
+            // day in one fixed zone is what makes two blames of the same commit agree on which day it was.
             current.date = new Date(Number(line.slice(12)) * 1000).toISOString().slice(0, 10);
         } else if (line.startsWith("summary ")) {
             current.summary = line.slice(8);

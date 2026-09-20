@@ -1,6 +1,7 @@
 // The structured schedule the automations dialog edits instead of raw cron. `cronOf` composes the cron string;
 // `parseCron` inverts it for the shapes the builder produces, falling back to freq "custom" with the raw string.
 // `scheduleLabel` renders the human badge for the automations list.
+import { asZone, type Zone, zoneLabel } from "@intentic/sandbox-contract/time";
 
 export type ScheduleFreq = `minutes` | `hourly` | `daily` | `weekly` | `monthly` | `custom`;
 
@@ -193,13 +194,24 @@ export const nextIn = (at: number): string => {
     return `in ${Math.round(minutes / MINUTES_PER_DAY)}d`;
 };
 
-// Full trigger rule as one phrase, e.g. "Daily 05:00 · after 30 sessions".
-export const scheduleTriggerLabel = (trigger: { readonly cron: string; readonly afterSessions?: number }): string =>
-    trigger.afterSessions === undefined ? scheduleLabel(trigger.cron) : `${scheduleLabel(trigger.cron)} · after ${trigger.afterSessions} sessions`;
+// Full trigger rule as one phrase, e.g. "Daily 05:00 Europe/Warsaw · after 30 sessions".
+export const scheduleTriggerLabel = (trigger: { readonly cron: string; readonly afterSessions?: number; readonly tz?: string }, reader: Zone, sandbox: Zone): string => {
+    const label = scheduleLabel(trigger.cron, reader, (asZone(trigger.tz) ?? sandbox) as Zone);
+    return trigger.afterSessions === undefined ? label : `${label} · after ${trigger.afterSessions} sessions`;
+};
 
-// Human badge for a stored cron; unrecognized shapes pass the raw string through.
-export const scheduleLabel = (cron: string): string => {
+/**
+ * Human badge for a stored cron. The zone is part of the badge, not decoration: "Daily 20:43" with no zone was read as
+ * the reader's own 20:43 and fired at somebody else's, which is the entire bug this carries. Named only when the
+ * reader is on a different clock — telling somebody in Warsaw that their schedule runs on Warsaw time is noise.
+ * Unrecognized cron shapes pass the raw string through, zone and all, since there is no wall clock to qualify.
+ */
+export const scheduleLabel = (cron: string, reader: Zone, rule: Zone): string => {
     const schedule = parseCron(cron);
+    const zone = zoneLabel(rule, reader);
+    // Only the shapes that name an hour take a zone. "Every 5 min" and "Hourly" mean the same thing on every clock,
+    // so qualifying them would be false precision.
+    const qualify = (label: string): string => (zone === undefined ? label : `${label} ${zone}`);
     if (schedule.freq === `custom`) {
         return schedule.cron;
     }
@@ -210,18 +222,18 @@ export const scheduleLabel = (cron: string): string => {
         return `Hourly`;
     }
     if (schedule.freq === `daily`) {
-        return `Daily ${schedule.time}`;
+        return qualify(`Daily ${schedule.time}`);
     }
     if (schedule.freq === `monthly`) {
-        return `Monthly ${ordinal(schedule.dayOfMonth)} ${schedule.time}`;
+        return qualify(`Monthly ${ordinal(schedule.dayOfMonth)} ${schedule.time}`);
     }
     if (schedule.days.length === 7) {
-        return `Every day ${schedule.time}`;
+        return qualify(`Every day ${schedule.time}`);
     }
     if (schedule.days.join(`,`) === `1,2,3,4,5`) {
-        return `Weekdays ${schedule.time}`;
+        return qualify(`Weekdays ${schedule.time}`);
     }
     // Mon-first display order.
     const names = schedule.days.toSorted((a, b) => ((a + 6) % 7) - ((b + 6) % 7)).map((day) => DAY_NAMES[day]);
-    return `${names.join(`, `)} ${schedule.time}`;
+    return qualify(`${names.join(`, `)} ${schedule.time}`);
 };

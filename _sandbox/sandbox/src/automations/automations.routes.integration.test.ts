@@ -1,7 +1,7 @@
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { type Automation, type Capability, SandboxSettingsSchema } from "@intentic/sandbox-contract";
+import { type Automation, type Capability, SandboxSettingsSchema, ZoneSchema } from "@intentic/sandbox-contract";
 import { unstubbed } from "@intentic/testing";
 import { call } from "@orpc/server";
 import { expect, test, vi } from "vitest";
@@ -24,6 +24,9 @@ const fakeServices = (root: string): Services =>
 const context: OrpcContext = { headers: new Headers(), method: "POST", url: "/automations" };
 
 const automation = (id: string, trigger: Automation["trigger"]): Automation => ({ id, trigger, prompt: `wake:${id}`, models: [{ provider: "claude", model: "claude-sonnet-4-6" }], enabled: true });
+
+// A schedule's promise is a wall clock, not an epoch: the epoch moves with the date, "20:43 in Warsaw" does not.
+const wallClockIn = (tz: string, at: number): string => new Intl.DateTimeFormat("en-GB", { timeZone: tz, hour: "2-digit", minute: "2-digit", hour12: false }).format(at);
 
 test("run now refuses a chat listener: by hand there is no message, which is the whole thing it handles", async () => {
     const services = fakeServices(mkdtempSync(join(tmpdir(), "routes-")));
@@ -48,6 +51,9 @@ const catalogServices = (root: string): Services =>
         workspace: unstubbed<Services["workspace"]>("workspace", { root }),
         files: unstubbed<Services["files"]>("files", { read: readWorkspaceFile }),
         capabilities: unstubbed<Services["capabilities"]>("capabilities", { list: async (): Promise<Capability[]> => [] }),
+        // Read by the cron half of upsert: "has a next run" is only answerable against a clock, so the route resolves
+        // the zone the schedule would fire in before judging it.
+        sandboxSettings: unstubbed<Services["sandboxSettings"]>("sandboxSettings", { get: async () => SandboxSettingsSchema.parse({}) }),
         config: { ...testConfig, extensionsDir: join(root, "extensions") },
         // Reached only once a write gets PAST the refusals: a stored automation has its door reconciled, and the
         // listener reconcile that follows it logs rather than throws.
@@ -118,6 +124,45 @@ test("run now retires a one-time wake exactly as its own moment would have", asy
     // The fire itself is detached and outlives the request; the floor is what stopped it, and that reaches the record.
     await vi.waitFor(async () => expect((await services.automations.get("dentist"))?.runs).toHaveLength(1), SETTLES);
     expect((await services.automations.get("dentist"))?.runs[0]?.outcome).toBe("skipped");
+});
+
+// THE REPORTED BUG, pinned at the seam it crossed. The dialog turns "20:43" into `43 20 * * *` and sends it; the
+// daemon runs in a UTC container. Evaluated bare, that cron means 20:43 UTC — 22:43 in Warsaw — so a schedule set for
+// the evening read as two hours away, and every screen showed a plausible number for the wrong moment.
+test("a schedule fires on the wall clock of its own zone, not the container's", async () => {
+    const services = catalogServices(mkdtempSync(join(tmpdir(), "routes-")));
+    const routes = createAutomationsRoutes(services);
+    // Through the schema rather than cast: a zone this repo cannot resolve should fail the fixture, not the assertion.
+    const tz = ZoneSchema.parse("Europe/Warsaw");
+    await call(routes.upsert, automation("evening", { kind: "schedule", cron: "43 20 * * *", tz }), { context });
+
+    const { automations } = await call(routes.list, {}, { context });
+    const nextRun = automations.find((a) => a.id === "evening")?.nextRun;
+    expect(nextRun).toEqual(expect.any(Number));
+    // Asserted as a wall clock IN THAT ZONE rather than as an epoch, since the epoch is what changes with the date and
+    // the wall clock is the promise: 20:43 in Warsaw, whatever the container thinks the hour is.
+    expect(wallClockIn(tz, nextRun as number)).toBe("20:43");
+    // And it is NOT 20:43 UTC, which is the answer the bug gave and the one an unzoned croner still would.
+    expect(wallClockIn("UTC", nextRun as number)).not.toBe("20:43");
+});
+
+// The sandbox setting is the default behind an automation that names no zone of its own; without it a bare cron falls
+// back to the container's UTC, which is the same bug with one fewer place to look.
+test("an automation with no zone of its own follows the sandbox's setting", async () => {
+    const root = mkdtempSync(join(tmpdir(), "routes-"));
+    const services = {
+        ...catalogServices(root),
+        sandboxSettings: unstubbed<Services["sandboxSettings"]>("sandboxSettings", {
+            get: async () => SandboxSettingsSchema.parse({ timezone: "Asia/Tokyo" }),
+        }),
+    };
+    const routes = createAutomationsRoutes(services);
+    await call(routes.upsert, automation("morning", { kind: "schedule", cron: "15 9 * * *" }), { context });
+
+    const { automations } = await call(routes.list, {}, { context });
+    const nextRun = automations.find((a) => a.id === "morning")?.nextRun;
+    expect(nextRun).toEqual(expect.any(Number));
+    expect(wallClockIn("Asia/Tokyo", nextRun as number)).toBe("09:15");
 });
 
 test("upsert refuses a cron that parses but can never come round", async () => {

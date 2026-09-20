@@ -1,6 +1,7 @@
 import { type Automation, type AutomationSummary, AutomationsListSchema, type SenderSeen } from "@intentic/sandbox-contract";
+import { asZone, UTC, type Zone } from "@intentic/sandbox-contract/time";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/vue-query";
-import { computed, type Ref } from "vue";
+import { computed, type ComputedRef, type Ref } from "vue";
 import { host } from "./host";
 
 // Who has written to a listener source, admitted or not, for the sender rules picker: offered by name, stored by id.
@@ -76,6 +77,24 @@ export function useFrontDeskInstalls(automationId: Ref<string | undefined>, enab
         isLoading: query.isLoading,
         error: computed(() => query.error.value?.message),
     };
+}
+
+/**
+ * The clock this sandbox's schedules are set by, for every surface here that shows or edits one. Read from the daemon
+ * rather than from `Intl.DateTimeFormat()`, which answers the READER's zone: the two agree for the owner sitting at
+ * their own machine and diverge for everyone else — a colleague opening the workspace from another country, a phone in
+ * an airport — and it is the daemon's answer that decides when anything actually fires.
+ * UTC while the settings read is in flight, which is also the daemon's own fallback, so the screen never briefly shows
+ * a zone nothing would fire in.
+ */
+export function useSandboxZone(): ComputedRef<Zone> {
+    const api = host();
+    const query = useQuery({
+        queryKey: api.sandbox.key(`sandbox-timezone`),
+        queryFn: async (): Promise<string> => ((await api.sandbox.json(`/settings`)) as { timezone?: string }).timezone ?? ``,
+        enabled: computed(() => api.sandbox.reachable()),
+    });
+    return computed<Zone>(() => asZone(query.data.value) ?? UTC);
 }
 
 export function useAutomations() {

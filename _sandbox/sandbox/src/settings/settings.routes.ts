@@ -31,6 +31,17 @@ export const createSettingsRoutes = (services: Services) => {
             return { ok: true } as const;
         }),
         fieldNotes: i.fieldNotes.handler(() => fieldNotesStatus(services)),
+        // Take-if-empty, never overwrite: this is called by every browser that opens the workspace, and the second one
+        // must not move the first one's chores onto its own clock. An owner changing their mind goes through `set`.
+        adoptTimezone: i.adoptTimezone.handler(async ({ input }) => {
+            const settings = await services.sandboxSettings.get();
+            if (settings.timezone !== "") {
+                return { timezone: settings.timezone, adopted: false };
+            }
+            await services.sandboxSettings.set({ ...settings, timezone: input.timezone });
+            services.logger.info({ timezone: input.timezone }, "sandbox timezone adopted from a browser");
+            return { timezone: input.timezone, adopted: true };
+        }),
         savings: i.savings.handler(async ({ input }) => {
             const [inputSavings, experiments] = await Promise.all([
                 readInputSavings(services.config.historyRoot, input),

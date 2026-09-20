@@ -34,6 +34,13 @@ export const CHECKS = [
     { id: "build-cache", file: "build-cache-mounts.mjs", needs: "checkout", gate: "code", about: "sandbox image fragments keep the build-cache contract" },
     { id: "mirror-roots", file: "mirror-roots.mjs", needs: "checkout", gate: "code", about: "build output an agent turn overlays is emptied, never removed" },
     { id: "paths", file: "path-literals.mjs", needs: "checkout", gate: "tidy", scoped: true, about: "no hand-spelled roots and no counted ones (ratcheted)" },
+    {
+        id: "time-zones",
+        file: "time-zones.mjs",
+        needs: "checkout",
+        gate: "tidy",
+        about: "every cron carries the zone it means, dates format through the kit, and a UTC day bucket says it is one",
+    },
     { id: "layout", file: "layout.mjs", needs: "checkout", gate: "tidy", about: "no ghost directories, no over-full ones, no twin or colliding names, no dead ones (ratcheted)" },
     { id: "md-links", file: "md-links.mjs", needs: "checkout", gate: "tidy", about: "every relative link in the documentation resolves" },
     { id: "metaphor-home", file: "metaphor-home.mjs", needs: "checkout", gate: "tidy", about: "the four-noun picture is defined once, reached from the docs, and never from the home page" },

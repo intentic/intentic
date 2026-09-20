@@ -39,6 +39,7 @@ const slugOf = (path: string): string => path.split("/").pop()!.replace(/\.md$/u
 // date as a timestamp. The time half is always midnight and is dropped.
 const isoDay = (date: string | Date): string => {
     if (date instanceof Date) {
+        // UTC day: a post's date is one fact for every reader, not a thing that shifts with where they are.
         return Number.isNaN(date.getTime()) ? "" : date.toISOString().slice(0, 10);
     }
     return typeof date === "string" ? date.trim().slice(0, 10) : "";

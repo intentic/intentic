@@ -49,6 +49,8 @@ import type {
     SafetyPolicySchema,
     SandboxSettingsSchema,
     ServiceKindSchema,
+    TimezoneOfferSchema,
+    TimezoneStateSchema,
     AgentChangeSchema,
     AgentChangesSchema,
     AgentHistoryCommitSchema,
@@ -171,6 +173,8 @@ export {
     SafetyPolicySchema,
     SandboxSettingsSchema,
     ServiceEntrySchema,
+    TimezoneOfferSchema,
+    TimezoneStateSchema,
     ServiceKindSchema,
     SkillBodySchema,
     SkillDraftSchema,
@@ -230,6 +234,8 @@ export type Approval = z.infer<typeof ApprovalSchema>;
 export type ApprovalSummary = z.infer<typeof ApprovalSummarySchema>;
 export type ApprovalsList = z.infer<typeof ApprovalsListSchema>;
 export type SandboxSettings = z.infer<typeof SandboxSettingsSchema>;
+export type TimezoneOffer = z.infer<typeof TimezoneOfferSchema>;
+export type TimezoneState = z.infer<typeof TimezoneStateSchema>;
 export type Rule = z.infer<typeof RuleSchema>;
 export type SkillOrigin = z.infer<typeof SkillOriginSchema>;
 export type SkillSummary = z.infer<typeof SkillSummarySchema>;

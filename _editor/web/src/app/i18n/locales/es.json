@@ -1638,6 +1638,12 @@
             "runOneCheckBefore": "Ejecutar una comprobación antes de cualquier push, salga el repositorio que salga. La compilación propia de un repositorio va en el repositorio, abajo.",
             "verifyBeforeFinishing": "Verificar antes de terminar"
         },
+        "agentClock": {
+            "clock": "Reloj",
+            "scheduleTimesAreIn": "Las programaciones se rigen por",
+            "whatAnAutomations": "Lo que significa «09:00» en una automatización. Las horas en pantalla siempre se muestran en tu propio reloj; este es el que decide cuándo se ejecuta algo.",
+            "yourOwnClockIs": "Lo que significa «09:00» en una automatización. Tu equipo está en {zone}, así que estas horas no coincidirán con las que ves en él."
+        },
         "agentCodeSearch": {
             "automationOff": "Its monthly rewrite is switched off.",
             "briefUnreadable": "The brief is there but cannot be sent: {why}",
@@ -3041,6 +3047,7 @@
             "costByModel": "Coste por modelo",
             "couldntReadSandboxsUsage": "No se pudo leer el uso de este sandbox.",
             "day": "Día",
+            "daysRunMidnight": "Aquí los días van de medianoche a medianoche en UTC, no según tu reloj, así que el gasto cercano a tu medianoche cae en el día contiguo.",
             "everyCommandCarriesOwn": "Cada comando lleva su propia línea base en crudo, así que esto es realizado, no estimado. Cada etapa se pesa contra lo que le llegó: atribución secuencial, que es lo que hace que las partes sumen el total y permite apilarlas. No es «lo que te costaría apagar este limpiador»: el tope de más abajo se habría comido parte de las mismas líneas. Los pies de recuperación son el precio de que el recorte sea reversible: los punteros que permiten al agente recuperar la salida completa con grep.",
             "exportCsv": "Exportar CSV",
             "holdoutControl": "Grupo de control",
@@ -3068,7 +3075,8 @@
             "tokenSavings": "Ahorro de tokens",
             "tokens": "Tokens",
             "toolOutputAssistant": "Salida de herramientas → asistente",
-            "turns": "Turnos"
+            "turns": "Turnos",
+            "utcDays": "Días UTC"
         },
         "sandboxWarming": {
             "sandboxUpGettingWorkspace": "Tu sandbox está en marcha y preparando su espacio de trabajo. Se abre solo en cuanto pueda servir: no hay que tocar nada.",

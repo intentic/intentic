@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Button, ui, CopyButton, Icon, InfoHint, Notice, noticeOf, StatusBadge } from "@intentic/extension-ui";
+import { Button, ui, CopyButton, formatDayMonth, Icon, InfoHint, Notice, noticeOf, StatusBadge } from "@intentic/extension-ui";
 import { ref } from "vue";
 import { useShares } from "./useShares";
 import { t } from "./i18n.js";
@@ -35,7 +35,9 @@ const when = (at: number): string => {
     if (ago < DAY) {
         return `${Math.round(ago / 3_600_000)}h ago`;
     }
-    return new Date(at).toLocaleDateString(undefined, { month: `short`, day: `numeric` });
+    // Through the kit, not `toLocaleDateString` directly: the kit's formatters follow the language the app is in and
+    // re-render when it changes, which a formatter built here does not.
+    return formatDayMonth(at);
 };
 </script>
 

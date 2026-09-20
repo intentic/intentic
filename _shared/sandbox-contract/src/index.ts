@@ -206,6 +206,7 @@ export * from "./text/model-answer.js";
 export * from "./text/whisper.js";
 export * from "./text/workflow-faults.js";
 export * from "./text/emoji.js";
+export * from "./time/zone.js";
 
 // The aggregated contract; implemented server-side by per-domain route factories, consumed by the browser's typed oRPC
 // client. Mounted at the sandbox root, alongside plain Hono routes like /health and /workspace/raw.

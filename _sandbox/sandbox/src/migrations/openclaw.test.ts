@@ -73,6 +73,12 @@ const fixture = (): Map<string, Buffer> =>
 
 const byId = (planned: readonly PlannedItem[], id: string): PlannedItem | undefined => planned.find((entry) => entry.item.id === id);
 
+// The planned automation itself, for the assertions that need to say a field is ABSENT and so cannot use a partial match.
+const automationOf = (planned: readonly PlannedItem[], id: string): { trigger: unknown } | undefined => {
+    const apply = byId(planned, id)?.apply;
+    return apply?.target === "automation" ? apply.automation : undefined;
+};
+
 test("the json5-ish reader takes comments, trailing commas, bare keys and single quotes, refusing politely past that", () => {
     expect(parseJson5ish(`{"a": 1}`)).toEqual({ a: 1 });
     expect(parseJson5ish(`{ /* block */ a: 'x//not-a-comment', "b": [1, 2,], flag: true, // line\n }`)).toEqual({
@@ -136,9 +142,12 @@ test("the noise prefix demotes the tick without hiding the key: every env-shaped
 test("cron: expr jobs land, clean intervals convert, one-offs and unspellable intervals are refused by name", () => {
     const { planned, refused, needsAction } = planOpenclaw(fixture());
     const brief = byId(planned, "automation:openclaw-Morning-brief");
+    // The ZONE comes with the cron. A "0 7 * * *" that ran at 07:00 in Los Angeles is not a job that runs at 07:00
+    // here: without the tz it would land on the sandbox's own clock, seven or eight hours out, and read as imported
+    // correctly. This used to be raised as a card asking the owner to fix the hours by hand.
     expect(brief?.apply).toMatchObject({
         target: "automation",
-        automation: { trigger: { kind: "schedule", cron: "0 7 * * *" }, requireApproval: true },
+        automation: { trigger: { kind: "schedule", cron: "0 7 * * *", tz: "America/Los_Angeles" }, requireApproval: true },
     });
     expect(byId(planned, "automation:openclaw-Water-check")?.apply).toMatchObject({
         target: "automation",
@@ -146,7 +155,31 @@ test("cron: expr jobs land, clean intervals convert, one-offs and unspellable in
     });
     expect(refused.some((line) => line.includes("One-off") && line.includes("one-time"))).toBe(true);
     expect(refused.some((line) => line.includes("Odd interval") && line.includes("no clean cron"))).toBe(true);
-    expect(needsAction.some((entry) => entry.subject === "Check automation hours" && entry.detail.includes("America/Los_Angeles"))).toBe(true);
+    // A zone that survives the crossing needs no card: the job keeps its hours, so there is nothing for anyone to do.
+    expect(needsAction.map((entry) => entry.subject)).not.toContain("Check automation hours");
+});
+
+// The card still exists, for the one case that genuinely needs a person: a zone name this machine's ICU cannot
+// resolve. The automation falls back to the sandbox's own clock, and the card says which id was dropped.
+test("a timezone this machine does not know is named on a card rather than stored", () => {
+    const files = fixture();
+    files.set(
+        "cron/jobs.json",
+        Buffer.from(
+            JSON.stringify({
+                jobs: [{ name: "Ghost", schedule: { kind: "cron", expr: "0 7 * * *", tz: "Mars/Olympus" }, payload: { message: "Rise." } }],
+            }),
+        ),
+    );
+    const { planned, needsAction } = planOpenclaw(files);
+    // `toEqual` on the whole trigger, not `toMatchObject`: the point is that `tz` is ABSENT, which a partial match
+    // cannot say. An unresolvable id must not be stored — croner would throw on it every tick.
+    expect(byId(planned, "automation:openclaw-Ghost")?.apply).toMatchObject({
+        target: "automation",
+        automation: { trigger: { kind: "schedule", cron: "0 7 * * *" } },
+    });
+    expect(automationOf(planned, "automation:openclaw-Ghost")?.trigger).toEqual({ kind: "schedule", cron: "0 7 * * *" });
+    expect(needsAction.some((entry) => entry.subject === "Check automation hours" && entry.detail.includes("Mars/Olympus"))).toBe(true);
 });
 
 test("the heartbeat file becomes a scheduled automation on the configured interval", () => {

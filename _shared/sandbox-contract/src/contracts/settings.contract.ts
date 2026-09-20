@@ -10,6 +10,8 @@ import {
     RuleFiringsSchema,
     SandboxSettingsSchema,
     SavingsReportSchema,
+    TimezoneOfferSchema,
+    TimezoneStateSchema,
 } from "../schemas/settings.js";
 import { OkSchema } from "../schemas/shared.js";
 import { DayWindowQuerySchema } from "../schemas/providers/usage.js";
@@ -85,6 +87,20 @@ export const settingsContract = {
             description: `Whether \`${FIELD_NOTES_FILE}\` exists, when it was last rewritten, how much of it the current budget reaches, and whether a monthly rewrite is scheduled.`,
         })
         .output(FieldNotesStatusSchema),
+    // Its own route rather than a field on `set`, for one reason: this is the only write that must NOT overwrite. The
+    // browser offers the zone it is in; the daemon takes it only if nobody has chosen one. Folding it into the
+    // whole-object `set` would mean the second machine to open the workspace silently moved every schedule to its own
+    // clock, and an owner in Warsaw would find their chores on a colleague's Tokyo hours.
+    adoptTimezone: oc
+        .route({
+            method: "POST",
+            path: "/settings/timezone",
+            summary: "Offer this sandbox a clock, if it has none",
+            description:
+                "Sets which timezone this sandbox's schedules are meant in, but only while it has none set. Already answered, the stored zone wins and comes back unchanged, so any number of browsers can offer theirs without fighting over it. To change a zone that is already set, write the settings.",
+        })
+        .input(TimezoneOfferSchema)
+        .output(TimezoneStateSchema),
     adoptRepoChecks: oc
         .route({
             method: "POST",

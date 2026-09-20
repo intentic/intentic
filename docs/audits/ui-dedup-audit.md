@@ -6,8 +6,14 @@ the duplicate was causing, weighed against how hard it is to collapse.
 
 The kit (`_editor/ui`) was already in good shape and has clearly been through dedup passes before: `FilterBar`,
 `ChangeStatusMark`, `SplitView`, `ResizeSeam` and `Row`/`RowGroup` all carry comments naming the surfaces they
-replaced. Date/time formatting is fully centralised: there is not a single stray `toLocaleDateString` outside
-`format.ts`.
+replaced. Date/time formatting is centralised in `format.ts`.
+
+> **Correction, later.** The sentence here used to claim there was "not a single stray `toLocaleDateString` outside
+> `format.ts`". That was true when it was written and had drifted by the time the timezone work went through:
+> `SharedConversations.vue` and `AgentReviewPanel.vue` had each grown one, and both were building an `Intl` formatter
+> frozen at module load, so their dates stayed in the old language after a language change. Both now go through the
+> kit, and `checks/time-zones.mjs` fails the build on the next one — an audit sentence cannot hold a rule, only a
+> check can.
 
 **Everything below has been acted on.** Each section states what was duplicated and what replaced it, so the
 reasoning survives the change. Three user-visible bugs fell out of the work and are marked ⚑.

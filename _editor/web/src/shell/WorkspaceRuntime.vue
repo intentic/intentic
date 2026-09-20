@@ -9,6 +9,7 @@ import { startBackgroundLoader, stopBackgroundLoader } from "../router/prefetch/
 import { startDraftingReceipts } from "../features/workspace/changes/draftingReceipts";
 import { reportIdle, reportSessionId, reportView } from "./presence/usePresence";
 import { useSandboxLiveness } from "../features/sandbox/overview/useSandboxLiveness";
+import { offerTimezone } from "../features/sandbox/overview/offerTimezone";
 import { startRestartWatch } from "../features/sandbox/live/restartWatch";
 import PoppablePanels from "./window/PoppablePanels.vue";
 
@@ -37,6 +38,11 @@ watch(
 );
 // Per window, not per tab (onScreen.ts): a floating chat needs its own idle signal.
 watch(onScreen, (looking) => reportIdle(!looking), { immediate: true });
+
+// The one fact about the owner that only the browser holds: which clock they are on. Offered as soon as a sandbox is
+// attached rather than from the settings screen, because the schedule that gets this wrong is usually created before
+// anybody opens settings. Take-if-empty at the daemon, so a second window or a second member changes nothing.
+onMounted(() => void offerTimezone());
 
 // One long-lived stream keeps `reachable` live for the session, detecting a killed sandbox from anywhere.
 onMounted(() => liveness.start());

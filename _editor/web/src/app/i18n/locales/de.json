@@ -1638,6 +1638,12 @@
             "runOneCheckBefore": "Vor jedem Push eine Prüfung laufen lassen, gleich welches Repository hinausgeht. Der eigene Build eines Repositorys gehört ins Repository, siehe unten.",
             "verifyBeforeFinishing": "Vor dem Abschließen verifizieren"
         },
+        "agentClock": {
+            "clock": "Uhr",
+            "scheduleTimesAreIn": "Zeitpläne richten sich nach",
+            "whatAnAutomations": "Was „09:00“ bei einer Automatisierung bedeutet. Angezeigte Zeiten folgen immer deiner eigenen Uhr; diese hier entscheidet, wann etwas ausgelöst wird.",
+            "yourOwnClockIs": "Was „09:00“ bei einer Automatisierung bedeutet. Dein Rechner läuft auf {zone}, die Zeiten hier stimmen also nicht mit dem überein, was du dort abliest."
+        },
         "agentCodeSearch": {
             "automationOff": "Its monthly rewrite is switched off.",
             "briefUnreadable": "The brief is there but cannot be sent: {why}",
@@ -3041,6 +3047,7 @@
             "costByModel": "Kosten nach Modell",
             "couldntReadSandboxsUsage": "Die Nutzung dieser Sandbox ließ sich nicht lesen.",
             "day": "Tag",
+            "daysRunMidnight": "Tage laufen hier von Mitternacht bis Mitternacht UTC, nicht nach deiner Uhr; Ausgaben rund um deine Mitternacht fallen also auf den Nachbartag.",
             "everyCommandCarriesOwn": "Jeder Befehl trägt seine eigene Rohmessung, das hier ist also realisiert und nicht geschätzt. Jede Stufe wird gegen das gewogen, was sie erreicht hat: sequenzielle Zuordnung, und genau das lässt die Teile zum Ganzen summieren und überhaupt stapeln. Es ist nicht „was es Sie kosten würde, diesen Säuberer abzuschalten“: die Grenze weiter unten hätte einen Teil derselben Zeilen ohnehin gefressen. Die Abruf-Fußzeilen sind der Preis dafür, dass das Kürzen umkehrbar ist: die Zeiger, mit denen der Agent die vollständige Ausgabe zurückgrepen kann.",
             "exportCsv": "CSV exportieren",
             "holdoutControl": "Kontrollgruppe",
@@ -3068,7 +3075,8 @@
             "tokenSavings": "Token-Ersparnis",
             "tokens": "Tokens",
             "toolOutputAssistant": "Werkzeugausgabe → Assistent",
-            "turns": "Züge"
+            "turns": "Züge",
+            "utcDays": "UTC-Tage"
         },
         "sandboxWarming": {
             "sandboxUpGettingWorkspace": "Ihre Sandbox ist da und macht ihren Workspace bereit. Sie öffnet sich von selbst, sobald sie bedienen kann: nichts zu klicken.",

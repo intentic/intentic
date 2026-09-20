@@ -9,6 +9,7 @@ import type {
     WorkspaceEventKind,
 } from "@intentic/sandbox-contract";
 import { AutomationSchema, FRONT_DESK_PERSONA, WEBCHAT_DAILY_MAX_DEFAULT } from "@intentic/sandbox-contract";
+import { asZone, cronOptions, type Zone } from "@intentic/sandbox-contract/time";
 import { Cron } from "croner";
 import { computed, type ComputedRef, reactive, watch } from "vue";
 import { type AvailableSource, listenerSourceOf } from "./catalog";
@@ -69,7 +70,14 @@ export const triggerKey = (trigger: { readonly kind: TriggerKind; readonly provi
 
 // The form's own text (starters and templates) now comes from the daemon's catalogue, so it's computed per call rather
 // than a module constant; a just-installed pack's template must count as form-owned text too.
-export function useAutomationForm(sources: ComputedRef<readonly AvailableSource[]>, templates: ComputedRef<readonly AutomationTemplate[]>) {
+// `sandboxZone` is the clock a schedule with no override of its own runs on. Passed in rather than read from
+// `Intl.DateTimeFormat()` here: the browser's zone is the reader's, and the reader is not necessarily where the
+// sandbox's chores are meant to happen.
+export function useAutomationForm(
+    sources: ComputedRef<readonly AvailableSource[]>,
+    templates: ComputedRef<readonly AutomationTemplate[]>,
+    sandboxZone: ComputedRef<Zone>,
+) {
     // Text the form put in the box (starter or template prompt); compared verbatim to detect a user edit.
     const templatePrompts = computed(() => new Set<string>(templates.value.map((template) => template.prompt)));
     const formGuards = computed(
@@ -101,6 +109,10 @@ export function useAutomationForm(sources: ComputedRef<readonly AvailableSource[
         holdForSeconds: 0,
         // Schedule's session bar: 0 fires every occurrence; positive skips until that many new sessions have run.
         afterSessions: 0,
+        // Which clock the schedule's times are meant on. Blank is not "no zone" — it is "this sandbox's zone", which
+        // is what most schedules want and what keeps one setting able to move all of them at once. A value here is a
+        // deliberate override for the one chore that belongs to somewhere else.
+        tz: ``,
         // A one-time wake's moment, as a `datetime-local` box reads it: the reader's own wall clock, no zone. Blank
         // until they pick one, which is what `onceError` refuses to save.
         onceAt: ``,
@@ -166,24 +178,33 @@ export function useAutomationForm(sources: ComputedRef<readonly AvailableSource[
 
     const effectiveCron = computed(() => cronOf(schedule));
     // Schedule trigger's two halves (clock, bar) read into the form and written back by one function each way.
-    const loadSchedule = (trigger: { readonly cron: string; readonly afterSessions?: number }): void => {
+    const loadSchedule = (trigger: { readonly cron: string; readonly afterSessions?: number; readonly tz?: string }): void => {
         Object.assign(schedule, parseCron(trigger.cron));
         form.afterSessions = trigger.afterSessions ?? 0;
+        form.tz = trigger.tz ?? ``;
     };
     const scheduleTrigger = (): Automation[`trigger`] => ({
         kind: `schedule`,
         cron: effectiveCron.value as string,
         ...(form.afterSessions > 0 ? { afterSessions: form.afterSessions } : {}),
+        // Absent rather than the resolved zone spelled out: storing the sandbox's own answer would freeze it, and
+        // moving the setting afterwards would then leave every schedule behind on the old clock.
+        ...(asZone(form.tz) === undefined ? {} : { tz: asZone(form.tz) as Zone }),
     });
 
-    // A callback-less Cron is only a queryable pattern; preview uses the browser's timezone, not the sandbox's.
+    /** The clock this form's times are actually on: its own override, else the sandbox's. Never the browser's. */
+    const effectiveZone = computed<Zone>(() => asZone(form.tz) ?? sandboxZone.value);
+
+    // A callback-less Cron is only a queryable pattern. Evaluated in the zone the DAEMON will fire it in, not the
+    // browser's: a preview computed on the reader's own clock showed the times they typed and the daemon fired at
+    // others, so the one screen built to prove the schedule was right was the one confirming the bug.
     const cronPreview = computed<{ runs: number[] } | { error: string } | undefined>(() => {
         const cron = effectiveCron.value;
         if (form.kind !== `schedule` || cron === undefined) {
             return undefined;
         }
         try {
-            const runs = new Cron(cron).nextRuns(3).map((date) => date.getTime());
+            const runs = new Cron(cron, cronOptions(effectiveZone.value)).nextRuns(3).map((date) => date.getTime());
             return runs.length > 0 ? { runs } : { error: `This schedule never fires.` };
         } catch {
             return { error: `Invalid cron expression.` };
@@ -609,6 +630,10 @@ export function useAutomationForm(sources: ComputedRef<readonly AvailableSource[
         visibleSources,
         originList,
         effectiveCron,
+        effectiveZone,
+        // Re-exposed so the zone picker can label its blank option with what "follow the sandbox" currently means;
+        // a blank that does not say which clock it stands for is the same silence this whole change is about.
+        sandboxZone,
         cronPreview,
         dailyMessageMaxDefault: WEBCHAT_DAILY_MAX_DEFAULT,
         // the prompt's relationship to the trigger

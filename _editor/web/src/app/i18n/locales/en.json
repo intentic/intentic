@@ -1638,6 +1638,12 @@
             "runOneCheckBefore": "Run one check before any push, whichever repository is going out. A repository's own build belongs in the repository, below.",
             "verifyBeforeFinishing": "Verify before finishing"
         },
+        "agentClock": {
+            "clock": "Clock",
+            "scheduleTimesAreIn": "Schedules are set by",
+            "whatAnAutomations": "What an automation's \"09:00\" means. Times on screen are always drawn in your own clock; this is the one that decides when things fire.",
+            "yourOwnClockIs": "What an automation's \"09:00\" means. Your own machine is on {zone}, so times here will not match what you read on it."
+        },
         "agentCodeSearch": {
             "automationOff": "Its monthly rewrite is switched off.",
             "briefUnreadable": "The brief is there but cannot be sent: {why}",
@@ -3041,6 +3047,7 @@
             "costByModel": "Cost by model",
             "couldntReadSandboxsUsage": "Couldn't read this sandbox's usage.",
             "day": "Day",
+            "daysRunMidnight": "Days here run midnight to midnight UTC, not on your own clock, so spend near your midnight falls on the neighbouring day.",
             "everyCommandCarriesOwn": "Every command carries its own raw baseline, so this is realized, not estimated. Each stage is weighed against what reached it: sequential attribution, which is what makes the parts sum to the whole and lets them be stacked at all. It is not \"what turning this cleaner off would cost you\": the cap downstream would have eaten some of the same lines. The retrieval footers are the price of the trimming being reversible: the pointers that let the agent grep the full output back.",
             "exportCsv": "Export CSV",
             "holdoutControl": "Holdout control",
@@ -3068,7 +3075,8 @@
             "tokenSavings": "Token savings",
             "tokens": "Tokens",
             "toolOutputAssistant": "Tool output → assistant",
-            "turns": "Turns"
+            "turns": "Turns",
+            "utcDays": "UTC days"
         },
         "sandboxWarming": {
             "sandboxUpGettingWorkspace": "Your sandbox is up and getting its workspace ready. It opens by itself the moment it can serve: nothing to click.",

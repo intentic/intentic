@@ -1638,6 +1638,12 @@
             "runOneCheckBefore": "Lancer une vérification avant tout push, quel que soit le dépôt qui sort. La compilation propre à un dépôt appartient au dépôt, ci-dessous.",
             "verifyBeforeFinishing": "Vérifier avant de terminer"
         },
+        "agentClock": {
+            "clock": "Horloge",
+            "scheduleTimesAreIn": "Les planifications suivent",
+            "whatAnAutomations": "Ce que « 09:00 » veut dire pour une automatisation. Les heures affichées suivent toujours votre propre horloge ; c'est celle-ci qui décide du déclenchement.",
+            "yourOwnClockIs": "Ce que « 09:00 » veut dire pour une automatisation. Votre machine est sur {zone} : les heures indiquées ici ne correspondront donc pas à celles que vous y lisez."
+        },
         "agentCodeSearch": {
             "automationOff": "Its monthly rewrite is switched off.",
             "briefUnreadable": "The brief is there but cannot be sent: {why}",
@@ -3041,6 +3047,7 @@
             "costByModel": "Coût par modèle",
             "couldntReadSandboxsUsage": "Impossible de lire l'usage de ce sandbox.",
             "day": "Jour",
+            "daysRunMidnight": "Ici les jours vont de minuit à minuit UTC, pas selon votre horloge : une dépense proche de votre minuit tombe donc sur le jour voisin.",
             "everyCommandCarriesOwn": "Chaque commande porte sa propre référence brute : ceci est donc réalisé, pas estimé. Chaque étape est pesée face à ce qui l'a atteinte : attribution séquentielle, et c'est ce qui fait que les parties somment au tout et qu'elles peuvent être empilées. Ce n'est pas « ce que couperait ce nettoyeur vous coûterait » : le plafond en aval aurait mangé une partie des mêmes lignes. Les pieds de récupération sont le prix de la réversibilité de l'élagage : les pointeurs qui permettent à l'agent de retrouver la sortie complète.",
             "exportCsv": "Exporter en CSV",
             "holdoutControl": "Groupe témoin",
@@ -3068,7 +3075,8 @@
             "tokenSavings": "Économies de jetons",
             "tokens": "Jetons",
             "toolOutputAssistant": "Sortie d'outil → assistant",
-            "turns": "Tours"
+            "turns": "Tours",
+            "utcDays": "Jours UTC"
         },
         "sandboxWarming": {
             "sandboxUpGettingWorkspace": "Votre sandbox est en marche et prépare son espace de travail. Il s'ouvre tout seul dès qu'il peut servir : rien à cliquer.",

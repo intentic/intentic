@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { AutomationRun, AutomationSummary, AutomationTemplate, Trigger } from "@intentic/sandbox-contract";
+import { localZone } from "@intentic/sandbox-contract/time";
 import { Button, ui, CopyButton, DisclosureRow, formatDateTime, Icon, Notice, noticeOf, ToggleSwitch, type IconName } from "@intentic/extension-ui";
 import { computed, ref } from "vue";
 import { nextIn, scheduleTriggerLabel, since } from "./cronSchedule";
@@ -7,7 +8,7 @@ import { host } from "./host";
 import { type AvailableSource, listenerSourceOf } from "./catalog";
 import AutomationFields from "./AutomationFields.vue";
 import RunStrip from "./RunStrip.vue";
-import { embedSnippet, useAutomations, webhookUrl } from "./useAutomations";
+import { embedSnippet, useAutomations, useSandboxZone, webhookUrl } from "./useAutomations";
 import { useAutomationForm } from "./useAutomationForm";
 import { t } from "./i18n.js";
 
@@ -46,7 +47,9 @@ const listenerLabel = (fires: Extract<Trigger, { kind: `listener` }>): string =>
 const triggerLabel = computed<string>(() => {
     const fires = trigger.value;
     if (fires.kind === `schedule`) {
-        return scheduleTriggerLabel(fires);
+        // The reader's own zone is what decides whether the badge names one: "Daily 20:43" is only unambiguous to
+        // somebody on the clock it means, and this row is the surface that told everyone else the wrong hour.
+        return scheduleTriggerLabel(fires, localZone(), sandboxZone.value);
     }
     // The moment itself, in the reader's own clock, since that is the clock they picked it on.
     if (fires.kind === `once`) {
@@ -116,9 +119,11 @@ const nextLabel = computed<string | undefined>(() => (props.automation.nextRun !
 // mid-keystroke.
 const editing = ref(false);
 const editError = ref<string | undefined>(undefined);
+const sandboxZone = useSandboxZone();
 const editForm = useAutomationForm(
     computed(() => props.listenerSources),
     computed(() => props.templates),
+    sandboxZone,
 );
 const { save, rotateToken } = useAutomations();
 const saving = computed(() => save.isPending.value);

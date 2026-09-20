@@ -2,16 +2,21 @@ import type { FigureAccent } from "@intentic/ui/markdown";
 import type { BarItem } from "@intentic/ui";
 import { seriesColor } from "@intentic/ui/series";
 import type { UsageRollupRow } from "@intentic/sandbox-contract";
+import { utcDayOf } from "@intentic/sandbox-contract/time";
 import { t } from "@intentic/ui/i18n";
 
 // Every number and mark on the Usage tab, as pure functions over the daemon's rollup rows; the screen only binds.
 // Same split as toolPresentation.ts, so a money readout's arithmetic is testable without mounting a component.
 
 const DAY_MS = 86_400_000;
+// `T00:00:00Z` is load-bearing: `Date.parse("2026-09-20")` is UTC midnight by spec, but the same string through a
+// `new Date()` path is not, and one accidental round-trip through the reader's zone slides every bar a day west.
 const dayToMs = (day: string): number => Date.parse(`${day}T00:00:00Z`);
-const msToDay = (ms: number): string => new Date(ms).toISOString().slice(0, 10);
+const msToDay = (ms: number): string => utcDayOf(ms);
 
-// UTC day of an instant, matching the daemon's own row-stamping bucket (usage-store.ts).
+// UTC day of an instant, matching the daemon's own row-stamping bucket (usage-store.ts). Both ends of this window are
+// UTC on purpose — a money log must not re-bucket when somebody changes a setting — and the tab says so on screen,
+// because "today" quietly meaning a different day than the reader's is exactly the kind of thing nobody reports.
 export const todayUtc = (now: number = Date.now()): string => msToDay(now);
 export const shiftDay = (day: string, days: number): string => msToDay(dayToMs(day) + days * DAY_MS);
 // Inclusive day count: a from/to pair covering one day is 1, not 0.

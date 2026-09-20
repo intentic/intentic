@@ -1,6 +1,6 @@
 import { appendFile, mkdir, readFile } from "node:fs/promises";
 import { dirname } from "node:path";
-import { type UsageRollupRow, type UsageTurn, UsageTurnSchema } from "@intentic/sandbox-contract";
+import { type UsageRollupRow, type UsageTurn, UsageTurnSchema, utcDayOf } from "@intentic/sandbox-contract";
 
 // Durable spend-and-outcome ledger (historyRoot/usage.jsonl): one append-only line per turn, daemon-written only,
 // outside the agent's /work mount.
@@ -19,9 +19,11 @@ export interface UsageStore {
     readonly turns: (query: { from?: string | undefined; to?: string | undefined }) => Promise<UsageTurn[]>;
 }
 
-// UTC calendar day of an instant, not the container's local zone. Turns near midnight may land on the neighbouring day;
-// totals over any range stay exact.
-export const utcDay = (at: number): string => new Date(at).toISOString().slice(0, 10);
+// UTC calendar day of an instant, deliberately, not the owner's zone: a money log's buckets must not move when
+// somebody changes a setting, or last month's totals would change with it. Turns near the owner's midnight land on
+// the neighbouring day; totals over any range stay exact, and every screen that shows these says which midnight.
+// Re-exported rather than respelled so there is one definition of "UTC day" in the tree (contract's time/zone.ts).
+export const utcDay = utcDayOf;
 
 // The rollup's grouping key; JSON of the tuple, not a string join, since a provider id could contain any separator.
 const groupKey = (row: Pick<UsageTurn, "day" | "provider" | "account" | "model" | "harness" | "conversationId">): string =>

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { BarChart, Card, ui, Notice, type NoticeModel, NoticeStack, SegmentedControl, vAction } from "@intentic/ui";
+import { localZone, sameClock, UTC } from "@intentic/sandbox-contract/time";
 import { computed, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useAgents } from "../../agents/fleet/useAgents";
@@ -69,6 +70,9 @@ const clearAgentFilter = (): void => {
 
 // Today in UTC: the ledger's own calendar, so the window bounds and the rows' days can't disagree.
 const today = computed(() => todayUtc());
+// Whether this reader's own midnight is UTC's. For them the label below would be noise; for everyone else it is the
+// difference between "today" meaning what they think and it quietly meaning a window they never chose.
+const dayBoundaryDiffers = computed(() => !sameClock(UTC, localZone()));
 const window = computed(() => windowFor(preset.value, today.value));
 
 const scoped = computed(() =>
@@ -183,6 +187,12 @@ const hasSpend = computed(() => current.value.length > 0);
         <!-- One filter row scoping everything below; date first, the control every reader reaches for. -->
         <div class="flex flex-wrap items-center gap-x-4 gap-y-2">
             <SegmentedControl v-model="preset" :options="rangePresets()" />
+            <!-- These days are UTC days, at both ends: the daemon stamps every row in UTC so that last month's totals
+                 cannot change when somebody moves a setting. Said out loud only to a reader whose own midnight is a
+                 different moment, for whom "today" here is not the today they mean. -->
+            <span v-if="dayBoundaryDiffers" class="text-2xs text-subtle" :title="t(`sandbox.sandboxUsage.daysRunMidnight`)">
+                {{ t(`sandbox.sandboxUsage.utcDays`) }}
+            </span>
             <span class="h-4 w-px bg-line" />
             <SegmentedControl v-model="providerFilter" :options="providerOptions" size="xs" />
             <button v-if="agentFilter !== undefined" type="button" class="ui-chip gap-1" @click="clearAgentFilter">

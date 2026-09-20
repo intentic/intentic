@@ -1,7 +1,8 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { Cron } from "croner";
-import type { AgentEvent, AgentOrigin, AgentTurn, Automation, AutomationApproval, ModelPin, Trigger } from "@intentic/sandbox-contract";
+import type { AgentEvent, AgentOrigin, AgentTurn, Automation, AutomationApproval, ModelPin, Trigger, Zone } from "@intentic/sandbox-contract";
+import { cronOptions, wallClockIn } from "@intentic/sandbox-contract";
 import { WORKSPACE_ROOT_EXCLUDE_ENV } from "@intentic/sandbox-contract/chores";
 import { REFERENCE_DIR } from "@intentic/workspace-ignore";
 import { TranscriptFold } from "@intentic/sandbox-contract/transcript-fold";
@@ -16,6 +17,7 @@ import { automationPending, turnFinished } from "../push/notifications.js";
 import { pinnedRunModel } from "../agent/models/run-role-model.js";
 import type { OutboxSink } from "../webchat/webchat-outbox.js";
 import { type AutomationRecord, consecutiveFailures } from "./automations-store.js";
+import { sandboxZone, zoneOf } from "./schedule-zone.js";
 import type { SenderLane } from "./senders.js";
 
 const execFileAsync = promisify(execFile);
@@ -586,7 +588,9 @@ export const runHeldWake = async (services: Services, automation: AutomationReco
 // no next run rather than failing whatever asked.
 // A one-time wake answers its own moment even once that moment is past: the tick fires an overdue one rather than
 // dropping it, so "due" stays the truth right up until it fires.
-export const nextRunOf = (automation: AutomationRecord): number | undefined => {
+// `sandbox` is the zone of record the automation's own `tz` overrides; it is a parameter rather than a read, so this
+// stays pure and every caller has to have decided which clock it means.
+export const nextRunOf = (automation: AutomationRecord, sandbox: Zone): number | undefined => {
     if (!automation.enabled) {
         return undefined;
     }
@@ -597,7 +601,7 @@ export const nextRunOf = (automation: AutomationRecord): number | undefined => {
         return undefined;
     }
     try {
-        return new Cron(automation.trigger.cron).nextRun()?.getTime();
+        return new Cron(automation.trigger.cron, cronOptions(zoneOf(automation.trigger, sandbox))).nextRun()?.getTime();
     } catch {
         return undefined;
     }
@@ -610,10 +614,11 @@ export const nextRunOf = (automation: AutomationRecord): number | undefined => {
 // all month so a nightly chore is punctual costs more than the chore; a one-time wake has nothing behind it, and holds
 // the machine for at most one window, since it retires as it fires.
 export const nextOneTimeWakeAt = async (services: Services): Promise<number> => {
-    const due = (await services.automations.list())
-        .filter((automation) => automation.trigger.kind === "once")
-        .map(nextRunOf)
-        .filter((at) => at !== undefined);
+    // Reads the moment off the trigger rather than through `nextRunOf`: a one-time wake IS an instant, so it needs no
+    // zone, and routing it through the cron path would make this depend on a setting it has no business reading.
+    const due = (await services.automations.list()).flatMap((automation) =>
+        automation.enabled && automation.trigger.kind === "once" ? [automation.trigger.at] : [],
+    );
     return due.length === 0 ? 0 : Math.min(...due);
 };
 
@@ -621,11 +626,16 @@ export const nextOneTimeWakeAt = async (services: Services): Promise<number> => 
 // turn is told so, because "your 3pm reminder" delivered at 9pm has to say which of the two times it means.
 const LATE_WAKE_MS = 2 * 60_000;
 
-const lateWakeNote = (at: number, now: number): string =>
+// The instant in ISO because that is what a model reads without ambiguity, AND the same instant on the owner's own
+// clock, because that is the one they will recognise. A note carrying only "18:43Z" makes the agent do the conversion
+// itself to say anything useful, and it has no reliable way to know which zone to convert into.
+const lateWakeNote = (at: number, now: number, zone: Zone): string =>
     [
-        `This wake was due at ${new Date(at).toISOString()}, and is running ${Math.round((now - at) / 60_000)} minutes late:`,
-        `the sandbox was not running when its moment came, and fired it at the first opportunity after.`,
-        `If you pass this on to somebody, say when it was meant to arrive rather than implying it is on time.`,
+        `This wake was due at ${new Date(at).toISOString()} (${wallClockIn(at, zone)}), and is running`,
+        `${Math.round((now - at) / 60_000)} minutes late: the sandbox was not running when its moment came, and fired it`,
+        `at the first opportunity after.`,
+        `If you pass this on to somebody, say when it was meant to arrive rather than implying it is on time,`,
+        `and say it on the ${zone} clock rather than in UTC.`,
     ].join(" ");
 
 // Whether an interrupted fire of this automation may be re-fired at boot (turn-resume.ts). A retired `once` was
@@ -640,12 +650,14 @@ export const resumable = (automation: Pick<Automation, "enabled" | "trigger">): 
 // Deliberately not gated on the poll window the cron path uses: a schedule that misses a beat has another one coming,
 // a one-time wake has nothing behind it, so a moment that passed while the sandbox was down still fires, late and
 // saying so.
-const fireOnceWake = async (services: Services, automation: AutomationRecord, at: number, wake: WakeFn, now: number): Promise<void> => {
+const fireOnceWake = async (services: Services, automation: AutomationRecord, at: number, wake: WakeFn, now: number, sandbox: Zone): Promise<void> => {
     if (at > now) {
         return;
     }
     await services.automations.setEnabled(automation.id, false);
-    const late = now - at >= LATE_WAKE_MS ? { payload: lateWakeNote(at, now) } : {};
+    // The sandbox's zone, never a per-automation override: a one-time wake stores an instant and has no zone of its
+    // own, and the clock the owner will recognise is the sandbox's.
+    const late = now - at >= LATE_WAKE_MS ? { payload: lateWakeNote(at, now, sandbox) } : {};
     void fireAutomation(services, automation, wake, late).catch((error: unknown) =>
         services.logger.error({ err: error, automation: automation.id }, "one-time automation run failed"),
     );
@@ -654,9 +666,9 @@ const fireOnceWake = async (services: Services, automation: AutomationRecord, at
 // One enabled automation's clock, per poll: a one-time wake fires the moment it is due or already overdue, a cron
 // fires when its next run measured from the last poll falls inside this one. Every other trigger has its own
 // dispatcher and nothing to do here.
-const fireIfDue = async (services: Services, automation: AutomationRecord, wake: WakeFn, windowStart: number, now: number): Promise<void> => {
+const fireIfDue = async (services: Services, automation: AutomationRecord, wake: WakeFn, windowStart: number, now: number, sandbox: Zone): Promise<void> => {
     if (automation.trigger.kind === "once") {
-        await fireOnceWake(services, automation, automation.trigger.at, wake, now);
+        await fireOnceWake(services, automation, automation.trigger.at, wake, now, sandbox);
         return;
     }
     if (automation.trigger.kind !== "schedule") {
@@ -665,7 +677,7 @@ const fireIfDue = async (services: Services, automation: AutomationRecord, wake:
     // A cron hand-edited into invalidity only silences its own automation, never the tick.
     let due: Date | null;
     try {
-        due = new Cron(automation.trigger.cron).nextRun(new Date(windowStart));
+        due = new Cron(automation.trigger.cron, cronOptions(zoneOf(automation.trigger, sandbox))).nextRun(new Date(windowStart));
     } catch {
         return;
     }
@@ -704,9 +716,12 @@ export const createAutomationsScheduler = (services: Services, wake: WakeFn, int
     const tick = async (now = Date.now()): Promise<void> => {
         const windowStart = since;
         since = now;
+        // Read once per poll, not per automation: the owner's zone cannot change between two rows of the same pass,
+        // and a settings read per automation would make a manifest of fifty chores fifty file reads a tick.
+        const sandbox = await sandboxZone(services);
         for (const automation of await services.automations.list()) {
             if (automation.enabled) {
-                await fireIfDue(services, automation, wake, windowStart, now);
+                await fireIfDue(services, automation, wake, windowStart, now, sandbox);
             }
         }
         await releaseCountdownHolds(services, wake, now);

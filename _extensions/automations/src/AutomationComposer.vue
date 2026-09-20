@@ -5,7 +5,7 @@ import AutomationFields from "./AutomationFields.vue";
 import { host } from "./host";
 import type { AutomationTemplate } from "@intentic/sandbox-contract";
 import { availableTemplates, type AvailableSource, glyph } from "./catalog";
-import { embedSnippet, useAutomations, webhookUrl } from "./useAutomations";
+import { embedSnippet, useAutomations, useSandboxZone, webhookUrl } from "./useAutomations";
 import { triggerKey, useAutomationForm } from "./useAutomationForm";
 import { t } from "./i18n.js";
 
@@ -24,6 +24,7 @@ const { automations, save } = useAutomations();
 const state = useAutomationForm(
     computed(() => listenerSources),
     computed(() => templates),
+    useSandboxZone(),
 );
 const { form, valid, touchAll, build, loadTemplate } = state;
 

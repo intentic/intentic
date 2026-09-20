@@ -105,8 +105,20 @@ disagreement waiting for whichever was edited second.
   (`scheduler.ts`, `resumable`). It is also the one trigger that pushes a notification when it finishes: every other
   kind is already answering somebody who is listening, or is a chore nobody asked to hear each run of.
 - The moment itself is stored as an instant, not a wall-clock time and a zone, and the composer resolves the
-  reader's own clock at save. That is the one place the timezone gap a cron lives with does not exist: a cron says
-  09:00 and means 09:00 on the sandbox's clock, which is not the one the person setting it is reading.
+  reader's own clock at save. A one-time wake therefore means the same thing on any machine.
+
+**A schedule cannot do that, and says so instead.** A cron is a wall-clock rule: `43 20 * * *` is not a moment, it is
+20:43 on *some* clock, and which one is not written in it. The daemon runs in a UTC container, so an unzoned cron used
+to be read as UTC — an automation set for 20:43 fired at 22:43 for an owner in Warsaw, and every screen showed a
+plausible number for the wrong moment. Now:
+
+- A schedule trigger carries `tz`, an IANA zone. Absent, it follows the sandbox's own `timezone` setting (Settings →
+  Agent → Clock); absent that, UTC. One setting therefore moves every chore that never asked for something else.
+- The first browser to open a workspace offers its zone, and the daemon takes it only while it has none — so a
+  colleague opening the same workspace from another country cannot move anybody's chores.
+- The badge names the zone whenever the reader is not on that clock ("Daily 20:43 Europe/Warsaw"), and the composer's
+  next-runs preview is evaluated in the zone the **daemon** will fire in rather than the browser's, which is what made
+  the original bug invisible: the one screen built to prove the schedule was right was confirming it.
 - **A wake nothing is awake for still does not fire on time.** A hosted machine stops itself after a quiet window and
   only a visit brings it back, so the watchdog now asks the manifest what is due (`system/idle-stop.ts`, and
   `nextWakeAt` here): anything landing inside that window holds the machine up, the way an armed watch already does.

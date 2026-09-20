@@ -4,6 +4,7 @@ import { AgentOriginSchema, ModelPinSchema } from "./agent.js";
 import { AgentSummarySchema } from "./agents.js";
 import { entryId } from "./internal.js";
 import { IssuesConfigSchema } from "./issues.js";
+import { ZoneSchema } from "../time/zone.js";
 // An automation wakes the agent: the daemon fires each enabled one on its trigger, runs the optional guard command
 // (non-zero exit skips the wake), then runs one turn with the prompt. The manifest is user config; run history is
 // daemon-recorded.
@@ -60,6 +61,13 @@ export const TriggerSchema = z.discriminatedUnion("kind", [
     z.object({
         kind: z.literal("schedule").describe("On a clock."),
         cron: z.string().min(1).describe("When, in cron notation."),
+        // A cron is a WALL-CLOCK RULE: "43 20 * * *" is not a moment, it is 20:43 on some clock, and which clock is
+        // not written in it. The composer sends the reader's own zone here; absent, the sandbox's `timezone` setting
+        // answers, and absent that, UTC. Stored per automation rather than only globally so one chore can keep a
+        // colleague's hours, or a market's, without moving everything else.
+        tz: ZoneSchema.optional().describe(
+            "Which clock the times in the cron mean, as a zone name like Europe/Warsaw. Leave it out to use the sandbox's own setting, which is what you want unless this one chore belongs to a different place.",
+        ),
         // Fires only once at least this many other sessions have started since this automation's last wake; a due run
         // short of that is recorded as skipped.
         afterSessions: z

@@ -7,6 +7,7 @@ import { useSandboxSettings } from "./useSandboxSettings";
 import AiAccountSection from "../secrets/AiAccountSection.vue";
 import AgentChangelog from "../agent-settings/behaviour/AgentChangelog.vue";
 import AgentChecks from "../agent-settings/behaviour/AgentChecks.vue";
+import AgentClock from "../agent-settings/behaviour/AgentClock.vue";
 import AgentCodeSearch from "../agent-settings/behaviour/AgentCodeSearch.vue";
 import AgentCommandOutput from "../agent-settings/behaviour/AgentCommandOutput.vue";
 import AgentDependencies from "../agent-settings/behaviour/AgentDependencies.vue";
@@ -130,6 +131,9 @@ const settingsBlocked = computed<NoticeModel | undefined>(() => {
             <AgentFinishedWork />
             <AgentChangelog />
             <AgentRecovery />
+            <!-- Beside the automation failure limit above, which is the other setting that only matters once
+                 something runs on a clock rather than because somebody pressed send. -->
+            <AgentClock />
         </template>
     </div>
 </template>

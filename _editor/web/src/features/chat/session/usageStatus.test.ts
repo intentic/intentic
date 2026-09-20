@@ -205,10 +205,16 @@ describe(`formatReset`, () => {
     });
 
     it(`names the date once the reset is past the coming week, so a monthly pool stops reading as two days away`, () => {
-        const reset = Math.round((now + 30 * 86_400_000) / 1000);
-        const printed = formatReset(reset, now);
-        expect(printed).toContain(`Oct`);
-        expect(printed).toContain(`20`);
+        const at = now + 30 * 86_400_000;
+        const printed = formatReset(Math.round(at / 1000), now);
+        // The month and day are READ OFF the instant in the runner's own zone, not spelled out: `formatWhen` draws it
+        // on the reader's clock, so an instant 30 days on is "Oct 20" in Europe and "Oct 21" at UTC+14. Both are
+        // right, and hardcoding either makes this test pass only where its author sat.
+        const expected = new Intl.DateTimeFormat(`en`, { month: `short`, day: `numeric` }).formatToParts(at);
+        expect(printed).toContain(expected.find((part) => part.type === `month`)?.value);
+        expect(printed).toContain(expected.find((part) => part.type === `day`)?.value);
+        // The claim that actually distinguishes this case from the one above: a date, not a weekday.
+        expect(printed).toMatch(/\d+,/u);
     });
 });
 

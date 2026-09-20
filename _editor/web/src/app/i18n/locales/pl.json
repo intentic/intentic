@@ -1638,6 +1638,12 @@
             "runOneCheckBefore": "Uruchamiaj jedno sprawdzenie przed każdym pushem, niezależnie od tego, które repozytorium wychodzi. Własny build repozytorium należy do repozytorium, poniżej.",
             "verifyBeforeFinishing": "Zweryfikuj przed zakończeniem"
         },
+        "agentClock": {
+            "clock": "Zegar",
+            "scheduleTimesAreIn": "Harmonogramy działają według",
+            "whatAnAutomations": "Co znaczy „09:00” w automatyzacji. Godziny na ekranie zawsze pokazujemy według twojego zegara; ta strefa decyduje o tym, kiedy coś się uruchomi.",
+            "yourOwnClockIs": "Co znaczy „09:00” w automatyzacji. Twój komputer jest w strefie {zone}, więc te godziny nie będą się zgadzać z tym, co na nim widzisz."
+        },
         "agentCodeSearch": {
             "automationOff": "Its monthly rewrite is switched off.",
             "briefUnreadable": "The brief is there but cannot be sent: {why}",
@@ -3041,6 +3047,7 @@
             "costByModel": "Koszt według modelu",
             "couldntReadSandboxsUsage": "Nie udało się odczytać zużycia tego sandboxa.",
             "day": "Dzień",
+            "daysRunMidnight": "Doby liczymy tu od północy do północy UTC, nie według twojego zegara, więc wydatek blisko twojej północy trafia na sąsiedni dzień.",
             "everyCommandCarriesOwn": "Każde polecenie niesie własną surową wartość bazową, więc to jest zrealizowane, a nie szacowane. Każdy etap jest ważony wobec tego, co do niego dotarło: przypisanie sekwencyjne, i to właśnie sprawia, że części sumują się do całości i dają się w ogóle ułożyć jedna na drugiej. To nie jest „ile kosztowałoby Cię wyłączenie tego czyściciela”: limit niżej i tak zjadłby część tych samych linii. Stopki do odzyskiwania to cena tego, że przycinanie jest odwracalne: wskaźniki, dzięki którym agent może odzyskać pełne wyjście.",
             "exportCsv": "Eksportuj CSV",
             "holdoutControl": "Grupa kontrolna",
@@ -3068,7 +3075,8 @@
             "tokenSavings": "Oszczędność tokenów",
             "tokens": "Tokeny",
             "toolOutputAssistant": "Wyjście narzędzi → asystent",
-            "turns": "Tury"
+            "turns": "Tury",
+            "utcDays": "Doby UTC"
         },
         "sandboxWarming": {
             "sandboxUpGettingWorkspace": "Twój sandbox działa i przygotowuje swoją przestrzeń roboczą. Otworzy się sam, gdy tylko będzie mógł obsługiwać: nie trzeba nic klikać.",

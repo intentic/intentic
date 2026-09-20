@@ -598,6 +598,72 @@ jobs:
       - run: bash _tools/scripts/ci/install-provider-clis.sh
       - run: pnpm e2e:providers
 
+  # THE SUITES THAT MEASURE TIME, RUN SOMEWHERE THAT IS NOT UTC.
+  #
+  # Every other job in this pipeline runs in a UTC container, which is the same clock the daemon ships on. That makes
+  # a whole class of defect structurally invisible: a cron evaluated in the process's own zone, a day bucket that is
+  # the reader's only by coincidence, a date test that passes because the author and the runner happen to agree.
+  # An automation set for 20:43 fired at 22:43 for its owner for as long as the feature existed, and the suite was
+  # green throughout — it could not have been anything else.
+  #
+  # Two zones, chosen as the extremes rather than as realistic ones: Kiritimati is UTC+14 and Niue is UTC−11, so
+  # between them every "is it the same calendar day" question is answered both ways on the same instant, and a
+  # 25-hour spread means no off-by-one can hide. Neither observes summer time, so a failure here is a zone bug and
+  # never a changeover flake.
+  #
+  # A subset, not the whole tree: these are the packages that bucket days, evaluate crons or format dates. Widen the
+  # filter when another one starts doing so — `_tools/checks/time-zones.mjs` is what notices the code, this is what
+  # notices the behaviour.
+  verify-clocks:
+    needs: preflight
+    if: ${{ !cancelled() && needs.preflight.result == 'success' }}
+    runs-on: [self-hosted, intentic]
+    timeout-minutes: 20
+    strategy:
+      # Both legs always run: knowing a bug is east-only or west-only is most of the diagnosis, and stopping at the
+      # first failure throws that away.
+      fail-fast: false
+      matrix:
+        tz: [Pacific/Kiritimati, Pacific/Niue]
+    container:
+      image: ghcr.io/intentic/ci-base:latest
+      volumes:
+        - /ci-cache:/ci-cache
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    env:
+      COREPACK_ENABLE_DOWNLOAD_PROMPT: "0"
+      PNPM_STORE: /ci-cache/pnpm-store
+      TURBO_CACHE_DIR: /ci-cache/turbo
+      TZ: ${{ matrix.tz }}
+      # Turbo hashes inputs, not the environment, so without this the UTC job's cached results would be replayed
+      # here and both legs would pass having run nothing.
+      TURBO_FORCE: "true"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          clean: false
+      - uses: ./.github/actions/pnpm-setup
+      # Proves the zone actually took before anything is judged by it: a container without tzdata silently reports
+      # UTC, and this whole job would then be a slower copy of one that already ran.
+      - name: The runner is on the zone it claims
+        run: |
+          node -e '
+            const want = process.env.TZ;
+            const got = Intl.DateTimeFormat().resolvedOptions().timeZone;
+            if (got !== want) {
+              console.error(`this leg asked for ${want} and the runtime reports ${got}; tzdata is missing from the image`);
+              process.exit(1);
+            }
+            console.log(`${got}, offset ${-new Date().getTimezoneOffset() / 60}h from UTC`);
+          '
+      # `@intentic/ui` is absent on purpose and not by oversight: the kit holds the formatters every date on screen
+      # goes through, and it has no test script at all, so naming it here would claim a coverage that does not exist.
+      # Its formatters are exercised through `@intentic/web`, which imports them.
+      - run: pnpm turbo run test --filter=@intentic/sandbox --filter=@intentic/sandbox-contract --filter=@intentic/ext-automations --filter=@intentic/web --continue=dependencies-successful
+
   # The marketing site and the content/integration libs behind it. It gates no deploy — the site publishes from
   # Cloudflare's own git integration, outside this pipeline, so nothing here can stop a bad one — which makes
   # this the pull-request gate and the `needs` a future site-deploy job would hang off.

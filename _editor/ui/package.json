@@ -90,6 +90,10 @@
             "types": "./src/components/feedback/notice.ts",
             "default": "./src/components/feedback/notice.ts"
         },
+        "./format": {
+            "types": "./src/lib/format.ts",
+            "default": "./src/lib/format.ts"
+        },
         "./series": {
             "types": "./src/components/charts/seriesAccent.ts",
             "default": "./src/components/charts/seriesAccent.ts"

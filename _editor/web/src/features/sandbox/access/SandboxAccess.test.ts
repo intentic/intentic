@@ -5,6 +5,7 @@ import PrimeVue from "primevue/config";
 import { afterEach, expect, it, vi } from "vitest";
 import { type App, computed, createApp, h, nextTick, ref } from "vue";
 import { IconStub } from "@intentic/ui/testing";
+import { formatDate } from "@intentic/ui/format";
 
 // Import chain touches the API client and a media query (UI barrel's useDevice) at module eval; hence jsdom.
 
@@ -161,7 +162,10 @@ it(`names this browser and says why the others cannot be listed`, async () => {
     await nextTick();
 
     expect(shown()).toContain(`This browser`);
-    expect(shown()).toContain(`owner@example.com · signed in until Sep 24, 2026`);
+    // The date is formatted through the kit, in the READER's zone, so a fixture at 12:00Z prints as the 24th in
+    // Europe and the 25th at UTC+14. Asserted through the same formatter the row uses rather than spelled out: a
+    // hardcoded day here tests where the suite runs, not what the row says.
+    expect(shown()).toContain(`owner@example.com · signed in until ${formatDate(sessionExpiresAt.value as number)}`);
     expect(shown()).toContain(`Other browsers aren't listed`);
     expect(shown()).toMatch(/doesn't track devices/);
 });

@@ -1,4 +1,5 @@
 import { parseEnv } from "node:util";
+import { asZone } from "@intentic/sandbox-contract";
 import {
     asArray,
     asRecord,
@@ -26,6 +27,14 @@ const WS = "workspace/";
 export const detectOpenclaw = (files: Files): boolean =>
     files.has("openclaw.json") &&
     (files.has(".env") || [...files.keys()].some((path) => path.startsWith(WS) || path.startsWith("cron/") || path.startsWith("skills/")));
+
+// A source zone this machine's ICU cannot resolve, collected so the arrival card can name it. A zone it CAN resolve
+// needs no note: it rides along on the automation, and the job keeps the hours it ran at.
+const noteUnknownZone = (seen: Set<string>, tz: string | undefined): void => {
+    if (tz !== undefined && asZone(tz) === undefined) {
+        seen.add(tz);
+    }
+};
 
 // "30m" / "2h" / "1d" → ms. Undefined for anything else, the caller words the fallback.
 const durationMs = (raw: string): number | undefined => {
@@ -220,7 +229,7 @@ export const planOpenclaw = (files: Files): SourcePlan => {
 
     // Cron jobs, plus the heartbeat file as one more scheduled prompt.
     const planCron = automationPlanner("openclaw", planned, refused);
-    const timezones = new Set<string>();
+    const unknownZones = new Set<string>();
     for (const path of [...files.keys()].filter((candidate) => candidate.startsWith("cron/") && candidate.endsWith(".json")).toSorted()) {
         const parsed = ((): unknown => {
             try {
@@ -258,17 +267,18 @@ export const planOpenclaw = (files: Files): SourcePlan => {
                 refused.push(`${path}: "${jobName}" (its interval has no clean cron spelling, recreate it by hand)`);
                 continue;
             }
+            // Carried through rather than noted for the owner to reapply by hand: an automation stores the zone its
+            // cron is meant in, so a job that ran at 09:00 in Tokyo still runs at 09:00 in Tokyo here. Only an id ICU
+            // cannot resolve is worth raising, and that one is raised by name.
             const tz = asString(schedule["tz"]);
-            if (tz !== undefined) {
-                timezones.add(tz);
-            }
-            planCron(jobName, record, path, { cron, prompt });
+            noteUnknownZone(unknownZones, tz);
+            planCron(jobName, record, path, { cron, prompt, ...(tz === undefined ? {} : { tz }) });
         }
     }
-    if (timezones.size > 0) {
+    if (unknownZones.size > 0) {
         needsAction.push({
             subject: "Check automation hours",
-            detail: `Some jobs ran in ${[...timezones].join(", ")}; here they follow this sandbox's clock. Adjust the hours on their cards if the difference matters.`,
+            detail: `These jobs named a timezone this machine does not recognise: ${[...unknownZones].join(", ")}. They now follow this sandbox's own clock, so set the hours on their cards if that is not what you want.`,
         });
     }
     const heartbeat = text(files, `${WS}HEARTBEAT.md`);

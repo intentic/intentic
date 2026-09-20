@@ -74,6 +74,8 @@ export const parseWhen = (text: string, now: Date, timeZone: string): EventTime 
 // exclusive). Advances the wall clock, not the instant, so a naive time stays naive.
 export const defaultEnd = (start: EventTime): EventTime => {
     if (start.date !== undefined) {
+        // UTC end to end, and deliberately: an all-day event has no zone, so "the next day" has to be computed on a
+        // clock that never shifts. Doing this on a local clock would move the end date across a DST boundary.
         return { date: new Date(new Date(`${start.date}T00:00:00Z`).getTime() + DAY_MS).toISOString().slice(0, 10) };
     }
     const naive = start.dateTime ?? new Date().toISOString();

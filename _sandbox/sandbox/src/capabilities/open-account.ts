@@ -1,4 +1,5 @@
 import type { Capability, IdentityConfig } from "@intentic/sandbox-contract";
+import { utcDayOf } from "@intentic/sandbox-contract";
 import type { Services } from "../composition.js";
 import { composeEnvironment } from "../environment/environment.js";
 import { capabilityCtx } from "./capability.js";
@@ -62,7 +63,8 @@ export const openBrowserAccount = async (services: Services, input: OpenAccountI
             platform,
             identity: input.identity,
             purpose,
-            openedAt: new Date().toISOString().slice(0, 10),
+            // UTC day: a record of when a card was opened, read by nobody to the hour.
+            openedAt: utcDayOf(Date.now()),
             // Set only on the generic card; a site card pins its own URLs and rejects unknown fields.
             ...(known ? {} : { homeUrl: input.homeUrl as string, ...((input.loginUrl ?? "") === "" ? {} : { loginUrl: input.loginUrl as string }) }),
         },

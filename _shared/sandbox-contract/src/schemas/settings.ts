@@ -6,6 +6,7 @@ import { CommandJudgeModeSchema } from "../policy/safety-policy.js";
 import { ModelRoleSchema } from "../models/model-roles.js";
 import { AdmissionPolicySchema, AdmissionRuleSchema, ModelPinSchema } from "./agent.js";
 import { LimitPolicySchema, RetryPolicySchema } from "./turn-break.js";
+import { ZoneSchema } from "../time/zone.js";
 // Which prompt base the agent runs before this turn composes anything on top: Intentic's own (default), Claude Code's
 // preset, or the owner's text. Declared out here since both the daemon and the browser branch on it.
 export const SystemPromptModeSchema = z.enum(["intentic", "claude", "custom"]);
@@ -203,6 +204,20 @@ export type SkillSwitch = z.infer<typeof SkillSwitchSchema>;
 // picks rather than failing whole.
 
 export const SandboxSettingsSchema = z.object({
+    // The zone every WALL-CLOCK RULE in this sandbox is meant in — an automation's cron, and anything else that says
+    // "at 09:00" instead of naming an instant. It is not a display preference: nothing formats through it, and an
+    // instant on screen is still drawn in the reader's own clock.
+    // Empty means nobody has said, and the container's clock (UTC) answers. That is harmless for a sandbox where
+    // nothing is scheduled and wrong the moment something is, which is why the editor offers its own zone on first
+    // load and the automations screen names this one beside every schedule.
+    // An IANA id rather than an offset, because an offset cannot express the summer-time rule that moves "09:00" twice
+    // a year, and a chore set in March should still be right in November.
+    timezone: z
+        .union([z.literal(""), ZoneSchema])
+        .default("")
+        .describe(
+            "Which clock this sandbox's schedules are set by, as a zone name like Europe/Warsaw. Automations that repeat on a clock fire by this, not by the machine's own time. Leave it empty and they fire by UTC, which is almost certainly not what you meant when you typed a time.",
+        ),
     stableSystemPrompt: z
         .boolean()
         .default(false)
@@ -449,6 +464,20 @@ export const SandboxSettingsSchema = z.object({
         .describe("How many levels deep the delegation may go, since a subagent can start subagents of its own."),
 });
 export type SandboxSettings = z.infer<typeof SandboxSettingsSchema>;
+
+// A browser telling the sandbox which clock IT is on. An offer, not an instruction: see `adoptTimezone`.
+export const TimezoneOfferSchema = z.object({
+    timezone: ZoneSchema.describe("The zone the offering machine is in, as an IANA name like Europe/Warsaw."),
+});
+export type TimezoneOffer = z.infer<typeof TimezoneOfferSchema>;
+
+// What the sandbox's clock is after the offer, and whether the offer is what set it. `adopted: false` with a zone
+// back means somebody had already chosen, which is the normal answer for every browser after the first.
+export const TimezoneStateSchema = z.object({
+    timezone: z.string().describe("The zone this sandbox's schedules are now read in. Empty only if none could be resolved."),
+    adopted: z.boolean().describe("Whether this call is what set it. False means it was already answered and the stored zone stands."),
+});
+export type TimezoneState = z.infer<typeof TimezoneStateSchema>;
 // Read live from the installed CLI (preset-prompt.ts), not a stored transcription. `version` is the CLI build it came
 // from, so a fork from an older build reads as a snapshot; empty for Intentic's own prompt.
 export const BuiltinPromptTextSchema = z.object({ text: z.string(), version: z.string() });

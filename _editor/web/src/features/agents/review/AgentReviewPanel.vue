@@ -5,6 +5,7 @@ import {
     ChangeStatusMark,
     ui,
     explorerColorClass,
+    formatDayMonth,
     iconForEntry,
     Notice,
     ResizeSeam,
@@ -209,7 +210,9 @@ const absorbedNote = computed(() => {
 // The committed work: clicking a row here reads it directly instead of pushing a workspace tab and hunting
 // through a commit graph. The graph is still offered as a secondary act for questions a file list can't answer
 // (what else was in that commit, what came before).
-const historyStamp = (authored: number): string => new Date(authored).toLocaleDateString(undefined, { month: `short`, day: `numeric` });
+// Through the kit rather than a formatter built here: these dates have to move with the app's language like every
+// other one on screen, and a hand-built `Intl` instance is frozen at whatever the locale was when the module loaded.
+const historyStamp = (authored: number): string => formatDayMonth(authored);
 // Shown only with several commits; with one the summary above has already named it.
 const manyCommits = computed(() => history.commits.value.length > 1);
 

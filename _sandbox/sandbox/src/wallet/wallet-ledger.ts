@@ -1,4 +1,5 @@
 import { randomBytes } from "node:crypto";
+import { utcDayOf } from "@intentic/sandbox-contract";
 import { z } from "zod";
 import { jsonFile } from "../store/json-file.js";
 
@@ -53,7 +54,10 @@ export interface WalletLedgerStore {
     readonly all: () => Promise<readonly PaymentRow[]>;
 }
 
-const utcDay = (at: number): string => new Date(at).toISOString().slice(0, 10);
+// UTC, and the refusal message says so ("the cap resets at midnight UTC", payment-offer.ts). A spending cap keyed to
+// the owner's own midnight would move every time they changed the setting, and a cap that moves is not a cap.
+// The shared spelling rather than a local one, so every UTC bucket in the tree is findable from one name.
+const utcDay = utcDayOf;
 
 // Today's payments in USDC atomic units: `paid` plus everything still in flight, so the cap stays conservative while a
 // fate is unknown.

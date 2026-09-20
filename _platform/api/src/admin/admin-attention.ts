@@ -17,7 +17,8 @@ const BUILD_STALE_MS = 2 * 60 * MINUTE_MS;
 const STRIKE_WINDOW_MS = 7 * DAY_MS;
 // Setup, reach and announce rows record one moment that nothing ever clears, so they age off the feed like a strike does; must exceed the digest's day, or a row landing between two sends is announced by neither.
 const EVENT_WINDOW_MS = 3 * DAY_MS;
-const dateWord = (at: Date): string => at.toISOString().slice(0, 10);
+// UTC day, matching every other bucket in the admin rollups, so two panels cannot disagree about which day a row is on.
+const utcDayWord = (at: Date): string => at.toISOString().slice(0, 10);
 
 // What the watch measured, in the operator's units.
 const strikeWords = (strike: { kind: string; measure: number; windowMinutes: number }): string =>
@@ -133,7 +134,7 @@ export const adminAttention = async (prisma: PrismaClient, now: () => Date = () 
                 kind: `plan-past-due`,
                 severity: `warning`,
                 title: `${plan.user.email}'s hosted plan is past due`,
-                detail: `Stripe is retrying; the plan is paused and the free lane's ceiling applies. Period ran to ${dateWord(plan.currentPeriodEnd)}.`,
+                detail: `Stripe is retrying; the plan is paused and the free lane's ceiling applies. Period ran to ${utcDayWord(plan.currentPeriodEnd)}.`,
                 at: plan.updatedAt.toISOString(),
                 email: plan.user.email,
             }),

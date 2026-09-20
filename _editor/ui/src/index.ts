@@ -224,6 +224,7 @@ export { type CodeToken, useHighlighter } from "./composables/useHighlighter.js"
 export {
     formatBytes,
     formatDate,
+    formatDateLong,
     formatDateTime,
     formatDayMonth,
     formatDayMonthTime,

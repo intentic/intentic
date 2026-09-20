@@ -162,6 +162,9 @@ const DREAMING_PROMPT =
 // rewrite costs the measurement its cohort.
 export const FIELD_NOTES_AUTOMATION_ID = "field-notes";
 // 04:00 on the 1st. The composer renders this as "Monthly 1st 04:00" (cronSchedule.ts) rather than as a raw expression.
+// Deliberately carries no `tz`, like every other preset here: "04:00" means 04:00 on the owner's own clock, which is
+// what the sandbox's `timezone` setting answers. Baking a zone in would pin an overnight chore to one place on earth
+// and run it during the working day for everybody else.
 const FIELD_NOTES_CRON = "0 4 1 * *";
 
 const FIELD_NOTES_PROMPT =

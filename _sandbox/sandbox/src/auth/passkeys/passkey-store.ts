@@ -6,6 +6,7 @@ import type {
     RegistrationOptionsJSON,
     RegistrationResponse,
 } from "@intentic/sandbox-contract";
+import { utcDayOf } from "@intentic/sandbox-contract";
 import { sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
 import { z } from "zod";
 import { jsonFile } from "../../store/json-file.js";
@@ -206,7 +207,9 @@ export const summaryOf = (credential: StoredCredential): PasskeySummary => ({
 // The label a passkey gets when none was typed: what it is, dated, so two unnamed ones still read apart.
 const labelFor = (label: string | undefined, now: number): string => {
     const trimmed = label?.trim().slice(0, 60);
-    return trimmed === undefined || trimmed === "" ? `Passkey added ${new Date(now).toISOString().slice(0, 10)}` : trimmed;
+    // The UTC day, not the owner's: a fallback label is a name, not a fact anybody reads a date off, and it is
+    // written once and then editable. Precision here would cost a zone the store has no reason to know.
+    return trimmed === undefined || trimmed === "" ? `Passkey added ${utcDayOf(now)}` : trimmed;
 };
 
 // A verifier's refusal as the 400 the route answers with; the message names what failed to match.

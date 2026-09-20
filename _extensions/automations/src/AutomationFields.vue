@@ -17,6 +17,7 @@ import { useQuery } from "@tanstack/vue-query";
 import { computed, ref } from "vue";
 import { glyph } from "./catalog";
 import { nextIn } from "./cronSchedule";
+import { localZone, zoneLabel } from "@intentic/sandbox-contract/time";
 import { host } from "./host";
 import { useCiDelivery } from "./useCiDelivery";
 import { useSenders } from "./useAutomations";
@@ -44,6 +45,8 @@ const {
     liveSources,
     visibleSources,
     cronPreview,
+    effectiveZone,
+    sandboxZone,
     starterPrompt,
     staleStarter,
     applyStarter,
@@ -205,6 +208,16 @@ const kind = computed<TriggerKind>({
         }
     },
 });
+
+// Every zone ICU knows, which is the only list that cannot go stale against the runtime that will resolve it. Built
+// once: it is ~450 strings and the picker is opened rarely.
+const ZONE_OPTIONS = Intl.supportedValuesOf(`timeZone`);
+
+// Names the rule's zone beside the preview when the reader is not on that clock, and stays quiet when they are. The
+// preview itself is formatted in the READER's zone deliberately — "when does this happen to me" is the question a
+// preview answers — and without this line a 20:43 Warsaw rule would read "22:43" to a reader in London with nothing
+// on screen explaining the two hours.
+const previewZoneNote = computed(() => zoneLabel(effectiveZone.value, localZone()));
 
 const FREQ_OPTIONS = computed(
     () =>
@@ -688,6 +701,20 @@ const setProvider = (provider: string): void => {
                             <input v-model="schedule.cron" placeholder="0 9 * * 1-5" class="w-48" :class="ui.input('font-mono')" />
                             <span class="text-2xs text-subtle">{{ t(`automationFields.standard5FieldCron`) }}</span>
                         </label>
+                        <!-- WHICH CLOCK the times above are on. Offered wherever a schedule names an hour; "every 5
+                             minutes" and "hourly" mean the same on every clock, so asking there would be noise.
+                             The blank option is not "no zone", it is the sandbox's own, so moving that one setting
+                             moves every schedule that never asked for something else. -->
+                        <label
+                            v-if="schedule.freq !== 'minutes' && schedule.freq !== 'hourly'"
+                            class="flex items-center gap-2 text-xs text-muted"
+                        >
+                            {{ t(`automationFields.inZone`) }}
+                            <select v-model="form.tz" class="w-52" :class="ui.input()">
+                                <option value="">{{ t(`automationFields.sandboxClock`, { zone: sandboxZone }) }}</option>
+                                <option v-for="zone in ZONE_OPTIONS" :key="zone" :value="zone">{{ zone }}</option>
+                            </select>
+                        </label>
                     </div>
                     <p v-if="schedule.freq === 'weekly' && schedule.days.length === 0" class="text-xs text-danger">
                         {{ t(`automationFields.pickAtLeastOne`) }}
@@ -698,6 +725,11 @@ const setProvider = (provider: string): void => {
                             t(`automationFields.nextRuns`, { runs: cronPreview.runs.map(formatDateTime).join(" · ") })
                         }}</template>
                         <template v-else>{{ cronPreview.error }}</template>
+                    </p>
+                    <!-- Shown only to a reader on a different clock from the rule, for whom the preview above reads as
+                         a different hour than the one they typed. -->
+                    <p v-if="previewZoneNote && cronPreview && 'runs' in cronPreview" class="text-2xs text-subtle">
+                        {{ t(`automationFields.shownInYourClock`, { zone: previewZoneNote }) }}
                     </p>
                     <!-- Gates use sessions since the last wake, not elapsed time. -->
                     <label class="flex flex-wrap items-center gap-2 text-xs text-muted">

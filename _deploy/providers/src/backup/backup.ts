@@ -20,12 +20,41 @@ const backupSchema = sshSchema.extend({
         .string()
         .regex(/^[\d*,/A-Za-z-]+(?: [\d*,/A-Za-z-]+){4}$/, "must be exactly five cron fields (minute hour day month weekday)")
         .default("0 3 * * *"),
+    // WHICH CLOCK `schedule` IS READ ON. A cron in a crontab means nothing without one, and crond takes the zone
+    // from the container's own environment, which is UTC unless told otherwise. That default is a fine answer — a
+    // backup at 03:00 UTC every day is stable and never skips or repeats an hour at a changeover, unlike a local
+    // 03:00 — but it has to be a STATED answer, or an operator reading "0 3 * * *" reads their own 3am.
+    // A named zone also needs tzdata present in `image`; without it crond silently falls back to UTC, which is why
+    // UTC is the default rather than something derived from the host.
+    timezone: z.string().default("UTC"),
     retention: z
         .object({ daily: z.coerce.number().default(7), weekly: z.coerce.number().default(4), monthly: z.coerce.number().default(6) })
         .default({ daily: 7, weekly: 4, monthly: 6 }),
 });
 type BackupInputs = z.infer<typeof backupSchema>;
-const parse = (inputs: ResolvedInputs): BackupInputs => parseInputs(backupSchema, inputs, "backup");
+// The same test `@intentic/sandbox-contract`'s `isZone` makes, spelled locally: the deploy plane is bundled on its
+// own and does not carry the sandbox contract, and one predicate is not worth the edge between them. An offset
+// ("+02:00") is refused for the reason it is refused everywhere here — it cannot express a summer-time rule.
+const knownZone = (value: string): boolean => {
+    if (value.startsWith("+") || value.startsWith("-")) {
+        return false;
+    }
+    try {
+        return Intl.DateTimeFormat("en", { timeZone: value }).resolvedOptions().timeZone !== "";
+    } catch {
+        return false;
+    }
+};
+
+const parse = (inputs: ResolvedInputs): BackupInputs => {
+    const parsed = parseInputs(backupSchema, inputs, "backup");
+    // Refused at parse rather than at the crontab: a zone crond cannot resolve does not fail, it silently runs the
+    // backup in UTC, and the operator finds out by reading snapshot timestamps months later.
+    if (!knownZone(parsed.timezone)) {
+        throw new Error(`backup: "${parsed.timezone}" is not a zone name this machine knows (try Europe/Warsaw, or UTC)`);
+    }
+    return parsed;
+};
 
 const CONTAINER = "intentic-backup";
 const STATE_DIR = `${HOST_STATE_ROOT}/backup`;
@@ -82,12 +111,14 @@ const running = async (session: SshSession): Promise<boolean> => {
 };
 
 // The create-time image + the schedule/repo labels, the observable config the diff converges on.
-const observe = async (session: SshSession): Promise<{ image: string; schedule: string; repo: string }> => {
+const observe = async (session: SshSession): Promise<{ image: string; schedule: string; repo: string; timezone: string }> => {
     const result = await session.exec(
-        `docker inspect --format '{{.Config.Image}}${SEP}{{index .Config.Labels "intentic.schedule"}}${SEP}{{index .Config.Labels "intentic.repo"}}' ${CONTAINER} 2>/dev/null || true`,
+        `docker inspect --format '{{.Config.Image}}${SEP}{{index .Config.Labels "intentic.schedule"}}${SEP}{{index .Config.Labels "intentic.repo"}}${SEP}{{index .Config.Labels "intentic.timezone"}}' ${CONTAINER} 2>/dev/null || true`,
     );
-    const [image = "", schedule = "", repo = ""] = result.stdout.trim().split(SEP);
-    return { image, schedule, repo };
+    // A container created before the zone was recorded reports an empty one, which reads as the UTC it was in fact
+    // running on, so it converges on the first apply rather than looking like a change nobody made.
+    const [image = "", schedule = "", repo = "", timezone = ""] = result.stdout.trim().split(SEP);
+    return { image, schedule, repo, timezone: timezone === "" ? "UTC" : timezone };
 };
 
 // Write restic.env once (the encryption password + backend creds must survive recreation); always rewrite the
@@ -160,6 +191,10 @@ export const createBackupProvider = (executor: SshExecutor = sshExecutor): Provi
         if (detail["repo"] !== parsed.repo) {
             return { action: "update", reason: `backup repo differs (running ${String(detail["repo"])}, want ${parsed.repo})` };
         }
+        // Same hour on a different clock is a different moment, so this converges like any other config change.
+        if (detail["timezone"] !== parsed.timezone) {
+            return { action: "update", reason: `backup timezone differs (running ${String(detail["timezone"])}, want ${parsed.timezone})` };
+        }
         return { action: "noop" };
     },
     apply: async (inputs, _observed, ctx) => {
@@ -177,6 +212,7 @@ export const createBackupProvider = (executor: SshExecutor = sshExecutor): Provi
             const run = await session.exec(
                 `docker run -d --restart unless-stopped --name ${CONTAINER} --label ${shellQuote(`intentic.id=${ctx.id}`)} --label intentic.type=backup ` +
                     `--label ${shellQuote(`intentic.schedule=${parsed.schedule}`)} --label ${shellQuote(`intentic.repo=${parsed.repo}`)} ` +
+                    `--label ${shellQuote(`intentic.timezone=${parsed.timezone}`)} -e ${shellQuote(`TZ=${parsed.timezone}`)} ` +
                     `${mountArgs(parsed, dockerBin)} --entrypoint crond ${shellQuote(parsed.image)} -f -l 8`,
             );
             if (run.code !== 0) {

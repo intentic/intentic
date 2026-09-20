@@ -16,7 +16,8 @@ const rootFromEnv = (): string => {
     return config.workspaceRoot === "" ? process.cwd() : config.workspaceRoot;
 };
 
-const dateOf = (ms: number): string => new Date(ms).toISOString().slice(0, 10);
+// UTC day. Sessions are grouped by it rather than by the reader's, so the same listing from two machines matches.
+const utcDayOf = (ms: number): string => new Date(ms).toISOString().slice(0, 10);
 
 const collapse = (text: string): string => text.replaceAll(/\s+/gu, " ").trim();
 
@@ -67,7 +68,7 @@ const list = buildCommand({
                         conversation === undefined
                             ? (session.title ?? "(untitled)")
                             : [conversation.id, conversation.title, conversation.owner === undefined ? undefined : `@${conversation.owner}`].filter(Boolean).join(" · ");
-                    this.process.stdout.write(`${session.sessionId}  ${dateOf(session.lastTs)}  ${session.promptCount} prompts  ${named}\n`);
+                    this.process.stdout.write(`${session.sessionId}  ${utcDayOf(session.lastTs)}  ${session.promptCount} prompts  ${named}\n`);
                 }
                 // Printed here rather than as a standing prompt line, for a reader one step from wanting the
                 // conversation.
@@ -102,7 +103,7 @@ const files = buildCommand({
             } else {
                 for (const hit of hits) {
                     this.process.stdout.write(
-                        `${hit.path}  (${hit.sessions} session${hit.sessions === 1 ? "" : "s"}, last ${dateOf(hit.lastTouched)})${hit.sampleTitle === undefined ? "" : ` , ${hit.sampleTitle}`}\n`,
+                        `${hit.path}  (${hit.sessions} session${hit.sessions === 1 ? "" : "s"}, last ${utcDayOf(hit.lastTouched)})${hit.sampleTitle === undefined ? "" : ` , ${hit.sampleTitle}`}\n`,
                     );
                 }
             }
@@ -222,7 +223,7 @@ export const runHookMatch = async (input: string, write: (chunk: string) => void
         }
         // The excerpts are the payload; the fork command only rides along as a mention, not an instruction to the
         // model.
-        const lead = `Related past session "${top.title ?? top.sessionId}" (${dateOf(top.lastTs)}, ${top.promptCount} prompts). Use what follows as background. If this prompt is genuinely continuing that work, you can tell the user they may resume it with \`${forkCommandOf(recall, top, prompt)}\` rather than rebuilding the context here.`;
+        const lead = `Related past session "${top.title ?? top.sessionId}" (${utcDayOf(top.lastTs)}, ${top.promptCount} prompts). Use what follows as background. If this prompt is genuinely continuing that work, you can tell the user they may resume it with \`${forkCommandOf(recall, top, prompt)}\` rather than rebuilding the context here.`;
         // Same 45-day window as the strong-match gate; the current session never quotes itself.
         const excerpts = recall.grab(prompt, {
             days: 45,
@@ -231,7 +232,7 @@ export const runHookMatch = async (input: string, write: (chunk: string) => void
         });
         const fragments = excerpts.map(
             (excerpt) =>
-                `- "${excerpt.title ?? excerpt.sessionId}" ${dateOf(excerpt.ts)} · asked: ${cap(collapse(excerpt.prompt), 160)}${excerpt.fragment === "" ? "" : ` · answered: ${cap(collapse(excerpt.fragment), 280)}`}`,
+                `- "${excerpt.title ?? excerpt.sessionId}" ${utcDayOf(excerpt.ts)} · asked: ${cap(collapse(excerpt.prompt), 160)}${excerpt.fragment === "" ? "" : ` · answered: ${cap(collapse(excerpt.fragment), 280)}`}`,
         );
         const context =
             fragments.length === 0
@@ -275,7 +276,7 @@ const match = buildCommand({
             } else {
                 for (const hit of matches) {
                     this.process.stdout.write(
-                        `${hit.score.toFixed(2)}${hit.strong ? " strong" : "       "}  ${hit.sessionId}  ${dateOf(hit.lastTs)}  ${hit.title ?? "(untitled)"}\n`,
+                        `${hit.score.toFixed(2)}${hit.strong ? " strong" : "       "}  ${hit.sessionId}  ${utcDayOf(hit.lastTs)}  ${hit.title ?? "(untitled)"}\n`,
                     );
                 }
                 const top = matches[0];
@@ -314,7 +315,7 @@ const grab = buildCommand({
                 for (const excerpt of excerpts) {
                     const block = [
                         // `×N` marks a recurring prompt collapsed to one row instead of N rows saying the same thing.
-                        `${excerpt.score.toFixed(2)}  ${excerpt.sessionId}/${excerpt.ordinal}  ${dateOf(excerpt.ts)}  ${excerpt.title ?? "(untitled)"}${excerpt.repeats > 0 ? `  ×${excerpt.repeats + 1}` : ""}`,
+                        `${excerpt.score.toFixed(2)}  ${excerpt.sessionId}/${excerpt.ordinal}  ${utcDayOf(excerpt.ts)}  ${excerpt.title ?? "(untitled)"}${excerpt.repeats > 0 ? `  ×${excerpt.repeats + 1}` : ""}`,
                         `    asked: ${cap(collapse(excerpt.prompt), 240)}`,
                         ...(excerpt.fragment === "" ? [] : [`    answered: ${cap(collapse(excerpt.fragment), 480)}`]),
                         // What the session around the hit opened and closed on, giving a mid-session match its context.

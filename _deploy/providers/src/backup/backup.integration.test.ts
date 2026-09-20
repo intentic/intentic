@@ -78,26 +78,39 @@ test("read returns undefined when the backup container is not running", async ()
 
 test("read returns the observed image + schedule + repo when running", async () => {
     const observed = await createBackupProvider(fakeSsh({ running: true }).executor).read(inputs, ctx());
-    expect(observed).toEqual({ outputs: {}, detail: { image: IMAGE, schedule: "0 3 * * *", repo: "s3:s3.example.com/bucket" } });
+    expect(observed).toEqual({ outputs: {}, detail: { image: IMAGE, schedule: "0 3 * * *", repo: "s3:s3.example.com/bucket", timezone: "UTC" } });
 });
 
 test("diff is noop when image, schedule, and repo all match", () => {
-    const observed = { outputs: {}, detail: { image: IMAGE, schedule: "0 3 * * *", repo: "s3:s3.example.com/bucket" } };
+    const observed = { outputs: {}, detail: { image: IMAGE, schedule: "0 3 * * *", repo: "s3:s3.example.com/bucket", timezone: "UTC" } };
     expect(createBackupProvider(fakeSsh().executor).diff(inputs, observed)).toEqual({ action: "noop" });
 });
 
 test("diff is update when the schedule drifts", () => {
-    const observed = { outputs: {}, detail: { image: IMAGE, schedule: "0 5 * * *", repo: "s3:s3.example.com/bucket" } };
+    const observed = { outputs: {}, detail: { image: IMAGE, schedule: "0 5 * * *", repo: "s3:s3.example.com/bucket", timezone: "UTC" } };
     expect(createBackupProvider(fakeSsh().executor).diff(inputs, observed).action).toBe("update");
 });
 
 test("diff is update when the repo drifts", () => {
-    const observed = { outputs: {}, detail: { image: IMAGE, schedule: "0 3 * * *", repo: "b2:other-bucket" } };
+    const observed = { outputs: {}, detail: { image: IMAGE, schedule: "0 3 * * *", repo: "b2:other-bucket", timezone: "UTC" } };
     expect(createBackupProvider(fakeSsh().executor).diff(inputs, observed).action).toBe("update");
 });
 
+// A backup "at 03:00" is not one moment, it is one per clock. The container's own zone decides which, so the zone is
+// config the diff has to converge on like any other — otherwise moving it changes nothing until something unrelated
+// forces a recreate.
+test("diff is update when the timezone drifts, even with the same cron", () => {
+    const observed = { outputs: {}, detail: { image: IMAGE, schedule: "0 3 * * *", repo: "s3:s3.example.com/bucket", timezone: "Europe/Warsaw" } };
+    // Matched whole, so the reason has to name the zone: an "update" whose reason says "image" would send an operator
+    // looking at the wrong thing.
+    expect(createBackupProvider(fakeSsh().executor).diff(inputs, observed)).toEqual({
+        action: "update",
+        reason: "backup timezone differs (running Europe/Warsaw, want UTC)",
+    });
+});
+
 test("diff is update when the image drifts", () => {
-    const observed = { outputs: {}, detail: { image: "restic/restic:0.18.0@sha256:old", schedule: "0 3 * * *", repo: "s3:s3.example.com/bucket" } };
+    const observed = { outputs: {}, detail: { image: "restic/restic:0.18.0@sha256:old", schedule: "0 3 * * *", repo: "s3:s3.example.com/bucket", timezone: "UTC" } };
     expect(createBackupProvider(fakeSsh().executor).diff(inputs, observed).action).toBe("update");
 });
 

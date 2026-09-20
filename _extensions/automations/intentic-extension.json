@@ -12,6 +12,7 @@
             "GET /automations/catalog",
             "GET /automations/senders/*",
             "GET /personas",
+            "GET /settings",
             "GET /ci/runs",
             "POST /automations",
             "POST /automations/*/enabled",

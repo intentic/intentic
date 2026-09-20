@@ -159,6 +159,10 @@ export const sourceAliases = (): Record<string, string> => ({
     // Derives a batch run's ids and manifest paths, shared by acceptance, documentation and maintenance so they can't
     // disagree on where a run lives.
     "@intentic/sandbox-contract/batch-runs": fromRoot("_shared/sandbox-contract/src/policy/batch-runs.ts"),
+    // Zone names, UTC day buckets and the cron-zone pair. Off the barrel because the modules that need it are pure
+    // projections (the usage window's day arithmetic, the automations clock) whose unit tests run without a DOM, and
+    // because the app's very first sandbox call — offering this browser's zone — must not wait on the whole contract.
+    "@intentic/sandbox-contract/time": fromRoot("_shared/sandbox-contract/src/time/zone.ts"),
     "@intentic/sandbox-contract": fromRoot("_shared/sandbox-contract/src/index.ts"),
     // Extension-registry file format, imported by the wire contract's schemas.ts; without this alias the dev server
     // resolves to a `dist/` that may not exist yet.

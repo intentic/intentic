@@ -1,4 +1,4 @@
-import { type Automation, type AutomationCatalog, type AutomationSummary, automationsContract, FRONT_DESK_PERSONA } from "@intentic/sandbox-contract";
+import { type Automation, type AutomationCatalog, type AutomationSummary, automationsContract, cronOptions, FRONT_DESK_PERSONA, type Zone } from "@intentic/sandbox-contract";
 import { implement, ORPCError } from "@orpc/server";
 import { Cron } from "croner";
 import { streamAgent } from "../agent/routes/agent.routes.js";
@@ -11,6 +11,7 @@ import { ISSUES_PROVIDER } from "../issues/provider.js";
 import { ensureFrontDeskPersona } from "../personas/front-desk.js";
 import type { AutomationRecord } from "./automations-store.js";
 import { automationCatalog, triggerSourceEvents } from "./catalog.js";
+import { sandboxZone, zoneOf } from "./schedule-zone.js";
 import { fireAutomation, nextRunOf, runHeldWake } from "./scheduler.js";
 
 // A moment already gone cannot be waited for. Refused at both doors that could arm one — saving a new automation, and
@@ -36,8 +37,8 @@ const doorOf = (automation: Automation): DoorKind | undefined => {
 // the list but never the firing string.
 // Minted here if the door has none yet, so an automation declared before the store existed gets its URL the first time
 // an operator looks.
-const listed = async (services: Services, automation: AutomationRecord, operator: boolean): Promise<AutomationSummary> => {
-    const nextRun = nextRunOf(automation);
+const listed = async (services: Services, automation: AutomationRecord, operator: boolean, sandbox: Zone): Promise<AutomationSummary> => {
+    const nextRun = nextRunOf(automation, sandbox);
     const door = doorOf(automation);
     const summary: AutomationSummary = { ...automation, ...(nextRun !== undefined ? { nextRun } : {}) };
     if (!operator || door === undefined) {
@@ -73,7 +74,9 @@ export const createAutomationsRoutes = (services: Services) => {
     return {
         list: i.list.handler(async ({ context }) => {
             const operator = operatorHere(services, context);
-            return { automations: await Promise.all((await services.automations.list()).map((automation) => listed(services, automation, operator))) };
+            // One read for the whole list, so every row's countdown is measured against the same clock.
+            const sandbox = await sandboxZone(services);
+            return { automations: await Promise.all((await services.automations.list()).map((automation) => listed(services, automation, operator, sandbox))) };
         }),
         catalog: i.catalog.handler(async () => await automationCatalog(services)),
         // Who has written to a source, admitted or not; the picker offers these by name and stores the id.
@@ -84,9 +87,15 @@ export const createAutomationsRoutes = (services: Services) => {
                 // Both halves matter: a pattern that won't parse, and one that parses into a moment that can never
                 // come (a fixed date in the past, the 30th of February). The second used to be accepted and then sit
                 // there reading as armed, since "no next run" is also what a switched-off row shows.
+                // Resolved BEFORE the try, which covers the cron parse and nothing else: a settings read that fails
+                // means the daemon could not answer, and reporting that as "invalid cron expression" would send the
+                // owner to edit a schedule that was never the problem.
+                const zone = zoneOf(input.trigger, await sandboxZone(services));
                 let next: Date | null;
                 try {
-                    next = new Cron(input.trigger.cron).nextRun();
+                    // In the zone it will actually be fired in, so "never fires" is judged against the same clock the
+                    // tick uses rather than the container's.
+                    next = new Cron(input.trigger.cron, cronOptions(zone)).nextRun();
                 } catch {
                     throw new ORPCError("BAD_REQUEST", { message: "invalid cron expression" });
                 }

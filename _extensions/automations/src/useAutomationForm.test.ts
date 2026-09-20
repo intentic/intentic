@@ -1,4 +1,5 @@
 import type { Automation, AutomationTemplate } from "@intentic/sandbox-contract";
+import { ZoneSchema } from "@intentic/sandbox-contract/time";
 import { describe, expect, it } from "vitest";
 import { computed, nextTick } from "vue";
 import type { AvailableSource } from "./catalog";
@@ -57,7 +58,10 @@ const LADDER = [{ provider: `claude`, model: `claude-sonnet-4-6` }, { provider: 
 
 const SOURCES = computed<readonly AvailableSource[]>(() => [DISCORD, CI]);
 const TEMPLATES = computed<readonly AutomationTemplate[]>(() => [FIX_CI, REVIEW]);
-const formState = () => useAutomationForm(SOURCES, TEMPLATES);
+// A sandbox zone that is NOT UTC and not the test runner's, so anything reading the process's own clock instead of
+// this shows up as a wrong answer rather than an accidentally right one.
+const SANDBOX_ZONE = computed(() => ZoneSchema.parse(`Europe/Warsaw`));
+const formState = () => useAutomationForm(SOURCES, TEMPLATES, SANDBOX_ZONE);
 
 describe(`the prompt follows the trigger`, () => {
     it(`arrives with the picked source's starter`, async () => {
@@ -166,6 +170,27 @@ describe(`editing preserves fields outside the changed control`, () => {
         // Zero means unlimited: the record represents it by omitting afterSessions, not by storing zero.
         form.afterSessions = 0;
         expect(build().trigger).toEqual({ kind: `schedule`, cron: `0 5 * * *` });
+    });
+
+    it(`round-trips a schedule's zone, and omits it when the sandbox's own answers`, () => {
+        const tokyo: Automation = {
+            id: `market`,
+            trigger: { kind: `schedule`, cron: `0 9 * * *`, tz: ZoneSchema.parse(`Asia/Tokyo`) },
+            prompt: `Open of business.`,
+            models: LADDER,
+            enabled: true,
+        };
+        const { form, load, build, effectiveZone } = formState();
+        load(tokyo);
+        expect(form.tz).toBe(`Asia/Tokyo`);
+        expect(effectiveZone.value).toBe(`Asia/Tokyo`);
+        expect(build()).toEqual(tokyo);
+
+        // Cleared means "follow the sandbox", which is stored as an ABSENT tz rather than the sandbox's id spelled
+        // out: writing the resolved zone down would freeze it, and moving the setting later would strand this row.
+        form.tz = ``;
+        expect(build().trigger).toEqual({ kind: `schedule`, cron: `0 9 * * *` });
+        expect(effectiveZone.value).toBe(`Europe/Warsaw`);
     });
 
     it(`round-trips a one-time wake through the reader's own clock`, () => {
