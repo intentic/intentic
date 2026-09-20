@@ -1194,28 +1194,23 @@ html[data-variant="desk"] {
     background: linear-gradient(180deg, transparent, rgb(var(--role-scrim) / calc(0.6 * var(--role-plate-veil))) 55%, var(--color-canvas) 96%);
     pointer-events: none;
 }
-/* ON A PHONE THE ART IS CROPPED TO ONE FIGURE, and which one is not a free choice. */
+/* Mobile artwork keeps both figures within the landscape frame. */
 @media (max-width: 48rem) {
     :root {
         --bar-height: 4rem;
         --role-plate-art: url("/assets/angkor/temple-900.avif");
-        --role-plate-dim: 0.65;
-        --role-plate-well-veil: 0.85;
+        --role-plate-dim: 0.85;
+        --role-plate-well-veil: 0.6;
     }
     .btn {
         max-width: 100%;
         white-space: normal;
         text-align: center;
     }
-    .plate-img {
-        aspect-ratio: auto;
-        bottom: 0;
-        background-position: 21% 0%;
-    }
     .plate-img::after {
-        display: none;
+        height: 65%;
     }
-/* Below the columns break the copy takes the whole width, so the well has nothing left to spare and becomes a plain top-down darkening. */
+    /* Full-width copy requires an even veil across the artwork. */
     .plate::after {
         background:
             linear-gradient(
