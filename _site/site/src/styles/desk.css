@@ -235,10 +235,6 @@ html[data-variant="desk"] .plate-fade {
     html[data-variant="desk"] {
         --role-plate-art: url("/assets/angkor/temple-desk-900.avif");
     }
-    /* The dark art crops to one figure on a phone; this one is symmetrical, so it keeps its centre. */
-    html[data-variant="desk"] .plate-img {
-        background-position: 50% 0%;
-    }
 }
 @media (min-width: 100rem) {
     html[data-variant="desk"] {
