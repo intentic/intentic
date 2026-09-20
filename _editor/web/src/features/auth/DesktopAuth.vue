@@ -265,8 +265,6 @@ onMounted(() => void hand());
                         {{ t(`auth.desktopAuth.troubleSigningInUse`) }}
                     </button>
                 </template>
-
-                <p class="fine">{{ t(`auth.desktopAuth.onlyOneSignIn`) }}</p>
             </section>
 
             <!-- /login's rail of stations, made live: the same three stops, lit as this page passes them. -->
@@ -410,16 +408,6 @@ onMounted(() => void hand());
 }
 .escape:hover {
     color: var(--ink);
-}
-
-.fine {
-    margin-top: 1.1rem;
-    padding-top: 1rem;
-    border-top: 1px solid var(--rule);
-    font-size: 0.75rem;
-    line-height: 1.7;
-    color: var(--ink-subtle);
-    text-wrap: pretty;
 }
 
 /* THE RAIL — /login's three stations, reporting instead of promising. */

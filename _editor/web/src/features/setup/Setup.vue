@@ -1495,12 +1495,6 @@ const warmSandboxCredential = async (): Promise<void> => {
                     </Button>
                 </div>
 
-                <!-- Matches the sign-in rail's second beat verbatim; true in both lanes, since attach means already reachable. -->
-                <p class="entry-eyebrow mast-eyebrow">
-                    <span class="entry-lozenge"></span>
-                    <span>{{ t(`setup.setup.sandboxWaiting`) }}</span>
-                </p>
-
                 <!-- One sentence only; the door's headline gets two, but here the loudest thing on screen has to be a rung. -->
                 <h1 class="mast-headline">
                     <span class="entry-display">{{ t(`setup.setup.setUpWorkspace`) }}</span
@@ -2341,9 +2335,6 @@ const warmSandboxCredential = async (): Promise<void> => {
 /* Must not read as an action: the quiet tier already draws it right; this only aligns it with the mark opposite. */
 .mast-back {
     font-size: 0.8125rem;
-}
-.mast-eyebrow {
-    margin-bottom: 0.9rem;
 }
 .mast-headline {
     /* Sized between the door's headline and a page hero, since this one shares its screen with a decision. */
