@@ -52,18 +52,22 @@ step() {
     fi
 }
 
-# Peek at the args only as far as the failure messages need (the first non-flag positional is the setup
-# code); everything is forwarded to ic untouched, which owns the real parsing.
-SETUP_CODE_PEEK=""
-for arg in "$@"; do
-    case "$arg" in
-        -*) ;;
+# THE SETUP CODE IS THE FIRST ARGUMENT, and it is lifted out here rather than forwarded in the pile.
+#
+# It is a value the platform minted, so it may be any string at all — and `-*` cannot tell a code that begins
+# with a hyphen from a flag. The flags this shim is ever handed are ic's own and are named one by one for that
+# reason; anything else in first position is the code, whatever it starts with. It reaches ic behind `--`
+# (the exec at the foot), which is the only place a hyphen-leading value is safe from being read as a flag.
+SETUP_CODE=""
+if [ $# -gt 0 ]; then
+    case "$1" in
+        -y | --yes | --force) ;;
         *)
-            SETUP_CODE_PEEK="$arg"
-            break
+            SETUP_CODE="$1"
+            shift
             ;;
     esac
-done
+fi
 
 # The one-liner carries `sudo` ONLY so that a missing Docker can be installed. Docker is missing and we are
 # not root, so there is nothing to do but name the two ways forward. Printing the exact command back is the
@@ -78,8 +82,8 @@ require_root_to_install_docker() {
     echo "  …or let intentic install it, by re-running with sudo:" >&2
     if [ -n "${CF_TOKEN:-}" ]; then
         echo "      copy the command from the setup page again with \"I already have Docker\" switched off" >&2
-    elif [ -n "$SETUP_CODE_PEEK" ]; then
-        echo "      curl -fsSL https://intentic.dev/connect | sudo sh -s -- $SETUP_CODE_PEEK" >&2
+    elif [ -n "$SETUP_CODE" ]; then
+        echo "      curl -fsSL https://intentic.dev/connect | sudo sh -s -- $SETUP_CODE" >&2
     else
         echo "      curl -fsSL https://intentic.dev/connect | sudo sh" >&2
     fi
@@ -294,6 +298,10 @@ if [ -z "$IC" ]; then
     fi
 fi
 
-# Everything else — claim, tunnels, launch, sync — is ic's. Args pass through untouched (the setup code
-# positional, -y); the env this shell carries (CF_TOKEN, SANDBOX_IMAGE, SELF_HOST, …) rides along.
+# Everything else — claim, tunnels, launch, sync — is ic's. Flags pass through untouched; the setup code goes
+# last, behind `--`, so a code beginning with a hyphen is a value rather than an unknown flag. The env this
+# shell carries (CF_TOKEN, SANDBOX_IMAGE, SELF_HOST, …) rides along.
+if [ -n "$SETUP_CODE" ]; then
+    exec "$IC" sandbox connect "$@" -- "$SETUP_CODE"
+fi
 exec "$IC" sandbox connect "$@"
