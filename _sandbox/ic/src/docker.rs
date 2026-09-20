@@ -153,10 +153,46 @@ pub fn capture_with_stdin(args: &[&str], input: &[u8], log: &Log) -> Result<Stri
     Ok(String::from_utf8_lossy(&out.stdout).trim_end().to_string())
 }
 
+/// What a streamed command did: its exit, and the tail of what it printed. The log holds all of it, but the
+/// log is on the user's machine — `said` is the only copy a caller can put into the sentence it fails with.
+pub struct Streamed {
+    pub ok: bool,
+    pub said: String,
+}
+
+/// The tail of a streamed command's output, shared by its two reader threads. Capped at [`SAID_TAIL`] bytes:
+/// a pull's chatter is unbounded, and only its last words diagnose a failure.
+#[derive(Clone, Default)]
+struct Said(std::sync::Arc<std::sync::Mutex<String>>);
+
+const SAID_TAIL: usize = 4096;
+
+impl Said {
+    fn push(&self, text: &str) {
+        let Ok(mut held) = self.0.lock() else { return };
+        held.push_str(text);
+        if held.len() > SAID_TAIL {
+            // Drop from the front to the next char boundary — a cut through a multi-byte char would panic.
+            let mut cut = held.len() - SAID_TAIL;
+            while cut < held.len() && !held.is_char_boundary(cut) {
+                cut += 1;
+            }
+            held.drain(..cut);
+        }
+    }
+
+    fn into_inner(self) -> String {
+        self.0
+            .lock()
+            .map(|held| held.clone())
+            .unwrap_or_else(|_| String::new())
+    }
+}
+
 /// Live output to the terminal AND the log — pulls and builds, where progress is the user experience and
-/// the log is the postmortem. Ok(true) on success, Ok(false) on a non-zero exit (the caller decides whether
-/// that ends the flow — a failed pull may fall back to a local image).
-pub fn stream(args: &[&str], log: &Log) -> Result<bool> {
+/// the log is the postmortem. `ok` is false on a non-zero exit (the caller decides whether that ends the
+/// flow — a failed pull may fall back to a local image).
+pub fn stream(args: &[&str], log: &Log) -> Result<Streamed> {
     let mut child = docker(args)
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -166,14 +202,22 @@ pub fn stream(args: &[&str], log: &Log) -> Result<bool> {
     let stderr = child.stderr.take().expect("stderr was piped");
     let out_log = log.clone();
     let err_log = log.clone();
-    let out_thread = std::thread::spawn(move || tee(stdout, &out_log, &mut std::io::stdout()));
-    let err_thread = std::thread::spawn(move || tee(stderr, &err_log, &mut std::io::stderr()));
+    let said = Said::default();
+    let out_said = said.clone();
+    let err_said = said.clone();
+    let out_thread =
+        std::thread::spawn(move || tee(stdout, &out_log, &mut std::io::stdout(), &out_said));
+    let err_thread =
+        std::thread::spawn(move || tee(stderr, &err_log, &mut std::io::stderr(), &err_said));
     let status = child
         .wait()
         .map_err(|err| Fail(format!("docker did not finish: {err}")))?;
     let _ = out_thread.join();
     let _ = err_thread.join();
-    Ok(status.success())
+    Ok(Streamed {
+        ok: status.success(),
+        said: said.into_inner(),
+    })
 }
 
 /// `stream`, with stdin fed from `input` — the stdin `docker build -t <tag> -` shape, where progress is the
@@ -203,8 +247,13 @@ pub fn stream_with_stdin(args: &[&str], input: &[u8], log: &Log) -> Result<bool>
     let stderr = child.stderr.take().expect("stderr was piped");
     let out_log = log.clone();
     let err_log = log.clone();
-    let out_thread = std::thread::spawn(move || tee(stdout, &out_log, &mut std::io::stdout()));
-    let err_thread = std::thread::spawn(move || tee(stderr, &err_log, &mut std::io::stderr()));
+    // A build's output is read from the log, not from a caller's message, so nothing keeps its tail.
+    let out_said = Said::default();
+    let err_said = Said::default();
+    let out_thread =
+        std::thread::spawn(move || tee(stdout, &out_log, &mut std::io::stdout(), &out_said));
+    let err_thread =
+        std::thread::spawn(move || tee(stderr, &err_log, &mut std::io::stderr(), &err_said));
     let status = child
         .wait()
         .map_err(|err| Fail(format!("docker did not finish: {err}")))?;
@@ -213,7 +262,7 @@ pub fn stream_with_stdin(args: &[&str], input: &[u8], log: &Log) -> Result<bool>
     Ok(status.success())
 }
 
-fn tee(mut from: impl Read, log: &Log, terminal: &mut impl Write) {
+fn tee(mut from: impl Read, log: &Log, terminal: &mut impl Write, said: &Said) {
     let mut buf = [0u8; 8192];
     while let Ok(read) = from.read(&mut buf) {
         if read == 0 {
@@ -222,6 +271,7 @@ fn tee(mut from: impl Read, log: &Log, terminal: &mut impl Write) {
         let _ = terminal.write_all(&buf[..read]);
         let _ = terminal.flush();
         log.write(&buf[..read]);
+        said.push(&String::from_utf8_lossy(&buf[..read]));
     }
 }
 
@@ -231,7 +281,7 @@ pub fn stream_lines(
     log: &Log,
     keep: fn(&str) -> bool,
     show: fn(&str),
-) -> Result<bool> {
+) -> Result<Streamed> {
     let mut child = docker(args)
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -241,20 +291,26 @@ pub fn stream_lines(
     let stderr = child.stderr.take().expect("stderr was piped");
     let out_log = log.clone();
     let err_log = log.clone();
-    let out_thread = std::thread::spawn(move || sift(stdout, &out_log, keep, show));
-    let err_thread = std::thread::spawn(move || sift(stderr, &err_log, keep, show));
+    let said = Said::default();
+    let out_said = said.clone();
+    let err_said = said.clone();
+    let out_thread = std::thread::spawn(move || sift(stdout, &out_log, keep, show, &out_said));
+    let err_thread = std::thread::spawn(move || sift(stderr, &err_log, keep, show, &err_said));
     let status = child
         .wait()
         .map_err(|err| Fail(format!("docker did not finish: {err}")))?;
     let _ = out_thread.join();
     let _ = err_thread.join();
-    Ok(status.success())
+    Ok(Streamed {
+        ok: status.success(),
+        said: said.into_inner(),
+    })
 }
 
 /// Line-buffered because the decision is per LINE and the kernel's read sizes are not: a chunk boundary
 /// through the middle of `6e3729cf69e0: Extracting` would leak half a layer report onto the screen and hide
 /// the other half. Docker also rewrites its status lines with a carriage return, so those split too.
-fn sift(from: impl Read, log: &Log, keep: fn(&str) -> bool, show: fn(&str)) {
+fn sift(from: impl Read, log: &Log, keep: fn(&str) -> bool, show: fn(&str), said: &Said) {
     let mut reader = std::io::BufReader::new(from);
     let mut pending = Vec::new();
     let mut buf = [0u8; 8192];
@@ -263,6 +319,7 @@ fn sift(from: impl Read, log: &Log, keep: fn(&str) -> bool, show: fn(&str)) {
             break;
         }
         log.write(&buf[..read]);
+        said.push(&String::from_utf8_lossy(&buf[..read]));
         pending.extend_from_slice(&buf[..read]);
         while let Some(at) = pending
             .iter()
@@ -413,33 +470,158 @@ pub fn logs_into(container: &str, tail: &str, log: &Log) {
     }
 }
 
-/// Pull a published image, with the two recoveries the scripts learned: an existing local copy beats a
-/// failed pull, and a stale `docker login ghcr.io` (Docker Desktop's credential store) makes docker present
-/// a dead token instead of pulling anonymously — clear it and retry once. After that, "denied" means the
-/// registry refuses the package to EVERYONE: a packaging fault on our side, and the message says so, because
-/// the older wording sent users hunting through their own Docker config for a fault that was ours.
+/// Why a pull stopped, as docker's own words say it — and every branch here answers a different question:
+/// who has to act. Only a registry that refuses the image to everyone is ours; a transfer that broke is
+/// nobody's fault and beaten by another attempt, so a failure is never called a packaging fault on the
+/// strength of a non-zero exit alone.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum PullRefusal {
+    /// The registry answered and refuses this package anonymously: it is private, and publishing it is ours.
+    Refused,
+    /// The registry answered and has no such reference: the tag is missing from the package, also ours.
+    Missing,
+    /// Docker could not read its own credential store, so nothing reached the registry: the machine's to fix.
+    Credentials,
+    /// The registry answered and the transfer did not finish: network, and a re-run usually beats it.
+    Broken,
+}
+
+/// Attempts a broken transfer gets before the flow stops. A pull that dies mid-transfer keeps the layers that
+/// finished, so each retry is cheaper than the one before.
+const PULL_ATTEMPTS: u32 = 3;
+
+/// Pull a published image, with the recoveries this can make itself: an existing local copy beats a failed
+/// pull, a stale `docker login ghcr.io` (Docker Desktop's credential store) makes docker present a dead token
+/// instead of pulling anonymously, and a broken transfer is retried. The login is cleared only for a failure
+/// shaped like an auth refusal — a user's own ghcr.io login is not a network blip's to throw away.
 pub fn pull(image: &str, log: &Log) -> Result<()> {
     log.section(&format!("docker pull {image}"));
-    if pull_once(image, log)? {
-        return Ok(());
+    let mut cleared_login = false;
+    let mut attempt = 0;
+    loop {
+        attempt += 1;
+        let pulled = pull_once(image, log)?;
+        if pulled.ok {
+            return Ok(());
+        }
+        if image_exists(image) {
+            crate::ui::warn("pull failed but the image exists locally — using the local copy.");
+            return Ok(());
+        }
+        let refusal = pull_refusal(&pulled.said);
+        match refusal {
+            PullRefusal::Refused if !cleared_login => {
+                cleared_login = true;
+                crate::ui::warn(
+                    "the registry refused the pull — clearing a stale ghcr.io login and retrying anonymously…",
+                );
+                quiet(&["logout", "ghcr.io"]);
+            }
+            PullRefusal::Broken if attempt < PULL_ATTEMPTS => {
+                let wait = pull_backoff(attempt);
+                crate::ui::warn(&format!(
+                    "the download broke before it finished — retrying in {wait}s (attempt {} of {PULL_ATTEMPTS})…",
+                    attempt + 1
+                ));
+                std::thread::sleep(std::time::Duration::from_secs(wait));
+            }
+            _ => bail!("{}", pull_refusal_message(image, refusal, &pulled.said)),
+        }
     }
-    if image_exists(image) {
-        crate::ui::warn("pull failed but the image exists locally — using the local copy.");
-        return Ok(());
+}
+
+/// Seconds before the next attempt: long enough for a blip to pass, short enough that a person waits it out.
+fn pull_backoff(attempt: u32) -> u64 {
+    match attempt {
+        1 => 3,
+        _ => 10,
     }
-    crate::ui::warn("pull failed — clearing a stale ghcr.io login and retrying anonymously…");
-    quiet(&["logout", "ghcr.io"]);
-    if pull_once(image, log)? {
-        return Ok(());
+}
+
+/// Read docker's output for the one distinction that decides who acts. Needles are the registry's own error
+/// codes, matched narrowly: Windows' "Access is denied." is a daemon refusing this account, not a registry
+/// refusing this package, and must never be read as one.
+fn pull_refusal(said: &str) -> PullRefusal {
+    let text = said.to_lowercase();
+    // Read first: the credential store fails before any registry answer, and its message is the only one
+    // carrying these words.
+    if text.contains("error getting credentials")
+        || text.contains("credential helper")
+        || text.contains("credsstore")
+    {
+        return PullRefusal::Credentials;
     }
-    bail!(
-        "{image} could not be pulled without a login. An \"unauthorized\" or \"denied\" above means the image's registry package is not public — that is a packaging fault on our side, not a problem with your machine. Report it, or if this org is yours make the package public at https://github.com/orgs/intentic/packages, then re-run."
-    );
+    if text.contains("unauthorized")
+        || text.contains("authentication required")
+        || text.contains("denied:")
+        || text.contains("access denied")
+        || text.contains("insufficient_scope")
+        || text.contains("forbidden")
+    {
+        return PullRefusal::Refused;
+    }
+    if text.contains("manifest unknown")
+        || text.contains("manifest for")
+        || text.contains("repository does not exist")
+        || text.contains("name unknown")
+    {
+        return PullRefusal::Missing;
+    }
+    PullRefusal::Broken
+}
+
+/// The sentence a stopped pull ends on: what happened, who fixes it, and docker's own last line — which is
+/// the only trace of the cause that reaches a user whose install log stays on their machine.
+fn pull_refusal_message(image: &str, refusal: PullRefusal, said: &str) -> String {
+    let body = match refusal {
+        PullRefusal::Refused => format!(
+            "the registry refused an anonymous pull of {image} — its package is not public, which is a packaging fault on our side, not a problem with your machine. Report it, or if this org is yours make the package public at https://github.com/orgs/intentic/packages, then re-run."
+        ),
+        PullRefusal::Missing => format!(
+            "the registry has no {image} — that reference is missing from the package, which is ours to fix, not a problem with your machine. Report it, then re-run."
+        ),
+        PullRefusal::Credentials => format!(
+            "docker could not read its own saved credentials, so the pull of {image} never reached the registry. Run 'docker logout ghcr.io' (or remove \"credsStore\" from ~/.docker/config.json), then re-run."
+        ),
+        PullRefusal::Broken => format!(
+            "{image} did not finish downloading in {PULL_ATTEMPTS} attempts. The registry answered and the transfer broke, so this is the network between this machine and the registry rather than anything to fix here — re-run when it is steadier: the layers that finished are kept, so the next pull resumes rather than starting over."
+        ),
+    };
+    match docker_last_words(said) {
+        Some(words) => format!("{body} Docker said: {words}"),
+        None => body,
+    }
+}
+
+/// Docker's last sentence about the pull, picked out of the layer chatter the readout already absorbed —
+/// trimmed to fit a message a person reads. None when docker printed nothing but chatter.
+fn docker_last_words(said: &str) -> Option<String> {
+    let line = said
+        .split(['\n', '\r'])
+        .map(str::trim)
+        .filter(|line| !line.is_empty() && !is_layer_chatter(line))
+        .next_back()?;
+    let kept: String = line.chars().take(200).collect();
+    Some(if kept.chars().count() < line.chars().count() {
+        format!("{kept}…")
+    } else {
+        kept
+    })
+}
+
+/// A line the pull readout accounts for: a layer report, the `tag: Pulling from repo` header, or a bare
+/// token (an image reference, a digest). Everything else docker prints is a sentence about the pull.
+fn is_layer_chatter(line: &str) -> bool {
+    let Some((head, rest)) = line.split_once(": ") else {
+        return !line.contains(char::is_whitespace);
+    };
+    (head.len() >= 6 && head.chars().all(|c| c.is_ascii_hexdigit()))
+        || rest.starts_with("Pulling from ")
 }
 
 /// One attempt. A pipe gets docker's own output byte for byte — it is what an install log has always held,
 /// and the desktop app counts those same layer lines for its bar. A terminal gets the count instead.
-fn pull_once(image: &str, log: &Log) -> Result<bool> {
+fn pull_once(image: &str, log: &Log) -> Result<Streamed> {
     if !crate::ui::is_rich() {
         return stream(&["pull", image], log);
     }
@@ -453,7 +635,136 @@ fn pull_once(image: &str, log: &Log) -> Result<bool> {
 
 #[cfg(test)]
 mod tests {
-    use super::wrong_container_platform;
+    use super::{
+        docker_last_words, pull_refusal, pull_refusal_message, wrong_container_platform,
+        PullRefusal,
+    };
+
+    /* WHO HAS TO ACT, read out of docker's words — the one question a failed pull must not guess at. */
+
+    #[test]
+    fn a_registry_that_refuses_the_package_is_ours() {
+        assert_eq!(
+            pull_refusal("denied: requested access to the resource is denied"),
+            PullRefusal::Refused
+        );
+        assert_eq!(
+            pull_refusal("Error response from daemon: unauthorized: authentication required"),
+            PullRefusal::Refused
+        );
+        assert_eq!(
+            pull_refusal(
+                "pull access denied for x, repository does not exist or may require 'docker login'"
+            ),
+            PullRefusal::Refused
+        );
+    }
+
+    #[test]
+    fn a_missing_reference_is_ours_too() {
+        assert_eq!(
+            pull_refusal(
+                "manifest for ghcr.io/intentic/sandbox:stable not found: manifest unknown"
+            ),
+            PullRefusal::Missing
+        );
+    }
+
+    #[test]
+    fn a_transfer_that_broke_is_nobodys_packaging_fault() {
+        // Every one of these ended a real pull mid-download. None of them says anything about our registry,
+        // and calling them a refusal sends a user to settings they cannot change and did not break.
+        for said in [
+            "failed to copy: httpReadSeeker: failed open: unexpected status code 503",
+            "error pulling image configuration: download failed after attempts=6: dial tcp: i/o timeout",
+            "net/http: TLS handshake timeout",
+            "read tcp 10.0.0.2:52344->140.82.121.33:443: read: connection reset by peer",
+            "failed to register layer: no space left on device",
+            "toomanyrequests: retry-after 300s",
+        ] {
+            assert_eq!(pull_refusal(said), PullRefusal::Broken, "{said}");
+        }
+    }
+
+    #[test]
+    fn a_windows_daemon_refusing_this_account_is_not_a_registry_refusal() {
+        // "Access is denied." is the engine refusing this user, one word away from the registry's "denied:".
+        assert_eq!(
+            pull_refusal(
+                "error during connect: in the default daemon configuration on Windows, ... Access is denied."
+            ),
+            PullRefusal::Broken
+        );
+    }
+
+    #[test]
+    fn a_broken_credential_store_points_at_the_store() {
+        let refusal = pull_refusal("error getting credentials - err: exit status 1, out: ``");
+        assert_eq!(refusal, PullRefusal::Credentials);
+        let message = pull_refusal_message("ghcr.io/intentic/sandbox:stable", refusal, "");
+        assert!(message.contains("docker logout ghcr.io"), "{message}");
+    }
+
+    #[test]
+    fn only_a_real_refusal_sends_a_user_to_our_packaging() {
+        let ours = pull_refusal_message(
+            "ghcr.io/intentic/sandbox:stable",
+            PullRefusal::Refused,
+            "denied: requested access to the resource is denied",
+        );
+        assert!(ours.contains("packaging fault on our side"), "{ours}");
+        assert!(
+            ours.contains("https://github.com/orgs/intentic/packages"),
+            "{ours}"
+        );
+
+        let theirs = pull_refusal_message(
+            "ghcr.io/intentic/sandbox:stable",
+            PullRefusal::Broken,
+            "net/http: TLS handshake timeout",
+        );
+        assert!(!theirs.contains("packaging"), "{theirs}");
+        assert!(!theirs.contains("not public"), "{theirs}");
+        assert!(theirs.contains("re-run"), "{theirs}");
+        // Docker's own line rides along: the install log stays on the user's machine, this message does not.
+        assert!(theirs.contains("TLS handshake timeout"), "{theirs}");
+    }
+
+    #[test]
+    fn dockers_last_words_survive_the_layer_chatter() {
+        let said = concat!(
+            "stable: Pulling from intentic/sandbox\n",
+            "6e3729cf69e0: Pulling fs layer\r",
+            "6e3729cf69e0: Downloading [===>   ] 12MB/45MB\r",
+            "error pulling image configuration: download failed after attempts=6: i/o timeout\n",
+            "c4e6c4d4ab21: Already exists\n",
+        );
+        assert_eq!(
+            docker_last_words(said).as_deref(),
+            Some(
+                "error pulling image configuration: download failed after attempts=6: i/o timeout"
+            )
+        );
+    }
+
+    #[test]
+    fn a_pull_that_printed_only_chatter_says_nothing() {
+        assert_eq!(
+            docker_last_words(
+                "stable: Pulling from intentic/sandbox\nghcr.io/intentic/sandbox:stable\n"
+            ),
+            None
+        );
+        assert_eq!(docker_last_words(""), None);
+    }
+
+    #[test]
+    fn a_long_line_is_cut_where_a_person_stops_reading() {
+        let words = docker_last_words(&format!("error: {}", "x".repeat(400)))
+            .expect("a sentence is not chatter");
+        assert_eq!(words.chars().count(), 201, "200 chars and the ellipsis");
+        assert!(words.ends_with('…'), "{words}");
+    }
 
     /* The one decision in this file that is pure, and the one whose absence let a whole class of Windows install failure through: the daemon answers. */
 

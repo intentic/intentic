@@ -93,24 +93,68 @@ if (-not $HostName) {
     if (-not $HostName) { $HostName = 'host' }
 }
 
-# Pull a published image, clearing a stale ghcr.io login and retrying anonymously on failure (images are public).
+# Which failure a pull hit, in docker's own words - the same rule ic's docker.rs applies. The needles are the
+# registry's own error codes, matched narrowly: Windows' "Access is denied." is the DAEMON refusing this
+# account, and reading it as the registry refusing the package would blame our packaging for a local fault.
+function Get-PullRefusal([string]$Said) {
+    $text = $Said.ToLowerInvariant()
+    # Read first: the credential store fails before any registry answer, and only it says these words.
+    if ($text -match 'error getting credentials|credential helper|credsstore') { return 'credentials' }
+    if ($text -match 'unauthorized|authentication required|denied:|access denied|insufficient_scope|forbidden') { return 'refused' }
+    if ($text -match 'manifest unknown|manifest for|repository does not exist|name unknown') { return 'missing' }
+    return 'broken'
+}
+
+# Attempts a broken transfer gets: a pull that dies mid-transfer keeps the layers that finished, so each retry
+# is cheaper than the one before.
+$PullAttempts = 3
+
+# Pull a published image. A stale ghcr.io login (Docker Desktop's credential store presenting a dead token) is
+# cleared once, but only for a failure shaped like an auth refusal - a user's own login is not a network blip's
+# to throw away - and a torn download is retried rather than reported as a packaging fault.
 function Invoke-ImagePull([string]$Image) {
     Write-Host "intentic: pulling $Image (first run can take a minute)..."
-    docker pull $Image
-    if ($LASTEXITCODE -ne 0) {
-        Write-Host 'intentic: pull failed - clearing a stale ghcr.io login and retrying anonymously...'
-        docker logout ghcr.io *> $null
-        docker pull $Image
-        if ($LASTEXITCODE -ne 0) {
-            # The stale-login guess has been cleared and the anonymous retry failed too, so an
-            # "unauthorized"/"denied" here means the package is refused to everyone - ours to fix, not the
-            # user's (a GHCR package is private until made public by hand; see publish-images.sh).
-            Write-Host "intentic: $Image could not be pulled without a login - an ""unauthorized"" or ""denied"" above means"
-            Write-Host '          its registry package is not public, which is a packaging fault on our side. Report it, or if'
-            Write-Host '          this org is yours make the package public at https://github.com/orgs/intentic/packages.'
-            Write-Error "failed to pull $Image (see the docker output above)."
-            exit 1
+    $clearedLogin = $false
+    $attempt = 0
+    while ($true) {
+        $attempt++
+        $said = ((docker pull $Image 2>&1 | ForEach-Object { Write-Host $_; $_ }) -join "`n")
+        if ($LASTEXITCODE -eq 0) { return }
+        $refusal = Get-PullRefusal $said
+        if ($refusal -eq 'refused' -and -not $clearedLogin) {
+            $clearedLogin = $true
+            Write-Host 'intentic: the registry refused the pull - clearing a stale ghcr.io login and retrying anonymously...'
+            docker logout ghcr.io *> $null
+            continue
         }
+        if ($refusal -eq 'broken' -and $attempt -lt $PullAttempts) {
+            $wait = if ($attempt -eq 1) { 3 } else { 10 }
+            Write-Host "intentic: the download broke before it finished - retrying in ${wait}s (attempt $($attempt + 1) of $PullAttempts)..."
+            Start-Sleep -Seconds $wait
+            continue
+        }
+        switch ($refusal) {
+            'refused' {
+                Write-Host "intentic: the registry refused an anonymous pull of $Image - its package is not public, which is a"
+                Write-Host '          packaging fault on our side, not a problem with your machine. Report it, or if this org is'
+                Write-Host '          yours make the package public at https://github.com/orgs/intentic/packages.'
+            }
+            'missing' {
+                Write-Host "intentic: the registry has no $Image - that reference is missing from the package, which is ours to"
+                Write-Host '          fix, not a problem with your machine. Report it, then re-run.'
+            }
+            'credentials' {
+                Write-Host "intentic: docker could not read its own saved credentials, so the pull of $Image never reached the"
+                Write-Host '          registry. Run ''docker logout ghcr.io'', then re-run.'
+            }
+            default {
+                Write-Host "intentic: $Image did not finish downloading in $PullAttempts attempts. The registry answered and the"
+                Write-Host '          transfer broke, so this is the network between this machine and the registry rather than'
+                Write-Host '          anything to fix here - re-run when it is steadier: the layers that finished are kept.'
+            }
+        }
+        Write-Error "failed to pull $Image (see the docker output above)."
+        exit 1
     }
 }
 
