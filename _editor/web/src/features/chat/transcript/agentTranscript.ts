@@ -1,4 +1,4 @@
-import type { AgentHarness, AgentProvider, TranscriptRow, TurnEnding } from "@intentic/sandbox-contract";
+import type { AgentHarness, AgentProvider, TranscriptRow, TranscriptTool, TurnEnding } from "@intentic/sandbox-contract";
 import { queryClient, UNPERSISTED } from "../../../lib/queryPersistence";
 import { sandboxRequestVia } from "../../sandbox/client/sandboxClient";
 import { supportsRoute } from "../../sandbox/overview/useDaemonRoutes";
@@ -86,3 +86,16 @@ export const agentTranscript = (conversationId: string, at?: string): Promise<Ag
 // Not a cached query, deliberately: this key holds the conversation's opening page, and filing older pages there would
 // paint the middle of a chat on next open. Appended to that conversation's own state instead.
 export const olderTranscriptPage = (conversationId: string, before: number, at?: string): Promise<AgentTranscript> => read(conversationId, at, before);
+
+// A delegation's own calls, which the page counts (`nested`) rather than carries. Fetched on the press that opens the
+// card, so reopening a conversation full of delegations costs the cards, not their runs. A failed read is empty, not an
+// error: the card simply stays as it was and the next press asks again.
+export const agentToolChildren = async (conversationId: string, toolId: string, at?: string): Promise<TranscriptTool[]> => {
+    const path = `/agents/${encodeURIComponent(conversationId)}/transcript/tools/${encodeURIComponent(toolId)}`;
+    const response = await sandboxRequestVia(at, path);
+    if (!response.ok) {
+        return [];
+    }
+    const body = (await response.json()) as { children?: TranscriptTool[] };
+    return body.children ?? [];
+};

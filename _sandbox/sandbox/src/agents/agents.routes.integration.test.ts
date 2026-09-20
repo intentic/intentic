@@ -7,7 +7,7 @@ import { join } from "node:path";
 import { expect, test, vi } from "vitest";
 import { SETTLES } from "@intentic/testing/vitest";
 
-import type { TranscriptRow } from "@intentic/sandbox-contract";
+import type { TranscriptRow, TranscriptTool } from "@intentic/sandbox-contract";
 
 import { createApp } from "../app.js";
 
@@ -15,7 +15,7 @@ import type { Services } from "../composition.js";
 
 import { extensionProcessKey } from "../extensions/extension-processes.js";
 
-import { windowOf } from "../sessions/transcript-record.js";
+import { toolChildrenOf, transcriptPageOf } from "../sessions/agent-transcript.js";
 
 import { fileWebchatOutbox } from "../webchat/webchat-outbox.js";
 
@@ -330,7 +330,8 @@ test("agents.search reads the daemon transcript for a provider with no SDK promp
                 fork: async () => {},
                 append: async () => {},
                 // Derived from the same record `read` returns, so the fake cannot disagree with itself.
-                page: async (agent, window = {}) => windowOf(codexSearchTranscript(agent.id), window),
+                page: async (agent, window = {}) => transcriptPageOf(codexSearchTranscript(agent.id), window),
+                toolChildren: async (agent, toolId) => toolChildrenOf(codexSearchTranscript(agent.id), toolId),
                 count: async (agent) => codexSearchTranscript(agent.id).length,
                 truncate: async (agent, keep) => Math.max(0, codexSearchTranscript(agent.id).length - keep),
             },
@@ -498,7 +499,8 @@ test("agents.place appends the user's words as the agent's, retires the session,
                     append: async (agent, messages) => void records.set(agent.id, [...(records.get(agent.id) ?? []), ...messages]),
                     // Uses production's own window rule, so this test cannot pass a shape the daemon later disagrees
                     // with.
-                    page: async (agent, window = {}) => windowOf(records.get(agent.id) ?? [], window),
+                    page: async (agent, window = {}) => transcriptPageOf(records.get(agent.id) ?? [], window),
+                    toolChildren: async (agent, toolId) => toolChildrenOf(records.get(agent.id) ?? [], toolId),
                     count: async (agent) => (records.get(agent.id) ?? []).length,
                     truncate: async () => 0,
                 },
@@ -532,6 +534,45 @@ test("agents.place appends the user's words as the agent's, retires the session,
     expect(await errorCode(client.agents.place({ id: "ghost", text: "boo" }))).toBe("NOT_FOUND");
 });
 
+// A page counts a delegation's calls rather than carrying them, so this route is the way back to them — and the only
+// one an archived conversation has, since the subagent registry is an in-memory map swept on a schedule.
+test("agents.toolChildren hands back the calls the transcript page left counted", async () => {
+    const records = new Map<string, TranscriptRow[]>();
+    const child: TranscriptTool = { id: "call_child", name: "Bash", category: "execute", status: "completed", target: "ls" };
+    const client = clientFor(
+        createApp(
+            services({
+                async *agent() {
+                    yield { kind: "done" };
+                },
+                transcripts: {
+                    read: async (agent) => records.get(agent.id) ?? [],
+                    fork: async () => {},
+                    append: async (agent, messages) => void records.set(agent.id, [...(records.get(agent.id) ?? []), ...messages]),
+                    page: async (agent, window = {}) => transcriptPageOf(records.get(agent.id) ?? [], window),
+                    toolChildren: async (agent, toolId) => toolChildrenOf(records.get(agent.id) ?? [], toolId),
+                    count: async (agent) => (records.get(agent.id) ?? []).length,
+                    truncate: async () => 0,
+                },
+            }),
+        ),
+    );
+    await runAgentTurn(client, { prompt: "delegate it", conversationId: "conv1", isolated: true });
+    records.set("conv1", [
+        { role: "user", text: "delegate it" },
+        { role: "assistant", text: "done", tools: [{ id: "call_agent", name: "Agent", category: "other", status: "completed", children: [child] }] },
+    ]);
+
+    const card = (await client.agents.transcript({ id: "conv1" })).messages.at(-1)?.tools?.[0];
+    expect(card?.nested).toBe(1);
+    expect(card?.children).toBeUndefined();
+
+    expect(await client.agents.toolChildren({ id: "conv1", toolId: "call_agent" })).toEqual({ children: [child] });
+    // A card the record no longer holds answers empty; the chat folds open onto nothing rather than failing.
+    expect(await client.agents.toolChildren({ id: "conv1", toolId: "call_missing" })).toEqual({ children: [] });
+    expect(await errorCode(client.agents.toolChildren({ id: "ghost", toolId: "call_agent" }))).toBe("NOT_FOUND");
+});
+
 // A channel conversation delivers the placed line through the provider's gateway before appending; a failed delivery
 // refuses the place. Tests run against real extension manifests, matching production.
 
@@ -555,7 +596,8 @@ const channelPlaceHarness = (ports: Record<string, number>, activity?: unknown[]
                     append: async (agent, messages) => void records.set(agent.id, [...(records.get(agent.id) ?? []), ...messages]),
                     // Uses production's own window rule, so this test cannot pass a shape the daemon later disagrees
                     // with.
-                    page: async (agent, window = {}) => windowOf(records.get(agent.id) ?? [], window),
+                    page: async (agent, window = {}) => transcriptPageOf(records.get(agent.id) ?? [], window),
+                    toolChildren: async (agent, toolId) => toolChildrenOf(records.get(agent.id) ?? [], toolId),
                     count: async (agent) => (records.get(agent.id) ?? []).length,
                     truncate: async () => 0,
                 },
@@ -705,7 +747,8 @@ test("agents.transcript serves the newest turns by default and walks back throug
                 read: async () => record,
                 fork: async () => {},
                 append: async () => {},
-                page: async (_agent, window = {}) => windowOf(record, window),
+                page: async (_agent, window = {}) => transcriptPageOf(record, window),
+                toolChildren: async (_agent, toolId) => toolChildrenOf(record, toolId),
                 count: async () => record.length,
                 truncate: async () => 0,
             },

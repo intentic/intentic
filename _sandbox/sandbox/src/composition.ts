@@ -21,6 +21,7 @@ import type {
     IntenticLine,
     NativeProvider,
     TranscriptRow,
+    TranscriptTool,
     SidecarStatus,
     StashEntry,
     WorkspaceChildren,
@@ -209,6 +210,7 @@ import { fileWebchatOutbox, type OutboxSink, outboxStreamFor, type WebchatOutbox
 import { openSearchIndex, type SearchIndex } from "./sessions/search-index.js";
 import { backfillSearchIndex, type BackfillSource } from "./sessions/search-backfill.js";
 import {
+    agentToolChildren,
     agentTranscript,
     agentTranscriptPage,
     type AgentTranscriptDeps,
@@ -634,6 +636,8 @@ export interface Services extends ClaudeSlice, CodexSlice, CursorSlice, GrokSlic
         readonly read: (agent: TranscriptAgent) => Promise<TranscriptRow[]>;
         // One page, newest turns by default, window walking back; what a chat tab opening asks for.
         readonly page: (agent: TranscriptAgent, window?: TranscriptWindow) => Promise<TranscriptPage>;
+        // The calls under one tool card, which a page counts rather than carries; read on the press that opens it.
+        readonly toolChildren: (agent: TranscriptAgent, toolId: string) => Promise<TranscriptTool[]>;
         // Opens a branch's record as a copy of the source's first `keep` rows; a no-op once the record exists.
         readonly fork: (agent: TranscriptAgent, source: string, keep: number) => Promise<void>;
         readonly append: (agent: TranscriptAgent, messages: readonly TranscriptRow[]) => Promise<void>;
@@ -1313,6 +1317,7 @@ export const createServices = (config: Config, logger: Logger): Services => {
         transcripts: {
             read: (agent) => agentTranscript(transcriptDeps, agent),
             page: (agent, window) => agentTranscriptPage(transcriptDeps, agent, window),
+            toolChildren: (agent, toolId) => agentToolChildren(transcriptDeps, agent, toolId),
             // A branch's opening history is the source conversation's record, copied once.
             fork: (agent, source, keep) => transcriptDeps.record.fork(agent.id, source, keep),
             // Written right after the record, best-effort: a failed index write is fixed by the next backfill.

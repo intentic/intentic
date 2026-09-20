@@ -4,8 +4,8 @@ import { join } from "node:path";
 import type { TranscriptRow, TranscriptTool } from "@intentic/sandbox-contract";
 import { describe, expect, it } from "vitest";
 import type { TurnAnchor, TurnAnchors } from "../agent/anchors/turn-anchors.js";
-import { agentTranscriptPage } from "./agent-transcript.js";
-import { fileTranscriptRecord } from "./transcript-record.js";
+import { agentToolChildren, type AgentTranscriptDeps, agentTranscriptPage, PAGE_TEXT_CAP } from "./agent-transcript.js";
+import { fileTranscriptRecord, MAX_WINDOW_BYTES } from "./transcript-record.js";
 
 // Pins that a window's cost scales with the window, not the conversation's length. Assertions are on byte and row
 // counts only; elapsed time is logged for visibility, never asserted, since CI timing is not deterministic.
@@ -226,5 +226,145 @@ describe("the transcript window", () => {
         const fractional = await record.window("c-stale", { before: 12.7, turns: 99 });
         expect(fractional.rows.length).toBe(12);
         expect(fractional.from).toBe(0);
+    });
+});
+
+const agentOf = (id: string): { id: string; provider: "claude"; harness: "claude-code" } => ({ id, provider: "claude", harness: "claude-code" });
+
+// A turn whose weight is all in one tool result: the shape turns and rows alone do not bound, since it is few rows of
+// enormous size rather than many rows.
+const dumpTurn = (turn: number, bytes: number): TranscriptRow[] => [
+    { role: "user", text: `ask ${turn}` },
+    { role: "assistant", text: `answer ${turn}`, tools: [{ ...call(turn, 0), content: [{ type: "text", text: filler(bytes, `dump ${turn}`) }] }] },
+];
+
+// A turn whose weight is in the answer itself, which no cap touches: what the byte budget is left to bound.
+const proseTurn = (turn: number, bytes: number): TranscriptRow[] => [
+    { role: "user", text: `ask ${turn}` },
+    { role: "assistant", text: filler(bytes, `answer ${turn}`) },
+];
+
+const delegationTurn = (calls: number): TranscriptRow[] => [
+    { role: "user", text: "delegate it" },
+    {
+        role: "assistant",
+        text: "done",
+        tools: [
+            {
+                id: "call_agent",
+                name: "Agent",
+                category: "other",
+                status: "completed",
+                children: Array.from({ length: calls }, (_, index) => call(0, index)),
+            },
+        ],
+    },
+];
+
+const filled = async (conversationId: string, turns: readonly TranscriptRow[][]): Promise<{ root: string; deps: AgentTranscriptDeps }> => {
+    const root = await dir();
+    const record = fileTranscriptRecord(root);
+    for (const rows of turns) {
+        await record.append(conversationId, rows);
+    }
+    return { root, deps: { record, turnAnchors: anchorsOf([]) } };
+};
+
+const servedBytes = (page: { readonly rows: readonly TranscriptRow[] }): number => Buffer.byteLength(JSON.stringify(page.rows));
+
+// Length of the last row's first tool result, or -1 where there is none; a flat number keeps the assertion readable.
+const lastToolOutput = (rows: readonly TranscriptRow[]): number => {
+    const entry = rows.at(-1)?.tools?.[0]?.content?.[0];
+    return entry?.type === "text" ? entry.text.length : -1;
+};
+
+describe("what a page carries of a heavy turn", () => {
+    // Turns and rows measure the wrong thing: a conversation of four turns can be tens of megabytes.
+    it("stops on the byte budget when the turn count would not", async () => {
+        const { deps } = await filled(
+            "c-prose",
+            Array.from({ length: 12 }, (_, turn) => proseTurn(turn, 400_000)),
+        );
+
+        const page = await agentTranscriptPage(deps, agentOf("c-prose"));
+
+        expect(servedBytes(page)).toBeLessThanOrEqual(MAX_WINDOW_BYTES);
+        expect(page.rows.filter((row) => row.role === "user").length).toBeLessThan(12);
+        expect(page.more).toBe(true);
+    });
+
+    // Withholding it would leave the chat with nothing at all, which is worse than one slow open. The budget splits the
+    // turn the same way the row ceiling already does, and `more` puts the question above it one press away.
+    it("serves a single row larger than the whole budget rather than nothing", async () => {
+        const { deps } = await filled("c-onebig", [proseTurn(0, MAX_WINDOW_BYTES * 2)]);
+
+        const page = await agentTranscriptPage(deps, agentOf("c-onebig"));
+
+        expect(page.rows.length).toBe(1);
+        expect(servedBytes(page)).toBeGreaterThan(MAX_WINDOW_BYTES);
+        expect(page.from).toBe(1);
+        expect(page.more).toBe(true);
+    });
+
+    // The budget is spent on what goes out. Measured against the stored line instead, a conversation of tool dumps
+    // would open on two turns despite shipping a few kilobytes.
+    it("spends the budget on the served page, not the stored record", async () => {
+        const { root, deps } = await filled(
+            "c-dumps",
+            Array.from({ length: 20 }, (_, turn) => dumpTurn(turn, 500_000)),
+        );
+
+        const page = await agentTranscriptPage(deps, agentOf("c-dumps"));
+
+        expect((await stat(join(root, "c-dumps.jsonl"))).size).toBeGreaterThan(9_000_000);
+        expect(page.rows.filter((row) => row.role === "user").length).toBe(20);
+        expect(servedBytes(page)).toBeLessThan(MAX_WINDOW_BYTES);
+    });
+
+    // The pane draws 4000 characters of a tool result (toolPresentation.ts TEXT_CAP); the rest was shipped to be thrown
+    // away. The record keeps it, for a handoff, a share or a recall.
+    it("caps a tool's output at what the pane draws, and leaves the record whole", async () => {
+        const { root, deps } = await filled("c-dump", [dumpTurn(0, 500_000)]);
+
+        const page = await agentTranscriptPage(deps, agentOf("c-dump"));
+
+        expect(lastToolOutput(page.rows)).toBe(PAGE_TEXT_CAP);
+        expect(lastToolOutput(await fileTranscriptRecord(root).read("c-dump"))).toBe(500_000);
+    });
+});
+
+describe("a delegation's own calls", () => {
+    it("are counted on the page, not carried", async () => {
+        const { root, deps } = await filled("c-deleg", [delegationTurn(40)]);
+
+        const page = await agentTranscriptPage(deps, agentOf("c-deleg"));
+        const card = page.rows.at(-1)?.tools?.[0];
+
+        expect(card?.children).toBeUndefined();
+        expect(card?.nested).toBe(40);
+        expect((await fileTranscriptRecord(root).read("c-deleg")).at(-1)?.tools?.[0]?.children).toHaveLength(40);
+    });
+
+    it("come back whole on the press that opens the card", async () => {
+        const { deps } = await filled("c-open", [delegationTurn(40)]);
+
+        const children = await agentToolChildren(deps, agentOf("c-open"), "call_agent");
+
+        expect(children).toHaveLength(40);
+        expect(children[0]?.id).toBe("call_0_0");
+    });
+
+    // A child that delegated in turn: the lookup has to descend, since only the top card is addressed by the page.
+    it("reach a call nested under another delegation", async () => {
+        const inner: TranscriptTool = { id: "call_inner", name: "Agent", category: "other", status: "completed", children: [call(9, 9)] };
+        const { deps } = await filled("c-deep", [
+            [
+                { role: "user", text: "delegate deeply" },
+                { role: "assistant", text: "done", tools: [{ id: "call_outer", name: "Agent", category: "other", status: "completed", children: [inner] }] },
+            ],
+        ]);
+
+        expect(await agentToolChildren(deps, agentOf("c-deep"), "call_inner")).toEqual([call(9, 9)]);
+        expect(await agentToolChildren(deps, agentOf("c-deep"), "call_missing")).toEqual([]);
     });
 });

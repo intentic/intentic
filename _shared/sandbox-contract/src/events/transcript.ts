@@ -81,6 +81,14 @@ export const TranscriptToolSchema: z.ZodType<TranscriptTool> = z.lazy(() =>
             .describe(
                 "Calls a delegated subagent made, nested under the call that started it, so a reopened conversation redraws the delegation rather than collapsing it into one result.",
             ),
+        nested: z
+            .number()
+            .int()
+            .nonnegative()
+            .optional()
+            .describe(
+                "How many calls sit under this one, present in place of `children` when they were left behind. A transcript page does that, since a settled delegation draws collapsed; ask for the call's own children to fill it in.",
+            ),
         thinking: z.string().optional().describe("What the agent was reasoning about around this call."),
         subagent: TranscriptSubagentSchema.optional().describe(
             "The helper this call started, as the daemon's registry sees it: what it is, how it is going, what it has spent. What a card can say about a backgrounded child whose result is minutes away.",
@@ -116,6 +124,9 @@ export interface TranscriptTool {
     locations?: ToolCallLocation[] | undefined;
     content?: ToolCallContent[] | undefined;
     children?: TranscriptTool[] | undefined;
+    // How many calls sit under this one when `children` is not carried: a transcript page leaves a delegation's run
+    // behind, since it only draws once the card is opened.
+    nested?: number | undefined;
     thinking?: string | undefined;
     subagent?: TranscriptSubagent | undefined;
 }
@@ -338,6 +349,11 @@ export const AgentTranscriptSchema = SessionTranscriptSchema.extend({
     // `from` offsets every `rewindIndex` here, and is the `before` for the page above; `more` flags older messages.
     from: z.number().int().nonnegative().describe("Where the first message sits in the whole record, and the `before` that asks for the page above this one."),
     more: z.boolean().describe("Whether older messages precede this page."),
+});
+
+// A delegation's own run, fetched when its card opens; empty when the record no longer holds it.
+export const AgentToolChildrenSchema = z.object({
+    children: z.array(TranscriptToolSchema).describe("The calls the delegated agent made, in the order it made them."),
 });
 
 // The whole of a published conversation, baked into the page since nothing else may still be running when it opens. The

@@ -2,7 +2,7 @@
 // Pins that a sub-agent delegation nests its own calls and thinking under the card (ChatToolCard renders
 // itself recursively) instead of a flat sibling list. Needs jsdom: a failed resolve renders wrong, not a throw.
 import { afterEach, describe, expect, it } from "vitest";
-import { type App, createApp, h } from "vue";
+import { type App, createApp, h, nextTick } from "vue";
 import type { TranscriptTool } from "@intentic/sandbox-contract";
 import type { ChatSurface } from "./chatToolSurface";
 import { IconStub } from "@intentic/ui/testing";
@@ -94,6 +94,45 @@ describe(`ChatToolCard`, () => {
         expect(element.querySelector(`[data-spin]`)).toBeNull();
         expect(element.querySelector(`[data-icon="clock"]`)).not.toBeNull();
         expect(element.textContent).toContain(`interrupted`);
+    });
+
+    // A transcript page counts a delegation's calls rather than carrying them (agent-transcript.ts fitTool), so the
+    // card is the thing that asks for them, and only when it would draw them.
+    it(`fetches a counted delegation's calls when the card opens, once`, async () => {
+        const asked: string[] = [];
+        const surface: ChatSurface = {
+            imageUrl: () => undefined,
+            toolChildren: (toolId) => {
+                asked.push(toolId);
+                return Promise.resolve([{ id: `b1`, name: `Bash`, category: `execute`, status: `completed`, target: `ls -la` }]);
+            },
+        };
+        // Settled, so the card draws collapsed: the fetch must wait for the press.
+        const element = mount({ id: `a1`, name: `Agent`, category: `other`, status: `completed`, nested: 3 }, false, surface);
+        expect(asked).toEqual([]);
+
+        element.querySelector<HTMLElement>(`[aria-expanded]`)?.click();
+        await nextTick();
+        await nextTick();
+
+        expect(asked).toEqual([`a1`]);
+        expect(element.textContent).toContain(`ls -la`);
+
+        // Folding and reopening reads what it already has.
+        element.querySelector<HTMLElement>(`[aria-expanded]`)?.click();
+        element.querySelector<HTMLElement>(`[aria-expanded]`)?.click();
+        await nextTick();
+        expect(asked).toEqual([`a1`]);
+    });
+
+    // A published page hands the transcript over whole, so there is nothing to ask and nobody to ask.
+    it(`leaves a counted delegation alone where the surface cannot fetch`, async () => {
+        const element = mount({ id: `a1`, name: `Agent`, category: `other`, status: `completed`, nested: 3 }, false);
+
+        element.querySelector<HTMLElement>(`[aria-expanded]`)?.click();
+        await nextTick();
+
+        expect(element.textContent).toContain(`Agent`);
     });
 
     it(`freezes a sub-agent's nested calls with the delegation that holds them`, () => {

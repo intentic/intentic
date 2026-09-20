@@ -39,7 +39,7 @@ import { deriveBytes } from "../derived/derived-blob.js";
 import { deriveText, readDerivedText } from "../derived/derived-text.js";
 import { sidecarStatus } from "../derived/sidecar-service.js";
 import { IN_MEMORY, openSearchIndex } from "../sessions/search-index.js";
-import { windowOf } from "../sessions/transcript-record.js";
+import { toolChildrenOf, transcriptPageOf } from "../sessions/agent-transcript.js";
 import { spokenLinesOf } from "../sessions/transcript-search.js";
 import { pairings } from "../store/enrollment.js";
 import { createTerminalRunner } from "../terminal/terminal-run.js";
@@ -524,7 +524,9 @@ export const services = (overrides: ServiceOverrides = {}): Services => {
                 return sessionId === undefined ? [] : merged.sessions.read(merged.workspace.root, sessionId);
             },
             // Derived from `read` via production's own window rule, so a route test can't disagree with the daemon.
-            page: async (agent, window = {}) => windowOf(await merged.transcripts.read(agent), window),
+            page: async (agent, window = {}) => transcriptPageOf(await merged.transcripts.read(agent), window),
+            // Same door, same source: a route test asking for a delegation's calls gets what the record-backed route would.
+            toolChildren: async (agent, toolId) => toolChildrenOf(await merged.transcripts.read(agent), toolId),
             // Inert but present: a fork's first turn opens through this door, so a fake without it fails every forkOf
             // turn with a bare 500 that no type check catches.
             fork: async () => {},

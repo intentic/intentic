@@ -13,6 +13,12 @@ export interface TranscriptWindow {
     readonly before?: number | undefined;
     readonly turns?: number | undefined;
     readonly maxRows?: number | undefined;
+    // Ceiling on the page in bytes, whatever the turn and row counts allow: a row carries whole tool outputs, so a
+    // handful of turns runs to tens of megabytes.
+    readonly maxBytes?: number | undefined;
+    // Trims a row to what the reader will actually carry, applied as it is taken. The budget has to measure the served
+    // row, not the stored one, or a page that ships 1 MB is cut as though it shipped 60.
+    readonly fit?: ((row: TranscriptRow) => TranscriptRow) | undefined;
 }
 
 export interface TranscriptPage {
@@ -26,6 +32,9 @@ export interface TranscriptPage {
 // Default window: enough that a chat opens on more than a screenful without scaling with conversation length.
 export const DEFAULT_WINDOW_TURNS = 20;
 export const MAX_WINDOW_ROWS = 400;
+// Byte ceiling on one page. Measured on this workspace's records, the turn and row counts alone leave the median page
+// at 275 KB and the worst at 62 MB, because length lives in the rows rather than in how many there are.
+export const MAX_WINDOW_BYTES = 2_000_000;
 
 export interface TranscriptRecord {
     // Copies another record's first `keep` rows to start a branch; a `wx` write, a no-op if the file already exists.
@@ -38,6 +47,9 @@ export interface TranscriptRecord {
     // Returns the tail of a conversation and where it sits; only the returned rows are parsed, so cost scales with the
     // window, not the conversation. A cursor is never an error: out-of-range values clamp instead of failing.
     readonly window: (conversationId: string, window: TranscriptWindow) => Promise<TranscriptPage>;
+    // Newest row back, for a reader looking for one thing rather than a span; rows are parsed one at a time, so a hit
+    // near the tail costs the tail rather than the record.
+    readonly findBack: (conversationId: string, match: (row: TranscriptRow) => boolean) => Promise<TranscriptRow | undefined>;
     // Record's byte size, undefined when no record exists; changes on every append or truncate, usable as a version
     // key.
     readonly size: (conversationId: string) => Promise<number | undefined>;
@@ -75,18 +87,34 @@ const rawRows = async (path: string): Promise<string[]> => {
 // absent means the end.
 const pageEnd = (before: number | undefined, length: number): number => Math.min(Math.max(Math.floor(before ?? length), 0), length);
 
-// Walks back from `end` collecting rows until `turns` user messages have opened or `maxRows` is hit; only collected
-// rows are parsed.
-const scanBack = (at: (index: number) => TranscriptRow[], end: number, turns: number, maxRows: number): TranscriptPage => {
+// One stored position as the page will carry it: the rows it yields, and what they cost against the byte budget.
+type Taken = (index: number) => { readonly rows: TranscriptRow[]; readonly bytes: number };
+
+interface PageBounds {
+    readonly turns: number;
+    readonly maxRows: number;
+    readonly maxBytes: number;
+}
+
+// Walks back from `end` collecting rows until `turns` user messages have opened, or `maxRows`/`maxBytes` is hit; only
+// collected rows are parsed.
+const scanBack = (at: Taken, end: number, { turns, maxRows, maxBytes }: PageBounds): TranscriptPage => {
     const rows: TranscriptRow[] = [];
     let from = end;
     let seen = 0;
+    let bytes = 0;
     for (let index = end - 1; index >= 0; index -= 1) {
-        const parsed = at(index);
-        if (parsed[0]?.role === "user") {
+        const taken = at(index);
+        // Never checked against an empty page: a single turn larger than the whole budget is still served, since
+        // withholding it would leave the chat with nothing to show at all.
+        if (rows.length > 0 && bytes + taken.bytes > maxBytes) {
+            break;
+        }
+        if (taken.rows[0]?.role === "user") {
             seen += 1;
         }
-        rows.unshift(...parsed);
+        rows.unshift(...taken.rows);
+        bytes += taken.bytes;
         from = index;
         // Stops on the user row that opens the oldest wanted turn, not the row after it, so its answers keep their
         // question.
@@ -101,11 +129,22 @@ const scanBack = (at: (index: number) => TranscriptRow[], end: number, turns: nu
     return { rows, from, more: from > 0 };
 };
 
+const servedSize = (rows: readonly TranscriptRow[]): number => rows.reduce((total, served) => total + JSON.stringify(served).length, 0);
+
 // Same windowing as `window`, for a caller that already holds the whole record in memory.
 export const windowOf = (
     rows: readonly TranscriptRow[],
-    { before, turns = DEFAULT_WINDOW_TURNS, maxRows = MAX_WINDOW_ROWS }: TranscriptWindow,
-): TranscriptPage => scanBack((index) => (rows[index] === undefined ? [] : [rows[index]]), pageEnd(before, rows.length), turns, maxRows);
+    { before, turns = DEFAULT_WINDOW_TURNS, maxRows = MAX_WINDOW_ROWS, maxBytes = MAX_WINDOW_BYTES, fit }: TranscriptWindow,
+): TranscriptPage =>
+    scanBack(
+        (index) => {
+            const found = rows[index];
+            const taken = found === undefined ? [] : [fit === undefined ? found : fit(found)];
+            return { rows: taken, bytes: servedSize(taken) };
+        },
+        pageEnd(before, rows.length),
+        { turns, maxRows, maxBytes },
+    );
 
 export const fileTranscriptRecord = (dir: string): TranscriptRecord => ({
     fork: async (conversationId, source, keep) => {
@@ -145,14 +184,40 @@ export const fileTranscriptRecord = (dir: string): TranscriptRecord => ({
         }
         return (await rawRows(join(dir, `${conversationId}.jsonl`))).flatMap(row);
     },
-    window: async (conversationId, { before, turns = DEFAULT_WINDOW_TURNS, maxRows = MAX_WINDOW_ROWS }) => {
+    window: async (conversationId, { before, turns = DEFAULT_WINDOW_TURNS, maxRows = MAX_WINDOW_ROWS, maxBytes = MAX_WINDOW_BYTES, fit }) => {
         if (!isConversationId(conversationId)) {
             return { rows: [], from: 0, more: false };
         }
         // Raw rows, the same position `count` and `truncate` use, so `from` addresses the same message a rewind would.
         const raw = await rawRows(join(dir, `${conversationId}.jsonl`));
         // Only the returned rows are parsed; splitting the file is cheap, JSON.parse is not.
-        return scanBack((index) => row(raw[index] ?? ""), pageEnd(before, raw.length), turns, maxRows);
+        return scanBack(
+            (index) => {
+                const line = raw[index] ?? "";
+                const parsed = row(line);
+                // Unfitted, the stored line is what goes out, so its own length is the cost and nothing is re-measured.
+                if (fit === undefined) {
+                    return { rows: parsed, bytes: line.length };
+                }
+                const fitted = parsed.map(fit);
+                return { rows: fitted, bytes: servedSize(fitted) };
+            },
+            pageEnd(before, raw.length),
+            { turns, maxRows, maxBytes },
+        );
+    },
+    findBack: async (conversationId, match) => {
+        if (!isConversationId(conversationId)) {
+            return undefined;
+        }
+        const raw = await rawRows(join(dir, `${conversationId}.jsonl`));
+        for (let index = raw.length - 1; index >= 0; index -= 1) {
+            const found = row(raw[index] ?? "").find(match);
+            if (found !== undefined) {
+                return found;
+            }
+        }
+        return undefined;
     },
     count: async (conversationId) => (isConversationId(conversationId) ? (await rawRows(join(dir, `${conversationId}.jsonl`))).length : 0),
     size: async (conversationId) => {

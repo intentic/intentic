@@ -205,6 +205,9 @@ export const createAgentsRoutes = (services: Services) => {
                 more,
             };
         }),
+        // Fills in what `transcript` counted rather than carried. Off the record, so it answers for an archived
+        // conversation too, unlike the subagent registry, which is an in-memory map.
+        toolChildren: i.toolChildren.handler(async ({ input }) => ({ children: await services.transcripts.toolChildren(entryOf(input.id), input.toolId) })),
         // Speaks as the agent: appends the user's words as an assistant row marked `placed` (human-only, never
         // agent-facing).
         // - clears the session so the next turn reseeds from the record instead of stale runtime memory

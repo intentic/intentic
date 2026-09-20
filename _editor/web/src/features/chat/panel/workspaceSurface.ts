@@ -1,3 +1,4 @@
+import { agentToolChildren } from "../transcript/agentTranscript";
 import { attachmentPreview } from "../drafts/attachmentPreviews";
 import { fileLinkDecorator } from "../../../lib/markdown/renderMarkdown";
 import { openWorkTerminal } from "../../terminal/useWorkTerminals";
@@ -13,6 +14,9 @@ export interface WorkspaceSurfaceOptions {
     // tmux session for commands, and the browser session for browser tools; absent on a page with no live conversation.
     readonly terminal?: () => string | undefined;
     readonly browser?: () => string | undefined;
+    // Which conversation's record a delegation's calls are fetched from, and which sandbox holds it. Absent on a page
+    // whose transcript already arrived whole, where a card has nothing left to ask for.
+    readonly conversation?: () => { readonly id: string; readonly at: string | undefined };
     // How a route is entered; passed in (not useRouter()) so this stays a plain function for either caller.
     readonly navigate?: (route: string) => void;
 }
@@ -26,6 +30,14 @@ export const workspaceSurface = (options: WorkspaceSurfaceOptions): ChatSurface 
     ...(options.browser === undefined || options.navigate === undefined
         ? {}
         : { commandBrowser: options.browser, watchBrowser: (session: string) => options.navigate?.(`/browsers/${session}`) }),
+    ...(options.conversation === undefined
+        ? {}
+        : {
+              toolChildren: (toolId: string) => {
+                  const chat = options.conversation?.();
+                  return chat === undefined ? Promise.resolve([]) : agentToolChildren(chat.id, toolId, chat.at);
+              },
+          }),
     subagentRoute: (toolId) => `/subagents/${toolId}`,
     // No navigate still yields a working link, just a full page load; the honest fallback rather than a dead anchor.
     ...(options.navigate === undefined ? {} : { navigate: options.navigate }),

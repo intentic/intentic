@@ -1,11 +1,12 @@
 import { oc } from "@orpc/contract";
-import { AgentTranscriptSchema } from "../events/transcript.js";
+import { AgentToolChildrenSchema, AgentTranscriptSchema } from "../events/transcript.js";
 import {
     AgentArchiveSchema,
     AgentAssignSchema,
     AgentAutoLandSchema,
     AgentFileDiffQuerySchema,
     AgentIdSchema,
+    AgentToolChildrenQuerySchema,
     AgentTranscriptQuerySchema,
     AgentIdsSchema,
     AgentLandSchema,
@@ -81,6 +82,16 @@ export const agentsContract = {
         })
         .input(AgentTranscriptQuerySchema)
         .output(AgentTranscriptSchema),
+    toolChildren: oc
+        .route({
+            method: "GET",
+            path: "/agents/{id}/transcript/tools/{toolId}",
+            summary: "One delegation's own calls",
+            description:
+                "The calls a delegated agent made under one tool card. A transcript page leaves them behind and reports their count as `nested`, since a settled delegation draws collapsed; this is what fills the card in when it is opened. Empty when the record no longer holds that call.",
+        })
+        .input(AgentToolChildrenQuerySchema)
+        .output(AgentToolChildrenSchema),
     // Also forgets the provider session, rewind-style, so the next fresh session reads the placed line as the agent's
     // own.
     place: oc

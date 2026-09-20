@@ -13,35 +13,32 @@ export interface ToolRun {
     readonly running: boolean;
 }
 
+// What the category alone is worth, once the shapes that outrank it have been ruled out.
+const CATEGORY_SCORES: Partial<Record<TranscriptTool["category"], number>> = { fetch: 40, execute: 30, search: 20, read: 10 };
+
+// `nested` stands in for `children` on a transcript page, which counts a delegation's calls rather than carrying them; a
+// delegation must rank the same either way, or a reopened turn's mark changes on its own.
+const delegates = (tool: TranscriptTool): boolean => tool.subagent !== undefined || (tool.children?.length ?? 0) > 0 || (tool.nested ?? 0) > 0;
+
+const writes = (tool: TranscriptTool): boolean =>
+    tool.category === `edit` || tool.category === `delete` || tool.category === `move` || (tool.content ?? []).some((entry) => entry.type === `diff`);
+
 // Ranks a call by consequence (delegation, workspace edit, image, fetch/browser, command, search, read) rather than by
 // which tool it is; the mark is the highest score.
 const notability = (tool: TranscriptTool): number => {
-    if (tool.subagent !== undefined || (tool.children?.length ?? 0) > 0) {
+    if (delegates(tool)) {
         return 70;
     }
-    if (tool.category === `edit` || tool.category === `delete` || tool.category === `move`) {
+    if (writes(tool)) {
         return 60;
     }
-    const content = tool.content ?? [];
-    if (content.some((entry) => entry.type === `diff`)) {
-        return 60;
-    }
-    if (content.some((entry) => entry.type === `image`)) {
+    if ((tool.content ?? []).some((entry) => entry.type === `image`)) {
         return 50;
     }
-    if (tool.category === `fetch` || tool.name.toLowerCase().startsWith(`browser `)) {
+    if (tool.name.toLowerCase().startsWith(`browser `)) {
         return 40;
     }
-    if (tool.category === `execute`) {
-        return 30;
-    }
-    if (tool.category === `search`) {
-        return 20;
-    }
-    if (tool.category === `read`) {
-        return 10;
-    }
-    return 5;
+    return CATEGORY_SCORES[tool.category] ?? 5;
 };
 
 // Picks the first call reaching the top score, so the mark's icon doesn't change as later calls of equal weight arrive

@@ -182,6 +182,7 @@ provide(
         agent: () => (props.conversation.isolated.value ? props.conversation.conversationId : undefined),
         terminal: () => props.conversation.agentTerminal.value,
         browser: () => props.conversation.agentBrowser.value,
+        conversation: () => ({ id: props.conversation.conversationId, at: props.conversation.box.value }),
         // Every destination is an app view; a popped-out chat has no app in it, so navigation there goes to the app's
         // own
         // window (mainWindow.ts) instead of replacing this chat.

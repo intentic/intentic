@@ -1,3 +1,4 @@
+import type { TranscriptTool } from "@intentic/sandbox-contract";
 import type { MarkdownDecorator } from "@intentic/ui/markdown";
 import { inject, type InjectionKey } from "vue";
 
@@ -16,6 +17,9 @@ export interface ChatSurface {
     // The live browser behind a browser card, on the same terms.
     readonly commandBrowser?: () => string | undefined;
     readonly watchBrowser?: (session: string) => void;
+    // A delegation's own calls, for a card whose page carried their count instead of the calls themselves. Absent
+    // wherever the transcript arrives whole (a published page, a subagent's own view), where there is nothing to fetch.
+    readonly toolChildren?: (toolId: string) => Promise<TranscriptTool[]>;
     // Route to a delegation's transcript; a string, not RouterLink, since the card may render with no router.
     readonly subagentRoute?: (toolId: string) => string;
     // How a route is entered without a page load; present wherever `subagentRoute` is.

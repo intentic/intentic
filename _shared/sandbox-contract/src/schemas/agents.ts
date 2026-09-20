@@ -471,6 +471,12 @@ export const AgentTranscriptQuerySchema = AgentIdSchema.extend({
         .describe("Return the messages before this position in the record: the `from` of the page below. Absent asks for the most recent turns."),
     turns: z.coerce.number().int().min(1).max(200).optional().describe("How many of the user's turns to return, newest first. Absent takes the daemon's default."),
 });
+
+// Fills in what a page counted instead of carrying: a delegation's own calls, addressed by the card's id, which is
+// unique within a conversation.
+export const AgentToolChildrenQuerySchema = AgentIdSchema.extend({
+    toolId: z.string().min(1).describe("Which tool call, by the id its card carries."),
+});
 // Absent `ids` archives every archivable finished agent (the lane's "Clear"); unarchive always names its own ids.
 export const AgentArchiveSchema = z.object({
     ids: z

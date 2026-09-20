@@ -28,7 +28,7 @@ import { fakeFiles, fakeHistory } from "./harness/route-fakes.testing.js";
 import { codexConnectedProxy, services, withTranslator } from "./harness/route-services.testing.js";
 import { automationRecord, memoryAutomationsStore, memoryCapabilitiesStore } from "./harness/route-stores.testing.js";
 import { runAgentTurn } from "./harness/route-turns.testing.js";
-import { windowOf } from "./sessions/transcript-record.js";
+import { toolChildrenOf, transcriptPageOf } from "./sessions/agent-transcript.js";
 
 test("GET /health reports ok, and names the sandbox so a loopback probe can tell WHICH daemon answered", async () => {
     const res = await createApp(services()).request("/health");
@@ -1015,7 +1015,8 @@ test("agent.run reopens a conversation whose session the sandbox never stored, s
                     read: async () => recorded,
                     fork: async () => {},
                     append: async () => {},
-                    page: async (_agent, window = {}) => windowOf(recorded, window),
+                    page: async (_agent, window = {}) => transcriptPageOf(recorded, window),
+                    toolChildren: async (_agent, toolId) => toolChildrenOf(recorded, toolId),
                     count: async () => recorded.length,
                     truncate: async () => 0,
                 },
@@ -1050,7 +1051,8 @@ test("agent.run folds a switched conversation's history into the prompt as a rol
                     read: async () => recorded,
                     fork: async () => {},
                     append: async () => {},
-                    page: async (_agent, window = {}) => windowOf(recorded, window),
+                    page: async (_agent, window = {}) => transcriptPageOf(recorded, window),
+                    toolChildren: async (_agent, toolId) => toolChildrenOf(recorded, toolId),
                     count: async () => recorded.length,
                     truncate: async () => 0,
                 },

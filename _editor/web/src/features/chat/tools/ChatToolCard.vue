@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { IconName } from "@intentic/ui";
-import { computed, ref } from "vue";
+import { computed, ref, watch } from "vue";
 import type { TranscriptTool } from "@intentic/sandbox-contract";
 import { useChatSurface } from "./chatToolSurface";
 import ChatCodeBody from "../transcript/ChatCodeBody.vue";
@@ -41,24 +41,29 @@ const statusIcon = computed<{ name: IconName; spin: boolean; class: string }>(()
     return { name: view.value.icon, spin: false, class: failed.value ? `text-danger` : `text-link` };
 });
 
-// Whether there's anything to fold: an output-less call shows just its header. A sub-agent also folds its
-// nested transcript (children + thinking), collapsing the whole delegation to one line once settled.
-const hasContent = computed(
+// What the call itself produced.
+const hasOutput = computed(
+    () => view.value.document !== undefined || view.value.diffs.length > 0 || view.value.images.length > 0 || view.value.body !== undefined,
+);
+
+// What a delegation folds beside its own output: the child's calls (carried, or counted by a transcript page and
+// fetched on the press), its thinking, and a backgrounded child's report before the result lands.
+const hasDelegation = computed(
     () =>
-        view.value.document !== undefined ||
-        view.value.diffs.length > 0 ||
-        view.value.images.length > 0 ||
-        view.value.body !== undefined ||
         props.tool.thinking !== undefined ||
         (props.tool.children?.length ?? 0) > 0 ||
-        // A backgrounded child's report is the only content under its card until the result lands.
+        (props.tool.nested ?? 0) > 0 ||
         props.tool.subagent?.summary !== undefined,
 );
+
+// Whether there's anything to fold: an output-less call shows just its header.
+const hasContent = computed(() => hasOutput.value || hasDelegation.value);
 
 // Output fold, mirroring the turn's Thinking block: the registry picks the default (open while running or
 // failed); a manual toggle overrides it for the session.
 const outputOverride = ref<boolean>();
 const isOpen = computed(() => outputOverride.value ?? view.value.defaultOpen);
+
 const toggleOpen = (): void => {
     outputOverride.value = !isOpen.value;
 };
@@ -70,6 +75,29 @@ const location = computed(() => props.tool.locations?.[0]);
 // shell/browser; on a published conversation, nothing.
 const surface = useChatSurface();
 const openFile = surface.openFile;
+
+// A delegation's own calls, when the page counted them (`nested`) instead of carrying them. Read on the press that
+// would draw them, so reopening a conversation full of delegations costs the cards and not their runs; a record that
+// no longer holds them answers empty, and the card folds open onto nothing.
+const fetched = ref<TranscriptTool[]>();
+const children = computed(() => props.tool.children ?? fetched.value ?? []);
+
+// Whether the card would draw a delegation's calls and hasn't got them. Watched rather than hung off `toggleOpen`,
+// which would miss both a card that opens with no press (failed, still running) and one held open while a settled turn
+// replaces its carried children with a count.
+const needsChildren = computed(() => isOpen.value && props.tool.children === undefined && (props.tool.nested ?? 0) > 0);
+watch(
+    needsChildren,
+    (needs) => {
+        if (!needs || fetched.value !== undefined || surface.toolChildren === undefined) {
+            return;
+        }
+        // Marked in flight before the await, so a press while one is outstanding can't fire a second read.
+        fetched.value = [];
+        void surface.toolChildren(props.tool.id).then((calls) => (fetched.value = calls));
+    },
+    { immediate: true },
+);
 
 // The shell behind a command card: an agent's Bash runs in a real tmux session, no longer tabbed into the
 // strip, so this is where watching (and asking "what's it doing") happens. Only for command-shaped cards with
@@ -225,8 +253,8 @@ const openSubagent = (event: MouseEvent, toolId: string): void => {
                 class="chat-inset ml-4 max-h-40 overflow-auto px-2.5 py-1.5 text-2xs leading-relaxed whitespace-pre-wrap italic"
                 >{{ tool.thinking }}</pre>
             <!-- A sub-agent's nested transcript, indented under the delegation so the whole run reads as one unit; recursive. -->
-            <div v-if="tool.children?.length" class="ml-4 flex flex-col gap-1">
-                <ChatToolCard v-for="child in tool.children" :key="child.id" :tool="child" :live="live" />
+            <div v-if="children.length" class="ml-4 flex flex-col gap-1">
+                <ChatToolCard v-for="child in children" :key="child.id" :tool="child" :live="live" />
             </div>
             <!-- Agent output is re-minted from the workspace in-app when needed. -->
             <component
