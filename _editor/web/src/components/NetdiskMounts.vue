@@ -150,7 +150,7 @@ const caption = computed(() =>
 </script>
 
 <template>
-    <RowGroup :label="t(`common.netdiskMounts.disks`)" :count="rows.length" :caption="caption">
+    <RowGroup :label="t(`common.netdiskMounts.disks`)" :caption="caption">
         <!-- The disks stay listed: this says the live half is missing, not the disks. -->
         <Notice v-if="listNotice" :of="listNotice" class="m-4" />
         <Row v-for="row in rows" :key="row.id" :icon="row.link?.state === 'mounted' ? 'server' : 'box'" :selected="editingId === row.id">

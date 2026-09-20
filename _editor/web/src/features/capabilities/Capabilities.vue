@@ -747,9 +747,7 @@ const connectionGroups = computed<CapabilityConnectionGroup[]>(() =>
     }),
 );
 
-// Which list the pane is showing and how much of it; the filter count follows whichever list is on screen.
 const showingConnections = computed(() => activeScope.value.key === CONNECTED);
-const visibleCount = computed(() => (showingConnections.value ? visibleConnections.value.length : visibleCards.value.length));
 const nothingMatches = computed(() => (showingConnections.value ? connectionGroups.value.length === 0 : groupedCatalog.value.length === 0));
 
 // A card's own connection rows (vs. the Connected slice above) share the same state vocabulary (connectionState),
@@ -1308,7 +1306,6 @@ const submitLabel = computed(() => {
                             <RowGroup
                                 v-else-if="(selectedInstances.length > 0 || selectedDevices.length > 0) && !selected.singleton"
                                 :label="t(`capabilities.capabilities.connections`)"
-                                :count="selectedInstances.length + selectedDevices.length"
                             >
                                 <CapabilityInstanceRow
                                     v-for="instance in selectedInstances"
@@ -1526,7 +1523,6 @@ const submitLabel = computed(() => {
                                 <button type="button" :class="ui.textAction(`gap-1`)" @click="advancedOpen = !advancedOpen">
                                     <Icon :name="advancedOpen ? 'chevron-down' : 'chevron-right'" class="text-2xs" />
                                     {{ advancedLabel(selected) }}
-                                    <span class="text-2xs text-subtle">{{ advancedFields(selected).length }}</span>
                                 </button>
                                 <template v-if="advancedOpen">
                                     <CapabilityFieldRow
@@ -1661,7 +1657,6 @@ const submitLabel = computed(() => {
                     :placeholder="
                         showingConnections ? t(`capabilities.capabilities.filterByNameHost`) : t(`capabilities.capabilities.filterByNameWhat`)
                     "
-                    :count="visibleCount"
                 />
 
                 <!-- `pr-2` keeps tiles clear of the scrollbar; the reserved gutter stops the grid shifting when a filter removes the last row. -->

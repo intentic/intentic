@@ -177,7 +177,7 @@ const caption = computed(() =>
 </script>
 
 <template>
-    <RowGroup :label="t(`common.vpnConnections.connections`)" :count="rows.length" :caption="caption">
+    <RowGroup :label="t(`common.vpnConnections.connections`)" :caption="caption">
         <!-- The tunnels stay listed: this says the live half is missing, not the connections. -->
         <Notice v-if="listNotice" :of="listNotice" class="m-4" />
         <Row v-for="row in rows" :key="row.id" :icon="row.link?.state === 'connected' ? 'shield' : 'globe'" :selected="editingId === row.id">

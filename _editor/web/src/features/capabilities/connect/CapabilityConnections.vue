@@ -40,8 +40,8 @@ const emit = defineEmits<{ open: [cardId: string, connectionId: string] }>();
 
 <template>
     <div class="flex flex-col gap-6">
-        <!-- Grouped and counted by category, so the rail's headings match the catalog's. -->
-        <RowGroup v-for="group in groups" :key="group.label" :label="group.label" :count="group.rows.length">
+        <!-- Grouped by category, so the rail's headings match the catalog's. -->
+        <RowGroup v-for="group in groups" :key="group.label" :label="group.label">
             <Row v-for="row in group.rows" :key="`${row.cardId}:${row.id}`" as="button" chevron @click="emit(`open`, row.cardId, row.id)">
                 <!-- Mark size comes from the group's tier now. -->
                 <template #lead="{ mark }">
