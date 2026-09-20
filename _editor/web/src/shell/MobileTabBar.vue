@@ -17,10 +17,12 @@ import { useChanges } from "../features/workspace/changes/useChanges";
 import { usePushFlow } from "../features/workspace/push/usePushFlow";
 import { useSandboxAttention } from "../features/sandbox/overview/sandboxAttention";
 import { useSandbox } from "../features/sandbox/client/useSandbox";
+import { useRole } from "../features/sandbox/secrets/useRole";
 import { restartRunning } from "../features/sandbox/live/sandboxRestart";
 import { useT } from "@intentic/ui/i18n";
 
 const t = useT();
+const { isDesk } = useRole();
 
 // Four fixed tabs: Agents (fleet, "needs you" badge), Chat (the conversation you were last in), Review (drafts plus
 // uncommitted changes owed), Menu (what the sandbox needs, standing in for the desktop rail's chip); everything else,
@@ -114,14 +116,20 @@ const tabs = computed<readonly Tab[]>(() => [
         match: (route) => route.path === `/agents`,
     },
     chatTab.value,
-    {
-        /* The queue when the pack is on; the workspace's OWN review: its Changes panel, when it is off. */
-        id: `approvals`,
-        to: approvalsTile.value?.to ?? `/workspace?panel=changes`,
-        label: t(`shell.mobileTabBar.review`),
-        ...(reviewBadge.value === undefined ? {} : { badge: reviewBadge.value }),
-        ...(approvalsTile.value === undefined ? { panel: `changes` as const } : {}),
-    },
+    // Review is a tier's tab, not everyone's: both destinations are reads the daemon refuses a desk, which never
+    // reviews anything — it drives its own chats.
+    ...(isDesk.value
+        ? []
+        : [
+              {
+                  /* The queue when the pack is on; the workspace's OWN review: its Changes panel, when it is off. */
+                  id: `approvals`,
+                  to: approvalsTile.value?.to ?? `/workspace?panel=changes`,
+                  label: t(`shell.mobileTabBar.review`),
+                  ...(reviewBadge.value === undefined ? {} : { badge: reviewBadge.value }),
+                  ...(approvalsTile.value === undefined ? { panel: `changes` as const } : {}),
+              },
+          ]),
     { id: `menu`, to: `/menu`, label: t(`shell.mobileTabBar.menu`), ...(menuBadge.value === undefined ? {} : { badge: menuBadge.value }) },
 ]);
 

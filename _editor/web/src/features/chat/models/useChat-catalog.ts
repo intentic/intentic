@@ -13,6 +13,7 @@ import { reloadOnHotUpdate } from "../../../app/hotReload";
 import {
     acpProviders,
     endpointProviders,
+    nativeReady,
     endpointsLoaded,
     providerCommands,
     providerDefaultModel,
@@ -202,6 +203,7 @@ export const loadRunnableProviders = async (): Promise<void> => {
     // the lists keep what they had and the gate still stops waiting.
     const listing = RunnableProvidersSchema.safeParse(answer);
     if (listing.success) {
+        nativeReady.value = listing.data.native;
         acpProviders.value = listing.data.agents;
         // Ids arrive already prefixed `endpoint/`, and `kind` rides along: it's the only way to tell a local model from
         // a remote server once both are `endpoint/<id>`.

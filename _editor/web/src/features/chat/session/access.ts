@@ -12,7 +12,7 @@ import {
 } from "@intentic/sandbox-contract";
 import { computed, type ComputedRef } from "vue";
 import { accountsLoaded, providerAccounts, translatorAccounts } from "../accounts/providerAccounts";
-import { acpProviders, endpointProviders, endpointsLoaded, trialStatus } from "../accounts/providerCatalog";
+import { acpProviders, endpointProviders, endpointsLoaded, nativeReady, trialStatus } from "../accounts/providerCatalog";
 
 // Whether a provider can actually run, and what unlocks it: one rule, read by every surface that offers a
 // provider (picker, connect gate, account panel). A catalog always has rows (every provider seeds a floor
@@ -45,7 +45,9 @@ export const providerReady = (provider: AgentProvider): boolean => {
         return isEndpoint(provider) && trialStatus.value.available && trialStatus.value.remaining > 0;
     }
     // Everything else needs a stored account; an endpoint or installed ACP agent is ready just by existing.
-    return accountsOf(provider).length > 0 || isAcp(provider) || isEndpoint(provider);
+    // `nativeReady` is the daemon's own answer to the same question, and the only one a reader gets who may drive a
+    // turn but not read /accounts: without it a desk is told to connect a provider the box is already signed into.
+    return accountsOf(provider).length > 0 || nativeReady.value.includes(provider) || isAcp(provider) || isEndpoint(provider);
 };
 
 // Narrows providerReady to one harness: only Grok's credential depends on it (native xAI account vs. the translator's

@@ -10,12 +10,14 @@ import { useCapabilities } from "../features/capabilities/connect/useCapabilitie
 import {
     type ActiveExtension,
     activationBadge,
+    areaReachable,
     detectActivations,
     extensionPath,
     railBands,
     tabBarIds,
     WORKSPACE_VIEW_ID,
 } from "../core-views/registry";
+import { sandboxHubPath } from "../features/sandbox/sandboxNav";
 import { useVocabulary } from "../core-views/vocabulary";
 import { badgeChip, badgeClass, badgeToneClass, RUNNING_MARK_CLASS } from "../core-views/viewBadge";
 import { usePanels } from "../features/extensions/usePanels";
@@ -96,7 +98,7 @@ const areaBands = computed(() =>
             ...detectActivations(panels.value, capabilities.value)
                 .filter(({ extension }) => extension.surface === `rail` && !tabBarIds().includes(extension.id))
                 .map(extensionRow),
-        ],
+        ].filter((area) => areaReachable(area.to)),
         (area) => area.id,
     ),
 );
@@ -107,7 +109,7 @@ const { maker } = useAudience();
 const sandboxRows = computed<readonly AreaRow[]>(() => [
     ...(isDesk.value ? [] : [{ id: `capabilities`, to: `/capabilities`, label: t(`shell.mobileMenu.addCapability`), icon: `plus` } as const]),
     ...(canShip.value && !maker.value ? [{ id: `terminal`, to: `/terminal`, label: t(`shell.mobileMenu.terminal`), icon: `code` } as const] : []),
-    { id: `sandbox`, to: `/sandbox`, label: t(`shell.mobileMenu.sandbox`), icon: `box` },
+    { id: `sandbox`, to: sandboxHubPath(isDesk.value), label: t(`shell.mobileMenu.sandbox`), icon: `box` },
     { id: `settings`, to: `/settings`, label: t(`shell.mobileMenu.settings`), icon: `cog` },
 ]);
 

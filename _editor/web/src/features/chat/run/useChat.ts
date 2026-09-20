@@ -7,6 +7,7 @@ import {
     endpointProviders,
     endpointsLoaded,
     type ModelOption,
+    nativeReady,
     perProvider,
     providerCommands,
     providerDefaultModel,
@@ -121,6 +122,9 @@ export const resetChat = (): void => {
     }
     // Cleared before restoreTabs, or it validates new picks against the old sandbox's accounts.
     providerAccounts.value = perProvider<readonly OauthAccount[]>(() => []);
+    // The other half of the same reading, and just as sandbox-scoped: what the outgoing box could run says nothing
+    // about the incoming one.
+    nativeReady.value = [];
     accountsLoaded.value = false;
     // Which chats were done with was the outgoing daemon's reading; the incoming roster gives its own.
     forgetSettled();

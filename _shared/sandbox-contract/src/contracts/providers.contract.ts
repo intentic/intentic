@@ -7,6 +7,11 @@ import { ModelsSchema } from "../schemas/providers/provider-oauth.js";
 // this sandbox serves. Deliberately not the capability list (/capabilities, maintainer): a name and a label say what a
 // chat may run on, and say nothing about what holds a credential or what this box can reach.
 export const RunnableProvidersSchema = z.object({
+    // The one thing about the fixed native list this route says, and it says no more than the ACP and endpoint lists
+    // do: a name a message can be addressed to. Which account answers for it, and whose it is, stays behind
+    // /accounts, whose tier is a different question. Without this a reader who may drive a turn but not read that
+    // route sees no native provider as runnable and is told to connect one the box already has.
+    native: z.array(NativeProviderParamSchema.shape.provider).describe("Native providers with a working credential here, by id; never what holds it."),
     agents: z
         .array(z.object({ id: z.string(), label: z.string() }))
         .describe("ACP agents installed here. The id is the provider id itself, the label its display name."),

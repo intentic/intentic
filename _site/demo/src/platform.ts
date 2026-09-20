@@ -1,7 +1,7 @@
 import type { HostedPlanState, SandboxSummary, User } from "@intentic/api-contract";
 import { inviteRecords } from "./fixture/access";
 import { DESK_SANDBOX_NAME } from "./fixture/desk";
-import { deskEdition } from "./mode";
+import { deskEdition, demoTier } from "./mode";
 import { DEMO_DAEMON_ORIGIN, json } from "./transport";
 
 // Fetch handler for the three router gates before the workspace renders:
@@ -27,7 +27,7 @@ export const DEMO_SANDBOX: SandboxSummary = {
     removedAt: null,
     removedBy: null,
     token: `demo-connect-token`,
-    role: `owner`,
+    role: demoTier,
     providedAddress: false,
     // Null: no real container or CA-signed cert to offer a loopback shortcut from.
     localHostname: null,

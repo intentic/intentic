@@ -18,6 +18,7 @@ import { commandShortcut, registerCommand } from "./commands/useCommands";
 import {
     type ActiveExtension,
     activationBadge,
+    areaReachable,
     detectActivations,
     extensionPath,
     railBands,
@@ -259,7 +260,9 @@ const subagentTile = computed<AreaTile | undefined>(() => {
     };
 });
 // Same AreaTile shape as the nav tiles, so badges render through one path instead of per hand-rolled link.
-const runtimeTiles = computed<readonly AreaTile[]>(() => [browserTile.value, subagentTile.value].filter((tile) => tile !== undefined));
+const runtimeTiles = computed<readonly AreaTile[]>(() =>
+    [browserTile.value, subagentTile.value].filter((tile) => tile !== undefined).filter((tile) => areaReachable(tile.to)),
+);
 // RailIcon selects bespoke glyphs by view id and validates extension fallbacks before drawing them.
 const extensionTile = (active: ActiveExtension): AreaTile => {
     const { extension, activation } = active;
@@ -282,7 +285,10 @@ const tiles = computed<readonly AreaTile[]>(() =>
             // Only rail-surface extensions get a tile; per-repo panels open from the Workspace tree instead.
             .filter(({ extension }) => extension.surface === `rail`)
             .map(extensionTile),
-    ].toSorted((left, right) => railRank(left.id) - railRank(right.id)),
+    ]
+        // Before seating and before More: an area this reader cannot open belongs in neither list.
+        .filter((tile) => areaReachable(tile.to))
+        .toSorted((left, right) => railRank(left.id) - railRank(right.id)),
 );
 // True once extensions, panels, and capabilities have all loaded; before that a missing tile is only late.
 const railSettled = computed(() => extensionsLoaded.value && panelsSettled.value && capabilitiesSettled.value);
@@ -472,7 +478,7 @@ const gridStyle = computed(() => {
 // Toggled by the rail tile or Ctrl+`; the panel docks below the workspace since sessions are sandbox-global.
 const terminal = useTerminalPanel();
 // Ship-tier only: a PTY is the whole sandbox, and the daemon refuses the socket below maintainer anyway.
-const { canShip } = useRole();
+const { canShip, isDesk } = useRole();
 // The only affordance for the panel now; the Workspace view's own toggle is gone, since terminals are
 // sandbox-global. Doubles as an indicator: the badge counts live sessions, the tooltip names them.
 const terminalActivity = useTerminalActivity();
@@ -549,7 +555,10 @@ useKeybindings();
             <!-- Every unseated area; kept outside the scrolling run so it's never scrolled out of sight. -->
             <!-- A door to areas, not an "add one": the same tile as the nav run above it, so the dashed rim is left to the
                  one control on this rail that really does add something. -->
+            <!-- Empty for an owner means "everything is seated", which is worth a tile and a sentence. Empty for a desk
+                 means there is nothing to put there and never will be, so the door itself goes. -->
             <button
+                v-if="!isDesk"
                 ref="moreTrigger"
                 type="button"
                 class="icon-rail-tile flex items-center justify-center rounded-lg text-muted transition-colors hover:bg-overlay hover:text-content"
@@ -666,7 +675,10 @@ useKeybindings();
             </button>
 
             <!-- Every "add" here writes to the sandbox's deploy.config.ts or clones into /work, never platform storage. -->
+            <!-- A desk connects nothing: what this box can reach is the operator's decision, and the page says so at
+                 the maintainer tier. -->
             <RouterLink
+                v-if="!isDesk"
                 to="/capabilities"
                 :class="[
                     ui.addTile(`icon-rail-tile rounded-lg hover:bg-overlay`),

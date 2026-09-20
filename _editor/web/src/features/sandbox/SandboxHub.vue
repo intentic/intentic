@@ -116,6 +116,7 @@ const groups = computed<readonly NavGroup<HubTab>[]>(() => [
         :title="sandbox.active.value?.name ?? t(`sandbox.sandboxHub.sandbox`)"
         :route-name="HUB"
         :default-slug="defaultSlug"
+        :addressable="isDesk"
         :groups="groups"
         :ready="!isLoading"
     >

@@ -1,9 +1,9 @@
-import { endpointProvider, isTrialProvider, providersContract, TRIAL_LABEL } from "@intentic/sandbox-contract";
+import { endpointProvider, isTrialProvider, NATIVE_PROVIDERS, providersContract, TRIAL_LABEL } from "@intentic/sandbox-contract";
 import { implement } from "@orpc/server";
 import type { Services } from "../../composition.js";
 import type { OrpcContext } from "../../app-env.js";
 
-export type ProvidersRoutesDeps = Pick<Services, "providerCatalogs" | "capabilities">;
+export type ProvidersRoutesDeps = Pick<Services, "providerCatalogs" | "capabilities" | "providerReadiness">;
 
 // What a chat can be addressed to here: the providers this box adds to the fixed native list, and any one provider's
 // picker catalog (one route, replacing the five that differed only in their path).
@@ -20,8 +20,11 @@ export const createProvidersRoutes = (services: ProvidersRoutesDeps) => {
         // The two capability kinds that mint a provider, and nothing else about them: every surface that offers a chat
         // a provider reads this, including the tiers that may drive a turn but not see what this box connects to.
         list: i.list.handler(async () => {
-            const capabilities = await services.capabilities.list();
+            const [capabilities, readiness] = await Promise.all([services.capabilities.list(), services.providerReadiness()]);
             return {
+                // The same gate a turn itself passes through, so a chat is never offered a provider the run would
+                // refuse, nor told to connect one already connected.
+                native: NATIVE_PROVIDERS.filter((provider) => readiness[provider]),
                 agents: capabilities.flatMap((capability) =>
                     capability.kind === "agent" ? [{ id: capability.id, label: capability.config.name ?? capability.id }] : [],
                 ),

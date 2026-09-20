@@ -16,6 +16,7 @@ const {
     groups,
     routeName,
     defaultSlug,
+    addressable = false,
     ready = true,
 } = defineProps<{
     title: string;
@@ -24,6 +25,12 @@ const {
     routeName: string;
     /** The section the param-less URL shows. Its row writes no param, so no section has two URLs. */
     defaultSlug: string;
+    /**
+     * Whether every row must name its own slug, param-less form included. Set when the param-less URL is not one this
+     * reader may stand on — a desk's hub root is a path the shell fence sends it home from, so the one row it has
+     * would otherwise link somewhere it is bounced off.
+     */
+    addressable?: boolean;
     groups: readonly NavGroup<HubTab>[];
     /** Holds the unknown-slug redirect while the set is still filling in. */
     ready?: boolean;
@@ -45,7 +52,7 @@ const activeSlug = computed<string>(() => {
     return slugs.value.includes(tab) || !ready ? tab : defaultSlug;
 });
 
-const linkTo = (slug: string) => ({ name: routeName, params: { tab: slug === defaultSlug ? undefined : slug } });
+const linkTo = (slug: string) => ({ name: routeName, params: { tab: slug === defaultSlug && !addressable ? undefined : slug } });
 
 // The address the section on screen reports its long-running work under, so no view has to be told which row it
 // lives on. The hub draws the mark; what it says comes back through this hub's own badges.
@@ -79,7 +86,7 @@ watch(
     [() => route.params[`tab`], slugs, () => ready],
     ([tab, known, settled]) => {
         if (settled && typeof tab === `string` && tab.length > 0 && !known.includes(tab)) {
-            void router.replace({ name: routeName });
+            void router.replace(linkTo(defaultSlug));
         }
     },
     { immediate: true },

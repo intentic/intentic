@@ -2,6 +2,7 @@ import type { Activation, CapabilityFacts, Disposable, RepoFacts, ViewBadge, Vie
 import { computed, shallowRef } from "vue";
 import { type Audience, useAudience } from "../app/useAudience";
 import { useRole } from "../features/sandbox/secrets/useRole";
+import { deskAllowedPath } from "../shell/deskPaths";
 import { coreViews } from "./coreViews";
 import { badgeSpeaks } from "./viewBadge";
 import { t } from "@intentic/ui/i18n";
@@ -135,6 +136,13 @@ export const railGroupsFor = (audience: Audience): readonly RailGroup[] => railG
 // A desk's rail: the chat it drives and the board of its own conversations, whichever audience it answered. Every
 // other seat opens on a read the daemon refuses a desk, and a tile that only ever shows a refusal is not a seat.
 export const deskRailGroups = (): readonly RailGroup[] => [{ id: `work`, label: t(`views.registry.work`), items: [always(`chat`), always(`agents`)] }];
+
+// Whether this reader can open a tile at all, asked of every list of areas the shell draws: the rail's seats, its
+// More menu, the phone's menu and tab bar. A desk is fenced to a handful of paths (shell/deskPaths.ts) and a tile
+// outside them answers a press by bouncing to the chat, which reads as a broken tile rather than as a boundary —
+// so the offer is withdrawn instead. Keyed on the destination, not the id, so an area added later is covered by the
+// fence it will actually meet.
+export const areaReachable = (to: string): boolean => !useRole().isDesk.value || deskAllowedPath(to);
 
 // The developer's table, which is also what every surface read before there were two.
 export const railGroups = (): readonly RailGroup[] => railGroupsByAudience().developer;

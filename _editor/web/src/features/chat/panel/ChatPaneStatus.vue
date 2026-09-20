@@ -7,6 +7,7 @@ import { formatReset, formatUtilization, planHeadroom, SPENT_PERCENT, usageStatu
 import { usePaneView } from "./useChat-view";
 import { sandboxAvailabilityVisual } from "../../sandbox/overview/availability";
 import { useSandboxAvailability } from "../../sandbox/overview/useSandboxAvailability";
+import { useRole } from "../../sandbox/secrets/useRole";
 import { useWorkspaceTree } from "../../workspace/explorer/useWorkspaceTree";
 import ChatToolCallsToggle from "../tools/ChatToolCallsToggle.vue";
 import UsageRing from "../../../components/UsageRing.vue";
@@ -26,6 +27,7 @@ const { block, hint } = defineProps<{
     hint: string;
 }>();
 
+const { isDesk } = useRole();
 const { contextUsage, provider, account, model } = usePaneView();
 const { mobile, keyboardInset } = useDevice();
 
@@ -89,7 +91,7 @@ const usageChip = computed(() => {
             </span>
             <!-- The chip answers "am I about to get rate-limited": hover opens the pool-by-pool card, a click goes to the cost. -->
             <RouterLink
-                v-if="usageChip"
+                v-if="usageChip && !isDesk"
                 to="/sandbox/usage"
                 class="touch-target inline-flex cursor-pointer items-center transition-colors hover:text-content"
             >
@@ -98,7 +100,13 @@ const usageChip = computed(() => {
                 >
             </RouterLink>
             <!-- Every chip here names a page, so each is a link: hover shows the address, Ctrl/Cmd-click opens it without leaving the chat. -->
-            <RouterLink to="/sandbox/agent" class="touch-target inline-flex items-center gap-1 transition-colors hover:text-content">
+            <!-- Except for a desk, which may not open either page. Whether the box is answering is still its business —
+                 it is why a message would not send — so the state stays and only the door goes. -->
+            <span v-if="isDesk" class="inline-flex items-center gap-1">
+                <span class="inline-block h-1.5 w-1.5 rounded-full" :class="availabilityVisual.dotClass"></span>
+                {{ availabilityVisual.label }}
+            </span>
+            <RouterLink v-else to="/sandbox/agent" class="touch-target inline-flex items-center gap-1 transition-colors hover:text-content">
                 <!-- One spelling and colour for sandbox state, shared with the rail chip and switcher (availability.ts); a short retry keeps the healthy look. -->
                 <span class="inline-block h-1.5 w-1.5 rounded-full" :class="availabilityVisual.dotClass"></span>
                 {{ availabilityVisual.label }} {{ t(`chat.chatPaneStatus.manage`) }}

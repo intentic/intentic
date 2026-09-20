@@ -184,7 +184,7 @@ import { createGeminiSlice, type GeminiSlice } from "./runtimes/gemini/gemini-pr
 import { createGrokSlice, type GrokSlice } from "./runtimes/grok/grok-provider.js";
 import { createMintedSlice, type MintedSlice } from "./runtimes/minted/minted-provider.js";
 import { createKimiSlice, type KimiSlice } from "./runtimes/kimi/kimi-provider.js";
-import { type ProviderCatalog, providerCatalogsOf } from "./agent/providers/provider-registry.js";
+import { type ProviderCatalog, providerCatalogsOf, providerReadiness } from "./agent/providers/provider-registry.js";
 import { createWorkspaceHistory, type WorkspaceHistory } from "./history/history.js";
 import { type IntenticRun, runIntentic } from "./intentic/intentic-runner.js";
 import { type ManagedProcesses, createManagedProcesses } from "./processes/managed-processes.js";
@@ -478,6 +478,10 @@ export interface Services extends ClaudeSlice, CodexSlice, CursorSlice, GrokSlic
     readonly observedLimits: ObservedLimitStore;
     // Every native provider's live model catalog, assembled from provider modules for one lookup, not each its own.
     readonly providerCatalogs: Record<NativeProvider, ProviderCatalog>;
+    // Whether each native provider holds a credential that can run a turn. Composed rather than called where it is
+    // needed, since it reaches every provider module and each reads its own stores: a caller that only wants the
+    // answer would otherwise have to take the whole of Services to ask for it.
+    readonly providerReadiness: () => Promise<Record<NativeProvider, boolean>>;
     // What each endpoint capability's server publishes, keyed by id; only the server says what it serves.
     readonly endpointModels: EndpointCatalog;
     // Bundled translator: connects/disconnects subscription OAuth; codex/kimi/gemini have no other credential.
@@ -1214,6 +1218,12 @@ export const createServices = (config: Config, logger: Logger): Services => {
             }
             return servicesHolder.current;
         }),
+        providerReadiness: () => {
+            if (servicesHolder.current === undefined) {
+                throw new Error("provider readiness read before services finished composing");
+            }
+            return providerReadiness(servicesHolder.current);
+        },
         endpointModels: createEndpointCatalog(join(authRoot, "endpoints")),
         cliProxy,
         openCode,

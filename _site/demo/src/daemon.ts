@@ -435,7 +435,9 @@ const ROUTES: readonly (readonly [string, string, Handler])[] = [
     [`GET`, `/providers/{provider}/models`, ({ param }) => json(DEMO_CATALOGS[param(`provider`)] ?? { models: [], default: `` })],
     // The recorded workspace adds no ACP agent and no endpoint of its own, but the composer's gate waits on this read
     // as much as on the accounts above it.
-    [`GET`, `/providers`, () => json({ agents: [], endpoints: [] })],
+    // The recording is a box with Claude connected, which is what its chats are addressed to; `native` is how a
+    // reader who cannot open /accounts learns that.
+    [`GET`, `/providers`, () => json({ native: [`claude`], agents: [], endpoints: [] })],
 
     [`GET`, `/settings`, () => json(DEMO_SETTINGS)],
     [`GET`, `/settings/savings`, () => json(DEMO_SAVINGS)],

@@ -11,6 +11,7 @@ const deskReader = vi.hoisted(() => ({ isDesk: false }));
 vi.mock(`../features/sandbox/secrets/useRole`, () => ({ useRole: () => ({ isDesk: ref(deskReader.isDesk) }) }));
 import {
     activationBadge,
+    areaReachable,
     railBands,
     railGroups,
     detectActivations,
@@ -523,6 +524,29 @@ describe(`a desk's rail`, () => {
             expect(railBands([{ id: `chat` }, { id: `agents` }], (tile) => tile.id).map((band) => band.group.id)).toEqual([`work`]);
         } finally {
             deskReader.isDesk = false;
+        }
+    });
+
+    // A `signal` seat is not a closed door: an extension that badges takes one, and every unseated tile is listed in
+    // the More menu besides. Both put areas in front of a desk that answer a press by bouncing it to the chat, which
+    // is what the reader reported as icons that do nothing.
+    it(`withdraws the areas the fence would bounce, rather than seating them and refusing the press`, () => {
+        deskReader.isDesk = true;
+        try {
+            expect(areaReachable(`/chat`)).toBe(true);
+            expect(areaReachable(`/agents`)).toBe(true);
+            expect(areaReachable(`/sandbox/access`)).toBe(true);
+            for (const closed of [`/workspace`, `/preview`, `/browsers`, `/subagents`, `/sandbox`, `/ext/intentic.approvals`]) {
+                expect(areaReachable(closed), closed).toBe(false);
+            }
+        } finally {
+            deskReader.isDesk = false;
+        }
+    });
+
+    it(`withdraws nothing from a tier that can open everything`, () => {
+        for (const area of [`/workspace`, `/preview`, `/browsers`, `/sandbox`, `/ext/intentic.approvals`]) {
+            expect(areaReachable(area), area).toBe(true);
         }
     });
 });

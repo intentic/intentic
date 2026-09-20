@@ -219,7 +219,7 @@ const landing = computed(() => props.pending === `land` || props.agent.status ==
 // Maintainers get Land now; collaborators get Request land instead, since the daemon floors landing at maintainer;
 // viewers get neither.
 // The request is sent here rather than emitted, since the board is only one of this card's several hosts.
-const { canReview, canShip } = useRole();
+const { canReview, canShip, isDesk } = useRole();
 // The audience's words for the verbs on this card; a maker also loses the branch and runner chips, which name nothing
 // they chose.
 const words = useVocabulary();
@@ -754,8 +754,14 @@ const grab = (event: PointerEvent): void => {
                 <span v-if="agent.costUsd !== undefined">{{ formatCost(agent.costUsd) }}</span>
                 <!-- Counts this agent's own children, live-of-total while any are running and settling to the lifetime total once none are. -->
                 <!-- A real link (underlines on hover, tints live), so Ctrl/Cmd-click opens the list in its own tab. -->
+                <!-- Plain text for a desk, whose subagent list the daemon refuses: the count is still its own run's. -->
+                <span v-if="agent.subagents !== undefined && isDesk" class="inline-flex items-center">
+                    <Icon name="users" class="mr-0.5 text-2xs" />{{
+                        agent.subagents.running > 0 ? `${agent.subagents.running} / ${agent.subagents.total}` : agent.subagents.total
+                    }}
+                </span>
                 <RouterLink
-                    v-if="agent.subagents !== undefined"
+                    v-else-if="agent.subagents !== undefined"
                     :to="{ name: `subagents`, query: { agent: agent.id } }"
                     class="touch-target cursor-pointer transition-colors hover:text-content hover:underline"
                     :class="{ 'text-link': agent.subagents.running > 0 }"

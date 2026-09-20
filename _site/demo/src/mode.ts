@@ -89,6 +89,31 @@ const resolve = (): DemoMode => {
 /** State this page load serves, resolved once before boot; every fixture reads it. */
 export const demoMode = resolve();
 
+// WHICH TIER IS READING, from `?as=`, sticky per tab like the mode above it. Not a fullness and not an audience: a
+// grant, which changes what the shell draws at all. A desk is a different app — two rail seats, no hub, no files —
+// and without this the recording could only ever be looked at as the owner, which is the one tier none of that
+// narrowing applies to. `?as=owner` (or a fresh tab) is the way back.
+const TIER_KEY = `intentic.demo.tier`;
+const TIERS = [`owner`, `maintainer`, `collaborator`, `viewer`, `desk`] as const;
+export type DemoTier = (typeof TIERS)[number];
+
+const resolveTier = (): DemoTier => {
+    const url = new URL(window.location.href);
+    const asked = url.searchParams.get(`as`);
+    if (asked !== null) {
+        url.searchParams.delete(`as`);
+        window.history.replaceState(window.history.state, ``, url);
+    }
+    const tier = TIERS.find((candidate) => candidate === (asked ?? window.sessionStorage.getItem(TIER_KEY)));
+    if (tier !== undefined) {
+        window.sessionStorage.setItem(TIER_KEY, tier);
+    }
+    return tier ?? `owner`;
+};
+
+/** The grant this page load is read with; the platform's sandbox row carries it, as a real one would. */
+export const demoTier = resolveTier();
+
 /** Whether this page load is the desk recording: the one switch every fixture seam reads. */
 export const deskEdition = demoMode.id === `desk`;
 

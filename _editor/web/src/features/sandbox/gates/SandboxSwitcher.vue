@@ -22,6 +22,8 @@ import ViewBadgeChip from "../../../core-views/ViewBadgeChip.vue";
 import { RUNNING_MARK_CLASS } from "../../../core-views/viewBadge";
 import TileMark from "../../../shell/rail/TileMark.vue";
 import { restartRunning } from "../live/sandboxRestart";
+import { sandboxHubPath } from "../sandboxNav";
+import { useRole } from "../secrets/useRole";
 import { type SandboxAttentionItem, useSandboxAttention } from "../overview/sandboxAttention";
 import { sandboxIdFromToken } from "../session/sandboxIdFromToken";
 import { sandboxAvailabilityVisual } from "../overview/availability";
@@ -58,6 +60,10 @@ const { cmdOs } = useOsPreference();
 // badge for it would teach the reader to stop reading the badge. A mark of its own, on its own corner, saying only
 // that something is moving. What it will do is said when it does it, by the lane.
 const restarting = computed(() => restartRunning(sandbox.activeSandboxId.value));
+
+// A desk's door to the hub names the one section it may open; every other tier opens on the hub's own default.
+const { isDesk } = useRole();
+const hubPath = computed(() => sandboxHubPath(isDesk.value));
 
 // WHERE THIS SANDBOX RUNS: Intentic's cloud, a machine of the owner's, or somebody else's. A standing fact, never an
 // errand, so it takes the tile's one free corner as a quiet mark rather than a plated badge — and its sentence rides
@@ -516,7 +522,7 @@ const confirmRemove = async (): Promise<void> => {
 
             <!-- The sandbox management hub has no rail tile; this chip is its home, and every attention row lands here too. -->
             <RouterLink
-                to="/sandbox"
+                :to="hubPath"
                 class="flex w-full items-center gap-2 rounded-md px-2 py-1 text-xs text-content transition-colors hover:bg-content/5"
                 @click="dismiss"
             >

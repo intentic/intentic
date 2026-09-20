@@ -29,7 +29,7 @@ const sandboxRequestMock = vi.mocked(sandboxRequest);
 const sandboxJsonMock = vi.mocked(sandboxJson);
 const { loadActiveProviderModels, loadRunnableProviders, loadProviderModels } = await import("./useChat-catalog");
 const { NATIVE_PROVIDERS } = await import("@intentic/sandbox-contract");
-const { acpProviders, endpointProviders, endpointsLoaded } = await import("../accounts/providerCatalog");
+const { acpProviders, endpointProviders, endpointsLoaded, nativeReady } = await import("../accounts/providerCatalog");
 const { setConversations } = await import("../tabs/useChat-tabs");
 const { Conversation } = await import("../session/conversation");
 
@@ -56,6 +56,7 @@ beforeEach(() => {
     endpointsLoaded.value = false;
     acpProviders.value = [];
     endpointProviders.value = [];
+    nativeReady.value = [];
 });
 
 // The daemon's `/providers` answer, and the trial allowance read that rides on the same load.
@@ -76,12 +77,18 @@ const refuses = (status: number): void => {
 
 test(`takes the providers this box adds from the daemon's own answer`, async () => {
     serves([OPUS]);
-    answers({ agents: [{ id: `goose`, label: `Goose` }], endpoints: [{ id: `endpoint/trial`, label: `Free trial`, kind: `endpoint` }] });
+    answers({
+        native: [`claude`],
+        agents: [{ id: `goose`, label: `Goose` }],
+        endpoints: [{ id: `endpoint/trial`, label: `Free trial`, kind: `endpoint` }],
+    });
 
     await loadRunnableProviders();
 
     expect(acpProviders.value).toEqual([{ id: `goose`, label: `Goose` }]);
     expect(endpointProviders.value).toEqual([{ id: `endpoint/trial`, label: `Free trial`, kind: `endpoint` }]);
+    // The half a reader who cannot open /accounts has instead: which of the fixed native list can actually run.
+    expect(nativeReady.value).toEqual([`claude`]);
     expect(endpointsLoaded.value).toBe(true);
 });
 

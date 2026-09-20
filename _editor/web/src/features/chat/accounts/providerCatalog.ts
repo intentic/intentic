@@ -78,6 +78,11 @@ export const providerCommands = ref<Record<AgentProvider, readonly AgentCommand[
 // Installed ACP agent providers (id + label), loaded alongside accounts/models; empty until the first load.
 export const acpProviders = ref<readonly { id: string; label: string }[]>([]);
 
+// Native providers the daemon says can run a turn right now. The account lists answer the same question for anyone
+// who may read them; this is the answer for a tier that may drive a turn but not see what the box is signed in as —
+// a desk, which was otherwise told to connect a provider this sandbox already holds.
+export const nativeReady = ref<readonly AgentProvider[]>([]);
+
 // What's left of today's free trial; `available: false` is both "no trial" and "not loaded yet".
 export const trialStatus = ref<{
     available: boolean;

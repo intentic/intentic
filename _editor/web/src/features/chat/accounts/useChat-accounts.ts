@@ -184,6 +184,9 @@ const readConnections = async (force: boolean): Promise<void> => {
         Promise.allSettled(natives.map((target) => refreshAccounts(target))),
         refreshTranslatorAccounts(),
         refreshProviderRefusals(),
+        // The daemon's own readiness rides with the account lists rather than only with the catalogs: the two answer
+        // one question, and a disconnect that moved one and not the other would leave a gone account reading ready.
+        loadRunnableProviders(),
         // Alongside the lists rather than before them: unforced it must not delay the panel, and its own answer lands
         // on `heldAccounts` whenever it arrives.
         force ? undefined : readPlanLimits(false),
@@ -211,12 +214,11 @@ export const refreshConnections = (force = false): Promise<void> => {
 export const loadAccountStatus = async (): Promise<void> => {
     await Promise.all([
         // Which accounts and subscriptions this sandbox is signed in with, the gate every provider surface reads.
+        // Carries the runnable list (ACP agents, endpoints, native readiness) with it: one question, one read.
         refreshConnections(),
         // Model lists are daemon-owned too; the open chat's loads on the same reachable seam, so its composer can name
         // the model it will send on. The other providers' lists are the picker's to fetch when it opens.
         loadActiveProviderModels(),
-        // Installed ACP agents and model endpoints are providers too, surface them on the same seam.
-        loadRunnableProviders(),
         // Claude only, for a populated `/` popover on open; other providers load via ensureProviderCommands.
         loadProviderCommands(`claude`),
     ]);
