@@ -10,7 +10,7 @@ export interface BootStepDeclaration<Key extends string = string> {
     readonly label: string;
 }
 
-// `Key` lets a caller with a known chain (main.ts) get its declarations checked by tsc instead of at runtime.
+// `Key` lets a caller with a known chain (boot-chain.ts) get its declarations checked by tsc instead of at runtime.
 export interface BootTracker<Key extends string = string> {
     // Resolves once the chain converges; data routes await it, /health and /events never do.
     readonly converged: Promise<void>;

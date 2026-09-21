@@ -630,7 +630,7 @@ export const refreshUpdatesIfStale = (services: Services): void => {
     })().catch((error: unknown) => services.logger.warn({ err: error }, "extension update check failed"));
 };
 
-// Boot wiring (main.ts): one check shortly after boot, delayed to avoid the boot path's own git work, then daily.
+// Boot wiring (bootstrap/version-watches.ts): one check shortly after boot, delayed to avoid the boot path's own git work, then daily.
 // The list-read staleness refresh above is the floor for a sandbox somebody is actually looking at.
 export const startExtensionUpdateWatch = (services: Services): { stop: () => void } => {
     const initial = setTimeout(() => refreshUpdatesIfStale(services), 60_000);

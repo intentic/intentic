@@ -116,7 +116,7 @@ const defaultRunner: ProcessRunner = {
 };
 
 // The tmux server outlives a daemon restart; panel/agent-*/job-* sessions are killed at boot so 'stopped after a
-// restart' holds. `exempt` spares a session main.ts re-adopted instead of truncating.
+// restart' holds. `exempt` spares a session the boot chain re-adopted instead of truncating.
 export const killStaleManagedSessions = async (exempt: readonly string[] = []): Promise<void> => {
     try {
         const { stdout } = await execFileAsync("tmux", ["list-sessions", "-F", "#{session_name}"]);

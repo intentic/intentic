@@ -376,7 +376,7 @@ export const createApp = (services: Services): Hono<AppEnv> => {
     const access = createAccessRoutes(services);
     app.post("/system/ws-ticket", access.wsTicket);
 
-    // Interactive PTY over a WebSocket, paired with the `ws` server in main.ts; matched before the oRPC catch-all.
+    // Interactive PTY over a WebSocket, paired with the `ws` server in bootstrap/daemon-listeners.ts; matched before the oRPC catch-all.
     app.get("/system/terminal", createTerminalRoute(services));
 
     // Desktop sync's transport: this container's sshd as a byte stream, authorized via the ordinary grant table.

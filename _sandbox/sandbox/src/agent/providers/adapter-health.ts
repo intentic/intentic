@@ -36,7 +36,7 @@ const refreshRuntimeHealth = async (services: Services): Promise<void> => {
     cached = Object.fromEntries(entries) as RuntimeHealth;
 };
 
-// Boot-time sweep (main.ts): warms the cache immediately, then on an interval. Unref'd so it never holds the event loop
+// Boot-time sweep (bootstrap/boot-schedulers.ts): warms the cache immediately, then on an interval. Unref'd so it never holds the event loop
 // open; tests that build the app directly never call this.
 export const startRuntimeHealth = (services: Services): void => {
     const tick = (): void => {

@@ -135,7 +135,7 @@ export const definitionActions = (definition: SandboxDefinition): NeedsAction[] 
     return actions;
 };
 
-// Exported apart from the arrival surface: main.ts's definitionSeed applies everything applicable with no browser
+// Exported apart from the arrival surface: the boot chain's definitionSeed applies everything applicable with no browser
 // involved, using the same report shape either caller renders or logs.
 export const applyDefinitionItems = async (
     services: Services,

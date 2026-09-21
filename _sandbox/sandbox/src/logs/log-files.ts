@@ -105,7 +105,7 @@ export const pruneLogFiles = async (root: string): Promise<void> => {
 const pipeHook = (dir: string): string =>
     `pipe-pane -o "mkdir -p ${dir}; exec pane-log-clean ${dir}/#{s|[^a-zA-Z0-9_.-]|_|:session_name}-#{pane_id}.log #{pane_width} #{pane_height}"`;
 
-// Matches INTENTIC_TERMINAL_LOGS_DIR (main.ts); bin/tmux-run composes `$dir/$session-$pane.log` from it for the output
+// Matches INTENTIC_TERMINAL_LOGS_DIR (bootstrap/daemon-env.ts); bin/tmux-run composes `$dir/$session-$pane.log` from it for the output
 // filter's footer.
 export const terminalLogsDir = (historyRoot: string): string => join(logsRoot(historyRoot), "terminals");
 

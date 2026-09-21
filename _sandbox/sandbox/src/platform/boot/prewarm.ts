@@ -52,8 +52,8 @@ export const arrivedPrewarmed = async (root: string, historyRoot: string): Promi
 const WARMUP_MAX_MS = 120_000;
 const WARMUP_POLL_MS = 2_000;
 
-// Passed in rather than imported: platform sits below ports and workspace in the import graph, and main.ts is the one
-// place that already knows both.
+// Passed in rather than imported: platform sits below ports and workspace in the import graph, and the phases that
+// probe a starter (bootstrap/workspace-apps.ts, main.ts's prewarm exit) are the ones that already know both.
 export interface StarterProbe {
     // Process-manager key the starter's dev server runs under (workspace/app-previews.ts `appPanelKey`).
     readonly starterKey: string;

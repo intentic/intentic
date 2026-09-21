@@ -13,7 +13,7 @@ import type { CapabilityCtx, CapabilityHandler } from "../capability.js";
 
 const exec = promisify(execFile);
 
-// Panel key for the dockerd session; must match what main.ts's boot adopt uses.
+// Panel key for the dockerd session; must match what the boot chain's adopt uses.
 export const DOCKER_PANEL_KEY = "docker";
 
 // Always present; the engine half is the docker pack, composed only when the base image lacks it.

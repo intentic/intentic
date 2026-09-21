@@ -1430,7 +1430,7 @@ export const createServices = (config: Config, logger: Logger): Services => {
         auth,
     };
     servicesHolder.current = services;
-    // Registration only; nothing runs until main.ts drives a moment, so a test build carries it unpaid for.
+    // Registration only; nothing runs until a boot phase drives a moment, so a test build carries it unpaid for.
     registerDaemonInvariants(invariants, {
         turnJournal,
         agents,

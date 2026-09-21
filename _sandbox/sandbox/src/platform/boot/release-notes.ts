@@ -112,7 +112,7 @@ export const refreshReleaseNotes = async (): Promise<void> => {
     }
 };
 
-// Boot-time background refresh (main.ts), mirroring startVersionCheck including its dev-build skip: a dev build's 0.0.0
+// Boot-time background refresh (bootstrap/version-watches.ts), mirroring startVersionCheck including its dev-build skip: a dev build's 0.0.0
 // is never offered an update, so its notes would have nowhere to go.
 export const startReleaseNotesCheck = (): { stop: () => void } => {
     if (isDevBuild) {
