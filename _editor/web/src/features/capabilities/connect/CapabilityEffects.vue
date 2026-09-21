@@ -38,96 +38,89 @@ const describeMount = (target: string, writable: boolean): EffectRow => {
     };
 };
 
-const describe = (effect: CapabilityEffect): EffectRow => {
-    switch (effect.kind) {
-        case "skill":
-            return {
-                icon: `sparkles`,
-                label: effect.name === undefined ? `Adds a skill the agent loads next turn` : `Adds skill "${effect.name}" the agent loads next turn`,
-            };
-        case "secret":
-            return effect.exposure === `agent-env`
-                ? { icon: `key`, label: t(`capabilities.capabilityEffects.storesSecretInjectedInto`) }
-                : { icon: `lock`, label: t(`capabilities.capabilityEffects.storesSecretInSandbox`) };
-        case "clone":
-            return {
-                icon: `download`,
-                label: effect.url === undefined ? `Clones a git repository into your sandbox` : `Clones ${effect.url} into your sandbox`,
-            };
-        case "image":
-            return { icon: `box`, label: t(`capabilities.capabilityEffects.extendsSandboxImageOne`) };
-        case "runtime":
-            return describeRuntime(effect.level);
-        case "gpu":
-            return { icon: `bolt`, label: t(`capabilities.capabilityEffects.claimsEveryNvidiaGpu`), warn: true };
-        case "mount":
-            return describeMount(effect.target, effect.writable);
-        case "restart":
-            return { icon: `refresh`, label: t(`capabilities.capabilityEffects.appliesWithoutRebuildBy`, { process: effect.process }) };
-        case "process":
-            return { icon: `play`, label: `Runs background process${effect.names.length === 1 ? `` : `es`}: ${effect.names.join(`, `)}` };
-        case "mcp":
-            return { icon: `bolt`, label: t(`capabilities.capabilityEffects.registersMcpServerAgent`) };
-        case "scaffold":
-            return {
-                icon: `sitemap`,
-                label:
-                    effect.repos.length === 0
-                        ? `Scaffolds a repository`
-                        : `Scaffolds ${effect.repos.length === 1 ? `repository` : `repositories`} ${effect.repos.join(`, `)}`,
-            };
-        case "trusted-code":
-            return {
-                icon: `exclamation-triangle`,
-                label: t(`capabilities.capabilityEffects.runsCodeInsideApp`),
-                warn: true,
-            };
-        case "profile":
-            // Names the passkey as well as the profile, since a stored security key is a bigger thing to hold than a
-            // session
-            // cookie; both are removed together.
-            return { icon: `globe`, label: t(`capabilities.capabilityEffects.keepsLoggedInBrowser`, { platform: effect.platform }) };
-        case "machine":
-            // The one effect reaching outside the sandbox: warned, and states the actual verbs granted on the user's
-            // device.
-            return {
-                icon: `desktop`,
-                label: `Lets the agent ${effect.grants.join(`, `)} on your ${effect.platform === `windows` ? `Windows` : `Linux`} device`,
-                warn: true,
-            };
-        case "own-browser":
-            // Warned like `machine`; the allowed sites are the user's own choice in the extension, which the reader
-            // must know
-            // before agreeing to this.
-            return {
-                icon: `globe`,
-                label: `Lets the agent ${effect.grants.join(`, `)} in your ${effect.platform === `edge` ? `Edge` : `Chrome`}, on the sites you allow it in the extension`,
-                warn: true,
-            };
-        case "endpoint":
-            // Named, not warned: pointing at a server is the point of this capability (as often a private choice, like
-            // a local
-            // model); the row states the destination.
-            return {
-                icon: `cloud-upload`,
-                label:
-                    effect.url === ``
-                        ? `Sends this sandbox's prompts, files and command output to the model API you configure`
-                        : `Sends this sandbox's prompts, files and command output to ${effect.url}`,
-            };
-        case "spend":
-            // Warned like `machine`: the spend leaves the sandbox and can't be undone by removing the tile; the row
-            // leads with
-            // the ceiling and whether it asks each time.
-            return {
-                icon: `credit-card`,
-                label: effect.carded
-                    ? `Lets the agent spend real money: up to $${effect.perPaymentUsd} per payment and $${effect.dailyUsd} a day, and it asks you in chat every time`
-                    : `Lets the agent spend real money, up to $${effect.perPaymentUsd} per payment and $${effect.dailyUsd} a day, and small payments go through without asking`,
-                warn: true,
-            };
-    }
+// One row per effect kind, keyed rather than switched. The map is exhaustive by type exactly as the switch was — a
+// new kind is a compile error here — and each entry is its own small function, which twenty cases in one body could
+// never be.
+type Describers = { readonly [K in CapabilityEffect["kind"]]: (effect: Extract<CapabilityEffect, { readonly kind: K }>) => EffectRow };
+
+const DESCRIBE: Describers = {
+    skill: (effect) => ({
+        icon: `sparkles`,
+        label: effect.name === undefined ? `Adds a skill the agent loads next turn` : `Adds skill "${effect.name}" the agent loads next turn`,
+    }),
+    secret: (effect) =>
+        effect.exposure === `agent-env`
+            ? { icon: `key`, label: t(`capabilities.capabilityEffects.storesSecretInjectedInto`) }
+            : { icon: `lock`, label: t(`capabilities.capabilityEffects.storesSecretInSandbox`) },
+    clone: (effect) => ({
+        icon: `download`,
+        label: effect.url === undefined ? `Clones a git repository into your sandbox` : `Clones ${effect.url} into your sandbox`,
+    }),
+    image: () => ({ icon: `box`, label: t(`capabilities.capabilityEffects.extendsSandboxImageOne`) }),
+    runtime: (effect) => describeRuntime(effect.level),
+    gpu: () => ({ icon: `bolt`, label: t(`capabilities.capabilityEffects.claimsEveryNvidiaGpu`), warn: true }),
+    mount: (effect) => describeMount(effect.target, effect.writable),
+    restart: (effect) => ({ icon: `refresh`, label: t(`capabilities.capabilityEffects.appliesWithoutRebuildBy`, { process: effect.process }) }),
+    process: (effect) => ({ icon: `play`, label: `Runs background process${effect.names.length === 1 ? `` : `es`}: ${effect.names.join(`, `)}` }),
+    mcp: () => ({ icon: `bolt`, label: t(`capabilities.capabilityEffects.registersMcpServerAgent`) }),
+    scaffold: (effect) => ({
+        icon: `sitemap`,
+        label:
+            effect.repos.length === 0
+                ? `Scaffolds a repository`
+                : `Scaffolds ${effect.repos.length === 1 ? `repository` : `repositories`} ${effect.repos.join(`, `)}`,
+    }),
+    "trusted-code": () => ({
+        icon: `exclamation-triangle`,
+        label: t(`capabilities.capabilityEffects.runsCodeInsideApp`),
+        warn: true,
+    }),
+    // Names the passkey as well as the profile, since a stored security key is a bigger thing to hold than a session
+    // cookie; both are removed together.
+    profile: (effect) => ({ icon: `globe`, label: t(`capabilities.capabilityEffects.keepsLoggedInBrowser`, { platform: effect.platform }) }),
+    // Reaches outside the sandbox: warned, and states the actual verbs granted on the user's device.
+    machine: (effect) => ({
+        icon: `desktop`,
+        label: `Lets the agent ${effect.grants.join(`, `)} on your ${effect.platform === `windows` ? `Windows` : `Linux`} device`,
+        warn: true,
+    }),
+    // Warned like `machine`; the allowed sites are the user's own choice in the extension, which the reader must know
+    // before agreeing to this.
+    "own-browser": (effect) => ({
+        icon: `globe`,
+        label: `Lets the agent ${effect.grants.join(`, `)} in your ${effect.platform === `edge` ? `Edge` : `Chrome`}, on the sites you allow it in the extension`,
+        warn: true,
+    }),
+    // Named, not warned: pointing at a server is the point of this capability (as often a private choice, like a local
+    // model); the row states the destination.
+    endpoint: (effect) => ({
+        icon: `cloud-upload`,
+        label:
+            effect.url === ``
+                ? `Sends this sandbox's prompts, files and command output to the model API you configure`
+                : `Sends this sandbox's prompts, files and command output to ${effect.url}`,
+    }),
+    // Warned like `machine`: the spend leaves the sandbox and can't be undone by removing the tile; the row leads with
+    // the ceiling and whether it asks each time.
+    spend: (effect) => ({
+        icon: `credit-card`,
+        label: effect.carded
+            ? `Lets the agent spend real money: up to $${effect.perPaymentUsd} per payment and $${effect.dailyUsd} a day, and it asks you in chat every time`
+            : `Lets the agent spend real money, up to $${effect.perPaymentUsd} per payment and $${effect.dailyUsd} a day, and small payments go through without asking`,
+        warn: true,
+    }),
+    // Warned, and worded for what survives removing the tile: sandboxes the agent made stay made, on the account
+    // rather than in this box.
+    provision: () => ({
+        icon: `server`,
+        label: `Lets the agent create sandboxes on your intentic account, asking you in chat each time. Ones it made outlive this connection`,
+        warn: true,
+    }),
 };
+
+// The key and the handler it selects are correlated by construction and not to the checker, so the narrowing the
+// switch did for free costs one assertion here, at the single point where the tag is read.
+const describe = (effect: CapabilityEffect): EffectRow => (DESCRIBE[effect.kind] as (value: CapabilityEffect) => EffectRow)(effect);
 
 const rows = computed<readonly EffectRow[]>(() => effects.map(describe));
 </script>

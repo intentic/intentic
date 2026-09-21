@@ -2,9 +2,9 @@ import { request } from "node:https";
 import type { Config } from "../env.config.js";
 import { isLocalHost } from "./tls/local-tls.js";
 
-// One buffered platform call, authenticated by the connect token, onto the platform's connect-token routes
-// (wallet-signer.ts above all). Its answer is relayed through untouched, since a refusal is already written for its
-// reader. node:https, not fetch: a dev platform's cert needs per-request verification skipped.
+// One buffered platform call onto the platform's non-session routes (wallet-signer.ts, fleet/fleet-client.ts). Its
+// answer is relayed through untouched, since a refusal is already written for its reader. node:https, not fetch: a dev
+// platform's cert needs per-request verification skipped.
 
 export interface RelayedAnswer {
     readonly status: number;
@@ -12,27 +12,48 @@ export interface RelayedAnswer {
     readonly contentType: string;
 }
 
-// The daemon's own answer for a sandbox with no platform; the one case that can't actually be relayed.
-const UNRELAYABLE: RelayedAnswer = {
-    status: 502,
-    body: JSON.stringify({ error: "this sandbox is not connected to a platform" }),
-    contentType: "application/json",
+// WHAT A CALL PRESENTS TO PROVE WHO IS ASKING. The connect token names this SANDBOX and reaches only its own relay
+// routes; a provisioning token names the owner's ACCOUNT and reaches only /fleet. Disjoint on purpose, so a leaked
+// credential is bounded by the door it was minted for rather than by what the holder thinks to try.
+export type PlatformAuth = { readonly kind: "connect" } | { readonly kind: "bearer"; readonly token: string };
+
+export interface PlatformCall {
+    readonly method: "GET" | "POST";
+    readonly path: string;
+    readonly payload?: string;
+    readonly auth: PlatformAuth;
+    // What a dead or absent platform did NOT do, in the caller's own words: the sentence is read by a person deciding
+    // whether to retry, and "nothing was charged" and "nothing was created" settle different worries.
+    readonly unreached: string;
+}
+
+const headerFor = (config: Config, auth: PlatformAuth): Record<string, string> | undefined => {
+    if (auth.kind === "connect") {
+        return config.connectToken === "" ? undefined : { "x-intentic-connect": config.connectToken };
+    }
+    return auth.token === "" ? undefined : { authorization: `Bearer ${auth.token}` };
 };
 
-export const relayPlatform = (config: Config, method: "GET" | "POST", path: string, payload?: string): Promise<RelayedAnswer> =>
+export const callPlatform = (config: Config, call: PlatformCall): Promise<RelayedAnswer> =>
     new Promise((resolve) => {
-        if (config.platform.url === "" || config.connectToken === "") {
-            resolve(UNRELAYABLE);
+        const auth = headerFor(config, call.auth);
+        // The one case that can't actually be relayed: no platform, or no credential for the door being knocked on.
+        if (config.platform.url === "" || auth === undefined) {
+            resolve({
+                status: 502,
+                body: JSON.stringify({ error: "this sandbox is not connected to a platform" }),
+                contentType: "application/json",
+            });
             return;
         }
-        const url = new URL(path, config.platform.url);
+        const url = new URL(call.path, config.platform.url);
         const req = request(
             url,
             {
-                method,
+                method: call.method,
                 headers: {
-                    "x-intentic-connect": config.connectToken,
-                    ...(payload !== undefined ? { "content-type": "application/json" } : {}),
+                    ...auth,
+                    ...(call.payload !== undefined ? { "content-type": "application/json" } : {}),
                 },
                 rejectUnauthorized: !isLocalHost(url.hostname),
             },
@@ -53,11 +74,11 @@ export const relayPlatform = (config: Config, method: "GET" | "POST", path: stri
         req.on("error", () =>
             resolve({
                 status: 502,
-                body: JSON.stringify({ error: "the platform could not be reached, nothing was charged" }),
+                body: JSON.stringify({ error: `the platform could not be reached, ${call.unreached}` }),
                 contentType: "application/json",
             }),
         );
         // Quick calls only, so cut a dead platform short.
         req.setTimeout(30_000, () => req.destroy(new Error("timeout")));
-        req.end(payload);
+        req.end(call.payload);
     });

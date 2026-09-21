@@ -3420,7 +3420,8 @@
             "data": "Datos",
             "keybindings": "Atajos de teclado",
             "notifications": "Notificaciones",
-            "profile": "Perfil"
+            "profile": "Perfil",
+            "tokens": "Tokens"
         },
         "settingsBilling": {
             "activating": "Activando…",
@@ -3520,6 +3521,15 @@
             "displayName": "Nombre visible",
             "profile": "Perfil",
             "renameDisplayName": "Cambiar el nombre visible"
+        },
+        "settingsTokens": {
+            "apiTokens": "Tokens de API",
+            "labelEGStorefrontSandbox": "Etiqueta (p. ej. sandbox de la tienda)",
+            "mintToken": "Crear token",
+            "revoke": "Revocar",
+            "shownOnceCopyNow": "Se muestra una sola vez. Cópialo ahora: solo se guarda su huella.",
+            "whatProvisioningTokensAre": "Un token de aprovisionamiento permite que una de tus sandboxes cree sandboxes en esta cuenta. Pégalo en la capacidad «Flota de sandboxes» de esa sandbox; cada sandbox que cree su agente te seguirá preguntando antes en el chat.",
+            "whereItGoes": "Dónde va"
         },
         "title": "Ajustes"
     },

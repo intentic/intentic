@@ -1,6 +1,7 @@
 import type { CapabilityStatus, IntenticLine } from "@intentic/sandbox-contract";
 import type { Services } from "../composition.js";
 import type { ManagedProcesses } from "../processes/managed-processes.js";
+import { fleetWhoami } from "../fleet/fleet-client.js";
 import { relayWalletEnsure } from "../wallet/wallet-signer.js";
 import { ensureIntentInstallable } from "../scaffold/ensure-intent.js";
 import { scaffoldAppMonorepo, scaffoldNeutralLedger } from "../scaffold/scaffold-repos.js";
@@ -40,6 +41,9 @@ export interface CapabilityCtx {
     // Create-or-fetch the owner's platform wallet for its address (wallet/wallet-signer.ts), the wallet
     // handler's whole platform reach, closure-wrapped so it stays testable. The caps are not this side's to send.
     readonly walletEnsure: (network: string) => Promise<{ readonly status: number; readonly body: string }>;
+    // Whether a provisioning token still names an account, the `fleet` handler's whole platform reach. Closure-wrapped
+    // for the same reason as the wallet's: a handler holds no Config and no platform address of its own.
+    readonly fleetWhoami: (token: string) => Promise<{ readonly status: number; readonly body: string }>;
     readonly scaffoldNeutralLedger: (session: string) => Promise<void>;
     readonly ensureIntentInstallable: (session: string) => Promise<void>;
     readonly scaffoldMonorepo: (name: string, session: string) => Promise<void>;
@@ -93,6 +97,7 @@ export const capabilityCtx = (services: Services): CapabilityCtx => {
         syncEndpoints: () => syncEndpointCompat(services),
         extensionsDir: services.config.extensionsDir,
         walletEnsure: (network) => relayWalletEnsure(services.config, network),
+        fleetWhoami: (token) => fleetWhoami(services.config, token),
         scaffoldNeutralLedger: (session) => scaffoldNeutralLedger(services, session),
         ensureIntentInstallable: (session) => ensureIntentInstallable(services, session),
         scaffoldMonorepo: (name, session) => scaffoldAppMonorepo(services, name, session),

@@ -3420,7 +3420,8 @@
             "data": "Daten",
             "keybindings": "Tastenkürzel",
             "notifications": "Benachrichtigungen",
-            "profile": "Profil"
+            "profile": "Profil",
+            "tokens": "Tokens"
         },
         "settingsBilling": {
             "activating": "Wird aktiviert…",
@@ -3520,6 +3521,15 @@
             "displayName": "Anzeigename",
             "profile": "Profil",
             "renameDisplayName": "Anzeigename ändern"
+        },
+        "settingsTokens": {
+            "apiTokens": "API-Tokens",
+            "labelEGStorefrontSandbox": "Bezeichnung (z. B. Storefront-Sandbox)",
+            "mintToken": "Token erzeugen",
+            "revoke": "Widerrufen",
+            "shownOnceCopyNow": "Wird nur einmal angezeigt. Kopiere ihn jetzt: gespeichert wird nur sein Hashwert.",
+            "whatProvisioningTokensAre": "Mit einem Bereitstellungs-Token kann eine deiner Sandboxes Sandboxes in diesem Konto anlegen. Füge ihn in die Fähigkeit „Sandbox-Flotte“ jener Sandbox ein; jede Sandbox, die ihr Agent anlegt, fragt dich vorher trotzdem im Chat.",
+            "whereItGoes": "Wohin er gehört"
         },
         "title": "Einstellungen"
     },

@@ -549,6 +549,11 @@ COPY --chmod=755 _sandbox/sandbox/bin/secrets /usr/local/bin/secrets
 # services — it relays through the daemon, which owns the engine, the budgets and the persona gate; the CLI
 # spawns nothing itself and reads no credential.
 COPY --chmod=755 _sandbox/sandbox/bin/agents /usr/local/bin/agents
+# The sandbox-fleet command the fleet skill teaches: the owner's other sandboxes, and the one door a new one
+# is created through (src/fleet/). Same shape as wallet — it relays through the daemon, which owns the
+# provisioning token, the consent card and the machine that builds it; the CLI holds no credential, and a
+# create that was not approved in chat mints nothing.
+COPY --chmod=755 _sandbox/sandbox/bin/sandboxes /usr/local/bin/sandboxes
 # Entrypoint starts sshd (for Mutagen sync) then execs the daemon as PID 1.
 COPY _sandbox/sandbox/docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh

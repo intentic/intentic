@@ -241,6 +241,20 @@ export const docsBook: Book = {
                             },
                         },
                         {
+                            // After Remote runners on purpose: that page moves a turn's compute to another machine,
+                            // this one gives the work its own machine outright, and the fork between them is the
+                            // question a reader arrives with.
+                            id: "fleet",
+                            title: "A fleet of sandboxes",
+                            blurb: "Let an agent create the sandboxes a team of them needs",
+                            meta: {
+                                title: "A fleet of sandboxes · intentic docs",
+                                description:
+                                    "Connect one sandbox to your account so its agent can create the others: a provisioning token, a card in chat for every create, and sandbox.toml as the unit of work.",
+                                datePublished: "2026-09-21",
+                            },
+                        },
+                        {
                             id: "automations",
                             // Names all three (automations, workflows, loops); still the longest row, but fits on one
                             // line.

@@ -27,6 +27,7 @@ import { createRouter } from "./router.js";
 import { verifySyncToken } from "./platform/sync.js";
 import { createSyncRoutes } from "./platform/sync.routes.js";
 import { createSyncSshRoute } from "./platform/sync-ssh.js";
+import { createSandboxesRoutes } from "./fleet/sandboxes.routes.js";
 import { createWalletRoutes } from "./wallet/wallet.routes.js";
 import { createFleetRoutes } from "./agents/recall/fleet.routes.js";
 import { createChildrenRoutes } from "./agent/subagents/children.routes.js";
@@ -475,6 +476,12 @@ export const createApp = (services: Services): Hono<AppEnv> => {
     const askRoutes = createCapabilityAskRoutes(services);
     app.get("/capabilities/connectable", askRoutes.connectable);
     app.post("/capabilities/ask", askRoutes.ask);
+
+    // The `sandboxes` CLI: the owner's other sandboxes, and the one door a new one is created through. `/sandboxes`
+    // rather than `/fleet`, which the conversation-fleet reads already own.
+    const sandboxRoutes = createSandboxesRoutes(services);
+    app.get("/sandboxes", sandboxRoutes.list);
+    app.post("/sandboxes", sandboxRoutes.create);
 
     // The wallet surface: `status`/`history` are reads, `fetch` is the one door money leaves through.
     // It parses the endpoint's x402 challenge, checks the owner's policy, parks non-standing spend on an approval card,

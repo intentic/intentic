@@ -2,9 +2,10 @@ import type { HostScopes } from "@intentic/sandbox-contract";
 import { expect, test } from "vitest";
 import { ScopeError } from "../policy.js";
 import {
+    createSandbox,
     FLEET_ARGS,
     icCandidates,
-    icReconnectArgs,
+    icConnectArgs,
     icRemoveArgs,
     icReshapeArgs,
     icRunnerArgs,
@@ -102,20 +103,30 @@ test("each swap builds the argv ic actually takes", () => {
 
 // ic sandbox connect derives the sandbox from the claim; a slug alongside it would pick a second one.
 test("a reconnect redeems the claim and lets ic derive the sandbox from it", () => {
-    expect(icReconnectArgs("code-abc")).toEqual(["sandbox", "connect", "-y", "--", "code-abc"]);
-    expect(icReconnectArgs("  code-abc  ")).toEqual(["sandbox", "connect", "-y", "--", "code-abc"]);
+    expect(icConnectArgs("code-abc")).toEqual(["sandbox", "connect", "-y", "--", "code-abc"]);
+    expect(icConnectArgs("  code-abc  ")).toEqual(["sandbox", "connect", "-y", "--", "code-abc"]);
 });
 
 // A code starting with a hyphen is a code, not a flag: `--` is what keeps the argument parser from reading it as one.
 test("a reconnect passes a hyphen-leading code as a value", () => {
-    expect(icReconnectArgs("-Tq9xk")).toEqual(["sandbox", "connect", "-y", "--", "-Tq9xk"]);
+    expect(icConnectArgs("-Tq9xk")).toEqual(["sandbox", "connect", "-y", "--", "-Tq9xk"]);
 });
 
 test("a reconnect with no claim is refused rather than run as a bare connect", () => {
     // Without a code, ic sandbox connect -y opens an interactive wizard this machine has no terminal for.
-    expect(() => icReconnectArgs(undefined)).toThrow(/setupCode.*required/i);
-    expect(() => icReconnectArgs("")).toThrow(/required/i);
-    expect(() => icReconnectArgs("   ")).toThrow(/required/i);
+    expect(() => icConnectArgs(undefined)).toThrow(/setupCode.*required/i);
+    expect(() => icConnectArgs("")).toThrow(/required/i);
+    expect(() => icConnectArgs("   ")).toThrow(/required/i);
+});
+
+// The claim is single-use: a create that would land on a name already taken has to refuse BEFORE ic runs, or the
+// owner pays a round trip to the platform for a code that bought nothing.
+test("a create with no claim is refused before the fleet is even read", async () => {
+    await expect(createSandbox("reviewer", undefined, scopes(), () => {})).rejects.toThrow(/setupCode.*required/i);
+});
+
+test("creating is refused by the sandboxes switch, like every other verb that runs ic", async () => {
+    await expect(createSandbox("reviewer", "code-abc", scopes({ sandboxes: "off" }), () => {})).rejects.toThrow(/Manage sandboxes on this device/);
 });
 
 test("a rebuild without the approved digest is refused rather than built against nothing", () => {

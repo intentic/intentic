@@ -64,15 +64,20 @@ export const DeviceSandboxOpSchema = z.enum([
     "reshape",
     "remove",
     "logs",
-    // Only op that redeems a fresh setup code; others recreate a container from its own existing env.
+    // The two ops that redeem a fresh setup code; every other one recreates a container from its own existing env.
+    // They differ only in which row the claim names — an existing sandbox on this machine, or one that has never run
+    // anywhere — which is why each checks the opposite thing about the slug before spending the code.
     "reconnect",
+    "create",
     "runner-up",
     "runner-remove",
 ]);
 export type DeviceSandboxOp = z.infer<typeof DeviceSandboxOpSchema>;
 export const DeviceSandboxFlowSchema = z.object({
     op: DeviceSandboxOpSchema,
-    // Sandbox slug, or the runner's name for the runner ops (as `/system/runners`/`ic runner list` know it).
+    // Sandbox slug, the runner's name for the runner ops (as `/system/runners`/`ic runner list` know it), or for
+    // `create` the name the claim is about to produce — the one op where the slug is an expectation rather than a
+    // lookup, and the device refuses if anything already answers to it.
     slug: z.string().min(1),
     // Approved overlay's sha256, required only by `rebuild`; only content matching it is ever built.
     hash: z.string().optional(),
@@ -81,7 +86,7 @@ export const DeviceSandboxFlowSchema = z.object({
     // `runner-up` only, daemon-filled, never by the caller: the browser never holds the pairing credential.
     parentUrl: z.string().optional(),
     pair: z.string().optional().meta({ secret: true }),
-    // Required by `reconnect` only; single-sandbox and short-lived, so a leak only buys a recreate.
+    // Required by `reconnect` and `create`; single-sandbox and short-lived, so a leak only buys one recreate.
     setupCode: z.string().optional().meta({ secret: true }),
     // `runner-up` only, daemon-filled: `definition` carries no capabilities or secrets; `overlay`/`overlayHash` are
     // re-verified by hash before build.

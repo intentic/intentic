@@ -69,6 +69,7 @@ conversation that starts there (a persona's `startIn`).
 | a tool, toolchain or system package that survives a rebuild | `environment` skill: propose overlay Dockerfile steps the owner approves |
 | a repo they can open, run and preview from the sidebar | `panels` skill: give the repo an `operator/` web app |
 | to pay an x402 endpoint | `wallet` skill: the `wallet` CLI; the owner approves each payment outside their auto-approve band |
+| a SEPARATE sandbox: a second project, a specialized agent with its own tools and access, a team of them | `fleet` skill: the `sandboxes` CLI; every create asks in chat first. A difference only in how a turn behaves is a persona, not a machine |
 | a post on X, Reddit, Discord, YouTube… prepared rather than sent | `drafts` skill (present when the drafts extension is on) |
 | to act as one of the sandbox's signed-in accounts on a site | `mcp__accounts__roster`, then `ToolSearch` `+mcp__browser__`; the account's own skill holds the site's cheatsheet |
 | to wait on a CI run, a deploy, anything outside this sandbox | `mcp__watch__start` with a cheap check command, then end the turn |

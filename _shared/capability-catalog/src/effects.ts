@@ -45,7 +45,10 @@ export type CapabilityEffect =
     | { readonly kind: "spend"; readonly perPaymentUsd: string; readonly dailyUsd: string; readonly carded: boolean }
     // Mounts somebody's file server into the sandbox; `writable` is the whole decision, so it is its own row rather
     // than a config detail. `target` is //server/share, empty while the form is still blank.
-    | { readonly kind: "mount"; readonly target: string; readonly writable: boolean };
+    | { readonly kind: "mount"; readonly target: string; readonly writable: boolean }
+    // Reaches the owner's ACCOUNT rather than this sandbox: the agent may create sandboxes on it. Its own row because
+    // no other effect outlives the tile the way a sandbox somebody else's agent made does.
+    | { readonly kind: "provision" };
 
 export interface CapabilityEffectInput {
     readonly kind: CapabilityKind;
@@ -251,6 +254,9 @@ const KIND_EFFECTS: Record<CapabilityKind, (input: CapabilityEffectInput) => rea
         },
         { kind: "skill", name: "wallet" },
     ],
+    // The token is held by the daemon and never injected into the agent's env, so its `secret` row is `disk`: what the
+    // agent gets is the door, not the credential. Every create still asks in chat.
+    fleet: () => [{ kind: "provision" }, { kind: "secret", exposure: "disk" }, { kind: "skill", name: "fleet" }],
 };
 
 export const capabilityEffects = (input: CapabilityEffectInput): readonly CapabilityEffect[] => KIND_EFFECTS[input.kind](input);

@@ -1,6 +1,5 @@
 import { apiContract, AnnounceRefusalSchema, BootReportSchema, HostedStatusSchema, SetupReportSchema } from "@intentic/api-contract";
 import { FREE_TIER } from "@intentic/constants";
-import { Prisma } from "@intentic/prisma";
 import type { MemberRole } from "@intentic/sandbox-contract";
 import { GrantedRoleSchema, localHostname } from "@intentic/sandbox-contract";
 import { implement, ORPCError } from "@orpc/server";
@@ -8,7 +7,7 @@ import type { Config } from "../config.js";
 import type { OrpcContext } from "../context.js";
 import { sandboxIdFromToken } from "@intentic/sandbox-contract/tunnel-ids";
 import { clientIp } from "../client-ip.js";
-import { decryptSecret, encryptSecret } from "../crypto.js";
+import { decryptSecret } from "../crypto.js";
 import { requireOwnedSandbox, requireUser } from "../guards.js";
 import { CloudflareTokenError, listZoneNames } from "./cloudflare.js";
 import { getMachine, isFlyGone, stopMachine } from "./hosted/fly/fly.js";
@@ -44,18 +43,15 @@ import { assertHostedSource, HostedSourceCapped, recordHostedProvision } from ".
 import { assertHostedStanding, HostedSuspended, hostedSuspensionOf } from "./hosted/abuse/hosted-standing.js";
 import { hostedArrivalBudget, hostedBudgetOf, openHostedStretch, settleHostedStretch } from "./hosted/hosted-usage.js";
 import { hostedRegionFor } from "./hosted/region.js";
-import { mintSandbox, mintSetupCode } from "./mint-sandbox.js";
+import { mintSandbox } from "./mint-sandbox.js";
 import { listTrash, restoreSandbox, trashSandbox, TrashedSandboxGone } from "./sandbox-trash.js";
-import { definitionSeedFor, ENV_DEFINITION_SEED } from "./profiles/profiles.js";
+import { definitionSeedFor } from "./profiles/profiles.js";
+import { mintSetupCodeFor, ReachabilityUnavailable } from "./setup-code.js";
 import { sendSetupLinkEmail } from "./setup-email.js";
-import { ENV_INGRESS_URL, ENV_SANDBOX_GRANT } from "@intentic/sandbox-contract/ingress-contract";
 import { mintOwnerTicket, OWNER_TICKET_TTL_MS } from "@intentic/sandbox-contract/owner-ticket";
-import { ensureReachability, ingressEnabled } from "./reachability.js";
+import { ingressEnabled } from "./reachability.js";
 
 const os = implement(apiContract).$context<OrpcContext>();
-
-// Long enough to retry a failed install command; short enough that a leaked pasted command goes stale fast.
-const SETUP_CODE_TTL_MS = 30 * 60 * 1000;
 
 // Wire status per build refusal; `capacity` isn't the asker's fault, so it maps like provisioning does.
 const REFUSAL_CODES = {
@@ -627,59 +623,19 @@ export const sandboxRoutes = {
     setupCode: os.sandbox.setupCode.handler(async ({ context, input }) => {
         const user = requireUser(context);
         const sandbox = await requireOwnedSandbox(context, input.sandboxId);
-        if (!ingressEnabled(context.config)) {
-            throw new ORPCError(`NOT_FOUND`, { message: `this platform has no reachability fabric configured` });
+        try {
+            // The profile's own sandbox, for the lane where the machine is the owner's: the connect script exports the
+            // minted map, and the daemon applies the definition once, on a workspace that arrived empty.
+            return await mintSetupCodeFor(context.prisma, context.config, sandbox, {
+                ownerEmail: user.email,
+                definitionSeed: definitionSeedFor(input.profile),
+            });
+        } catch (error) {
+            if (error instanceof ReachabilityUnavailable) {
+                throw new ORPCError(`NOT_FOUND`, { message: error.message });
+            }
+            throw error;
         }
-        const grant = ensureReachability(context.config, sandbox);
-        const hostname = grant.hostname;
-        const payload: Record<string, string> = {
-            [ENV_SANDBOX_GRANT]: grant.grant,
-            [ENV_INGRESS_URL]: grant.ingressUrl,
-            SANDBOX_HOSTNAME: hostname,
-        };
-        // Seeds the daemon's owner binding with the creator's own email, so ownership always matches the intentic
-        // account.
-        payload[`OWNER_EMAIL`] = user.email.toLowerCase();
-        // The profile's own sandbox, for the lane where the machine is the owner's: the connect script exports this
-        // map, and the daemon applies the definition once, on a workspace that arrived empty.
-        const seed = definitionSeedFor(input.profile);
-        if (seed !== undefined) {
-            payload[ENV_DEFINITION_SEED] = seed;
-        }
-        // Re-minting is NOT free, which is why an unchanged ask returns the live code untouched. Rotating it would
-        // orphan an install already under way: /setup/claim and /setup/report both find a sandbox BY its setup code,
-        // so the running machine's stage reports stop matching any row, and the claim stamp below is the wizard's
-        // only evidence the command was ever pasted. The wizard mints on every mount, so without this a reload
-        // mid-install tells a reader "still nothing" about a machine that is pulling the image right then.
-        // `?? null` on both: these columns are optional as well as nullable, and `undefined !== null` would read an
-        // unminted row as holding a live code.
-        const held = sandbox.setupCode ?? null;
-        const heldUntil = sandbox.setupCodeExpiresAt ?? null;
-        if (
-            held !== null &&
-            heldUntil !== null &&
-            heldUntil.getTime() > Date.now() &&
-            typeof sandbox.setupPayload === `string` &&
-            // Ciphertext is not comparable (encryptSecret salts each call), so the plaintext is what settles it.
-            decryptSecret(context.config, sandbox.setupPayload) === JSON.stringify(payload)
-        ) {
-            return { code: held, hostname, expiresAt: heldUntil.toISOString() };
-        }
-        const code = mintSetupCode();
-        const expiresAt = new Date(Date.now() + SETUP_CODE_TTL_MS);
-        // Claim stamp belongs to the code: a fresh code must start unclaimed, or the wizard would report a stale claim.
-        await context.prisma.sandbox.update({
-            where: { id: sandbox.id },
-            data: {
-                setupCode: code,
-                setupCodeExpiresAt: expiresAt,
-                setupCodeClaimedAt: null,
-                // Cleared here too: a fresh code means a fresh run, and last run's report would narrate the wrong one.
-                setupReport: Prisma.DbNull,
-                setupPayload: encryptSecret(context.config, JSON.stringify(payload)),
-            },
-        });
-        return { code, hostname, expiresAt: expiresAt.toISOString() };
     }),
     // Mails a setup link to the session's own email, never an input — never usable to mail anyone else. Not plan-gated
     // or specially rate-limited: it's an escape hatch that costs nothing to ignore.

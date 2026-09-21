@@ -5,6 +5,7 @@ import { handleMcpMessage } from "./mcp.js";
 import { hostFacts } from "./tools/describe.js";
 import { runAgentOp } from "./tools/agent.js";
 import {
+    createSandbox,
     manageSandbox,
     reconnectSandbox,
     removeSandbox,
@@ -95,6 +96,11 @@ const FLOWS: Record<DeviceSandboxOp, FlowFor> = {
         ({ slug, setupCode }, scopes) =>
         (onLine) =>
             reconnectSandbox(slug, setupCode, scopes, onLine),
+    // The same claim, for a row that has never run anywhere: `slug` is what the claim will produce, not what is here.
+    create:
+        ({ slug, setupCode }, scopes) =>
+        (onLine) =>
+            createSandbox(slug, setupCode, scopes, onLine),
     "runner-up": runnerFlowFor,
     "runner-remove": runnerFlowFor,
 };

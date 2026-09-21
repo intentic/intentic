@@ -1,0 +1,127 @@
+---
+import DocsCodeBlock from "../../components/docs/DocsCodeBlock.astro";
+import DocsLayout from "../../components/docs/DocsLayout.astro";
+import DocsRelated from "../../components/docs/DocsRelated.astro";
+
+/* ONE SANDBOX THAT CAN MAKE THE OTHERS, without a person fetching a setup code out of the browser. */
+
+const creating = [
+    "sandboxes ls",
+    "sandboxes create reviewer --why 'somewhere to run the nightly review off this box'",
+    "sandboxes create storefront --on build-rig --definition ./team/storefront.sandbox.toml",
+].join("\n");
+
+const asking = ["capabilities request fleet --why 'so I can bring up the reviewer sandbox we planned'"].join("\n");
+
+const order = [
+    { step: "The card", what: "Your chat asks, naming the sandbox and the machine it would run on. Nothing has been created yet." },
+    { step: "The claim", what: "A yes mints the sandbox's row and one short-lived, single-use setup code." },
+    { step: "The build", what: "That code goes straight to the machine, which builds the container with `ic`, the same way every other sandbox on it was built." },
+];
+---
+
+<DocsLayout
+    pageId="fleet"
+    heading="A fleet of sandboxes"
+    lead="A specialized agent is a sandbox of its own, and a team of them is several. Connect one sandbox to your account and its agent can create the others — on your computers, from a file you review, asking you in chat every time."
+>
+    <h2>Why this exists</h2>
+    <p>
+        Everything else an agent needs, it can ask for: a connector, a device, a secret, a package in its image. A second
+        <strong>sandbox</strong> was the exception. Creating one has always meant a browser — a page, a name, a setup code copied into a
+        terminal — so an agent that decided the work needed its own machine could only ask you to go and do it.
+    </p>
+    <p>
+        The Sandbox fleet capability closes that. It is one credential, held by the daemon, that lets a sandbox create sandboxes on the
+        account that owns it.
+    </p>
+
+    <h2>Connecting it</h2>
+    <ol>
+        <li>Mint a provisioning token at <strong>Settings → Tokens</strong>. It is shown once; only its digest is stored.</li>
+        <li>In the sandbox that should hold it, add the <strong>Sandbox fleet</strong> capability and paste the token in.</li>
+    </ol>
+    <p>
+        That is the whole setup, and it is deliberately one sandbox rather than a switch on your account. The box you connect is the one that
+        can provision; every other sandbox you own is unchanged. An agent that needs it and does not have it asks the ordinary way:
+    </p>
+    <DocsCodeBlock code={asking} lang="bash" />
+
+    <h2>What the agent runs</h2>
+    <DocsCodeBlock code={creating} lang="bash" />
+    <p>
+        <code>create</code> holds its connection through both slow halves — you deciding, then the machine pulling an image and starting a
+        container. Every line the machine printed comes back with the answer, so a create that fails reads like the setup wizard does rather
+        than like a boolean.
+    </p>
+
+    <h2>The order is the safeguard</h2>
+    <table>
+        <thead>
+            <tr><th>Step</th><th>What happens</th></tr>
+        </thead>
+        <tbody>
+            {
+                order.map((entry) => (
+                    <tr>
+                        <td><strong>{entry.step}</strong></td>
+                        <td>{entry.what}</td>
+                    </tr>
+                ))
+            }
+        </tbody>
+    </table>
+    <p>
+        Because the card comes first, a no costs the account nothing at all: no row, no code, nothing left to expire. There is no
+        auto-approve band here and no standing allowance — unlike a payment, creating a sandbox is rare enough that every one of them is
+        worth a click.
+    </p>
+
+    <h2>What it will not do</h2>
+    <ul>
+        <li>
+            <strong>It never provisions hosted machines.</strong> A sandbox made this way runs on a computer you have connected as a device.
+            Nothing here can spend your hosted plan.
+        </li>
+        <li>
+            <strong>It creates; it does not destroy.</strong> There is no remove verb. Deleting a sandbox stays yours, in your own UI.
+        </li>
+        <li>
+            <strong>It carries no credentials into the new box.</strong> A definition names capabilities and secrets; their values are never
+            in it, and you connect them there.
+        </li>
+        <li>
+            <strong>The agent never holds the token.</strong> It is kept by the daemon and never injected into the agent's environment, which
+            is what makes the card an approval rather than a formality.
+        </li>
+    </ul>
+
+    <h2>A sandbox as a file</h2>
+    <p>
+        <code>--definition</code> takes a <a href="/docs/sandbox-definitions/">sandbox.toml</a>, the same document the Environment tab
+        exports: the workspace repo, the repositories to clone, the capabilities the box should have, the secret names to fill in, the
+        overlay Dockerfile and the settings that differ from their defaults. The new sandbox applies it on first boot, on a workspace that
+        arrived empty.
+    </p>
+    <p>
+        That is what turns a team of specialized agents into something you can review. The roles live in your repository as files; bringing
+        one up is a command, and what it will be is a diff somebody read.
+    </p>
+
+    <h2>Another sandbox, or another persona?</h2>
+    <p>
+        Go by what is actually different. A sandbox is a machine: its own environment, its own connected services, its own workspace and its
+        own blast radius. If the only difference is how a turn behaves — which model, which folder, which tone, which of the tools already
+        here — that is a <a href="/docs/worksite/#ws-persona">persona</a>, and personas are free. A sandbox is a container one of your
+        computers has to run.
+    </p>
+
+    <DocsRelated
+        links={[
+            { href: "/docs/autonomous-employees/", title: "Autonomous employees", why: "what to put in a sandbox once it exists, and how a team of them hands work down the line." },
+            { href: "/docs/sandbox-definitions/", title: "Sandbox definitions", why: "the TOML a new sandbox seeds itself from, and what it deliberately cannot carry." },
+            { href: "/docs/your-machine/", title: "Your own machine", why: "connecting the computer a new sandbox is built on, and the switch that permits it." },
+            { href: "/docs/remote-runners/", title: "Remote runners", why: "the other answer to 'not on this box': moving a turn's compute without giving the work its own machine." },
+        ]}
+    />
+</DocsLayout>

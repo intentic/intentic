@@ -260,9 +260,12 @@ export const icSwapArgs = (swap: SandboxSwap, slug: string, hash: string | undef
 // Consent happened in the browser, on a card that named what is lost.
 export const icRemoveArgs = (slug: string): string[] => ["sandbox", "remove", slug, "-y"];
 
-export const icReconnectArgs = (setupCode: string | undefined): string[] => {
+// One argv for both claim-redeeming ops, because `ic sandbox connect` IS both: a claim minted for a row this machine
+// already runs reconnects it, and a claim minted for a fresh row builds that sandbox here. What differs is which row
+// the claim was minted for, which is decided on the platform and is nothing this side can see.
+export const icConnectArgs = (setupCode: string | undefined): string[] => {
     if (setupCode === undefined || setupCode.trim() === "") {
-        throw new Error(`"setupCode" is required to reconnect: it is the claim carrying the values this sandbox is missing.`);
+        throw new Error(`"setupCode" is required: it is the claim carrying the values this sandbox is missing.`);
     }
     // No slug in argv: ic derives it from the claim, and a second spelling would build a second sandbox.
     // -y: there is no terminal to answer ic's other-sandboxes prompt.
@@ -512,7 +515,7 @@ export const reconnectSandbox = async (
     onLine: (line: string) => void,
 ): Promise<string> => {
     assertScope(scopes, "sandboxes");
-    const args = icReconnectArgs(setupCode);
+    const args = icConnectArgs(setupCode);
     // find(slug) first: redeeming the claim for a slug not on this machine would burn it for nothing.
     await find(slug);
     icInFlight.add(slug);
@@ -526,6 +529,30 @@ export const reconnectSandbox = async (
         throw new Error(`That reconnect failed on this device.\n\n${run.output}`);
     }
     return `Reconnected sandbox "${slug}". Its files and its history were kept, and it now has what it was missing.`;
+};
+
+// A sandbox this machine does not run yet, from a claim minted for a row that has never been anywhere. The same `ic`
+// flow as a reconnect and the OPPOSITE precondition: `slug` is the name the claim will produce (the first label of the
+// hostname the platform minted), so a container already answering to it means the claim would recreate somebody else's
+// sandbox — refused here, before the code is spent, because a setup code is single-use and burning one costs the
+// caller a whole round trip to the platform.
+export const createSandbox = async (slug: string, setupCode: string | undefined, scopes: HostScopes, onLine: (line: string) => void): Promise<string> => {
+    assertScope(scopes, "sandboxes");
+    const args = icConnectArgs(setupCode);
+    if ((await fleet()).some((box) => box.slug === slug)) {
+        throw new Error(`This device already runs a sandbox called "${slug}". Nothing was created and the setup code was not spent.`);
+    }
+    icInFlight.add(slug);
+    let run: { code: number; output: string };
+    try {
+        run = await runIc(args, onLine);
+    } finally {
+        icInFlight.delete(slug);
+    }
+    if (run.code !== 0) {
+        throw new Error(`That sandbox could not be created on this device.\n\n${run.output}`);
+    }
+    return `Created sandbox "${slug}" on this device.`;
 };
 
 // Rides `sandboxes` like every other verb: a fleet nobody may delete from is one the owner can't clean up. The

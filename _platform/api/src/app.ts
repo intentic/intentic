@@ -22,6 +22,7 @@ import type { Logger } from "pino";
 import { router } from "./router.js";
 import { createTracingHttpMiddleware } from "./tracing.js";
 import { hostedPlanHttpRoutes } from "./sandbox/hosted/hosted-plan.routes.js";
+import { fleetHttpRoutes } from "./fleet/fleet.routes.js";
 import { walletHttpRoutes } from "./wallet/wallet.routes.js";
 import { trialRoutes } from "./trial/trial.routes.js";
 import { Prisma, type PrismaClient } from "@intentic/prisma";
@@ -395,6 +396,10 @@ export const createApp = (config: Config, prisma: PrismaClient, logger: Logger):
 
     // The agent wallet's signer routes; caps are re-checked here against the database, never trusted from a box.
     app.route(`/wallet`, walletHttpRoutes({ config, prisma }));
+
+    // The provisioning door: an account-scoped API token, not a session, so a sandbox can create sandboxes for its
+    // owner. Rows and claims only — never a hosted machine.
+    app.route(`/fleet`, fleetHttpRoutes({ config, prisma }));
 
     // A development lane: admin READS replayed against another deployment, so a local panel can show its figures; off
     // (404s) unless ADMIN_UPSTREAM_URL and ADMIN_UPSTREAM_COOKIE are both set.

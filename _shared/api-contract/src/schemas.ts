@@ -1194,3 +1194,27 @@ export type AdminTrends = z.infer<typeof AdminTrendsSchema>;
 // What every admin mutation answers: what happened, in a sentence the panel can show verbatim.
 export const AdminActionResultSchema = z.object({ ok: z.boolean(), message: z.string() });
 export type AdminActionResult = z.infer<typeof AdminActionResultSchema>;
+
+/* ACCOUNT-LEVEL API TOKENS (api tokens/): the credential that acts for a person outside a browser. */
+
+// The scopes a token may carry. `provision` is held by a sandbox's `fleet` capability so an agent in it can create
+// sandboxes for the owner; it cannot read a sandbox, spend the hosted plan, or mint another token.
+export const ApiTokenScopeSchema = z.enum([`provision`]);
+export type ApiTokenScope = z.infer<typeof ApiTokenScopeSchema>;
+
+// A token as the Tokens page lists it. No value and no digest: the raw one was shown once at mint, and the digest is
+// a lookup key, not something a reader can do anything with.
+export const ApiTokenSchema = z.object({
+    id: z.string(),
+    label: z.string(),
+    scope: ApiTokenScopeSchema,
+    createdAt: z.string(),
+    // Absent until something presents it; coarse to the minute, so it answers "is this one in use" and nothing finer.
+    lastUsedAt: z.string().optional(),
+});
+export type ApiToken = z.infer<typeof ApiTokenSchema>;
+
+// The mint's answer, and the only time `token` exists anywhere but the holder's hands: it is stored as a digest, so a
+// value not copied now is replaced rather than recovered.
+export const ApiTokenMintedSchema = ApiTokenSchema.extend({ token: z.string() });
+export type ApiTokenMinted = z.infer<typeof ApiTokenMintedSchema>;

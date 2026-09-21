@@ -30,6 +30,7 @@ export const CapabilityKindSchema = z.enum([
     "endpoint",
     "localmodel",
     "wallet",
+    "fleet",
 ]);
 export type CapabilityKind = z.infer<typeof CapabilityKindSchema>;
 export const CapabilityStateSchema = z.enum(["active", "pending", "error", "inactive"]);
@@ -287,6 +288,14 @@ export const WalletConfigSchema = z.object({
     deny: z.string().optional(),
 });
 export type WalletConfig = z.infer<typeof WalletConfigSchema>;
+// The owner's Intentic account, reachable from inside this sandbox: what lets it create sandboxes on that account
+// instead of asking a person to fetch a setup code from the browser. The token is minted at Settings ▸ Tokens and is
+// account-scoped, so it is held by the daemon and never injected into the agent's env — the approval card on every
+// create is only an approval while the agent cannot mint a claim behind it.
+export const FleetConfigSchema = z.object({
+    token: z.string().min(1).describe("A provisioning token from Settings ▸ Tokens. Stored, never echoed back."),
+});
+export type FleetConfig = z.infer<typeof FleetConfigSchema>;
 export type McpConfig = z.infer<typeof McpConfigSchema>;
 export type CliConfig = z.infer<typeof CliConfigSchema>;
 export type PluginConfig = z.infer<typeof PluginConfigSchema>;
@@ -335,6 +344,8 @@ export const CapabilitySchema = z.discriminatedUnion("kind", [
     z.object({ id: entryId, kind: z.literal("localmodel"), config: LocalModelConfigSchema }),
     // The sandbox's USDC wallet (WalletConfigSchema), one per sandbox; the key never enters the container.
     z.object({ id: entryId, kind: z.literal("wallet"), config: WalletConfigSchema }),
+    // The owner's account, one per sandbox: the box holding this may provision sandboxes on it.
+    z.object({ id: entryId, kind: z.literal("fleet"), config: FleetConfigSchema }),
 ]);
 export type Capability = z.infer<typeof CapabilitySchema>;
 // A credential the owner must type elsewhere (a WhatsApp pairing code); rendered large and copyable, not buried in

@@ -3420,7 +3420,8 @@
             "data": "Dane",
             "keybindings": "Skróty klawiszowe",
             "notifications": "Powiadomienia",
-            "profile": "Profil"
+            "profile": "Profil",
+            "tokens": "Tokeny"
         },
         "settingsBilling": {
             "activating": "Aktywowanie…",
@@ -3520,6 +3521,15 @@
             "displayName": "Nazwa wyświetlana",
             "profile": "Profil",
             "renameDisplayName": "Zmień nazwę wyświetlaną"
+        },
+        "settingsTokens": {
+            "apiTokens": "Tokeny API",
+            "labelEGStorefrontSandbox": "Etykieta (np. piaskownica sklepu)",
+            "mintToken": "Utwórz token",
+            "revoke": "Unieważnij",
+            "shownOnceCopyNow": "Pokazywany raz. Skopiuj go teraz: przechowywany jest tylko jego skrót.",
+            "whatProvisioningTokensAre": "Token provisioningowy pozwala jednej z Twoich piaskownic tworzyć piaskownice na tym koncie. Wklej go w zdolność „Flota piaskownic” tej piaskownicy; każda piaskownica tworzona przez jej agenta i tak najpierw zapyta Cię na czacie.",
+            "whereItGoes": "Gdzie go wkleić"
         },
         "title": "Ustawienia"
     },

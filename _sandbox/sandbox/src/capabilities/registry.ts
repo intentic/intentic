@@ -8,6 +8,7 @@ import { dockerHandler } from "./handlers/docker.handler.js";
 import { endpointHandler } from "./handlers/endpoint.handler.js";
 import { exitHandler } from "./handlers/exit.handler.js";
 import { extensionHandler } from "./handlers/extension.handler.js";
+import { fleetHandler } from "./handlers/fleet.handler.js";
 import { hostHandler } from "./handlers/host.handler.js";
 import { identityHandler } from "./handlers/identity.handler.js";
 import { localModelHandler } from "./handlers/localmodel.handler.js";
@@ -41,4 +42,5 @@ export const registry: Record<CapabilityKind, CapabilityHandler> = {
     endpoint: endpointHandler,
     localmodel: localModelHandler,
     wallet: walletHandler,
+    fleet: fleetHandler,
 };

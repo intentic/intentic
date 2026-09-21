@@ -3420,7 +3420,8 @@
             "data": "Data",
             "keybindings": "Keybindings",
             "notifications": "Notifications",
-            "profile": "Profile"
+            "profile": "Profile",
+            "tokens": "Tokens"
         },
         "settingsBilling": {
             "activating": "Activating…",
@@ -3520,6 +3521,15 @@
             "displayName": "Display name",
             "profile": "Profile",
             "renameDisplayName": "Rename display name"
+        },
+        "settingsTokens": {
+            "apiTokens": "API tokens",
+            "labelEGStorefrontSandbox": "Label (e.g. storefront sandbox)",
+            "mintToken": "Mint token",
+            "revoke": "Revoke",
+            "shownOnceCopyNow": "Shown once. Copy it now: only its digest is stored.",
+            "whatProvisioningTokensAre": "A provisioning token lets one of your sandboxes create sandboxes on this account. Paste it into that sandbox's Sandbox fleet capability; every sandbox its agent creates still asks you in chat first.",
+            "whereItGoes": "Where it goes"
         },
         "title": "Settings"
     },

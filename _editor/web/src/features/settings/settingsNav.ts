@@ -33,6 +33,9 @@ const SETTINGS_SECTIONS = [
     { slug: `appearance`, icon: `palette` },
     { slug: `notifications`, icon: `volume-up` },
     { slug: `keybindings`, icon: `bolt` },
+    // Account credentials, not this sandbox's: a token minted here acts for the person on every sandbox they own,
+    // which is why it lives beside the account's own rows rather than on a Sandbox tab.
+    { slug: `tokens`, icon: `key` },
     { slug: `data`, icon: `database` },
 ] as const satisfies readonly { slug: string; icon: IconName; plan?: true }[];
 

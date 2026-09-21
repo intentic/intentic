@@ -1,0 +1,187 @@
+#!/usr/bin/env node
+// The in-sandbox FLEET-OF-SANDBOXES command: the owner's other sandboxes, and the one door a new one is
+// created through, from inside a turn, with nobody fetching a setup code out of a browser.
+//
+// The CREATE is the whole of it. It raises a card in the owner's chat naming the sandbox and the machine it
+// would run on (fleet/fleet-gate.ts), and only a yes mints anything: the platform's row and its claim are
+// created against the approval, and the claim is spent immediately by `ic sandbox connect` on that machine.
+// A no leaves the account exactly as it was — no row, no code, nothing to expire.
+//
+// It owns NO credential. The provisioning token lives on the `fleet` capability, is held by the daemon, and
+// is never put in the agent's environment: the card is only an approval while nothing here can mint a claim
+// behind it. A sandbox with no such capability is answered with the `capabilities request fleet` sentence.
+//
+// node:http rather than fetch, deliberately: a create holds its connection while the owner decides and then
+// while `ic` pulls an image and starts a container — minutes, either half — and undici's default header
+// timeout would kill the wait with the card still up.
+//
+// Auth is the per-boot agent token from /run/intentic/agent.token; auth/grants.ts admits it to exactly the
+// two /sandboxes routes and nothing credential-shaped.
+
+import { readFileSync } from "node:fs";
+import { request } from "node:http";
+
+const TOKEN_PATH = "/run/intentic/agent.token";
+const PORT = process.env.SANDBOX_PORT ?? "8787";
+
+// The conversation this shell was spawned for (platform/leftovers.ts workloadStamp) — what tells the daemon
+// WHOSE chat the card belongs in. The daemon falls back to the sole live turn when it is unset.
+const CONVERSATION = process.env.INTENTIC_TURN_OWNER ?? "";
+
+const USAGE = `sandboxes — the owner's sandboxes, and how a new one is made
+
+  sandboxes ls [--json]                every sandbox on the owner's account: its name, its address, and
+                                       whether it has ever come up
+
+  sandboxes create <name> [--on <device>] [--definition <path>] [--why "…"]
+                                       make a new sandbox and bring it up on one of the owner's computers.
+                                       ASKS IN CHAT FIRST, every time, naming the sandbox and the machine;
+                                       a no creates nothing at all.
+                                       --on        which connected computer builds it; left out, the one
+                                                   this sandbox runs on
+                                       --definition  a sandbox.toml the new box applies to itself on first
+                                                   boot: its repos, the capabilities it needs by name, and
+                                                   an overlay its owner still approves there. Never a
+                                                   credential — those are named, not carried
+                                       --why       your one-line case for it, shown on the card
+
+The create holds its connection while the owner decides and while the machine builds: minutes, both halves.
+Hold it open rather than timing it out. A declined or expired ask answers with a sentence to act on —
+continue without it, and don't ask again for the same sandbox in this conversation.`;
+
+const die = (message) => {
+    process.stderr.write(`${message}\n`);
+    process.exit(1);
+};
+
+// Read lazily, not at startup: `sandboxes --help` has to work in any shell, including one where the daemon
+// isn't running yet — only an actual call needs the token.
+const token = () => {
+    try {
+        return readFileSync(TOKEN_PATH, "utf8").trim();
+    } catch {
+        return die(`sandboxes: no daemon token at ${TOKEN_PATH} — is the intentic daemon running in this container?`);
+    }
+};
+
+// One loopback call, held open for as long as the daemon holds it — no timeout on purpose (see the header
+// note above). Resolves with whatever the daemon answered; only a transport failure rejects.
+const call = (method, path, body) =>
+    new Promise((resolve, reject) => {
+        const req = request({ host: "127.0.0.1", port: PORT, path, method }, (response) => {
+            let raw = "";
+            response.on("data", (chunk) => {
+                raw += chunk.toString();
+            });
+            response.on("end", () => resolve({ status: response.statusCode ?? 502, text: raw }));
+        });
+        req.on("error", reject);
+        req.setHeader("x-intentic-agent", token());
+        if (CONVERSATION !== "") {
+            req.setHeader("x-intentic-conversation", CONVERSATION);
+        }
+        if (body !== undefined) {
+            req.setHeader("content-type", "application/json");
+        }
+        req.end(body);
+    });
+
+// The daemon's refusals arrive as {error: {message}} — surface the sentence, which is already written to be
+// acted on.
+const refusalOf = (text) => {
+    try {
+        const parsed = JSON.parse(text);
+        if (typeof parsed?.error === "string") return parsed.error;
+        if (typeof parsed?.error?.message === "string") return parsed.error.message;
+    } catch {
+        // Not JSON — fall through to the raw text.
+    }
+    return text || "the daemon did not say why";
+};
+
+const ls = async (args) => {
+    const { status, text } = await call("GET", "/sandboxes");
+    if (status !== 200) {
+        return die(`sandboxes: ${refusalOf(text)}`);
+    }
+    if (args.includes("--json")) {
+        process.stdout.write(`${text}\n`);
+        return;
+    }
+    const { sandboxes } = JSON.parse(text);
+    if (!Array.isArray(sandboxes) || sandboxes.length === 0) {
+        process.stdout.write("This account has no sandboxes.\n");
+        return;
+    }
+    for (const sandbox of sandboxes) {
+        // A box that never announced has no address at all, which is a different fact from one that is merely
+        // stopped: say so rather than printing an empty column.
+        const where = sandbox.url ?? "never came up";
+        const seen = sandbox.lastSeenAt === undefined ? "" : ` · last seen ${sandbox.lastSeenAt}`;
+        process.stdout.write(`${sandbox.name} — ${where}${seen}\n`);
+    }
+};
+
+// Flags may sit anywhere after `create`; what remains is `<name>`.
+const flagsOf = (args, names) => {
+    const rest = [];
+    const flags = {};
+    for (let i = 0; i < args.length; i += 1) {
+        const name = names.find((candidate) => args[i] === `--${candidate}`);
+        if (name !== undefined) {
+            flags[name] = args[i + 1] ?? "";
+            i += 1;
+        } else {
+            rest.push(args[i]);
+        }
+    }
+    return { rest, flags };
+};
+
+const create = async (args) => {
+    const { rest, flags } = flagsOf(args, ["on", "definition", "why"]);
+    const [name] = rest;
+    if (name === undefined || name === "") {
+        return die(USAGE);
+    }
+    let definition;
+    if (flags.definition !== undefined && flags.definition !== "") {
+        try {
+            definition = readFileSync(flags.definition, "utf8");
+        } catch {
+            return die(`sandboxes: no definition file at ${flags.definition}`);
+        }
+    }
+    const { status, text } = await call(
+        "POST",
+        "/sandboxes",
+        JSON.stringify({
+            name,
+            ...(flags.on ? { on: flags.on } : {}),
+            ...(flags.why ? { why: flags.why } : {}),
+            ...(definition !== undefined ? { definition } : {}),
+        }),
+    );
+    if (status < 200 || status >= 300) {
+        return die(`sandboxes: ${refusalOf(text)}`);
+    }
+    const created = JSON.parse(text);
+    // `ic`'s own narration first: when a create is slow or strange, what the machine printed is the answer.
+    for (const line of created.lines ?? []) {
+        process.stdout.write(`${line}\n`);
+    }
+    process.stdout.write(`\nCreated "${created.name}" on ${created.on}: ${created.url}\n`);
+};
+
+const main = async () => {
+    const [command, ...rest] = process.argv.slice(2);
+    if (command === "ls") {
+        return ls(rest);
+    }
+    if (command === "create") {
+        return create(rest);
+    }
+    return die(USAGE);
+};
+
+main().catch((error) => die(`sandboxes: ${error?.message ?? error}`));

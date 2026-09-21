@@ -46,17 +46,39 @@ const fixedSecretGrant = (header: string, name: string, reaches: (method: string
 // the per-boot agent token.
 // Scoped hard: dial/drop configured tunnels, mint expiring codes, spend the owner's credit allowance, ask to connect or
 // release a credential — never read a value directly.
-// The child-agent surface the `agents` CLI drives: start/steer/follow-up a child, answer its question (never its
-// consent cards), list children.
-// A set rather than more chain clauses: the chain is an allowlist whose entries cost two branches each, already over
-// the complexity ceiling.
-const CHILD_ROUTES = new Set([
+// A SET, not more chain clauses: this is an allowlist, every entry of it cost two branches in the chain, and the chain
+// was already past the complexity ceiling with a third of these on it. One `METHOD /path` per door, each grouped under
+// what it is for.
+const EXACT_ROUTES = new Set([
+    // The child-agent surface the `agents` CLI drives: start/steer/follow-up a child, answer its question (never its
+    // consent cards), list children.
     "POST /children/spawn",
     "POST /children/wait",
     "POST /children/send",
     "POST /children/answer",
     "GET /children",
     "GET /children/providers",
+    // The capability setup gate the `capabilities` CLI drives: discovery (names only, never config) and the ask.
+    // The ask parks on an owner-decided card in chat; consent is enforced at the route.
+    "GET /capabilities/connectable",
+    "POST /capabilities/ask",
+    // The wallet surface the `wallet` CLI drives: balance, one paid fetch, history; spend is bounded by the owner's
+    // policy twice over. Anything outside the standing auto-approve band parks on an approval card before signing; the
+    // container never holds a key.
+    "GET /wallet/status",
+    "POST /wallet/fetch",
+    "GET /wallet/history",
+    // The `sandboxes` CLI: the owner's other sandboxes, and the one door a new one is created through. As gated as the
+    // wallet's spend — the provisioning token stays with the daemon, and every create parks on a card in the owner's
+    // chat before the platform is asked for anything.
+    "GET /sandboxes",
+    "POST /sandboxes",
+    // The credential-approval surface the `secrets` CLI drives, and the only two doors under /secrets this token gets:
+    // they answer with names, never values.
+    // `gates` tells the model which connected account is withheld so it can ask for the right one instead of guessing;
+    // `request` raises the release card and parks (consent checked on the reply).
+    "GET /secrets/gates",
+    "POST /secrets/request",
 ]);
 
 // The live-link surfaces the `vpn`, `geo` and `netdisk` CLIs drive: dial/drop a tunnel, start/move/rotate/stop an exit,
@@ -64,32 +86,19 @@ const CHILD_ROUTES = new Set([
 // it, which stays on the manifest this token never reaches.
 const LIVE_LINK_ROUTES = /^\/(?:vpn|exit|netdisk)(?:\/|$)/;
 
+// The conversation-fleet read surface the `agents` CLI drives: which conversations exist, what one is, which said a
+// phrase — nothing new, only cheaper than an agent reading the files by hand. A pattern rather than an exact route,
+// since the handle is in the path. Not `/agents`: its neighbours land, discard, archive and rename, so a read-only
+// namespace here can't grow teeth by accident.
+const FLEET_READS = /^\/fleet(?:\/[^/]+)?$/;
+
+// One-time codes for a connected account, by capability id: mint only, never a read of the secret behind it.
+const OTP_READS = /^\/capabilities\/[^/]+\/otp$/;
+
 const agentReach = (method: string, path: string): boolean =>
     LIVE_LINK_ROUTES.test(path) ||
-    (method === "GET" && /^\/capabilities\/[^/]+\/otp$/.test(path)) ||
-    // The capability setup gate the `capabilities` CLI drives: discovery (names only, never config) and the ask.
-    // The ask parks on an owner-decided card in chat; consent is enforced at the route.
-    (method === "GET" && path === "/capabilities/connectable") ||
-    (method === "POST" && path === "/capabilities/ask") ||
-    // The wallet surface the `wallet` CLI drives: balance, one paid fetch, history; spend is bounded by the owner's
-    // policy twice over.
-    // Anything outside the standing auto-approve band parks on an approval card before signing; the container never
-    // holds a key.
-    (method === "GET" && path === "/wallet/status") ||
-    (method === "POST" && path === "/wallet/fetch") ||
-    (method === "GET" && path === "/wallet/history") ||
-    CHILD_ROUTES.has(`${method} ${path}`) ||
-    // The fleet read surface the same CLI drives: which conversations exist, what one is, which said a phrase — nothing
-    // new, only cheaper than an agent reading the files by hand.
-    // Not `/agents`: its neighbours land, discard, archive and rename, so a read-only namespace here can't grow teeth
-    // by accident.
-    (method === "GET" && (path === "/fleet" || /^\/fleet\/[^/]+$/.test(path))) ||
-    // The credential-approval surface the `secrets` CLI drives, and the only two doors under /secrets this token gets:
-    // they answer with names, never values.
-    // `gates` tells the model which connected account is withheld so it can ask for the right one instead of guessing;
-    // `request` raises the release card and parks (consent checked on the reply).
-    (method === "GET" && path === "/secrets/gates") ||
-    (method === "POST" && path === "/secrets/request");
+    EXACT_ROUTES.has(`${method} ${path}`) ||
+    (method === "GET" && (OTP_READS.test(path) || FLEET_READS.test(path)));
 
 // The panel grant is broad on purpose (an open-ended app), except two routes that put a stored credential in motion:
 // `/capabilities/<id>/connection` returns a config with secrets included.

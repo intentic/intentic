@@ -780,6 +780,30 @@ export const CAPABILITY_CATALOG: readonly CapabilityCatalogEntry[] = [
         ],
         hint: "The key stays with the platform's custody provider: the agent can never move more than your limits allow. Fund it by sending USDC to the address shown once connected.",
     },
+    // The owner's own account, connected to one sandbox so that box can bring up others: the sibling of the wallet,
+    // one level up. The wallet lets an agent spend money; this lets it spend the account.
+    {
+        id: "fleet",
+        name: "Sandbox fleet",
+        kind: "fleet",
+        category: "deploy",
+        icon: "server",
+        description: "Let the agent create sandboxes on your account.",
+        singleton: true,
+        fields: [{ key: "token", label: "Provisioning token", secret: true }],
+        // No `url`: the token page is this app's own, and the reader is already in it. Every other tile's guide links
+        // out to somebody else's dashboard, which is the only reason that field exists.
+        guide: {
+            scopes: "`provision`: create sandboxes on this account and mint their setup codes, and nothing else",
+            steps: [
+                "Your account menu → `Settings` → `Tokens` → `Mint token`.",
+                "Copy it once. It is stored hashed, so a lost one is replaced rather than recovered.",
+                "Paste it here. It stays with this sandbox's daemon and is never put in the agent's environment.",
+                "Revoke it on the same page; provisioning stops the moment you do.",
+            ],
+        },
+        hint: "The agent runs `sandboxes create` and every create asks you in chat first, naming the machine it would run on. New sandboxes land on a computer you have connected as a device — this never provisions hosted machines, so it cannot spend your plan.",
+    },
     {
         id: "identity",
         name: "Identity",

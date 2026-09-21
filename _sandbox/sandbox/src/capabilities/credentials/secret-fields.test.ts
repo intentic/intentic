@@ -152,6 +152,9 @@ const SAMPLES: Record<CapabilityKind, readonly Capability[]> = {
             },
         },
     ],
+    // One field, and it is the secret: a fleet entry with its token vaulted is a config with nothing else in it, which
+    // is the narrowest case this guard has.
+    fleet: [{ id: "fleet", kind: "fleet", config: { token: "itk_x" } }],
 };
 
 // Reproduces what withSecretVault's upsert writes (vaulted keys replaced by the marker) without going through the

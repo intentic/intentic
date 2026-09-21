@@ -5,12 +5,14 @@ import { meRoutes } from "./me/me.routes.js";
 import { pushRelayRoutes } from "./push-relay/push-relay.routes.js";
 import { hostedPlanRoutes } from "./sandbox/hosted/hosted-plan.orpc.js";
 import { sandboxRoutes } from "./sandbox/sandbox.routes.js";
+import { tokenRoutes } from "./tokens/tokens.routes.js";
 import { walletRoutes } from "./wallet/wallet.orpc.js";
 
 // The implemented oRPC router, the per-domain route objects assembled into the apiContract shape. The
 // OpenAPIHandler in app.ts serves it. Each domain's handlers, logic, and tests live in its own folder.
 export const router = {
     me: meRoutes,
+    token: tokenRoutes,
     sandbox: sandboxRoutes,
     invite: inviteRoutes,
     desktop: desktopRoutes,

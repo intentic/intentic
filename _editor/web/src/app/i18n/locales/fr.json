@@ -3420,7 +3420,8 @@
             "data": "Données",
             "keybindings": "Raccourcis clavier",
             "notifications": "Notifications",
-            "profile": "Profil"
+            "profile": "Profil",
+            "tokens": "Jetons"
         },
         "settingsBilling": {
             "activating": "Activation…",
@@ -3520,6 +3521,15 @@
             "displayName": "Nom affiché",
             "profile": "Profil",
             "renameDisplayName": "Renommer le nom affiché"
+        },
+        "settingsTokens": {
+            "apiTokens": "Jetons d'API",
+            "labelEGStorefrontSandbox": "Libellé (p. ex. sandbox boutique)",
+            "mintToken": "Créer le jeton",
+            "revoke": "Révoquer",
+            "shownOnceCopyNow": "Affiché une seule fois. Copiez-le maintenant : seule son empreinte est conservée.",
+            "whatProvisioningTokensAre": "Un jeton d'approvisionnement permet à l'une de vos sandboxes de créer des sandboxes sur ce compte. Collez-le dans la capacité « Flotte de sandboxes » de cette sandbox ; chaque sandbox créée par son agent vous demandera quand même d'abord dans le chat.",
+            "whereItGoes": "Où le coller"
         },
         "title": "Paramètres"
     },

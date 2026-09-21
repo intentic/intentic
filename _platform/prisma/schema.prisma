@@ -41,8 +41,36 @@ model User {
     hostedStrikes    HostedStrike[]
     wallets          Wallet[]
     pushDevices      PushDevice[]
+    apiTokens        ApiToken[]
 
     @@map("user")
+}
+
+// A credential that acts for this account from OUTSIDE a browser. Everything else the platform accepts names one
+// sandbox (Sandbox.token) or one sign-in (Session); this names the person, which is why it is scoped at mint and
+// revocable on its own. Today one scope exists — `provision`, held by a sandbox's `fleet` capability so an agent in
+// it can create sandboxes for the owner — and the column is a string rather than an enum so a second scope is a
+// value, not a migration.
+//
+// Stored as sha256 of the raw value and never encrypted: nothing ever needs it back, the lookup is by digest, and a
+// stolen database row is therefore not a usable token. The raw value is returned once, at mint.
+model ApiToken {
+    id         String    @id @default(cuid())
+    userId     String
+    user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+    // The owner's own words for what this one is for; shown on the Tokens page so a revoke can be aimed.
+    label      String
+    // SHA-256 hex of the raw token. Unique: the digest IS the lookup key, as it is for a sandbox's connect token.
+    hash       String    @unique
+    scope      String
+    createdAt  DateTime  @default(now())
+    // Coarse, written at most once a minute per token: enough to spot one nothing uses, not an audit log.
+    lastUsedAt DateTime?
+    // Set by a revoke rather than deleting the row, so a token that acted stays explicable after it stops working.
+    revokedAt  DateTime?
+
+    @@index([userId])
+    @@map("api_token")
 }
 
 // The free-trial allowance this account has spent today. The trial is the one thing the platform serves ON the

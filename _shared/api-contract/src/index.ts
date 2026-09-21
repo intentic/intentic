@@ -13,6 +13,9 @@ import {
     AdminTrendsSchema,
     AdminUserDetailSchema,
     AdminUserListSchema,
+    ApiTokenMintedSchema,
+    ApiTokenSchema,
+    ApiTokenScopeSchema,
     CfTokenSchema,
     CfZonesSchema,
     DaemonUrlSchema,
@@ -246,9 +249,24 @@ export const adminContract = {
         .output(AdminActionResultSchema),
 };
 
+// Account-level API tokens: the only credential here that acts for a person rather than for one sandbox or one
+// sign-in, so minting and revoking are deliberately session-only — a token can never mint its successor.
+export const tokenContract = {
+    list: oc.route({ method: "GET", path: "/tokens" }).output(z.object({ tokens: z.array(ApiTokenSchema) })),
+    create: oc
+        .route({ method: "POST", path: "/tokens/create" })
+        .input(z.object({ label: z.string().min(1).max(80), scope: ApiTokenScopeSchema }))
+        .output(ApiTokenMintedSchema),
+    revoke: oc
+        .route({ method: "POST", path: "/tokens/revoke" })
+        .input(z.object({ tokenId: z.string().min(1) }))
+        .output(z.object({ tokens: z.array(ApiTokenSchema) })),
+};
+
 // Aggregated contract consumed by the oRPC client and implemented per-domain on the server.
 export const apiContract = {
     me: meContract,
+    token: tokenContract,
     sandbox: sandboxContract,
     invite: inviteContract,
     desktop: desktopContract,

@@ -20,7 +20,7 @@ const ALPHABET = `0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz
 const CEILING = 248;
 
 /** A secret of `length` base62 characters, ~5.95 bits each, safe to pass as an argument to anything. */
-const argvSafeSecret = (length: number): string => {
+export const argvSafeSecret = (length: number): string => {
     let secret = ``;
     while (secret.length < length) {
         for (const byte of randomBytes(length)) {
