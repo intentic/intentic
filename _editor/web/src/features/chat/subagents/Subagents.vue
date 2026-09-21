@@ -2,7 +2,7 @@
 import { type AgentProvider, providerLabel, type TranscriptRow, type SubagentSession } from "@intentic/sandbox-contract";
 import { Icon, type IconName, Markdown, ui, useDevice } from "@intentic/ui";
 import { useQuery } from "@tanstack/vue-query";
-import { computed, onBeforeUnmount, onMounted, onUnmounted, provide, ref, watch } from "vue";
+import { computed, onUnmounted, provide, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { activityIcon } from "../../agents/fleet/agentStatus";
 import { useAgents } from "../../agents/fleet/useAgents";
@@ -170,16 +170,6 @@ const liveOf = (session: SubagentSession): { icon: IconName; text: string; since
 // model, a settled row's age, and the live readout.
 const hasFacts = (session: SubagentSession): boolean => modelOf(session) !== undefined || (!subagentLive(session) && session.activityAt > 0);
 
-// One shared timer ticks every live row's elapsed time together.
-const now = ref(Date.now());
-let ticker: ReturnType<typeof setInterval> | undefined;
-onMounted(() => {
-    ticker = setInterval(() => {
-        now.value = Date.now();
-    }, 1000);
-});
-onBeforeUnmount(() => clearInterval(ticker));
-
 // Polled while the child runs, read once when it's finished; the daemon serves a live one from the
 // parent's frame log, a settled one from storage.
 const transcript = useQuery({
@@ -326,7 +316,6 @@ watch(
                                 :provider="providerOf(session)"
                                 :status="STATUS[session.status]"
                                 :live="liveOf(session)"
-                                :now="now"
                                 tight
                                 :selected="session.id === selected"
                                 :to="rowTo(session.id)"

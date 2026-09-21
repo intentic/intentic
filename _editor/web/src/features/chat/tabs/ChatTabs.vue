@@ -166,7 +166,7 @@ onBeforeUnmount(() => clearTimeout(searchTimer));
 // Right-click on the bar's chrome opens window-wide sweeps (Close Finished/All, pop-out), not a pop-out on the
 // spot. A card's own menu acts on that card; this one and the keyboard commands act on the active chat.
 const barMenu = ref<{ show: (event: Event) => void } | undefined>();
-const barMenuItems = computed<MenuItem[]>(() => [
+const barVerbs = (): MenuItem[] => [
     {
         label: t(`chat.chatTabs.closeFinished`),
         disabled: tabsInLane(`finished`).size === 0,
@@ -186,12 +186,18 @@ const barMenuItems = computed<MenuItem[]>(() => [
         shortcut: commandShortcut(`chat.toggleFloating`),
         command: (): void => toggleChatFloating(),
     },
-]);
+];
+// One array for every closed menu, and the verbs above are read only while it is up: built unconditionally they
+// rebuild on every conversation change — a keystroke's worth — and a rebuilt model redraws the menu and its portal.
+const NO_ITEMS: MenuItem[] = [];
+const barMenuUp = ref(false);
+const barMenuItems = computed<MenuItem[]>(() => (barMenuUp.value ? barVerbs() : NO_ITEMS));
 const onBarContextMenu = (event: MouseEvent): void => {
     if (event.target instanceof Element && event.target.closest(`input, textarea`) !== null) {
         return; // A text field keeps the browser's own editing menu (the rename box, the list's filter).
     }
     event.preventDefault();
+    barMenuUp.value = true;
     barMenu.value?.show(event);
 };
 
@@ -540,6 +546,6 @@ const openHistory = (event: Event): void => {
         </AnchoredOverlay>
 
         <!-- Right-click menu for the bar's own chrome; cards have their own, inside the list. -->
-        <ContextMenu ref="barMenu" :model="barMenuItems" :min-width="13" />
+        <ContextMenu ref="barMenu" :model="barMenuItems" :min-width="13" @hide="barMenuUp = false" />
     </component>
 </template>

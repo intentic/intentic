@@ -2,7 +2,6 @@
 <script setup lang="ts">
 import { personaBounds, providerLabel } from "@intentic/sandbox-contract";
 import { ui, Icon, type IconName, PersonaFace, StatusBadge } from "@intentic/ui";
-import { useNow } from "@intentic/ui/async";
 import { computed, ref, watch } from "vue";
 import { RouterLink } from "vue-router";
 import { startAgent } from "../../agents/fleet/agentActions";
@@ -148,9 +147,6 @@ const rows = computed<PersonaRow[]>(() =>
 
 const empty = computed(() => personas.value.length === 0);
 
-// One shared clock for the whole column, so every row's elapsed readout ticks together instead of drifting apart.
-const now = useNow();
-
 // Switching chats or starting a fresh one both land here; the ring follows whichever this rail put on screen.
 const show = (conversationId: string): void => {
     picked.value = conversationId;
@@ -216,7 +212,6 @@ const sessionsOf = (row: PersonaRow) =>
                         :title="row.label"
                         :status="row.status"
                         :live="row.live"
-                        :now="now"
                         tight
                         :selected="row.open"
                         :attention="row.needsYou"
@@ -264,7 +259,6 @@ const sessionsOf = (row: PersonaRow) =>
                             :status="statusOf(entry)"
                             :chip="chipOf(entry)"
                             :live="liveOf(entry)"
-                            :now="now"
                             tight
                             :selected="entry.conversation.conversationId === picked"
                             :attention="entry.agent !== undefined && blocked(entry.agent)"

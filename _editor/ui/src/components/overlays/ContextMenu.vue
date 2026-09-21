@@ -19,6 +19,10 @@ const {
     appendTo?: HTMLElement | string;
 }>();
 
+// Forwarded so a caller can drop the state its model is built from: a menu left named keeps rebuilding that model
+// on every unrelated change, and a rebuilt model redraws the closed menu.
+const emit = defineEmits<{ hide: [] }>();
+
 const menu = ref<{ show: (event: Event) => void; hide: () => void } | undefined>();
 
 // One column for both marks: an item is never both checked and icon-bearing, and reserving two gutters for
@@ -71,6 +75,7 @@ const onRowClick = (event: MouseEvent, item: MenuItem): void => {
         ref="menu"
         :model="model"
         :append-to="appendTo"
+        @hide="emit(`hide`)"
         :pt="{
             root: { class: `!text-xs`, style: { minWidth: `${minWidth}rem` } },
             rootList: { class: `!p-1 overflow-y-auto overscroll-contain`, style: { maxHeight } },

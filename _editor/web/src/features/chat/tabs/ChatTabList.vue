@@ -23,8 +23,9 @@ import { sessionCategory } from "../../../app/sessionCategory";
 import { useAgentFilter } from "../../agents/board/useAgentFilter";
 import { boxNameOf } from "../../agents/fleet/fleetScope";
 import { useAgents } from "../../agents/fleet/useAgents";
+import { snapshotFingerprint } from "../../agents/fleet/useAgents-registry";
 import { FINISHED_WINDOW, type FleetAgent, finishedLaneOrder, windowFinished } from "../../agents/fleet/useAgents-fleet";
-import { type CacheCooling, cacheCooling } from "../../agents/fleet/promptCache";
+import { type CacheCooling, cacheCooling, cacheWarm } from "../../agents/fleet/promptCache";
 import HoverCard from "../../../components/HoverCard.vue";
 import OriginMark from "../../../components/OriginMark.vue";
 import RailCard from "../../../components/RailCard.vue";
@@ -56,7 +57,7 @@ import {
 import { commandShortcut } from "../../../shell/commands/useCommands";
 import { viewersOfSession } from "../../../shell/presence/usePresence";
 import PresenceAvatars from "../../../shell/presence/PresenceAvatars.vue";
-import { providerLabel, type WorkflowRun } from "@intentic/sandbox-contract";
+import { type MatchSnippet, providerLabel, type WorkflowRun } from "@intentic/sandbox-contract";
 import { useT } from "@intentic/ui/i18n";
 
 // Switcher for every open conversation, hosted by both the docked ChatTabs sheet and the floating rail. Card and
@@ -225,12 +226,6 @@ const hiddenRuns = computed(
 );
 const hiddenFinished = computed(() => finishedWindow.value.hidden + hiddenRuns.value);
 
-// A lane's visible chats. The `n of m` denominator is the lane's total, not the windowed count; the row below
-// the cards explains the difference.
-const cardsIn = (lane: FleetLane): OpenChat[] => {
-    const source = lane === `finished` && windowed.value ? finishedWindow.value.shown : lanes.value[lane];
-    return source.filter(tabMatches);
-};
 // A run counts as its one row on both sides: `heldIn` and `cardsIn` must agree, or the lane header would
 // contradict the row drawn beneath it.
 const heldIn = (lane: FleetLane): number =>
@@ -310,6 +305,65 @@ const hasMeta = (entry: OpenChat): boolean =>
     isArchived(entry.conversation) ||
     modelOf(entry) !== undefined;
 
+// Everything a card is handed that isn't a primitive, derived in one place per card.
+interface CardView {
+    readonly status: { name: IconName; spin?: boolean; class: string; "aria-label": string };
+    readonly chip: StandingChip | undefined;
+    readonly rim: TileRim | undefined;
+    readonly live: { icon: IconName; text: string; since: number | undefined } | undefined;
+    readonly snippet: MatchSnippet | undefined;
+    readonly model: string | undefined;
+    readonly meta: boolean;
+}
+
+// A card's view model is held while its fields are value-equal, since a card compares its props by identity: a
+// fresh object for unchanged facts redraws every row in the lane on any pass, and a pass is as cheap as a keystroke.
+const viewCache = new Map<string, { print: string; view: CardView }>();
+const viewOf = (entry: OpenChat): CardView => {
+    const view: CardView = {
+        status: statusOf(entry),
+        chip: chipOf(entry),
+        rim: rimOf(entry),
+        live: liveOf(entry),
+        snippet: entry.agent === undefined ? undefined : snippetOf(entry.agent),
+        model: modelOf(entry),
+        meta: hasMeta(entry),
+    };
+    const print = snapshotFingerprint(view);
+    const held = viewCache.get(entry.conversation.conversationId);
+    if (held?.print === print) {
+        return held.view;
+    }
+    viewCache.set(entry.conversation.conversationId, { print, view });
+    return view;
+};
+
+// The drawn cards of every lane, built once a pass rather than per `cardsIn` call, and the only place the view
+// cache is written — so a card that leaves the list takes its entry with it.
+const laneCards = computed<Record<FleetLane, (OpenChat & { view: CardView })[]>>(() => {
+    const next: Record<FleetLane, (OpenChat & { view: CardView })[]> = { attention: [], active: [], finished: [] };
+    const alive = new Set<string>();
+    for (const lane of [`attention`, `active`, `finished`] as const) {
+        const source = lane === `finished` && windowed.value ? finishedWindow.value.shown : lanes.value[lane];
+        for (const entry of source) {
+            if (!tabMatches(entry)) {
+                continue;
+            }
+            alive.add(entry.conversation.conversationId);
+            next[lane].push({ ...entry, view: viewOf(entry) });
+        }
+    }
+    for (const id of viewCache.keys()) {
+        if (!alive.has(id)) {
+            viewCache.delete(id);
+        }
+    }
+    return next;
+});
+// A lane's visible chats. The `n of m` denominator is the lane's total, not the windowed count; the row below
+// the cards explains the difference.
+const cardsIn = (lane: FleetLane): (OpenChat & { view: CardView })[] => laneCards.value[lane];
+
 // Matches outside this window: fleet agents, then archived agents, then agent-less conversations
 // (sessionMatches); each opens the conversation. Archive loads lazily on first query, not at mount.
 const openIds = computed(() => new Set(conversations.value.map((conversation) => conversation.conversationId)));
@@ -344,8 +398,10 @@ watch(filtering, (on) => {
     }
 });
 
-// Shared clock for every running card's elapsed readout; ticks only while this list is mounted.
-const now = useNow();
+// The cooling chip is the only readout this list draws off a clock — the cards and marks below own theirs (RailCard,
+// UnsentMark) — so the tick is armed by the same gate the chip is, and a rail with nothing cooling ticks not at all.
+const cooling = computed(() => Object.values(lanes.value).some((entries) => entries.some(({ agent }) => agent !== undefined && cacheWarm(agent))));
+const now = useNow(() => cooling.value);
 
 // Scrolls the active card into view (`nearest`) on activeId or tabReveal changes, and immediately at mount for
 // the docked sheet.
@@ -492,10 +548,13 @@ const openShare = (id: string): void => {
 const tabMenu = ref<{ show: (event: Event) => void } | undefined>();
 const menuTabId = ref<string>();
 
+// One array for every closed menu: a fresh one each pass is a changed prop, and the menu redraws for it.
+const NO_ITEMS: MenuItem[] = [];
+
 const tabMenuItems = computed<MenuItem[]>(() => {
     const id = menuTabId.value;
     if (id === undefined || !conversations.value.some((conversation) => conversation.conversationId === id)) {
-        return []; // no card named, or the right-clicked one closed under the open menu
+        return NO_ITEMS; // no card named, or the right-clicked one closed under the open menu
     }
     const others = othersOf(id);
     const toRight = toRightOf(id);
@@ -650,7 +709,7 @@ const keepTab = (event: Event, id: string): void => {
                     {{ t(`chat.chatTabList.noMatches`) }}
                 </p>
                 <div v-else-if="cardsIn(lane.key).length > 0" class="flex min-w-0 flex-col gap-2.5">
-                    <template v-for="{ conversation: c, agent } in cardsIn(lane.key)" :key="c.conversationId">
+                    <template v-for="{ conversation: c, agent, view } in cardsIn(lane.key)" :key="c.conversationId">
                         <!-- Replaces the card rather than nesting a field in it (a button can't host a usable input). -->
                         <input
                             v-if="edit.editing && renamingId === c.conversationId"
@@ -673,16 +732,15 @@ const keepTab = (event: Event, id: string): void => {
                             :needle="needle"
                             :match-case="matchCase"
                             :provider="agent?.provider ?? c.provider.value"
-                            :status="statusOf({ conversation: c, agent })"
-                            :chip="chipOf({ conversation: c, agent })"
-                            :rim="rimOf({ conversation: c, agent })"
-                            :live="liveOf({ conversation: c, agent })"
-                            :now="now"
+                            :status="view.status"
+                            :chip="view.chip"
+                            :rim="view.rim"
+                            :live="view.live"
                             tight
                             :selected="activeId === c.conversationId || showing(c.conversationId)"
                             :peek="c.peek.value"
                             :attention="lane.key === 'attention'"
-                            :snippet="agent === undefined ? undefined : snippetOf(agent)"
+                            :snippet="view.snippet"
                             v-middleclick="() => middleCloseTab(c.conversationId)"
                             @click="onRowClick($event, c.conversationId)"
                             @dblclick.prevent.stop="beginRename(c.conversationId)"
@@ -719,8 +777,8 @@ const keepTab = (event: Event, id: string): void => {
                                 </span>
                             </template>
                             <!-- One line: where it came from, the model, and (settled only) its age, right-aligned. Why it needs you is the card's corner (see `chipOf`), where the board puts it too. -->
-                            <template v-if="hasMeta({ conversation: c, agent })" #meta>
-                                <UnsentMark v-if="c.unsent.value" :preview="draftPreview(c.draft.value)" :at="c.draftAt.value" :now="now" />
+                            <template v-if="view.meta" #meta>
+                                <UnsentMark v-if="c.unsent.value" :preview="draftPreview(c.draft.value)" :at="c.draftAt.value" />
                                 <!-- One glyph, no countdown: the rail says which chat is about to stop being cheap to answer, the board says for how long. -->
                                 <Icon
                                     v-if="coolingOf(agent) !== undefined"
@@ -751,9 +809,7 @@ const keepTab = (event: Event, id: string): void => {
                                     <Icon name="box" class="text-2xs text-subtle" />
                                 </span>
                                 <!-- Spend, diff and turn count are deliberately absent here; they live on the board and Usage tab. -->
-                                <span v-if="modelOf({ conversation: c, agent }) !== undefined" class="max-w-24 truncate">{{
-                                    modelOf({ conversation: c, agent })
-                                }}</span>
+                                <span v-if="view.model !== undefined" class="max-w-24 truncate">{{ view.model }}</span>
                                 <!-- Age is shown only when settled; a running card's clock is the live line's elapsed readout instead. -->
                                 <span v-if="agent !== undefined && !turnInFlight(agent) && agent.updatedAt > 0" class="ml-auto shrink-0">{{
                                     relativeTime(agent.updatedAt)
@@ -828,7 +884,8 @@ const keepTab = (event: Event, id: string): void => {
 
         <!-- Both teleport out (hover card to the overlay target, menu to `append-to`); kept here only so the component stays single-rooted. -->
         <HoverCard ref="hoverCard" />
-        <ContextMenu ref="tabMenu" :model="tabMenuItems" :min-width="13" />
+        <!-- Unnamed again on close, so the model above collapses to its one dependency until the next right-click. -->
+        <ContextMenu ref="tabMenu" :model="tabMenuItems" :min-width="13" @hide="menuTabId = undefined" />
         <ChatShareDialog
             v-if="shareTarget"
             visible

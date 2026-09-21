@@ -1223,8 +1223,10 @@ watch(
 );
 </script>
 
+<!-- Everything the panel's chat list is not; carries the @container so composer density keys off this pane's own share of the width, not the panel's. -->
+<!-- Kept outside the template: a comment inside it makes this multi-root, and dev patches a multi-root subtree
+     unoptimized — every slotted child, including all six closed composer menus, redraws on every keystroke. -->
 <template>
-    <!-- Everything the panel's chat list is not; carries the @container so composer density keys off this pane's own share of the width, not the panel's. -->
     <div
         class="chat-pane @container relative flex min-h-0 min-w-0 flex-1 flex-col"
         :class="{ 'chat-pane-on': focused }"

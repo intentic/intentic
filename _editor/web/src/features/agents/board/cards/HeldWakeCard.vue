@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { Button, Icon, timeAgo } from "@intentic/ui";
+import { useNow } from "@intentic/ui/async";
 import type { AutomationApproval } from "@intentic/sandbox-contract";
-import { computed, onMounted, onUnmounted, ref } from "vue";
+import { computed } from "vue";
 import OriginMark from "../../../../components/OriginMark.vue";
 import { useT } from "@intentic/ui/i18n";
 
@@ -21,23 +22,18 @@ const emit = defineEmits<{ approve: []; reject: [] }>();
 // First line of what fired: distinguishes two holds of the same automation (which otherwise share no payload).
 const snippet = computed(() => entry.payload?.split("\n", 1)[0] ?? undefined);
 
-// Coarse 5s clock, only while a countdown shows: the label only needs to say "this will run itself", not the exact
-// second.
-const now = ref(Date.now());
-let ticker: ReturnType<typeof setInterval> | undefined;
-onMounted(() => {
-    if (entry.autoRunAt !== undefined) {
-        ticker = setInterval(() => (now.value = Date.now()), 5_000);
-    }
-});
-onUnmounted(() => clearInterval(ticker));
+// The shared clock rather than a timer of this card's own, armed only while a countdown shows, and quantized to the
+// 5s the label is coarse to: a finer tick would redraw the card for words that had not changed.
+const COARSE_MS = 5_000;
+const now = useNow(() => entry.autoRunAt !== undefined);
+const coarseNow = computed(() => Math.floor(now.value / COARSE_MS) * COARSE_MS);
 // Each unit hands over before the number it would print stops being readable at a glance: a hold parked for three days
 // read "runs itself in 4320m", which is a number to do arithmetic on rather than a wait to feel.
 const autoRunLabel = computed(() => {
     if (entry.autoRunAt === undefined) {
         return undefined;
     }
-    const seconds = Math.max(0, Math.round((entry.autoRunAt - now.value) / 1000));
+    const seconds = Math.max(0, Math.round((entry.autoRunAt - coarseNow.value) / 1000));
     if (seconds < 120) {
         return `runs itself in ${seconds}s`;
     }

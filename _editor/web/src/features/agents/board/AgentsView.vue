@@ -1143,8 +1143,10 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
     begin(event, agent, card);
 };
 </script>
+<!-- `relative` positions the lane-drop affordances only; the fixed drag ghost and the app's notification lane need no containing block here. -->
+<!-- Kept outside the template: a comment inside it makes this multi-root, and dev patches a multi-root subtree
+     unoptimized — every slotted child, closed dialogs included, redraws on every board render. -->
 <template>
-    <!-- `relative` positions the lane-drop affordances only; the fixed drag ghost and the app's notification lane need no containing block here. -->
     <div ref="boardEl" class="relative flex h-full min-h-0 flex-col">
         <!-- The filter remains usable at narrow /agents widths. -->
         <div class="view-header view-header-wrap flex flex-wrap items-center gap-x-2 gap-y-1 px-3 py-1">

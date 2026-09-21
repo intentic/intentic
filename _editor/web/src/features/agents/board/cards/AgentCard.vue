@@ -602,7 +602,7 @@ const grab = (event: PointerEvent): void => {
                 class="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-2xs text-subtle"
             >
                 <!-- Shape, wording and hover live in UnsentMark, shared with the rail row. -->
-                <UnsentMark v-if="agent.unsent" :preview="agent.preview" :at="agent.draftAt" :now="now" />
+                <UnsentMark v-if="agent.unsent" :preview="agent.preview" :at="agent.draftAt" />
                 <!-- Which sandbox this agent is in, shown only when it isn't the reader's own; leads the line since it changes what every other number means. -->
                 <span
                     v-if="box !== undefined"

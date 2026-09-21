@@ -94,6 +94,14 @@ const stabilizeRegistry = (incoming: readonly AgentSummary[]): AgentSummary[] =>
 export const sameEntries = <T>(left: readonly T[], right: readonly T[]): boolean =>
     left.length === right.length && left.every((entry, at) => entry === right[at]);
 
+// Single writer for the held list, holding it to the rule `registry` keeps: a re-read carrying the same holds
+// leaves the array alone, since identity is the only change signal its readers get.
+const setHeldWakes = (held: AutomationApproval[]): void => {
+    if (snapshotFingerprint(held) !== snapshotFingerprint(heldWakes.value)) {
+        heldWakes.value = held;
+    }
+};
+
 // Retires every intent the server has now absorbed, then re-projects what remains.
 const applySnapshot = (agents: AgentSummary[], rev: number): void => {
     for (const [id, move] of pending) {
@@ -180,7 +188,7 @@ export const setAgents = (agents: AgentSummary[], rev: number): void => {
 export const desyncRegistry = (keepRoster: boolean): void => {
     if (!keepRoster) {
         registry.value = [];
-        heldWakes.value = [];
+        setHeldWakes([]);
     }
     pending.clear();
     registryStable.clear();
@@ -282,7 +290,7 @@ export const refresh = async (): Promise<void> => {
         }
         // Goes through setAgents, not a raw assignment, so a slow read can't undo a newer frame from the stream.
         setAgents(body.agents, body.rev);
-        heldWakes.value = body.held ?? [];
+        setHeldWakes(body.held ?? []);
     } catch {
         // Leave the last roster; the events stream repaints on reconnect.
     }
@@ -302,7 +310,7 @@ watch([onScreen, reachable] as const, ([looking, live], [wasLooking]) => {
 // from the list optimistically; the trailing refresh() repaints whatever else moved.
 export const releaseHeld = async (id: string, verb: `approve` | `reject`): Promise<void> => {
     await sandboxJson(`/automations/pending/${encodeURIComponent(id)}/${verb}`, { method: `POST` });
-    heldWakes.value = heldWakes.value.filter((entry) => entry.id !== id);
+    setHeldWakes(heldWakes.value.filter((entry) => entry.id !== id));
     void refresh();
 };
 

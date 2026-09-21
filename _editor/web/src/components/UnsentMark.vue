@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useNow } from "@intentic/ui/async";
 import { computed } from "vue";
 import { relativeTime } from "../features/chat/models/catalog";
 import { useT } from "@intentic/ui/i18n";
@@ -14,13 +15,17 @@ const props = defineProps<{
     preview?: string;
     // When the composer first held it (Conversation.draftAt); absent for a chat restored with no stamp.
     at?: number;
-    // Host's tick (AgentsView `now`, rail useNow); optional since a clockless surface still renders a correct age.
-    now?: number;
 }>();
+
+// The mark reads the shared clock itself, armed only while it has a stamp to age, and quantized to the 15s that
+// keeps a minute-granular age honest: a tick a second would redraw every unsent card for the same words.
+const AGE_STEP_MS = 15_000;
+const now = useNow(() => props.at !== undefined);
+const aged = computed(() => Math.floor(now.value / AGE_STEP_MS) * AGE_STEP_MS);
 
 // Reports what the card doesn't show; drops missing parts, falls back to naming the state when both are gone.
 const hint = computed<string>(() => {
-    const age = props.at === undefined ? undefined : relativeTime(props.at, props.now);
+    const age = props.at === undefined ? undefined : relativeTime(props.at, aged.value);
     if (props.preview !== undefined) {
         return age === undefined ? `Not sent: ${props.preview}` : `Not sent, ${age}: ${props.preview}`;
     }

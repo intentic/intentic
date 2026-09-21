@@ -107,14 +107,21 @@ const applyFailure = (state: ConnectionState, failure: ConnectionFailure, at: nu
     };
 };
 
+// An attempt under way. Returns the very same state when it would change nothing, since identity is the whole
+// signal a reader gets and a repeat attempt would otherwise repaint the shell (the `frame` arm keeps the same rule).
+const attempting = (state: ConnectionState): ConnectionState => {
+    const phase = state.phase === `online` ? `online` : `connecting`;
+    return state.phase === phase && state.retryDelayMs === 0 ? state : { ...state, phase, retryDelayMs: 0 };
+};
+
 export const applyConnectionSignal = (state: ConnectionState, signal: ConnectionSignal): ConnectionState => {
     switch (signal.kind) {
         case `connect`:
             // Keeps `attempt` and `failure` across a reconnect; an optimistic `online` survives so it doesn't flicker.
-            return { ...state, phase: state.phase === `online` ? `online` : `connecting`, retryDelayMs: 0 };
+            return attempting(state);
         case `opened`:
             // Headers aren't liveness: a proxy can answer 200 with a silent body; only a frame proves it's serving.
-            return { ...state, phase: state.phase === `online` ? `online` : `connecting`, retryDelayMs: 0 };
+            return attempting(state);
         case `frame`: {
             // Guards on `onlineSince` too, since an optimistic `online` already has no failure to short-circuit on.
             if (state.phase === `online` && state.failure === undefined && state.onlineSince !== undefined) {

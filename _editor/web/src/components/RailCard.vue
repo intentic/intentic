@@ -2,6 +2,7 @@
 <script setup lang="ts">
 import type { AgentProvider, MatchSnippet } from "@intentic/sandbox-contract";
 import { type IconName, ProgressRing, SegmentRing } from "@intentic/ui";
+import { useNow } from "@intentic/ui/async";
 import { computed } from "vue";
 import { type RouteLocationRaw, RouterLink } from "vue-router";
 import { formatElapsed, type StandingChip, type TileRim, unreadHint } from "../features/agents/fleet/agentStatus";
@@ -34,7 +35,6 @@ const props = defineProps<{
     // isn't a session), which wears the empty rim instead.
     rim?: TileRim;
     live?: { icon: IconName; text: string; since?: number };
-    now?: number;
     // When true, the live readout trails the facts line instead of taking its own row, for narrow rails.
     tight?: boolean;
     // True when this card's chat is open in a column: ring and lifted surface, same weight for every open column.
@@ -52,6 +52,10 @@ const props = defineProps<{
     // When set, renders as a RouterLink instead of a button, for rows that are addresses, not selections.
     to?: RouteLocationRaw;
 }>();
+
+// The card reads the shared clock itself, armed only while it draws an elapsed readout, so a settled rail ticks
+// nothing and a running one redraws one card rather than the list around it.
+const now = useNow(() => props.live?.since !== undefined);
 
 const titleRuns = computed(() => markSegments(props.title, props.needle ?? ``, props.matchCase === true));
 // Only the "Updated" chip earns a hover: "New" already says unopened, while this hides when you last looked.
@@ -142,9 +146,7 @@ const chipHint = computed(() => (props.chip?.seenAt === undefined ? undefined : 
                 <span v-if="tight && live !== undefined" class="ml-auto flex min-w-0 items-center gap-1 font-medium text-link">
                     <Icon :name="live.icon" class="shrink-0 text-2xs" />
                     <span class="min-w-0 truncate">{{ live.text }}</span>
-                    <span v-if="live.since !== undefined && now !== undefined" class="shrink-0 tabular-nums">{{
-                        formatElapsed(live.since, now)
-                    }}</span>
+                    <span v-if="live.since !== undefined" class="shrink-0 tabular-nums">{{ formatElapsed(live.since, now) }}</span>
                 </span>
             </span>
 
@@ -152,7 +154,7 @@ const chipHint = computed(() => (props.chip?.seenAt === undefined ? undefined : 
             <span v-if="live !== undefined && tight !== true" class="flex w-full min-w-0 items-center gap-1.5 text-2xs font-medium text-link">
                 <Icon :name="live.icon" class="shrink-0 text-2xs" />
                 <span class="min-w-0 flex-1 truncate">{{ live.text }}</span>
-                <span v-if="live.since !== undefined && now !== undefined" class="shrink-0">{{ formatElapsed(live.since, now) }}</span>
+                <span v-if="live.since !== undefined" class="shrink-0">{{ formatElapsed(live.since, now) }}</span>
             </span>
 
             <span v-if="snippet !== undefined" class="flex w-full min-w-0 items-start gap-1 text-2xs text-muted">

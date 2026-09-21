@@ -105,6 +105,15 @@ describe(`applyConnectionSignal`, () => {
         expect(applyConnectionSignal(online, frame())).toBe(online);
     });
 
+    it(`returns the identical object for an attempt that changes nothing`, () => {
+        // The loop re-signals connect and opened on every pass; a fresh state each time repaints every reader of it.
+        const connecting = drive({ kind: `connect` });
+        expect(applyConnectionSignal(connecting, { kind: `connect` })).toBe(connecting);
+        expect(applyConnectionSignal(connecting, { kind: `opened` })).toBe(connecting);
+        const online = drive({ kind: `connect` }, { kind: `opened` }, frame());
+        expect(applyConnectionSignal(online, { kind: `connect` })).toBe(online);
+    });
+
     it(`walks the backoff up over consecutive failures and caps it`, () => {
         const fail = failed();
         expect(drive({ kind: `connect` }, fail).retryDelayMs).toBe(1000);
