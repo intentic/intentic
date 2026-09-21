@@ -18,6 +18,7 @@ const {
     multiple = false,
     placeholder,
     label,
+    excludes,
 } = defineProps<{
     /** Several folders (a fence), or exactly one (where a session starts). */
     multiple?: boolean;
@@ -25,6 +26,9 @@ const {
     placeholder: string;
     /** Names the trigger for a screen reader; the visible label is the form row's. */
     label: string;
+    // Folders this caller's own schema would refuse, hidden rather than offered: an area cannot name the sandbox's
+    // configuration or its public outbox, and a pick that can only end in a refusal is a dead end with a tree in it.
+    excludes?: (path: string) => boolean;
 }>();
 
 const picked = defineModel<string[]>({ required: true });
@@ -39,9 +43,9 @@ const { query } = useSandboxQuery<WorkspaceTreeResponse>({
 // Sandbox-scoped like other reads behind these panels, so switching sandboxes drops the outline.
 const outline = useSandboxOutline(query.isPending);
 
-// Only directories, and only non-ignored ones (node_modules, .git, gitignored).
+// Only directories, and only non-ignored ones (node_modules, .git, gitignored), minus whatever the caller refuses.
 const foldersIn = (entries: readonly WorkspaceTreeEntry[]): readonly WorkspaceTreeEntry[] =>
-    entries.filter((entry) => entry.type === `dir` && entry.ignored !== true);
+    entries.filter((entry) => entry.type === `dir` && entry.ignored !== true && excludes?.(entry.path) !== true);
 
 const roots = computed(() => foldersIn(query.data.value?.tree ?? []));
 
