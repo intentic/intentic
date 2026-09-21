@@ -119,7 +119,7 @@ const passReaders = (worktrees: AgentWorktrees, git: GitRunner) => {
 const deltaOf = async (worktrees: AgentWorktrees, repos: readonly RepoShas[], git: GitRunner): Promise<{ outstanding: boolean; produced: boolean }> => {
     let outstanding = false;
     let produced = false;
-    for (const { composed, tip } of repos) {
+    for (const { composed, head, tip } of repos) {
         if (tip === undefined) {
             continue; // The branch is gone: nothing of this agent's is left in this repo.
         }
@@ -128,9 +128,16 @@ const deltaOf = async (worktrees: AgentWorktrees, repos: readonly RepoShas[], gi
         const main = worktrees.mainDir(composed.repo);
         // Both halves matter: a rebase can leave a branch ahead of an anchor that already holds all of it.
         const anchor = await checkpointOf(main, main, tip, composed.landedTip, composed.base, git);
-        if (anchor !== tip && (await carriesContent(main, anchor, tip, git))) {
-            outstanding = true;
+        if (anchor === tip || !(await carriesContent(main, anchor, tip, git))) {
+            continue;
         }
+        // Rewriting main (a rebase, a force-push) drags the anchor back behind content main already holds, which would
+        // re-offer the whole delta; measured against main's own tree instead, a tip main already holds has nothing left.
+        // The review keeps listing those paths as absorbed, which is why this reading lives here and not in the anchor.
+        if (head !== undefined && !(await carriesContent(main, head, tip, git))) {
+            continue;
+        }
+        outstanding = true;
     }
     return { outstanding, produced };
 };

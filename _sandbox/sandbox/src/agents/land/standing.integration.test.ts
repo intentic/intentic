@@ -309,3 +309,40 @@ test("a repo deleted from the workspace contributes nothing, and cannot fail the
     // A composition that is entirely that one deleted repo is idle rather than an exception.
     expect(await standingOf(worktrees, isolatedAgent([{ repo: "deleted", base: "0".repeat(40) }]))).toBe("idle");
 });
+
+// The incident this guards: a push forced main onto a rebased copy of the same work, and every agent branch parked on
+// the old tip read as ready again — same tree as main, a merge-base dragged back behind it, a whole commit re-offered.
+test("main rewritten onto an equal tree leaves the branches that held it landed, not ready", async () => {
+    const { work, worktrees, conversation } = await setup();
+    await writeFile(join(conversation.cwd, "app.ts"), "line one EDITED\nline two\nline three\n");
+    await sh(conversation.cwd, "add", "-A");
+    await commit(conversation.cwd, "agent work");
+    await sh(work, "merge", "--ff-only", "agent/c1");
+    const entry = isolatedAgent(conversation.repos);
+    expect(await standingOf(worktrees, entry)).toBe("landed");
+
+    // What a rebase-and-push does to main: a new sha over the same tree, so the branch is no longer an ancestor and the
+    // merge-base falls back to the commit before the work.
+    await sh(work, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "--amend", "-m", "agent work, rebased");
+    expect(await sh(work, "rev-parse", "HEAD^{tree}")).toBe(await sh(work, "rev-parse", "agent/c1^{tree}"));
+    expect(await sh(work, "merge-base", "HEAD", "agent/c1")).not.toBe(await sh(work, "rev-parse", "agent/c1"));
+
+    expect(await standingOf(worktrees, entry)).toBe("landed");
+});
+
+// The other half of the same rewrite: work the agent never landed is still outstanding, so the guard reads trees rather
+// than taking any rewritten main for one that absorbed everything.
+test("a rewritten main does not swallow work the branch alone carries", async () => {
+    const { work, worktrees, conversation } = await setup();
+    await writeFile(join(conversation.cwd, "app.ts"), "line one EDITED\nline two\nline three\n");
+    await sh(conversation.cwd, "add", "-A");
+    await commit(conversation.cwd, "agent work");
+
+    // Main moves on its own and is then rewritten, keeping the shared root: merge-base sits behind a tip main never held.
+    await writeFile(join(work, "notes.md"), "mine\n");
+    await sh(work, "add", "-A");
+    await commit(work, "user work");
+    await sh(work, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "--amend", "-m", "user work, rebased");
+
+    expect(await standingOf(worktrees, isolatedAgent(conversation.repos))).toBe("ready");
+});
