@@ -272,6 +272,10 @@ export const AgentEventSchema = z.discriminatedUnion("kind", [
             .optional(),
         // provider-outage only: `retryAt` is the next attempt on backoff; `attempt`/`maxAttempts` bound it.
         outage: z.object({ retryAt: z.number(), attempt: z.number(), maxAttempts: z.number() }).optional(),
+        // Nobody was at the composer when this turn was refused. The codes that ran nothing otherwise read as "held
+        // for you to send again", which on an automation, a loop or a watch wake names a message no one typed and a
+        // composer no one is looking at.
+        unattended: z.boolean().optional(),
     }),
     z.object({ kind: z.literal("done") }),
 ]);

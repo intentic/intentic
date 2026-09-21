@@ -7,10 +7,10 @@ import {
     cleanBreakingNote,
     cleanCommitSubject,
     cleanReleaseNote,
-    commitMessagePrompt,
     fallbackBreakingNote,
     markSubjectBreaking,
     type RepoDiff,
+    sizedCommitMessagePrompt,
 } from "../../git/ops/commit-message.js";
 import { claimedContractShrink } from "../../git/changes/contract-shrink.js";
 import { publishRuntimeChange } from "../../system/runtime-watch.js";
@@ -120,7 +120,9 @@ export const describeLanding = async (services: Services, id: string): Promise<v
             askRoleModel(
                 services,
                 `commit-message`,
-                { prompt: commitMessagePrompt(diffs, wantsNote, removed), answer: messageAnswer(wantsNote) },
+                // Sized per rung rather than built once: the patch budget is the largest thing any helper sends, and a
+                // model on a small window gets a clipped diff instead of a prompt it has to refuse.
+                { prompt: (room) => sizedCommitMessagePrompt(room, diffs, wantsNote, removed), answer: messageAnswer(wantsNote) },
                 new AbortController().signal,
                 { onProgress: (attempts) => publish({ ...draft, steps: attempts.map(step) }) },
             ),

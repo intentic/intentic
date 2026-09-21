@@ -1011,6 +1011,17 @@ const settleRefusals = (services: Services, provider: string, account: string | 
         .catch((error: unknown) => services.logger.warn({ err: error }, "claude account: could not clear the entitlement mark"));
 };
 
+// A refusal that ran nothing, as the frame the chat draws. `unattended` rides with it because the row it becomes
+// offers to send the message again (transcript-fold.ts errorRow), which is only true where somebody typed one: an
+// automation, a loop or a watch wake has no composer holding anything.
+const refusalFrame = (refusal: { readonly code?: Extract<AgentEvent, { kind: "error" }>["code"]; readonly message: string }, unattended: boolean) =>
+    ({
+        kind: "error",
+        ...(refusal.code !== undefined ? { code: refusal.code } : {}),
+        ...(unattended ? { unattended: true } : {}),
+        message: refusal.message,
+    }) as const satisfies AgentEvent;
+
 // What the message grew before reaching the model, and what the model's window would not let it grow. Both, together,
 // because they are one disclosure asked from two sides: an empty note list is not one, and a shed note has no message
 // to be drawn beside, so the trim frame is the only place its absence can be said.
@@ -1163,7 +1174,7 @@ async function* runTurn(
     if (!plan.ok) {
         // The namespace anchor was built before the gates ran, so a refusal must dispose it too.
         isolation?.anchor?.dispose();
-        yield { kind: "error", ...(plan.code !== undefined ? { code: plan.code } : {}), message: plan.message };
+        yield refusalFrame(plan, input.unattended === true);
         yield { kind: "done" };
         return;
     }

@@ -16,10 +16,41 @@ const OUTPUT_RESERVE_TOKENS = 2_000;
 // Rough chars-per-token rate every budget in this daemon counts at (workspace-map.ts, runtime-history.ts).
 const CHARS_PER_TOKEN = 4;
 
+// A one-shot helper's reply: a commit subject, a session title, a verdict and at most a short document. Far below a
+// turn's reserve because nothing here writes code.
+const HELPER_REPLY_TOKENS = 1_000;
+
 const withCommas = (value: number): string =>
     Math.round(value)
         .toString()
         .replace(/\B(?=(\d{3})+(?!\d))/gu, ",");
+
+// How many characters of prompt a one-shot helper may spend on a model that declared a window (role-model.ts).
+//
+// The arithmetic is not the turn's below, and deliberately: a helper carries no tools, no session and no transcript
+// (claude-one-shot.ts sends `allowedTools: []`, `settingSources: []`, `maxTurns: 1`), so the harness floor that makes
+// turns fail simply is not there. The whole window minus room to answer is genuinely the helper's to spend.
+//
+// Infinity where the window is unknown, so a caller can size against it arithmetically without branching, and so an
+// unknown window never makes a helper send less than it would have.
+export const helperPromptRoom = (declared: DeclaredWindow | undefined): number =>
+    declared === undefined ? Number.POSITIVE_INFINITY : Math.max(0, (declared.window - HELPER_REPLY_TOKENS) * CHARS_PER_TOKEN);
+
+// Why a rung was not asked, in the words the owner can act on: what it would have taken, what the model accepts, and
+// the two places either number is changed. Undefined means it fits.
+export const helperOverflow = (prompt: string, room: number, declared: DeclaredWindow | undefined): string | undefined => {
+    if (prompt.length <= room || declared === undefined) {
+        return undefined;
+    }
+    const fix = declared.onACard
+        ? `Raise "Conversation window" on this model's card in Connections`
+        : `Raise the context size its server was started with`;
+    return (
+        `this job needs about ${withCommas(prompt.length / CHARS_PER_TOKEN)} tokens and the model accepts ` +
+        `${withCommas(declared.window)} in one request. ${fix}, or set a model with a larger window for this job in ` +
+        `Sandbox ▸ Agent ▸ Models.`
+    );
+};
 
 export interface ContextShortfall {
     // What the server said it will accept; what the turn was measured against.

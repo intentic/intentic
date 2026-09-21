@@ -16,6 +16,7 @@ import {
     MAX_SUBJECT_LENGTH,
     parsableMessage,
     type RepoDiff,
+    sizedCommitMessagePrompt,
 } from "./commit-message.js";
 
 // Run against real repos, not fakes: index and worktree disagree constantly, and a fake runner could pass while the
@@ -479,4 +480,37 @@ test("reports an empty answer as empty, so the caller can say the model said not
     expect(cleanCommitSubject("")).toBe("");
     expect(cleanCommitSubject("   \n\n  ")).toBe("");
     expect(cleanCommitSubject("```\n```")).toBe("");
+});
+
+// A helper rung on a small window gets a clipped diff rather than a prompt it has to refuse
+// (agent/prompt/window/context-budget.ts decides the room, role-model.ts hands it over).
+
+test("a room smaller than the full prompt clips the patch and keeps the rules", async () => {
+    const dir = await tempRepo();
+    await writeFile(join(dir, "big.ts"), "const x = 1;\n".repeat(4_000));
+    await sh(dir, "add", "-A");
+    const diff = await collectRepoDiff("root", dir, {});
+
+    const full = commitMessagePrompt([diff]);
+    const room = Math.floor(full.length / 2);
+    const sized = sizedCommitMessagePrompt(room, [diff]);
+
+    expect(full.length).toBeGreaterThan(room);
+    expect(sized.length).toBeLessThanOrEqual(room);
+    // The rules are the part that must survive: a clipped diff still earns a usable message, clipped rules earn an
+    // unparsable one.
+    expect(sized).toContain("Reply with the message itself.");
+    expect(sized).toContain("truncated");
+});
+
+test("a room the full prompt already fits is left exactly alone", async () => {
+    const dir = await tempRepo();
+    await writeFile(join(dir, "c.txt"), "c\n");
+    await sh(dir, "add", "-A");
+    const diff = await collectRepoDiff("root", dir, {});
+
+    const full = commitMessagePrompt([diff]);
+
+    expect(sizedCommitMessagePrompt(Number.POSITIVE_INFINITY, [diff])).toBe(full);
+    expect(sizedCommitMessagePrompt(full.length, [diff])).toBe(full);
 });

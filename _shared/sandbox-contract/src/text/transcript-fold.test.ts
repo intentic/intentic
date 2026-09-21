@@ -462,3 +462,24 @@ describe("patches", () => {
         expect(fold.rows[1]?.text).toBe("ab");
     });
 });
+
+// A refusal that ran nothing offers the message back to the composer — true where somebody typed one, false for a run
+// that started itself, where there is no composer and no typed message.
+describe(`a refusal that ran nothing`, () => {
+    const REFUSED = { kind: `error`, code: `context-window-too-small`, message: `This model accepts 16,384 tokens.` } as const satisfies AgentEvent;
+
+    it(`holds a turn somebody typed for another press`, () => {
+        const rows = foldOf(`land it`, [REFUSED]);
+
+        expect(rows.at(-1)?.text).toContain(`held for you to send again`);
+    });
+
+    it(`promises no resend for a turn that started itself`, () => {
+        const rows = foldOf(`land it`, [{ ...REFUSED, unattended: true }]);
+
+        expect(rows.at(-1)?.text).not.toContain(`send again`);
+        expect(rows.at(-1)?.text).toContain(`started on its own`);
+        // The provider's own sentence still leads, whichever clause follows it.
+        expect(rows.at(-1)?.text).toContain(`16,384 tokens`);
+    });
+});

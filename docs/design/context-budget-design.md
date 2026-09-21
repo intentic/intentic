@@ -281,3 +281,53 @@ Two consequences for the rest of this document:
 - **`turn-context.ts`'s retrieved anchors are not in the ladder**, because they are not in the card's
   vocabulary and the flag that produces them is off by default. Adding an id for them is a card-editor change,
   and belongs with whatever re-measures that experiment.
+
+## 12. The other door: helpers, and the runs nobody presses (Sep 2026)
+
+§11 covers turns. The question it does not answer is what happens to the rest of `/sandbox/agent` on a small
+model — the three blocks the settings page draws: automatic helpers, runs you start, runs that start themselves.
+Traced, they split cleanly, and only one half was exposed.
+
+**Runs were already covered, all three blocks.** Every path that reaches a model as a turn goes through the one
+`planTurn` call: interactive chat, spawned children, `scheduler.ts` automations, `loop-runner.ts`,
+`workspace-events.ts`, `verify-nudge.ts`, `workflows.routes.ts`, `gate.routes.ts`. So they inherit both §9's
+refusal and §11's trim for free, and a 32k-pinned automation that used to be refused may now fit.
+
+**Helpers were not, because they are not turns.** `askRoleModel → askRung → adapter.oneShot` never touches
+`planTurn`. That turns out to matter *less* than it sounds: a one-shot sends `allowedTools: []`,
+`settingSources: []`, `maxTurns: 1` — no tools, no session, no transcript — so the ~20k harness floor that made
+§1's turn fail is simply not there. A helper's whole exposure is its own prompt.
+
+Every helper did cap its prompt. The caps were each chosen against a large window, and spanned 80×:
+
+| Role | Cap | ≈ tokens |
+| --- | --- | --- |
+| Auto model choice, Persona routing | 600 chars | 0.15k |
+| Session titles | 4,000 | 1k |
+| Loop verdicts | 8,000 | 2k |
+| Safety judge | 4,000 program + 8,000 policy | 3k |
+| **Commit messages** | **48,000 patch + 4,000 untracked + stats** | **13k** |
+
+Only the last one can overflow a 16k window, and it is the one this product *recommends* for a small model:
+§9's own refusal sentence, and `local-models-design.md` §10, both say "keep this one for the small jobs (titles,
+commit messages) it can do as a one-shot helper". We pointed owners at the single helper that could not take it.
+
+What shipped, three changes:
+
+- **`RoleAsk.prompt` may now be a function of the room its rung has.** `role-model.ts` resolves every rung's
+  declared window once before the walk and hands each ask `helperPromptRoom(...)` — the whole window less a
+  1k reply reserve, in characters, `Infinity` where the window is unknown. `sizedCommitMessagePrompt` uses it:
+  built at full size, then corrected once by exactly the overshoot, because the patch is the only part that
+  clips. A small model now gets a clipped diff instead of a prompt it must refuse.
+- **A rung that still cannot hold the ask is stepped over, not spent.** Sending it cost a round trip, earned a
+  ten-minute memo (`OTHER_REFUSED_FOR_MS`), and came back as the server's raw 400 — so a mis-sized job read as
+  an intermittent one. `helperOverflow` skips it with the two numbers and the two switches that change them,
+  reusing the same card-versus-server split §10 gave the turn refusal.
+- **The refusal row stopped promising a resend to nobody.** The codes that ran nothing all render as "held for
+  you to send again", which on an automation, a loop or a watch wake names a composer no one is looking at and a
+  message no one typed. The error frame now carries `unattended`, set where the route yields a refusal, and the
+  row reads accordingly. This fixes the whole group, not just the context code.
+
+One thing deliberately not done: the helper arithmetic is NOT the turn arithmetic, and the two should not be
+merged. A turn pays the floor and a one-shot does not, so a shared "budget" would either refuse helpers that
+work or admit turns that cannot. They share `declaredWindow` and nothing else.

@@ -18,7 +18,11 @@ export interface RoleAnswer<T> {
 
 // A prompt paired with the answer contract it must satisfy.
 export interface RoleAsk<T> {
-    readonly prompt: string;
+    // A fixed prompt, or one built to the room the rung being asked actually has (role-model.ts walks the chain and
+    // each rung can declare a different window). `room` is in characters and is Infinity where the window is unknown,
+    // so an ask that does not care can ignore it and an ask carrying something clippable — a diff, a report — can
+    // spend what is there instead of a constant chosen against a 200k window.
+    readonly prompt: string | ((room: number) => string);
     readonly answer: RoleAnswer<T>;
 }
 

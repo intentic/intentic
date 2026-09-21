@@ -15,6 +15,7 @@ import { endpointConfigOf } from "../../endpoints/local-model.js";
 import { mentionsSpentAllowance } from "../providers/failure-sentences.js";
 import { adapterFor } from "../providers/adapter-registry.js";
 import { harnessReadyProviders } from "../providers/harness-credentials.js";
+import { type DeclaredWindow, declaredWindow, helperOverflow, helperPromptRoom } from "../prompt/window/context-budget.js";
 import { type RoleAsk, readRoleAnswer, UnusableAnswerError } from "./role-answer.js";
 import { rungLimit, spentRung } from "./role-model-quota.js";
 import { RoleModelUnsetError } from "./role-model-unset.js";
@@ -130,6 +131,28 @@ const cooling = (choice: ModelChoice, now: number): Memo | undefined => {
     return held !== undefined && held.until > now ? held : undefined;
 };
 
+// What each rung of the chain will accept, resolved once before the walk rather than per ask: the walk runs twice when
+// a memo skipped everything, and two reads could disagree across a catalog refresh between them. A native provider
+// publishes no window and resolves to undefined, which reads as unmeasured everywhere below.
+const chainWindows = async (services: Services, chain: readonly ModelChoice[]): Promise<Map<string, DeclaredWindow | undefined>> =>
+    new Map(
+        await Promise.all(
+            chain.map(async (choice): Promise<[string, DeclaredWindow | undefined]> => [
+                modelPinKey(choice),
+                // Unknown rather than fatal: a catalog that cannot be read must not stop the job. Logged rather than
+                // silent, because "unknown window" is also what a BUG here looks like, and a quiet one reads as a
+                // helper that simply never checks.
+                await declaredWindow(services, choice.provider, choice.model).catch((error: unknown) => {
+                    services.logger.debug({ err: error, model: choice.model }, "role model: could not read this rung's window, treating it as unknown");
+                    return undefined;
+                }),
+            ]),
+        ),
+    );
+
+// The prompt as this rung would receive it: built to its room when the ask can size itself, taken whole when it cannot.
+const promptFor = <T>(ask: RoleAsk<T>, room: number): string => (typeof ask.prompt === `function` ? ask.prompt(room) : ask.prompt);
+
 // Runtime is decided by adapterFor/capabilitiesOf, never here, so a provider that refuses a harness always lands on its
 // own regardless of the pin. Effort, thinking and fast ride along unchanged.
 const askRung = async (services: Services, pin: ModelPin, prompt: string, signal: AbortSignal): Promise<string> => {
@@ -174,6 +197,8 @@ export const askRoleModel = async <T>(
     if (chain.length === 0) {
         throw new Error(`Every model set for this job names an account this sandbox no longer has: set one in Sandbox ▸ Agent ▸ Models.`);
     }
+    // What each rung will accept, read once for both passes of the walk below.
+    const windows = await chainWindows(services, chain);
     // Resent after every beat; wrapped so a throwing listener can't break the walk it is only watching.
     const attempts: RoleModelAttempt[] = [];
     const tell = (): void => {
@@ -218,6 +243,22 @@ export const askRoleModel = async <T>(
                 tell();
                 continue;
             }
+            // Built for THIS rung's window, since the next one down the chain may have a different one.
+            const declared = windows.get(modelPinKey(choice));
+            const room = helperPromptRoom(declared);
+            const prompt = promptFor(ask, room);
+            // A prompt the rung cannot hold is stepped over here rather than sent and refused. Sending it costs a
+            // provider round trip, earns a ten-minute memo (`remember` below), and comes back as the server's own 400
+            // instead of the two numbers and the two switches that change the answer — so the same job reads as
+            // intermittent rather than as mis-sized. Never honourSkips-gated: this one is a fact about the request,
+            // not a memo that can go stale.
+            const overflow = helperOverflow(prompt, room, declared);
+            if (overflow !== undefined) {
+                skipped.push({ choice, reason: overflow });
+                attempts.push({ choice, status: `skipped`, reason: overflow });
+                tell();
+                continue;
+            }
             asked = true;
             // Every rung is timed and named as it is spent, the only way to see which model made a call slow.
             const from = Date.now();
@@ -233,7 +274,7 @@ export const askRoleModel = async <T>(
             };
             try {
                 // A credential failing at resolution is the same dead end as one failing outright.
-                const text = await askRung(services, choice, ask.prompt, signal);
+                const text = await askRung(services, choice, prompt, signal);
                 // Reply is validated here, not by the caller, so a bad-shaped answer is stepped over like a refusal.
                 const value = readRoleAnswer(ask.answer, text);
                 // Clears any memo: an answer proves whatever this rung refused for before is over.

@@ -194,10 +194,56 @@ export const MAX_NOTE_LENGTH = 160;
 // Header ceiling git hooks enforce (100, header-max-length); distinct from the 72-char style ask.
 export const MAX_SUBJECT_LENGTH = 100;
 
+// The same prompt, sized to what the model being asked will actually accept (agent/models/role-model.ts walks a chain
+// and hands each rung its room in characters).
+//
+// Built at full size first and corrected once by exactly the overshoot, rather than searched: the patch is the only
+// part that clips, so one pass lands it. A room that still cannot hold the result means the fixed cost — the rules,
+// the file list, the recent subjects — is itself too big, and the caller steps over that rung rather than sending a
+// prompt with no diff in it.
+export const sizedCommitMessagePrompt = (
+    room: number,
+    diffs: readonly RepoDiff[],
+    wantsNote = false,
+    removedSurfaces: readonly string[] = [],
+): string => {
+    const full = commitMessagePrompt(diffs, wantsNote, removedSurfaces);
+    return full.length <= room ? full : commitMessagePrompt(diffs, wantsNote, removedSurfaces, Math.max(0, MAX_PATCH_BYTES - (full.length - room)));
+};
+
+// The changelog half of the rules, which only applies where the repo asked for a note. Lifted out of the prompt body
+// because it is one decision said four ways, and because the body has no complexity left to spend.
+const noteRules = (wantsNote: boolean, removedSurfaces: readonly string[]): string[] => {
+    if (!wantsNote) {
+        return [];
+    }
+    return [
+        // Asked in the terms a user reads it in, not a diff reviewer's; omission is the expected outcome (most commits
+        // earn no note), not an escape hatch.
+        `- If (and only if) someone USING this software would notice this change, add a last line spelled exactly: Release-Note: <one plain sentence>.`,
+        // Stated in the prompt since it's enforced anyway: an unstated ceiling gets written past and cut mid-word.
+        `- That sentence is for users, not developers: say what they can now do or what no longer goes wrong, in their words, with no file, symbol or internal name in it. ONE sentence, at most ${MAX_NOTE_LENGTH} characters. Anything past that is cut off.`,
+        `- OMIT the Release-Note line entirely for anything a user would never see: refactors, tests, build and CI work, dependency bumps, internal cleanup. Most commits get no note, and that is the expected answer.`,
+        // Bar is removal, not "changes" (every diff changes something); marker position is spelled out in both shapes
+        // since "mark the type" plus a scopeless example alone yields the unparsable `feat!(scope):`. Skipped where a
+        // removal was already detected, since the block below then states it as required rather than optional.
+        ...(removedSurfaces.length > 0
+            ? []
+            : [
+                  `- If (and only if) this change REMOVES or breaks something users already rely on (a feature gone, a command renamed, a file format no longer read), add a line spelled exactly: Breaking-Note: <what stops working and what to do instead, one plain sentence of at most ${MAX_NOTE_LENGTH} characters>, and put a "!" immediately before the colon: "feat!:" without a scope, "feat(scope)!:" with one, never "feat!(scope):". This is rare; when in doubt, omit it.`,
+              ]),
+    ];
+};
+
 // One flat message, not a system/user pair: the one-shot sends no system prompt (claude/claude-one-shot.ts), so
 // instructions, examples and material are ordered in one text.
-export const commitMessagePrompt = (diffs: readonly RepoDiff[], wantsNote = false, removedSurfaces: readonly string[] = []): string => {
-    const budget = Math.floor(MAX_PATCH_BYTES / Math.max(1, diffs.length));
+export const commitMessagePrompt = (
+    diffs: readonly RepoDiff[],
+    wantsNote = false,
+    removedSurfaces: readonly string[] = [],
+    patchBytes = MAX_PATCH_BYTES,
+): string => {
+    const budget = Math.floor(patchBytes / Math.max(1, diffs.length));
     const repos = diffs.map((diff) =>
         [
             `## Repository: ${diff.repo}`,
@@ -242,23 +288,7 @@ export const commitMessagePrompt = (diffs: readonly RepoDiff[], wantsNote = fals
         `- No filler. No "this commit", no "various", no "various improvements", no "improved code quality".`,
         // A commit spanning repos gets one message, so it has to describe the change rather than any one repo.
         diffs.length > 1 ? `- This commit spans ${diffs.length} repositories and shares one message. Describe the change as a whole.` : undefined,
-        // Asked in the terms a user reads it in, not a diff reviewer's; omission is the expected outcome (most commits
-        // earn no note), not an escape hatch.
-        wantsNote
-            ? `- If (and only if) someone USING this software would notice this change, add a last line spelled exactly: Release-Note: <one plain sentence>.`
-            : undefined,
-        // Stated in the prompt since it's enforced anyway: an unstated ceiling gets written past and cut mid-word.
-        wantsNote
-            ? `- That sentence is for users, not developers: say what they can now do or what no longer goes wrong, in their words, with no file, symbol or internal name in it. ONE sentence, at most ${MAX_NOTE_LENGTH} characters. Anything past that is cut off.`
-            : undefined,
-        wantsNote
-            ? `- OMIT the Release-Note line entirely for anything a user would never see: refactors, tests, build and CI work, dependency bumps, internal cleanup. Most commits get no note, and that is the expected answer.`
-            : undefined,
-        // Bar is removal, not "changes" (every diff changes something); marker position is spelled out in both shapes
-        // since "mark the type" plus a scopeless example alone yields the unparsable `feat!(scope):`.
-        wantsNote && removedSurfaces.length === 0
-            ? `- If (and only if) this change REMOVES or breaks something users already rely on (a feature gone, a command renamed, a file format no longer read), add a line spelled exactly: Breaking-Note: <what stops working and what to do instead, one plain sentence of at most ${MAX_NOTE_LENGTH} characters>, and put a "!" immediately before the colon: "feat!:" without a scope, "feat(scope)!:" with one, never "feat!(scope):". This is rare; when in doubt, omit it.`
-            : undefined,
+        ...noteRules(wantsNote, removedSurfaces),
         // Forced when contract-shrink.ts already detected a removal: only the sentence's wording is the model's job.
         // Independent of wantsNote — this declaration is what lets the change ship, not a changelog courtesy.
         ...(removedSurfaces.length > 0

@@ -5,7 +5,13 @@ import type { Services } from "../../composition.js";
 import type { PerfFields } from "../../platform/resources/perf.js";
 
 const ready = vi.fn<() => Promise<Record<string, boolean>>>();
-vi.mock("../providers/harness-credentials.js", () => ({ harnessReadyProviders: () => ready() }));
+// Only the readiness probe is faked. The rest of the module stands, because the walk's window check reads its
+// model-resolution rule (routedModel) and a mock that replaced the whole module left that undefined — which the
+// check's own catch then swallowed as "window unknown".
+vi.mock("../providers/harness-credentials.js", async (importOriginal) => ({
+    ...(await importOriginal<typeof import("../providers/harness-credentials.js")>()),
+    harnessReadyProviders: () => ready(),
+}));
 
 // Mocked at the adapter seam, keyed by runtime, so a test can tell which loop a rung took.
 const oneShot = vi.fn<(ask: { model: string }) => Promise<string>>();
@@ -417,4 +423,64 @@ test("bills every model it asks, by name, answered or refused", async () => {
         [`role.model`, `gpt-5.6`, true],
         [`role.model`, `claude-haiku-4-5`, undefined],
     ]);
+});
+
+// A rung whose declared window cannot hold the ask. Sending it anyway costs a round trip, earns a ten-minute memo and
+// comes back as the server's raw 400, so the same job reads as intermittent rather than as mis-sized.
+
+// The fixture above has no endpoints; this adds one that publishes a window, which is the only kind of rung that can
+// declare one at all (a native subscription publishes none).
+const withEndpoint = (pinned: readonly string[], window: number): Services => {
+    const card = { id: `tiny`, kind: `localmodel` as const, config: { model: `x/llama.gguf`, gpu: `off` as const, context: `16384` as const } };
+    const base = fakeServices(pinned);
+    return unstubbed<Services>(`services`, {
+        ...base,
+        capabilities: unstubbed<Services[`capabilities`]>(`capabilities`, { list: async () => [card], get: async () => card }),
+        endpointModels: unstubbed<Services[`endpointModels`]>(`endpointModels`, {
+            models: async () => ({ models: [{ id: `llama`, label: `llama`, contextWindow: window }], default: `llama` }),
+        }),
+    });
+};
+
+test("a rung too small for the ask is stepped over, and the next one answers", async () => {
+    const services = withEndpoint([`endpoint/tiny:llama`, `claude:claude-opus-5`], 16_384);
+    const big = { ...DRAFT, prompt: `x`.repeat(200_000) };
+
+    const answer = await askRoleModel(services, ROLE, big, signal());
+
+    // The small rung was never asked: no round trip, no memo, no raw 400.
+    expect(timed.map((billed) => billed.fields[`model`])).toEqual([`claude-opus-5`]);
+    expect(answer.choice.model).toBe(`claude-opus-5`);
+    const reason = answer.skipped.find((refusal) => refusal.choice.model === `llama`)?.reason;
+    expect(reason).toContain(`16,384`);
+    expect(reason).toContain(`Sandbox ▸ Agent ▸ Models`);
+});
+
+// The other half of the same mechanism: an ask that can size itself is handed the room instead of being refused.
+test("an ask that sizes itself is built for the rung's own room and asked", async () => {
+    const services = withEndpoint([`endpoint/tiny:llama`], 16_384);
+    const rooms: number[] = [];
+    const sizing = {
+        ...DRAFT,
+        prompt: (room: number): string => {
+            rooms.push(room);
+            return `x`.repeat(Math.min(room, 200_000));
+        },
+    };
+
+    const answer = await askRoleModel(services, ROLE, sizing, signal());
+
+    expect(answer.choice.model).toBe(`llama`);
+    // 16,384 window − 1,000 reply = 15,384 tokens × 4 chars: the whole window bar room to answer, since a one-shot
+    // carries no tools.
+    expect(rooms).toEqual([15_384 * 4]);
+});
+
+// A native provider publishes no window, so nothing is measured and a fixed prompt of any size still goes.
+test("an unknown window is asked whatever the prompt's size", async () => {
+    const services = fakeServices([`claude:claude-opus-5`]);
+
+    const answer = await askRoleModel(services, ROLE, { ...DRAFT, prompt: `x`.repeat(500_000) }, signal());
+
+    expect(answer.choice.model).toBe(`claude-opus-5`);
 });
