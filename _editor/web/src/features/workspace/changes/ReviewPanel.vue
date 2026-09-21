@@ -842,6 +842,9 @@ const heldHint = computed<string | undefined>(() => {
 const outgoing = computed<"flow" | "held" | "offer" | undefined>(() =>
     stageLine.value !== undefined ? `flow` : heldLine.value !== undefined ? `held` : syncMeta.value !== undefined ? `offer` : undefined,
 );
+// How much is waiting outlives the press that failed to send it, so the counts stay under a standing verdict — where
+// the width is the verdict's, they earn it only by having something to count; the offer states "no upstream yet" too.
+const showCounts = computed(() => outgoing.value === `offer` || (outgoing.value === `held` && (aheadTotal.value > 0 || behindTotal.value > 0)));
 // Commit keeps the primary slot while there's anything to record, so the two buttons are never both full-weight.
 const syncSeverity = computed<"secondary" | undefined>(() => (changes.count.value > 0 ? `secondary` : undefined));
 // Names which repos, since the summary beside the button only counts. The fast-forward caveat rides here too
@@ -1081,7 +1084,8 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
             </div>
         </div>
 
-        <!-- One block, two states, never both: at rest the sync every repo needs, in flight the run in the button's own place. -->
+        <!-- One block, three states, never two: at rest the sync every repo needs, in flight the run in the button's own
+             place, and a closed card's verdict in front of the counts it did not change. -->
         <div
             v-if="outgoing !== undefined"
             class="relative flex shrink-0 items-center"
@@ -1123,9 +1127,10 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                     {{ t(`ui.action.stop`) }}
                 </Button>
             </template>
-            <!-- The verdict the card was closed on, kept where the press that raised it lives. -->
-            <template v-else-if="outgoing === `held`">
+            <template v-else>
+                <!-- The verdict the card was closed on, kept where the press that raised it lives. -->
                 <button
+                    v-if="outgoing === `held`"
                     type="button"
                     :class="ui.textAction(`m-0 min-w-0 flex-1 gap-2.5 rounded-md p-1 hover:bg-overlay`)"
                     :aria-label="heldLine"
@@ -1147,48 +1152,38 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                         </span>
                     </span>
                 </button>
-                <Button
-                    v-if="syncMeta"
-                    size="small"
-                    :severity="syncSeverity"
-                    class="shrink-0 whitespace-nowrap"
-                    :disabled="changes.actionBusy.value"
-                    v-tooltip.top="syncHint"
-                    @click="doSync"
-                >
-                    <Icon :name="syncMeta.icon" />{{ syncMeta.label }}
-                </Button>
-            </template>
-            <template v-else>
+                <!-- The counts belong to the tree, not to the press: a refused push leaves exactly as much waiting to go
+                     out as before it, so the standing verdict is drawn beside them rather than over them. -->
                 <div
-                    class="flex min-w-0 flex-1 items-center gap-1.5 truncate"
+                    v-if="showCounts"
+                    class="flex items-center gap-1.5 truncate"
+                    :class="outgoing === `held` ? `shrink-0` : `min-w-0 flex-1`"
                     v-tooltip.right="syncHint"
                     :aria-label="syncSummary"
                 >
-                    <template v-if="behindTotal > 0 || aheadTotal > 0">
-                        <span
-                            v-if="behindTotal > 0"
-                            class="ui-status-pill inline-flex shrink-0 items-center gap-0.5 bg-overlay text-2xs font-medium tabular-nums text-content"
-                        >
-                            <Icon name="arrow-down-left" class="text-2xs text-link" aria-hidden="true" />
-                            {{ behindTotal }}
-                        </span>
-                        <span
-                            v-if="aheadTotal > 0"
-                            class="ui-status-pill inline-flex shrink-0 items-center gap-0.5 bg-overlay text-2xs font-medium tabular-nums text-content"
-                        >
-                            <Icon name="arrow-up-right" class="text-2xs text-link" aria-hidden="true" />
-                            {{ aheadTotal }}
-                        </span>
-                        <span v-if="syncRepoSpread !== undefined" class="truncate text-2xs text-subtle">{{ syncRepoSpread }}</span>
-                    </template>
-                    <template v-else>
-                        <span class="truncate text-2xs text-subtle">{{ t(`workspace.reviewPanel.noUpstreamYet`) }}</span>
-                        <span v-if="syncRepoSpread !== undefined" class="truncate text-2xs text-subtle">{{ syncRepoSpread }}</span>
-                    </template>
+                    <span
+                        v-if="behindTotal > 0"
+                        class="ui-status-pill inline-flex shrink-0 items-center gap-0.5 bg-overlay text-2xs font-medium tabular-nums text-content"
+                    >
+                        <Icon name="arrow-down-left" class="text-2xs text-link" aria-hidden="true" />
+                        {{ behindTotal }}
+                    </span>
+                    <span
+                        v-if="aheadTotal > 0"
+                        class="ui-status-pill inline-flex shrink-0 items-center gap-0.5 bg-overlay text-2xs font-medium tabular-nums text-content"
+                    >
+                        <Icon name="arrow-up-right" class="text-2xs text-link" aria-hidden="true" />
+                        {{ aheadTotal }}
+                    </span>
+                    <!-- A branch git reports no count for; the offer has the width to say so, the held card doesn't. -->
+                    <span v-if="behindTotal === 0 && aheadTotal === 0" class="truncate text-2xs text-subtle">
+                        {{ t(`workspace.reviewPanel.noUpstreamYet`) }}
+                    </span>
+                    <span v-if="syncRepoSpread !== undefined" class="truncate text-2xs text-subtle">{{ syncRepoSpread }}</span>
                 </div>
                 <!-- Fetch lives with the number it refreshes, and there's one of it now: its scope is every repo with a remote. -->
                 <button
+                    v-if="outgoing === `offer`"
                     type="button"
                     :class="[ICON_BUTTON, 'max-md:h-8 max-md:w-8']"
                     :disabled="changes.actionBusy.value"
@@ -1199,8 +1194,16 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                     <Icon name="sync" class="text-2xs" />
                 </button>
                 <!-- The flow owns the block while running, so Push has no separate disabled state. -->
-                <Button size="small" :severity="syncSeverity" class="shrink-0 whitespace-nowrap" :disabled="changes.actionBusy.value" @click="doSync">
-                    <Icon :name="syncMeta!.icon" />{{ syncMeta!.label }}
+                <Button
+                    v-if="syncMeta"
+                    size="small"
+                    :severity="syncSeverity"
+                    class="shrink-0 whitespace-nowrap"
+                    :disabled="changes.actionBusy.value"
+                    v-tooltip.top="showCounts ? undefined : syncHint"
+                    @click="doSync"
+                >
+                    <Icon :name="syncMeta.icon" />{{ syncMeta.label }}
                 </Button>
             </template>
 
