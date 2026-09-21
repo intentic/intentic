@@ -251,9 +251,9 @@ export const startEngineWatch = (host: EngineHost, role: BootRole): { stop: () =
         return { stop: () => undefined };
     }
     const initial = setTimeout(() => void checkAll(host).catch(() => undefined), INITIAL_DELAY_MS);
-    initial.unref?.();
+    initial.unref();
     const timer = setInterval(() => void checkAll(host).catch(() => undefined), CHECK_INTERVAL_MS);
-    timer.unref?.();
+    timer.unref();
     return {
         stop: () => {
             clearTimeout(initial);

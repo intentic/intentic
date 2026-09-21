@@ -105,7 +105,7 @@ export const fleetHttpRoutes = ({ config, prisma, now = () => new Date() }: Flee
             if (error instanceof ReachabilityUnavailable) {
                 return c.json({ error: error.message }, 503);
             }
-            c.get(`logger`)?.warn({ err: error, ownerId: caller.userId }, `fleet provision failed`);
+            c.get(`logger`).warn({ err: error, ownerId: caller.userId }, `fleet provision failed`);
             return c.json({ error: error instanceof Error ? error.message : `the sandbox could not be prepared` }, 502);
         }
     });

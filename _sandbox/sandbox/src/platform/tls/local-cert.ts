@@ -140,7 +140,7 @@ export const startLocalCertificateRenewal = (
         }
         timer = setTimeout(attempt, delay);
         // Never hold the process open for a renewal check.
-        timer.unref?.();
+        timer.unref();
     };
     function attempt(): void {
         void ensureLocalCertificate(config, logger)

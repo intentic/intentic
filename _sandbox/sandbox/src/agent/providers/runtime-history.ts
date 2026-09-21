@@ -88,7 +88,7 @@ export const parseRuntimeHistory = (text: string): { history: RuntimeHistoryMess
         return undefined;
     }
     const history = matches.map((match, index): RuntimeHistoryMessage => {
-        const start = (match.index ?? 0) + match[0].length;
+        const start = match.index + match[0].length;
         const end = matches[index + 1]?.index ?? encoded.length;
         return { role: match[1] === "User" ? "user" : "assistant", text: encoded.slice(start, end) };
     });

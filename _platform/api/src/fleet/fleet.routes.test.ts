@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import type { PrismaClient } from "@intentic/prisma";
+import { Hono } from "hono";
 import type { Logger } from "pino";
 import { expect, it, vi } from "vitest";
 import { type Config, configSchema } from "../config.js";
@@ -85,9 +86,16 @@ const fakePrisma = (seed: Seed = {}) => {
 };
 
 const app = (prisma: PrismaClient, over: Partial<Config> = {}) => {
-    const routes = fleetHttpRoutes({ config: { ...config, ...over }, prisma, now: () => NOW });
+    // Mounted the way app.ts mounts it — behind the request-logger middleware — so `c.get('logger')` is the Logger
+    // these routes declare in their Variables rather than undefined.
+    const host = new Hono<{ Variables: { logger: Logger } }>();
+    host.use(`*`, async (c, next) => {
+        c.set(`logger`, logger);
+        await next();
+    });
+    host.route(`/`, fleetHttpRoutes({ config: { ...config, ...over }, prisma, now: () => NOW }));
     return (path: string, init: { method?: string; body?: unknown; token?: string } = {}) =>
-        routes.request(path, {
+        host.request(path, {
             method: init.method ?? `GET`,
             headers: {
                 "content-type": `application/json`,

@@ -250,7 +250,7 @@ export const createCluster = (options: ClusterOptions): Cluster => {
 export const startCluster = (options: ClusterOptions & { readonly intervalMs?: number }): Cluster => {
     const cluster = createCluster(options);
     const timer = setInterval(() => void cluster.tick(), options.intervalMs ?? SYNC_INTERVAL_MS);
-    timer.unref?.();
+    timer.unref();
     return {
         ...cluster,
         close: () => {

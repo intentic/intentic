@@ -16,7 +16,7 @@ export type WebExtRoutesDeps = Pick<Services, "webexts" | "workspace" | "capabil
 export const createWebExtSessionRoute =
     (services: WebExtRoutesDeps) =>
     async (c: Context): Promise<Response> => {
-        const id = await services.webexts.verify(bearerFrom(c.req.header("authorization")) ?? "");
+        const id = await services.webexts.verify(bearerFrom(c.req.header("authorization")));
         if (id === undefined) {
             return c.json({ error: "unauthorized" }, 401);
         }
@@ -37,7 +37,7 @@ export const createWebExtSessionRoute =
 export const createWebExtLendRoute =
     (services: WebExtRoutesDeps) =>
     async (c: Context): Promise<Response> => {
-        const id = await services.webexts.verify(bearerFrom(c.req.header("authorization")) ?? "");
+        const id = await services.webexts.verify(bearerFrom(c.req.header("authorization")));
         if (id === undefined) {
             return c.json({ error: "unauthorized" }, 401);
         }

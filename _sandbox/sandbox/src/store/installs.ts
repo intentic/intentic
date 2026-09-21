@@ -76,7 +76,7 @@ export const fileInstallsStore = (path: string): InstallsStore => {
                 all[automationId] = evictOldest(forAutomation);
                 timer ??= setTimeout(() => void flush(), FLUSH_MS);
                 // Never holds the daemon open on a diagnostic write.
-                timer.unref?.();
+                timer.unref();
             });
         },
         list: async (automationId) =>

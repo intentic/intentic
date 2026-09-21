@@ -67,7 +67,9 @@ export const listWorkspaceSessions = async (dir: string): Promise<SessionSummary
     const sessions = await sdk().listSessions({ dir, limit: 50 });
     return sessions.map((session) => ({
         id: session.sessionId,
-        title: session.customTitle ?? session.summary ?? promptTitle(session.firstPrompt) ?? "New chat",
+        // `summary` is never nullish, so it cannot sit mid-`??`: the SDK fills it from the raw prompt (notice and
+        // runtime wrapper included) when it has no title, and with "" for a session row it could not read.
+        title: session.customTitle ?? promptTitle(session.firstPrompt) ?? (session.summary || "New chat"),
         updatedAt: session.lastModified,
     }));
 };

@@ -18,7 +18,7 @@ const watchdog = setTimeout(() => {
     );
     process.exit(1);
 }, 30_000);
-watchdog.unref?.();
+watchdog.unref();
 const fail = (why: string): never => {
     console.error(`ingress runtime smoke FAILED on ${process.versions.bun === undefined ? `node` : `bun ${process.versions.bun}`}: ${why}`);
     process.exit(1);

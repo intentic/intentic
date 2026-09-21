@@ -409,8 +409,8 @@ export const createCliProxyClient = (params: {
                     resolve({ url, code, state: login.state, flow: "device" });
                 }
             };
-            child.stdout?.on("data", onData);
-            child.stderr?.on("data", onData);
+            child.stdout.on("data", onData);
+            child.stderr.on("data", onData);
             child.on("error", (error) => {
                 login.status = {
                     status: "error",

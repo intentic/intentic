@@ -255,7 +255,7 @@ export const createUi = (process: UiProcess): Ui => {
             frame += 1;
             repaint();
         }, TICK_MS);
-        ticker.unref?.();
+        ticker.unref();
     };
 
     /**

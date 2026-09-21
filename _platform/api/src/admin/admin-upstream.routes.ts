@@ -60,7 +60,7 @@ export const adminUpstreamRoutes = ({ config, prisma, auth, fetchUpstream = fetc
 
     const forward = async (c: Context<{ Variables: UpstreamVariables }>, route: string) => {
         const target = `${config.admin.upstreamUrl.replace(/\/+$/, ``)}${API_BASE_PATH}${route}${new URL(c.req.url).search}`;
-        c.get(`logger`)?.info({ admin: c.get(`admin`), route, upstream: config.admin.upstreamUrl }, `admin upstream read`);
+        c.get(`logger`).info({ admin: c.get(`admin`), route, upstream: config.admin.upstreamUrl }, `admin upstream read`);
         let response: Response;
         try {
             response = await fetchUpstream(target, {
@@ -70,7 +70,7 @@ export const adminUpstreamRoutes = ({ config, prisma, auth, fetchUpstream = fetc
                 signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS),
             });
         } catch (error) {
-            c.get(`logger`)?.warn({ err: error, upstream: config.admin.upstreamUrl }, `admin upstream unreachable`);
+            c.get(`logger`).warn({ err: error, upstream: config.admin.upstreamUrl }, `admin upstream unreachable`);
             return c.json({ message: `the upstream platform did not answer` }, 502);
         }
         // A fresh response carrying only the body: the upstream's own Set-Cookie must never reach this browser, or the

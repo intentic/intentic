@@ -93,7 +93,7 @@ export const walletHttpRoutes = ({ config, prisma, custody, now = () => new Date
             const wallet = await ensureWallet(prisma, gateway(), ownerId, network);
             return c.json({ address: wallet.address });
         } catch (error) {
-            c.get(`logger`)?.warn({ err: error }, `wallet ensure failed`);
+            c.get(`logger`).warn({ err: error }, `wallet ensure failed`);
             return c.json({ error: error instanceof Error ? error.message : `the wallet could not be created` }, 502);
         }
     });
@@ -198,7 +198,7 @@ export const walletHttpRoutes = ({ config, prisma, custody, now = () => new Date
             // Row is deleted, not left as a phantom spend: no authorization exists to ever settle it, and leaving it
             // would eat the daily cap for a payment that never happened.
             await prisma.walletPayment.delete({ where: { id: payment.id } }).catch(() => undefined);
-            c.get(`logger`)?.warn({ err: error }, `wallet sign failed`);
+            c.get(`logger`).warn({ err: error }, `wallet sign failed`);
             return c.json({ error: error instanceof Error ? error.message : `the signature could not be produced` }, 502);
         }
     });

@@ -22,7 +22,7 @@ const SERVICES = new Set(["git-upload-pack", "git-receive-pack"]);
 
 // Which runner is calling, or undefined. Every route below starts here; there is no anonymous read.
 const callerRunner = async (services: Services, c: Context): Promise<string | undefined> =>
-    await services.runners.verify(bearerFrom(c.req.header("authorization")) ?? "");
+    await services.runners.verify(bearerFrom(c.req.header("authorization")));
 
 // Two parent shapes: a container parent keeps every repo's git dir on /history; a local parent never reshapes the
 // user's repos, so git itself is asked where the dir is. Traversal is closed in both arms.

@@ -57,7 +57,7 @@ export const createHeartbeat = (options: HeartbeatOptions): Heartbeat => {
 export const startHeartbeat = (options: HeartbeatOptions & { readonly intervalMs?: number }): Heartbeat => {
     const heartbeat = createHeartbeat(options);
     const timer = setInterval(() => heartbeat.tick(), options.intervalMs ?? PING_INTERVAL_MS);
-    timer.unref?.();
+    timer.unref();
     return {
         ...heartbeat,
         stop: () => {

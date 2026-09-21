@@ -45,6 +45,6 @@ export const startVersionCheck = (): { stop: () => void } => {
     }
     void refreshLatestVersion();
     const timer = setInterval(() => void refreshLatestVersion(), REFRESH_MS);
-    timer.unref?.();
+    timer.unref();
     return { stop: () => clearInterval(timer) };
 };

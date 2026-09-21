@@ -18,7 +18,7 @@ import { type HarnessCredentialsResult, resolveHarnessCredentials } from "../age
 // Never travels: refresh tokens, the translator's local bearer, or the per-model allowance (reads parent-local state).
 
 const callerRunner = async (services: Services, c: Context): Promise<string | undefined> =>
-    await services.runners.verify(bearerFrom(c.req.header("authorization")) ?? "");
+    await services.runners.verify(bearerFrom(c.req.header("authorization")));
 
 // Exported for its unit test: every arm is a rule about what leaves the sandbox. `envOauth` travels as an ordinary
 // oauth value since resolution answers {} for it; an API-key-shaped fallback stays home instead.

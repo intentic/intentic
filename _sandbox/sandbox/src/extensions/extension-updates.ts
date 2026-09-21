@@ -418,11 +418,11 @@ const watchExtensionHealth = (services: Services, id: string, identity: string, 
             await record({ state: "healthy", fromRef, at: new Date().toISOString() });
         } else {
             const timer = setTimeout(() => void probe(true).catch(() => undefined), FINAL_PROBE_MS - EARLY_PROBE_MS);
-            timer.unref?.();
+            timer.unref();
         }
     };
     const timer = setTimeout(() => void probe(false).catch(() => undefined), EARLY_PROBE_MS);
-    timer.unref?.();
+    timer.unref();
     return armed;
 };
 
@@ -634,12 +634,12 @@ export const refreshUpdatesIfStale = (services: Services): void => {
 // The list-read staleness refresh above is the floor for a sandbox somebody is actually looking at.
 export const startExtensionUpdateWatch = (services: Services): { stop: () => void } => {
     const initial = setTimeout(() => refreshUpdatesIfStale(services), 60_000);
-    initial.unref?.();
+    initial.unref();
     const timer = setInterval(
         () => void checkExtensionUpdates(services).catch((error: unknown) => services.logger.warn({ err: error }, "extension update check failed")),
         CHECK_INTERVAL_MS,
     );
-    timer.unref?.();
+    timer.unref();
     return {
         stop: () => {
             clearTimeout(initial);

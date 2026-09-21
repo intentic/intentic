@@ -120,6 +120,6 @@ export const startReleaseNotesCheck = (): { stop: () => void } => {
     }
     void refreshReleaseNotes();
     const timer = setInterval(() => void refreshReleaseNotes(), REFRESH_MS);
-    timer.unref?.();
+    timer.unref();
     return { stop: () => clearInterval(timer) };
 };

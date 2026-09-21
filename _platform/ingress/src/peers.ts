@@ -130,7 +130,7 @@ export const startFlyPeers = (options: FlyPeersOptions & { readonly intervalMs?:
     const peers = createFlyPeers(options);
     void peers.refresh();
     const timer = setInterval(() => void peers.refresh(), options.intervalMs ?? FLY_POLL_INTERVAL_MS);
-    timer.unref?.();
+    timer.unref();
     return {
         ...peers,
         close: () => {

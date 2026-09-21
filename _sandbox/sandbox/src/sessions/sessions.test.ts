@@ -455,22 +455,25 @@ test("a history-list title falling back to firstPrompt names the chat, not the i
         "",
         "fix the config",
     ].join("\n");
-    listSessions.mockResolvedValue([{ sessionId: "s0", firstPrompt: first, lastModified: 1 }]);
+    // `summary` is required on SDKSessionInfo, and with no title to show the SDK fills it with this same raw prompt;
+    // a mock that omits it would let the title come out right for a reason production never has.
+    listSessions.mockResolvedValue([{ sessionId: "s0", summary: first, firstPrompt: first, lastModified: 1 }]);
     const sessions = await listWorkspaceSessions(WORKSPACE_ROOT);
     expect(sessions[0]?.title).toBe("fix the config");
 });
 
+test("a session row the SDK could not read is titled New chat, never left blank", async () => {
+    // That row is the SDK's own shape for an unreadable session file: a required `summary`, empty, and no other field.
+    listSessions.mockResolvedValue([{ sessionId: "unreadable", summary: "", lastModified: 1 }]);
+    expect((await listWorkspaceSessions(WORKSPACE_ROOT))[0]?.title).toBe("New chat");
+});
+
 test("a replacement runtime session keeps the conversation's original user title", async () => {
-    listSessions.mockResolvedValue([
-        {
-            sessionId: "replacement",
-            firstPrompt: withRuntimeHistory("Continue.", [
-                { role: "user", text: "Investigate the blank chat." },
-                { role: "assistant", text: "I will trace hydration." },
-            ]),
-            lastModified: 1,
-        },
+    const first = withRuntimeHistory("Continue.", [
+        { role: "user", text: "Investigate the blank chat." },
+        { role: "assistant", text: "I will trace hydration." },
     ]);
+    listSessions.mockResolvedValue([{ sessionId: "replacement", summary: first, firstPrompt: first, lastModified: 1 }]);
     expect((await listWorkspaceSessions("/work"))[0]?.title).toBe("Investigate the blank chat.");
 });
 

@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import type { PrismaClient } from "@intentic/prisma";
+import { Hono } from "hono";
 import type { Logger } from "pino";
 import { expect, it, vi } from "vitest";
 import { type Config, configSchema } from "../config.js";
@@ -113,9 +114,16 @@ const custody = (over: Partial<CustodyGateway> = {}): CustodyGateway => ({
 });
 
 const app = (deps: { prisma: PrismaClient; custody?: CustodyGateway; config?: Config }) => {
-    const routes = walletHttpRoutes({ config: deps.config ?? config, prisma: deps.prisma, custody: deps.custody ?? custody(), now: () => NOW });
+    // Mounted the way app.ts mounts it — behind the request-logger middleware — so `c.get('logger')` is the Logger
+    // these routes declare in their Variables rather than undefined.
+    const host = new Hono<{ Variables: { logger: Logger } }>();
+    host.use(`*`, async (c, next) => {
+        c.set(`logger`, logger);
+        await next();
+    });
+    host.route(`/`, walletHttpRoutes({ config: deps.config ?? config, prisma: deps.prisma, custody: deps.custody ?? custody(), now: () => NOW }));
     return (path: string, body: unknown, token = `tok`) =>
-        routes.request(path, {
+        host.request(path, {
             method: `POST`,
             headers: { "content-type": `application/json`, "x-intentic-connect": token },
             body: JSON.stringify(body),

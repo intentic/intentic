@@ -87,7 +87,7 @@ const admitMcp = async (
     noun: string,
     store: Pick<PeerStore<unknown>, "enrolled">,
 ): Promise<Response | { readonly id: string; readonly payload: unknown; readonly request: McpRequest }> => {
-    if (!tokenEquals(bearerFrom(c.req.header("authorization")) ?? "", bridgeToken)) {
+    if (!tokenEquals(bearerFrom(c.req.header("authorization")), bridgeToken)) {
         return c.json({ error: "unauthorized" }, 401);
     }
     const id = c.req.param("id") ?? "";
@@ -194,7 +194,7 @@ export const createPeerRoutes = <
                 }
                 let raw: unknown;
                 try {
-                    raw = JSON.parse(String(event.data ?? ""));
+                    raw = JSON.parse(String(event.data));
                 } catch {
                     raw = undefined;
                 }

@@ -130,7 +130,7 @@ export const trialRoutes = ({ config, prisma, fetchFn = fetch, now = () => new D
         if (attempt === undefined || poolRefused(attempt.response.status)) {
             await attempt?.response.body?.cancel().catch(() => undefined);
             await refundTrialMessage(prisma, ownerId, at);
-            c.get(`logger`)?.warn(
+            c.get(`logger`).warn(
                 { tried: attempt?.tried ?? 0, status: attempt?.response.status ?? 0, candidates },
                 `trial: no key answered on any model`,
             );
