@@ -7,6 +7,7 @@ import {
     type BrowsersList,
     ChoreLedgerWriteSchema,
     type CiJobsResponse,
+    type ConversationPrompt,
     type DevicesList,
     type Info,
     isTurnBreakPolicy,
@@ -28,6 +29,7 @@ import {
     type TranslatorAccounts,
     type WorkflowRun,
 } from "@intentic/sandbox-contract";
+import { WORKSPACE_ROOT } from "@intentic/constants";
 import { KNOWLEDGE_BASE } from "../vendor/knowledge/wire-types";
 import { BROWSER_SESSIONS } from "./browser";
 import { type DemoGrant, grantAccess, grants, revokeAccess } from "./fixture/access";
@@ -348,6 +350,7 @@ const ROUTES: readonly (readonly [string, string, Handler])[] = [
     [`GET`, `/agents/{id}/diff`, ({ param }) => json(agentChanges(param(`id`)))],
     // A card that is not mid-turn reads its transcript instead of attaching.
     [`GET`, `/agents/{id}/transcript`, ({ param }) => json(transcriptFor(param(`id`)))],
+    [`GET`, `/agents/{id}/system-prompt`, () => json(DEMO_SYSTEM_PROMPT)],
     [`GET`, `/agents/{id}/{repo}/file-diff`, ({ url, param }) => json(fileDiff(param(`repo`), url.searchParams.get(`path`) ?? ``))],
     [`POST`, `/agents/{id}/rename`, renameAgent],
     [`POST`, `/agents/{id}/seen`, ({ param }) => agentResponse(patchAgent(param(`id`), { seenAt: Date.now() }))],
@@ -777,6 +780,46 @@ const DEMO_SETTINGS = {
     fieldNotesBudget: 4000,
     fieldNotesHoldout: 0.2,
     sidecars: true,
+};
+
+// What a conversation was told before its first word. Every source at once, because the chip's whole job is to let a
+// reader tell an arriving AGENTS.md from a dropped one, and a fixture with three of the four could not show that.
+const DEMO_SYSTEM_PROMPT: ConversationPrompt = {
+    prompt: {
+        at: STARTED_AT - 6 * 60_000,
+        runtime: `claude-code`,
+        mode: `intentic`,
+        base: {
+            kind: `intentic`,
+            text: "You are an Intentic agent.\n\nYou work in one sandbox, on one workspace, for one person, and you finish what you are asked rather than reporting on how far you got.",
+        },
+        sections: [
+            {
+                source: `guidance`,
+                title: `How this sandbox asks agents to work`,
+                text: "You run inside Intentic: a sandbox container serving one workspace, driven from a browser editor, where each conversation is an agent on its own git worktree whose finished delta lands in the owner's tree as uncommitted changes.\n\nSearch code with `rg` (ripgrep), which is installed: it is ~30× faster than `grep -r` on this tree.\n\nThe owner lands uncommitted work; commit only when asked.",
+            },
+            {
+                source: `persona`,
+                title: `Who this turn is acting as`,
+                text: "## Who this turn is acting as\n\nYou are acting as **Studio**, which may read and write files and run commands, and reaches the `github` account alone.",
+            },
+            {
+                source: `field-notes`,
+                title: `Field notes for this sandbox`,
+                text:
+                    `## Field notes for this sandbox\n\nWritten 19 days ago from this sandbox's own record; ranks 1-5 of 12 are below.\n\n` +
+                    `### Which tree you are standing in\n\n\`${WORKSPACE_ROOT}\` is the shared checkout every other agent is editing; your branch ` +
+                    `is the worktree you were started in.\n\n### Toolchain\n\n\`pnpm\`'s exit code lies after a successful build here: ` +
+                    `\`node_modules\` is an overlay mount and the hardlink sync fails across the device boundary. Read the build's own output, not the code.`,
+            },
+            {
+                source: `memory`,
+                title: `Standing instructions for this workspace`,
+                text: "## Standing instructions for this workspace\n\n### AGENTS.md\n\n- No legacy support – make clean breaking changes; update all usages.\n- No migration logic – assume fresh state; remove compatibility layers.",
+            },
+        ],
+    },
 };
 
 /* The checks each repository declares for itself (`<repo>/.intentic/checks.json`), one repository per state the group can be in: `web` running. */

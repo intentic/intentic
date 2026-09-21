@@ -70,6 +70,15 @@ runtime with no system seam (Pi, ACP) gets it on the user message beside the oth
 It rides the system prefix, so it is composed on every turn and served from cache on all but the first. Rewriting the
 file mints a new prefix — the same cost as editing `AGENTS.md`, once a month.
 
+## Where the reader sees it
+
+Nothing composed into a system prompt reaches the transcript, which made "are the field notes on, and which ranks
+arrived" a question only the settings row could half-answer. Every turn now records what it was told
+(`prompt-disclosure.ts` → `prompt-record.ts`, one file per conversation beside its transcript), and the chat draws a
+**System prompt** chip above its first message that opens it section by section — the base, this product's guidance,
+the persona, this brief, the owner's `AGENTS.md` — each with the words the model received. The brief is one row there,
+sized, so a budget that dropped ranks 6-12 is visible as a number rather than inferred.
+
 ## The automation
 
 `field-notes` in `src/automations/catalog.ts`, monthly on the 1st at 04:00, offered in `/ext/automations` beside the

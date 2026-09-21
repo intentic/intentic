@@ -139,6 +139,7 @@ import { pairings, type Pairings } from "./store/enrollment.js";
 import { fileTurnJournal, type TurnJournal } from "./agent/run/turn/turn-journal.js";
 import { fileWatchJournal, type WatchJournal } from "./agent/verification/watch-journal.js";
 import { fileTurnAnchors, type TurnAnchors } from "./agent/anchors/turn-anchors.js";
+import { filePromptRecord, type PromptRecord } from "./agent/prompt/prompt-record.js";
 import type { Config } from "./env.config.js";
 import { createAgentsRegistry, type AgentsRegistry } from "./agents/registry/agents-registry.js";
 import type { AgentArchiveDeps } from "./agents/registry/archive.js";
@@ -446,6 +447,8 @@ export interface Services extends ClaudeSlice, CodexSlice, CursorSlice, GrokSlic
     readonly watchJournal: WatchJournal;
     // What each message can be restored to: a workspace checkpoint, or an isolated turn's own per-repo commits.
     readonly turnAnchors: TurnAnchors;
+    // The system prompt each conversation's newest turn ran on, which the transcript never shows.
+    readonly promptRecord: PromptRecord;
     // Activity audit log, outside the agent's reach: inbound wakes, sniffed calls, voice sessions, failures.
     readonly activity: ActivityStore;
     // Durable spend ledger, outside the agent's reach, one row per attributed turn, never pruned unlike activity.
@@ -1194,6 +1197,9 @@ export const createServices = (config: Config, logger: Logger): Services => {
         invariants,
         // The same instance the transcript reader holds; a second would answer from a file the first already passed.
         turnAnchors,
+        // Beside the transcripts, on the history volume: what a conversation is told outlives a container recreate the
+        // same way what it said does.
+        promptRecord: filePromptRecord(join(config.historyRoot, "system-prompts")),
         activity: fileActivityStore(join(config.historyRoot, "activity.jsonl")),
         usage: fileUsageStore(join(config.historyRoot, "usage.jsonl")),
         sandboxSettings: fileSandboxSettingsStore(statePath(workspace.root, ".intentic/config/settings.json")),

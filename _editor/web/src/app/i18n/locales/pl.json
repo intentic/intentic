@@ -1107,6 +1107,27 @@
             "searchChats": "Szukaj czatów",
             "searchChats2": "Szukaj czatów…"
         },
+        "chatSystemPrompt": {
+            "baseClaude": "Własny prompt Claude Code",
+            "baseCustom": "Twój własny prompt",
+            "baseIntentic": "Własny prompt Intentic",
+            "baseRuntime": "Własny prompt {runtime}",
+            "characters": "{count} znaków",
+            "chip": "Prompt systemowy",
+            "composed": "Z ostatniej wysłanej tury, na {runtime}, {when}",
+            "copyAll": "Skopiuj cały prompt",
+            "hint": "Co ten czat dostaje, zanim powiesz pierwsze słowo",
+            "lede": "To wszystko trafiło do modelu przed Twoimi słowami i nic z tego nie pojawia się w transkrypcji.",
+            "nothing": "Dla tego czatu nic jeszcze nie zapisano. Następna wysłana tura zapisze, co dostała.",
+            "reading": "Odczytuję z Twojego sandboxa…",
+            "title": "Co dostaje ten czat",
+            "whenceBase": "Prompt, do którego dokładana jest reszta; wybierasz go w ustawieniach agenta w sandboxie.",
+            "whenceFieldNotes": "Z notatek terenowych tego sandboxa — tyle, ile mieści się w budżecie.",
+            "whenceGuidance": "Dokładane przez Intentic do każdej tury, która działa tutaj.",
+            "whenceMemory": "Z plików AGENTS.md w Twoim workspace.",
+            "whenceOpaque": "Ten runtime trzyma własny prompt i przyjmuje tylko dopiski, więc nie ma tu czego czytać.",
+            "whencePersona": "Wysłane, bo ten czat działa jako konkretna persona."
+        },
         "chatTabList": {
             "active": "Aktywne",
             "agents": "Agenty",

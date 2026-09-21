@@ -1,0 +1,106 @@
+import type {
+    AgentCapabilities,
+    PromptBase,
+    PromptSection,
+    PromptSectionSource,
+    SystemPromptDisclosure,
+    SystemPromptMode,
+} from "@intentic/sandbox-contract";
+import { PERSONA_NOTE_HEADER, PERSONA_NOTE_TITLE } from "../../personas/personas.js";
+import { tmuxRunEnabled } from "../tools/agent-terminals.js";
+import { FIELD_NOTES_NOTE_HEADER, FIELD_NOTES_NOTE_TITLE } from "./field-notes.js";
+import { INTENTIC_PROMPT } from "./intentic-prompt.js";
+import { presetSystemPrompt } from "./preset-prompt.js";
+import { harnessGuidance, type PromptRequest, promptInputOf, terminalMounted } from "./system-prompt.js";
+import { MEMORY_NOTE_HEADER, MEMORY_NOTE_TITLE } from "./workspace-memory.js";
+
+// What a turn was told before the user's own words, said back so the chat can show it. The system prompt is the one
+// part of a turn that never appears in the transcript, and most of it is composed here rather than written by anyone:
+// a reader who cannot see it cannot tell an arriving AGENTS.md from a silently dropped one.
+//
+// Read off the request the adapter was handed, never recomposed from settings: this is what that turn was sent, not
+// what the same turn would be sent if it were planned again now.
+
+// The composed pieces, each read back by the header it opens with — the same anchors the user preamble is split at
+// (turn-preamble.ts). A piece that stopped carrying its header would show here merged into the guidance above it,
+// which is a visible gap rather than a silent loss.
+const APPENDED: readonly { readonly header: string; readonly title: string; readonly source: PromptSectionSource }[] = [
+    { header: PERSONA_NOTE_HEADER, title: PERSONA_NOTE_TITLE, source: "persona" },
+    { header: FIELD_NOTES_NOTE_HEADER, title: FIELD_NOTES_NOTE_TITLE, source: "field-notes" },
+    { header: MEMORY_NOTE_HEADER, title: MEMORY_NOTE_TITLE, source: "memory" },
+];
+
+// Titles this product's own paragraphs, which carry no header of their own: they are one block in the prompt and one
+// row here.
+const GUIDANCE_TITLE = "How this sandbox asks agents to work";
+
+// A header counts only at the start of a line, so a section quoting another's wording mid-sentence isn't mistaken for
+// one.
+const marksIn = (append: string): { readonly at: number; readonly title: string; readonly source: PromptSectionSource }[] =>
+    APPENDED.flatMap(({ header, title, source }) => {
+        const at = append.indexOf(header);
+        return at === -1 || (at > 0 && append[at - 1] !== "\n") ? [] : [{ at, title, source }];
+    }).toSorted((left, right) => left.at - right.at);
+
+// Which prompt the additions ride on. Only `claude-code` takes a base from here at all; every other runtime keeps its
+// own and is told so, rather than being shown a prompt it never ran.
+const baseOf = (capabilities: AgentCapabilities, mode: SystemPromptMode, own: string): PromptBase => {
+    if (mode === "custom") {
+        // Whichever seam carried it, the owner's words are what sits ahead of the first composed piece.
+        return { kind: "custom", text: own };
+    }
+    if (capabilities.runtime !== "claude-code") {
+        return { kind: "runtime" };
+    }
+    // Intentic's is shipped text, filled in on read; Claude's is read from the installed CLI, which is a probe worth
+    // paying only for a reader who opens it.
+    return { kind: mode === "claude" ? "claude" : "intentic" };
+};
+
+export interface DisclosureInput {
+    readonly capabilities: AgentCapabilities;
+    readonly request: PromptRequest;
+    // Epoch ms of the turn this was composed for.
+    readonly at: number;
+}
+
+export const promptDisclosure = ({ capabilities, request, at }: DisclosureInput): SystemPromptDisclosure => {
+    const mode = request.systemPromptMode ?? "intentic";
+    // Which seam carried the composition: a custom prompt on a runtime that replaces has the owner's standing rules
+    // folded into the prompt itself, every other turn has everything in the append.
+    const append = (mode === "custom" ? request.systemPrompt : undefined) ?? request.systemAppend ?? "";
+    const marks = marksIn(append);
+    // Whatever sits ahead of the first titled piece: the workspace guidance on a runtime that takes the append whole,
+    // and the owner's own prompt under `custom`.
+    const leading = append.slice(0, marks[0]?.at).trim();
+    const base = baseOf(capabilities, mode, leading);
+    // A custom prompt drops this product's guidance outright, so there is none to show; the harness arm composes its
+    // own (harnessGuidance) rather than carrying it in the append, which is why the two sources are joined here.
+    const guidance =
+        mode === "custom"
+            ? ""
+            : [
+                  ...(capabilities.runtime === "claude-code"
+                      ? harnessGuidance({ ...promptInputOf(request, terminalMounted(request, tmuxRunEnabled())), append: undefined })
+                      : []),
+                  ...(leading === "" ? [] : [leading]),
+              ].join("\n\n");
+    const sections: PromptSection[] = [
+        ...(guidance === "" ? [] : [{ source: "guidance" as const, title: GUIDANCE_TITLE, text: guidance }]),
+        ...marks.map(({ at: from, title, source }, index) => ({ source, title, text: append.slice(from, marks[index + 1]?.at).trim() })),
+    ];
+    return { at, runtime: capabilities.runtime, mode, base, sections };
+};
+
+// The base's own words, fetched only when a reader opens one: the shipped text for Intentic's, a probe of the
+// installed CLI for Claude's (cached there), and nothing for a runtime that keeps its prompt to itself.
+export const withBaseText = async (disclosure: SystemPromptDisclosure, cwd: string): Promise<SystemPromptDisclosure> => {
+    if (disclosure.base.kind === "intentic") {
+        return { ...disclosure, base: { ...disclosure.base, text: INTENTIC_PROMPT } };
+    }
+    if (disclosure.base.kind === "claude") {
+        const preset = await presetSystemPrompt(cwd).catch(() => undefined);
+        return preset === undefined ? disclosure : { ...disclosure, base: { ...disclosure.base, text: preset.text } };
+    }
+    return disclosure;
+};

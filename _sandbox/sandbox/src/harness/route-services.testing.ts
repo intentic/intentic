@@ -243,6 +243,8 @@ export const services = (overrides: ServiceOverrides = {}): Services => {
             add: async (approval) => ({ ...approval, id: "held-1" }),
             remove: async () => false,
         },
+        // Inert: every dispatched turn files what it was told, and no suite here reads it back.
+        promptRecord: { record: async () => {}, of: async () => undefined, forget: async () => {} },
         // Inert: every fire path writes an in-flight entry and clears it; nothing here resumes.
         turnJournal: {
             list: async () => [],

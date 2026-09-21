@@ -13,6 +13,9 @@ const ATTACHMENT_DIR = /\.intentic\/records\/artifacts\/attachments\/([a-zA-Z0-9
 
 const transcript = (historyRoot: string, id: string): string => join(historyRoot, "transcripts", `${id}.jsonl`);
 
+// What the conversation was told, beside what it said (agent/prompt/prompt-record.ts); it goes with the transcript.
+const systemPrompt = (historyRoot: string, id: string): string => join(historyRoot, "system-prompts", `${id}.json`);
+
 const rawTranscript = async (path: string): Promise<string> => readFile(path, "utf8").catch(() => "");
 
 const attachmentDirs = (raw: string): Set<string> =>
@@ -67,6 +70,7 @@ export const purgeConversationState = async (
 
     await Promise.all([
         ...removed.map((entry) => rm(transcript(historyRoot, entry.id), { force: true })),
+        ...removed.map((entry) => rm(systemPrompt(historyRoot, entry.id), { force: true })),
         ...[...orphanedAttachments].map((id) =>
             rm(statePath(workspaceRoot, ".intentic/records/artifacts/", "attachments", id), { recursive: true, force: true }),
         ),

@@ -1107,6 +1107,27 @@
             "searchChats": "Search chats",
             "searchChats2": "Search chats…"
         },
+        "chatSystemPrompt": {
+            "baseClaude": "Claude Code's own prompt",
+            "baseCustom": "Your own prompt",
+            "baseIntentic": "Intentic's own prompt",
+            "baseRuntime": "{runtime}'s own prompt",
+            "characters": "{count} characters",
+            "chip": "System prompt",
+            "composed": "From the last turn sent, on {runtime}, {when}",
+            "copyAll": "Copy the whole prompt",
+            "hint": "What this chat is told before your own words",
+            "lede": "All of this reached the model ahead of your words, and none of it appears in the transcript.",
+            "nothing": "Nothing recorded for this chat yet. The next turn you send writes down what it was told.",
+            "reading": "Reading it from your sandbox…",
+            "title": "What this chat is told",
+            "whenceBase": "The prompt everything else is added to, chosen in your sandbox's agent settings.",
+            "whenceFieldNotes": "From this sandbox's field notes, as much of them as the budget reaches.",
+            "whenceGuidance": "Added by Intentic to every turn that runs here.",
+            "whenceMemory": "From the AGENTS.md files in your workspace.",
+            "whenceOpaque": "This runtime keeps its own prompt and only takes additions, so there is nothing to read here.",
+            "whencePersona": "Sent because this chat acts as someone in particular."
+        },
         "chatTabList": {
             "active": "Active",
             "agents": "Agents",

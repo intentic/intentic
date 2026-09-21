@@ -367,9 +367,44 @@ export interface SdkSystemPromptInput {
     readonly hostDevices?: HostDeviceReach | undefined;
 }
 
+// The turn fields the composed prompt reads. Declared here rather than taken from AgentRequest so both readers — the
+// adapter that sends the prompt and the disclosure that shows it (prompt-disclosure.ts) — map a request one way.
+export interface PromptRequest {
+    readonly systemPromptMode?: SystemPromptMode;
+    readonly systemPrompt?: string;
+    readonly systemAppend?: string;
+    readonly unattended?: boolean;
+    readonly browserOutputDir?: string;
+    readonly browserAccounts?: Record<string, string>;
+    readonly diagnostics?: boolean;
+    readonly hostDevices?: HostDeviceReach | undefined;
+}
+
+// Whether the routed browser has any account behind it, deciding if the system prompt names that server at all.
+const holdsBrowserAccounts = (accounts: Record<string, string> | undefined): boolean => Object.keys(accounts ?? {}).length > 0;
+
+// Whether the terminal hand-off server is mounted, kept as one predicate so the mount and its prompt sentence never
+// drift; off when unattended or without the tmux wrapper.
+export const terminalMounted = (request: Pick<PromptRequest, "unattended">, tmuxEnabled: boolean): boolean =>
+    tmuxEnabled && request.unattended !== true;
+
+// One request, one prompt input: the mapping every caller shares, so a field read differently by two of them can't
+// make the prompt shown disagree with the prompt sent.
+export const promptInputOf = (request: PromptRequest, terminal: boolean): SdkSystemPromptInput => ({
+    mode: request.systemPromptMode ?? "intentic",
+    custom: request.systemPrompt,
+    append: request.systemAppend,
+    unattended: request.unattended === true,
+    browserOutputDir: request.browserOutputDir,
+    browserAccounts: holdsBrowserAccounts(request.browserAccounts),
+    diagnostics: request.diagnostics === true,
+    terminal,
+    hostDevices: request.hostDevices,
+});
+
 // This harness's own guidance, most-stable-first, with whatever the turn composed appended after. Shared by both
 // built-in bases, so they differ only in the base itself.
-const harnessGuidance = ({
+export const harnessGuidance = ({
     append,
     unattended,
     browserOutputDir,

@@ -1107,6 +1107,27 @@
             "searchChats": "Chats durchsuchen",
             "searchChats2": "Chats durchsuchen…"
         },
+        "chatSystemPrompt": {
+            "baseClaude": "Der eigene Prompt von Claude Code",
+            "baseCustom": "Ihr eigener Prompt",
+            "baseIntentic": "Der eigene Prompt von Intentic",
+            "baseRuntime": "Der eigene Prompt von {runtime}",
+            "characters": "{count} Zeichen",
+            "chip": "Systemprompt",
+            "composed": "Aus der zuletzt gesendeten Runde, auf {runtime}, {when}",
+            "copyAll": "Den ganzen Prompt kopieren",
+            "hint": "Was dieser Chat erfährt, bevor Sie das erste Wort sagen",
+            "lede": "All das erreichte das Modell vor Ihren Worten, und nichts davon steht im Transkript.",
+            "nothing": "Für diesen Chat ist noch nichts festgehalten. Die nächste gesendete Runde schreibt auf, was sie bekommen hat.",
+            "reading": "Wird aus Ihrer Sandbox gelesen …",
+            "title": "Was dieser Chat erfährt",
+            "whenceBase": "Der Prompt, zu dem alles andere hinzukommt; gewählt in den Agent-Einstellungen Ihrer Sandbox.",
+            "whenceFieldNotes": "Aus den Feldnotizen dieser Sandbox, so viel davon wie das Budget zulässt.",
+            "whenceGuidance": "Von Intentic zu jeder Runde hinzugefügt, die hier läuft.",
+            "whenceMemory": "Aus den AGENTS.md-Dateien in Ihrem Workspace.",
+            "whenceOpaque": "Diese Laufzeit behält ihren eigenen Prompt und nimmt nur Ergänzungen an, hier gibt es also nichts zu lesen.",
+            "whencePersona": "Gesendet, weil dieser Chat als eine bestimmte Persona handelt."
+        },
         "chatTabList": {
             "active": "Aktiv",
             "agents": "Agenten",

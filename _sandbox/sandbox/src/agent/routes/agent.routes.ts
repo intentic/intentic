@@ -48,6 +48,7 @@ import { type ChildSupervisor, childSupervisor, isSpawnedChild } from "../subage
 import type { AgentRequest } from "../run/agent.js";
 import { adapterFor } from "../providers/adapter-registry.js";
 import { composeWirePrompt } from "../prompt/turn-preamble.js";
+import { promptDisclosure } from "../prompt/prompt-disclosure.js";
 import { rewindConversation } from "../anchors/rewind.js";
 import { commandsOf } from "../providers/agent-commands.js";
 import { limitReopensAt } from "../models/limit-reset.js";
@@ -150,6 +151,23 @@ const silentEnding = (turn: TurnSilence): string | undefined => {
 // Whether this turn enters the namespace, asked in one place so three callers can't disagree. A property of the
 // runtime: only the Claude Code loop enters it.
 const entersNamespace = (input: AgentTurn): boolean => capabilitiesOf(input.agent ?? "claude", input.harness ?? "native").isolation === "namespace";
+
+// What the turn was told before the user's own words, filed for the chat to show. The preamble's notes ride the
+// message and land in the transcript; the system prompt reaches the model and nothing else, so this file is the only
+// place it can be read back. Composed from the request the adapter is about to be handed, and never awaited: a reader
+// opens it minutes later, and a turn must not wait on a file to start.
+const recordSystemPrompt = (services: Services, input: AgentTurn, request: AgentRequest): void => {
+    const conversationId = input.conversationId;
+    // A spawned child files nothing: no chat draws its opening, and the conversation purge only names registry
+    // entries, so its record would be written and never reclaimed.
+    if (conversationId === undefined || isSpawnedChild(conversationId)) {
+        return;
+    }
+    const capabilities = capabilitiesOf(input.agent ?? "claude", input.harness ?? "native");
+    void services.promptRecord
+        .record(conversationId, promptDisclosure({ capabilities, request, at: Date.now() }))
+        .catch((error: unknown) => services.logger.warn({ err: error }, "prompt: recording what this turn was told failed"));
+};
 
 // Injected ahead of `done`, so a silent ending runs the same path a provider failure does (activity, log, ledger,
 // Attention). `silent` is a callback since its state is only final once the stream is.
@@ -1140,6 +1158,7 @@ async function* runTurn(
     }
     // Where typed notes become the wire prompt, right before the adapter; nothing unpacks it again.
     request = { ...request, prompt: composeWirePrompt(notes, request.prompt) };
+    recordSystemPrompt(services, input, request);
     // This turn's before-state, for a rewind or fork to name; fences pending work as user-authored.
     if (worktree === undefined) {
         // This turn's start checkpoint: the fence capture if any, else the newest one.

@@ -1107,6 +1107,27 @@
             "searchChats": "Buscar chats",
             "searchChats2": "Buscar chats…"
         },
+        "chatSystemPrompt": {
+            "baseClaude": "El propio prompt de Claude Code",
+            "baseCustom": "Tu propio prompt",
+            "baseIntentic": "El propio prompt de Intentic",
+            "baseRuntime": "El propio prompt de {runtime}",
+            "characters": "{count} caracteres",
+            "chip": "Prompt del sistema",
+            "composed": "Del último turno enviado, en {runtime}, {when}",
+            "copyAll": "Copiar el prompt entero",
+            "hint": "Lo que se le dice a este chat antes de tus propias palabras",
+            "lede": "Todo esto llegó al modelo antes que tus palabras, y nada de ello aparece en la transcripción.",
+            "nothing": "Aún no hay nada registrado para este chat. El próximo turno que envíes anotará lo que se le dijo.",
+            "reading": "Leyéndolo de tu sandbox…",
+            "title": "Lo que se le dice a este chat",
+            "whenceBase": "El prompt al que se añade todo lo demás, elegido en los ajustes de agente de tu sandbox.",
+            "whenceFieldNotes": "De las notas de campo de este sandbox, tanto como alcance el presupuesto.",
+            "whenceGuidance": "Añadido por Intentic a cada turno que se ejecuta aquí.",
+            "whenceMemory": "De los archivos AGENTS.md de tu espacio de trabajo.",
+            "whenceOpaque": "Este runtime conserva su propio prompt y solo acepta añadidos, así que aquí no hay nada que leer.",
+            "whencePersona": "Enviado porque este chat actúa como alguien en concreto."
+        },
         "chatTabList": {
             "active": "Activos",
             "agents": "Agentes",

@@ -79,7 +79,7 @@ import { routedEndpointOf } from "../providers/routed-refusal.js";
 import { defaultQuery, promptInput, type QueryFn, streamSdk, type TurnPosture } from "./sdk-stream.js";
 import { checklistCloseHooks } from "./checklist-close.js";
 import { checklistSeedOf } from "./task-store.js";
-import { sdkSystemPrompt } from "../prompt/system-prompt.js";
+import { promptInputOf, sdkSystemPrompt, terminalMounted } from "../prompt/system-prompt.js";
 import type { HostDeviceReach } from "../../hosts/self-host.js";
 import { noteChildWork } from "../subagents/child-verification.js";
 import { closeSubagents, subagentInParentTree, subagentHooks, type SubagentTurn } from "../subagents/subagents.js";
@@ -405,13 +405,6 @@ const reasoningOptions = (request: AgentRequest): { effort?: EffortLevel; thinki
     };
 };
 
-// Whether the routed browser has any account behind it, deciding if the system prompt names that server at all.
-const holdsBrowserAccounts = (accounts: Record<string, string> | undefined): boolean => Object.keys(accounts ?? {}).length > 0;
-
-// Whether the terminal hand-off server is mounted, kept as one predicate so the mount and its prompt sentence never
-// drift; off when unattended or without the tmux wrapper.
-const terminalMounted = (request: AgentRequest, tmuxEnabled: boolean): boolean => tmuxEnabled && request.unattended !== true;
-
 // Base SDK options for the turn.
 const baseOptions = (
     request: AgentRequest,
@@ -443,17 +436,7 @@ const baseOptions = (
         abortController,
         // Claude Code's coding preset plus this harness's guidance, or the owner's own prompt alone; SDK sends an empty
         // prompt if omitted.
-        systemPrompt: sdkSystemPrompt({
-            mode: request.systemPromptMode ?? "intentic",
-            custom: request.systemPrompt,
-            append: request.systemAppend,
-            unattended: request.unattended === true,
-            browserOutputDir: request.browserOutputDir,
-            browserAccounts: holdsBrowserAccounts(request.browserAccounts),
-            diagnostics: request.diagnostics === true,
-            terminal: terminalMounted(request, tmuxEnabled),
-            hostDevices: request.hostDevices,
-        }),
+        systemPrompt: sdkSystemPrompt(promptInputOf(request, terminalMounted(request, tmuxEnabled))),
         // Loads the workspace's .claude/ config: skills, subagents, settings, hooks, .mcp.json; else none. Not the
         // owner's standing rules — those are composed for every runtime alike (workspace-memory.ts), so a CLAUDE.md
         // this still picks up is a repo's own file, not this product's memory.

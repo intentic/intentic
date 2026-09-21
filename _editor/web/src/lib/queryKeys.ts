@@ -52,6 +52,10 @@ export const AGENT_DIFF = {
     matches: (key: readonly unknown[]): boolean => key[0] === AGENTS.every[0] && key[2] === DIFF,
 } as const;
 
+// What one conversation was told before its own words; read only when a reader opens it, so it is never part of the
+// transcript's own key.
+export const AGENT_SYSTEM_PROMPT = family(`agent-system-prompt`);
+
 export const SESSIONS = family(`sessions`);
 export const SUBAGENTS = family(`subagents`);
 export const SUBAGENT_TRANSCRIPT = family(`subagent-transcript`);

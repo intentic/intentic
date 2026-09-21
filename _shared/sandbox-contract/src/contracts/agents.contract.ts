@@ -27,6 +27,7 @@ import { AgentsListSchema } from "../schemas/automations.js";
 import { AgentChangesSchema, AgentHistorySchema } from "../schemas/git/git.js";
 import { FileDiffSchema } from "../schemas/history.js";
 import { OkSchema } from "../schemas/shared.js";
+import { ConversationPromptSchema } from "../schemas/system-prompt.js";
 
 // Every registered conversation-agent (AgentSummarySchema); an unknown {id} is NOT_FOUND across this whole family.
 // `archive` is the non-destructive counterpart to `discard` (worktree committed, entry kept); `purge` is `discard`
@@ -80,6 +81,16 @@ export const agentsContract = {
         })
         .input(AgentTranscriptQuerySchema)
         .output(AgentTranscriptSchema),
+    systemPrompt: oc
+        .route({
+            method: "GET",
+            path: "/agents/{id}/system-prompt",
+            summary: "What this conversation is told before it is asked anything",
+            description:
+                "The system prompt the most recent turn of this conversation actually ran on: which base it was, and every piece the sandbox added to it — this product's guidance, the persona, the field notes, the workspace's own standing rules — each with the exact words the model received. None of this appears in the transcript, so this is the only way to read it.",
+        })
+        .input(AgentIdSchema)
+        .output(ConversationPromptSchema),
     toolChildren: oc
         .route({
             method: "GET",

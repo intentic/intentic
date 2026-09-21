@@ -74,6 +74,7 @@ import ChatMentionPopover from "../composer/ChatMentionPopover.vue";
 import ChatForkCut from "../transcript/ChatForkCut.vue";
 import ChatForkLine from "../transcript/ChatForkLine.vue";
 import ChatMessageView from "../transcript/ChatMessageView.vue";
+import ChatSystemPrompt from "../transcript/ChatSystemPrompt.vue";
 import ChatModelPicker from "../models/ChatModelPicker.vue";
 import { useRunners } from "../../sandbox/devices/runners/useRunners";
 import ChatModeMenu from "../models/run-settings/ChatModeMenu.vue";
@@ -1275,6 +1276,13 @@ watch(
                     </div>
                     <!-- Where a forked chat says so, above its inherited turns; held back until the reader reaches that point. -->
                     <ChatForkLine v-if="!conversation.historyMore.value" />
+                    <!-- What the conversation was told before its first word, at the one place in the column where that is
+                         true: above everything it has said. Drawn only at the real top, since in the middle of a paged
+                         history it would claim a beginning that isn't on screen. -->
+                    <ChatSystemPrompt
+                        v-if="!conversation.historyMore.value && messages.length > 0"
+                        :conversation-id="conversation.conversationId"
+                    />
                     <template v-if="messages.length > 0">
                         <!-- One section per turn, so each prompt's sticky range ends where its own answer does. -->
                         <!-- `index` is for the day marker below, the one row that cares about its column position, not its turn. -->

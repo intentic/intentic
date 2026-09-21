@@ -200,6 +200,7 @@ export * from "./schemas/sessions.js";
 export * from "./schemas/settings.js";
 export * from "./schemas/share.js";
 export * from "./schemas/shared.js";
+export * from "./schemas/system-prompt.js";
 export * from "./schemas/system.js";
 export * from "./schemas/terminal.js";
 export * from "./schemas/turn-break.js";

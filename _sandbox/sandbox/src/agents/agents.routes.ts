@@ -11,6 +11,7 @@ import {
 } from "@intentic/sandbox-contract";
 import { implement, ORPCError } from "@orpc/server";
 import { streamAgent } from "../agent/routes/agent.routes.js";
+import { withBaseText } from "../agent/prompt/prompt-disclosure.js";
 import { type HeldTurn, heldTurn } from "../agent/run/turn/turn-resume.js";
 import { opt } from "../agent/run/opt.js";
 import { cancelWatcher, cancelWatchersFor } from "../agent/verification/watchers.js";
@@ -223,6 +224,14 @@ export const createAgentsRoutes = (services: Services) => {
         // Fills in what `transcript` counted rather than carried. Off the record, so it answers for an archived
         // conversation too, unlike the subagent registry, which is an in-memory map.
         toolChildren: i.toolChildren.handler(async ({ input }) => ({ children: await services.transcripts.toolChildren(entryOf(input.id), input.toolId) })),
+        // The turn's other half, which the transcript never carries. Absent for a conversation whose last turn predates
+        // the record; the base's own text is filled in here rather than stored, since it belongs to the sandbox, not to
+        // the conversation.
+        systemPrompt: i.systemPrompt.handler(async ({ input, context }) => {
+            entryFor(input.id, context);
+            const recorded = await services.promptRecord.of(input.id);
+            return recorded === undefined ? {} : { prompt: await withBaseText(recorded, services.workspace.root) };
+        }),
         // Speaks as the agent: appends the user's words as an assistant row marked `placed` (human-only, never
         // agent-facing).
         // - clears the session so the next turn reseeds from the record instead of stale runtime memory
