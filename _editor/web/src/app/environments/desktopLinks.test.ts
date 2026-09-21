@@ -23,14 +23,14 @@ installDesktopLinks();
 const opened: string[] = [];
 
 /* A link on the page, pressed the way a reader presses it. Returns whether the press was answered here. */
-const press = (attributes: Record<string, string>): boolean => {
+const press = (attributes: Record<string, string>, modifiers: MouseEventInit = {}): boolean => {
     const link = document.createElement(`a`);
     for (const [name, value] of Object.entries(attributes)) {
         link.setAttribute(name, value);
     }
     link.textContent = `link`;
     document.body.append(link);
-    const event = new window.MouseEvent(`click`, { bubbles: true, cancelable: true, button: 0 });
+    const event = new window.MouseEvent(`click`, { bubbles: true, cancelable: true, button: 0, ...modifiers });
     link.dispatchEvent(event);
     link.remove();
     return event.defaultPrevented;
@@ -68,6 +68,24 @@ test("a press on what the link contains counts as a press on the link", () => {
 test("the app's own origin is re-issued too, not followed in place", () => {
     expect(press({ href: `/sandbox/agent`, target: `_blank` })).toBe(true);
     expect(opened).toEqual([`${window.location.origin}/sandbox/agent`]);
+});
+
+// Ctrl/Shift-click is "open this elsewhere", and the app's opener plugin injects its own window-level listener that
+// takes the press (`preventDefault`) and then hands it to an IPC command no window of this app is allowed to call —
+// so the press died with `Command plugin:opener|open_url not allowed by ACL` and nothing on screen. Answered here
+// first, in capture, for the same reason `_blank` is: this page decides where its links go.
+test("ctrl-click and shift-click leave for the browser rather than dying in the webview", () => {
+    expect(press({ href: `https://intentic.dev/docs/` }, { ctrlKey: true })).toBe(true);
+    expect(press({ href: `/agents` }, { shiftKey: true })).toBe(true);
+    expect(press({ href: `https://intentic.dev/docs/`, target: `_blank` }, { ctrlKey: true })).toBe(true);
+    expect(opened).toEqual([`https://intentic.dev/docs/`, `${window.location.origin}/agents`, `https://intentic.dev/docs/`]);
+});
+
+// Cmd-click on a Mac is the same gesture; the plugin's listener ignores it (it bails on `metaKey`), so the webview's
+// own handling stands and this page must not take the press away from it.
+test("cmd-click is left to the webview, which is what the plugin does with it too", () => {
+    expect(press({ href: `https://intentic.dev/docs/` }, { metaKey: true })).toBe(false);
+    expect(opened).toEqual([]);
 });
 
 test("every other link on the page is left exactly as it was", () => {

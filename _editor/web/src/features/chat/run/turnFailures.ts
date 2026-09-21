@@ -6,6 +6,7 @@ import type { TranscriptClock } from "../transcript/transcriptClock";
 import type { SessionRef } from "./turnRequest";
 import type { TurnContext } from "./turnStream";
 import { bindingWindow, usageStatusFor } from "../session/usageStatus";
+import { importOrReload } from "../../../router/staleChunk";
 
 // Maps a turn failure's code to what this window does: whether the user is needed (red line) or merely informed,
 // whether the message is held for retry, and whether the turn returns on its own. The daemon owns the failure's
@@ -113,18 +114,24 @@ export class TurnFailures {
             case `trial-exhausted`:
                 // Message undelivered and refunded; held for explicit retry, not the outage auto-resume loop.
                 this.host.requeue(turn.userMessageId);
-                void import(`../models/useChat-catalog`).then(async (chat) => {
-                    await chat.loadTrialStatus();
-                    if (code === `trial-model-unavailable`) {
-                        await chat.loadProviderModels(this.host.provider.value);
-                    }
-                });
+                importOrReload(
+                    () => import(`../models/useChat-catalog`),
+                    async (chat) => {
+                        await chat.loadTrialStatus();
+                        if (code === `trial-model-unavailable`) {
+                            await chat.loadProviderModels(this.host.provider.value);
+                        }
+                    },
+                );
                 return;
             case `grok-model-invalid`:
             case `codex-model-invalid`:
                 // Daemon rejected the pinned model (after Grok's own mid-turn self-heal fails, or always for Codex);
                 // reload the provider's catalog so the picker repoints to what's actually served.
-                void import(`../models/useChat-catalog`).then((chat) => chat.loadProviderModels(this.host.provider.value));
+                importOrReload(
+                    () => import(`../models/useChat-catalog`),
+                    (chat) => chat.loadProviderModels(this.host.provider.value),
+                );
                 this.host.error.value = message;
                 return;
             default:
@@ -140,7 +147,10 @@ export class TurnFailures {
         if (code === `model-unavailable`) {
             // Model exists but isn't available on this plan; the daemon already dropped it from the catalog. Held for
             // retry (nothing was spent) while the catalog reloads and the picker repoints.
-            void import(`../models/useChat-catalog`).then((chat) => chat.loadProviderModels(this.host.provider.value));
+            importOrReload(
+                () => import(`../models/useChat-catalog`),
+                (chat) => chat.loadProviderModels(this.host.provider.value),
+            );
             this.host.requeue(turn.userMessageId);
             this.host.error.value = message;
             return;

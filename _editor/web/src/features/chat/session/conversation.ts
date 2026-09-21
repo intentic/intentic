@@ -27,6 +27,7 @@ import { basename } from "@intentic/ui/path";
 import { computed, ref } from "vue";
 import type { AgentStanding } from "../../agents/fleet/agentStatus";
 import { trackPerf } from "../../../app/perf";
+import { importOrReload } from "../../../router/staleChunk";
 import { sandboxError, sandboxRequestVia } from "../../sandbox/client/sandboxClient";
 import { jsonBody } from "../../sandbox/client/jsonBody";
 import { invalidateAgentTranscript, olderTranscriptPage } from "../transcript/agentTranscript";
@@ -401,8 +402,7 @@ export class Conversation {
         this.displacedModel.value = undefined;
         // Born displaced when the pick couldn't run and something else was substituted (see movedFrom).
         const picked = turnDefaults.provider.value;
-        this.movedFrom.value =
-            picked === undefined || picked === provider ? undefined : { provider: picked, value: rememberedModelFor(picked) };
+        this.movedFrom.value = picked === undefined || picked === provider ? undefined : { provider: picked, value: rememberedModelFor(picked) };
     }
 
     // Switch the provider this chat's next turn runs on, re-scoping provider settings; writes the module default.
@@ -1653,7 +1653,10 @@ export class Conversation {
         if (!this.isolated.value && this.turnStartedAt.value !== undefined) {
             const startedAt = this.turnStartedAt.value;
             const call = patch.tool;
-            void import(`../../workspace/files/liveWrites`).then((m) => m.recordTurnWrite(this.conversationId, startedAt, call));
+            importOrReload(
+                () => import(`../../workspace/files/liveWrites`),
+                (m) => m.recordTurnWrite(this.conversationId, startedAt, call),
+            );
         }
     }
 
@@ -1703,8 +1706,14 @@ export class Conversation {
                 const { session } = fact;
                 this.agentTerminal.value = session;
                 const title = this.title.value;
-                void import("../../terminal/useWorkTerminals").then((m) => m.noteAgentTerminal(session, title));
-                void import("../../terminal/useTerminalPanel").then((m) => m.useTerminalPanel().surface(session));
+                importOrReload(
+                    () => import("../../terminal/useWorkTerminals"),
+                    (m) => m.noteAgentTerminal(session, title),
+                );
+                importOrReload(
+                    () => import("../../terminal/useTerminalPanel"),
+                    (m) => m.useTerminalPanel().surface(session),
+                );
                 return;
             }
             case `browser`: {
@@ -1712,8 +1721,14 @@ export class Conversation {
                 const { session } = fact;
                 this.agentBrowser.value = session;
                 const title = this.title.value;
-                void import("../../terminal/useWorkTerminals").then((m) => m.noteAgentTerminal(session, title));
-                void import("../../terminal/useTerminalPanel").then((m) => m.useTerminalPanel().surface(session));
+                importOrReload(
+                    () => import("../../terminal/useWorkTerminals"),
+                    (m) => m.noteAgentTerminal(session, title),
+                );
+                importOrReload(
+                    () => import("../../terminal/useTerminalPanel"),
+                    (m) => m.useTerminalPanel().surface(session),
+                );
                 return;
             }
             case `provider_retry`:

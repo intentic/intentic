@@ -12,7 +12,7 @@ interface DesktopWebview {
     installId: string;
     update: string | null;
     loopbackUngated?: boolean;
-/* THIS WINDOW HAS NO TITLE BAR OF ITS OWN, so the page draws one. */
+    /* THIS WINDOW HAS NO TITLE BAR OF ITS OWN, so the page draws one. */
     frameless?: boolean;
 }
 
@@ -112,19 +112,47 @@ export const workDesktopWindow = (verb: DesktopWindowVerb): void => {
     openDesktopLink(`intentic://window?do=${verb}`);
 };
 
-/* THE ONE LINK SHAPE THIS WEBVIEW DROPS ON THE FLOOR: `target="_blank"`. */
+/* THE TWO LINK PRESSES THIS WEBVIEW DROPS ON THE FLOOR: `target="_blank"`, and Ctrl/Shift-click. */
 
-// The app answers a link out of the page from the webview's new-window event (windows.rs `page_window`), and WebView2
-// raises that event for `window.open` and for a NAMED target but never for `_blank`: the click is swallowed inside the
-// webview, the app never hears the address, and nothing happens on screen. Re-issued here as the shape the app does
-// hear, which is what every `target="_blank"` in the app depends on — provider sign-ins, docs, an agent's markdown link.
+/* Addresses the app can hand the machine; an `intentic:` or `blob:` link is this webview's own business. */
+const OPENABLE = new Set([`http:`, `https:`, `mailto:`, `tel:`]);
+
+/**
+ * Whether this press means "not in this window" — two shapes, each broken its own way.
+ *
+ * `target="_blank"`: the app answers a link out of the page from the webview's new-window event (windows.rs
+ * `page_window`), and WebView2 raises that event for `window.open` and for a NAMED target but never for `_blank`, so
+ * the click is swallowed inside the webview and the app never hears the address.
+ *
+ * Ctrl/Shift-click: the app's opener plugin injects a window-level listener that takes the press with
+ * `preventDefault` and hands it to `plugin:opener|open_url` — an IPC command no window of this app is allowed to
+ * call. The press ended as `not allowed by ACL` in the console with nothing on screen, which is worse than the
+ * unhandled press it replaced. Taken here first, in capture, so the plugin's listener sees it already answered.
+ *
+ * Meta and Alt are left alone: the plugin ignores those, so the webview's own answer to them still stands.
+ */
+const leavesThisWindow = (event: MouseEvent, link: HTMLAnchorElement): boolean => {
+    if (link.target === `_blank`) {
+        return true;
+    }
+    if (event.metaKey || event.altKey || !(event.ctrlKey || event.shiftKey)) {
+        return false;
+    }
+    return OPENABLE.has(link.protocol);
+};
+
+// Re-issued as the shape the app does hear, which is what every link out of the app depends on — provider sign-ins,
+// docs, an agent's markdown link.
 const followBlankLink = (event: MouseEvent): void => {
     if (event.defaultPrevented || event.button !== 0) {
         return;
     }
     const link = (event.target as HTMLElement | null)?.closest<HTMLAnchorElement>(`a[href]`);
-    // A download is the browser's to do in place, and `_blank` is the only target the webview cannot follow itself.
-    if (link === null || link === undefined || link.target !== `_blank` || link.hasAttribute(`download`)) {
+    // A download is the browser's to do in place, whichever way it was pressed.
+    if (link === null || link === undefined || link.hasAttribute(`download`)) {
+        return;
+    }
+    if (!leavesThisWindow(event, link)) {
         return;
     }
     event.preventDefault();

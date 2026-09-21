@@ -1,6 +1,7 @@
 import { type CommandRun, followCommandRun } from "@intentic/sandbox-contract";
 import { errorMessage } from "@intentic/ui/async";
 import { computed, type ComputedRef, ref } from "vue";
+import { importOrReload } from "../../../router/staleChunk";
 
 // Watches a command the daemon runs on click: start it, follow it to a verdict, stop it. One watcher over two
 // sources (the check in usePrepush.ts, the push in usePushRun.ts), since both need the same rules:
@@ -71,7 +72,10 @@ export const createRunWatcher = <R extends CommandRun, A = void>(source: RunSour
         const { session } = state;
         const words = session === undefined ? undefined : source.reveal(state);
         if (session !== undefined && words !== undefined) {
-            void import(`../../terminal/useTerminalPanel`).then(({ useTerminalPanel }) => useTerminalPanel().openFocused(session, words));
+            importOrReload(
+                () => import(`../../terminal/useTerminalPanel`),
+                ({ useTerminalPanel }) => useTerminalPanel().openFocused(session, words),
+            );
         }
     };
 

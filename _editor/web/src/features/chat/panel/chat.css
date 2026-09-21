@@ -718,19 +718,18 @@
     border-color: var(--color-primary-500);
     background: color-mix(in srgb, var(--color-primary-500) 6%, var(--color-overlay));
 }
-/* The press target only: the rung plus this padding, 22px tall against a 12px rung, because a 4px-wide button is a
-   miss at the rate replays show (two rage-clicks in twenty-two presses). It paints nothing of its own — ::before is
-   the bar, so the drawn rung is a box with its own size and never a clip of this one. */
+/* The press target only, 8×32px around a 4×12px rung: ::before is the bar, so the drawn rung keeps its own size and
+   is never a clip of this one. 32px is the model pill's height, so the target grows and the composer row does not.
+   The gap between two bars is padding on a rung rather than a flex gap, so every pixel across the meter answers a
+   press and the outermost rungs keep their half too. Sized by the rage-click rate replays measure on this control:
+   3 in 20 presses at 4px wide, 4 in 64 at 6×22px. */
 .composer-effort-seg {
     display: flex;
     align-items: flex-end;
-    padding-block: 0.3125rem;
+    padding-block: 0.625rem;
+    padding-inline: 0.125rem;
     background: none;
     cursor: pointer;
-}
-/* The gap between two bars is a click target for the lower (left) level — it lives as this bar's right-padding rather than a flex gap. */
-.composer-effort-seg:not(:last-child) {
-    padding-right: 0.125rem;
 }
 .composer-effort-seg::before {
     content: "";
@@ -754,8 +753,8 @@
         height: 1.1rem;
         width: 0.5rem;
     }
-    .composer-effort-seg:not(:last-child) {
-        padding-right: 0.3rem; /* chunkier snap-down gap for touch */
+    .composer-effort-seg {
+        padding-inline: 0.15rem; /* chunkier snap-down gap for touch */
     }
 }
 /* THE SAME LADDER AS A PICTURE — the spans ComposerEffort draws on a touch pointer. */

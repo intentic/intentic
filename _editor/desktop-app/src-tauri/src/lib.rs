@@ -60,7 +60,16 @@ const fn opening(parked: bool, hosts_sandboxes: bool, engine_listening: bool) ->
 pub fn run() {
     let mut builder = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
-        .plugin(tauri_plugin_opener::init())
+        // Rust-side opening only. The plugin's default injects a click listener into EVERY webview that takes
+        // `target="_blank"` and Ctrl/Shift-click with `preventDefault` and then invokes `plugin:opener|open_url` —
+        // an IPC command no capability here grants, and the workspace window is remote content that gets none by
+        // design. So every press it took died as `not allowed by ACL` with nothing on screen. The page answers both
+        // shapes itself (`_editor/web`, `environments/desktop.ts`), which is the road the new-window handler hears.
+        .plugin(
+            tauri_plugin_opener::Builder::new()
+                .open_js_links_on_click(false)
+                .build(),
+        )
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_updater::Builder::new().build());
 

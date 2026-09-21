@@ -1,6 +1,7 @@
 import { computed, type ComputedRef, ref, type Ref } from "vue";
 import { definePreference } from "@intentic/ui/preference";
 import { type TerminalSession, useTerminalsQuery } from "./terminalsQuery";
+import { importOrReload } from "../../router/staleChunk";
 
 // Work terminals: agent Bash shells and daemon job sessions (including one-shot runs: installs, a project's checks, a
 // scaffold), shown by default only through their own surfaces (chat's Bash card, Capabilities page, the popover), not
@@ -44,7 +45,10 @@ export interface WorkTerminalRow {
 // Reveals a work terminal as a focused tab regardless of the preference; a plain action so callers with no tab
 // machinery can call it. Imports the panel lazily so reading this module doesn't pull in xterm.
 export const openWorkTerminal = (session: string): void => {
-    void import(`./useTerminalPanel`).then((module) => module.useTerminalPanel().openFocused(session));
+    importOrReload(
+        () => import(`./useTerminalPanel`),
+        (module) => module.useTerminalPanel().openFocused(session),
+    );
 };
 
 const isWork = (session: TerminalSession): session is TerminalSession & { kind: "agent" | "job" } =>
@@ -66,7 +70,13 @@ export function useWorkTerminals(): {
     showWorkTerminals: Ref<boolean>;
 } {
     const { sessions } = useTerminalsQuery();
-    const rows = computed<WorkTerminalRow[]>(() => sessions.value.filter(isWork).filter((session) => session.running).toSorted(byRecency).map(toRow));
+    const rows = computed<WorkTerminalRow[]>(() =>
+        sessions.value
+            .filter(isWork)
+            .filter((session) => session.running)
+            .toSorted(byRecency)
+            .map(toRow),
+    );
     // Jobs only. A finished agent shell is already written down in its conversation's transcript, while a check's own
     // output exists nowhere but the pane it ran in, so that pane is worth offering back.
     const finished = computed<WorkTerminalRow[]>(() =>
