@@ -12,6 +12,7 @@ import { useAuth } from "../features/auth/useAuth";
 import { useGoogleIdentity } from "../features/auth/useGoogleIdentity";
 import { useSandbox } from "../features/sandbox/client/useSandbox";
 import { useRole } from "../features/sandbox/secrets/useRole";
+import { retryOnEntry } from "./platformRetry";
 import { setupRedirect } from "./setupGate";
 import { signInAt } from "./signIn";
 import { isStaleChunkError, recoverStaleChunk } from "./staleChunk";
@@ -106,6 +107,8 @@ const routes: RouteRecordRaw[] = [
         path: `/platform-unavailable`,
         name: `platform-unavailable`,
         meta: { title: () => t(`router.index.cantReachIntentic`) },
+        // Guarded so a reload on this URL is the retry, not a re-render of the failure (platformRetry.ts).
+        beforeEnter: [retryOnEntry],
         component: () => import(`../features/setup/PlatformUnavailable.vue`),
     },
     {

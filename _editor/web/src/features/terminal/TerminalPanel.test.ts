@@ -55,11 +55,15 @@ const busy = (name: string, command: string): Listed => ({ name, kind: `shell`, 
 const finished = (name: string): Listed => ({ name, kind: `panel`, label: name, running: false, activityAt: 0 });
 
 const mounted: { app: App; host: HTMLElement }[] = [];
-afterEach(() => {
+afterEach(async () => {
     for (const { app, host } of mounted.splice(0)) {
         app.unmount();
         host.remove();
     }
+    // PrimeVue's tooltip directive schedules its own removal on a zero-delay timer as it unmounts (tooltip/index.mjs,
+    // `unmounted` -> `hide(el, 0)`). Run it here, while there is still a document for it to read: left pending, it
+    // fires after this file's environment is torn down and fails the run as an unhandled `document is not defined`.
+    await new Promise((resolve) => setTimeout(resolve));
     // Strip remembers active tab/splits per sandbox; clear localStorage so cases don't inherit the last focus.
     localStorage.clear();
 });
