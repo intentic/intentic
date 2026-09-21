@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { promisify } from "node:util";
 import type { AgentEvent } from "@intentic/sandbox-contract";
 import { afterEach, beforeEach, expect, test } from "vitest";
-import type { CommandGate } from "../../guard/command-gate.js";
+import type { CommandGuard } from "../../guard/command-guard.js";
 import { createLogger } from "../../logger.js";
 import { createCursorHookService, type CursorHookService } from "./cursor-hooks.js";
 
@@ -38,7 +38,7 @@ const started = async (): Promise<{ service: CursorHookService; dir: string }> =
 
 // Runs the generated script as Cursor would: a child process, payload on stdin, answer on stdout.
 const askHook = async (dir: string, mode: "gate" | "session-env" | "prompt", payload: unknown): Promise<unknown> => {
-    const child = execFile("node", [join(dir, "intentic-command-gate.mjs"), mode]);
+    const child = execFile("node", [join(dir, "intentic-command-guard.mjs"), mode]);
     child.stdin?.end(JSON.stringify(payload));
     const stdout = await new Promise<string>((settle) => {
         let out = "";
@@ -52,14 +52,14 @@ const askSessionEnv = (dir: string, payload: unknown): Promise<unknown> => askHo
 const askPrompt = (dir: string, payload: unknown): Promise<unknown> => askHook(dir, "prompt", payload);
 
 // A gate that denies every command with the given reason.
-const denying = (reason: string): CommandGate => ({
+const denying = (reason: string): CommandGuard => ({
     enforcing: true,
     // eslint-disable-next-line require-yield
     async *consult() {
         return { allow: false, reason };
     },
 });
-const allowing = (): CommandGate => ({
+const allowing = (): CommandGuard => ({
     enforcing: true,
     // eslint-disable-next-line require-yield
     async *consult() {
@@ -158,7 +158,7 @@ test("with two turns running there is nothing to reason from, so it allows", asy
 
 test("a turn whose gate enforces nothing short-circuits to allow", async () => {
     const { service: hooks, dir } = await started();
-    const gate: CommandGate = {
+    const gate: CommandGuard = {
         enforcing: false,
         // eslint-disable-next-line require-yield
         async *consult() {
@@ -181,7 +181,7 @@ test("frames the gate yields are pushed to the turn's own stream", async () => {
     const pushed: AgentEvent[] = [];
     // Real AgentEvent shape, not a cast-based stand-in a fake would slip through unnoticed.
     const card: AgentEvent = { kind: "permission", requestId: "r1", toolName: "Shell", displayName: "Run command", reason: "rule" };
-    const gate: CommandGate = {
+    const gate: CommandGuard = {
         enforcing: true,
         async *consult() {
             yield card;
@@ -206,7 +206,7 @@ test("a script that cannot reach the daemon fails safely rather than hanging", a
 
 test("a payload that is not JSON is allowed rather than crashing the turn", async () => {
     const { dir } = await started();
-    const child = execFile("node", [join(dir, "intentic-command-gate.mjs"), "gate"]);
+    const child = execFile("node", [join(dir, "intentic-command-guard.mjs"), "gate"]);
     child.stdin?.end("not json at all");
     const out = await new Promise<string>((settle) => {
         let text = "";
@@ -218,7 +218,7 @@ test("a payload that is not JSON is allowed rather than crashing the turn", asyn
 
 test("the hooks file promises exactly the shape Cursor is documented to read", async () => {
     const { dir } = await started();
-    const script = join(dir, "intentic-command-gate.mjs");
+    const script = join(dir, "intentic-command-guard.mjs");
     expect(readFileSync(script, "utf8")).toContain("permission");
     const installed = readFileSync(hooksFile, "utf8").trim();
     const parsed = JSON.parse(installed) as { version: number; hooks: Record<string, { command: string; failClosed?: boolean }[]> };

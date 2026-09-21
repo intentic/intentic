@@ -58,7 +58,7 @@ export const createAgentOrigins = (
 
     // Where the branch left the main line, so the claim is the agent's own work, not what a rebase pulled in; falls
     // back to the recorded base for unrelated histories. Keyed on tip alone: a rebase already mints a new tip.
-    const anchorOf = async (dir: string, repo: string, head: string, tip: string, base: string): Promise<string> => {
+    const checkpointOf = async (dir: string, repo: string, head: string, tip: string, base: string): Promise<string> => {
         const key = `anchor ${repo} ${tip}`;
         const hit = anchors.get(key);
         if (hit !== undefined) {
@@ -139,7 +139,7 @@ export const createAgentOrigins = (
                     // Own paths narrowed to what this land put in the tree, minus what history has since absorbed.
                     const applied = new Set(await appliedPaths(dir, repo, landing.head, landing.tip));
                     const retired = await expiry.committedSince(dir, repo, landing.head, head);
-                    const anchor = await anchorOf(dir, repo, head, landing.tip, landing.base);
+                    const anchor = await checkpointOf(dir, repo, head, landing.tip, landing.base);
                     let total = 0;
                     let claimed = 0;
                     for (const path of await landedPaths(dir, repo, anchor, landing.tip)) {

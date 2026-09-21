@@ -26,7 +26,7 @@ const DEADLINE_MS = 10 * 60_000;
 // The only call shape this gate judges: file, screen and input tools carry no program to classify.
 const RUN_COMMAND = "run_command";
 
-// Every command here leaves the container, so locus is fixed (mirrors SANDBOX in guard/command-gate.ts).
+// Every command here leaves the container, so locus is fixed (mirrors SANDBOX in guard/command-guard.ts).
 const DEVICE: CommandLocus = "device";
 
 // What the model reads when the daemon stops a call; a value, not an error, so the agent reports it instead of

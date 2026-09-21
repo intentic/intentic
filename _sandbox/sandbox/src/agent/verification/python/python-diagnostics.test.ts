@@ -27,7 +27,7 @@ test("ruff's two diagnostic spellings both parse, and the prose around them does
 });
 
 test("a relative path is resolved against the run's own directory before it is reported in the agent's names", () => {
-    // Both halves of the path gap: ruff names files where it ran; an unanchored checker sits in the worktree.
+    // Both halves of the path gap: ruff names files where it ran; an uncheckpointed checker sits in the worktree.
     const findings = ruffFindings("deep/main.py:2:12: F821 Undefined name `x`", `${HISTORY_ROOT}/worktrees/c1/app`, (file) =>
         file.replace(`${HISTORY_ROOT}/worktrees/c1`, WORKSPACE_ROOT),
     );

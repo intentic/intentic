@@ -62,10 +62,10 @@ export const machineReach = (summaries: readonly HostSummary[], ids: readonly st
             })),
         }));
 
-// One entry per granted host card, which is exactly the set `peerToolsOf("host", …)` mounts for the turn; undefined
+// One entry per granted host card, which is exactly the set `peerToolsOf("device", …)` mounts for the turn; undefined
 // with no card at all, so a prompt composed from it says nothing rather than promising tools that aren't there.
 export const hostDeviceReach = async (services: Services, granted: readonly Capability[]): Promise<HostDeviceReach | undefined> => {
-    const ids = granted.filter((capability) => capability.kind === "host").map((capability) => capability.id);
+    const ids = granted.filter((capability) => capability.kind === "device").map((capability) => capability.id);
     if (ids.length === 0) {
         return undefined;
     }

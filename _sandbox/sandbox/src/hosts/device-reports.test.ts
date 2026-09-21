@@ -300,7 +300,7 @@ const fakeServices = (id: string, mcp: (call: FakeCall) => Promise<unknown>): { 
         // The real reader over a history root that holds nothing, which is the empty fleet these cases assume.
         syncFleet: () => enrolledFleet(NO_HISTORY),
         perf: { track: async <T>(_op: string, _fields: unknown, run: () => Promise<T>): Promise<T> => await run() },
-        capabilities: { list: async () => [{ kind: "host", id, config: { platform: "linux" } }] },
+        capabilities: { list: async () => [{ kind: "device", id, config: { platform: "linux" } }] },
         // One enrollment per card here, named after it: these machines have a single OS install.
         hosts: { list: async () => [{ id }] },
         hostHub: {
@@ -424,7 +424,7 @@ test("gives every environment of one machine its own door, read through its own 
         config: { historyRoot: NO_HISTORY },
         syncFleet: () => enrolledFleet(NO_HISTORY),
         perf: { track: async <T>(_op: string, _fields: unknown, run: () => Promise<T>): Promise<T> => await run() },
-        capabilities: { list: async () => [{ kind: "host", id: "pc-rog", config: { platform: "windows" } }] },
+        capabilities: { list: async () => [{ kind: "device", id: "pc-rog", config: { platform: "windows" } }] },
         hosts: { list: async () => [{ id: "pc-rog" }, { id: distro }] },
         hostHub: {
             state: (key: string) => ({
@@ -601,10 +601,10 @@ test("an update the device narrates all the way through keeps every frame it sen
     ]);
 });
 
-// The transport dying with the loop it just stopped is this flow working. The RPC layer's own abort text
+// The transport dying with the process it just stopped is this flow working. The RPC layer's own abort text
 // ("[AsyncIdQueue] Queue[..] was closed or aborted while waiting for pulling.") is nothing a reader can act on,
 // and a `result` frame would tell the view the device answered when it never did.
-test("a connection that dies with the restarted loop ends with one plain line and no result", async () => {
+test("a connection that dies with the restarted process ends with one plain line and no result", async () => {
     const lines = await drain(
         runDeviceAgentFlow(
             agentServices(async function* () {

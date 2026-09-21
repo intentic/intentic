@@ -1,7 +1,7 @@
 import { mkdir, readdir, readFile, rename, stat, writeFile } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 import { agentHome } from "@intentic/local-agent";
-import type { HostScopes } from "@intentic/sandbox-contract";
+import type { DeviceScopes } from "@intentic/sandbox-contract";
 import { assertPath, assertScope } from "../policy.js";
 
 // Files on somebody's device. Reads are bounded by the roots; writes need the roots AND the write switch, off
@@ -13,7 +13,7 @@ import { assertPath, assertScope } from "../policy.js";
 // memory incident on a laptop rather than a useful answer.
 const MAX_READ_BYTES = 2_000_000;
 
-export const readTextFile = async (path: string, scopes: HostScopes): Promise<string> => {
+export const readTextFile = async (path: string, scopes: DeviceScopes): Promise<string> => {
     const target = assertPath(path, scopes, "read");
     const info = await stat(target);
     if (info.isDirectory()) {
@@ -25,7 +25,7 @@ export const readTextFile = async (path: string, scopes: HostScopes): Promise<st
     return await readFile(target, "utf8");
 };
 
-export const writeTextFile = async (path: string, content: string, scopes: HostScopes): Promise<string> => {
+export const writeTextFile = async (path: string, content: string, scopes: DeviceScopes): Promise<string> => {
     assertScope(scopes, "write");
     const target = assertPath(path, scopes, "write");
     await mkdir(dirname(target), { recursive: true });
@@ -46,7 +46,7 @@ export interface DirEntry {
     readonly modified?: string;
 }
 
-export const listDirectory = async (path: string, scopes: HostScopes): Promise<DirEntry[]> => {
+export const listDirectory = async (path: string, scopes: DeviceScopes): Promise<DirEntry[]> => {
     const target = assertPath(path, scopes, "list");
     const entries = await readdir(target, { withFileTypes: true });
     return await Promise.all(
@@ -65,7 +65,7 @@ export const listDirectory = async (path: string, scopes: HostScopes): Promise<D
 
 const trashDir = (): string => join(agentHome("machine").dir, "trash");
 
-export const trashFile = async (path: string, scopes: HostScopes): Promise<string> => {
+export const trashFile = async (path: string, scopes: DeviceScopes): Promise<string> => {
     assertScope(scopes, "write");
     const target = assertPath(path, scopes, "trash");
     await stat(target);

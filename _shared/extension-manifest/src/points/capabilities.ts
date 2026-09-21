@@ -209,7 +209,7 @@ export const CapabilityContributionSchema = z
         // skill pack varies.
         z.object({
             ...contributionBase,
-            kind: z.literal("host"),
+            kind: z.literal("device"),
             skill: z.string().min(1).describe("Checkout-relative SKILL.md teaching the agent that machine's shell."),
         }),
         // A browser family the user connects their own copy of; `install` is a URL since each family has its own store
@@ -245,7 +245,7 @@ export type SkillContribution = Extract<CapabilityContribution, { skill: string 
 
 // The config key a kind's cards pin to their own id, so a stored capability traces back to its card. `agent` has none:
 // its cards differ only in defaults.
-const DISCRIMINATOR = { cli: "provider", browser: "platform", host: "platform", webext: "platform", agent: undefined } satisfies Record<
+const DISCRIMINATOR = { cli: "provider", browser: "platform", device: "platform", webext: "platform", agent: undefined } satisfies Record<
     CapabilityContribution["kind"],
     string | undefined
 >;

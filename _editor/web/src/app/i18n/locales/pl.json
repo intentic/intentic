@@ -3224,7 +3224,7 @@
             "rawShellOutputBy": "Surowe wyjście powłoki według tego, co je usunęło, i tego, co zostało dla asystenta.",
             "reachedAssistant": "dotarło do asystenta"
         },
-        "signinGate": {
+        "signInWall": {
             "addPasskey": "Dodaj klucz dostępu",
             "addPasskeyToContinue": "Dodaj klucz dostępu, żeby kontynuować",
             "backToSetup": "Wróć do konfiguracji",

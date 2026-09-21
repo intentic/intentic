@@ -98,7 +98,7 @@ describe("contributionEntry", () => {
         // The grant doesn't vary by OS; a pack that could restate it could also weaken it.
         const pack: CapabilityContribution = {
             id: "windows",
-            kind: "host",
+            kind: "device",
             catalog: { name: "Windows PC", description: "Your Windows device", category: "devices" },
             fields: [],
             skill: "skills/windows/SKILL.md",

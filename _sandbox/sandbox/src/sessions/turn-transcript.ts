@@ -2,7 +2,7 @@ import { type AgentTurn, capabilitiesOf, resumeDisclosure, type TranscriptRow, w
 import { userRow } from "@intentic/sandbox-contract/transcript-fold";
 import { stripAttachmentNote } from "../agent/prompt/attachment-note.js";
 import { parseRuntimeHistory } from "../agent/providers/runtime-history.js";
-import { takeSteerAnchors } from "../agent/anchors/steer-anchors.js";
+import { takeSteerCheckpoints } from "../agent/checkpoints/steer-checkpoints.js";
 import type { Services } from "../composition.js";
 import type { TranscriptAgent } from "./agent-transcript.js";
 
@@ -103,7 +103,7 @@ const recorded = (rows: readonly TranscriptRow[]): TranscriptRow[] =>
 // Writes one settled turn to the record; every path a turn can start down funnels through this one call. Never rejects;
 // the returned boolean lets the restart-recovery path hold a journal entry until the write actually lands.
 export const recordTurnTranscript = async (
-    services: Pick<Services, "transcripts" | "turnAnchors" | "workspace" | "logger">,
+    services: Pick<Services, "transcripts" | "turnCheckpoints" | "workspace" | "logger">,
     turn: AgentTurn & { readonly conversationId: string },
     rows: readonly TranscriptRow[],
     // Where the user's mid-turn messages sit among `rows`, as the fold placed them (`TranscriptFold.steerRows`).
@@ -135,12 +135,12 @@ const recordedCount = async (services: Pick<Services, "transcripts">, agent: Tra
 // Files a steer's pinned state under the row index it landed on, computed only once the turn settles. Drains the queue
 // regardless, since a leftover would be misfiled under the next turn's rows; never throws.
 const recordSteerAnchors = async (
-    services: Pick<Services, "turnAnchors" | "logger">,
+    services: Pick<Services, "turnCheckpoints" | "logger">,
     conversationId: string,
     positions: readonly number[],
     base: number | undefined,
 ): Promise<void> => {
-    const anchors = takeSteerAnchors(conversationId);
+    const anchors = takeSteerCheckpoints(conversationId);
     if (base === undefined) {
         return;
     }
@@ -150,7 +150,7 @@ const recordSteerAnchors = async (
             if (anchor === undefined) {
                 return;
             }
-            await services.turnAnchors
+            await services.turnCheckpoints
                 .record(conversationId, base + position, anchor)
                 .catch((error: unknown) => services.logger.warn({ err: error, conversationId }, "anchors: filing a steered message failed"));
         }),

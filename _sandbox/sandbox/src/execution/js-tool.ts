@@ -7,7 +7,7 @@ import { JS_TIMEOUT_DEFAULT_S, JS_TIMEOUT_MAX_S, type JsExecutionPlan, type JsRu
 
 // One tool, a peer of Bash, mounted by agent.ts from the request's own `jsExecution` field; the SDK server is only the
 // wire. Planning lives in turn-plan, fencing in js-runtime, gated by the same command gate and secret exit Bash rides.
-// Name constants live here since the mount, the `Code` alias, and the command-gate matcher must agree.
+// Name constants live here since the mount, the `Code` alias, and the command-guard matcher must agree.
 export const JS_SERVER_NAME = "code";
 export const JS_TOOL_NAME = "mcp__code__run";
 export const JS_TOOL_ALIAS = "Code";

@@ -8,8 +8,8 @@ import { dockerHandler } from "./handlers/docker.handler.js";
 import { endpointHandler } from "./handlers/endpoint.handler.js";
 import { exitHandler } from "./handlers/exit.handler.js";
 import { extensionHandler } from "./handlers/extension.handler.js";
+import { deviceHandler } from "./handlers/device.handler.js";
 import { fleetHandler } from "./handlers/fleet.handler.js";
-import { hostHandler } from "./handlers/host.handler.js";
 import { identityHandler } from "./handlers/identity.handler.js";
 import { localModelHandler } from "./handlers/localmodel.handler.js";
 import { mcpHandler } from "./handlers/mcp.handler.js";
@@ -36,7 +36,7 @@ export const registry: Record<CapabilityKind, CapabilityHandler> = {
     docker: dockerHandler,
     browser: browserHandler,
     identity: identityHandler,
-    host: hostHandler,
+    device: deviceHandler,
     webext: webextHandler,
     agent: agentHandler,
     endpoint: endpointHandler,

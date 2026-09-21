@@ -6,7 +6,7 @@ import { OkSchema } from "../schemas/shared.js";
 import { WebExtFactsSchema, WebExtScopesSchema } from "../schemas/webext.js";
 
 // What a connected browser can be asked, over the socket its extension opened; the extension is the oRPC server here,
-// inverted from host.contract.ts, since a browser cannot be dialled.
+// inverted from device.contract.ts, since a browser cannot be dialled.
 // `mcp` stays one opaque procedure so a browser can gain a tool without a matching daemon release; the payload is
 // validated in the extension against the tool's own schema.
 // No `runSandboxFlow` twin: every browser operation is a click or read that either happened or did not.

@@ -1,6 +1,6 @@
 import type { PermissionOption, PermissionOptionKind, RequestPermissionRequest, RequestPermissionResponse } from "@agentclientprotocol/sdk";
 import type { AgentEvent } from "@intentic/sandbox-contract";
-import { type CommandGate, consultWith, vendorSubject } from "../../guard/command-gate.js";
+import { type CommandGuard, consultWith, vendorSubject } from "../../guard/command-guard.js";
 
 // Daemon's answer to ACP session/request_permission: auto-allows by default. Plan phase rejects mutating tool kinds
 // (best-effort); the safety policy runs the same triage/judge/hard rule as the Claude Code hook. A refusal carries no
@@ -43,7 +43,7 @@ export const decidePermission = async (
     request: RequestPermissionRequest,
     phase: PermissionPhase,
     aborted: boolean,
-    gate?: CommandGate,
+    gate?: CommandGuard,
     // Permission arrives via the connection's callback, not the turn generator; frames push into the turn's queue.
     push: (event: AgentEvent) => void = () => {},
 ): Promise<RequestPermissionResponse> => {

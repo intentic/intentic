@@ -6978,7 +6978,7 @@
     "hostContract",
     "hostFacts",
     "hostGrantSummary",
-    "hostHandler",
+    "deviceHandler",
     "hostIdFrom",
     "hostKeyPath",
     "hostOf",

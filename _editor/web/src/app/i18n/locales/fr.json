@@ -3224,7 +3224,7 @@
             "rawShellOutputBy": "Sortie shell brute, par ce qui l'a retirée, et ce qui restait pour l'assistant.",
             "reachedAssistant": "a atteint l'assistant"
         },
-        "signinGate": {
+        "signInWall": {
             "addPasskey": "Ajouter une passkey",
             "addPasskeyToContinue": "Ajoutez une passkey pour continuer",
             "backToSetup": "Retour à l'installation",

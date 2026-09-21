@@ -18,10 +18,10 @@ import {
     homeViewId,
     railGroupsFor,
     railRank,
-    railSeated,
+    onRail,
     registerView,
-    seatPolicy,
-    seatedOnlyByVisit,
+    railPolicy,
+    onRailOnlyByVisit,
     tabBarIds,
 } from "./registry";
 import { badgeChip } from "./viewBadge";
@@ -264,7 +264,7 @@ describe(`rail order`, () => {
 
     // The top of the column is the scarce thing. Checked on railRank rather than a detected run, since two of
     // the four ids are core shell tiles that contribute no activation.
-    it(`keeps the busy permanent run adjacent, with nothing seated between them`, () => {
+    it(`keeps the busy permanent run adjacent, with nothing on the rail between them`, () => {
         // Pick the project, start a turn, read what it did: the loop the rail serves, with the scope that narrows the
         // rest at its head. Approvals/Workflows used to sit between them.
         expect(railRank(`chat`)).toBe(railRank(`projects`) + 1);
@@ -272,8 +272,8 @@ describe(`rail order`, () => {
         expect(railRank(`workspace`)).toBe(railRank(`agents`) + 1);
     });
 
-    it(`seats configuration below everything that lights up`, () => {
-        // Workflows never badges; it held the third seat only by being filed beside Agents.
+    it(`tiles configuration below everything that lights up`, () => {
+        // Workflows never badges; it held the third tile only by being filed beside Agents.
         expect(railRank(`workflows`)).toBe(railRank(`automations`) - 1);
         for (const summons of [`approvals`, `acceptance`, `pipelines`, `deployments`, `maintenance`]) {
             expect(railRank(summons)).toBeLessThan(railRank(`workflows`));
@@ -299,11 +299,11 @@ describe(`rail order`, () => {
         stray.dispose();
     });
 
-    it(`keeps the seat table and the rank table naming the same ids, so no tile sorts into a band it can't sit in`, () => {
+    it(`keeps the tile table and the rank table naming the same ids, so no tile sorts into a band it can't sit in`, () => {
         // Both are read off railGroups(), so this fails only if an id is added to one derived list, not the other.
         for (const item of railGroups().flatMap((group) => group.items)) {
             expect(railRank(item.id)).toBeLessThan(railGroups().flatMap((group) => group.items).length);
-            expect([`always`, `signal`]).toContain(seatPolicy(item.id));
+            expect([`always`, `signal`]).toContain(railPolicy(item.id));
         }
     });
 
@@ -318,55 +318,55 @@ describe(`rail order`, () => {
     });
 });
 
-// Which tiles are on the column at all: the rail's scarce resource is seats, roughly nine fit above a
+// Which tiles are on the column at all: the rail's scarce resource is tiles, roughly nine fit above a
 // 945px viewport. The rule is stated in registry.ts; this is it holding.
-describe(`rail seats`, () => {
+describe(`rail tiles`, () => {
     const resting = { pinned: false, active: false };
 
-    it(`seats a permanent section with nothing to report: it is where you GO`, () => {
-        expect(railSeated({ id: `agents` }, resting)).toBe(true);
-        expect(railSeated({ id: `workspace` }, resting)).toBe(true);
-        expect(railSeated({ id: `chat` }, resting)).toBe(true);
-        // Preview's badge is an inventory ("2 running"), not a claim; it holds its seat on the other half of the rule.
-        expect(railSeated({ id: `preview` }, resting)).toBe(true);
+    it(`tiles a permanent section with nothing to report: it is where you GO`, () => {
+        expect(onRail({ id: `agents` }, resting)).toBe(true);
+        expect(onRail({ id: `workspace` }, resting)).toBe(true);
+        expect(onRail({ id: `chat` }, resting)).toBe(true);
+        // Preview's badge is an inventory ("2 running"), not a claim; it holds its tile on the other half of the rule.
+        expect(onRail({ id: `preview` }, resting)).toBe(true);
     });
 
-    it(`keeps a quiet queue off the rail, and seats it the moment it owes the owner something`, () => {
+    it(`keeps a quiet queue off the rail, and tiles it the moment it owes the owner something`, () => {
         // The whole complaint this table answers: Approvals was permanent, carrying a tile for an empty queue all day.
-        expect(railSeated({ id: `approvals` }, resting)).toBe(false);
-        expect(railSeated({ id: `approvals`, badge: { count: 3, tooltip: `3 waiting on you` } }, resting)).toBe(true);
+        expect(onRail({ id: `approvals` }, resting)).toBe(false);
+        expect(onRail({ id: `approvals`, badge: { count: 3, tooltip: `3 waiting on you` } }, resting)).toBe(true);
     });
 
     it(`keeps the surfaces you author once and leave alone off it until a run needs you`, () => {
         for (const shelf of [`workflows`, `automations`]) {
-            expect(railSeated({ id: shelf }, resting)).toBe(false);
-            expect(railSeated({ id: shelf, badge: { count: 1 } }, resting)).toBe(true);
+            expect(onRail({ id: shelf }, resting)).toBe(false);
+            expect(onRail({ id: shelf, badge: { count: 1 } }, resting)).toBe(true);
         }
     });
 
     it(`never retires the section the reader is standing in`, () => {
         // Opened from More, a silent section would otherwise have no tile lit while its own view is on screen.
-        expect(railSeated({ id: `automations` }, { pinned: false, active: true })).toBe(true);
+        expect(onRail({ id: `automations` }, { pinned: false, active: true })).toBe(true);
     });
 
     it(`lets a pin overrule the table for one route without touching the others`, () => {
-        expect(railSeated({ id: `deployments` }, { pinned: true, active: false })).toBe(true);
-        expect(railSeated({ id: `deployments` }, resting)).toBe(false);
+        expect(onRail({ id: `deployments` }, { pinned: true, active: false })).toBe(true);
+        expect(onRail({ id: `deployments` }, resting)).toBe(false);
     });
 
-    it(`knows which seat is only a visit, so the tile can say so before it goes`, () => {
+    it(`knows which tile is only a visit, so the tile can say so before it goes`, () => {
         const visiting = { pinned: false, active: true };
         // The case the label is for: opened from More, nothing else holding it up, gone when the reader leaves.
-        expect(seatedOnlyByVisit({ id: `automations` }, visiting)).toBe(true);
-        // Everything with a second clause behind it keeps its seat after the visit: permanent, pinned, or badging.
-        expect(seatedOnlyByVisit({ id: `workspace` }, visiting)).toBe(false);
-        expect(seatedOnlyByVisit({ id: `automations` }, { pinned: true, active: true })).toBe(false);
-        expect(seatedOnlyByVisit({ id: `approvals`, badge: { count: 3 } }, visiting)).toBe(false);
-        // A claim about the tile you're ON: an section you aren't in is either seated for its own reason or not at all.
-        expect(seatedOnlyByVisit({ id: `automations` }, resting)).toBe(false);
+        expect(onRailOnlyByVisit({ id: `automations` }, visiting)).toBe(true);
+        // Everything with a second clause behind it keeps its tile after the visit: permanent, pinned, or badging.
+        expect(onRailOnlyByVisit({ id: `workspace` }, visiting)).toBe(false);
+        expect(onRailOnlyByVisit({ id: `automations` }, { pinned: true, active: true })).toBe(false);
+        expect(onRailOnlyByVisit({ id: `approvals`, badge: { count: 3 } }, visiting)).toBe(false);
+        // A claim about the tile you're ON: a section you aren't in is either on the rail for its own reason or not at all.
+        expect(onRailOnlyByVisit({ id: `automations` }, resting)).toBe(false);
     });
 
-    it(`says only-a-visit exactly where railSeated rests on the visit alone`, () => {
+    it(`says only-a-visit exactly where onRail rests on the visit alone`, () => {
         // The two are one rule read twice, checked against each other rather than a list copied from the table.
         const cases = [
             { id: `workspace` },
@@ -377,34 +377,34 @@ describe(`rail seats`, () => {
         ] as const;
         for (const pinned of [false, true]) {
             for (const tile of cases) {
-                const stillSeatedAfterwards = railSeated(tile, { pinned, active: false });
-                expect(seatedOnlyByVisit(tile, { pinned, active: true })).toBe(!stillSeatedAfterwards);
+                const stillSeatedAfterwards = onRail(tile, { pinned, active: false });
+                expect(onRailOnlyByVisit(tile, { pinned, active: true })).toBe(!stillSeatedAfterwards);
             }
         }
     });
 
     it(`gives an unlisted third-party view the same terms as a first-party one`, () => {
-        // Not `always`: a bundle can't take one of nine seats by registering; it's seated exactly when it badges.
-        expect(seatPolicy(`some-third-party-view`)).toBe(`signal`);
-        expect(railSeated({ id: `some-third-party-view` }, resting)).toBe(false);
-        expect(railSeated({ id: `some-third-party-view`, badge: { mark: `arrow-up` } }, resting)).toBe(true);
+        // Not `always`: a bundle can't take one of nine tiles by registering; it's on the rail exactly when it badges.
+        expect(railPolicy(`some-third-party-view`)).toBe(`signal`);
+        expect(onRail({ id: `some-third-party-view` }, resting)).toBe(false);
+        expect(onRail({ id: `some-third-party-view`, badge: { mark: `arrow-up` } }, resting)).toBe(true);
     });
 
-    it(`seats a tile whose only news is that something is running there`, () => {
-        // The rail has always seated live work — an open browser, a subagent, a workflow run — so a pipeline in
-        // flight earns the same seat. Waiting for it to FAIL before showing a tile hides the half hour when
+    it(`tiles a tile whose only news is that something is running there`, () => {
+        // The rail has always on the rail live work — an open browser, a subagent, a workflow run — so a pipeline in
+        // flight earns the same tile. Waiting for it to FAIL before showing a tile hides the half hour when
         // watching it is the point.
-        expect(railSeated({ id: `pipelines`, badge: { running: `1 running` } }, resting)).toBe(true);
-        // And it is a seat of its own, so it outlives the visit exactly like a count does.
-        expect(seatedOnlyByVisit({ id: `pipelines`, badge: { running: `1 running` } }, { pinned: false, active: true })).toBe(false);
+        expect(onRail({ id: `pipelines`, badge: { running: `1 running` } }, resting)).toBe(true);
+        // And it is a tile of its own, so it outlives the visit exactly like a count does.
+        expect(onRailOnlyByVisit({ id: `pipelines`, badge: { running: `1 running` } }, { pinned: false, active: true })).toBe(false);
     });
 
-    it(`spends permanent seats on the work loop and nowhere else`, () => {
+    it(`spends permanent tiles on the work loop and nowhere else`, () => {
         // The count is the point: five fits above the fold, room for what lights up. A sixth means editing this. The
-        // first is the project scope's seat, the only place the shell says which project it is looking at.
+        // first is the project scope's tile, the only place the shell says which project it is looking at.
         const permanent = railGroups()
             .flatMap((group) => group.items)
-            .filter((item) => item.seat === `always`)
+            .filter((item) => item.policy === `always`)
             .map((item) => item.id);
         expect(permanent).toEqual([`projects`, `chat`, `agents`, `workspace`, `preview`]);
     });
@@ -444,7 +444,7 @@ describe(`what a badge says`, () => {
     });
 });
 
-// The maker's table: the same rail with the Projects dashboard in the file tree's seat, and the file tree standing in for it
+// The maker's table: the same rail with the Projects dashboard in the file tree's tile, and the file tree standing in for it
 // while that extension is off. Read through the audience preference, so the switch is the same one Settings flips.
 describe(`the maker's rail`, () => {
     const projectView = (): ViewRegistration => ({
@@ -455,23 +455,23 @@ describe(`the maker's rail`, () => {
         view: async () => ({}),
     });
 
-    it(`keeps the developer's home on the file tree when nothing has been answered, with the dashboard seated beside it`, () => {
-        expect(seatPolicy(`workspace`)).toBe(`always`);
-        expect(seatPolicy(`projects`)).toBe(`always`);
+    it(`keeps the developer's home on the file tree when nothing has been answered, with the dashboard on the rail beside it`, () => {
+        expect(railPolicy(`workspace`)).toBe(`always`);
+        expect(railPolicy(`projects`)).toBe(`always`);
         expect(homeViewId()).toBe(`workspace`);
     });
 
-    it(`seats the Projects dashboard where the file tree was, once a maker has it`, () => {
+    it(`tiles the Projects dashboard where the file tree was, once a maker has it`, () => {
         useAudience().setAudience(`maker`);
         const registered = registerView(`test`, projectView());
         try {
-            expect(seatPolicy(`projects`)).toBe(`always`);
-            expect(seatPolicy(`workspace`)).toBe(`signal`);
+            expect(railPolicy(`projects`)).toBe(`always`);
+            expect(railPolicy(`workspace`)).toBe(`signal`);
             expect(homeViewId()).toBe(`projects`);
             expect(railRank(`chat`)).toBe(railRank(`projects`) + 1);
             expect(railRank(`agents`)).toBe(railRank(`chat`) + 1);
             expect(railRank(`workspace`)).toBe(railRank(`agents`) + 1);
-            // The phone's bar seats Chat, never the home view: the Project page is the Menu's to list.
+            // The phone's bar tiles Chat, never the home view: the Project page is the Menu's to list.
             expect(tabBarIds()).not.toContain(`projects`);
             expect(tabBarIds()).toContain(`chat`);
         } finally {
@@ -480,11 +480,11 @@ describe(`the maker's rail`, () => {
         }
     });
 
-    it(`hands the seat back to the file tree while the Projects extension is off, so a maker never has no home`, () => {
+    it(`hands the tile back to the file tree while the Projects extension is off, so a maker never has no home`, () => {
         useAudience().setAudience(`maker`);
         try {
-            expect(seatPolicy(`projects`)).toBe(`always`);
-            expect(seatPolicy(`workspace`)).toBe(`always`);
+            expect(railPolicy(`projects`)).toBe(`always`);
+            expect(railPolicy(`workspace`)).toBe(`always`);
             expect(homeViewId()).toBe(`workspace`);
             expect(tabBarIds()).not.toContain(`workspace`);
         } finally {
@@ -492,10 +492,10 @@ describe(`the maker's rail`, () => {
         }
     });
 
-    it(`spends the same four permanent seats in both tables`, () => {
+    it(`spends the same four permanent tiles in both tables`, () => {
         const permanent = railGroupsFor(`maker`)
             .flatMap((group) => group.items)
-            .filter((item) => item.seat === `always`)
+            .filter((item) => item.policy === `always`)
             .map((item) => item.id);
         expect(permanent).toEqual([`projects`, `chat`, `agents`, `preview`]);
     });
@@ -504,22 +504,22 @@ describe(`the maker's rail`, () => {
     // shell showed when the group table became a function and `railBands` was still matching groups by identity —
     // two calls hand back equal groups that are not the same objects. Asserted on the tiles themselves, not on the
     // band count, so the failure reads as "the rail is empty" rather than as an internal detail.
-    it(`lands every seated tile in a band, however many times the group table is built`, () => {
+    it(`lands every on the rail tile in a band, however many times the group table is built`, () => {
         const tiles = [{ id: `chat` }, { id: `agents` }, { id: `approvals` }, { id: `live-status` }, { id: `stranger` }];
         const banded = railBands(tiles, (tile) => tile.id).flatMap((band) => band.items.map((item) => item.id));
         expect(banded.toSorted()).toEqual(tiles.map((tile) => tile.id).toSorted());
     });
 });
 
-// A guest's rail is two seats whichever audience it answered: every other tile opens on a read the daemon refuses it.
+// A guest's rail is two tiles whichever audience it answered: every other tile opens on a read the daemon refuses it.
 describe(`a guest's rail`, () => {
-    it(`seats only the chat and the board, and ranks nothing else`, () => {
+    it(`tiles only the chat and the board, and ranks nothing else`, () => {
         guestReader.isGuest = true;
         try {
-            expect(seatPolicy(`chat`)).toBe(`always`);
-            expect(seatPolicy(`agents`)).toBe(`always`);
-            expect(seatPolicy(`workspace`)).toBe(`signal`);
-            expect(seatPolicy(`preview`)).toBe(`signal`);
+            expect(railPolicy(`chat`)).toBe(`always`);
+            expect(railPolicy(`agents`)).toBe(`always`);
+            expect(railPolicy(`workspace`)).toBe(`signal`);
+            expect(railPolicy(`preview`)).toBe(`signal`);
             expect(railRank(`workspace`)).toBe(2);
             expect(railBands([{ id: `chat` }, { id: `agents` }], (tile) => tile.id).map((band) => band.group.id)).toEqual([`work`]);
         } finally {
@@ -527,10 +527,10 @@ describe(`a guest's rail`, () => {
         }
     });
 
-    // A `signal` seat is not a closed door: an extension that badges takes one, and every unseated tile is listed in
+    // A `signal` tile is not a closed door: an extension that badges takes one, and every offRail tile is listed in
     // the More menu besides. Both put sections in front of a guest that answer a press by bouncing it to the chat, which
     // is what the reader reported as icons that do nothing.
-    it(`withdraws the sections the fence would bounce, rather than seating them and refusing the press`, () => {
+    it(`withdraws the sections the fence would bounce, rather than putting them on the rail and refusing the press`, () => {
         guestReader.isGuest = true;
         try {
             expect(sectionReachable(`/chat`)).toBe(true);

@@ -10,43 +10,43 @@ const AnchorSchema = z.union([
     z.object({ kind: z.literal("tree"), snapshot: z.string().min(1) }),
     z.object({ kind: z.literal("worktree"), repos: z.array(z.object({ repo: z.string(), base: z.string().min(1) })).min(1) }),
 ]);
-export type TurnAnchor = z.infer<typeof AnchorSchema>;
+export type TurnCheckpoint = z.infer<typeof AnchorSchema>;
 
-// index → anchor, per conversation; object-keyed since indices are sparse (an unanchored turn files nothing).
+// index → checkpoint, per conversation; object-keyed since indices are sparse (an uncheckpointed turn files nothing).
 const FileSchema = z.record(z.string(), z.record(z.string(), AnchorSchema));
-type AnchorsFile = z.infer<typeof FileSchema>;
+type CheckpointsFile = z.infer<typeof FileSchema>;
 
-// Bounds one conversation's anchors so the file stays bounded; oldest indices evict first, only recent turns matter.
+// Bounds one conversation's checkpoints so the file stays bounded; oldest indices evict first, only recent turns matter.
 const MAX_ANCHORS_PER_CONVERSATION = 200;
 // Same bound one level up: conversations evicted by least-recently-touched.
 const MAX_CONVERSATIONS = 500;
 
-export interface TurnAnchors {
+export interface TurnCheckpoints {
     // Remember what this conversation's message `index` can be put back to.
-    readonly record: (conversationId: string, index: number, anchor: TurnAnchor) => Promise<void>;
-    // The anchor for one message, or undefined if none was ever recorded or it's since been evicted.
-    readonly of: (conversationId: string, index: number) => Promise<TurnAnchor | undefined>;
+    readonly record: (conversationId: string, index: number, checkpoint: TurnCheckpoint) => Promise<void>;
+    // The checkpoint for one message, or undefined if none was ever recorded or it's since been evicted.
+    readonly of: (conversationId: string, index: number) => Promise<TurnCheckpoint | undefined>;
     // Every bound index for a conversation, for stamping a transcript being read back.
-    readonly all: (conversationId: string) => Promise<ReadonlyMap<number, TurnAnchor>>;
-    // Drops anchors at or after `from`, so a second rewind can't offer a turn the first one already dropped.
+    readonly all: (conversationId: string) => Promise<ReadonlyMap<number, TurnCheckpoint>>;
+    // Drops checkpoints at or after `from`, so a second rewind can't offer a turn the first one already dropped.
     readonly truncate: (conversationId: string, from: number) => Promise<void>;
 }
 
-const trimmed = (anchors: Record<string, TurnAnchor>): Record<string, TurnAnchor> => {
-    const keys = Object.keys(anchors);
+const trimmed = (checkpoints: Record<string, TurnCheckpoint>): Record<string, TurnCheckpoint> => {
+    const keys = Object.keys(checkpoints);
     if (keys.length <= MAX_ANCHORS_PER_CONVERSATION) {
-        return anchors;
+        return checkpoints;
     }
     const kept = keys
         .map(Number)
         .toSorted((a, b) => a - b)
         .slice(-MAX_ANCHORS_PER_CONVERSATION);
-    return Object.fromEntries(kept.map((index) => [String(index), anchors[String(index)] as TurnAnchor]));
+    return Object.fromEntries(kept.map((index) => [String(index), checkpoints[String(index)] as TurnCheckpoint]));
 };
 
-// Same anchor by value; a turn re-run at the same index on a clean tree is the common repeat, letting the write be
+// Same checkpoint by value; a turn re-run at the same index on a clean tree is the common repeat, letting the write be
 // skipped.
-const same = (a: TurnAnchor | undefined, b: TurnAnchor): boolean => {
+const same = (a: TurnCheckpoint | undefined, b: TurnCheckpoint): boolean => {
     if (a === undefined || a.kind !== b.kind) {
         return false;
     }
@@ -59,34 +59,34 @@ const same = (a: TurnAnchor | undefined, b: TurnAnchor): boolean => {
     return false;
 };
 
-export const fileTurnAnchors = (path: string): TurnAnchors => {
-    const file = jsonFile<AnchorsFile>(path, {
+export const fileTurnCheckpoints = (path: string): TurnCheckpoints => {
+    const file = jsonFile<CheckpointsFile>(path, {
         parse: (raw) => FileSchema.safeParse(raw).data,
         fallback: () => ({}),
     });
 
     return {
-        record: async (conversationId, index, anchor) => {
+        record: async (conversationId, index, checkpoint) => {
             await file.update((current) => {
                 const existing = current[conversationId];
-                if (same(existing?.[String(index)], anchor)) {
+                if (same(existing?.[String(index)], checkpoint)) {
                     // Unchanged by reference ⇒ jsonFile skips the write.
                     return current;
                 }
-                const anchors = trimmed({ ...existing, [String(index)]: anchor });
+                const checkpoints = trimmed({ ...existing, [String(index)]: checkpoint });
                 // Re-inserted last so key order is recency order; eviction below is then a plain slice, no timestamp
                 // needed.
                 const { [conversationId]: _moved, ...rest } = current;
-                const next = { ...rest, [conversationId]: anchors };
+                const next = { ...rest, [conversationId]: checkpoints };
                 const ids = Object.keys(next);
                 return ids.length <= MAX_CONVERSATIONS
                     ? next
-                    : Object.fromEntries(ids.slice(-MAX_CONVERSATIONS).map((id) => [id, next[id] as Record<string, TurnAnchor>]));
+                    : Object.fromEntries(ids.slice(-MAX_CONVERSATIONS).map((id) => [id, next[id] as Record<string, TurnCheckpoint>]));
             });
         },
         of: async (conversationId, index) => (await file.read())[conversationId]?.[String(index)],
         all: async (conversationId) =>
-            new Map(Object.entries((await file.read())[conversationId] ?? {}).map(([index, anchor]) => [Number(index), anchor])),
+            new Map(Object.entries((await file.read())[conversationId] ?? {}).map(([index, checkpoint]) => [Number(index), checkpoint])),
         truncate: async (conversationId, from) => {
             await file.update((current) => {
                 const existing = current[conversationId];

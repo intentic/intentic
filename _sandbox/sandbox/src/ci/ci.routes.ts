@@ -1,7 +1,7 @@
 import { errorMessage } from "@intentic/base/errors";
 import { ciContract, ciFixConversationId, type CiRepo, type PipelineRun } from "@intentic/sandbox-contract";
 import { implement, ORPCError } from "@orpc/server";
-import { stopTurn } from "../agent/anchors/agent-steering.js";
+import { stopTurn } from "../agent/checkpoints/agent-steering.js";
 import { streamAgent } from "../agent/routes/agent.routes.js";
 import { startConversationTurn } from "../agent/run/turn/turn-resume.js";
 import { turnRunOf } from "../agent/run/turn/turn-runs.js";

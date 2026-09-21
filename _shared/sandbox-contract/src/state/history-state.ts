@@ -28,7 +28,7 @@ export const HISTORY_STATE_FILES: readonly StateFile[] = [
     // namespace can reach them. Carried for the same reason that one is.
     { path: "sessions/", portability: "carry" },
     // What each message can restore to (a checkpoint or isolated commit); the join between transcripts and scopes.
-    { path: "turn-anchors.json", portability: "carry" },
+    { path: "turn-checkpoints.json", portability: "carry" },
     // Index of published-page conversations; the pages travel with /work anyway, this makes one withdrawable.
     { path: "shares.json", portability: "carry" },
     { path: "activity.jsonl", portability: "carry" },

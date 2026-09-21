@@ -55,8 +55,8 @@ import { installSteeringHooks } from "../providers/agent-installs.js";
 import type { ClassifiedInstall } from "../../environment/runtime-installs.js";
 import { redactionHooks } from "../tools/agent-redaction.js";
 import { type SecretAccess, secretCommandHooks } from "../tools/agent-secrets.js";
-import { type CommandGateOptions, commandGateHooks } from "../../guard/command-gate.js";
-import { outboundGateHooks } from "../../guard/outbound-gate.js";
+import { type CommandGuardOptions, commandGateHooks } from "../../guard/command-guard.js";
+import { outboundGuardHooks } from "../../guard/outbound-guard.js";
 import { outsideResultHooks } from "../../guard/outside-results.js";
 import { createTurnTaint, publishTurnTaint } from "../../guard/turn-taint.js";
 import { type PersonaScope, personaScopeHooks } from "../../personas/persona-scope.js";
@@ -64,7 +64,7 @@ import type { JsExecutionPlan } from "../../execution/js-runtime.js";
 import { JS_TOOL_ALIAS, JS_TOOL_NAME, jsExecutionServer } from "../../execution/js-tool.js";
 import { type AgentTool, mcpServersOf } from "../tools/agent-tools.js";
 import { createRequest } from "../tools/agent-requests.js";
-import { type SteeringQueue, turnSteered } from "../anchors/agent-steering.js";
+import { type SteeringQueue, turnSteered } from "../checkpoints/agent-steering.js";
 import { type FollowUpOutcome, type TurnRuleCommand, turnEndingHooks } from "../../rules/turn-ending.js";
 import { agentShellBusy, bashTmuxHooks, tmuxRunEnabled } from "../tools/agent-terminals.js";
 import type { HeavyCommands } from "../../platform/resources/heavy-commands.js";
@@ -203,10 +203,10 @@ export interface AgentRequest {
     // How much of the command gate is on: 'on' full design, 'watch' records only, 'off' skips the judge.
     readonly judging?: CommandJudgeMode;
     // The judge and its writes, as functions so this module never reaches for `Services`; absent skips the judge.
-    readonly judge?: CommandGateOptions["judge"];
-    readonly logSafety?: CommandGateOptions["log"];
-    readonly safetyAnswered?: CommandGateOptions["answered"];
-    readonly rememberSafety?: CommandGateOptions["remember"];
+    readonly judge?: CommandGuardOptions["judge"];
+    readonly logSafety?: CommandGuardOptions["log"];
+    readonly safetyAnswered?: CommandGuardOptions["answered"];
+    readonly rememberSafety?: CommandGuardOptions["remember"];
     // What the serving runtime can do about the safety policy; absent defaults to 'hooks' (Claude Code).
     readonly rulebook?: AgentCapabilities["rulebook"];
     // Whether this turn was woken by outside content (a listener message, a webchat visitor), naming the source.
@@ -509,7 +509,7 @@ const baseOptions = (
             freshnessHooks(request.dependencyFreshness, request.freshnessResolver, request.workspacePins),
             // Checks classified outbound calls against owner action rules before they run, even under
             // bypassPermissions.
-            hasRules(request.actionRules) ? outboundGateHooks(request.actionRules) : {},
+            hasRules(request.actionRules) ? outboundGuardHooks(request.actionRules) : {},
             // Persona's folder limit and config-edit permission; the only layer between an unattended wake and a bad
             // path.
             request.personaScope !== undefined ? personaScopeHooks(request.personaScope) : {},

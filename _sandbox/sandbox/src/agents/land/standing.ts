@@ -2,7 +2,7 @@ import type { LandConflictReason } from "@intentic/sandbox-contract";
 import { defaultGit, type GitRunner } from "@intentic/scaffold";
 import { headSha } from "../../git/changes/changes.js";
 import type { IsolatedAgent, PersistedAgent } from "../registry/agents-store.js";
-import { anchorOf, carriesContent } from "./agent-changes.js";
+import { checkpointOf, carriesContent } from "./agent-changes.js";
 import { agentBranchTips } from "./agent-refs.js";
 import { dirtyPaths } from "./land.js";
 import type { AgentWorktrees } from "../worktrees/worktrees.js";
@@ -127,7 +127,7 @@ const deltaOf = async (worktrees: AgentWorktrees, repos: readonly RepoShas[], gi
         produced ||= tip !== composed.base;
         const main = worktrees.mainDir(composed.repo);
         // Both halves matter: a rebase can leave a branch ahead of an anchor that already holds all of it.
-        const anchor = await anchorOf(main, main, tip, composed.landedTip, composed.base, git);
+        const anchor = await checkpointOf(main, main, tip, composed.landedTip, composed.base, git);
         if (anchor !== tip && (await carriesContent(main, anchor, tip, git))) {
             outstanding = true;
         }

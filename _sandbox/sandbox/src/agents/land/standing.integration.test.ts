@@ -116,7 +116,7 @@ test("a standing is re-derived when either the branch or the main tree moves", a
     expect(await standings.refresh([entry])).toBe(false);
 });
 
-// A land moves neither HEAD nor the tip, only the entry's `landedTip`, the rung `anchorOf` measures from; a cache keyed
+// A land moves neither HEAD nor the tip, only the entry's `landedTip`, the rung `checkpointOf` measures from; a cache keyed
 // on the two shas alone would still serve the pre-land answer.
 test("a land re-derives on the spot, even though neither sha moved", async () => {
     const { worktrees, conversation } = await setup();

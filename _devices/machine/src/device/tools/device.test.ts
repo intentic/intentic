@@ -1,5 +1,5 @@
 import { DesktopError } from "@intentic/desktop-automation";
-import type { HostScopes } from "@intentic/sandbox-contract";
+import type { DeviceScopes } from "@intentic/sandbox-contract";
 import { expect, test, vi } from "vitest";
 import { ScopeError } from "../policy.js";
 import { fakeDesktop } from "../testing.js";
@@ -7,7 +7,7 @@ import { act, describeAction } from "./device.js";
 
 /* The policy half of GUI control, driven against a fake desktop. */
 
-const scopes = (overrides: Partial<HostScopes> = {}): HostScopes => ({
+const scopes = (overrides: Partial<DeviceScopes> = {}): DeviceScopes => ({
     shell: "on",
     write: "on",
     screen: "on",

@@ -3,7 +3,7 @@ import type { AgentEvent, AgentHarness, AgentProvider, AgentTurn, AskQuestion } 
 import { capabilitiesOf, newConversationId, PROVIDERS } from "@intentic/sandbox-contract";
 import type { Services } from "../../composition.js";
 import { createRequest, resolveRequest } from "../tools/agent-requests.js";
-import { steerTurn } from "../anchors/agent-steering.js";
+import { steerTurn } from "../checkpoints/agent-steering.js";
 import { childSpawn } from "../../guard/actions.js";
 import { guard } from "../../guard/guard.js";
 import { conversationTaintSource, markConversationTaint } from "../../guard/turn-taint.js";

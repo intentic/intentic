@@ -92,7 +92,7 @@ const staleNote = (missing: readonly string[]): string =>
 // standing notice is scoped to once per turn.
 // An isolated turn names its files inside its own mount namespace, which from the daemon is the main checkout, the same
 // path but a different file. Anchored, the compiler enters the turn's namespace and resolves the agent's own paths;
-// unanchored, the worktree stands on its own and only the reported names need mapping back.
+// uncheckpointed, the worktree stands on its own and only the reported names need mapping back.
 // A second reader of the same edit, beside the type check: what a `file.edited` rule's command says about the file.
 // Same signature as `review`, so a reader added later needs nothing but a place in the list; undefined means nothing to
 // say.

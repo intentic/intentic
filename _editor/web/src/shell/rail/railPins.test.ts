@@ -2,7 +2,7 @@
 import { beforeEach, expect, it } from "vitest";
 import { useRailPins } from "./railPins";
 
-// Pins the reader's overrule of the seat table: a toggle is visible to the rail immediately (localStorage isn't
+// Pins the reader's overrule of the rail table: a toggle is visible to the rail immediately (localStorage isn't
 // reactive) and survives a reload.
 
 const KEY = `intentic.railPins.local`;

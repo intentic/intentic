@@ -108,14 +108,14 @@ html[data-frameless] .entry {
     right: 0;
     left: 0;
     aspect-ratio: 16 / 9;
-    background-image: url("/assets/angkor/temple-900.avif");
+    background-image: url("/assets/plate/temple-900.avif");
     background-position: 50% 0%;
     background-size: cover;
     background-repeat: no-repeat;
 }
 @media (min-width: 60rem) {
     .entry-plate-img {
-        background-image: url("/assets/angkor/temple-1600.avif");
+        background-image: url("/assets/plate/temple-1600.avif");
     }
 }
 .entry-plate-img::after {
@@ -610,11 +610,11 @@ html:not([data-mode="dark"]) .entry {
 /* A PLATE OF ITS OWN, not the night photograph washed out: cream parchment, the same apsaras and spires, an empty
    middle for the headline. The app ships the two rungs its own breakpoints ask for. */
 html:not([data-mode="dark"]) .entry-plate-img {
-    background-image: url("/assets/angkor/temple-guest-900.avif");
+    background-image: url("/assets/plate/temple-maker-900.avif");
 }
 @media (min-width: 60rem) {
     html:not([data-mode="dark"]) .entry-plate-img {
-        background-image: url("/assets/angkor/temple-guest-1600.avif");
+        background-image: url("/assets/plate/temple-maker-1600.avif");
     }
 }
 

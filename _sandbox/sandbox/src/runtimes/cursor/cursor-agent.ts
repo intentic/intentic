@@ -2,7 +2,7 @@ import type { AgentOptions, ModelSelection, Run, SDKAgent, SendOptions } from "@
 import type { AgentEvent } from "@intentic/sandbox-contract";
 import type { Logger } from "pino";
 import { whenAborted } from "../../abort.js";
-import { type SteeringChannel, steeringRelay } from "../../agent/anchors/agent-steering.js";
+import { type SteeringChannel, steeringRelay } from "../../agent/checkpoints/agent-steering.js";
 import type { AgentRequest } from "../../agent/run/agent.js";
 import { EventQueue } from "../../agent/run/event-queue.js";
 import { splitAttachments, withFileNote } from "../../agent/prompt/attachment-note.js";

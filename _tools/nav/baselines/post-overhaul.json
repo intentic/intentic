@@ -2647,7 +2647,7 @@
       "glyph": 571,
       "DENIED_GLOBS": 354,
       "resetDaemonBoot": 392,
-      "hostHandler": 460,
+      "deviceHandler": 460,
       "agentTabOf": 973,
       "extensionIdOf": 442,
       "describeText": 546,

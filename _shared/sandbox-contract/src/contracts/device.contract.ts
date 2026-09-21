@@ -2,18 +2,18 @@ import { oc } from "@orpc/contract";
 import { streamOf } from "../protocol/routes.js";
 import { z } from "zod";
 import { DeviceAgentFlowSchema, DeviceFlowLineSchema, DeviceSandboxFlowSchema } from "../schemas/devices.js";
-import { HostScopesSchema } from "../schemas/capabilities.js";
-import { HostFactsSchema } from "../schemas/hosts.js";
+import { DeviceScopesSchema } from "../schemas/capabilities.js";
+import { DeviceFactsSchema } from "../schemas/hosts.js";
 import { OkSchema } from "../schemas/shared.js";
 
 // What a connected device can be asked, over the socket it opened; the machine is the oRPC server, the daemon the
 // client. No `.route()`: the procedure path is the address, not HTTP. `mcp` stays opaque (`z.unknown()`) so a machine
 // can add tools without a daemon release; validated on the machine and by the agent's MCP client.
-export const hostContract = {
+export const deviceContract = {
     // Device facts, refreshed on connect and on demand; the agent's skill pack is written against this shape.
-    describe: oc.output(HostFactsSchema),
+    describe: oc.output(DeviceFactsSchema),
     // Pushed on connect and on edit; the machine enforces the grant, nothing on the sandbox side checks a scope.
-    setScopes: oc.input(HostScopesSchema).output(OkSchema),
+    setScopes: oc.input(DeviceScopesSchema).output(OkSchema),
     // Daemon-driven liveness; doubles as keepalive against an idle tunnel and the gone-vs-quiet probe.
     ping: oc.output(OkSchema),
     // One MCP JSON-RPC message forwarded verbatim in both directions, unmodified.

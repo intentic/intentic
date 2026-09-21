@@ -64,8 +64,8 @@
         "agentAliveStoppedMaking": "Son agent est en vie mais ne fait plus de tours, donc l'image que ce sandbox a de ses dossiers et de ses ports date du dernier tour.",
         "commands": "Commandes",
         "folders": "Dossiers",
-        "loopKeepsBuildStarted": "Une boucle garde la version avec laquelle elle a démarré jusqu'à son redémarrage : remplacer le fichier sur le disque ne change donc rien à soi seul.",
         "ports": "Ports",
+        "processKeepsBuildStarted": "Une boucle garde la version avec laquelle elle a démarré jusqu'à son redémarrage : remplacer le fichier sur le disque ne change donc rien à soi seul.",
         "restartAgent": "Redémarrer l'agent",
         "stopsStartsDevicesAgent": "Arrête et relance la boucle de l'agent de cet appareil. Rien n'est téléchargé : c'est la version déjà installée là-bas qui remonte."
     },

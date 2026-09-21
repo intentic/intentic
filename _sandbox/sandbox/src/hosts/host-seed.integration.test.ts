@@ -64,7 +64,7 @@ test("the setup device's card is written once and never offered again", async ()
 // adopt it rather than rewrite it.
 test("a card left by an earlier build is remembered without being rewritten", async () => {
     const { services, entries, historyRoot, upserts } = tempServices();
-    entries.push({ id: "ada-laptop", kind: "host", config: { platform: "linux" } } as unknown as Capability);
+    entries.push({ id: "ada-laptop", kind: "device", config: { platform: "linux" } } as unknown as Capability);
 
     expect(await seedSetupHost(services, seed)).toEqual({ offered: false, id: "ada-laptop" });
     expect(upserts).toEqual([]);

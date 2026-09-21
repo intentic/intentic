@@ -2,7 +2,7 @@ import { checks as agentChecks, owner as agentOwner, type TurnJournalDeps } from
 import { checks as agentsChecks, owner as agentsOwner, type FleetRegistryDeps } from "../agents/invariant.js";
 import { checks as capabilityChecks, owner as capabilityOwner, type ManifestSecretDeps } from "../capabilities/invariant.js";
 import { checks as childrenChecks, owner as childrenOwner } from "../agent/subagents/invariant.js";
-import { checks as cursorChecks, type CommandGateDeps, owner as cursorOwner } from "../runtimes/cursor/invariant.js";
+import { checks as cursorChecks, type CommandGuardDeps, owner as cursorOwner } from "../runtimes/cursor/invariant.js";
 import { checks as dependenciesChecks, owner as dependenciesOwner } from "../dependencies/invariant.js";
 import { checks as derivedChecks, owner as derivedOwner } from "../derived/invariant.js";
 import { checks as engineChecks, owner as engineOwner } from "../engines/invariant.js";
@@ -31,7 +31,7 @@ export type DaemonInvariantDeps = TurnJournalDeps &
     PeerRegistryDeps &
     IssuesInboxDeps &
     AreaRosterDeps &
-    CommandGateDeps;
+    CommandGuardDeps;
 
 export const registerDaemonInvariants = (registry: InvariantRegistry, deps: DaemonInvariantDeps): void => {
     registry.register(agentOwner, agentChecks(deps));

@@ -9,8 +9,8 @@ const fail = (message: string): never => {
 };
 
 const PATHS = {
-    socket: "/work/.intentic/secrets/auth/cursor/command-gate.sock",
-    script: "/work/.intentic/secrets/auth/cursor/intentic-command-gate.mjs",
+    socket: "/work/.intentic/secrets/auth/cursor/command-guard.sock",
+    script: "/work/.intentic/secrets/auth/cursor/intentic-command-guard.mjs",
     hooks: "/etc/cursor/hooks.json",
 };
 const PID = 4242;
@@ -40,12 +40,12 @@ test("a hooks file that was never installed is start()'s report, not this one's"
 });
 
 test("a hooks file naming another daemon's script is the hook taken", async () => {
-    const files = { ...intact, [PATHS.hooks]: hooksNaming("/elsewhere/intentic-command-gate.mjs") };
+    const files = { ...intact, [PATHS.hooks]: hooksNaming("/elsewhere/intentic-command-guard.mjs") };
     await expect(run({ files, listener: PID })).rejects.toThrow(/another daemon has taken the hook/);
 });
 
 test("a script naming another daemon's socket is the second link broken", async () => {
-    const files = { ...intact, [PATHS.script]: scriptNaming("/elsewhere/command-gate.sock") };
+    const files = { ...intact, [PATHS.script]: scriptNaming("/elsewhere/command-guard.sock") };
     await expect(run({ files, listener: PID })).rejects.toThrow(/no longer names this daemon's socket/);
 });
 

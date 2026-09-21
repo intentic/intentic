@@ -26,7 +26,7 @@ const io = (overrides: Partial<SelfUpdateIo> & { outcome?: UpgradeOutcome } = {}
 };
 
 describe("selfUpdateBeforeSetup", () => {
-    it("skips under the re-exec guard, so an updated agent can never loop", async () => {
+    it("skips under the re-exec guard, so an updated agent can never agent", async () => {
         const t = io();
         await selfUpdateBeforeSetup(t.io, { [SELF_UPDATE_GUARD_ENV]: "1" }, ["device", "setup"], () => undefined);
         expect(t.upgraded()).toBe(false);

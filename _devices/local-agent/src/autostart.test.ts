@@ -97,9 +97,9 @@ describe("systemdUserUnit", () => {
         expect(unit).toContain(`Environment=PATH=${homedir()}/.local/bin:/usr/local/bin:/usr/bin:/bin`);
     });
 
-    // Routes loop output to the agent's own log, not journald, matching what `status` and the docs point to. `append:`,
+    // Routes agent output to the agent's own log, not journald, matching what `status` and the docs point to. `append:`,
     // not `file:`, keeps the log across restarts.
-    it("writes the loop's output to the agent's own log, appending across restarts", () => {
+    it("writes the agent's output to the agent's own log, appending across restarts", () => {
         const unit = systemdUserUnit(SPEC, BINARY);
         expect(unit).toContain(`StandardOutput=append:${LOG}`);
         expect(unit).toContain(`StandardError=append:${LOG}`);
@@ -126,9 +126,9 @@ const RUN_KEY = "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run";
 const STUB = "C:\\Users\\dev\\.intentic\\sync\\bin\\intentic-launch.exe";
 
 describe("windowsRunAddArgs", () => {
-    // The stub is a GUI-subsystem binary launched with CREATE_NO_WINDOW: no console flashes at logon, and loop output
+    // The stub is a GUI-subsystem binary launched with CREATE_NO_WINDOW: no console flashes at logon, and agent output
     // goes to the log.
-    it("starts the FOREGROUND loop through the stub, logging where the spec says", () => {
+    it("starts the FOREGROUND agent through the stub, logging where the spec says", () => {
         expect(windowsRunAddArgs(SPEC, BINARY, STUB)).toEqual([
             "add",
             RUN_KEY,
@@ -148,7 +148,7 @@ describe("windowsRunAddArgs", () => {
         );
     });
 
-    // No stub (dev checkout, no compiled binary): falls back to the detached command, since a foreground loop without
+    // No stub (dev checkout, no compiled binary): falls back to the detached command, since a foreground agent without
     // a stub would leave a console window open for the session.
     it("falls back to the detached command when no stub is installed", () => {
         expect(windowsRunAddArgs(SPEC, NODE).at(-2)).toBe('"/usr/bin/node" "/opt/intentic/sync/dist/cli.js" "mirror"');

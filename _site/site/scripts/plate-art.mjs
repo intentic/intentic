@@ -1,4 +1,4 @@
-// Regenerates the three background rungs from the master plate (`node scripts/angkor-plate.mjs`, from _site/site). It's
+// Regenerates the three background rungs from the master plate (`node scripts/plate-art.mjs`, from _site/site). It's
 // a CSS background-image by media query, not astro:assets (imports only); output is committed. The master is upscaled
 // deliberately, and encoded as 10-bit AVIF to avoid banding under the dark scrim.
 import { mkdir, writeFile } from "node:fs/promises";
@@ -7,7 +7,7 @@ import { join } from "node:path";
 import sharp from "sharp";
 
 const here = import.meta.dirname;
-const OUT_DIR = join(here, "../public/assets/angkor");
+const OUT_DIR = join(here, "../public/assets/plate");
 
 // One plate per skin, and they are different pictures rather than one picture lit twice. The dark skin's is a
 // photograph of a temple wall, dark enough that cream type sits on it. The maker skin's is drawn: cream parchment,
@@ -30,7 +30,7 @@ await mkdir(OUT_DIR, { recursive: true });
 for (const { master, prefix } of PLATES) {
     for (const { width, quality } of RUNGS) {
         const height = Math.round((width * 9) / 16);
-        const buffer = await sharp(join(here, "../src/assets/angkor", master))
+        const buffer = await sharp(join(here, "../src/assets/plate", master))
             .resize(width, height, { fit: "fill", kernel: "lanczos3" })
             .avif({ quality, effort: 9, chromaSubsampling: "4:4:4", bitdepth: 10 })
             .toBuffer();

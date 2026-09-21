@@ -15,18 +15,18 @@ const stubFacts = async (page: Page): Promise<void> => {
     });
 };
 
-// True once the rail's extensions have activated, when the failure states below become meaningful. A tile is seated
+// True once the rail's extensions have activated, when the failure states below become meaningful. A tile is on the rail
 // only if visited or badging; everything else counts under the More menu.
 const shellReady = async (page: Page): Promise<void> => {
     await expect(page.locator(`nav a[href^="/ext/"], nav [aria-label*="not on the rail"]`).first()).toBeVisible();
 };
 
-// Rows are the areas not currently seated; the menu's label carries a count, matched on its stable half.
+// Rows are the sections not currently on the rail; the menu's label carries a count, matched on its stable half.
 const openMore = async (page: Page): Promise<void> => {
     await page.locator(`nav [aria-label^="More areas"]`).click();
 };
 
-// Takes an unseated area from the menu instead of naming one: which areas badge depends on the fixture, so a hardcoded
+// Takes an offRail area from the menu instead of naming one: which areas badge depends on the fixture, so a hardcoded
 // name breaks for unrelated reasons.
 const anUnseatedArea = async (page: Page): Promise<{ href: string; label: string }> => {
     const keep = page.locator(`button[aria-label^="Keep "]`).first();
@@ -40,7 +40,7 @@ test.beforeEach(async ({ page }) => {
     await stubFacts(page);
 });
 
-test(`a tile opened from More says its seat lasts only as long as the visit`, async ({ page }) => {
+test(`a tile opened from More says its place lasts only as long as the visit`, async ({ page }) => {
     await page.goto(`/agents`);
     await shellReady(page);
     await openMore(page);

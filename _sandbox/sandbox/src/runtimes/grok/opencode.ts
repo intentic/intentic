@@ -12,7 +12,7 @@ import { discoveredCatalog } from "../../agent/models/model-catalog.js";
 import { idCatalog } from "../../agent/models/model-discovery.js";
 import { engineBinary } from "../../engines/engine-resolve.js";
 import type { InputModality } from "../gemini/gemini-models.js";
-import { type CommandGate, consultWith, vendorSubject } from "../../guard/command-gate.js";
+import { type CommandGuard, consultWith, vendorSubject } from "../../guard/command-guard.js";
 import { jsonFile } from "../../store/json-file.js";
 import { discoverXaiModels, isChatModel, SEED_XAI_MODELS } from "./grok-models.js";
 
@@ -94,9 +94,9 @@ const ALLOW_EVERY_PERMISSION: Required<NonNullable<OpenCodeConfig["permission"]>
 
 // Turn gates keyed by OpenCode session id, the only key the detached daemon-wide watcher and a turn's rules share; an
 // ask for an unregistered session gets the standing yes.
-const sessionGates = new Map<string, CommandGate>();
+const sessionGates = new Map<string, CommandGuard>();
 
-export const registerSessionGate = (sessionId: string, gate: CommandGate): void => {
+export const registerSessionGate = (sessionId: string, gate: CommandGuard): void => {
     sessionGates.set(sessionId, gate);
 };
 

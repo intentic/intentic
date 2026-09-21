@@ -1,4 +1,4 @@
-import { DEV_VERSION, type DevicePairing, type DeviceReport, AGENT_STALL_AFTER_MS, HostScopesSchema } from "@intentic/sandbox-contract";
+import { DEV_VERSION, type DevicePairing, type DeviceReport, AGENT_STALL_AFTER_MS, DeviceScopesSchema } from "@intentic/sandbox-contract";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { agentLine, buildSkewLine, conflictLines, linkLine, pairingLine, statusSummary } from "../status.js";
 import { enrollKey, selectPairings, syncSwitchPlan } from "./commands.js";
@@ -221,7 +221,7 @@ describe("pairingLine", () => {
     });
 });
 
-// A pid is not a pulse. The agent keeps its own tunnel listeners on the event loop, so a rejection that escapes
+// A pid is not a pulse. The agent keeps its own tunnel listeners on the event agent, so a rejection that escapes
 // it leaves the process alive with mirroring, the git bridge and file sync all stopped.
 describe("agentLine", () => {
     const NOW = 1_700_000_000_000;
@@ -264,7 +264,7 @@ describe("agentLine", () => {
 });
 
 // The machine is updated and still serving the old agent, which this output had no way to say: the version on
-// its first line is the FILE's, and the loop keeps whatever build it started with.
+// its first line is the FILE's, and the agent keeps whatever build it started with.
 describe("buildSkewLine and the status summary", () => {
     const NOW = 1_700_000_000_000;
     const report = (agent: Omit<DeviceReport["agent"], "installed">, installed: string | undefined): DeviceReport => ({
@@ -284,11 +284,11 @@ describe("buildSkewLine and the status summary", () => {
         expect(line).toContain("intentic-machine run --stop");
     });
 
-    it("says nothing when the loop is already on the installed build", () => {
+    it("says nothing when the agent is already on the installed build", () => {
         expect(buildSkewLine(report({ ...serving, build: "1.240.0" }, "1.240.0"))).toBeUndefined();
     });
 
-    // An unstamped loop is the loudest case, not a missing one: the loop stamps its build into the pidfile it
+    // An unstamped agent is the loudest case, not a missing one: the agent stamps its build into the pidfile it
     // claims, so one reporting none predates the stamp and is further behind than any build it could have named.
     it("names the machines too far behind to say which build they are on", () => {
         const unstamped = report({ running: true, pid: 4242 }, "1.240.0");
@@ -305,8 +305,8 @@ describe("buildSkewLine and the status summary", () => {
         expect(buildSkewLine(report({ running: true, pid: 4242 }, DEV_VERSION))).toBeUndefined();
     });
 
-    // A stopped loop is not serving an old build, it is not serving anything, and the line above it says so louder.
-    it("says nothing about a loop that is not running", () => {
+    // A stopped agent is not serving an old build, it is not serving anything, and the line above it says so louder.
+    it("says nothing about a agent that is not running", () => {
         expect(buildSkewLine(report({ running: false, build: "1.233.0" }, "1.240.0"))).toBeUndefined();
     });
 
@@ -315,7 +315,7 @@ describe("buildSkewLine and the status summary", () => {
         const skewed = report(serving, "1.240.0");
         expect(statusSummary(4242, 0, skewed, NOW)).toContain("OLD BUILD RUNNING");
         expect(statusSummary(4242, 0, report({ ...serving, build: "1.240.0" }, "1.240.0"), NOW)).not.toContain("OLD BUILD");
-        // A stalled loop outranks it: nothing is being served at all, whichever build is doing the not-serving.
+        // A stalled agent outranks it: nothing is being served at all, whichever build is doing the not-serving.
         expect(statusSummary(4242, 0, report({ ...serving, lastTickAt: NOW - AGENT_STALL_AFTER_MS - 60_000 }, "1.240.0"), NOW)).toContain("STALLED");
         expect(statusSummary(undefined, 0, skewed, NOW)).toContain("NOT RUNNING");
     });
@@ -325,7 +325,7 @@ describe("buildSkewLine and the status summary", () => {
 describe("linkLine", () => {
     // Scopes are beside the point for this line and are taken from the schema's own defaults rather than written
     // out here, so a scope added later can't break a test that never looks at one.
-    const link = { sandboxUrl: "https://sandbox-0738cd6b5027.example.dev", id: "radarsu-omen", scopes: HostScopesSchema.parse({}) } as const;
+    const link = { sandboxUrl: "https://sandbox-0738cd6b5027.example.dev", id: "radarsu-omen", scopes: DeviceScopesSchema.parse({}) } as const;
 
     it("says connected only for a socket that is open", () => {
         expect(linkLine({ ...link, state: "open" })).toContain("connected as radarsu-omen");

@@ -128,7 +128,7 @@ const MARKDOWN_OUTLINE_KEY = `ui-markdown-outline`;
 
 // Shell-layout state: chat position/width, sidebar width/collapse, terminal open state; app-local since these are
 // layout concepts, not @intentic/ui primitives. Everything below is an account preference (shared across every window
-// at that seat) except `terminalOpen`, which is per-window, per-sandbox state held via windowStore.ts.
+// at that tile) except `terminalOpen`, which is per-window, per-sandbox state held via windowStore.ts.
 
 // Clamped to a floor and ~95% of the viewport, sliver reserved for the workspace, after subtracting the icon rail's
 // width (the chat column sits beside it) and converting from screen pixels.

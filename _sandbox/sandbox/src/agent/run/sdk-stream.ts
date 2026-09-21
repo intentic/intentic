@@ -8,7 +8,7 @@ import { agentSessionName, browserSessionName } from "@intentic/sandbox-contract
 import { screenshotImage } from "../../browser/cast/browser-artifacts.js";
 import { browserServerOfTool } from "../../browser/sessions/browser-sessions.js";
 import { localCommandText, unknownCommandName } from "../providers/agent-commands.js";
-import type { SteeringQueue } from "../anchors/agent-steering.js";
+import type { SteeringQueue } from "../checkpoints/agent-steering.js";
 import { errorFrame, modelUnavailableFrame, rateLimitFrame, retryStormFrame, trialRetryFrame } from "./error-frames.js";
 import { probeRoutedEndpoint, type RoutedEndpoint } from "../providers/routed-refusal.js";
 import type { TurnAllowance } from "../providers/harness-credentials.js";

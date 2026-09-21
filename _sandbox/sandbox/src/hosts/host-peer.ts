@@ -4,41 +4,41 @@ import {
     HOST_NATIVE_ENVIRONMENT,
     hostEntryOf,
     hostConnectionKey,
-    type hostContract,
+    type deviceContract,
     hostEnvironmentOf,
     type HostEnvironment,
-    type HostFacts,
+    type DeviceFacts,
     type HostHello,
     HostHelloSchema,
-    type HostScopes,
+    type DeviceScopes,
     type HostSummary,
 } from "@intentic/sandbox-contract";
 import type { ContractRouterClient } from "@orpc/contract";
 import { capabilityCtx } from "../capabilities/capability.js";
-import { hostHandler } from "../capabilities/handlers/host.handler.js";
+import { deviceHandler } from "../capabilities/handlers/device.handler.js";
 import type { Services } from "../composition.js";
 import { PEER_BRIDGES, type PeerDoor } from "../peers/peer.js";
 import type { PeerHub } from "../peers/peer-hub.js";
 import { createPeerRoutes } from "../peers/peer-routes.js";
 import type { PeerStore } from "../peers/peer-store.js";
 import { bootstrapEnvironments } from "./environment-bootstrap.js";
-import { commandInCall, judgeHostCommand } from "./host-command-gate.js";
+import { commandInCall, judgeHostCommand } from "./host-command-guard.js";
 
-// The user's own computer as a peer door: @intentic/machine dials in with an enrollment token and serves `hostContract`
+// The user's own computer as a peer door: @intentic/machine dials in with an enrollment token and serves `deviceContract`
 // over that socket. The grant is the `host` capability's config; a `run_command` is judged against the owner's safety
-// policy before it crosses (host-command-gate.ts), and the setup flow can pre-arm a pairing from the container's env
+// policy before it crosses (host-command-guard.ts), and the setup flow can pre-arm a pairing from the container's env
 // (host-seed.ts).
 
-export type HostClient = ContractRouterClient<typeof hostContract>;
+export type HostClient = ContractRouterClient<typeof deviceContract>;
 // @intentic/machine's build version, so an old binary is visible rather than mysteriously missing a tool.
 export interface HostAnnounced {
     readonly version: string;
 }
-export type HostHub = PeerHub<HostClient, HostAnnounced, HostFacts, HostScopes>;
+export type HostHub = PeerHub<HostClient, HostAnnounced, DeviceFacts, DeviceScopes>;
 export type HostStore = PeerStore<Record<string, never>>;
 
 export const HOST_PEER: PeerDoor<HostHello, HostAnnounced, Record<never, never>> = {
-    slug: PEER_BRIDGES.host,
+    slug: PEER_BRIDGES.device,
     noun: "device",
     listKey: "hosts",
     store: {
@@ -54,7 +54,7 @@ export const HOST_PEER: PeerDoor<HostHello, HostAnnounced, Record<never, never>>
         offline: (id) => `"${id}" is not connected right now: the device is asleep, offline, or its agent isn't running.`,
     },
     hello: { schema: HostHelloSchema, announced: (hello) => ({ version: hello.version }) },
-    scopesKind: "host",
+    scopesKind: "device",
     // A machine card is one computer; each OS install on it connects under its own key and is admitted on the card's
     // own switches (peer-routes.ts). The native environment's key is the card id, so a one-OS machine is unchanged.
     cardOf: hostEntryOf,
@@ -94,12 +94,12 @@ export const hostSummaries = async (services: Services): Promise<HostSummary[]> 
     const cards = await services.capabilities.list();
     // A card is what makes a machine a machine, so with none there is nothing for an enrollment to be an environment
     // OF, and the store is not read at all — the ordinary state of a sandbox nobody has connected a computer to.
-    if (!cards.some((capability) => capability.kind === "host")) {
+    if (!cards.some((capability) => capability.kind === "device")) {
         return [];
     }
     const enrolled = (await services.hosts.list()).map((pairing) => pairing.id);
     return cards.flatMap((capability): HostSummary[] => {
-        if (capability.kind !== "host") {
+        if (capability.kind !== "device") {
             return [];
         }
         const environments = environmentsOf(services, capability.id, enrolled);
@@ -147,10 +147,10 @@ export const revokeCardlessHost = async (services: Services, id: string): Promis
     if (id === "" || !(await services.hosts.enrolled(id))) {
         return false;
     }
-    if ((await services.capabilities.list()).some((capability) => capability.kind === "host" && capability.id === id)) {
+    if ((await services.capabilities.list()).some((capability) => capability.kind === "device" && capability.id === id)) {
         return false;
     }
-    await hostHandler.remove?.(capabilityCtx(services), id, {});
+    await deviceHandler.remove?.(capabilityCtx(services), id, {});
     return true;
 };
 

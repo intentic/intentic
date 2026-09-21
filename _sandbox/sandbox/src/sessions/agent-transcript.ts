@@ -1,5 +1,5 @@
 import type { AgentHarness, AgentProvider, ToolCallContent, TranscriptRow, TranscriptTool } from "@intentic/sandbox-contract";
-import type { TurnAnchor, TurnAnchors } from "../agent/anchors/turn-anchors.js";
+import type { TurnCheckpoint, TurnCheckpoints } from "../agent/checkpoints/turn-checkpoints.js";
 import { type SpokenLine, spokenLinesOf } from "./transcript-search.js";
 import { type TranscriptPage, type TranscriptRecord, type TranscriptWindow, windowOf } from "./transcript-record.js";
 
@@ -14,12 +14,12 @@ export interface TranscriptAgent {
 export interface AgentTranscriptDeps {
     readonly record: TranscriptRecord;
     // What each message can be put back to, read per transcript, never stored in it.
-    readonly turnAnchors: TurnAnchors;
+    readonly turnCheckpoints: TurnCheckpoints;
 }
 
 // Stamps each user message with the state it can be put back to, read fresh per call so a rewind's effect appears
 // immediately, not a value frozen into the record. One small file read for the whole conversation.
-const stampAnchors = (messages: readonly TranscriptRow[], anchors: ReadonlyMap<number, TurnAnchor>, from: number): TranscriptRow[] => {
+const stampAnchors = (messages: readonly TranscriptRow[], anchors: ReadonlyMap<number, TurnCheckpoint>, from: number): TranscriptRow[] => {
     if (anchors.size === 0) {
         return [...messages];
     }
@@ -40,7 +40,7 @@ const stampAnchors = (messages: readonly TranscriptRow[], anchors: ReadonlyMap<n
 // The whole conversation, for readers that cannot be given a piece of one (a share, a handoff, a subagent record):
 // truncating would be wrong, not just slower. A tab opening a chat wants `agentTranscriptPage`, which costs less.
 export const agentTranscript = async (deps: AgentTranscriptDeps, agent: TranscriptAgent): Promise<TranscriptRow[]> =>
-    stampAnchors(await deps.record.read(agent.id), await deps.turnAnchors.all(agent.id), 0);
+    stampAnchors(await deps.record.read(agent.id), await deps.turnCheckpoints.all(agent.id), 0);
 
 // What a page carries of one tool call's output. The pane truncates text at 4000 characters of its own accord
 // (toolPresentation.ts TEXT_CAP), so twice that leaves room to raise that cap without a second round trip, and drops the
@@ -69,7 +69,7 @@ const fitRow = (row: TranscriptRow): TranscriptRow => (row.tools === undefined ?
 // `fit` last: it is what makes this a page rather than a read, so a caller's window cannot opt out of it.
 export const agentTranscriptPage = async (deps: AgentTranscriptDeps, agent: TranscriptAgent, window: TranscriptWindow = {}): Promise<TranscriptPage> => {
     const page = await deps.record.window(agent.id, { ...window, fit: fitRow });
-    return { ...page, rows: stampAnchors(page.rows, await deps.turnAnchors.all(agent.id), page.from) };
+    return { ...page, rows: stampAnchors(page.rows, await deps.turnCheckpoints.all(agent.id), page.from) };
 };
 
 // The same page, for a caller holding the whole record in memory: the route fakes answer through it, so a test cannot

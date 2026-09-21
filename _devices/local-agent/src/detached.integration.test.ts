@@ -7,13 +7,13 @@ import { isProcessAlive, livePid, livePidRecord, pidFileBody, spawnDetached, spa
 
 // Tests that a returned pid means something is actually running under it, not which spawn flags were used (the
 // runtime's job).
-const logFile = (): string => join(mkdtempSync(join(tmpdir(), "detached-")), "loop.log");
+const logFile = (): string => join(mkdtempSync(join(tmpdir(), "detached-")), "agent.log");
 
 // A child that outlives the settle window without holding the test open longer than needed.
 const stayAlive = ["-e", "setTimeout(() => {}, 10_000)"];
 
 describe("spawnDetached", () => {
-    it("answers the pid of a loop that is still running, and writes its output to the log", async () => {
+    it("answers the pid of an agent that is still running, and writes its output to the log", async () => {
         const log = logFile();
         const pid = await spawnDetached(log, [process.execPath], ["-e", "console.log('up'); setTimeout(() => {}, 10_000)"]);
 
@@ -22,14 +22,14 @@ describe("spawnDetached", () => {
         process.kill(pid);
     });
 
-    it("refuses to report a loop that died on startup, and names the log that says why", async () => {
+    it("refuses to report an agent that died on startup, and names the log that says why", async () => {
         const log = logFile();
 
         await expect(spawnDetached(log, [process.execPath], ["-e", "console.error('boom'); process.exit(1)"])).rejects.toThrow(log);
         expect(readFileSync(log, "utf8")).toContain("boom");
     });
 
-    it("detaches the loop from the caller, so it is still there once the caller is done with it", async () => {
+    it("detaches the agent from the caller, so it is still there once the caller is done with it", async () => {
         const pid = await spawnDetached(logFile(), [process.execPath], stayAlive);
 
         expect(isProcessAlive(pid)).toBe(true);
@@ -50,12 +50,12 @@ describe.skipIf(process.platform === "win32")("spawnThroughStub", () => {
     // in the two lines of it that this function has to survive.
     const stubThatLeaksItsPipes = (): string => stubFile("#!/bin/sh\nsleep 30 &\necho $!\n");
 
-    it("answers as soon as the stub prints the pid, without waiting on the loop that holds its pipes open", async () => {
+    it("answers as soon as the stub prints the pid, without waiting on the agent that holds its pipes open", async () => {
         const started = Date.now();
         const pid = await spawnThroughStub(stubThatLeaksItsPipes(), logFile(), [process.execPath], stayAlive);
 
         expect(isProcessAlive(pid)).toBe(true);
-        // The loop's own lifetime (30s here, unbounded in production) must not be in this number.
+        // The agent's own lifetime (30s here, unbounded in production) must not be in this number.
         expect(Date.now() - started).toBeLessThan(5_000);
         process.kill(pid);
     });
@@ -83,7 +83,7 @@ describe("livePid", () => {
         return { pid: child.pid, stop: () => void child.kill("SIGKILL") };
     };
 
-    it("answers the pid of a loop this boot wrote down and is still running", async () => {
+    it("answers the pid of an agent this boot wrote down and is still running", async () => {
         const path = pidFile();
         const { pid, stop } = alive();
         try {

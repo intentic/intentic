@@ -1,5 +1,5 @@
 import { plural } from "@intentic/base/format";
-import type { HostScopes, DeviceConflict, DeviceConflictChange, DevicePort, DeviceReport } from "@intentic/sandbox-contract";
+import type { DeviceScopes, DeviceConflict, DeviceConflictChange, DevicePort, DeviceReport } from "@intentic/sandbox-contract";
 import type { PeerLinkState } from "@intentic/sandbox-contract/peer-dial";
 import { buildCommand, type CommandContext } from "@stricli/core";
 import { agentBuildSkew, agentStalled } from "@intentic/sandbox-contract";
@@ -17,7 +17,7 @@ import { MACHINE_VERSION } from "./version.js";
 // reported, by construction.
 export interface DeviceStatus {
     readonly version: string;
-    // The resident loop's pid, absent when it is not running: one loop vouches for both halves.
+    // The resident agent's pid, absent when it is not running: one agent vouches for both halves.
     readonly running?: number;
     // The whole answer as one sentence, for surfaces with room for exactly one line (the desktop app's tray row
     // above all). Composed here so the tray cannot drift from the terminal.
@@ -26,18 +26,18 @@ export interface DeviceStatus {
     readonly sync: DeviceReport;
 }
 
-// One link, as every surface reads it. `state` is what the resident loop last stamped (device/config.ts) and is
+// One link, as every surface reads it. `state` is what the resident agent last stamped (device/config.ts) and is
 // ABSENT when there is no answer rather than defaulted to one: an agent too old to stamp, or a stamp too old to
 // be about now, is a thing this command does not know, not a link that is down.
 export interface StatusLink {
     readonly sandboxUrl: string;
     readonly id: string;
-    readonly scopes: HostScopes;
+    readonly scopes: DeviceScopes;
     readonly state?: PeerLinkState;
 }
 
 // The device half of the summary. A count of LINKS is all this could ever say; a count of connected links is
-// what it can say once the loop stamps them, and the difference is a tray that read "2 sandboxes connected" on a
+// what it can say once the agent stamps them, and the difference is a tray that read "2 sandboxes connected" on a
 // machine that had reached neither. An unknown count keeps the old sentence rather than inventing a worse one.
 const linksHalf = (links: number, connected: number | undefined): string | undefined => {
     if (links === 0) {
@@ -47,7 +47,7 @@ const linksHalf = (links: number, connected: number | undefined): string | undef
     return connected === undefined || connected === links ? `${links} ${sandboxes} connected` : `${connected} of ${links} ${sandboxes} connected`;
 };
 
-// The one-line summary. Health first, since a stopped or stalled loop outranks any count, then the counts in
+// The one-line summary. Health first, since a stopped or stalled agent outranks any count, then the counts in
 // the cards' vocabulary, only for the halves in use.
 export const statusSummary = (running: number | undefined, links: number, sync: DeviceReport, now: number, connected?: number): string => {
     const working = links > 0 || sync.pairings.length > 0;
@@ -69,7 +69,7 @@ export const statusSummary = (running: number | undefined, links: number, sync: 
     // would otherwise conclude the update hadn't worked.
     const skew = agentBuildSkew(sync.agent);
     if (skew !== undefined) {
-        // A loop too old to stamp its own build names only what it is behind: the tray has one line, so "OLD BUILD
+        // A agent too old to stamp its own build names only what it is behind: the tray has one line, so "OLD BUILD
         // RUNNING" plus the version that should be serving is what fits and matters.
         const which = skew.running === undefined ? `${skew.installed} installed` : `${skew.running}, ${skew.installed} installed`;
         return `OLD BUILD RUNNING (${which}) · ${halves.join(" · ")}`;
@@ -79,7 +79,7 @@ export const statusSummary = (running: number | undefined, links: number, sync: 
 
 export const deviceStatus = async (mutagen: string | undefined): Promise<DeviceStatus> => {
     const [pid, links, sync, stamped] = await Promise.all([readResidentPid(), readLinks(), deviceReport(mutagen), readLinkStates()]);
-    /* A loop that is not running holds no sockets, so every link is closed and that needs no stamp to know;. */
+    /* A agent that is not running holds no sockets, so every link is closed and that needs no stamp to know;. */
     const states: readonly (PeerLinkState | undefined)[] = links.map((link) => (pid === undefined ? "closed" : stamped?.[link.sandboxUrl]));
     const connected = states.every((state) => state !== undefined) ? states.filter((state) => state === "open").length : undefined;
     return {
@@ -180,9 +180,9 @@ export const pairingLine = (pairing: DeviceReport["pairings"][number]): string =
     return `  ${pairing.sandboxId}  ${where}${state.length === 0 ? "" : `  [${state.join(", ")}]`}`;
 };
 
-// The loop's line: running, stopped, or the third state that had no words, a live process whose sync loop is
-// gone. The loop holds its tunnel listeners on the event loop, so anything that escapes it leaves a process
-// that is alive with mirroring and the git bridge stopped underneath; a pid is not a pulse, the stamp the loop
+// The agent's line: running, stopped, or the third state that had no words, a live process whose sync agent is
+// gone. The agent holds its tunnel listeners on the event agent, so anything that escapes it leaves a process
+// that is alive with mirroring and the git bridge stopped underneath; a pid is not a pulse, the stamp the agent
 // writes at the end of each pass is (sync/config.ts).
 export const agentLine = (agent: DeviceReport["agent"], now: number): string => {
     if (!agent.running) {
@@ -199,7 +199,7 @@ export const agentLine = (agent: DeviceReport["agent"], now: number): string => 
         : `Agent: running (pid ${agent.pid}), last sync pass ${Math.round(since / 1000)}s ago`;
 };
 
-// The loop is fine and it is the wrong build, a sentence this output had no way to write before: the version
+// The agent is fine and it is the wrong build, a sentence this output had no way to write before: the version
 // on the first line is the file's, and a machine updated but never restarted printed a clean bill of health
 // with the old agent's behaviour underneath.
 export const buildSkewLine = (report: DeviceReport): string | undefined => {
@@ -207,13 +207,13 @@ export const buildSkewLine = (report: DeviceReport): string | undefined => {
     if (skew === undefined) {
         return undefined;
     }
-    // A loop that predates the build stamp cannot name itself, and that is the furthest-behind case rather than an
+    // A agent that predates the build stamp cannot name itself, and that is the furthest-behind case rather than an
     // unknown one.
     const which =
         skew.running === undefined
             ? `Agent: running a build older than the ${skew.installed} installed on this machine (too old to report its own version)`
             : `Agent: running ${skew.running}, but ${skew.installed} is installed on this machine`;
-    return `${which} — the loop keeps the build it started with. Restart it with \`intentic-machine run --stop\` then \`intentic-machine run\`.`;
+    return `${which} — the agent keeps the build it started with. Restart it with \`intentic-machine run --stop\` then \`intentic-machine run\`.`;
 };
 
 /* ONE LINK'S LINE, and the word in it that was not earned. */
@@ -316,7 +316,7 @@ const NOTHING_CONNECTED = [
 
 // Status leads with the one-line summary, the same sentence the desktop app's tray shows, so the question a person
 // arrives with ("is my machine connected, is my folder syncing") is answered before anything is enumerated. The
-// agent's liveness sits with its version, since a healthy-looking list under a dead loop means every promise below
+// agent's liveness sits with its version, since a healthy-looking list under a dead agent means every promise below
 // it is quietly broken.
 export const status = buildCommand<StatusFlags>({
     docs: { brief: "Show what this machine's agent is connected to, syncing, and mirroring, and whether it is alive" },
@@ -348,7 +348,7 @@ export const status = buildCommand<StatusFlags>({
         out(report.summary);
         out("");
         out(`intentic-machine v${report.version}`);
-        // The loop's liveness is the whole of sync's liveness, not just mirroring's: it holds the SSH transport every
+        // The agent's liveness is the whole of sync's liveness, not just mirroring's: it holds the SSH transport every
         // session rides (sync/tunnel.ts). Said once, here, where the version it is running is also stated.
         out(agentLine(report.sync.agent, Date.now()));
         const skew = buildSkewLine(report.sync);

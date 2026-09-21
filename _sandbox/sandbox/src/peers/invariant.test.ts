@@ -30,7 +30,7 @@ const run = async (
     name: string,
     enrolled: readonly string[],
     connected: readonly string[],
-    cards: readonly Capability[] = enrolled.flatMap((id) => [card(id, "host"), card(id, "webext")]),
+    cards: readonly Capability[] = enrolled.flatMap((id) => [card(id, "device"), card(id, "webext")]),
 ): Promise<void> => {
     const quiet = door([], []);
     const under = door(enrolled, connected);
@@ -72,7 +72,7 @@ test("an enrollment every card still holds reports nothing, connected or not", a
 });
 
 test("an enrollment no card holds is named, since nothing on either screen would list it", async () => {
-    await expect(run("enrolled-devices-have-cards", ["laptop", "ghost"], [], [card("laptop", "host")])).rejects.toThrow(
+    await expect(run("enrolled-devices-have-cards", ["laptop", "ghost"], [], [card("laptop", "device")])).rejects.toThrow(
         /no capability card \(ghost\).*no screen lists/,
     );
     await expect(run("enrolled-browsers-have-cards", ["old-chrome"], [], [])).rejects.toThrow(/no capability card \(old-chrome\)/);

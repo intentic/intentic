@@ -13,7 +13,7 @@ import type { AgentWorktrees } from "../worktrees/worktrees.js";
 
 // Anchor for measuring an agent's delta: `landedTip` for the incremental remainder, otherwise merge-base with main.
 // The frozen creation-time base is only a last resort; a rebase invalidates it while merge-base moves with the sync.
-export const anchorOf = async (
+export const checkpointOf = async (
     // Worktree while the checkout is attached, main repo once retired; the object store is shared either way.
     dir: string,
     main: string,
@@ -83,7 +83,7 @@ const agentRepoScope = async (
     return {
         dir,
         attached,
-        from: await anchorOf(dir, main, entry.branch, span === "outstanding" ? composed.landedTip : undefined, composed.base, git),
+        from: await checkpointOf(dir, main, entry.branch, span === "outstanding" ? composed.landedTip : undefined, composed.base, git),
     };
 };
 

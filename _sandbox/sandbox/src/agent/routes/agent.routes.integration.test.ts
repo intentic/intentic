@@ -368,7 +368,7 @@ test("a dismissed question settles the turn's books on the branch, and lands not
             services({
                 agentWorktrees: worktrees,
                 // A real before-state to pin; the one suite that reaches the turn-anchor store.
-                turnAnchors: { record: async () => {}, of: async () => undefined, all: async () => new Map(), truncate: async () => {} },
+                turnCheckpoints: { record: async () => {}, of: async () => undefined, all: async () => new Map(), truncate: async () => {} },
                 async *agent(request) {
                     await writeFile(join(worktree, "app.ts"), "line one\nthe agent's work\n");
                     const { id, wait } = createRequest("question", { kind: "question", requestId: "", cancelled: true }, request.conversationId);
@@ -397,7 +397,7 @@ test("an isolated turn announces the state its message can be rewound to, and fi
         createApp(
             services({
                 agentWorktrees: worktrees,
-                turnAnchors: {
+                turnCheckpoints: {
                     record: async (_id: string, index: number, anchor: { kind: string }) => void filed.push({ index, kind: anchor.kind }),
                     of: async () => undefined,
                     all: async () => new Map(),

@@ -24,7 +24,7 @@ const fleetEntry = async (services: Services): Promise<FleetConfig | undefined> 
 // Which machines this sandbox can act on. `host`-kind capabilities are the connected computers; `self` is the one
 // running this container, when that has already been read (never forced, so a sleeping laptop costs nothing here).
 const reachableDevices = async (services: Services): Promise<{ ids: readonly string[]; self: string | undefined }> => ({
-    ids: (await services.capabilities.list()).filter((capability) => capability.kind === "host").map((capability) => capability.id),
+    ids: (await services.capabilities.list()).filter((capability) => capability.kind === "device").map((capability) => capability.id),
     self: await hostRunningSelf(services),
 });
 

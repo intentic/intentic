@@ -64,8 +64,8 @@
         "agentAliveStoppedMaking": "Sein Agent lebt, dreht aber keine Runden mehr — das Bild, das diese Sandbox von seinen Ordnern und Ports hat, ist so alt wie die letzte Runde.",
         "commands": "Befehle",
         "folders": "Ordner",
-        "loopKeepsBuildStarted": "Eine Schleife behält den Build, mit dem sie gestartet ist, bis sie neu startet — die Datei auf der Platte zu ersetzen ändert für sich genommen nichts.",
         "ports": "Ports",
+        "processKeepsBuildStarted": "Eine Schleife behält den Build, mit dem sie gestartet ist, bis sie neu startet — die Datei auf der Platte zu ersetzen ändert für sich genommen nichts.",
         "restartAgent": "Agent neu starten",
         "stopsStartsDevicesAgent": "Stoppt und startet die Agent-Schleife dieses Geräts. Es wird nichts heruntergeladen — es kommt der Build hoch, der dort schon installiert ist."
     },

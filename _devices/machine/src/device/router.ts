@@ -1,5 +1,5 @@
 import { narrate } from "@intentic/base/async";
-import { type HostScopes, type DeviceFlowLine, type DeviceSandboxFlow, type DeviceSandboxOp, hostContract } from "@intentic/sandbox-contract";
+import { type DeviceScopes, type DeviceFlowLine, type DeviceSandboxFlow, type DeviceSandboxOp, deviceContract } from "@intentic/sandbox-contract";
 import { implement } from "@orpc/server";
 import { handleMcpMessage } from "./mcp.js";
 import { hostFacts } from "./tools/describe.js";
@@ -20,8 +20,8 @@ import {
 // that serves are independent, oRPC's websocket adapter attaches to any socket-like object. `scopes` is a live
 // reference: `setScopes` takes effect on the very next tool call, not at the next reconnect.
 export interface HostRuntime {
-    readonly scopes: () => HostScopes;
-    readonly setScopes: (scopes: HostScopes) => void;
+    readonly scopes: () => DeviceScopes;
+    readonly setScopes: (scopes: DeviceScopes) => void;
     readonly log: (message: string) => void;
 }
 
@@ -31,7 +31,7 @@ const streamFlow = (run: (onLine: (line: string) => void) => Promise<string>): A
     narrate(run, (outcome): DeviceFlowLine => (outcome.ok ? { kind: "result", message: outcome.value } : { kind: "error", message: outcome.error }));
 
 type Flow = (onLine: (line: string) => void) => Promise<string>;
-type FlowFor = (flow: DeviceSandboxFlow, scopes: HostScopes) => Flow;
+type FlowFor = (flow: DeviceSandboxFlow, scopes: DeviceScopes) => Flow;
 
 // A container that belongs to the asking sandbox rather than to a person; `slug` is the runner's name. The parent's
 // shape rides to `ic` as files, so the runner starts as its twin instead of a bare base image.
@@ -106,7 +106,7 @@ const FLOWS: Record<DeviceSandboxOp, FlowFor> = {
 };
 
 export const createHostRouter = (runtime: HostRuntime) => {
-    const os = implement(hostContract);
+    const os = implement(deviceContract);
     return os.router({
         describe: os.describe.handler(async () => await hostFacts(runtime.scopes())),
         setScopes: os.setScopes.handler(({ input }) => {

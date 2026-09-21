@@ -1,11 +1,11 @@
-import type { HostScopes } from "@intentic/sandbox-contract";
+import type { DeviceScopes } from "@intentic/sandbox-contract";
 import { expect, test } from "vitest";
 import { ScopeError } from "../policy.js";
 import { AGENT_VERB, runAgentOp } from "./agent.js";
 
 /* THE TWO THINGS ABOUT THIS TOOL THAT ARE DECISIONS RATHER THAN PLUMBING. */
 
-const scopes = (overrides: Partial<HostScopes> = {}): HostScopes => ({
+const scopes = (overrides: Partial<DeviceScopes> = {}): DeviceScopes => ({
     shell: "on",
     write: "on",
     screen: "on",

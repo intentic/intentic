@@ -132,19 +132,19 @@ const backToSetup = async (): Promise<void> => {
                 <!-- STEP-UP: the proof was taken, the sandbox wants its passkey. -->
                 <template v-if="stepUp">
                     <h2 class="text-lg font-semibold text-content">
-                        {{ stepUp.enrolled ? t(`sandbox.signinGate.confirm`) : t(`sandbox.signinGate.addPasskeyToContinue`) }}
+                        {{ stepUp.enrolled ? t(`sandbox.signInWall.confirm`) : t(`sandbox.signInWall.addPasskeyToContinue`) }}
                     </h2>
                     <p class="text-sm text-muted">
-                        <template v-if="stepUp.enrolled">{{ t(`sandbox.signinGate.sandboxOnlyOpensPasskey`) }}</template>
+                        <template v-if="stepUp.enrolled">{{ t(`sandbox.signInWall.sandboxOnlyOpensPasskey`) }}</template>
                         <template v-else>
-                            {{ t(`sandbox.signinGate.ownerSandboxRequiresPasskey`) }}
+                            {{ t(`sandbox.signInWall.ownerSandboxRequiresPasskey`) }}
                         </template>
                     </p>
                     <Notice v-if="notice" :of="notice" class="w-full text-left" />
                     <template v-if="passkeysWork">
                         <Button
                             v-if="stepUp.enrolled"
-                            :label="t(`sandbox.signinGate.usePasskey`)"
+                            :label="t(`sandbox.signInWall.usePasskey`)"
                             class="mt-2 w-full justify-center"
                             :loading="busy"
                             @click="usePasskey"
@@ -156,18 +156,18 @@ const backToSetup = async (): Promise<void> => {
                                 v-model="label"
                                 type="text"
                                 autocomplete="off"
-                                :placeholder="t(`sandbox.signinGate.nameEGWork`)"
+                                :placeholder="t(`sandbox.signInWall.nameEGWork`)"
                                 :class="ui.inputSm(`w-full`)"
                             />
-                            <Button type="submit" :label="t(`sandbox.signinGate.addPasskey`)" class="w-full justify-center" :loading="busy">
+                            <Button type="submit" :label="t(`sandbox.signInWall.addPasskey`)" class="w-full justify-center" :loading="busy">
                                 <template #icon><Icon name="key" /></template>
                             </Button>
                         </form>
                     </template>
-                    <p v-else class="text-sm text-muted">{{ t(`sandbox.signinGate.windowCantUsePasskeys`) }}</p>
+                    <p v-else class="text-sm text-muted">{{ t(`sandbox.signInWall.windowCantUsePasskeys`) }}</p>
                     <!-- The owner's way back in from a browser with no passkey: one of the codes shown when the rule went on. -->
                     <form v-if="isOwner" class="mt-3 flex w-full flex-col gap-2 border-t border-line pt-3" @submit.prevent="recover">
-                        <span class="text-2xs text-subtle">{{ t(`sandbox.signinGate.lostPasskeysUseOne`) }}</span>
+                        <span class="text-2xs text-subtle">{{ t(`sandbox.signInWall.lostPasskeysUseOne`) }}</span>
                         <div class="flex gap-2">
                             <input
                                 v-model="code"
@@ -179,7 +179,7 @@ const backToSetup = async (): Promise<void> => {
                             />
                             <Button
                                 type="submit"
-                                :label="t(`sandbox.signinGate.useCode`)"
+                                :label="t(`sandbox.signInWall.useCode`)"
                                 size="small"
                                 severity="secondary"
                                 :disabled="busy || code.trim() === ``"
@@ -190,12 +190,12 @@ const backToSetup = async (): Promise<void> => {
 
                 <!-- CHOOSE: nothing in hand yet. -->
                 <template v-else>
-                    <h2 class="text-lg font-semibold text-content">{{ t(`sandbox.signinGate.signInToReach`) }}</h2>
+                    <h2 class="text-lg font-semibold text-content">{{ t(`sandbox.signInWall.signInToReach`) }}</h2>
                     <p class="text-sm text-muted">
-                        <template v-if="desktop">{{ t(`sandbox.signinGate.intenticSignsInThrough`) }}</template>
-                        <template v-else>{{ t(`sandbox.signinGate.continueGoogleToSecurely`) }}</template>
+                        <template v-if="desktop">{{ t(`sandbox.signInWall.intenticSignsInThrough`) }}</template>
+                        <template v-else>{{ t(`sandbox.signInWall.continueGoogleToSecurely`) }}</template>
                         <template v-if="user?.email">
-                            {{ t(`sandbox.signinGate.useIntenticAccount`) }} <span class="font-medium text-content">{{ user.email }}</span
+                            {{ t(`sandbox.signInWall.useIntenticAccount`) }} <span class="font-medium text-content">{{ user.email }}</span
                             >.
                         </template>
                     </p>
@@ -203,7 +203,7 @@ const backToSetup = async (): Promise<void> => {
                     <!-- Google's own button does nothing when clicked here, so the desktop app hands off to the real browser instead. -->
                     <Button
                         v-if="desktop"
-                        :label="t(`sandbox.signinGate.continueGoogleInBrowser`)"
+                        :label="t(`sandbox.signInWall.continueGoogleInBrowser`)"
                         severity="secondary"
                         class="mt-2 w-full justify-center"
                         @click="signInOutside"
@@ -213,9 +213,9 @@ const backToSetup = async (): Promise<void> => {
                     <!-- `color-scheme: light` matches Google's button iframe so the browser paints no opaque canvas behind it. -->
                     <div v-else ref="btn" class="mt-2 flex justify-center" style="color-scheme: light"></div>
                     <template v-if="passkeyOffered">
-                        <span class="text-2xs uppercase tracking-wide text-subtle">{{ t(`sandbox.signinGate.or`) }}</span>
+                        <span class="text-2xs uppercase tracking-wide text-subtle">{{ t(`sandbox.signInWall.or`) }}</span>
                         <Button
-                            :label="t(`sandbox.signinGate.usePasskey2`)"
+                            :label="t(`sandbox.signInWall.usePasskey2`)"
                             severity="secondary"
                             class="w-full justify-center"
                             :loading="busy"
@@ -227,7 +227,7 @@ const backToSetup = async (): Promise<void> => {
                 </template>
 
                 <button type="button" :class="ui.textAction(`mt-1 text-subtle`)" v-action="backToSetup">
-                    {{ t(`sandbox.signinGate.backToSetup`) }}
+                    {{ t(`sandbox.signInWall.backToSetup`) }}
                 </button>
             </div>
         </div>

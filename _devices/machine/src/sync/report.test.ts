@@ -66,14 +66,14 @@ describe("buildReport", () => {
         expect(Object.keys(report({ pairings: [pairing({ sandboxId: "work" })] }))).not.toContain("sandboxes");
     });
 
-    it("carries the agent, because everything else is only true while its loop runs", () => {
+    it("carries the agent, because everything else is only true while its agent runs", () => {
         expect(report({ pairings: [] }).agent).toEqual(AGENT);
         expect(buildReport({ pairings: [] }, undefined, { running: false }, 1).agent).toEqual({ running: false });
     });
 
     // Installed and running are two separate facts: a device updated but not restarted has different `build` and
     // `installed`, invisible if collapsed to one number.
-    it("reports the installed agent and the running loop as separate builds of one block", () => {
+    it("reports the installed agent and the running agent as separate builds of one block", () => {
         const built = buildReport({ pairings: [] }, undefined, { running: true, pid: 4242, build: "1.1.0", installed: "1.2.0" }, 1);
         expect(built.agent.installed).toBe("1.2.0");
         expect(built.agent.build).toBe("1.1.0");

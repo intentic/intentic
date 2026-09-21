@@ -7,7 +7,7 @@ import { MACHINE_VERSION } from "./version.js";
 
 // Which build is installed on this machine (the file at `agentPath`), as opposed to which one is running
 // (resident.ts's readResidentBuild): replacing the binary doesn't touch a live process, so the two drift, and a
-// reader that only asks the compiled-in version can report a build the loop stopped serving releases ago.
+// reader that only asks the compiled-in version can report a build the agent stopped serving releases ago.
 // When this process IS that unchanged file, its own compiled version is free; otherwise the file is asked what
 // it is, once per version of it. No installed agent at all answers undefined, read as "not known".
 
@@ -38,7 +38,7 @@ const IS_INSTALLED_AGENT = ((): boolean => {
     }
 })();
 
-// One probe per version of the file: the resident loop asks on every report it builds.
+// One probe per version of the file: the resident agent asks on every report it builds.
 let probed: { readonly of: string; readonly version: string | undefined } | undefined;
 
 const probe = (of: string): string | undefined => {

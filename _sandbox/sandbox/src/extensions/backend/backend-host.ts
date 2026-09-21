@@ -5,7 +5,7 @@ import type { BackendRouteHandler, ExtensionServerApi, ExtensionServerModule } f
 import {
     BACKEND_HOST_HEADER,
     type BackendExtensionStatus,
-    type BackendHostConfig,
+    type BackendDeviceConfig,
     type BackendHostExtension,
     EXTENSION_TOKEN_HEADER,
 } from "./backend-host-config.js";
@@ -30,7 +30,7 @@ const resolveModule = (imported: Partial<ExtensionServerModule> & { default?: Ex
     return resolved as ExtensionServerModule;
 };
 
-const loadOne = async (config: BackendHostConfig, extension: BackendHostExtension): Promise<LoadedExtension> => {
+const loadOne = async (config: BackendDeviceConfig, extension: BackendHostExtension): Promise<LoadedExtension> => {
     // Mount slot; a second call to mount replaces the first, per the API contract.
     let mounted: BackendRouteHandler | undefined;
     const api: ExtensionServerApi = {
@@ -97,7 +97,7 @@ export interface BackendHostApp {
     readonly statuses: readonly BackendExtensionStatus[];
 }
 
-export const createBackendHostApp = async (config: BackendHostConfig): Promise<BackendHostApp> => {
+export const createBackendHostApp = async (config: BackendDeviceConfig): Promise<BackendHostApp> => {
     const loaded = new Map<string, LoadedExtension>();
     for (const extension of config.extensions) {
         loaded.set(extension.id, await loadOne(config, extension));

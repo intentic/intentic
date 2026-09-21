@@ -64,10 +64,10 @@
         "agentAliveStoppedMaking": "Its agent is alive but has stopped making rounds, so this sandbox's picture of its folders and ports is as old as the last one.",
         "commands": "Commands",
         "folders": "Folders",
-        "loopKeepsBuildStarted": "A loop keeps the build it started with until it restarts, so replacing the file on disk changes nothing on its own.",
+        "processKeepsBuildStarted": "The running agent keeps the build it started with until it restarts, so replacing the file on disk changes nothing on its own.",
         "ports": "Ports",
         "restartAgent": "Restart agent",
-        "stopsStartsDevicesAgent": "Stops and starts this device's agent loop. Nothing is downloaded — the build already installed there is the one that comes up."
+        "stopsStartsDevicesAgent": "Stops and starts this device's agent process. Nothing is downloaded — the build already installed there is the one that comes up."
     },
     "deviceAgentGroup": {
         "agent": "Agent",

@@ -11,7 +11,7 @@ import { archToken, download, exe, osToken } from "./sync/mutagen.js";
 // Upgrades the agent in place. Every step before the swap is reversible and the swap is last: on any failure,
 // the old binary is restored and restarted. Renamed rather than overwritten, since Windows refuses to unlink or
 // overwrite a running executable.
-// download beside target → probe the new binary → stop the loop → swap (keep the old one) → start it → confirm the loop
+// download beside target → probe the new binary → stop the agent → swap (keep the old one) → start it → confirm the agent
 // that came up is the new build
 
 // The published asset URL, resolved the same way device.sh/sync.sh do. Pinned to a tag when known, since a part
@@ -54,12 +54,12 @@ const probeVersion = (binary: string): Probe => {
 };
 
 // What an upgrade did, as a value the command prints and tests assert. `restarted` already had the right bytes
-// but served the old build; `loop-behind` is a swap that landed but didn't take.
+// but served the old build; `agent-behind` is a swap that landed but didn't take.
 export type UpgradeOutcome =
     | { readonly kind: "current"; readonly version: string; readonly note?: string }
     | { readonly kind: "restarted"; readonly from: string; readonly to: string }
     | { readonly kind: "upgraded"; readonly from: string; readonly to: string }
-    | { readonly kind: "loop-behind"; readonly installed: string; readonly running?: string }
+    | { readonly kind: "agent-behind"; readonly installed: string; readonly running?: string }
     | { readonly kind: "failed"; readonly reason: string };
 
 // The upgrade's effects behind one seam, so step order (the part worth getting right) is testable without a
@@ -70,10 +70,10 @@ export interface UpgradeExec {
     readonly probe: (binary: string) => Probe;
     readonly swap: (from: string, to: string) => Promise<void>;
     readonly stopWatcher: () => Promise<number | undefined>;
-    // Starts the loop and returns the build that came up, undefined if none. A plain "is it alive" check can't tell
+    // Starts the agent and returns the build that came up, undefined if none. A plain "is it alive" check can't tell
     // a failed swap or a supervisor race from success.
     readonly startWatcher: () => Promise<string | undefined>;
-    /** What the loop holding the pidfile right now is running, undefined when nothing holds it. */
+    /** What the agent holding the pidfile right now is running, undefined when nothing holds it. */
     readonly runningBuild: () => Promise<string | undefined>;
     readonly discard: (path: string) => Promise<void>;
 }
@@ -128,21 +128,21 @@ const stagingFor = (published: string | undefined): { readonly path: string; rea
         ? { path: `${agentPath}.new`, says: `Downloading the current agent…` }
         : { path: `${agentPath}.new-${published}`, says: `Downloading the current agent (${published})…` };
 
-// The binary can be current while the loop isn't: replacing the file doesn't touch the process. Reconciles only
-// the skew; an already-current loop, or none running at all, is left alone.
-const reconcileLoop = async (exec: UpgradeExec, installed: string, log: Log): Promise<UpgradeOutcome> => {
+// The binary can be current while the agent isn't: replacing the file doesn't touch the process. Reconciles only
+// the skew; an already-current agent, or none running at all, is left alone.
+const reconcileAgent = async (exec: UpgradeExec, installed: string, log: Log): Promise<UpgradeOutcome> => {
     const running = await exec.runningBuild();
     if (running === undefined || running === installed) {
         return { kind: "current", version: installed };
     }
-    log(`The background loop is still running ${running}: restarting it on ${installed}.`);
+    log(`The background agent is still running ${running}: restarting it on ${installed}.`);
     // No stop of our own: starting already stops whatever holds the pidfile first (resident.ts); a second stop here
     // would just add a timeout.
     const came = await exec.startWatcher();
     if (came === installed) {
         return { kind: "restarted", from: running, to: installed };
     }
-    return { kind: "loop-behind", installed, ...(came === undefined ? {} : { running: came }) };
+    return { kind: "agent-behind", installed, ...(came === undefined ? {} : { running: came }) };
 };
 
 // Whether the watcher must be running when this is over: put it back the way it was, since `--stop` and
@@ -159,8 +159,8 @@ export const runUpgrade = async (
     // second one.
     const published = await exec.published();
     if (published !== undefined && installed !== DEV_VERSION && !isNewer(published, installed)) {
-        // Nothing to download isn't nothing to do: the loop may still serve an older build than this machine's file.
-        return await reconcileLoop(exec, installed, log);
+        // Nothing to download isn't nothing to do: the agent may still serve an older build than this machine's file.
+        return await reconcileAgent(exec, installed, log);
     }
     const { path: staged, says } = stagingFor(published);
     const previous = `${agentPath}.previous`;
@@ -183,9 +183,9 @@ export const runUpgrade = async (
         await exec.discard(staged);
         // Nothing installed, but "not newer than mine" is the case the short-circuit above already handles, reached
         // here
-        // after a failed channel read. The two noted verdicts are left alone: bouncing that loop isn't this command's
+        // after a failed channel read. The two noted verdicts are left alone: bouncing that agent isn't this command's
         // business.
-        return verdict.outcome.kind === "current" && verdict.outcome.note === undefined ? await reconcileLoop(exec, installed, log) : verdict.outcome;
+        return verdict.outcome.kind === "current" && verdict.outcome.note === undefined ? await reconcileAgent(exec, installed, log) : verdict.outcome;
     }
     const candidate = verdict.version;
     const wasRunning = (await exec.stopWatcher()) !== undefined;
@@ -201,12 +201,12 @@ export const runUpgrade = async (
         await exec.discard(previous);
         return { kind: "upgraded", from: installed, to: candidate };
     }
-    // A loop came up that isn't what was just installed. Not a failed upgrade (the bytes are in place, rolling back
+    // A agent came up that isn't what was just installed. Not a failed upgrade (the bytes are in place, rolling back
     // would undo real work), but something else is still serving: a survived process, a supervisor restart, a second
     // install.
     if (came !== undefined) {
         await exec.discard(previous);
-        return { kind: "loop-behind", installed: candidate, running: came };
+        return { kind: "agent-behind", installed: candidate, running: came };
     }
     // The rollback: the new agent answered `version` but couldn't stay up, a machine-specific failure (bad config, a
     // port it can't bind) no smoke test catches. Leaving it installed would trade merely-outdated for no working sync
@@ -283,16 +283,16 @@ export const upgradeMessage = (outcome: UpgradeOutcome): string => {
     if (outcome.kind === "upgraded") {
         return `Upgraded the agent: ${outcome.from} → ${outcome.to}.`;
     }
-    // Both loop outcomes name which build is serving: the number every surface shows and users came to change.
+    // Both agent outcomes name which build is serving: the number every surface shows and users came to change.
     if (outcome.kind === "restarted") {
-        return `Already on the current agent (${outcome.to}), but the background loop was still running ${outcome.from}: restarted it, so ${outcome.to} is what's serving now.`;
+        return `Already on the current agent (${outcome.to}), but the background agent was still running ${outcome.from}: restarted it, so ${outcome.to} is what's serving now.`;
     }
-    if (outcome.kind === "loop-behind") {
+    if (outcome.kind === "agent-behind") {
         // Two different machines: one still serving an older build, one left serving nothing. The second only follows a
         // restart that was asked for, so it names the command to undo it.
         return outcome.running === undefined
-            ? `The agent on this machine is ${outcome.installed}, but the background loop didn't come back up. Start it with \`intentic-machine run\` and check its log.`
-            : `The agent on this machine is ${outcome.installed}, but the background loop is running ${outcome.running}. Stop it with \`intentic-machine run --stop\`, then start it with \`intentic-machine run\`.`;
+            ? `The agent on this machine is ${outcome.installed}, but the background agent didn't come back up. Start it with \`intentic-machine run\` and check its log.`
+            : `The agent on this machine is ${outcome.installed}, but the background agent is running ${outcome.running}. Stop it with \`intentic-machine run --stop\`, then start it with \`intentic-machine run\`.`;
     }
     return `Upgrade didn't happen: ${outcome.reason}`;
 };

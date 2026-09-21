@@ -1,7 +1,7 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import type { Logger } from "pino";
-import { activeTurnCount } from "../agent/anchors/agent-steering.js";
+import { activeTurnCount } from "../agent/checkpoints/agent-steering.js";
 import { listSubagentSessions, subagentRunning } from "../agent/subagents/subagents.js";
 import { armedWatcherCount } from "../agent/verification/watchers.js";
 import { connectedCount } from "./presence.js";

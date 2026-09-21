@@ -50,7 +50,7 @@ export interface Vocabulary {
     readonly changes: string;
     readonly pendingChange: string;
     readonly pendingChanges: string;
-    // The file tree's own tile, and the home seat's: the same tile for a developer, two for a maker.
+    // The file tree's own tile, and the home tile's: the same tile for a developer, two for a maker.
     readonly workspace: string;
     readonly home: string;
     readonly preview: string;

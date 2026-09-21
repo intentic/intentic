@@ -16,7 +16,7 @@ import {
     BACKEND_HOST_HEADER,
     type BackendExtensionStatus,
     type BackendHealth,
-    type BackendHostConfig,
+    type BackendDeviceConfig,
     type BackendHostExtension,
 } from "./backend-host-config.js";
 
@@ -190,7 +190,7 @@ export const createExtensionBackend = (services: () => ExtensionHost, daemonPort
         state = { state: "starting", extensions: collected.reported };
         const port = await freePort();
         const hostToken = randomBytes(32).toString("hex");
-        const config: BackendHostConfig = {
+        const config: BackendDeviceConfig = {
             port,
             hostToken,
             daemonUrl: `http://127.0.0.1:${daemonPort}`,

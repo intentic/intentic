@@ -2,7 +2,7 @@ import type { Disposable, ViewRegistration } from "@intentic/extension-api";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ref } from "vue";
 
-// The registry's rail table asks who is reading (a guest gets two seats); this is about warming, so everyone is the owner.
+// The registry's rail table asks who is reading (a guest gets two tiles); this is about warming, so everyone is the owner.
 vi.mock(`../../../features/sandbox/secrets/useRole`, () => ({ useRole: () => ({ isGuest: ref(false) }) }));
 
 import { registerView } from "../../../core-views/registry";

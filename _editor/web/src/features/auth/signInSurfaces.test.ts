@@ -49,13 +49,13 @@ vi.mock(`../../lib/useApi`, () => ({ apiClient: { desktop: { handoff: vi.fn() } 
 
 const { default: Login } = await import("./Login.vue");
 const { default: DesktopAuth } = await import("./DesktopAuth.vue");
-const { default: SigninGate } = await import("../sandbox/gates/SigninGate.vue");
+const { default: SignInWall } = await import("../sandbox/gates/SignInWall.vue");
 
 // Membership rule: any surface that can put a sign-in in front of someone, not just ones that import Google (which
 // would miss the gate).
 const SURFACES = [
     { name: `the login screen`, component: Login },
-    { name: `the workspace's sandbox gate`, component: SigninGate },
+    { name: `the workspace's sandbox gate`, component: SignInWall },
     { name: `the desktop hand-off page`, component: DesktopAuth },
 ] as const;
 

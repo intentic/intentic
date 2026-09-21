@@ -5,7 +5,7 @@ import { useDraft } from "../../../../lib/useDraft";
 import { useT } from "@intentic/ui/i18n";
 
 // Replaces six regex-verdict pickers, which couldn't tell a real `rm -rf /` from one quoted in a README; danger is now
-// judged by a model reading this text (guard/command-gate.ts runs it, the contract's safety-policy.ts argues the
+// judged by a model reading this text (guard/command-guard.ts runs it, the contract's safety-policy.ts argues the
 // design). Edited as markdown, so the assistant can edit it too, with an explicit save since every new turn reads this
 // file live.
 

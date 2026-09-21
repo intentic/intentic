@@ -120,7 +120,7 @@ test(`the public address is the floor, dialled as it is and without a loopback c
     await connection.done;
 });
 
-// One agent holds a link per sandbox and the dial loop's own complaints carry no address: unprefixed, a machine
+// One agent holds a link per sandbox and the dial agent's own complaints carry no address: unprefixed, a machine
 // with five links wrote "disconnected (1002); 7172 failed attempts" for two days without naming one of them, and
 // nothing in the log could tell the dead links from the live one.
 test(`a drop names the sandbox that went away, not just the close code`, async () => {
@@ -165,7 +165,7 @@ test(`asks again on every reconnect, so a container that went away falls back to
     await connection.done;
 });
 
-// A stop mid-resolution must open no socket afterward: one dialled by a loop already reported done would be
+// A stop mid-resolution must open no socket afterward: one dialled by a agent already reported done would be
 // a connection nobody stops.
 test(`a stop during resolution opens no socket`, async () => {
     let answer: ((base: DaemonBase) => void) | undefined;
@@ -193,9 +193,9 @@ test(`a stop during resolution opens no socket`, async () => {
     expect(sockets).toHaveLength(0);
 });
 
-// A refused enrollment is a decision: the loop must end rather than resolve an address for a door that is
+// A refused enrollment is a decision: the agent must end rather than resolve an address for a door that is
 // locked.
-test(`a refused enrollment ends the loop instead of redialling`, async () => {
+test(`a refused enrollment ends the agent instead of redialling`, async () => {
     vi.useFakeTimers();
     const { dial, sockets, asked } = dialing([{ base: LOCAL, local: true }]);
     const said: string[] = [];

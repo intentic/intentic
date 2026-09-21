@@ -28,7 +28,7 @@ import type { TurnTaint } from "./turn-taint.js";
 // may do. Four tiers run in `consult`: triage, an un-waivable hard rule, a judge, then a person; only the last
 // interrupts anyone, and an unattended turn gets a refusal instead of a card.
 
-export interface CommandGateOptions {
+export interface CommandGuardOptions {
     // The owner's policy text, snapshotted once per turn; edits take effect on the next turn, not mid-turn.
     readonly policy: string;
     // Mode (off/watch/on), snapshotted per turn like the policy; the hard rule applies at every setting.
@@ -70,7 +70,7 @@ const LEAD = 40;
 
 // What's about to run, in the words the card will use. Carried by the caller, since only it knows whether this is a
 // shell line, a script, or a vendor tool call.
-export interface GateSubject {
+export interface GuardSubject {
     // Cards file under this tool name, matching both the client's rendering and the SDK hook.
     readonly toolName: string;
     // The card's chip: "Run command", "Run code".
@@ -81,13 +81,13 @@ export interface GateSubject {
     readonly language: ProgramAsk["language"];
 }
 
-const BASH_SUBJECT: GateSubject = { toolName: "Bash", displayName: "Run command", noun: "command", language: "bash" };
+const BASH_SUBJECT: GuardSubject = { toolName: "Bash", displayName: "Run command", noun: "command", language: "bash" };
 // Exported for the runtimes that mount the backend as their own tool rather than through a hook, and so consult from
 // inside the handler; the card must name the same subject wherever the script came from.
-export const JS_SUBJECT: GateSubject = { toolName: JS_TOOL_NAME, displayName: "Run code", noun: "script", language: "javascript" };
+export const JS_SUBJECT: GuardSubject = { toolName: JS_TOOL_NAME, displayName: "Run code", noun: "script", language: "javascript" };
 
 // A vendor runtime's own command tool, whatever it's called; one subject serves all of them.
-export const vendorSubject = (toolName: string): GateSubject => ({ toolName, displayName: "Run command", noun: "command", language: "bash" });
+export const vendorSubject = (toolName: string): GuardSubject => ({ toolName, displayName: "Run command", noun: "command", language: "bash" });
 
 // Clips spans to one segment and rebases them onto it, so a span straddling the edge stops there too.
 const spansWithin = (spans: readonly CommandSpan[], from: number, to: number, shift: number): CommandSpan[] =>
@@ -100,7 +100,7 @@ const elision = (count: number): string => `\n[… ${count} character${count ===
 
 // Excerpt for the card: enough of the program to judge, with the matched spans intact. Splits into head + fragment
 // window (eliding the middle) when a flagged fragment would otherwise fall outside a head-only cut.
-const programAsk = (program: string, subject: GateSubject, matches: readonly CommandMatch[], held: CommandClass | undefined): ProgramAsk => {
+const programAsk = (program: string, subject: GuardSubject, matches: readonly CommandMatch[], held: CommandClass | undefined): ProgramAsk => {
     const spans: readonly CommandSpan[] = mergeSpans(
         matches.filter((match) => held === undefined || match.commandClass === held).flatMap((match) => match.spans),
     );
@@ -130,26 +130,26 @@ const programAsk = (program: string, subject: GateSubject, matches: readonly Com
 };
 
 // Allow, run it. Refuse, do not, and hand `reason` back to the model as the refusal.
-export type GateOutcome = { readonly allow: true } | { readonly allow: false; readonly reason: string };
+export type GuardOutcome = { readonly allow: true } | { readonly allow: false; readonly reason: string };
 
-const ALLOWED: GateOutcome = { allow: true };
+const ALLOWED: GuardOutcome = { allow: true };
 
-export interface CommandGate {
+export interface CommandGuard {
     // Whether anything can refuse this turn; runtimes read it before deciding to enable their approval channel.
     readonly enforcing: boolean;
     // A generator, not a Promise+push callback: a vendor runtime already inside its own for-await loop can `yield*` the
     // card in place. A promise+push shape would deadlock exactly that caller.
-    readonly consult: (program: string, subject: GateSubject) => AsyncGenerator<AgentEvent, GateOutcome>;
+    readonly consult: (program: string, subject: GuardSubject) => AsyncGenerator<AgentEvent, GuardOutcome>;
 }
 
 // Drives a consult from a caller that emits by callback rather than by yielding: every frame goes to `push` in order,
 // and the verdict comes back.
 export const consultWith = async (
-    gate: CommandGate,
+    gate: CommandGuard,
     program: string,
-    subject: GateSubject,
+    subject: GuardSubject,
     push: (event: AgentEvent) => void,
-): Promise<GateOutcome> => {
+): Promise<GuardOutcome> => {
     const consulting = gate.consult(program, subject);
     let step = await consulting.next();
     while (step.done !== true) {
@@ -159,7 +159,7 @@ export const consultWith = async (
     return step.value;
 };
 
-// Every command here runs in this container; a device command is judged in hosts/host-command-gate.ts instead.
+// Every command here runs in this container; a device command is judged in hosts/host-command-guard.ts instead.
 const SANDBOX: CommandLocus = "sandbox";
 
 // Takes matches, not classes, so `live` rides along: a class whose every fragment sits in a heredoc, comment or quoted
@@ -170,11 +170,11 @@ const hardRuled = (matches: readonly CommandMatch[]): CommandClass | undefined =
 
 // Whether an ask can reach anybody. `unattended` says how the turn STARTED; a steer says who is here now, and the
 // second outranks the first — a card raised at somebody who is mid-conversation with this turn gets answered.
-const nobodyToAsk = (options: CommandGateOptions): boolean => options.unattended && options.steered?.() !== true;
+const nobodyToAsk = (options: CommandGuardOptions): boolean => options.unattended && options.steered?.() !== true;
 
 // Why a command can't be asked about (or undefined if a card can be raised): both branches are properties of the turn,
 // not the policy. Each refusal tells the model not to retry.
-const cannotAsk = (reason: string, options: CommandGateOptions): GateOutcome | undefined => {
+const cannotAsk = (reason: string, options: CommandGuardOptions): GuardOutcome | undefined => {
     if (nobodyToAsk(options)) {
         return {
             allow: false,
@@ -204,7 +204,7 @@ const JUDGE_OFF = `The safety judge is turned off, so this was decided by the st
 // Same posture again: judge is on but no model is set for it, a choice rather than a fault.
 const JUDGE_UNSET = `No model is set for the safety judge, so this was decided by the standing rule alone.`;
 
-export const createCommandGate = (options: CommandGateOptions): CommandGate => {
+export const createCommandGuard = (options: CommandGuardOptions): CommandGuard => {
     // Programs the user has already said yes to this turn, keyed by exact text so a yes means only this command.
     const granted = new Set<string>();
     // Judged verdicts this turn, keyed by program; concurrent consults of the same program share one promise.
@@ -341,7 +341,7 @@ export const createCommandGate = (options: CommandGateOptions): CommandGate => {
     };
 };
 
-// Bash and the JS backend are one question to the rulebook: the classifier's patterns are unanchored substrings, so
+// Bash and the JS backend are one question to the rulebook: the classifier's patterns are uncheckpointed substrings, so
 // both get judged alike. One gate over both, or a command rule wouldn't reach the other.
 const EXECUTION_SOURCES = [
     { field: "command", subject: BASH_SUBJECT },
@@ -355,9 +355,9 @@ const refuse = (reason: string): { hookSpecificOutput: Record<string, unknown> }
 // Claude Code transport over the gate: a hook is a callback, so frames go out via the `push` passed in. Takes options
 // plus push rather than a built gate, so "always" grants are shared across both matchers.
 export const commandGateHooks = (
-    options: CommandGateOptions & { readonly push: (event: AgentEvent) => void },
+    options: CommandGuardOptions & { readonly push: (event: AgentEvent) => void },
 ): Partial<Record<HookEvent, HookCallbackMatcher[]>> => {
-    const gate = createCommandGate(options);
+    const gate = createCommandGuard(options);
     const gateFor =
         (source: (typeof EXECUTION_SOURCES)[number]) =>
         async (input: { hook_event_name: string; tool_input?: unknown }): Promise<Record<string, unknown>> => {

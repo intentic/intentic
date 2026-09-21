@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { TranscriptRow, TranscriptTool } from "@intentic/sandbox-contract";
 import { describe, expect, it } from "vitest";
-import type { TurnAnchor, TurnAnchors } from "../agent/anchors/turn-anchors.js";
+import type { TurnCheckpoint, TurnCheckpoints } from "../agent/checkpoints/turn-checkpoints.js";
 import { agentToolChildren, type AgentTranscriptDeps, agentTranscriptPage, PAGE_TEXT_CAP } from "./agent-transcript.js";
 import { fileTranscriptRecord, MAX_WINDOW_BYTES } from "./transcript-record.js";
 
@@ -55,8 +55,8 @@ const write = async (root: string, conversationId: string, turns: number): Promi
     }
 };
 
-const anchorsOf = (indices: readonly number[]): TurnAnchors => {
-    const all = new Map<number, TurnAnchor>(indices.map((index) => [index, { kind: "tree", snapshot: `snap-${index}` }]));
+const anchorsOf = (indices: readonly number[]): TurnCheckpoints => {
+    const all = new Map<number, TurnCheckpoint>(indices.map((index) => [index, { kind: "tree", snapshot: `snap-${index}` }]));
     return {
         record: () => Promise.resolve(),
         of: (_id, index) => Promise.resolve(all.get(index)),
@@ -76,7 +76,7 @@ interface Reading {
 const measure = async (root: string, conversationId: string, turns: number): Promise<Reading> => {
     const record = fileTranscriptRecord(root);
     const fileBytes = (await stat(join(root, `${conversationId}.jsonl`))).size;
-    const deps = { record, turnAnchors: anchorsOf(Array.from({ length: turns }, (_, turn) => turn * ROWS_PER_TURN)) };
+    const deps = { record, turnCheckpoints: anchorsOf(Array.from({ length: turns }, (_, turn) => turn * ROWS_PER_TURN)) };
     const started = performance.now();
     const page = await agentTranscriptPage(deps, { id: conversationId, provider: "claude", harness: "claude-code" });
     const readMs = performance.now() - started;
@@ -144,7 +144,7 @@ describe("the transcript window", () => {
         expect(page.more).toBe(true);
     });
 
-    // rewindIndex is the message's absolute position in the whole record; the rewind route, fork and turn-anchors
+    // rewindIndex is the message's absolute position in the whole record; the rewind route, fork and turn-checkpoints
     // checkpoints all address it directly.
     it("keeps rewind indices absolute, counted from the start of the record", async () => {
         const root = await dir();
@@ -152,7 +152,7 @@ describe("the transcript window", () => {
         await write(root, "c-anchors", turns);
         const record = fileTranscriptRecord(root);
         const userRows = Array.from({ length: turns }, (_, turn) => turn * ROWS_PER_TURN);
-        const deps = { record, turnAnchors: anchorsOf(userRows) };
+        const deps = { record, turnCheckpoints: anchorsOf(userRows) };
 
         const windowed = await agentTranscriptPage(deps, { id: "c-anchors", provider: "claude", harness: "claude-code" }, { turns: 5 });
 
@@ -267,7 +267,7 @@ const filled = async (conversationId: string, turns: readonly TranscriptRow[][])
     for (const rows of turns) {
         await record.append(conversationId, rows);
     }
-    return { root, deps: { record, turnAnchors: anchorsOf([]) } };
+    return { root, deps: { record, turnCheckpoints: anchorsOf([]) } };
 };
 
 const servedBytes = (page: { readonly rows: readonly TranscriptRow[] }): number => Buffer.byteLength(JSON.stringify(page.rows));

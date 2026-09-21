@@ -314,7 +314,7 @@ export const readSessionConflicts = (mutagen: string, name: string): SessionConf
 };
 
 // Asks for a cycle now rather than at the watcher's leisure. Always `--skip-wait`: this is called from the resident
-// loop, a full cycle over a large workspace outlives any tick, and Mutagen's own filesystem watch picks the change up
+// agent, a full cycle over a large workspace outlives any tick, and Mutagen's own filesystem watch picks the change up
 // regardless — the flush only stops it waiting for a coalescing window it has no reason to keep.
 export const flushSession = async (mutagen: string, name: string): Promise<void> => {
     await runProcess(mutagen, ["sync", "flush", "--skip-wait", name]);

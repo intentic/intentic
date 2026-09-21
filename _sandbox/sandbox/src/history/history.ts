@@ -49,7 +49,7 @@ const defaultRunner: HistoryGitRunner = (args, options) =>
 // Dir name is the URI-encoded repo id, one filesystem entry per (possibly nested) id.
 export const repoGitDir = (historyRoot: string, name: string): string => join(historyRoot, "gits", encodeURIComponent(name));
 
-// Secret/junk patterns every scope excludes; unanchored, appended after the carve-outs, so they always win.
+// Secret/junk patterns every scope excludes; uncheckpointed, appended after the carve-outs, so they always win.
 const COMMON_PRIVATE_FILES = new Set([".secrets.json", "claude.json"]);
 // Written without the trailing slash: a directory-only rule does not match a SYMLINK of that name, and an agent's
 // worktree mirrors these dirs in as symlinks. It also matches rootPathIsExcluded below, which has always gone by name.

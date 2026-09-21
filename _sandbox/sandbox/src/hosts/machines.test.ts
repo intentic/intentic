@@ -9,8 +9,8 @@ import {
     hostEntryOf,
     hostConnectionKey,
     hostEnvironmentOf,
-    type HostFacts,
-    type HostScopes,
+    type DeviceFacts,
+    type DeviceScopes,
     machinesOf,
     windowsPathOf,
     wslPathOf,
@@ -137,7 +137,7 @@ test("reads a connecting machine's environment off its own facts", () => {
 // The daemon's own reader of all of it: one card, a row per environment, native first, each with its own liveness —
 // one side asleep must not read as the machine being away.
 test("gives one card a row per environment, native first, each with its own liveness", async () => {
-    const hub = createPeerHub<HostClient, { version: string }, HostFacts, HostScopes>(HOST_PEER.hub, { warn: () => {} });
+    const hub = createPeerHub<HostClient, { version: string }, DeviceFacts, DeviceScopes>(HOST_PEER.hub, { warn: () => {} });
     const peer = () => ({ client: { ping: async () => ({ ok: true }) } as unknown as HostClient, close: () => {}, announced: { version: "1.274.0" } });
     const distroKey = hostConnectionKey("rog", "wsl:archlinux");
     const detachNative = hub.attach("rog", peer());
@@ -148,7 +148,7 @@ test("gives one card a row per environment, native first, each with its own live
     detachDistro();
 
     const services = {
-        capabilities: { list: async () => [{ kind: "host", id: "rog", config: { platform: "windows" } }] },
+        capabilities: { list: async () => [{ kind: "device", id: "rog", config: { platform: "windows" } }] },
         hosts: { list: async () => [{ id: "rog" }, { id: distroKey }] },
         hostHub: hub,
     } as unknown as Services;
@@ -171,9 +171,9 @@ test("gives one card a row per environment, native first, each with its own live
 // A card is a computer, so one nobody has reached yet is a computer with one environment, offline — never an empty
 // list the page would have to invent a row for.
 test("gives a card that has never connected its native environment anyway", async () => {
-    const hub = createPeerHub<HostClient, { version: string }, HostFacts, HostScopes>(HOST_PEER.hub, { warn: () => {} });
+    const hub = createPeerHub<HostClient, { version: string }, DeviceFacts, DeviceScopes>(HOST_PEER.hub, { warn: () => {} });
     const services = {
-        capabilities: { list: async () => [{ kind: "host", id: "omen", config: { platform: "windows" } }] },
+        capabilities: { list: async () => [{ kind: "device", id: "omen", config: { platform: "windows" } }] },
         hosts: { list: async () => [] },
         hostHub: hub,
     } as unknown as Services;
@@ -185,9 +185,9 @@ test("gives a card that has never connected its native environment anyway", asyn
 // Hub liveness resets when the daemon restarts, so an environment that has not dialled in since must come from the
 // enrollments: without this a distro drops off its own computer's page until it happens to reconnect.
 test("lists an enrolled environment that has not connected since this daemon booted", async () => {
-    const hub = createPeerHub<HostClient, { version: string }, HostFacts, HostScopes>(HOST_PEER.hub, { warn: () => {} });
+    const hub = createPeerHub<HostClient, { version: string }, DeviceFacts, DeviceScopes>(HOST_PEER.hub, { warn: () => {} });
     const services = {
-        capabilities: { list: async () => [{ kind: "host", id: "rog", config: { platform: "windows" } }] },
+        capabilities: { list: async () => [{ kind: "device", id: "rog", config: { platform: "windows" } }] },
         hosts: { list: async () => [{ id: "rog" }, { id: hostConnectionKey("rog", "wsl:archlinux") }, { id: "omen" }] },
         hostHub: hub,
     } as unknown as Services;

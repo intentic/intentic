@@ -1,5 +1,5 @@
 import { installScriptUrl } from "@intentic/constants";
-import { HOST_NATIVE_ENVIRONMENT, type HostFacts, hostEntryOf, hostConnectionKey, hostEnvironmentOf } from "@intentic/sandbox-contract";
+import { HOST_NATIVE_ENVIRONMENT, type DeviceFacts, hostEntryOf, hostConnectionKey, hostEnvironmentOf } from "@intentic/sandbox-contract";
 import type { Services } from "../composition.js";
 import { callTool } from "./device-reports.js";
 
@@ -28,7 +28,7 @@ export const forgetBootstrap = (connection?: string): void => void (connection =
 
 // Which environments of this machine an agent could be put in from the one that just connected. Read off the
 // connected side's own facts: Windows lists its distros, and a distro implies the Windows side it runs on.
-export const bootstrapTargets = (environment: string, facts: HostFacts): string[] => {
+export const bootstrapTargets = (environment: string, facts: DeviceFacts): string[] => {
     if (environment === HOST_NATIVE_ENVIRONMENT) {
         return (facts.wslDistros ?? []).filter((distro) => !SYSTEM_DISTROS.has(distro)).map((distro) => `wsl:${distro}`);
     }
@@ -76,7 +76,7 @@ const bootstrapOne = async (services: Services, from: string, card: string, targ
 
 // Called when an environment of a machine comes up and says what it is. Fire-and-forget by design: a connect must not
 // wait on a download, and the agent it installs arrives as its own connection when it is ready.
-export const bootstrapEnvironments = (services: Services, from: string, facts: HostFacts): void => {
+export const bootstrapEnvironments = (services: Services, from: string, facts: DeviceFacts): void => {
     const card = hostEntryOf(from);
     const now = Date.now();
     for (const target of bootstrapTargets(hostEnvironmentOf(from), facts)) {

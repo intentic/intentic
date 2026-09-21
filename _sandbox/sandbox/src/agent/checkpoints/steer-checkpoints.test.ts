@@ -1,5 +1,5 @@
 import { expect, test, vi } from "vitest";
-import { anchorSteeredMessage, takeSteerAnchors } from "./steer-anchors.js";
+import { checkpointSteeredMessage, takeSteerCheckpoints } from "./steer-checkpoints.js";
 
 // Pins that a steered message's position is fixed when the turn accepts it, before its snapshot resolves; a queue that
 // reordered by finish time would file one message's state under another's index.
@@ -31,12 +31,12 @@ test("a slow capture keeps its place, so states stay paired with the messages th
     // The first steer's capture is slower, resolving after the second's: what a finish-order queue would reorder.
     const deps = services(mainTree.agents, { history: history(finished, { "snap-1": 20 }) });
 
-    const first = anchorSteeredMessage(deps, "c1");
-    const second = anchorSteeredMessage(deps, "c1");
+    const first = checkpointSteeredMessage(deps, "c1");
+    const second = checkpointSteeredMessage(deps, "c1");
     await Promise.all([first, second]);
 
     expect(finished).toEqual(["snap-2", "snap-1"]);
-    expect(takeSteerAnchors("c1")).toEqual([
+    expect(takeSteerCheckpoints("c1")).toEqual([
         { kind: "tree", snapshot: "snap-1" },
         { kind: "tree", snapshot: "snap-2" },
     ]);
@@ -49,26 +49,26 @@ test("a conversation whose state is elsewhere leaves an empty box rather than no
     let at = 0;
     const deps = services({ entry: () => entries[at++] }, { history: history([], {}) });
 
-    await anchorSteeredMessage(deps, "c1");
-    await anchorSteeredMessage(deps, "c1");
+    await checkpointSteeredMessage(deps, "c1");
+    await checkpointSteeredMessage(deps, "c1");
 
-    expect(takeSteerAnchors("c1")).toEqual([undefined, { kind: "tree", snapshot: "snap-1" }]);
+    expect(takeSteerCheckpoints("c1")).toEqual([undefined, { kind: "tree", snapshot: "snap-1" }]);
 });
 
 // The queue always drains; a box left behind would be picked up by the next turn and filed under one of its rows.
 test("draining empties the queue, so nothing carries into the next turn", async () => {
     const deps = services(mainTree.agents, { history: history([], {}) });
 
-    await anchorSteeredMessage(deps, "c1");
-    expect(takeSteerAnchors("c1")).toHaveLength(1);
-    expect(takeSteerAnchors("c1")).toEqual([]);
+    await checkpointSteeredMessage(deps, "c1");
+    expect(takeSteerCheckpoints("c1")).toHaveLength(1);
+    expect(takeSteerCheckpoints("c1")).toEqual([]);
 });
 
-// An unknown conversation has nothing to anchor against, and a failing capture isn't fatal: both just mean no bookmark.
+// An unknown conversation has nothing to checkpoint against, and a failing capture isn't fatal: both just mean no bookmark.
 test("an unknown conversation and a failing capture both come back empty rather than throwing", async () => {
     const unknown = services({ entry: () => undefined }, { history: history([], {}) });
-    await anchorSteeredMessage(unknown, "c2");
-    expect(takeSteerAnchors("c2")).toEqual([undefined]);
+    await checkpointSteeredMessage(unknown, "c2");
+    expect(takeSteerCheckpoints("c2")).toEqual([undefined]);
 
     const broken = services(mainTree.agents, {
         history: {
@@ -78,6 +78,6 @@ test("an unknown conversation and a failing capture both come back empty rather 
             list: async () => [],
         },
     });
-    await anchorSteeredMessage(broken, "c3");
-    expect(takeSteerAnchors("c3")).toEqual([undefined]);
+    await checkpointSteeredMessage(broken, "c3");
+    expect(takeSteerCheckpoints("c3")).toEqual([undefined]);
 });

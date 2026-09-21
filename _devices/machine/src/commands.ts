@@ -8,7 +8,7 @@ import { assetUrl, runUpgrade, upgradeMessage } from "./upgrade.js";
 import { MACHINE_VERSION } from "./version.js";
 
 // intentic-machine: the agent on a user's own device. `device` connects a sandbox to this machine; `sync` mirrors
-// folders/ports; both share one resident loop (`run`), `status`, `upgrade`, and `uninstall`.
+// folders/ports; both share one resident agent (`run`), `status`, `upgrade`, and `uninstall`.
 
 interface RunFlags {
     readonly foreground: boolean;
@@ -19,8 +19,8 @@ const run = buildCommand<RunFlags>({
     docs: { brief: "Run this machine's agent: sandbox connections, file sync, port mirroring (setup starts this for you)" },
     parameters: {
         flags: {
-            foreground: { kind: "boolean", brief: "Run the loop in this terminal instead of the background" },
-            stop: { kind: "boolean", brief: "Stop the background loop" },
+            foreground: { kind: "boolean", brief: "Run the agent in this terminal instead of the background" },
+            stop: { kind: "boolean", brief: "Stop the background agent" },
         },
     },
     async func(this: CommandContext, flags: RunFlags) {
@@ -57,7 +57,7 @@ interface UpgradeFlags {
 }
 
 const upgrade = buildCommand<UpgradeFlags>({
-    docs: { brief: "Download and install the current agent, then restart the background loop" },
+    docs: { brief: "Download and install the current agent, then restart the background agent" },
     parameters: {
         flags: {
             force: {
@@ -75,7 +75,7 @@ const upgrade = buildCommand<UpgradeFlags>({
 });
 
 // Removes both halves in one command; sync tears down first while credentials still exist, then device's reconcile
-// retires the loop and the login entry.
+// retires the agent and the login entry.
 const uninstall = buildCommand({
     docs: { brief: "Remove this machine's agent entirely: every sandbox link, every sync pairing, the login entry" },
     parameters: {},

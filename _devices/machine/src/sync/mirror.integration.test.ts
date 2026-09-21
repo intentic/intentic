@@ -138,7 +138,7 @@ describe("fetchWorkspacePorts", () => {
         expect(ports).toEqual([{ port: 47145, host: "::1", forwardable: true, kind: "workspace", command: "vite", forwarded: false, ...named }]);
         expect(fetchMock).toHaveBeenCalledWith("https://sandbox-abc.example.dev/ports", {
             headers: { "x-intentic-sync": "ist_tok" },
-            // Bounded, because the watcher loop is sequential: an unbounded read here stalls the git bridge too.
+            // Bounded, because the watcher agent is sequential: an unbounded read here stalls the git bridge too.
             signal: expect.any(AbortSignal),
         });
     });
@@ -261,15 +261,15 @@ describe("readResidentPid", () => {
     });
 });
 
-// Two resident loops fight: each reconciles the same forwards from its own baseline, tearing down and recreating
-// each other's sessions. Every path that runs the loop directly (systemd unit, LaunchAgent, hand-run) must hit this
+// Two resident agents fight: each reconciles the same forwards from its own baseline, tearing down and recreating
+// each other's sessions. Every path that runs the agent directly (systemd unit, LaunchAgent, hand-run) must hit this
 // guard.
 describe("runForeground single-holder guard", () => {
-    it("refuses when a live loop already holds the pidfile, before touching config or Mutagen", async () => {
+    it("refuses when a live agent already holds the pidfile, before touching config or Mutagen", async () => {
         const other = spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], { detached: true, stdio: "ignore" });
         const pid = other.pid;
         if (pid === undefined) {
-            throw new Error("the stand-in loop didn't start");
+            throw new Error("the stand-in agent didn't start");
         }
         const held = await pidFileBody(pid);
         try {
@@ -282,7 +282,7 @@ describe("runForeground single-holder guard", () => {
             await runForeground((message) => said.push(message));
 
             expect(said.join("\n")).toContain(`already running (pid ${pid})`);
-            // The incumbent keeps the pidfile: a refusing loop must not stamp its own pid over it.
+            // The incumbent keeps the pidfile: a refusing agent must not stamp its own pid over it.
             expect((await readFile(runPidPath, "utf8")).trim()).toBe(held);
         } finally {
             other.kill("SIGKILL");
@@ -290,12 +290,12 @@ describe("runForeground single-holder guard", () => {
     });
 
     // A pidfile outlives the boot that wrote it, and pids restart low, so yesterday's watcher pid can be an unrelated
-    // process this morning; only the boot stamp says whether a live pid is really this loop's.
+    // process this morning; only the boot stamp says whether a live pid is really this agent's.
     it("starts when the pidfile is from an earlier boot, however alive that pid happens to be now", async () => {
         const other = spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], { detached: true, stdio: "ignore" });
         const pid = other.pid;
         if (pid === undefined) {
-            throw new Error("the stand-in loop didn't start");
+            throw new Error("the stand-in agent didn't start");
         }
         try {
             await writeFile(runPidPath, `${pid} id:0f9a1c3e-0000-4000-8000-000000000000`);
@@ -323,8 +323,8 @@ describe("signalExitCode", () => {
 });
 
 describe("stopResident", () => {
-    it("returns only once the loop is GONE, not merely signalled", async () => {
-        // Shaped like the real loop: handles SIGTERM and takes a moment to wind down. An instant-dying stand-in
+    it("returns only once the agent is GONE, not merely signalled", async () => {
+        // Shaped like the real agent: handles SIGTERM and takes a moment to wind down. An instant-dying stand-in
         // couldn't
         // distinguish "waited for it" from "signalled and moved on".
         const resident = spawn(
@@ -334,7 +334,7 @@ describe("stopResident", () => {
         );
         const pid = resident.pid;
         if (pid === undefined || resident.stdout === null) {
-            throw new Error("the stand-in loop didn't start");
+            throw new Error("the stand-in agent didn't start");
         }
         // Waits for the handler to be installed: signalling a still-booting process kills it outright, silently turning
         // this into a test that passes either way.

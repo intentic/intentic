@@ -11,7 +11,7 @@ export type WslEnvironment = z.infer<typeof WslEnvironmentSchema>;
 
 // What a machine reports once at connect (`host.describe`), cached until it reconnects: the skill pack says how to
 // drive Windows, this says which Windows it is.
-export const HostFactsSchema = z.object({
+export const DeviceFactsSchema = z.object({
     // The OS's own name for itself, e.g. "Windows 11 Pro 24H2".
     os: z.string(),
     arch: z.string(),
@@ -32,7 +32,7 @@ export const HostFactsSchema = z.object({
     // Windows only: the distros `wsl -l -q` lists, the names `run_command`'s `in: "wsl:<name>"` accepts.
     wslDistros: z.array(z.string()).optional(),
 });
-export type HostFacts = z.infer<typeof HostFactsSchema>;
+export type DeviceFacts = z.infer<typeof DeviceFactsSchema>;
 
 // One folder, two names. Windows sees a distro's files under a UNC share and a distro sees the Windows drives under
 // /mnt, so a path handed across the boundary is translated here rather than by hand at every call site.
@@ -54,7 +54,7 @@ const ENVIRONMENT_SEPARATOR = "::";
 // Which environment a machine is describing when it connects: the distro by the name WSL registered (what `wsl -l -q`
 // prints and `in: "wsl:<name>"` takes), or the metal. Facts arrive at connect and no scope withholds them, so this is
 // always answerable — unlike `environmentOf` (devices.ts), which weighs a report too and may hold no evidence at all.
-export const environmentKeyOf = (facts: Pick<HostFacts, "wsl">): string =>
+export const environmentKeyOf = (facts: Pick<DeviceFacts, "wsl">): string =>
     facts.wsl === undefined ? HOST_NATIVE_ENVIRONMENT : `wsl:${facts.wsl.distro}`;
 
 export const hostConnectionKey = (entry: string, environment: string): string =>
@@ -75,7 +75,7 @@ export const HostEnvironmentSchema = z.object({
     online: z.boolean(),
     version: z.string().optional(),
     lastSeen: z.number().optional(),
-    facts: HostFactsSchema.optional(),
+    facts: DeviceFactsSchema.optional(),
 });
 export type HostEnvironment = z.infer<typeof HostEnvironmentSchema>;
 
@@ -92,7 +92,7 @@ export const HostSummarySchema = z.object({
     version: z.string().optional(),
     // Epoch ms of the last held socket; absent means not since this daemon booted (liveness resets on restart).
     lastSeen: z.number().optional(),
-    facts: HostFactsSchema.optional(),
+    facts: DeviceFactsSchema.optional(),
 });
 export type HostSummary = z.infer<typeof HostSummarySchema>;
 export const HostsListSchema = z.object({ hosts: z.array(HostSummarySchema) });

@@ -994,7 +994,7 @@ const BROWSER_CREDENTIAL_FIELDS: readonly CapabilityField[] = [
         hint: "A connected Geo exit: this account then browses from that country.",
     },
 ];
-const CORE_FIELDS: Partial<Record<CapabilityKind, readonly CapabilityField[]>> = { host: HOST_SCOPE_FIELDS, browser: BROWSER_CREDENTIAL_FIELDS };
+const CORE_FIELDS: Partial<Record<CapabilityKind, readonly CapabilityField[]>> = { device: HOST_SCOPE_FIELDS, browser: BROWSER_CREDENTIAL_FIELDS };
 
 // A contribution rendered as a catalog tile; the manifest is the single source of name/logo/fields/guide. The
 // contribution's id becomes the tile id and the pinned discriminator; an unknown category lands under "extend".

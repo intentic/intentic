@@ -1,4 +1,4 @@
-import type { HostScopes } from "@intentic/sandbox-contract";
+import type { DeviceScopes } from "@intentic/sandbox-contract";
 import { expect, test } from "vitest";
 import { ScopeError } from "../policy.js";
 import { fakeDesktop, fakeWindow } from "../testing.js";
@@ -8,7 +8,7 @@ import { describeWindows, focusWindow, listWindows, openTarget, readClipboard, w
 // looking (windows, clipboard read) needs `screen`; changing (focus, clipboard write) needs `control`; opening
 // starts a process and needs `shell`.
 
-const scopes = (overrides: Partial<HostScopes> = {}): HostScopes => ({
+const scopes = (overrides: Partial<DeviceScopes> = {}): DeviceScopes => ({
     shell: "on",
     write: "on",
     screen: "on",

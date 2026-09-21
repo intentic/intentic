@@ -7,7 +7,7 @@ import type { Logger } from "pino";
 import type { WakeFn } from "../../automations/scheduler.js";
 import { turnCliEnv } from "../../capabilities/turn-env.js";
 import type { Services } from "../../composition.js";
-import { steerTurn } from "../anchors/agent-steering.js";
+import { steerTurn } from "../checkpoints/agent-steering.js";
 import { startConversationTurn } from "../run/turn/turn-resume.js";
 import { seedFields, type TurnSeed } from "../run/turn/turn-seed.js";
 import type { JournalledWatch, WatchJournal } from "./watch-journal.js";

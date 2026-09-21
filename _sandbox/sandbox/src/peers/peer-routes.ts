@@ -43,7 +43,7 @@ export interface PeerRouteDeps<Client extends PeerClient<Facts, Scopes>, Announc
 
 // Grant pushed on connect: the capability's own config, for kinds whose config is the grant. Narrowed by kind before
 // the cast, tying the shape to Scopes.
-const scopesOf = async <Scopes>(services: Services, kind: "host" | "webext", id: string): Promise<Scopes | undefined> => {
+const scopesOf = async <Scopes>(services: Services, kind: "device" | "webext", id: string): Promise<Scopes | undefined> => {
     const capability = (await services.capabilities.list()).find((entry) => entry.id === id && entry.kind === kind);
     return capability === undefined ? undefined : (capability.config as Scopes);
 };

@@ -1,6 +1,6 @@
 import { createBackoff } from "@intentic/base/async";
 import type { Log } from "@intentic/local-agent";
-import { HOST_HEARTBEAT_MS, hostConnectUrl, type HostScopes } from "@intentic/sandbox-contract";
+import { HOST_HEARTBEAT_MS, hostConnectUrl, type DeviceScopes } from "@intentic/sandbox-contract";
 import { dialPeer, PEER_LINK_BACKOFF, peerLinkSilenceMs, type PeerLink } from "@intentic/sandbox-contract/peer-dial";
 import { RPCHandler } from "@orpc/server/websocket";
 import { type DaemonBase, resolveDaemonBase } from "../daemon-base.js";
@@ -11,7 +11,7 @@ import { createHostRouter } from "./router.js";
 // 1008 rule). What's local: WHERE it dials, resolved per attempt (../daemon-base.ts) so a sandbox on this
 // machine's own loopback is reached even when its public tunnel is down, and what it serves.
 
-// The two things between this loop and the network, injectable together: where the daemon is, and the socket
+// The two things between this agent and the network, injectable together: where the daemon is, and the socket
 // that answer is handed to. Production wires the real resolver and the runtime's own WebSocket.
 export interface Dial {
     readonly resolveBase: (sandboxUrl: string) => Promise<DaemonBase>;
@@ -22,12 +22,12 @@ const realDial: Dial = { resolveBase: resolveDaemonBase, socket: (url) => new We
 
 export const connect = (config: HostLink, version: string, log: Log, dial: Dial = realDial): PeerLink => {
     // Every line this link writes names the sandbox it is about. One agent holds a link per sandbox and the dial
-    // loop's own complaints carry no address, so a machine with five links wrote "disconnected (1002); 7172 failed
+    // agent's own complaints carry no address, so a machine with five links wrote "disconnected (1002); 7172 failed
     // attempts" for two days without ever saying whose — and nothing in the log could tell the dead ones apart.
     const linkLog: Log = (message) => log(`${config.sandboxUrl}: ${message}`);
     // The live grant, replaced by the sandbox's `setScopes` on every connect, so a scope turned off is enforced
     // from the new session's first call.
-    let scopes: HostScopes = config.scopes;
+    let scopes: DeviceScopes = config.scopes;
     const handler = new RPCHandler(
         createHostRouter({
             scopes: () => scopes,

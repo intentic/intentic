@@ -1,5 +1,5 @@
 import type { Browser, PageState } from "@intentic/browser";
-import type { HostScopes } from "@intentic/sandbox-contract";
+import type { DeviceScopes } from "@intentic/sandbox-contract";
 import { expect, test } from "vitest";
 import { ScopeError } from "../policy.js";
 import { clickElement, fillElement, listTabs, openPage, readPage, snapshotPage } from "./browser.js";
@@ -8,7 +8,7 @@ import { clickElement, fillElement, listTabs, openPage, readPage, snapshotPage }
 // tools: reading is `screen`, clicking/typing is `control`, opening is `shell`. Every action answers with the
 // page after it, so a sequence of calls is one step each.
 
-const scopes = (overrides: Partial<HostScopes> = {}): HostScopes => ({
+const scopes = (overrides: Partial<DeviceScopes> = {}): DeviceScopes => ({
     shell: "on",
     write: "on",
     screen: "on",

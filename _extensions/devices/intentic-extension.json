@@ -10,7 +10,7 @@
         "capabilities": [
             {
                 "id": "windows",
-                "kind": "host",
+                "kind": "device",
                 "catalog": {
                     "name": "Windows PC",
                     "icon": "desktop",
@@ -31,7 +31,7 @@
             },
             {
                 "id": "linux",
-                "kind": "host",
+                "kind": "device",
                 "catalog": {
                     "name": "Linux PC",
                     "logo": "linux",

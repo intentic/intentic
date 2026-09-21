@@ -2,8 +2,8 @@ import type { Device, DeviceAgentOp } from "@intentic/sandbox-contract";
 // The kit's DOM-free subpath, not the barrel: this module is pure, and its tests run without a document.
 import {
     type AgentAction,
-    agentLoopNote,
-    agentLoopState,
+    agentStateNote,
+    agentProcessState,
     type AgentNote,
     type AgentPanel,
     agentSkewNote,
@@ -76,7 +76,7 @@ const blockedWhy = (device: Device, readAt: number): AgentNote | undefined => {
     return deviceReconnecting(device, readAt) ? reconnecting() : undefined;
 };
 
-// Two states only a registry can be in, ahead of the loop's own three (agentLoopState).
+// Two states only a registry can be in, ahead of the loop's own three (agentProcessState).
 const stateOf = (row: DeviceRow, readAt: number): AgentPanel[`state`] => {
     // A loop whose socket dropped seconds ago reported perfectly well a moment before; the reading is missing
     // because the machine is between connections, which is the badge's own word for it rather than the absence.
@@ -88,7 +88,7 @@ const stateOf = (row: DeviceRow, readAt: number): AgentPanel[`state`] => {
     if (row.agent === undefined) {
         return { word: `not reported`, variant: `neutral` };
     }
-    return agentLoopState(row.agent);
+    return agentProcessState(row.agent);
 };
 
 // Judged on the installed build, since that is what an update downloads over; a device whose only problem is
@@ -109,7 +109,7 @@ const publishedNote = (row: DeviceRow, latest: string): AgentNote => {
 // agent asking for nothing lives on Update's own hint.
 const notesOf = (row: DeviceRow, latest: string | undefined): AgentNote[] => {
     const behind = latest !== undefined && agentBehind(row.device, latest);
-    return [agentLoopNote(row.agent), agentSkewNote(row.agent?.staleBuild), behind ? publishedNote(row, latest) : undefined].filter(
+    return [agentStateNote(row.agent), agentSkewNote(row.agent?.staleBuild), behind ? publishedNote(row, latest) : undefined].filter(
         (note) => note !== undefined,
     );
 };

@@ -1,7 +1,7 @@
 import { oc } from "@orpc/contract";
 import {
     CredentialGateSchema,
-    CredentialGateSubjectParamSchema,
+    CredentialGuardSubjectParamSchema,
     CredentialGatesSchema,
     CredentialGrantSchema,
     CredentialRequestSchema,
@@ -90,7 +90,7 @@ export const secretsContract = {
             summary: "Stop requiring approval for a credential",
             description: "Removes one gate, so the agent can use that credential the way it uses any other. The owner's call alone.",
         })
-        .input(CredentialGateSubjectParamSchema)
+        .input(CredentialGuardSubjectParamSchema)
         .output(OkSchema),
     request: oc
         .route({

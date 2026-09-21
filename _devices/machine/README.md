@@ -1,10 +1,10 @@
 # @intentic/machine
 
 The one agent that lives on a user's own device: it lets a sandbox's agent work on the machine, and keeps the
-machine's folders and ports mirrored with the sandbox — one binary, one resident loop, one logon entry.
+machine's folders and ports mirrored with the sandbox — one binary, one resident agent, one logon entry.
 
 It replaces two agents (`@intentic/host` and `@intentic/sync`) that shared everything about *being installed* —
-a resident loop, a pidfile, a login entry, an updater, a ~90 MB compiled binary — and nothing about what they
+a resident agent, a pidfile, a login entry, an updater, a ~90 MB compiled binary — and nothing about what they
 did. Merging them halves what a machine downloads and keeps resident, and gives "is this machine's agent
 running" one answer instead of two halves of one.
 
@@ -13,7 +13,7 @@ running" one answer instead of two halves of one.
 The **device half** (`src/device/`, the machine side of the `host` capability):
 
 - Dial each linked sandbox — one outbound WebSocket, enrollment token in the first frame, oRPC after that; the
-  machine *serves* `hostContract`, so no port ever opens here. Where it dials is the shared resolver's answer
+  machine *serves* `deviceContract`, so no port ever opens here. Where it dials is the shared resolver's answer
   (below), re-asked on every reconnect, so a sandbox on this very machine stays connected with its tunnel down.
 - Expose the tool surface (`run_command`, files, screenshot, `describe`; deliberately no delete — trash is
   recoverable) as MCP carried verbatim, so a machine can learn a tool without a daemon release.
@@ -77,7 +77,7 @@ The **sync half** (`src/sync/`, the machine side of desktop sync):
 - Register Mutagen's daemon for login autostart — on Windows through the launcher stub, because Mutagen's own
   registration flashes a console window at every boot.
 
-**Shared** (`src/`): the one resident loop (`run`), the merged `status` (and its `--json` envelope the desktop
+**Shared** (`src/`): the one resident agent (`run`), the merged `status` (and its `--json` envelope the desktop
 app's tray reads), self-`upgrade` with automatic rollback, the autostart spec, and **where a sandbox's daemon is
 dialled** ([src/daemon-base.ts](src/daemon-base.ts)). A sandbox usually runs in a container on this very
 machine, which publishes its daemon on `127.0.0.1:<port derived from the sandbox id>`, so every dial either half
@@ -91,13 +91,13 @@ tab, with every button there gone, while this same process was polling it over l
 a pairing sitting on the public URL each minute, so a container started later is promoted with no restart; the
 socket re-resolves on every reconnect.
 
-## The resident loop
+## The resident agent
 
 `intentic-machine run --foreground` (what systemd, launchd and the Windows launcher stub run) serves both
 halves in one process ([src/resident.ts](src/resident.ts)):
 
 - The sync half re-reads its pairing list every tick; the device half's link list is fixed at startup, which
-  is why `setup` restarts the loop (`reconcileResidency`) instead of poking it.
+  is why `setup` restarts the agent (`reconcileResidency`) instead of poking it.
 - Unpairing one sandbox of several does **not** restart it (`startResidentIfStopped`): the sync half picks the
   drop up by itself, and this process holds the socket every sandbox reaches this machine over — bouncing it
   makes the sandbox that asked for the unpair watch its own device go offline.
@@ -113,18 +113,18 @@ halves in one process ([src/resident.ts](src/resident.ts)):
 ### Installed vs running
 
 Two facts, and every surface now carries both. `agents.sync` in the machine report is the **file** at
-`bin/intentic-machine` ([src/installed.ts](src/installed.ts)); `watcher.build` is the **loop** running from it.
+`bin/intentic-machine` ([src/installed.ts](src/installed.ts)); `watcher.build` is the **agent** running from it.
 They drift whenever a binary lands without a restart — a card's one-liner re-run, a copy dropped in, an upgrade
-in one environment while the loop runs in another — and the gap used to be invisible: whichever process built the
+in one environment while the agent runs in another — and the gap used to be invisible: whichever process built the
 report stamped its own version into the one field, so the same machine answered its running build to the sandbox
-its loop posts to and its installed build to one reading over a `host` capability.
+its agent posts to and its installed build to one reading over a `host` capability.
 
 - `intentic-machine status` says which is which, and the summary the tray reads leads with `OLD BUILD RUNNING`.
 - The Devices row says it beside the pid, with the two commands that close it.
-- `intentic-machine upgrade` restarts a loop that is behind the installed binary even when there is nothing to
-  download, and after a swap it verifies that the loop which came up **is** the new build rather than that some
+- `intentic-machine upgrade` restarts a agent that is behind the installed binary even when there is nothing to
+  download, and after a swap it verifies that the agent which came up **is** the new build rather than that some
   process is alive — the check the old agent passed just as well as the new one.
-- A loop already on the installed build is never bounced, and a loop that is stopped is never started: `run
+- A agent already on the installed build is never bounced, and a agent that is stopped is never started: `run
   --stop` is a thing people do on purpose.
 
 ### Linked vs connected
@@ -132,10 +132,10 @@ its loop posts to and its installed build to one reading over a `host` capabilit
 The same gap one level down, on the command whose entire job is to answer "is my machine connected". `device.json`
 records the sandboxes this machine is **meant** to answer to and nothing whatever about whether it reaches any of
 them, so `status` printed `connected as <id>` for every line in it — including, on the machine this was written
-for, a sandbox whose host had been answering 502 for four hours while the loop retried it every 30 seconds and
+for, a sandbox whose host had been answering 502 for four hours while the agent retried it every 30 seconds and
 said so in a log nobody had been pointed at.
 
-- The loop's stamp is the answer: `status` prints `connected`, `NOT connected (retrying)` or `NOT connected`
+- The agent's stamp is the answer: `status` prints `connected`, `NOT connected (retrying)` or `NOT connected`
   per link, and the summary the tray reads counts the links that are actually up (`1 of 2 sandboxes connected`).
 - The stamp **ages** on purpose, since it describes sockets held in a process that may be gone. Four ticks past
   the last write it is no answer at all — which is also what an agent too old to write one leaves behind — and
@@ -147,10 +147,10 @@ said so in a log nobody had been pointed at.
 
 - [src/commands.ts](src/commands.ts) — the CLI surface: `device setup|uninstall|updates`, `sync setup|pause|resume|mirror|uninstall`, shared `run|status|version|upgrade|uninstall`.
 - [src/install.ts](src/install.ts) — what every `setup` runs first: self-update (then re-exec), PATH repair, the Windows launcher stub. Everything the install scripts used to decide, decided once here.
-- [src/upgrade.ts](src/upgrade.ts) — `upgrade`: what is published, then download → probe → stop → swap → start, with a rollback behind every step, and a restart when the file is current but the loop is not.
+- [src/upgrade.ts](src/upgrade.ts) — `upgrade`: what is published, then download → probe → stop → swap → start, with a rollback behind every step, and a restart when the file is current but the agent is not.
 - [src/installed.ts](src/installed.ts) — which build the *file* at `bin/intentic-machine` is, as opposed to the one running: free while the two agree, one probe per swap after they stop.
 - [src/daemon-base.ts](src/daemon-base.ts) — where a sandbox's daemon is dialled, for both halves: loopback first when `/health` proves it is ours, the public URL as the floor.
-- [src/resident.ts](src/resident.ts) — the one loop, its pidfile, its link stamp, and `reconcileResidency`.
+- [src/resident.ts](src/resident.ts) — the one agent, its pidfile, its link stamp, and `reconcileResidency`.
 - [src/device/auto-prepare.ts](src/device/auto-prepare.ts) — the background update-download tick; the judgement about *what* to download stays in `ic sandbox prepare --auto`, on purpose.
 - [src/status.ts](src/status.ts) — both halves as one answer; `--json` is what the desktop app and tray read.
 - [src/wsl.ts](src/wsl.ts) — whether this is a WSL distro, and which one. WSL hands a distro the Windows machine's own hostname, so without this the sandbox cannot tell a distro from the Windows install hosting it, or one distro from its neighbour; reported at connect (`describe`) as well as in the status report, so it is known even with "Run commands" off.
@@ -191,10 +191,10 @@ The install-and-stay-alive plumbing is
 
 - **Bidirectional sync has no undo.** The integration tests here run against real directories and a real
   Mutagen for exactly that reason; a unit test that mocks the sync proves nothing about the case that loses work.
-- **The two halves keep separate state files** (`device.json`, `sync.json`) in the one home: the loop rewrites
+- **The two halves keep separate state files** (`device.json`, `sync.json`) in the one home: the agent rewrites
   one half's state while a concurrent `setup` writes the other's, and separate files make cross-half torn
   writes impossible rather than unlikely.
 - **Scopes are a cache.** The sandbox pushes the real grant on every connect; what is stored only governs the
   seconds before the first push, and it starts at everything-off.
-- **The transport lives in the resident loop**, so `sync setup` starts the loop *before* it probes ssh or hands
+- **The transport lives in the resident agent**, so `sync setup` starts the agent *before* it probes ssh or hands
   anything to Mutagen: every step after that one needs the port to be open.

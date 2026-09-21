@@ -290,7 +290,7 @@ const sendKey = (frame: KeyFrame): void => {
 // Which half of the keyboard a keystroke belongs to is keyIntent's call (see that module).
 const onKeyDown = (event: KeyboardEvent): void => {
     const intent = keyIntent(event);
-    if (intent.kind === "host") {
+    if (intent.kind === "device") {
         return;
     }
     event.preventDefault();

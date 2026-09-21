@@ -2,7 +2,7 @@
 
 Everything that runs on a user's OWN device rather than in a sandbox: the agent that lets a sandbox work there,
 the browser and desktop drivers it uses, the extension that lets a sandbox work in the browser they are already
-signed into, and the local-agent plumbing (state home, autostart, detached loops) every one of these CLIs
+signed into, and the local-agent plumbing (state home, autostart, detached agents) every one of these CLIs
 shares. Permissions are enforced at the far end, never in the sandbox: see [machine/](machine) for a device's,
 [webext/](webext) for a browser's.
 

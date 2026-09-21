@@ -30,7 +30,7 @@ const emit = defineEmits<{ connect: []; revoke: []; browse: []; login: []; agent
 
 // A device connects by running a command on it; a browser, by pasting a code into it. One that's never checked in
 // is waiting on that step; one that has is merely asleep, which a fresh pairing won't wake.
-const isHost = computed(() => props.entry.kind === `host`);
+const isHost = computed(() => props.entry.kind === `device`);
 const isBrowser = computed(() => props.entry.kind === `webext`);
 const pairs = computed(() => isHost.value || isBrowser.value);
 const paired = computed(() => Boolean(props.host?.lastSeen ?? props.browser?.lastSeen));

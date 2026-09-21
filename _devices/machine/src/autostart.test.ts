@@ -8,13 +8,13 @@ const BINARY: CliLauncher = ["/home/dev/.intentic/machine/bin/intentic-machine"]
 const STUB = "/home/dev/.intentic/machine/bin/intentic-launch.exe";
 
 describe("MACHINE_AUTOSTART", () => {
-    it("gives a stubless Windows install the detached starter, never the foreground loop", () => {
+    it("gives a stubless Windows install the detached starter, never the foreground agent", () => {
         // A bare Run entry would park a console window in the interactive session from login to shutdown; bare `run`
-        // spawns the hidden loop and exits quickly instead.
+        // spawns the hidden agent and exits quickly instead.
         expect(windowsRunAddArgs(MACHINE_AUTOSTART, BINARY).at(-2)).toBe('"/home/dev/.intentic/machine/bin/intentic-machine" "run"');
     });
 
-    it("gives a Windows install with the launcher stub the foreground loop, through the stub", () => {
+    it("gives a Windows install with the launcher stub the foreground agent, through the stub", () => {
         // The stub is a GUI-subsystem program: nothing shows on the desktop, and the intermediate `run` process
         // disappears from the logon path.
         expect(windowsRunAddArgs(MACHINE_AUTOSTART, BINARY, STUB).at(-2)).toBe(
@@ -22,7 +22,7 @@ describe("MACHINE_AUTOSTART", () => {
         );
     });
 
-    it("gives the supervising mechanisms the foreground loop, since they wait on the process they start", () => {
+    it("gives the supervising mechanisms the foreground agent, since they wait on the process they start", () => {
         expect(MACHINE_AUTOSTART.foregroundArgs).toEqual(["run", "--foreground"]);
         expect(linuxDesktopEntry(MACHINE_AUTOSTART, BINARY)).toContain('"run" "--foreground"');
     });

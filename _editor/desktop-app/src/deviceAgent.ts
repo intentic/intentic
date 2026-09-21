@@ -1,5 +1,5 @@
 // The kit's DOM-free subpath, not the barrel: nothing here draws anything.
-import { type AgentNote, type AgentPanel, agentLoopNote, agentLoopState, agentSkewNote, restartAgent } from "@intentic/ui/device-agent";
+import { type AgentNote, type AgentPanel, agentStateNote, agentProcessState, agentSkewNote, restartAgent } from "@intentic/ui/device-agent";
 import type { DeviceStatus } from "./desktop";
 import { t } from "@intentic/ui/i18n";
 
@@ -39,10 +39,10 @@ export const desktopAgentPanel = (status: DeviceStatus | undefined): AgentPanel<
     const agent = status.sync.agent;
     const staleBuild = skewOf(agent);
     const reported = { ...agent, ...(staleBuild === undefined ? {} : { staleBuild }) };
-    const notes = [agentLoopNote(reported), agentSkewNote(staleBuild)].filter((note) => note !== undefined);
+    const notes = [agentStateNote(reported), agentSkewNote(staleBuild)].filter((note) => note !== undefined);
     return {
         version: status.version,
-        state: agentLoopState(reported),
+        state: agentProcessState(reported),
         facts: agent.pid === undefined ? [] : [`pid ${agent.pid}`],
         notes: notes.length === 0 ? [settled()] : notes,
         // Always offered: this window is the device, so nothing stands between the press and the loop.

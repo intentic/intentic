@@ -78,7 +78,7 @@ export const nodeArgs = (plan: Pick<JsExecutionPlan, "readRoots" | "writeRoots" 
     "-",
 ];
 
-// Anchored turns enter the daemon's child via nsenter with paths unchanged; an unanchored isolated turn has no
+// Anchored turns enter the daemon's child via nsenter with paths unchanged; an uncheckpointed isolated turn has no
 // namespace to enter, so paths are mapped into its worktree tree instead. A main-tree turn needs neither.
 const placedPlan = (plan: JsExecutionPlan, placement: TurnPlacement | undefined): JsExecutionPlan => {
     if (placement === undefined || placement.anchor !== undefined) {

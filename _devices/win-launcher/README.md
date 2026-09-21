@@ -2,7 +2,7 @@
 
 The ~200 KB Windows program that starts another program without putting a window on anybody's desktop.
 
-Everything the machine-side agent leaves resident — [`@intentic/machine`](../machine)'s one loop (sandbox
+Everything the machine-side agent leaves resident — [`@intentic/machine`](../machine)'s one agent (sandbox
 connections + the mirror watcher), and Mutagen's daemon beside it — has to come back after a reboot,
 and on Windows that means a per-user `HKCU\…\Run` value. Explorer starts one in the interactive session, and
 the loader gives a console to any program whose PE subsystem says CONSOLE. Both are console programs. So every
@@ -45,15 +45,15 @@ the flag, a file handle for the child's stdio).
 
 ## What it gives the child
 
-A console of its own with **no window on it**, which is better than the `DETACHED_PROCESS` a loop gets from a
+A console of its own with **no window on it**, which is better than the `DETACHED_PROCESS` an agent gets from a
 terminal: a console child of a console-*less* process is handed a brand-new console, window and all, so every
 `spawn` inside the agents has to remember `windowsHide`. A child of a process started here inherits a console
 that has no window to show, and so does its children.
 
 Two callers want opposite lifetimes, which is the whole of `--wait`:
 
-- **An agent's Run value** wants this process gone at once. It exits after starting the loop and prints the
-  loop's pid on stdout, for the caller that has a pipe on it (`spawnDetached`) and to nowhere at logon.
+- **An agent's Run value** wants this process gone at once. It exits after starting the agent and prints the
+  agent's pid on stdout, for the caller that has a pipe on it (`spawnDetached`) and to nowhere at logon.
 - **A Task Scheduler action** ([`setup-windows-runner.ps1`](../../_tools/scripts/ci/setup-windows-runner.ps1))
   wants the opposite: a task counts as *running* only while its action process does, which is what makes
   `-MultipleInstances IgnoreNew` swallow watchdog repetitions and `Stop-ScheduledTask` reach what it started.

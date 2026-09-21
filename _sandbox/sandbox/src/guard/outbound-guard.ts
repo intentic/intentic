@@ -12,7 +12,7 @@ const DRAFT_REDIRECT =
     "Instead of sending directly, write the message as an approval into .intentic/config/approvals/ (the approvals skill " +
     "has the format): the owner approves before anything posts, and that approval is what this rule asks for.";
 
-export const outboundGateHooks = (rules: Readonly<Record<string, AdmissionRule>>): Partial<Record<HookEvent, HookCallbackMatcher[]>> => ({
+export const outboundGuardHooks = (rules: Readonly<Record<string, AdmissionRule>>): Partial<Record<HookEvent, HookCallbackMatcher[]>> => ({
     PreToolUse: [
         {
             matcher: "Bash",

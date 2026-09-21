@@ -368,7 +368,7 @@ export const flashBanner = (message: string): void => {
     setTimeout(() => host.remove(), 4000);
 };
 
-// Confirms in the page itself, not the popup or window.confirm() (which blocks the page's event loop). Resolves
+// Confirms in the page itself, not the popup or window.confirm() (which blocks the page's event agent). Resolves
 // false on timeout: an unanswered question is a no.
 export const askConfirm = async (question: string, timeoutMs: number): Promise<boolean> => {
     return await new Promise<boolean>((resolve) => {

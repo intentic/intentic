@@ -1,6 +1,6 @@
 import { sleep } from "@intentic/base/async";
 import { type Desktop, DesktopError, type MouseButton, type Point, type ScrollDirection } from "@intentic/desktop-automation";
-import type { HostScopes } from "@intentic/sandbox-contract";
+import type { DeviceScopes } from "@intentic/sandbox-contract";
 import { assertScope } from "../policy.js";
 
 // GUI work for what has no command-line way in. The mechanics live in @intentic/desktop-automation; this file
@@ -66,7 +66,7 @@ export const describeAction = (input: DeviceInput): string => {
 
 // Perform one action. Returns nothing; the caller reports describeAction plus, when it may look, a fresh
 // screenshot.
-export const act = async (screen: Desktop, input: DeviceInput, scopes: HostScopes): Promise<void> => {
+export const act = async (screen: Desktop, input: DeviceInput, scopes: DeviceScopes): Promise<void> => {
     assertScope(scopes, "control");
     if (input.action === "wait") {
         await sleep(Math.min(Math.max(0, input.ms ?? SETTLE_MS), MAX_WAIT_MS));

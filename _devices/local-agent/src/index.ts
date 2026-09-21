@@ -1,5 +1,5 @@
 // Shared plumbing for intentic CLIs that run on a user's own device: state under `~/.intentic/<name>`, autostart per
-// OS, re-invoking a compiled binary, and a detached loop found again by pidfile. Used by @intentic/machine and
+// OS, re-invoking a compiled binary, and a detached agent found again by pidfile. Used by @intentic/machine and
 // @intentic/acp-bridge.
 
 export { agentHome, writeSecretFile, type AgentHome, type Log } from "./home.js";

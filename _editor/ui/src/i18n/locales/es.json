@@ -64,8 +64,8 @@
         "agentAliveStoppedMaking": "Su agente está vivo pero ha dejado de hacer rondas, así que la imagen que este sandbox tiene de sus carpetas y puertos es tan vieja como la última ronda.",
         "commands": "Comandos",
         "folders": "Carpetas",
-        "loopKeepsBuildStarted": "Un bucle conserva la compilación con la que arrancó hasta que se reinicia, así que reemplazar el archivo en disco no cambia nada por sí solo.",
         "ports": "Puertos",
+        "processKeepsBuildStarted": "Un bucle conserva la compilación con la que arrancó hasta que se reinicia, así que reemplazar el archivo en disco no cambia nada por sí solo.",
         "restartAgent": "Reiniciar el agente",
         "stopsStartsDevicesAgent": "Detiene e inicia el bucle del agente de este dispositivo. No se descarga nada: arranca la compilación que ya está instalada allí."
     },

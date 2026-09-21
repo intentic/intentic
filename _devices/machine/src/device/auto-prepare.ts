@@ -118,7 +118,7 @@ export const startAutoPrepare = (log: Log): { stop: () => void } => {
                 await runTick(state, await fleet(), async (slug) => await runIc(autoPrepareArgs(slug), () => undefined), log);
             }
         } catch (error) {
-            // fleet throws when docker is missing or wedged; this loop just needs to still be there when it's back.
+            // fleet throws when docker is missing or wedged; this agent just needs to still be there when it's back.
             log(`auto-prepare: skipped this round — ${errorMessage(error)}`);
         }
         if (!stopped) {

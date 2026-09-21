@@ -23,7 +23,7 @@ import { grantRestoredPermission, POST_PLAN_MODE } from "../agent.js";
 import { formatAnswers } from "../../tools/question-answers.js";
 import { restoreRequest } from "../../tools/agent-requests.js";
 import { personaRunModel, runRoleModel } from "../../models/run-role-model.js";
-import { registerTurn } from "../../anchors/agent-steering.js";
+import { registerTurn } from "../../checkpoints/agent-steering.js";
 import { outageRetryDue, outageRetryFired } from "../../providers/provider-health.js";
 import type { JournalEntry, JournalledTurn } from "./turn-journal.js";
 import { startTurnRun, type TurnRun } from "./turn-runs.js";

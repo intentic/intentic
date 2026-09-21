@@ -13,7 +13,7 @@ import { backupSessionName, readSessionState, sessionName } from "./mutagen.js";
 // is the disclosure this design avoids, so containers are no part of a report — they are asked for by name, through
 // the host door's `list_sandboxes`, and land beside the report on the reader's row.
 
-// Liveness needs both the held pid and the last finished pass: a dead loop still holds its pidfile (tunnel
+// Liveness needs both the held pid and the last finished pass: a dead agent still holds its pidfile (tunnel
 // listeners keep it alive), so `running` alone can misreport a stopped mirror as healthy. Undefined means no pass has
 // finished yet.
 const lastTick = async (): Promise<number | undefined> => {
@@ -22,8 +22,8 @@ const lastTick = async (): Promise<number | undefined> => {
     return Number.isFinite(stamped) && stamped > 0 ? stamped : undefined;
 };
 
-// Two facts, not one: the loop's own build (from its pidfile note) and the build installed on disk, since a
-// swapped binary leaves a live loop running the old code. `installed` is passed in because it costs a syscall/spawn.
+// Two facts, not one: the agent's own build (from its pidfile note) and the build installed on disk, since a
+// swapped binary leaves a live agent running the old code. `installed` is passed in because it costs a syscall/spawn.
 const agentState = async (installed: string | undefined): Promise<DeviceAgent> => {
     const [resident, lastTickAt] = await Promise.all([livePidRecord(runPidPath), lastTick()]);
     return { running: resident !== undefined, pid: resident?.pid, build: resident?.note, installed, lastTickAt };

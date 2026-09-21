@@ -28,7 +28,7 @@ const door: PeerDoor<{ type: "hello"; token: string; version: string }, { versio
     store: { files: peerFiles("host"), key: "hosts", prefix: "iht_", extra: {} },
     hub: { domain: "hosts", heartbeatMs: 30_000, callTimeoutMs: 60_000, offline: (id) => `"${id}" is not connected right now` },
     hello: { schema: z.object({ type: z.literal("hello"), token: z.string(), version: z.string() }), announced: (hello) => ({ version: hello.version }) },
-    scopesKind: "host",
+    scopesKind: "device",
     mcp: { serverName: (id) => `intentic-machine:${id}` },
     expired: "pairing expired",
 };
@@ -188,7 +188,7 @@ test("a door without a bridge has no mcp route", () => {
 
 // The hello frame resolves which peer is knocking; the card decides whether anything still grants it a machine, and its
 // config IS the grant pushed over the socket.
-const laptopCard = { id: "laptop", kind: "host", config: { platform: "linux", shell: "on" } };
+const laptopCard = { id: "laptop", kind: "device", config: { platform: "linux", shell: "on" } };
 
 const admission = async (verified: string | undefined, cards: readonly typeof laptopCard[]) =>
     admitPeer<{ platform: string }>(

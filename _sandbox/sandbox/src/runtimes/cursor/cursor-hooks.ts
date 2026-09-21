@@ -3,7 +3,7 @@ import { chmod, mkdir, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import type { AgentEvent } from "@intentic/sandbox-contract";
 import type { Logger } from "pino";
-import { type CommandGate, consultWith, vendorSubject } from "../../guard/command-gate.js";
+import { type CommandGuard, consultWith, vendorSubject } from "../../guard/command-guard.js";
 
 // Owner's command rulebook enforced inside Cursor's own loop via beforeShellExecution, and the owner's standing
 // instructions folded onto Cursor's base prompt via beforeSubmitPrompt: the hook is a process this daemon wrote, so it
@@ -13,7 +13,7 @@ import { type CommandGate, consultWith, vendorSubject } from "../../guard/comman
 // Fixed by Cursor, not configurable; the one location no workspace or user can move. The env override is test-only: it
 // points the suite at a temp dir instead of writing a real machine-global file.
 const enterpriseHooksPath = (): string => process.env["INTENTIC_CURSOR_HOOKS_FILE"] ?? "/etc/cursor/hooks.json";
-const GATE_SCRIPT_NAME = "intentic-command-gate.mjs";
+const GATE_SCRIPT_NAME = "intentic-command-guard.mjs";
 
 // One live turn's hook context, registered for as long as the turn runs and looked up by the payload's id. `push` is
 // this turn's own event sink, so a permission card lands in the right conversation.
@@ -26,7 +26,7 @@ export interface CursorGateTurn {
     // the workspace's standing instructions. Cursor has no system seam, so it rides beforeSubmitPrompt's
     // additional_context instead, which is what `instructions: "append"` means on this runtime.
     readonly systemAppend?: string;
-    readonly gate: CommandGate;
+    readonly gate: CommandGuard;
     readonly push: (event: AgentEvent) => void;
 }
 
@@ -50,7 +50,7 @@ export interface CursorHookService {
 const gateScript = (socketPath: string): string =>
     [
         `// managed by intentic: overwritten on daemon boot (src/cursor/cursor-hooks.ts).`,
-        `// Asks the daemon for the current turn's environment, its standing instructions, or a command-gate verdict.`,
+        `// Asks the daemon for the current turn's environment, its standing instructions, or a command-guard verdict.`,
         `import { request } from "node:http";`,
         ``,
         `const MODES = {`,
@@ -129,7 +129,7 @@ interface TurnScopedRequest {
 const asString = (value: unknown): string | undefined => (typeof value === "string" && value !== "" ? value : undefined);
 
 export const createCursorHookService = (socketDir: string, logger: Logger): CursorHookService => {
-    const socketPath = join(socketDir, "command-gate.sock");
+    const socketPath = join(socketDir, "command-guard.sock");
     const scriptPath = join(socketDir, GATE_SCRIPT_NAME);
     const turns = new Map<string, CursorGateTurn>();
     let server: Server | undefined;
@@ -261,7 +261,7 @@ export const createCursorHookService = (socketDir: string, logger: Logger): Curs
             await mkdir(dirname(hooksPath), { recursive: true })
                 .then(() => writeFile(hooksPath, hooksJson(scriptPath), { mode: 0o644 }))
                 .catch((error: unknown) => {
-                    logger.warn({ err: error, path: hooksPath }, "cursor: could not install the command-gate hook, rules will not apply");
+                    logger.warn({ err: error, path: hooksPath }, "cursor: could not install the command-guard hook, rules will not apply");
                 });
         },
         register: (turn) => {

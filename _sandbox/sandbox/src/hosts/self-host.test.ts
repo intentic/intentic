@@ -171,7 +171,7 @@ test("answers nothing when only the side that cannot open the checkout is connec
     expect(hostHoldingPath([windowsSide, archSide], "not-here", "/home/radarsu/intentic")).toBeUndefined();
 });
 
-// A door that never said which platform it is: an agent older than `HostFacts`, a card with commands off. Blocking on
+// A door that never said which platform it is: an agent older than `DeviceFacts`, a card with commands off. Blocking on
 // silence would take away the button that works today, so only positive disagreement is read.
 test("keeps a door that has not said what it is", () => {
     const quiet = device({ hostId: "ada-laptop", ...runsWorkAbc });

@@ -7,9 +7,9 @@ import { runUpgrade, type UpgradeExec, type UpgradeOutcome, upgradeMessage } fro
 interface Scripted {
     /** What the probe says landed. Undefined is a download that is not an agent at all. */
     readonly downloaded?: string | undefined;
-    /** What the loop holding the pidfile is running before anything happens. Undefined is nothing running. */
+    /** What the agent holding the pidfile is running before anything happens. Undefined is nothing running. */
     readonly running?: string | undefined;
-    /** What comes up when the loop is started. Defaults to what was installed; undefined is nothing came up. */
+    /** What comes up when the agent is started. Defaults to what was installed; undefined is nothing came up. */
     readonly came?: string | undefined;
 }
 
@@ -43,7 +43,7 @@ const scripted = (overrides: Partial<UpgradeExec> & Scripted = {}) => {
             steps.push(`start`);
             return await Promise.resolve("came" in overrides ? overrides.came : downloaded);
         },
-        // Nothing running unless a test says otherwise, or an assumed loop would quietly satisfy the check under test.
+        // Nothing running unless a test says otherwise, or an assumed agent would quietly satisfy the check under test.
         runningBuild: async () => await Promise.resolve(overrides.running),
         discard: async (path) => {
             steps.push(`discard ${path}`);
@@ -131,18 +131,18 @@ describe("runUpgrade", () => {
 
     // The swap landed but something else is still serving; not a rollback, since the bytes are in place and undoing
     // that would throw away work that succeeded.
-    it("names the build still serving when the loop that came up isn't the one installed", async () => {
+    it("names the build still serving when the agent that came up isn't the one installed", async () => {
         const { steps, exec } = scripted({ came: "1.0.0" });
-        expect(await upgrade(exec, "1.0.0")).toEqual({ kind: "loop-behind", installed: "2.0.0", running: "1.0.0" });
+        expect(await upgrade(exec, "1.0.0")).toEqual({ kind: "agent-behind", installed: "2.0.0", running: "1.0.0" });
         expect(steps).not.toContain(`swap ${agentPath}.previous→${agentPath}`);
         expect(steps).toContain(`discard ${agentPath}.previous`);
     });
 });
 
-// Upgrade is about what's running, not what's on disk: a binary can land without the loop noticing (a re-run, a
-// manual copy, a failed restart), and the loop keeps its started build indefinitely.
-describe("runUpgrade reconciles the running loop", () => {
-    it("restarts a loop that is behind the installed binary, without downloading anything", async () => {
+// Upgrade is about what's running, not what's on disk: a binary can land without the agent noticing (a re-run, a
+// manual copy, a failed restart), and the agent keeps its started build indefinitely.
+describe("runUpgrade reconciles the running agent", () => {
+    it("restarts a agent that is behind the installed binary, without downloading anything", async () => {
         const { steps, exec } = scripted({ published: () => Promise.resolve("1.0.0"), running: "0.9.0", came: "1.0.0" });
         expect(await upgrade(exec, "1.0.0")).toEqual({ kind: "restarted", from: "0.9.0", to: "1.0.0" });
         expect(steps).toEqual(["start"]);
@@ -150,7 +150,7 @@ describe("runUpgrade reconciles the running loop", () => {
     });
 
     // The rule that keeps this command cheap enough to run on a whim, rather than an unconditional bounce.
-    it("leaves a loop already on the installed build strictly alone", async () => {
+    it("leaves a agent already on the installed build strictly alone", async () => {
         const { steps, exec } = scripted({ published: () => Promise.resolve("1.0.0"), running: "1.0.0" });
         expect(await upgrade(exec, "1.0.0")).toEqual({ kind: "current", version: "1.0.0" });
         expect(steps).toEqual([]);
@@ -158,7 +158,7 @@ describe("runUpgrade reconciles the running loop", () => {
 
     // Nothing running is not a skew: `run --stop` is deliberate, and an upgrade that starts it anyway is one people
     // stop trusting.
-    it("starts nothing when no loop is running at all", async () => {
+    it("starts nothing when no agent is running at all", async () => {
         const { steps, exec } = scripted({ published: () => Promise.resolve("1.0.0") });
         expect(await upgrade(exec, "1.0.0")).toEqual({ kind: "current", version: "1.0.0" });
         expect(steps).toEqual([]);
@@ -167,24 +167,24 @@ describe("runUpgrade reconciles the running loop", () => {
     it("says which build is still serving when the restart doesn't take", async () => {
         const { exec } = scripted({ published: () => Promise.resolve("1.0.0"), running: "0.9.0", came: "0.9.0" });
         const outcome = await upgrade(exec, "1.0.0");
-        expect(outcome).toEqual({ kind: "loop-behind", installed: "1.0.0", running: "0.9.0" });
+        expect(outcome).toEqual({ kind: "agent-behind", installed: "1.0.0", running: "0.9.0" });
         expect(upgradeMessage(outcome)).toContain("intentic-machine run --stop");
     });
 
-    // The other way a restart ends badly: the old loop went down and nothing replaced it. That's not "running
+    // The other way a restart ends badly: the old agent went down and nothing replaced it. That's not "running
     // another build", and telling the owner to stop an already-stopped process sends them looking for a process that
     // isn't there.
     it("says nothing came back when the restart leaves the machine unserved", async () => {
         const { exec } = scripted({ published: () => Promise.resolve("1.0.0"), running: "0.9.0", came: undefined });
         const outcome = await upgrade(exec, "1.0.0");
-        expect(outcome).toEqual({ kind: "loop-behind", installed: "1.0.0" });
+        expect(outcome).toEqual({ kind: "agent-behind", installed: "1.0.0" });
         expect(upgradeMessage(outcome)).toContain("didn't come back up");
         expect(upgradeMessage(outcome)).not.toContain("run --stop");
     });
 
     // The same reconciliation runs when the release channel couldn't be read at all. The two verdicts that carry a
     // note are deliberately not on this path, since each is about a machine off the release lane on purpose.
-    it("reconciles the loop after a download that installs nothing", async () => {
+    it("reconciles the agent after a download that installs nothing", async () => {
         const { steps, exec } = scripted({ downloaded: "1.0.0", running: "0.9.0", came: "1.0.0" });
         expect(await upgrade(exec, "1.0.0")).toEqual({ kind: "restarted", from: "0.9.0", to: "1.0.0" });
         expect(steps).toContain("start");

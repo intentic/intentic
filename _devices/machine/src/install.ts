@@ -19,16 +19,16 @@ import { MACHINE_VERSION } from "./version.js";
 // runs first in `prepareSetup` so the repairs below always run from the newest agent.
 
 // Set on the re-exec after a self-update, so the updated agent doesn't ask GitHub the question that was just
-// answered, and can never re-exec in a loop. Doubles as the escape hatch for a run that must not update.
+// answered, and can never re-exec in a agent. Doubles as the escape hatch for a run that must not update.
 export const SELF_UPDATE_GUARD_ENV = "INTENTIC_MACHINE_NO_SELF_UPDATE";
 
-// How long to give a just-started loop to claim its pidfile before calling an upgrade a failure. Bounded by
+// How long to give a just-started agent to claim its pidfile before calling an upgrade a failure. Bounded by
 // process startup, since the pidfile is its first act.
 const RESIDENT_START_TIMEOUT_MS = 10_000;
 const RESIDENT_START_POLL_MS = 200;
 
-// Restart the loop and answer which build came up, the only answer that proves an upgrade landed. Waits for
-// the pidfile rather than the build since the loop writes both together (resident.ts); undefined covers both
+// Restart the agent and answer which build came up, the only answer that proves an upgrade landed. Waits for
+// the pidfile rather than the build since the agent writes both together (resident.ts); undefined covers both
 // "nothing started" and "started too slowly to say so".
 const restartResident = async (): Promise<string | undefined> => {
     await reconcileResidency(() => undefined);
@@ -36,7 +36,7 @@ const restartResident = async (): Promise<string | undefined> => {
     return await readResidentBuild();
 };
 
-// The one wiring of the upgrade machinery to this machine's resident loop, shared by `upgrade` and the
+// The one wiring of the upgrade machinery to this machine's resident agent, shared by `upgrade` and the
 // self-update below so the two cannot drift apart.
 export const machineUpgradeExec = (out: Log): UpgradeExec => realUpgradeExec(stopResident, restartResident, readResidentBuild, out);
 

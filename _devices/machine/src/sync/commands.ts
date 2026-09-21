@@ -243,9 +243,9 @@ const runSetup = async (ui: Ui, out: Log, flags: SetupFlags): Promise<void> => {
     await writeManagedSshConfig(pairingSshConfig(pairings));
 
     // The transport comes up before anything dials it: the sandbox's sshd is reached through a listener the
-    // resident loop holds (tunnel.ts), so the loop is (re)started here, before the probe and before Mutagen, and
-    // the restart also retires a loop still running the binary this run just replaced. Not fatal on timeout:
-    // Mutagen retries a session forever and the loop keeps trying to bind.
+    // resident agent holds (tunnel.ts), so the agent is (re)started here, before the probe and before Mutagen, and
+    // the restart also retires a agent still running the binary this run just replaced. Not fatal on timeout:
+    // Mutagen retries a session forever and the agent keeps trying to bind.
     ui.step("sync-starting", "starting the sync engine…");
     await reconcileResidency(out);
     const port = syncSshPort(sandboxId);
@@ -328,7 +328,7 @@ export const syncSwitchPlan = (
 const named = (pairings: readonly Pairing[]): string => pairings.map((pairing) => pairing.sandboxId).join(", ");
 
 // Pause/resume act on file sync, skipped with a note for a mirror-only enrollment (mirroring rides the
-// resident loop, not a Mutagen pause).
+// resident agent, not a Mutagen pause).
 const fileSyncOnly = (brief: string, verb: "pause" | "resume") =>
     buildCommand<SandboxFlags>({
         docs: { brief },
@@ -390,7 +390,7 @@ const mirrorSwitch = (brief: string, off: boolean) =>
                 // back should
                 // have it before they can alt-tab. Turning it back ON is left to the watcher, since creating a forward
                 // dials
-                // the sandbox over the transport that loop holds.
+                // the sandbox over the transport that agent holds.
                 if (off) {
                     // oxlint-disable-next-line eslint/no-await-in-loop -- one pairing's teardown at a time, as everywhere else here
                     await retirePairingMirror(mutagen, pairing.sandboxId);
@@ -584,7 +584,7 @@ export const syncUninstall = async (out: Log, sandbox?: string): Promise<void> =
     }
 
     if (remaining.length > 0) {
-        // Sync stays: regenerate the ssh fragment for pairings still live. The loop is left running — it re-reads its
+        // Sync stays: regenerate the ssh fragment for pairings still live. The agent is left running — it re-reads its
         // pairing list every tick (mirror.ts), and restarting it would drop this machine's socket to every linked
         // sandbox, which is the connection an unpair asked for from a sandbox travels over. Mutagen's daemon is left
         // alone too.
@@ -595,7 +595,7 @@ export const syncUninstall = async (out: Log, sandbox?: string): Promise<void> =
     }
 
     // Nothing left to sync: sync's residue goes (forwards, transport, ssh include); reconcileResidency retires the
-    // resident loop with the login entry only when this machine holds nothing at all.
+    // resident agent with the login entry only when this machine holds nothing at all.
     await reconcileResidency(out);
     await teardownAllForwards(mutagen, out);
     await removeManagedSshConfig();

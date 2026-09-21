@@ -1,6 +1,6 @@
 import { sleep } from "@intentic/base/async";
 import { type Browser, BrowserError, renderPage } from "@intentic/browser";
-import type { HostScopes } from "@intentic/sandbox-contract";
+import type { DeviceScopes } from "@intentic/sandbox-contract";
 import { assertScope } from "../policy.js";
 
 // The browser, driven by what is on the page rather than where it is on screen: snapshot it, act on an element
@@ -8,7 +8,7 @@ import { assertScope } from "../policy.js";
 // (look -> `screen`, change -> `control`, open -> `shell`). The browser is a separate instance with its own
 // profile, never the user's own, so a misfired click never touches their session.
 
-export const openPage = async (web: Browser, url: string, scopes: HostScopes): Promise<string> => {
+export const openPage = async (web: Browser, url: string, scopes: DeviceScopes): Promise<string> => {
     // Opening may start a browser process, which is what the shell switch governs.
     assertScope(scopes, "shell");
     if (url === "") {
@@ -20,12 +20,12 @@ export const openPage = async (web: Browser, url: string, scopes: HostScopes): P
     return renderPage(await web.open(target));
 };
 
-export const snapshotPage = async (web: Browser, scopes: HostScopes): Promise<string> => {
+export const snapshotPage = async (web: Browser, scopes: DeviceScopes): Promise<string> => {
     assertScope(scopes, "screen");
     return renderPage(await web.snapshot());
 };
 
-export const readPage = async (web: Browser, scopes: HostScopes): Promise<string> => {
+export const readPage = async (web: Browser, scopes: DeviceScopes): Promise<string> => {
     assertScope(scopes, "screen");
     const text = await web.text();
     return text.trim() === "" ? "That page has no readable text, it may still be loading, or it may be a canvas or a PDF." : text;
@@ -33,7 +33,7 @@ export const readPage = async (web: Browser, scopes: HostScopes): Promise<string
 
 // Every action answers with a fresh snapshot: the page after a click is a different page, and an agent that has
 // to ask what happened will forget to, or spend a round trip finding out.
-export const clickElement = async (web: Browser, ref: string, scopes: HostScopes): Promise<string> => {
+export const clickElement = async (web: Browser, ref: string, scopes: DeviceScopes): Promise<string> => {
     assertScope(scopes, "control");
     if (ref === "") {
         throw new BrowserError(`"ref" is required: take a snapshot and use one of the [e…] references from it.`);
@@ -43,7 +43,7 @@ export const clickElement = async (web: Browser, ref: string, scopes: HostScopes
     return `Clicked ${ref}.\n\n${renderPage(await web.snapshot())}`;
 };
 
-export const fillElement = async (web: Browser, ref: string, text: string, submit: boolean, scopes: HostScopes): Promise<string> => {
+export const fillElement = async (web: Browser, ref: string, text: string, submit: boolean, scopes: DeviceScopes): Promise<string> => {
     assertScope(scopes, "control");
     if (ref === "") {
         throw new BrowserError(`"ref" is required: take a snapshot and use one of the [e…] references from it.`);
@@ -54,14 +54,14 @@ export const fillElement = async (web: Browser, ref: string, text: string, submi
     return `Typed ${text.length} characters into ${ref}${submit ? " and submitted" : ""}.\n\n${renderPage(await web.snapshot())}`;
 };
 
-export const pressKey = async (web: Browser, combo: string, scopes: HostScopes): Promise<string> => {
+export const pressKey = async (web: Browser, combo: string, scopes: DeviceScopes): Promise<string> => {
     assertScope(scopes, "control");
     await web.press(combo === "" ? "Return" : combo);
     await settle();
     return `Pressed ${combo === "" ? "Return" : combo}.\n\n${renderPage(await web.snapshot())}`;
 };
 
-export const listTabs = async (web: Browser, scopes: HostScopes): Promise<string> => {
+export const listTabs = async (web: Browser, scopes: DeviceScopes): Promise<string> => {
     assertScope(scopes, "screen");
     const tabs = await web.tabs();
     if (tabs.length === 0) {
@@ -73,7 +73,7 @@ export const listTabs = async (web: Browser, scopes: HostScopes): Promise<string
     ].join("\n");
 };
 
-export const selectTab = async (web: Browser, id: string, scopes: HostScopes): Promise<string> => {
+export const selectTab = async (web: Browser, id: string, scopes: DeviceScopes): Promise<string> => {
     assertScope(scopes, "control");
     if (id === "") {
         throw new BrowserError(`"id" is required: list the tabs and pass one of the ids in brackets.`);

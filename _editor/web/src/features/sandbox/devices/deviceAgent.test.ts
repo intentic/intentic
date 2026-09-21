@@ -10,7 +10,7 @@ const NOW = 1_700_000_000_000;
 
 type Report = NonNullable<Device[`report`]>;
 
-// A live loop: `agentStalled` reads `lastTickAt`, so a fixture without one is neither live nor stalled.
+// A live agent: `agentStalled` reads `lastTickAt`, so a fixture without one is neither live nor stalled.
 const report = (overrides: Partial<Report> = {}): Report => ({
     hostname: `rog`,
     os: `linux`,
@@ -59,7 +59,7 @@ test(`offers both verbs on a sandbox that does not know which release is newest`
     expect(verbs()).toEqual([`Update agent`, `Restart agent`]);
 });
 
-// Update leads: it is what this group is opened for, and it restarts the loop on its way past, which makes
+// Update leads: it is what this group is opened for, and it restarts the process on its way past, which makes
 // Restart the narrower of the two rather than the first thing to try.
 test(`leads with the update, since a restart is the narrower errand`, () => {
     expect(verbs({}, {}, `1.9.0`)[0]).toBe(`Update agent`);
@@ -67,7 +67,7 @@ test(`leads with the update, since a restart is the narrower errand`, () => {
 
 // ── what the panel says ────────────────────────────────────────────────────
 
-test(`states the build the loop is serving, its pid, and that it is running`, () => {
+test(`states the build the process is serving, its pid, and that it is running`, () => {
     const panel = panelOf({}, { agent: { running: true, lastTickAt: NOW, build: `1.2.0`, installed: `1.2.0`, pid: 4242 } }, `1.2.0`);
     expect(panel?.version).toBe(`1.2.0`);
     expect(panel?.facts).toEqual([`pid 4242`]);
@@ -103,22 +103,22 @@ test(`names the published release, and what this device holds, when it is behind
     expect(panelOf({}, { agent: { running: true, lastTickAt: NOW, build: `1.1.0`, installed: `1.1.0` } }, `1.2.0`)?.notes[0]?.tone).toBe(`info`);
 });
 
-test(`says a stopped loop is why nothing reaches this device, and still offers the verbs`, () => {
+test(`says a stopped process is why nothing reaches this device, and still offers the verbs`, () => {
     const stopped = { agent: { running: false, build: `1.2.0`, installed: `1.2.0` } };
-    expect(said({}, stopped, `1.2.0`)).toBe(`Loop stopped — nothing reaches its folders or ports.`);
+    expect(said({}, stopped, `1.2.0`)).toBe(`Agent stopped — nothing reaches its folders or ports.`);
     expect(panelOf({}, stopped, `1.2.0`)?.state).toEqual({ word: `stopped`, variant: `warning` });
     expect(verbs({}, stopped, `1.2.0`)).toEqual([`Update agent`, `Restart agent`]);
 });
 
-test(`distinguishes a loop that has stopped making rounds from one that has stopped`, () => {
+test(`distinguishes a process that has stopped making rounds from one that has stopped`, () => {
     const stalled = { agent: { running: true, lastTickAt: NOW - 61_000, build: `1.2.0`, installed: `1.2.0` } };
-    expect(said({}, stalled, `1.2.0`)).toBe(`Loop stalled — what is below may be out of date.`);
+    expect(said({}, stalled, `1.2.0`)).toBe(`Agent stalled — what is below may be out of date.`);
     expect(hints({}, stalled, `1.2.0`)).toContain(`stopped making rounds`);
     expect(panelOf({}, stalled, `1.2.0`)?.state).toEqual({ word: `stalled`, variant: `warning` });
 });
 
 // A restart closes this one and a download would not, so it is its own sentence rather than "behind".
-test(`asks about the loop, not a download, when only the running build is behind the installed one`, () => {
+test(`asks about the process, not a download, when only the running build is behind the installed one`, () => {
     const skewed = { agent: { running: true, lastTickAt: NOW, build: `1.1.0`, installed: `1.2.0` } };
     expect(said({}, skewed, `1.2.0`)).toBe(`Serving 1.1.0, 1.2.0 installed — a restart picks it up.`);
     expect(hints({}, skewed, `1.2.0`)).toContain(`keeps the build it started with until it restarts`);
@@ -126,7 +126,7 @@ test(`asks about the loop, not a download, when only the running build is behind
 
 // Two different errands, both true: the file on disk was replaced and never picked up, and something newer
 // than that file has since been published. Neither hides the other.
-test(`says both when the loop is behind its own file and the file is behind the registry`, () => {
+test(`says both when the process is behind its own file and the file is behind the registry`, () => {
     const notes = panelOf({}, { agent: { running: true, lastTickAt: NOW, build: `1.1.0`, installed: `1.2.0` } }, `1.3.0`)?.notes ?? [];
     expect(notes.map((note) => note.tone)).toEqual([`warning`, `info`]);
     expect(notes[0]?.text).toBe(`Serving 1.1.0, 1.2.0 installed — a restart picks it up.`);

@@ -163,7 +163,7 @@ html[data-variant="maker"] {
        same apsaras and spires, a gold cartouche border, and a deliberately empty middle for the headline to sit in.
        Because it arrives pale it needs none of the dimming the photograph needed — only enough veil to keep the
        ornament from competing with the words over it. */
-    --role-plate-art: url("/assets/angkor/temple-maker-1600.avif");
+    --role-plate-art: url("/assets/plate/temple-maker-1600.avif");
     --role-plate-dim: 1;
     --role-plate-tint: 0.04;
     --role-plate-veil: 0.3;
@@ -233,12 +233,12 @@ html[data-variant="maker"] .plate-fade {
    `html[data-variant]` and a `:root` inside a media query score the same, so order is what separates them. */
 @media (max-width: 48rem) {
     html[data-variant="maker"] {
-        --role-plate-art: url("/assets/angkor/temple-maker-900.avif");
+        --role-plate-art: url("/assets/plate/temple-maker-900.avif");
     }
 }
 @media (min-width: 100rem) {
     html[data-variant="maker"] {
-        --role-plate-art: url("/assets/angkor/temple-maker-2400.avif");
+        --role-plate-art: url("/assets/plate/temple-maker-2400.avif");
     }
 }
 

@@ -7,7 +7,7 @@ import type { CursorHookService } from "./cursor-hooks.js";
 // holds: another daemon on the same /etc and auth root can rewrite any link after ready(). The listener can't be read
 // off disk (a re-bound socket looks identical), so it's asked directly over /identity.
 
-export interface CommandGateDeps {
+export interface CommandGuardDeps {
     readonly cursorHooks: CursorHookService;
     // Overridden by tests; production reads the real files and asks the real socket.
     readonly readText?: (path: string) => Promise<string | undefined>;
@@ -46,9 +46,9 @@ export const checks = ({
     readText = readOrAbsent,
     listenerPid = askListener,
     pid = process.pid,
-}: CommandGateDeps): readonly InvariantCheck[] => [
+}: CommandGuardDeps): readonly InvariantCheck[] => [
     {
-        name: "command-gate-leads-to-this-daemon",
+        name: "command-guard-leads-to-this-daemon",
         // Not boot: the gate starts as its own best-effort boot job, after the boot moment has passed.
         on: ["sweep"],
         run: async ({ fail }) => {
@@ -70,13 +70,13 @@ export const checks = ({
             const scriptBody = await readText(script);
             if (scriptBody === undefined || !scriptBody.includes(socket)) {
                 return fail(
-                    `the command-gate script (${script}) no longer names this daemon's socket (${socket}): Cursor's consults about this daemon's turns reach a daemon that has none registered, which allows them`,
+                    `the command-guard script (${script}) no longer names this daemon's socket (${socket}): Cursor's consults about this daemon's turns reach a daemon that has none registered, which allows them`,
                 );
             }
             const listener = await listenerPid(socket);
             if (listener !== pid) {
                 fail(
-                    `the command-gate socket (${socket}) is answered by ${listener === undefined ? "nobody" : `pid ${listener}`}, not this daemon (pid ${pid}): a second daemon on this auth root has re-bound it, and consults about this daemon's turns reach one that has no such turn and allows them`,
+                    `the command-guard socket (${socket}) is answered by ${listener === undefined ? "nobody" : `pid ${listener}`}, not this daemon (pid ${pid}): a second daemon on this auth root has re-bound it, and consults about this daemon's turns reach one that has no such turn and allows them`,
                 );
             }
         },

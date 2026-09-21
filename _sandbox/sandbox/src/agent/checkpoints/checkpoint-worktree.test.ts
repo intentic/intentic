@@ -1,6 +1,6 @@
 import { expect, test, vi } from "vitest";
-import { anchorWorktree, type AnchorDeps, forkWorktreeBase } from "./anchor-worktree.js";
-import type { TurnAnchor } from "./turn-anchors.js";
+import { checkpointWorktree, type CheckpointDeps, forkWorktreeBase } from "./checkpoint-worktree.js";
+import type { TurnCheckpoint } from "./turn-checkpoints.js";
 
 const CONVERSATION = "conv-1";
 const REPOS = [
@@ -10,7 +10,7 @@ const REPOS = [
 // Commit title where there is something to keep; only ever read by a human, so tests assert nothing about it.
 const TITLE = "Agent: before this turn";
 
-const services = { agentWorktrees: { worktreeDir: (_id: string, repo: string) => `/w/${repo}` }, logger: { warn: vi.fn() } } as unknown as AnchorDeps;
+const services = { agentWorktrees: { worktreeDir: (_id: string, repo: string) => `/w/${repo}` }, logger: { warn: vi.fn() } } as unknown as CheckpointDeps;
 
 // Finds the git verb the way git does: `-c key=value` pairs come before the subcommand, so the first token isn't it.
 const subcommandOf = (args: readonly string[]): string => {
@@ -52,7 +52,7 @@ const gitFake = (options: { dirty?: readonly string[]; broken?: readonly string[
 test("a clean checkout is pinned without committing anything", async () => {
     const { git, calls } = gitFake();
 
-    const anchored = await anchorWorktree(services, CONVERSATION, REPOS, TITLE, git);
+    const anchored = await checkpointWorktree(services, CONVERSATION, REPOS, TITLE, git);
 
     expect(anchored).toEqual([
         { repo: "root", base: "head-root" },
@@ -61,44 +61,44 @@ test("a clean checkout is pinned without committing anything", async () => {
     expect(calls.filter((call) => call.startsWith("commit") || call.startsWith("add"))).toEqual([]);
 });
 
-// The anchor exists for this: uncommitted edits between turns would be missing from a HEAD-only pin, so a fork or
+// The checkpoint exists for this: uncommitted edits between turns would be missing from a HEAD-only pin, so a fork or
 // rewind aimed at this message would silently lose that work.
-test("a checkout holding work commits it before pinning, so the anchor includes it", async () => {
+test("a checkout holding work commits it before pinning, so the checkpoint includes it", async () => {
     const { git, calls } = gitFake({ dirty: ["root"] });
 
-    const anchored = await anchorWorktree(services, CONVERSATION, REPOS, TITLE, git);
+    const anchored = await checkpointWorktree(services, CONVERSATION, REPOS, TITLE, git);
 
     expect(calls).toContain("add:root");
     expect(anchored).toContainEqual({ repo: "root", base: "new-root" });
     expect(anchored).toContainEqual({ repo: "intent", base: "head-intent" });
 });
 
-test("a repo that refuses drops out of the anchor without taking the others with it", async () => {
+test("a repo that refuses drops out of the checkpoint without taking the others with it", async () => {
     const { git } = gitFake({ broken: ["root"] });
 
-    expect(await anchorWorktree(services, CONVERSATION, REPOS, TITLE, git)).toEqual([{ repo: "intent", base: "head-intent" }]);
+    expect(await checkpointWorktree(services, CONVERSATION, REPOS, TITLE, git)).toEqual([{ repo: "intent", base: "head-intent" }]);
 });
 
-const anchors = (anchor: TurnAnchor | undefined) => ({ of: async () => anchor });
+const checkpoints = (checkpoint: TurnCheckpoint | undefined) => ({ of: async () => checkpoint });
 
 // Old files are answerable only from the source's own commits; anything else falls through to today's files rather than
 // refusing the fork.
 test("a fork asking for the files as they were starts at the source's commits for that message", async () => {
-    const anchor: TurnAnchor = { kind: "worktree", repos: [{ repo: "root", base: "sha-root" }] };
+    const checkpoint: TurnCheckpoint = { kind: "worktree", repos: [{ repo: "root", base: "sha-root" }] };
 
-    expect(await forkWorktreeBase(anchors(anchor), { conversationId: "src", keep: 4, files: "then" })).toEqual([{ repo: "root", base: "sha-root" }]);
+    expect(await forkWorktreeBase(checkpoints(checkpoint), { conversationId: "src", keep: 4, files: "then" })).toEqual([{ repo: "root", base: "sha-root" }]);
 });
 
 test("a fork that wants today's files names no base at all", async () => {
-    const anchor: TurnAnchor = { kind: "worktree", repos: [{ repo: "root", base: "sha-root" }] };
+    const checkpoint: TurnCheckpoint = { kind: "worktree", repos: [{ repo: "root", base: "sha-root" }] };
 
-    expect(await forkWorktreeBase(anchors(anchor), { conversationId: "src", keep: 4, files: "now" })).toBeUndefined();
-    expect(await forkWorktreeBase(anchors(anchor), undefined)).toBeUndefined();
+    expect(await forkWorktreeBase(checkpoints(checkpoint), { conversationId: "src", keep: 4, files: "now" })).toBeUndefined();
+    expect(await forkWorktreeBase(checkpoints(checkpoint), undefined)).toBeUndefined();
 });
 
-// A main-tree anchor is a workspace checkpoint, not a commit a checkout can be created at, so the fork starts on
+// A main-tree checkpoint is a workspace checkpoint, not a commit a checkout can be created at, so the fork starts on
 // today's files anyway.
-test("a main-tree source, and a message with no anchor, both fall through to today's files", async () => {
-    expect(await forkWorktreeBase(anchors({ kind: "tree", snapshot: "snap-1" }), { conversationId: "src", keep: 4, files: "then" })).toBeUndefined();
-    expect(await forkWorktreeBase(anchors(undefined), { conversationId: "src", keep: 4, files: "then" })).toBeUndefined();
+test("a main-tree source, and a message with no checkpoint, both fall through to today's files", async () => {
+    expect(await forkWorktreeBase(checkpoints({ kind: "tree", snapshot: "snap-1" }), { conversationId: "src", keep: 4, files: "then" })).toBeUndefined();
+    expect(await forkWorktreeBase(checkpoints(undefined), { conversationId: "src", keep: 4, files: "then" })).toBeUndefined();
 });

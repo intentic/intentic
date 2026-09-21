@@ -673,7 +673,7 @@ const connectionRow = (tile: CatalogTile, instance: CapabilitySummary): Connecti
     const facts =
         (tile.entry.kind === `vpn` ? vpnAddress(instance.id) : undefined) ??
         (tile.entry.kind === `netdisk` ? netdiskMount(instance.id) : undefined) ??
-        (tile.entry.kind === `host` ? hostFacts(instance) : connectionFacts(instance));
+        (tile.entry.kind === `device` ? hostFacts(instance) : connectionFacts(instance));
     // An unnamed connection took the tile's id; the tile is then the name, and the line below is free for facts.
     const named = instance.id !== tile.entry.id;
     return {
@@ -750,7 +750,7 @@ const nothingMatches = computed(() => (showingConnections.value ? connectionGrou
 // plus live facts a stored config can't answer. VPN and network disks are drawn separately by <VpnConnections> and
 // <NetdiskMounts> since a link's facts change live.
 const cardRowFacts = (instance: CapabilitySummary): string => {
-    if (selected.value?.kind === `host`) {
+    if (selected.value?.kind === `device`) {
         return hostFacts(instance);
     }
     // A browser names itself and how many sites it may work on; no stored config can answer either.
@@ -1016,7 +1016,7 @@ const dismiss = async (entry: CapabilityCatalogEntry): Promise<void> => {
 // Sandbox screen.
 const handOff = (entry: CapabilityCatalogEntry, added: CapabilitySummary): void => {
     // A machine that's never checked in is waiting on the one-liner; one that has is merely asleep.
-    if (entry.kind === `host` && hostFor(added.id)?.lastSeen === undefined) {
+    if (entry.kind === `device` && hostFor(added.id)?.lastSeen === undefined) {
         openConnect(added);
         return;
     }
@@ -1462,7 +1462,7 @@ const submitLabel = computed(() => {
                             <!-- Narrow reference column shown inline below @3xl; the docked aside version takes over above it. -->
                             <CapabilityContext :entry="selected" :values="values" :effects="liveEffects" class="@3xl:hidden" />
                             <!-- A device's access as a posture: the preset sets all switches at once; the sentence states what they currently spell. -->
-                            <label v-if="selected.kind === 'host'" class="flex items-start justify-between gap-4">
+                            <label v-if="selected.kind === 'device'" class="flex items-start justify-between gap-4">
                                 <span class="min-w-0">
                                     <span class="ui-field-label">{{ t(`capabilities.capabilities.access`) }}</span>
                                     <span class="mt-0.5 block text-2xs text-muted">{{ hostGrantSummary(values) }}</span>

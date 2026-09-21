@@ -32,7 +32,7 @@ const connectors = extension(`connectors`, {
     contributes: {
         capabilities: [
             { kind: `browser`, id: `reddit`, catalog: { name: `Reddit`, logo: `reddit`, description: ``, category: `communication` } },
-            { kind: `host`, id: `windows`, catalog: { name: `Windows PC`, icon: `desktop`, description: ``, category: `devices` } },
+            { kind: `device`, id: `windows`, catalog: { name: `Windows PC`, icon: `desktop`, description: ``, category: `devices` } },
         ],
     } as ExtensionManifest[`contributes`],
 });
@@ -49,7 +49,7 @@ it(`gives a connection the mark of the card it came from, whatever the owner nam
 it(`takes the card's glyph where the card itself has no brand to lend`, () => {
     // Card says `desktop` (a device); the capability-origin fallback would otherwise say "connection".
     const visual = skillVisual(skill(`radarsu-omen`, `capability`, `radarsu-omen`), {
-        capabilities: [capability(`radarsu-omen`, `host`, { platform: `windows` })],
+        capabilities: [capability(`radarsu-omen`, `device`, { platform: `windows` })],
         extensions: [connectors],
     });
     expect(visual).toEqual({ logo: undefined, icon: `desktop` });

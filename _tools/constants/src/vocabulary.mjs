@@ -57,6 +57,36 @@ export const RETIRED = [
         since: "2026-09-21",
     },
     {
+        id: "host-device",
+        pattern: /\b(hostContract|HostFacts|HostFactsSchema|HostScopes|HostScopesSchema|HostConfig|HostConfigSchema|hostHandler)\b|host\.contract|host\.handler|kind: "host"|kind === "host"|kind !== "host"|z\.literal\("host"\)|"kind": "host"/,
+        became: "device (extension-host, docker host and the `host` ADDRESS field are untouched)",
+        since: "2026-09-21",
+    },
+    {
+        id: "anchor-checkpoint",
+        pattern: /\b(TurnAnchor|TurnAnchors|turnAnchors|takeSteerAnchors|anchorSteeredMessage|forgetAnchors|anchorWorktree|AnchorDeps|unanchored)\b|agent\/anchors|turn-anchors|steer-anchors|anchor-worktree/,
+        became: "checkpoint (the UI-positioning and regex senses of `anchor` are untouched)",
+        since: "2026-09-21",
+    },
+    {
+        id: "gate-guard",
+        pattern: /\b(CommandGate|CommandGateOptions|createCommandGate|GateSubject|GateOutcome|outboundGate|outboundGateHooks|SigninGate|signinGate)\b|command-gate|outbound-gate/,
+        became: "guard, or wall for the sign-in one (the release gate keeps the word)",
+        since: "2026-09-21",
+    },
+    {
+        id: "loop-agent",
+        pattern: /\b(agentLoopNote|loopKeepsBuildStarted|loop-behind)\b|the background loop|the resident loop|the foreground loop|Loop (stopped|stalled) —/,
+        became: "agent or process (the workflows Loop feature keeps the word)",
+        since: "2026-09-21",
+    },
+    {
+        id: "seat-rail",
+        pattern: /\b(RailSeat|GhostSeat|seatPolicy|SeatPolicy|seatedTiles|railSeats|railSeated|stableSeats|seatedOnlyByVisit|unseated)\b/,
+        became: "tile (the account-seat sense of `seat` is untouched)",
+        since: "2026-09-21",
+    },
+    {
         id: "area-shell",
         pattern: /\b(AreaTile|AreaRow|areaReachable|areaIcon|areaBands|areaCommands|shellAreas|extensionAreas|lastAreaPath|FloatingArea|ChatArea)\b|Every area is on the rail|Rail Area/,
         became: "section",

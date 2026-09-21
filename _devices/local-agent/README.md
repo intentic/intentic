@@ -5,8 +5,8 @@ The plumbing every intentic CLI that lives on a **user's own computer** needs, a
 ```
 ~/.intentic/<name>/          agentHome(name)      — state dir + config.json
         config.json          writeSecretFile()    — 0700 dir, 0600 file
-        <agent>.log          spawnDetached()      — the loop's output has nowhere else to go
-        <agent>.pid          livePid()            — find the loop again, pid + the boot it belongs to
+        <agent>.log          spawnDetached()      — the agent's output has nowhere else to go
+        <agent>.pid          livePid()            — find the agent again, pid + the boot it belongs to
 
 HKCU\…\Run                   registerAutostart()  — Windows, per-user, no elevation, through the launcher stub
 ~/Library/LaunchAgents/      registerAutostart()  — macOS, opt-in per agent
@@ -65,43 +65,43 @@ reads.
 Windows earns that indirection. Explorer starts a Run entry in the interactive session, and the loader gives
 every console-subsystem program a console — which on Windows 11, where the default console host is Windows
 Terminal, is a terminal window on the desktop. The entry used to name the agent's own **detached** command,
-which spawns the loop and exits, so what a user saw at every single boot was a black window for one to two
+which spawns the agent and exits, so what a user saw at every single boot was a black window for one to two
 seconds. Nothing softer works: `powershell -WindowStyle Hidden` hides the console *its* host owns while the
 window belongs to WindowsTerminal.exe, and a Task Scheduler logon task maps a window like anything else. Only a
 program whose PE subsystem is GUI never gets a console, which is the whole of what the stub is. `detachedArgs`
 remains the fallback for an install with no stub beside it (a developer running `node dist/cli.js`), and
 registration says out loud that a window will flash.
 
-**`detached.ts`**: `spawnDetached`, `livePid`, `pidFileBody`, `isProcessAlive`. On POSIX the loop is spawned
-`detached` for its own session; on Windows because without it the loop is torn down the moment its parent
+**`detached.ts`**: `spawnDetached`, `livePid`, `pidFileBody`, `isProcessAlive`. On POSIX the agent is spawned
+`detached` for its own session; on Windows because without it the agent is torn down the moment its parent
 exits — measured on the compiled binary, and the reason "connected in the background (pid N)" was a lie there
 for every release that passed `windowsHide` instead. The two cannot be combined to get both properties
-(`CREATE_NO_WINDOW` is ignored alongside `DETACHED_PROCESS`), so a detached loop on Windows has no console at
+(`CREATE_NO_WINDOW` is ignored alongside `DETACHED_PROCESS`), so a detached agent on Windows has no console at
 all, and Windows hands a console child of a console-less process a new console *with a window*. That is why
-every spawn inside a loop (git and ssh in sync's bridge, docker and PowerShell in host's tools) passes
+every spawn inside a agent (git and ssh in sync's bridge, docker and PowerShell in host's tools) passes
 `windowsHide` itself; the flag applies whether or not the parent has a console, where inheritance did not.
 
-Where the stub is installed, `spawnDetached` goes through it on Windows and the bargain improves: the loop gets
+Where the stub is installed, `spawnDetached` goes through it on Windows and the bargain improves: the agent gets
 `CREATE_NO_WINDOW`, so it has a console of its own with **no window on it**, and every console child inherits
-that console instead of being handed a fresh one. The per-spawn `windowsHide` stays — it is what covers a loop
+that console instead of being handed a fresh one. The per-spawn `windowsHide` stays — it is what covers a agent
 started any other way — but it stops being the only thing between a user and a black window. The stub prints
-the loop's pid on its stdout, because its own pid belongs to a process that has already exited by the time the
+the agent's pid on its stdout, because its own pid belongs to a process that has already exited by the time the
 settle check below would probe it.
 
-`spawnDetached` also answers only once the loop has **survived** a short settle window, and throws naming its log
+`spawnDetached` also answers only once the agent has **survived** a short settle window, and throws naming its log
 otherwise. A pid proves the OS created a process; every caller turns it straight into a sentence promising the
 user their machine is now doing something.
 
 A pidfile lives beside the config, so it **outlives the boot that wrote it**, while the number in it means
 nothing outside that boot's process table: pids restart low and are handed out in roughly the same order every
-time, so a loop's own pid from yesterday is somebody else's transient process this morning. So `pidFileBody`
+time, so a agent's own pid from yesterday is somebody else's transient process this morning. So `pidFileBody`
 writes the pid *and* a stamp naming the boot, and `livePid` ignores any record from a different one without
 probing it. On Linux the stamp is `/proc/sys/kernel/random/boot_id`, exact and unmoved by the clock; elsewhere
 it is the boot's epoch by subtraction from the uptime, which libuv takes from `GetTickCount64` on Windows and
 `kern.boottime` on macOS — both keep counting across sleep, so a laptop that suspends goes on answering the same
 boot. That derived form is compared with a two-minute tolerance, because it is anchored to `Date.now()` and a
 stepped clock would otherwise read as a new boot; a false *mismatch* is the expensive direction, since it lets a
-second loop start on top of a live one.
+second agent start on top of a live one.
 
 The cost of not doing this was measured: a machine bugchecked in standby, nothing removed the sync watcher's
 pidfile, and on the next boot the watcher probed the pid it used to hold, found an unrelated early-boot process
@@ -134,7 +134,7 @@ business: which is why host's scopes and sync's Mutagen sessions are nowhere nea
 - [src/index.ts](src/index.ts): the public surface.
 - [src/home.ts](src/home.ts): the `~/.intentic/<agent>` directory and its 0600 floor.
 - [src/autostart.ts](src/autostart.ts): login autostart, per platform.
-- [src/detached.ts](src/detached.ts): the background loop, and surviving a closed terminal.
+- [src/detached.ts](src/detached.ts): the background agent, and surviving a closed terminal.
 - [src/launcher.ts](src/launcher.ts): `cliLauncher()` and the Windows launcher stub, including the
   compiled-binary argv case.
 - [src/ui.ts](src/ui.ts), the renderer: the pipe/terminal/nested split, the checklist, the ranked ending.

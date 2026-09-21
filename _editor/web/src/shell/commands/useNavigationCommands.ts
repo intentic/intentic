@@ -35,12 +35,12 @@ export function useNavigationCommands(): void {
     const { panels } = usePanels();
     const { capabilities } = useCapabilities();
     // Maintainer-and-up rows: the sandbox hub hides the rest, and the daemon refuses them anyway. A guest keeps the two
-    // seats its rail has.
+    // tiles its rail has.
     const { canShip, isGuest } = useRole();
     const { offered: planOffered } = useHostedPlan();
     const words = useVocabulary();
 
-    // The rail's own seats, which are shell routes rather than registered views, so no detect() reports them. Named as
+    // The rail's own tiles, which are shell routes rather than registered views, so no detect() reports them. Named as
     // the rail names them, including the two the maker's vocabulary renames.
     const shellSections = computed<readonly NavCommand[]>(() => [
         { command: `view.chat`, title: t(`shell.useNavigationCommands.chat`), category: GO_TO, icon: `comments`, to: `/chat` },

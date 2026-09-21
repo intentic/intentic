@@ -39,7 +39,7 @@ const effectOf = (capability: Capability): string => {
             return capability.config.identity === undefined
                 ? "its signed-in browser profile is deleted, so nothing can act as that account again without signing in"
                 : "it stops being one of that identity's accounts; the shared browser profile itself stays signed in";
-        case "host":
+        case "device":
             return "that machine's key is revoked and its link to this sandbox cut; nothing on the machine itself is deleted";
         case "webext":
             return "that browser's pairing is revoked; the extension installed over there stays, disconnected";

@@ -3501,7 +3501,7 @@ describe(`Conversation editing a sent message`, () => {
     });
 
     it(`refuses to arm on a message with no state to go back to`, async () => {
-        const conversation = new Conversation(`c-edit-unanchored`);
+        const conversation = new Conversation(`c-edit-uncheckpointed`);
         sandboxRequestMock.mockImplementation(sseResponse([{ kind: `session`, sessionId: `s-1` }, { kind: `delta`, text: `hi` }, { kind: `done` }]));
         await conversation.send(`first`, settings);
 

@@ -1,10 +1,10 @@
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
-import type { HostScopes } from "@intentic/sandbox-contract";
+import type { DeviceScopes } from "@intentic/sandbox-contract";
 import { expect, test } from "vitest";
 import { assertPath, assertScope, rootsOf, ScopeError, withinRoots } from "./policy.js";
 
-const scopes = (overrides: Partial<HostScopes> = {}): HostScopes => ({
+const scopes = (overrides: Partial<DeviceScopes> = {}): DeviceScopes => ({
     shell: "on",
     write: "on",
     screen: "on",

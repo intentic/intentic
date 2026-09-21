@@ -1,6 +1,6 @@
 import type { AgentEvent, AgentReply, AskQuestion, ToolCallLocation } from "@intentic/sandbox-contract";
 import { createRequest } from "../../agent/tools/agent-requests.js";
-import { type SteeringChannel, steeringRelay } from "../../agent/anchors/agent-steering.js";
+import { type SteeringChannel, steeringRelay } from "../../agent/checkpoints/agent-steering.js";
 import type { AgentRequest } from "../../agent/run/agent.js";
 import { splitAttachments, withFileNote } from "../../agent/prompt/attachment-note.js";
 import { unsentParameterFrame } from "../../agent/run/error-frames.js";
@@ -10,7 +10,7 @@ import { transientUpstream } from "../../agent/providers/routed-refusal.js";
 import { toolCategoryOf, workspacePath } from "../../agent/tools/tool-calls.js";
 import { openBrowserSession } from "../../browser/sessions/browser-sessions.js";
 import { ROUTED_BROWSER_SERVER } from "../../browser/tools/browser-tools.js";
-import { type CommandGate, vendorSubject } from "../../guard/command-gate.js";
+import { type CommandGuard, vendorSubject } from "../../guard/command-guard.js";
 import { createTurnGate } from "../../guard/turn-gate.js";
 import { codexUsageFromRateLimits } from "../../usage/translator-usage.js";
 import {
@@ -382,7 +382,7 @@ interface CodexStreamContext {
     readonly holdMessages?: boolean;
     readonly browser?: CodexBrowserContext;
     // One gate for the whole turn, so an "always" from planning still holds while executing.
-    readonly gate?: CommandGate;
+    readonly gate?: CommandGuard;
 }
 
 // Same card, registry and dismissal the `ask` tool uses, so a question reads the same across runtimes. The stream parks

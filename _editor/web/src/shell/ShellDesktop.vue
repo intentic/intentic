@@ -23,9 +23,9 @@ import {
     extensionPath,
     railBands,
     railRank,
-    railSeated,
-    seatPolicy,
-    seatedOnlyByVisit,
+    onRail,
+    railPolicy,
+    onRailOnlyByVisit,
 } from "../core-views/registry";
 import ViewBadgeChip from "../core-views/ViewBadgeChip.vue";
 import { useVocabulary } from "../core-views/vocabulary";
@@ -53,7 +53,7 @@ import { extensionsLoaded } from "../extension-host/loader";
 import AccountPanel from "./AccountPanel.vue";
 import ChatQuickBar from "../features/chat/panel/ChatQuickBar.vue";
 import { chatDock, terminalDock } from "./window/dockSlots";
-import { type RailSeat, useRailMemory } from "./rail/railMemory";
+import { type RailTile, useRailMemory } from "./rail/railMemory";
 import { useRailPins } from "./rail/railPins";
 import RailIcon from "./rail/RailIcon.vue";
 import TileMark from "./rail/TileMark.vue";
@@ -64,17 +64,17 @@ import SandboxGate from "../features/sandbox/gates/SandboxGate.vue";
 import SandboxSwitcher from "../features/sandbox/gates/SandboxSwitcher.vue";
 import { useT } from "@intentic/ui/i18n";
 
-// A rail element; the identity half (id, route, label, icon) is RailSeat, shared with the rail's memory.
+// A rail element; the identity half (id, route, label, icon) is RailTile, shared with the rail's memory.
 // - id: the tile's own name or contributing extension's id — what RAIL_GROUPS ranks and groups by.
 // - icon: undefined for a repository tile, which renders initials instead.
 const t = useT();
 
-interface SectionTile extends RailSeat {
+interface SectionTile extends RailTile {
     // Same shape core sections and extensions both fill, so the rail renders one badge element.
     readonly badge?: ViewBadge;
     // A standing fact about the tile (not news); today only the Agents tile's cross-sandbox scope uses it.
     readonly note?: { readonly icon: IconName; readonly text: string };
-    // Set on a held seat for a tile not yet loaded: dim, inert, never badged (railMemory.ts).
+    // Set on a held tile for a tile not yet loaded: dim, inert, never badged (railMemory.ts).
     readonly ghost?: boolean;
 }
 
@@ -158,7 +158,7 @@ const workspaceBadge = computed<ViewBadge | undefined>(() => {
     return { mark: outgoingMark(work), tooltip: outgoingSummary(work), ...landing };
 });
 
-// Seated only while chat is docked and not floated, except briefly after popping out from /chat itself.
+// On the rail only while chat is docked and not floated, except briefly after popping out from /chat itself.
 const chatTileSeated = computed(() => chatOnRail.value && (!chatFloats.value || route.name === `chat`));
 
 /* Preview closes the Work band by showing the running result. */
@@ -276,8 +276,8 @@ const extensionTile = (active: ActiveExtension): SectionTile => {
         ...(badge === undefined ? {} : { badge }),
     };
 };
-// Every nav tile, seated or not, in one run ranked by RAIL_GROUPS (core sections, then one tile per
-// extension activation); the seated and More lists both come from this run, so an section is never in both or neither.
+// Every nav tile, on the rail or not, in one run ranked by RAIL_GROUPS (core sections, then one tile per
+// extension activation); the on the rail and More lists both come from this run, so a section is never in both or neither.
 const tiles = computed<readonly SectionTile[]>(() =>
     [
         ...fixedTiles.value,
@@ -286,47 +286,47 @@ const tiles = computed<readonly SectionTile[]>(() =>
             .filter(({ extension }) => extension.surface === `rail`)
             .map(extensionTile),
     ]
-        // Before seating and before More: an section this reader cannot open belongs in neither list.
+        // Before the rail and before More: a section this reader cannot open belongs in neither list.
         .filter((tile) => sectionReachable(tile.to))
         .toSorted((left, right) => railRank(left.id) - railRank(right.id)),
 );
 // True once extensions, panels, and capabilities have all loaded; before that a missing tile is only late.
 const railSettled = computed(() => extensionsLoaded.value && panelsSettled.value && capabilitiesSettled.value);
 
-// railSeated (registry.ts) holds the rule; this only supplies the live facts: pinned and active.
+// onRail (registry.ts) holds the rule; this only supplies the live facts: pinned and active.
 const pins = useRailPins();
-const seatedTiles = computed<readonly SectionTile[]>(() =>
-    tiles.value.filter((tile) => railSeated(tile, { pinned: pins.pinned.value.has(tile.to), active: isNavActive(tile.to) })),
+const onRailTiles = computed<readonly SectionTile[]>(() =>
+    tiles.value.filter((tile) => onRail(tile, { pinned: pins.pinned.value.has(tile.to), active: isNavActive(tile.to) })),
 );
 const moreTiles = computed<readonly SectionTile[]>(() =>
-    tiles.value.filter((tile) => !seatedTiles.value.includes(tile)).toSorted((left, right) => left.label.localeCompare(right.label)),
+    tiles.value.filter((tile) => !onRailTiles.value.includes(tile)).toSorted((left, right) => left.label.localeCompare(right.label)),
 );
 
-// tileLabel, plus one clause when a tile is seated only by the visit: says so once, while it can still
+// tileLabel, plus one clause when a tile is on the rail only by the visit: says so once, while it can still
 // be pinned. Not used by the runtime cluster below — those tiles can't be pinned at all.
 const railTileLabel = (tile: SectionTile): string => {
-    const visiting = seatedOnlyByVisit(tile, { pinned: pins.isPinned(tile.to), active: isNavActive(tile.to) });
+    const visiting = onRailOnlyByVisit(tile, { pinned: pins.isPinned(tile.to), active: isNavActive(tile.to) });
     return visiting ? `${tileLabel(tile)} · here while you are · right-click to keep` : tileLabel(tile);
 };
 
-// Only the permanent tiles and this reader's pins — the seats that will still be there tomorrow.
-const stableSeats = computed<readonly SectionTile[]>(() =>
-    tiles.value.filter((tile) => seatPolicy(tile.id) === `always` || pins.pinned.value.has(tile.to)),
+// Only the permanent tiles and this reader's pins — the tiles that will still be there tomorrow.
+const stableTiles = computed<readonly SectionTile[]>(() =>
+    tiles.value.filter((tile) => railPolicy(tile.id) === `always` || pins.pinned.value.has(tile.to)),
 );
-// Seats the rail had last time and hasn't refilled yet; empty once complete or on a first visit.
-const heldSeats = useRailMemory(stableSeats, railSettled);
-// Seated tiles plus held seats, sorted by the same table, so each lands in the seat its tile will take.
-const railSeats = computed<readonly SectionTile[]>(() =>
-    [...seatedTiles.value, ...heldSeats.value].toSorted((left, right) => railRank(left.id) - railRank(right.id)),
+// Tiles the rail had last time and hasn't refilled yet; empty once complete or on a first visit.
+const heldTiles = useRailMemory(stableTiles, railSettled);
+// On-rail tiles plus held tiles, sorted by the same table, so each lands where it will take its place.
+const railTiles = computed<readonly SectionTile[]>(() =>
+    [...onRailTiles.value, ...heldTiles.value].toSorted((left, right) => railRank(left.id) - railRank(right.id)),
 );
-// Held seats are included so band hairlines don't shift position as the run fills in.
-const tileBands = computed(() => railBands(railSeats.value, (tile) => tile.id));
+// Held tiles are included so band hairlines don't shift position as the run fills in.
+const tileBands = computed(() => railBands(railTiles.value, (tile) => tile.id));
 
-// Alt+Up/Down walks the seated nav tiles only (the runtime cluster's length changes under a running
+// Alt+Up/Down walks the on the rail nav tiles only (the runtime cluster's length changes under a running
 // turn); wraps, and from a route no tile owns enters at the end the press is heading toward.
 const cycleSection = (delta: number): void => {
-    // The seated run only; an section behind More is reached by its own command instead.
-    const list = seatedTiles.value;
+    // The on the rail run only; a section behind More is reached by its own command instead.
+    const list = railTiles.value;
     if (list.length === 0) {
         return;
     }
@@ -391,9 +391,9 @@ const showBesideRail = (menu: { show: (event: Event) => void } | undefined, even
 };
 
 // Two menus: the chat tile offers where it goes next (dock/float, same toggles as elsewhere); every
-// other seated tile offers the pin — permanent tiles get no row, since they're already always seated.
+// other on the rail tile offers the pin — permanent tiles get no row, since they're already always on the rail.
 const tileMenu = ref<{ show: (event: Event) => void }>();
-const menuTile = ref<RailSeat>();
+const menuTile = ref<RailTile>();
 const tileMenuItems = computed<MenuItem[]>(() => {
     const tile = menuTile.value;
     if (tile === undefined) {
@@ -416,15 +416,15 @@ const tileMenuItems = computed<MenuItem[]>(() => {
     return [
         {
             label: t(`shell.shellDesktop.keepOnRail2`),
-            // States what happens either way, since this is the one place the seat rule is explained.
-            hint: pins.isPinned(tile.to) ? `Always seated, badge or not` : `Otherwise it shows only when it needs you`,
+            // States what happens either way, since this is the one place the tile rule is explained.
+            hint: pins.isPinned(tile.to) ? `Always on the rail, badge or not` : `Otherwise it shows only when it needs you`,
             checked: pins.isPinned(tile.to),
             command: (): void => pins.toggle(tile.to),
         },
     ];
 });
-const onTileContextMenu = (tile: RailSeat, event: MouseEvent): void => {
-    if (tile.id !== `chat` && seatPolicy(tile.id) === `always`) {
+const onTileContextMenu = (tile: RailTile, event: MouseEvent): void => {
+    if (tile.id !== `chat` && railPolicy(tile.id) === `always`) {
         return; // A permanent tile has nothing to offer here; keep the browser's own menu.
     }
     event.preventDefault();
@@ -432,8 +432,8 @@ const onTileContextMenu = (tile: RailSeat, event: MouseEvent): void => {
     showBesideRail(tileMenu.value, event);
 };
 
-// Every unseated section, as real links (so click behaviors work), sorted alphabetically rather than by
-// rail rank; each row can pin the section (railPins.ts). Never badges — anything with something to say is already seated.
+// Every offRail section, as real links (so click behaviors work), sorted alphabetically rather than by
+// rail rank; each row can pin the section (railPins.ts). Never badges — anything with something to say is already on the rail.
 const moreTrigger = ref<HTMLButtonElement | null>(null);
 const moreOpen = ref(false);
 // The count is the whole point of hovering; phrased like every other tile's label. A `computed`, so it is rebuilt
@@ -448,7 +448,7 @@ const dismissMore = (event: MouseEvent): void => {
         moreOpen.value = false;
     }
 };
-// Pins here, not from a right-click, since an unseated section has no tile to click; the row leaves as
+// Pins here, not from a right-click, since an offRail section has no tile to click; the row leaves as
 // it's pressed (that departure is the feedback). Refocuses the door trigger so a keyboard reader isn't stranded.
 const keepOnRail = (tile: SectionTile): void => {
     pins.toggle(tile.to);
@@ -494,7 +494,7 @@ const terminalBadge = computed<ViewBadge | undefined>(() =>
 );
 // Registers the shell's built-in palette commands on mount, each with its own keybinding.
 useShellCommands();
-// One destination per place the shell has: every rail section seated or not, every sandbox and settings section.
+// One destination per place the shell has: every rail section on the rail or not, every sandbox and settings section.
 useNavigationCommands();
 // The single global-shortcut dispatcher: matches any registered command's keybinding to the keystroke.
 useKeybindings();
@@ -516,7 +516,7 @@ useKeybindings();
                     <!-- Air where a hairline used to be; aria-hidden, since the tiles already carry their own labels. -->
                     <span v-if="at > 0" class="icon-rail-band" aria-hidden="true"></span>
                     <template v-for="tile in band.items" :key="tile.to">
-                        <!-- A held seat, not a tile yet (railMemory.ts): draws the glyph it will show, dim, so arrival doesn't shift the tiles below it. -->
+                        <!-- A held tile, not a tile yet (railMemory.ts): draws the glyph it will show, dim, so arrival doesn't shift the tiles below it. -->
                         <span
                             v-if="tile.ghost"
                             class="icon-rail-tile flex items-center justify-center rounded-lg bg-overlay/50 text-muted opacity-40"
@@ -552,10 +552,10 @@ useKeybindings();
                 </template>
             </div>
 
-            <!-- Every unseated section; kept outside the scrolling run so it's never scrolled out of sight. -->
+            <!-- Every offRail section; kept outside the scrolling run so it's never scrolled out of sight. -->
             <!-- A door to sections, not an "add one": the same tile as the nav run above it, so the dashed rim is left to the
                  one control on this rail that really does add something. -->
-            <!-- Empty for an owner means "everything is seated", which is worth a tile and a sentence. Empty for a guest
+            <!-- Empty for an owner means "everything is on the rail", which is worth a tile and a sentence. Empty for a guest
                  means there is nothing to put there and never will be, so the door itself goes. -->
             <button
                 v-if="!isGuest"

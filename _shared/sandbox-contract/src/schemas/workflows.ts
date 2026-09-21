@@ -111,11 +111,11 @@ export type WorkflowGate = z.infer<typeof WorkflowGateSchema>;
 export const GATE_DAILY_MAX_DEFAULT = 20;
 // blocked means the gate couldn't reach a judgment, not that the product is broken; conflating the two makes teams turn
 // the gate off. Maps to a neutral pipeline exit, never a failed build.
-export const GateOutcomeSchema = z.enum(["pass", "fail", "blocked"]);
-export type GateOutcome = z.infer<typeof GateOutcomeSchema>;
+export const GuardOutcomeSchema = z.enum(["pass", "fail", "blocked"]);
+export type GuardOutcome = z.infer<typeof GuardOutcomeSchema>;
 // value is the field as the step wrote it; absent means most blocked verdicts had nothing to read.
 export const GateVerdictSchema = z.object({
-    outcome: GateOutcomeSchema.describe(
+    outcome: GuardOutcomeSchema.describe(
         "Ship it, do not, or we could not tell. That third answer exists because could not reach a judgement is not the product is broken: a gate that reported its own outages as failures is one a team switches off, so it should be the honest answer far more often than the convenient one, and it means a neutral build rather than a red one.",
     ),
     // Why, in one line; realistically the only part of this a pipeline log will show.

@@ -171,7 +171,7 @@ describe("capabilityEffects", () => {
 
     it("spells out what a connected device grants, defaulting writes OFF", () => {
         // An untouched form posts nothing for the switches, so the defaults are the disclosure the user reads.
-        expect(capabilityEffects({ kind: "host", id: "laptop", config: { platform: "windows" } })).toEqual([
+        expect(capabilityEffects({ kind: "device", id: "laptop", config: { platform: "windows" } })).toEqual([
             { kind: "machine", platform: "windows", grants: ["run commands", "read files", "capture the screen"] },
             { kind: "skill", name: "laptop" },
             { kind: "mcp" },
@@ -180,7 +180,7 @@ describe("capabilityEffects", () => {
 
     it("follows the switches the user set on a connected device", () => {
         const [machine] = capabilityEffects({
-            kind: "host",
+            kind: "device",
             id: "desktop",
             config: { platform: "linux", shell: "off", write: "on", screen: "off", sandboxes: "on" },
         });

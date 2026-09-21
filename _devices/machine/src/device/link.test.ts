@@ -1,4 +1,4 @@
-import type { hostContract, HostScopes } from "@intentic/sandbox-contract";
+import type { deviceContract, DeviceScopes } from "@intentic/sandbox-contract";
 import { createORPCClient } from "@orpc/client";
 import type { ContractRouterClient } from "@orpc/contract";
 import { RPCLink } from "@orpc/client/websocket";
@@ -6,7 +6,7 @@ import { RPCHandler } from "@orpc/server/websocket";
 import { expect, test } from "vitest";
 import { createHostRouter } from "./router.js";
 
-// Both ends of the socket, over a real oRPC handler and link built from the same `hostContract`, so a
+// Both ends of the socket, over a real oRPC handler and link built from the same `deviceContract`, so a
 // procedure renamed or a schema tightened on one side fails here rather than on somebody's laptop.
 
 // A pair of sockets wired to each other. Enough of the WebSocket surface for both adapters: the handler wants
@@ -40,7 +40,7 @@ class FakeSocket {
     }
 }
 
-const scopes = (overrides: Partial<HostScopes> = {}): HostScopes => ({
+const scopes = (overrides: Partial<DeviceScopes> = {}): DeviceScopes => ({
     shell: "on",
     write: "on",
     screen: "on",
@@ -51,7 +51,7 @@ const scopes = (overrides: Partial<HostScopes> = {}): HostScopes => ({
 });
 
 // The whole wiring: machine hosts the contract, "daemon" holds the client, over one socket, as in production.
-const connectedPair = (initial: HostScopes = scopes()) => {
+const connectedPair = (initial: DeviceScopes = scopes()) => {
     const machineSocket = new FakeSocket();
     const daemonSocket = new FakeSocket();
     machineSocket.peer = daemonSocket;
@@ -69,7 +69,7 @@ const connectedPair = (initial: HostScopes = scopes()) => {
         }),
     );
     handler.upgrade(machineSocket as unknown as WebSocket);
-    const client: ContractRouterClient<typeof hostContract> = createORPCClient(new RPCLink({ websocket: daemonSocket as unknown as WebSocket }));
+    const client: ContractRouterClient<typeof deviceContract> = createORPCClient(new RPCLink({ websocket: daemonSocket as unknown as WebSocket }));
     return { client, logged, scopesNow: () => live };
 };
 
@@ -100,7 +100,7 @@ test("a pushed grant takes effect on the machine", async () => {
 test("a grant that does not satisfy the contract is refused before it reaches the machine", async () => {
     const { client, scopesNow } = connectedPair();
     // The whole reason for a typed link: a caller cannot push a scope value the machine has no meaning for.
-    await expect(client.setScopes({ shell: "maybe", write: "off", screen: "on", control: "off" } as unknown as HostScopes)).rejects.toThrow();
+    await expect(client.setScopes({ shell: "maybe", write: "off", screen: "on", control: "off" } as unknown as DeviceScopes)).rejects.toThrow();
     expect(scopesNow()).toEqual(scopes());
 });
 

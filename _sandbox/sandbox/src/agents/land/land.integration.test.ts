@@ -14,7 +14,7 @@ import { ensureRootRepo } from "../../git/remote/root-repo.js";
 import { createLogger } from "../../logger.js";
 import { createPerfTracker } from "../../platform/resources/perf.js";
 import { workspacePaths } from "../../workspace/workspace.js";
-import { anchorOf } from "./agent-changes.js";
+import { checkpointOf } from "./agent-changes.js";
 
 import { landAgent, outstandingConflicts, pruneEmptiedDirs } from "./land.js";
 import { createAgentWorktrees, type AgentWorktrees, type ConversationWorktree } from "../worktrees/worktrees.js";
@@ -681,7 +681,7 @@ test("a user edit under a rename-with-edits is a conflict, not a clean change", 
     expect(existsSync(join(work, "moved.ts"))).toBe(false);
 });
 
-// Anchored the way the diff route now anchors it (agent-changes.ts -> anchorOf, no landedTip rung): a worktree
+// Anchored the way the diff route now anchors it (agent-changes.ts -> checkpointOf, no landedTip rung): a worktree
 // fast-forwarded onto newer main must not review main's own commits as this agent's.
 test("a worktree synced onto newer main commits does not review main's work as its own", async () => {
     const { work, conversation } = await setup();
@@ -693,9 +693,9 @@ test("a worktree synced onto newer main commits does not review main's work as i
     await sh(conversation.cwd, "merge", "--ff-only", await sh(work, "rev-parse", "HEAD"));
     await writeFile(join(conversation.cwd, "own.ts"), "this agent's work\n");
 
-    const anchor = await anchorOf(conversation.cwd, work, "agent/c1", undefined, base);
+    const anchor = await checkpointOf(conversation.cwd, work, "agent/c1", undefined, base);
     expect((await changesAgainstBase(conversation.cwd, anchor)).map((change) => change.path)).toEqual(["own.ts"]);
-    // The frozen creation-time base still counts foreign.ts as this agent's, which is the reading anchorOf replaces.
+    // The frozen creation-time base still counts foreign.ts as this agent's, which is the reading checkpointOf replaces.
     expect((await changesAgainstBase(conversation.cwd, base)).map((change) => change.path)).toContain("foreign.ts");
 });
 

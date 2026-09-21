@@ -22,7 +22,7 @@ import { deliverToListenerChannel } from "../extensions/listener-deliver.js";
 import { conversationLines, matchLines } from "../sessions/transcript-search.js";
 import { resolveWithin } from "../workspace/files/workspace-files-paths.js";
 import { headSha } from "../git/changes/changes.js";
-import { agentRepoReview, agentRepoModules, anchorOf, presentInMain } from "./land/agent-changes.js";
+import { agentRepoReview, agentRepoModules, checkpointOf, presentInMain } from "./land/agent-changes.js";
 import { commitsCarrying, historySpanStart } from "./land/landed-history.js";
 import { type IsolatedAgent, isIsolated, type PersistedAgent } from "./registry/agents-store.js";
 import { MAX_REACTION_KINDS } from "./registry/agents-registry.js";
@@ -486,7 +486,7 @@ export const createAgentsRoutes = (services: Services) => {
                     }
                     // Anchor read only when the recorded head can't serve: rare, saves a merge-base spawn.
                     const landed = composed.landedHead === undefined ? undefined : await historySpanStart(main, composed.landedHead, head);
-                    const from = landed ?? (await anchorOf(main, main, entry.branch, undefined, composed.base));
+                    const from = landed ?? (await checkpointOf(main, main, entry.branch, undefined, composed.base));
                     const byPath = new Map(absorbed.map((change) => [change.path, change]));
                     const commits: AgentHistoryCommit[] = [];
                     let placed = 0;
@@ -541,14 +541,14 @@ export const createAgentsRoutes = (services: Services) => {
                 if (resolveWithin(main, input.path) === undefined) {
                     throw new ORPCError("BAD_REQUEST", { message: "invalid path" });
                 }
-                const anchor = await anchorOf(main, main, entry.branch, undefined, composed.base);
+                const anchor = await checkpointOf(main, main, entry.branch, undefined, composed.base);
                 return services.git.refFileDiff(main, input.path, anchor, entry.branch);
             }
             const dir = services.agentWorktrees.worktreeDir(entry.id, input.repo);
             if (resolveWithin(dir, input.path) === undefined) {
                 throw new ORPCError("BAD_REQUEST", { message: "invalid path" });
             }
-            return services.git.fileDiff(dir, input.path, await anchorOf(dir, main, entry.branch, undefined, composed.base));
+            return services.git.fileDiff(dir, input.path, await checkpointOf(dir, main, entry.branch, undefined, composed.base));
         }),
         // Manual land, the recovery path after a conflicted or aborted auto-land; same patch-apply mechanics.
         land: i.land.handler(async ({ input }) => {

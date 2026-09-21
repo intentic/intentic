@@ -1,8 +1,8 @@
 import { join } from "node:path";
-import type { HostConfig } from "@intentic/sandbox-contract";
+import type { DeviceConfig } from "@intentic/sandbox-contract";
 import { z } from "zod";
 import { capabilityCtx } from "../capabilities/capability.js";
-import { hostHandler } from "../capabilities/handlers/host.handler.js";
+import { deviceHandler } from "../capabilities/handlers/device.handler.js";
 import type { Services } from "../composition.js";
 import { jsonFile } from "../store/json-file.js";
 
@@ -67,14 +67,14 @@ export const seedSetupHost = async (
     if ((await seeded.read()).ids.includes(id)) {
         return { offered: false, id };
     }
-    const existing = (await services.capabilities.list()).find((capability) => capability.id === id && capability.kind === "host");
+    const existing = (await services.capabilities.list()).find((capability) => capability.id === id && capability.kind === "device");
     if (existing === undefined) {
-        const config: HostConfig = { platform: seed.platform, ...SETUP_HOST_SCOPES };
+        const config: DeviceConfig = { platform: seed.platform, ...SETUP_HOST_SCOPES };
         // Drains the handler's progress frames; nothing reads them at boot, though it still writes the pack and grant.
-        for await (const frame of hostHandler.apply(capabilityCtx(services), id, config)) {
+        for await (const frame of deviceHandler.apply(capabilityCtx(services), id, config)) {
             void frame;
         }
-        await services.capabilities.upsert({ id, kind: "host", config });
+        await services.capabilities.upsert({ id, kind: "device", config });
     }
     // Also records a pre-existing card, so a sandbox older than this file gets fixed on its first boot here.
     await seeded.update((stored) => (stored.ids.includes(id) ? stored : { ids: [...stored.ids, id] }));

@@ -1,4 +1,4 @@
-import type { HostScopes } from "@intentic/sandbox-contract";
+import type { DeviceScopes } from "@intentic/sandbox-contract";
 import { expect, test } from "vitest";
 import { ScopeError } from "../policy.js";
 import { crossInterpreter, destructiveClasses, runCommand, targetOf } from "./shell.js";
@@ -8,7 +8,7 @@ import { crossInterpreter, destructiveClasses, runCommand, targetOf } from "./sh
 // backend; this arrives as an MCP call on a different machine). These tests run real, harmless commands, since
 // the refusal has to happen before the spawn.
 
-const scopes = (overrides: Partial<HostScopes> = {}): HostScopes => ({
+const scopes = (overrides: Partial<DeviceScopes> = {}): DeviceScopes => ({
     shell: "on",
     write: "off",
     screen: "on",

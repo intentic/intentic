@@ -25,7 +25,7 @@ test(`tells a browser waiting on a login from one waiting on a rebuild`, () => {
     // Only the rebuild one gets a link, and a machine never does: its remedy is a button on its own row.
     expect(rebuildStep(`browser`, build)).toBe(true);
     expect(rebuildStep(`browser`, login)).toBe(false);
-    expect(rebuildStep(`host`, build)).toBe(false);
+    expect(rebuildStep(`device`, build)).toBe(false);
 });
 
 // A sleeping machine isn't a machine with something to do, and only the roster (not stored status) can tell which
@@ -33,10 +33,10 @@ test(`tells a browser waiting on a login from one waiting on a rebuild`, () => {
 test(`reads a connected machine's liveness from the roster rather than its status`, () => {
     const machine = instance({ state: `active` });
 
-    expect(connectionState(`host`, machine, true).label).toBe(`online`);
-    expect(connectionState(`host`, machine, false).label).toBe(`offline`);
+    expect(connectionState(`device`, machine, true).label).toBe(`online`);
+    expect(connectionState(`device`, machine, false).label).toBe(`offline`);
     // Not yet in the roster reads as offline, not as an error.
-    expect(connectionState(`host`, machine, undefined).label).toBe(`offline`);
+    expect(connectionState(`device`, machine, undefined).label).toBe(`offline`);
 });
 
 // Rank is the same judgement as the wording: a list that mostly works still opens on the part that doesn't.

@@ -149,7 +149,7 @@ unspent landings in `intentic`, and for each one the loop does:
 for (const landing of landings) {
     const applied = new Set(await appliedPaths(...));       // cached (fixed shas)
     const retired = new Set(await committedSince(...));     // keyed on CURRENT head
-    const anchor  = await anchorOf(...);                    // cached (fixed shas)
+    const anchor  = await checkpointOf(...);                    // cached (fixed shas)
     for (const path of await landedPaths(...)) { ... }       // cached (fixed shas)
 }
 ```

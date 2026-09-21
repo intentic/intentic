@@ -5,7 +5,7 @@ import { MACHINE_VERSION } from "./version.js";
 
 // The intentic-machine CLI: `device setup` (redeem a device card's pairing and stay connected at login),
 // `sync setup` (redeem a Desktop sync card's pairing and keep a folder + ports mirrored), then the shared
-// residency: `run` (the one background loop for both), `status`, `upgrade`, `uninstall`. Command names map to
+// residency: `run` (the one background agent for both), `status`, `upgrade`, `uninstall`. Command names map to
 // kebab-case flags per stricli's scanner.
 export const app = buildApplication(
     buildRouteMap({

@@ -71,7 +71,7 @@ export { diffContract } from "./contracts/diff.contract.js";
 export { gitContract } from "./contracts/git.contract.js";
 export { historyContract } from "./contracts/history.contract.js";
 // Not part of `sandboxContract` below: spoken over a device's WebSocket, with the machine implementing it.
-export { hostContract } from "./contracts/host.contract.js";
+export { deviceContract } from "./contracts/device.contract.js";
 // Same inversion, spoken over a browser extension's socket, with the extension implementing it.
 export { webextContract } from "./contracts/webext.contract.js";
 // Same inversion again: spoken over a runner's WebSocket, with the runner implementing it.

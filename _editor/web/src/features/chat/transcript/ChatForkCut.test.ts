@@ -7,7 +7,7 @@ import type { ChatMessage } from "./transcript";
 import { errands } from "../run/errands";
 import { IconStub } from "@intentic/ui/testing";
 
-// Pins the cut's menu: which rows a cut offers, which an unanchored cut may still show, and that the destructive rewind
+// Pins the cut's menu: which rows a cut offers, which an uncheckpointed cut may still show, and that the destructive rewind
 // needs two presses.
 
 const forkAt = vi.hoisted(() => vi.fn());
@@ -98,9 +98,9 @@ const openMenu = async (element: HTMLElement): Promise<void> => {
 };
 const row = (label: string): MenuItem | undefined => shown.model.find((item) => String(item.label ?? ``).startsWith(label));
 
-// Anchored has a restorable state; unanchored predates that record or has been evicted.
+// Anchored has a restorable state; uncheckpointed predates that record or has been evicted.
 const anchored = (id: number): ChatMessage => ({ id, role: `user`, text: `prompt ${id}`, rewindIndex: id });
-const unanchored = (id: number): ChatMessage => ({ id, role: `user`, text: `prompt ${id}` });
+const uncheckpointed = (id: number): ChatMessage => ({ id, role: `user`, text: `prompt ${id}` });
 
 beforeEach(() => {
     vi.useFakeTimers();
@@ -136,7 +136,7 @@ describe(`the fork cut`, () => {
     });
 
     it(`withholds the rows that promise old files where there is no state to go back to`, async () => {
-        state.messages = [anchored(0), { id: 1, role: `assistant`, text: `answer` }, unanchored(2)];
+        state.messages = [anchored(0), { id: 1, role: `assistant`, text: `answer` }, uncheckpointed(2)];
         const element = mount(2);
         await openMenu(element);
 
@@ -180,7 +180,7 @@ describe(`the fork cut`, () => {
     });
 
     it(`refuses the edit where the files cannot come back, and while a turn holds them`, async () => {
-        state.messages = [anchored(0), { id: 1, role: `assistant`, text: `answer` }, unanchored(2)];
+        state.messages = [anchored(0), { id: 1, role: `assistant`, text: `answer` }, uncheckpointed(2)];
         const element = mount(2);
         await openMenu(element);
         expect(row(`Edit`)?.disabled).toBe(true);

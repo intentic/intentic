@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { vendorSubject } from "./command-gate.js";
+import { vendorSubject } from "./command-guard.js";
 import { createTurnGate, type TurnGateInput, turnIsGated } from "./turn-gate.js";
 import { conversationTainted } from "./turn-taint.js";
 

@@ -70,7 +70,7 @@ export const EXPECTED_ACTIVATIONS: readonly ExpectedActivation[] = [
     { id: `live-status`, key: `desired-state`, surface: `rail`, why: `the desired-state repo` },
     { id: `directory-ui`, key: `designer`, surface: `directory`, why: `designer ships .intentic/ui` },
 
-    // An activation, not a seat: whether a tile is drawn is the app's own question (RAIL_GROUPS). "Always on" means the
+    // An activation, not a place on the rail: whether a tile is drawn is the app's own question (RAIL_GROUPS). "Always on" means the
     // area exists on every sandbox; most surface through the rail's More menu here.
     { id: `acceptance`, key: `acceptance`, surface: `rail`, why: `platform has user stories` },
     { id: `approvals`, key: `approvals`, surface: `rail`, why: `always on` },

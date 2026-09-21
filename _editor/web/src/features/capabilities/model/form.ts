@@ -13,7 +13,7 @@ import {
 // edit: on edit, a blank secret box for a `stored` key means keep it, not unanswered.
 
 const NAME_RE = /^[a-zA-Z0-9][a-zA-Z0-9_-]*$/;
-// End-anchored and whitespace-free: unanchored, a two-line paste passed and `fieldVerified` then put a green tick on
+// End-anchored and whitespace-free: uncheckpointed, a two-line paste passed and `fieldVerified` then put a green tick on
 // it, which is worse than no tick. Parsed as well as matched, so the check stands behind what it vouches for.
 const URL_RE = /^https?:\/\/\S+$/i;
 const parsesAsUrl = (value: string): boolean => {

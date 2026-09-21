@@ -81,7 +81,7 @@ The one failure that matters is an owner with the rule on and no passkey left. T
 ## 4. What the browser does
 
 The editor's session module gained a third answer to the exchange ([sandboxSession.ts](../../_editor/web/src/features/sandbox/session/sandboxSession.ts)):
-a 428 raises the **step-up** on the sign-in gate ([SigninGate.vue](../../_editor/web/src/features/sandbox/gates/SigninGate.vue)),
+a 428 raises the **step-up** on the sign-in gate ([SignInWall.vue](../../_editor/web/src/features/sandbox/gates/SignInWall.vue)),
 which asks for the passkey held, or walks through adding the first under the Google proof that was just
 taken, or (owner only) takes a recovery code. With nothing in hand at all, the gate shows Google's button and,
 once the daemon says a passkey is registered for this origin, a passkey beside it; the two race, and the road

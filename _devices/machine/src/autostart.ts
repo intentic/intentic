@@ -1,7 +1,7 @@
 import type { AutostartSpec } from "@intentic/local-agent";
 import { runLogPath } from "./config.js";
 
-// One autostart entry for the resident loop serving both device and sync. Mechanisms live in @intentic/local-agent;
+// One autostart entry for the resident agent serving both device and sync. Mechanisms live in @intentic/local-agent;
 // launchAgent is declared because sync has always run on macOS, though device currently doesn't (Windows/Linux only),
 // so a Mac install serves sync alone.
 export const MACHINE_AUTOSTART: AutostartSpec = {

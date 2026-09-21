@@ -7,7 +7,7 @@ import { existsSync, readFileSync, statSync } from "node:fs";
 import { mcpConfigOffArgv, mergeHooks, type OauthRecoveryOptions, runAgent } from "./agent.js";
 import type { AgentQuery, QueryFn } from "./sdk-stream.js";
 import { resolveRequest } from "../tools/agent-requests.js";
-import { SteeringQueue } from "../anchors/agent-steering.js";
+import { SteeringQueue } from "../checkpoints/agent-steering.js";
 import { noteSubagentTask, resetSubagents } from "../subagents/subagents.js";
 import { EDIT_TOOLS } from "../../rules/edit-tools.js";
 

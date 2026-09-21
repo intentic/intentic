@@ -27,7 +27,7 @@ export const userSshConfigPath = join(sshDir, "config");
 export const mutagenDaemonLogPath = join(baseDir, "mutagen-daemon.log");
 
 // When the watcher last completed a pass; a live pid is not the same fact. The watcher holds its tunnel
-// listeners on the event loop, so a rejection that escapes it leaves the process alive while the loop is gone:
+// listeners on the event agent, so a rejection that escapes it leaves the process alive while the agent is gone:
 // the pidfile stays claimed and mirroring, the git bridge and file sync are silently stopped. Stamped at the
 // END of each tick, so a stamp older than a couple of polls reads as stalled (see report.ts).
 export const mirrorHeartbeatPath = join(baseDir, "mirror.tick");

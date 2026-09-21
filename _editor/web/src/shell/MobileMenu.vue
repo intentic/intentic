@@ -87,8 +87,8 @@ onMounted(() => {
 const { state: pushState } = usePushNotifications();
 const pushRow = computed(() => pushMenuRow(pushState.value));
 
-// Same detection and bands as ShellDesktop, but unfiltered by railSeated — no seat scarcity here. The file tree is
-// not an extension, so it is stated here: Chat holds the seat it has on the desktop rail's tab bar counterpart.
+// Same detection and bands as ShellDesktop, but unfiltered by onRail — no tile scarcity here. The file tree is
+// not an extension, so it is stated here: Chat holds the tile it has on the desktop rail's tab bar counterpart.
 const words = useVocabulary();
 const filesRow = computed<SectionRow>(() => ({ id: WORKSPACE_VIEW_ID, to: `/workspace`, label: words.value.workspace, icon: `folder` }));
 const sectionBands = computed(() =>

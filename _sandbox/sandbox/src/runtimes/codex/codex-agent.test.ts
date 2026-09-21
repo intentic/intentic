@@ -3,7 +3,7 @@ import type { AgentEvent } from "@intentic/sandbox-contract";
 import { expect, test, vi } from "vitest";
 import type { AgentRequest } from "../../agent/run/agent.js";
 import { resolveRequest } from "../../agent/tools/agent-requests.js";
-import { SteeringQueue } from "../../agent/anchors/agent-steering.js";
+import { SteeringQueue } from "../../agent/checkpoints/agent-steering.js";
 import { fakeCodexRunner } from "../../testing.js";
 import type { CodexEvent, CodexRunner } from "./codex-app-server.js";
 import { createCodexAgent } from "./codex-agent.js";

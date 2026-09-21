@@ -3,7 +3,7 @@ import type { Caller } from "../../../auth/auth.js";
 import type { Services } from "../../../composition.js";
 import { resolveWithin } from "../../../workspace/files/workspace-files-paths.js";
 import { conversationOf, resolveRequest } from "../../tools/agent-requests.js";
-import { steerTurn, stopTurn } from "../../anchors/agent-steering.js";
+import { steerTurn, stopTurn } from "../../checkpoints/agent-steering.js";
 import { withAttachmentNote } from "../../prompt/attachment-note.js";
 import { turnRunOf } from "./turn-runs.js";
 

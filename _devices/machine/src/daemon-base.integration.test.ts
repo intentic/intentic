@@ -123,7 +123,7 @@ describe(`resolveDaemonBase`, () => {
         expect(await resolveDaemonBase(PUBLIC)).toEqual({ base: PUBLIC, local: false });
     });
 
-    // An accepting-but-silent daemon is the one failure a refused port misses, and the costliest since the loop is
+    // An accepting-but-silent daemon is the one failure a refused port misses, and the costliest since the agent is
     // sequential: it must cost its budget and fall through, not hang the whole pass.
     it(`gives up on a daemon that accepts and never answers, and falls back`, async () => {
         await daemonOn(localDaemonPort(ID), { hang: true });

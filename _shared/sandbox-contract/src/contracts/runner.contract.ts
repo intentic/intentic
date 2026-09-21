@@ -7,8 +7,8 @@ import { EditorContextSchema } from "../schemas/agent.js";
 import { AgentReplySchema } from "../schemas/providers/plan-limits.js";
 import { OkSchema } from "../schemas/shared.js";
 
-// What a runner can be asked, over the socket it opened; same inversion as hostContract, the runner is the oRPC server,
-// the parent the client. No `.route()`: the procedure path is the address. Typed throughout, unlike hostContract's
+// What a runner can be asked, over the socket it opened; same inversion as deviceContract, the runner is the oRPC server,
+// the parent the client. No `.route()`: the procedure path is the address. Typed throughout, unlike deviceContract's
 // `mcp` hole, since a runner is the same daemon image as the parent, released together.
 export const runnerContract = {
     // Hardware facts, refreshed on demand; parity facts (image, overlay hash) ride the hello, not this call.

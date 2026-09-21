@@ -11,7 +11,7 @@ import { unsentParameterFrame } from "../../agent/run/error-frames.js";
 import { isUnsentParameterRefusalText, mentionsSpentAllowance } from "../../agent/providers/failure-sentences.js";
 import { EXECUTE_PROMPT, type ExecutePhase, PLAN_PREAMBLE, type PlanPhase, runPlanEmulation } from "../../agent/prompt/plan-emulation.js";
 import { displayNameOf, editDiffContent, toolCategoryOf, toolLocations, toolTarget } from "../../agent/tools/tool-calls.js";
-import type { CommandGate } from "../../guard/command-gate.js";
+import type { CommandGuard } from "../../guard/command-guard.js";
 import { createTurnGate } from "../../guard/turn-gate.js";
 import { isChatModel, parseModelSuggestions } from "./grok-models.js";
 import { openCodeBackendLabel, type OpenCodeService, registerSessionGate, releaseSessionGate } from "./opencode.js";
@@ -37,7 +37,7 @@ export interface GrokTurn {
     readonly agent: "plan" | "build";
     // Command-rulebook gate for this turn, registered against the session id once it exists; absent means every
     // permission gets the standing yes.
-    readonly gate?: CommandGate;
+    readonly gate?: CommandGuard;
     // Standing instructions appended via OpenCode's `system` field (added to, not replacing, OpenCode's own prompt);
     // per message, not per session.
     readonly system?: string;
@@ -483,7 +483,7 @@ async function* runGrokPlanTurn(
     request: AgentRequest,
     runner: GrokRunner,
     provider: string,
-    gate: CommandGate,
+    gate: CommandGuard,
     firstTurnImages: readonly FilePartInput[],
 ): AsyncGenerator<AgentEvent> {
     // Both phases carry the same standing instructions; they're two messages of one turn, so the execute phase must not

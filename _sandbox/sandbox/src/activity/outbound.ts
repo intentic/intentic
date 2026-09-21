@@ -164,7 +164,7 @@ const matchWhatsApp = (command: string): OutboundCall | undefined => {
 // One matcher per cli provider (cli/providers.ts key space): curl-based chat providers, plus whatsapp's bin.
 const matchers: readonly ((command: string) => OutboundCall | undefined)[] = [matchDiscord, matchSlack, matchTelegram, matchWhatsApp];
 
-// Shared with the enforcing PreToolUse gate (guard/outbound-gate.ts): one parser, so audit and enforcement can't
+// Shared with the enforcing PreToolUse gate (guard/outbound-guard.ts): one parser, so audit and enforcement can't
 // disagree.
 export const classifyOutboundCall = (command: string): OutboundCall | undefined => {
     for (const match of matchers) {

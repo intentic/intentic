@@ -30,7 +30,7 @@ const fleetApp = (): Hono<AppEnv> =>
         services({
             auth: { authorize: async () => proven("owner@example.com", "owner") },
             // Left unstubbed on purpose; inert here, since nothing in this file reads an anchor back.
-            turnAnchors: { record: async () => {}, of: async () => undefined, all: async () => new Map(), truncate: async () => {} },
+            turnCheckpoints: { record: async () => {}, of: async () => undefined, all: async () => new Map(), truncate: async () => {} },
             async *agent(request) {
                 yield { kind: "session", sessionId: request.prompt.includes("pipeline") ? "sess-pipeline" : "sess-publish" };
                 yield { kind: "usage", costUsd: 0.25, inputTokens: 4000, outputTokens: 120 };

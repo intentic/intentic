@@ -34,7 +34,7 @@ export const WebExtGrantSchema = object({
     mode: zEnum(["read", "act"]),
 });
 export type WebExtGrant = z.infer<typeof WebExtGrantSchema>;
-// What a connected browser reports about itself: mirrors HostFacts, adding exactly which sites it may touch right now.
+// What a connected browser reports about itself: mirrors DeviceFacts, adding exactly which sites it may touch right now.
 export const WebExtFactsSchema = object({
     // How a person would name it: "Chrome 141 on Windows".
     browser: string(),

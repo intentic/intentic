@@ -66,9 +66,9 @@ export type KeyIntent =
     // The chrome's own verb; never a keystroke.
     | { readonly kind: `command`; readonly command: BrowserCommand }
     // Not ours: the host app and the user's own browser keep default behaviour.
-    | { readonly kind: `host` };
+    | { readonly kind: `device` };
 
-const host: KeyIntent = { kind: `host` };
+const host: KeyIntent = { kind: `device` };
 const command = (name: BrowserCommand): KeyIntent => ({ kind: `command`, command: name });
 
 // Sent lower-case; Shift travels as a flag and the far end decides the resulting character (Ctrl+Shift+Z is a redo

@@ -255,7 +255,7 @@ expires unused); a 200-without-receipt is recorded as an anomaly against that en
 - `autoApproveUnderUsd` + `dailyCapUsd` implement delegated spending; the daily counter lives in the
   ledger and is mirrored at the signer.
 - **Unattended turns** (cron, delegated runs) cannot answer cards, so they may spend only inside the
-  auto-approve band; anything above refuses with a note the owner sees later: the command-gate's
+  auto-approve band; anything above refuses with a note the owner sees later: the command-guard's
   refuse-when-unattended precedent.
 - **Taint**: a turn that has ingested untrusted content keeps its wallet access, but the card renders
   the quote's origin domain prominently, and auto-approve is suspended for that turn: a fetched page

@@ -4,7 +4,7 @@ import { createRequest } from "../../agent/tools/agent-requests.js";
 import type { AgentRequest } from "../../agent/run/agent.js";
 import { formatAnswers } from "../../agent/tools/question-answers.js";
 import { waitForSubagent, type SubagentWaitUntil } from "../../agent/subagents/subagents.js";
-import { type CommandGate, consultWith, JS_SUBJECT } from "../../guard/command-gate.js";
+import { type CommandGuard, consultWith, JS_SUBJECT } from "../../guard/command-guard.js";
 import { outsideSourceOf, sealResult } from "../../guard/outside-results.js";
 import type { TurnTaint } from "../../guard/turn-taint.js";
 import { JS_TIMEOUT_DEFAULT_S, JS_TIMEOUT_MAX_S } from "../../execution/js-runtime.js";
@@ -13,7 +13,7 @@ import { JS_TOOL_NAME, jsToolDescription, runJsTool } from "../../execution/js-t
 // What the turn's gate answers with and what it marks, the two halves a tool needs to run a program safely. Carried
 // together because a runtime that consults without marking would launder outside content past the judge.
 export interface CursorGuard {
-    readonly gate: CommandGate;
+    readonly gate: CommandGuard;
     readonly taint: TurnTaint;
 }
 

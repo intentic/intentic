@@ -1,4 +1,4 @@
-import { HostConfigSchema } from "@intentic/sandbox-contract";
+import { DeviceConfigSchema } from "@intentic/sandbox-contract";
 import { expect, test } from "vitest";
 import { hostIdFrom, SETUP_HOST_SCOPES } from "./host-seed.js";
 
@@ -26,7 +26,7 @@ test("setup grants the fleet and nothing that reaches the machine itself", () =>
 });
 
 test("the seeded grant answers for every switch the card has", () => {
-    const parsed = HostConfigSchema.parse({ platform: "linux", ...SETUP_HOST_SCOPES });
+    const parsed = DeviceConfigSchema.parse({ platform: "linux", ...SETUP_HOST_SCOPES });
     const decided = new Set(Object.keys(SETUP_HOST_SCOPES));
     for (const key of Object.keys(parsed)) {
         // `platform` names the card; `roots` is a path list, meaningless with no file access granted.

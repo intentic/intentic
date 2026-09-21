@@ -97,7 +97,7 @@ export const bashTmuxHooks = (
     envKeys: readonly string[] = [],
     // An isolated turn's Bash must land in the same tree as its Edit/Write:
     // - anchored: nsenter wraps the command inside the window
-    // - unanchored: absolute paths in the command are rewritten into the worktree
+    // - uncheckpointed: absolute paths in the command are rewritten into the worktree
     isolation?: TurnPlacement,
     // Stamped onto the pane command too, since tmux-forked processes inherit nothing from the CLI; charset-guarded.
     owner?: string,

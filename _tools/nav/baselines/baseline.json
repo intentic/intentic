@@ -617,7 +617,7 @@
       "readWorldFile": 241,
       "ConnectorHook": 907,
       "required": 587,
-      "hostHandler": 1551,
+      "deviceHandler": 1551,
       "PreviewProbe": 881,
       "takePendingSync": 1505,
       "HOLD": 887,

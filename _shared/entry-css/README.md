@@ -35,7 +35,7 @@ from `intentic.dev/guest` has been reading a light page, and anyone who chose Li
 reader whatever brought them. `_site/site/scripts/check-guest-palette.mjs` fails the build if those values
 drift from the site's own.
 
-**No plate art in the launcher.** `.entry-plate` reaches for `/assets/angkor/*.avif`, which only the web app
+**No plate art in the launcher.** `.entry-plate` reaches for `/assets/plate/*.avif`, which only the web app
 serves. The desktop window uses the ground, the metals, the type and the frame kit, and leaves the
 photograph to the two full-page screens.
 

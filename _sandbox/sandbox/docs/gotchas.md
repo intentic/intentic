@@ -208,7 +208,7 @@ The decisions this daemon is built on and the traps that cost somebody a day —
   this end rather than fatal — the work is finished and sitting on the branch, so a git fault costs the rebase
   and never the land — and a repo that will not move lands from where it was, which is the old behaviour in
   full. The composition it hands back carries the moved `base` per repo, because landing from the pre-sync
-  record would hand `anchorOf` a sha the rebase has just orphaned.
+  record would hand `checkpointOf` a sha the rebase has just orphaned.
 - **`landedTip` records that a land happened, never that it is still there** (`src/agents/land/sync.ts`
   `mainAccountsForPrefix`). A land copies content into the main working tree and moves no ref, so discarding
   every one of those files in the Changes panel leaves the rung pointing at a delivery that no longer exists —

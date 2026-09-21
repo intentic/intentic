@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { quieted } from "./repeats.js";
 
-// The rule the five-second poll loop leans on. Tested with a clock of its own because the thing being measured is a
+// The rule the five-second poll agent leans on. Tested with a clock of its own because the thing being measured is a
 // cadence, and the failure it exists to stop took two days of real time to show itself.
 const collect = (): { readonly lines: string[]; readonly say: (message: string) => void; readonly advance: (ms: number) => void } => {
     const lines: string[] = [];
@@ -23,7 +23,7 @@ const BROKEN = "  sandbox-abc: reconcile skipped: reading the sandbox's ports fa
 describe("quieted", () => {
     it("says a repeating line three times, then once to say it is going quiet, then only every ten minutes", () => {
         const { lines, say, advance } = collect();
-        // 200 passes of a five-second loop: a shade under 17 minutes, so exactly one quiet window closes.
+        // 200 passes of a five-second agent: a shade under 17 minutes, so exactly one quiet window closes.
         for (let pass = 0; pass < 200; pass += 1) {
             say(BROKEN);
             advance(5000);

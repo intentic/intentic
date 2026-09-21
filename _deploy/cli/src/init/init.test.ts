@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { selfHostConfig } from "./init.js";
+import { selfDeviceConfig } from "./init.js";
 
-describe("selfHostConfig", () => {
+describe("selfDeviceConfig", () => {
     it("targets the self host with the app.<zone> domain", () => {
-        const config = selfHostConfig("example.com");
+        const config = selfDeviceConfig("example.com");
         expect(config).toContain("on: self,");
         expect(config).toContain(`domain: "app.example.com"`);
         // Keeps the Cloudflare resource (apply needs it to stand up the tunnel) but drops the placeholder host.
@@ -15,6 +15,6 @@ describe("selfHostConfig", () => {
     });
 
     it("falls back to the placeholder domain when the zone is unknown", () => {
-        expect(selfHostConfig(undefined)).toContain(`domain: "app.example.com"`);
+        expect(selfDeviceConfig(undefined)).toContain(`domain: "app.example.com"`);
     });
 });

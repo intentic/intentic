@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { setTimeout as sleep } from "node:timers/promises";
 import { isProcessAlive, spawnDetached } from "@intentic/local-agent";
-import type { DeviceAgentOp, HostScopes } from "@intentic/sandbox-contract";
+import type { DeviceAgentOp, DeviceScopes } from "@intentic/sandbox-contract";
 import { agentLogPath } from "../../config.js";
 import { installedBuild } from "../../installed.js";
 import { machineLauncher } from "../../resident.js";
@@ -12,12 +12,12 @@ import { assertScope } from "../policy.js";
 // which would die with an EPIPE mid-swap. Gated by "Run commands", not a sandbox switch: this touches no container.
 
 // `intentic-machine <verb>`; the op is a two-member enum in the contract and this is the whole mapping.
-// `restart` is bare `run`, not `run --stop`: reconcileResidency already stops the loop it finds before starting
+// `restart` is bare `run`, not `run --stop`: reconcileResidency already stops the agent it finds before starting
 // its own.
 export const AGENT_VERB: Record<DeviceAgentOp, string> = { upgrade: "upgrade", restart: "run" };
 
 // How long to keep reading the log after the detached run stops looking alive. `upgrade` replaces the binary
-// then starts a new loop, so the spawned pid can exit before its last lines are flushed.
+// then starts a new agent, so the spawned pid can exit before its last lines are flushed.
 const DRAIN_MS = 1_500;
 const POLL_MS = 250;
 
@@ -34,13 +34,13 @@ const readFrom = async (path: string, from: number): Promise<{ text: string; at:
 // Start it, then narrate it. The answer is about what was STARTED, not what it achieved, since this process is
 // usually not alive to see the end; the reader confirms by the version moving. `onLine` is the same callback
 // the sandbox flows take (see ../router.ts).
-export const runAgentOp = async (op: DeviceAgentOp, scopes: HostScopes, onLine: (line: string) => void): Promise<string> => {
+export const runAgentOp = async (op: DeviceAgentOp, scopes: DeviceScopes, onLine: (line: string) => void): Promise<string> => {
     assertScope(scopes, "shell");
     const installed = installedBuild();
     onLine(
         op === "upgrade"
-            ? `Updating the agent on this device${installed === undefined ? "" : ` (currently ${installed})`}. Its background loop restarts, so this connection drops while that happens.`
-            : `Restarting this device's agent loop. This connection drops while that happens.`,
+            ? `Updating the agent on this device${installed === undefined ? "" : ` (currently ${installed})`}. Its background agent restarts, so this connection drops while that happens.`
+            : `Restarting this device's agent agent. This connection drops while that happens.`,
     );
     // Fresh watermark per run, taken before the spawn: the log is append-only and long-lived, so a reader must see
     // only this run's lines.
@@ -69,5 +69,5 @@ export const runAgentOp = async (op: DeviceAgentOp, scopes: HostScopes, onLine: 
     }
     return op === "upgrade"
         ? `The update ran on this device. Whether the new agent is the one serving shows in its version, which this view re-reads on its own.`
-        : `The agent loop was restarted on this device.`;
+        : `The agent agent was restarted on this device.`;
 };

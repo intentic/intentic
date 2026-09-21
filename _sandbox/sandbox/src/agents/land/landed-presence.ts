@@ -2,7 +2,7 @@ import { defaultGit, type GitRunner } from "@intentic/scaffold";
 import type { Logger } from "pino";
 import { headSha } from "../../git/changes/changes.js";
 import { materializedPaths } from "../../git/changes/changes-porcelain.js";
-import { anchorOf } from "./agent-changes.js";
+import { checkpointOf } from "./agent-changes.js";
 import type { IsolatedAgent } from "../registry/agents-store.js";
 import { type ExpiryTracker, pathWeight } from "../registry/expiry.js";
 import type { AgentWorktrees } from "../worktrees/worktrees.js";
@@ -77,7 +77,7 @@ export const createLandedPresences = (
         if (hit !== undefined) {
             return hit;
         }
-        const anchor = await anchorOf(dir, dir, tip, undefined, base, git);
+        const anchor = await checkpointOf(dir, dir, tip, undefined, base, git);
         anchors.set(key, anchor);
         return anchor;
     };

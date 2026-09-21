@@ -1,8 +1,13 @@
 # Vocabulary audit, 2026-09-21
 
 Every domain word this repository uses, measured against two tests: does a reader have to be taught it, and
-does it name more than one idea. 34 words were counted. 16 name several ideas at once, 13 name one idea under a
-word nobody guesses, and 5 look like jargon while earning their keep.
+does it name more than one idea. 34 words were counted, and the first pass called 16 collisions and 13 opaque
+words.
+
+**Working through them revised that down to 9 collisions and 3 opaque words.** Seven of the supposed collisions
+turned out to be one idea used across several subjects, and six of the opaque words had no free replacement.
+Both corrections are recorded in place below rather than quietly edited out, because the mistake is the useful
+part: a census counts spellings, and only reading decides whether two uses are the same idea.
 
 This audit is the measurement. The decisions that follow from it, and the order the renames happen in, are in
 [docs/design/vocabulary.md](../design/vocabulary.md).
@@ -82,7 +87,7 @@ still says "every other limit on this card", and `personaForm.treeSessionWearing
 
 **gate** means a release gate (the CI webhook, [@intentic/gate](../../_sandbox/gate/README.md)), the push gate,
 the checkout gates, the turn gate, an approval gate, a credential gate (`CredentialGate`), a command guard
-([command-gate.ts](../../_sandbox/sandbox/src/guard/command-gate.ts)) and a sign-in wall (`signinGate`). Three
+([command-guard.ts](../../_sandbox/sandbox/src/guard/command-guard.ts)) and a sign-in wall (`signinGate`). Three
 of those are checks, one is a webhook, two are approvals, one is a guard and one is a wall. `FortiGate`, a
 vendor's product name, is in the count too and belongs to none of them.
 
@@ -99,31 +104,61 @@ not granted until it holds one"), a layout action ("Show desk") and the embeddab
 **host** is not counted as a bare word because `\bhost\b` catches hostnames and HTTP hosts. Counted as
 compounds: `dind-host` 76, `extension-host` 58, `docker host` 20, `host machine` 12. A fifth meaning is the
 `host` capability kind, which is the user's own computer, and which
-[host.contract.ts](../../_shared/sandbox-contract/src/contracts/host.contract.ts) itself documents as "what a
+[device.contract.ts](../../_shared/sandbox-contract/src/contracts/device.contract.ts) itself documents as "what a
 connected device can be asked". The screen calls that a device. The wire calls it a host.
 
 The rest, briefly: **lane** is a billing plan ("Free lane"), a column on the agents board and a choice on the
-Connect screen. **tier** is a hosted plan (`HOSTED_TIERS`), a test level (`e2eTier`), a model pin ("a tier of
-its own") and a half of the topology. **loop** is the workflows feature, the process a paired device keeps
-open, and the dev edit loop. **slot** is a billing unit, a hostname label
-([hostnames.ts](../../_shared/sandbox-contract/src/ids/hostnames.ts)) and an ordinary concurrency slot.
-**probe** dials a service, re-measures a chore and health-checks a container. **registry** is the capability
-handler map ([registry.ts](../../_sandbox/sandbox/src/capabilities/registry.ts)), the agents registry, the
-extension registry package and the workspace's own `registry/` directory. **ledger** counts shell commands,
-money, workflow runs and chore answers. **powers** is what an extension asks for and what a persona is denied.
-**kit** is a persona's instructions and the design kit.
+Connect screen. **loop** is the workflows feature, the process a paired device keeps open, and the dev edit
+loop.
+
+### Correction: seven of these are not collisions
+
+Written from counts, revised after reading each use. **`tier`, `slot`, `probe`, `registry`, `ledger`, `powers`
+and `kit` were miscounted here.** Each is ONE idea applied to several subjects, which is the shape good reuse
+takes, not the shape a collision takes:
+
+- a **tier** is a rung on a graded ladder, whether the ladder is machine sizes (`FREE_TIER.cpus`), test levels
+  (`e2eTier`) or model pins. `plan` is the subscription and is correctly a different word.
+- a **slot** is one of a fixed number of places: on a bill, in a hostname, in a concurrency pool.
+- to **probe** is to poke something and see whether it answers: a service, a repo's staleness, a container.
+- a **registry** is a table of things registered by id.
+- a **ledger** is an append-only record, one row per event. Seven of them exist (`createFrameLedger`,
+  `createViewLedger`, `createVerificationLedger`, `createRemovalLedger`, `WalletLedgerStore`, the chore and
+  sandbox ledgers) and all seven mean that.
+- **powers** are what a thing may do, asked of an extension or of a persona.
+- a **kit** is a set of things assembled for one purpose.
+
+`lane` and `gate` belong here too, in part. A **lane** is one of a few parallel tracks (a board column, a
+Connect column, a probe's route) — true everywhere except billing's "Free lane", which meant a subscription
+level; that one alone became "free plan". A **gate** is a check that can refuse an action — true of the
+release, push, checkout, turn, billing and credential gates, and false of exactly three things that were
+renamed: `CommandGate` filtered rather than refused (a **guard**), `outboundGateHooks` likewise, and
+`signinGate` stood in front of a screen (a **wall**).
+
+The test that separates the two shapes: **substitute the definition.** "A tier is a rung" reads true in every
+one of its uses; "a card is a decision held for the owner" is false in five of card's seven. The first is
+reuse, the second is a collision. Counting cannot tell them apart, which is the methodological lesson of this
+audit: **the census finds candidates, reading decides them** — and the honest output of a vocabulary pass is
+usually a shorter list than the one it started with.
 
 ## Class B: one idea, under a word nobody guesses
 
-These pass the one-idea test and fail the teaching test. Cheaper to fix, and each one is a word an agent has to
-look up before it can act.
+These pass the one-idea test and fail the teaching test. The table below is the first pass, kept as measured.
+
+**Only three of the thirteen survived**, and the filter that killed the rest was not the word — it was the
+replacement. A word is worth swapping only if the plain alternative is FREE. `disk` was already taken 1,178
+times for the local disk, so `netdisk`'s prefix is load-bearing. `scope`, `reach` and `bounds` are all in
+service, so `fence` stays. `summary` appears in the very packages that print a `capsule`. And `maintenance` is
+a mass noun, so "a chore" has no singular in it. [docs/design/vocabulary.md](../design/vocabulary.md#the-opaque-words)
+records the verdict per word; what was renamed is `angkor` → plate, the rail sense of `seat` → tile, and two
+`inventory` sentences → "your machines".
 
 | word | code | what it actually means |
 | --- | --- | --- |
 | chore | 610 | maintenance a repo is asking for, with evidence ([verdict.ts](../../_shared/sandbox-contract/src/chores/verdict.ts)) |
 | fence | 610 | restricting a session to an area, beside an `area-scope.ts` that already says scope |
 | seat | 260 | a position on the icon rail ([railMemory.ts](../../_editor/web/src/shell/rail/railMemory.ts)) |
-| anchor | 1,261 | the before-state snapshot of a steered message ([steer-anchors.ts](../../_sandbox/sandbox/src/agent/anchors/steer-anchors.ts)) |
+| anchor | 1,261 | the before-state snapshot of a steered message ([steer-checkpoints.ts](../../_sandbox/sandbox/src/agent/checkpoints/steer-checkpoints.ts)) |
 | netdisk | 143 | a network share, which the UI already calls "disk" |
 | inventory | 197 | the machines you have declared |
 | allowance | 511 | how much model usage is left, alongside pool, ceiling and limit for the same idea |
@@ -131,7 +166,7 @@ look up before it can act.
 | episode | 158 | one turn, message or event in the activity feed ([episodes.ts](../../_extensions/activity/src/episodes.ts)) |
 | capsule | 44 | the header block of an `iq` answer ([app.ts](../../_search/iq/src/app.ts)) |
 | geo exit | 37 | where VPN traffic leaves, under a word `process.exit` already owns |
-| angkor | 13 | the site's background plate art, named after a temple ([angkor-plate.mjs](../../_site/site/scripts/angkor-plate.mjs)) |
+| angkor | 13 | the site's background plate art, named after a temple ([plate-art.mjs](../../_site/site/scripts/plate-art.mjs)) |
 | prepush | 55 | the checks that run before a push |
 
 `chore` has a second problem on top of the first: `chore:` is also a conventional-commit type, enforced by

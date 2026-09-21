@@ -11,14 +11,14 @@ import { describe, expect, test } from "vitest";
 import { resolveRequest } from "../agent/tools/agent-requests.js";
 import type { JudgeFacts } from "../agent/tools/command-judge.js";
 import { JS_TOOL_NAME } from "../execution/js-tool.js";
-import { commandGateHooks, type CommandGateOptions } from "./command-gate.js";
+import { commandGateHooks, type CommandGuardOptions } from "./command-guard.js";
 import { createTurnTaint, NO_TAINT } from "./turn-taint.js";
 
 const FORCE_PUSH = "git push --force origin main";
 
 // A judge that always answers the same way, so tests cover the gate's pipeline, not model accuracy.
 const always =
-    (decision: SafetyVerdict["decision"], sentence = `It does the thing.`, policyLine?: string): CommandGateOptions["judge"] =>
+    (decision: SafetyVerdict["decision"], sentence = `It does the thing.`, policyLine?: string): CommandGuardOptions["judge"] =>
     async () => ({ decision, sentence, ...(policyLine === undefined ? {} : { policyLine }) });
 
 interface Harness {
@@ -37,7 +37,7 @@ interface Harness {
 
 // Drives the PreToolUse hooks like the SDK: one Bash call, or one JS run with the script. Built once per
 // harness, so a per-turn grant and the judge's memo carry across both sources.
-const harness = (options: Partial<CommandGateOptions> = {}): Harness => {
+const harness = (options: Partial<CommandGuardOptions> = {}): Harness => {
     const events: AgentEvent[] = [];
     const logged: SafetyLogEntry[] = [];
     const seen: { program: string; facts: JudgeFacts }[] = [];
@@ -429,7 +429,7 @@ describe("command gate: the hard rule", () => {
 
 // When the judge cannot run at all: fall back to the hard rule, and allow everything else.
 describe("command gate: no judge", () => {
-    const BROKEN: CommandGateOptions["judge"] = () => Promise.reject(new Error("No AI account is connected to this sandbox"));
+    const BROKEN: CommandGuardOptions["judge"] = () => Promise.reject(new Error("No AI account is connected to this sandbox"));
 
     test("a triage hit is allowed when nothing is hard-ruled", async () => {
         for (const judge of [BROKEN, undefined]) {

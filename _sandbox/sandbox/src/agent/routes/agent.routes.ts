@@ -34,8 +34,8 @@ import { startAnchor, type TurnPlacement } from "../../agents/worktrees/isolatio
 import { holdAccount } from "../../runtimes/claude/claude-credentials.js";
 import { isIsolated } from "../../agents/registry/agents-store.js";
 import { ensureComposedWorktree } from "../context/conversation-context.js";
-import { anchorWorktree, forkWorktreeBase } from "../anchors/anchor-worktree.js";
-import { anchorSteeredMessage } from "../anchors/steer-anchors.js";
+import { checkpointWorktree, forkWorktreeBase } from "../checkpoints/checkpoint-worktree.js";
+import { checkpointSteeredMessage } from "../checkpoints/steer-checkpoints.js";
 import { landAgent } from "../../agents/land/land.js";
 import { verifyLandedTree } from "../../agents/land/verify-landed.js";
 import { settleLandingInBackground, versionMainTree } from "../../agents/land/version-landed.js";
@@ -52,7 +52,7 @@ import { composeWirePrompt } from "../prompt/turn-preamble.js";
 import { applyTrim, trimFrame, type TurnTrimState } from "../prompt/window/context-trim.js";
 import { promptDisclosure } from "../prompt/prompt-disclosure.js";
 import type { TurnBriefing } from "../prompt/turn-briefing.js";
-import { rewindConversation } from "../anchors/rewind.js";
+import { rewindConversation } from "../checkpoints/rewind.js";
 import { commandsOf } from "../providers/agent-commands.js";
 import { limitReopensAt } from "../models/limit-reset.js";
 import { createFrameLedger } from "../verification/agent-verification.js";
@@ -65,7 +65,7 @@ import { actorOf, ownerOf, areasOf, type TurnInput } from "../run/turn/turn-acto
 import { refuseUnlessVisible } from "../../auth/fleet-scope.js";
 import { refuseUnlessReachable } from "../../personas/persona-reach.js";
 import { opt } from "../run/opt.js";
-import { registerTurn, SteeringQueue, steerTurn, stopTurn } from "../anchors/agent-steering.js";
+import { registerTurn, SteeringQueue, steerTurn, stopTurn } from "../checkpoints/agent-steering.js";
 import { OUTAGE_MAX_ATTEMPTS, recordProviderFailure, recordProviderSuccess } from "../providers/provider-health.js";
 import {
     authResumable,
@@ -293,16 +293,16 @@ const recordObservedLimit = (
 // This turn's before-state, as a branch commit: recorded for a reopened tab and framed for the live one, using the same
 // id agent-transcript.ts synthesizes for both. Best-effort; nothing pinned means no frame.
 async function* anchorIsolatedTurn(
-    services: Pick<Services, "agentWorktrees" | "logger" | "turnAnchors">,
+    services: Pick<Services, "agentWorktrees" | "logger" | "turnCheckpoints">,
     conversationId: string,
     repos: readonly { readonly repo: string; readonly base: string }[],
     turn: SnapshotTurn,
 ): AsyncGenerator<AgentEvent> {
-    const anchored = await anchorWorktree(services, conversationId, repos);
+    const anchored = await checkpointWorktree(services, conversationId, repos);
     if (anchored.length === 0) {
         return;
     }
-    await services.turnAnchors
+    await services.turnCheckpoints
         .record(turn.conversationId, turn.index, { kind: "worktree", repos: anchored })
         .catch((error: unknown) => services.logger.warn({ err: error }, "anchors: recording the turn's commits failed"));
     yield { kind: "checkpoint", id: `worktree:${turn.index}`, index: turn.index };
@@ -445,7 +445,7 @@ async function* runConversationTurn(
         // Lazily create (first turn) or repair the conversation's worktree composition, then announce it.
         const entry = services.agents.entry(conversationId);
         // A fork wanting the files as they were starts at the source's own commit for comparability.
-        const worktreeBase = input.worktreeBase ?? (await forkWorktreeBase(services.turnAnchors, input.forkOf));
+        const worktreeBase = input.worktreeBase ?? (await forkWorktreeBase(services.turnCheckpoints, input.forkOf));
         // Which repos the conversation carries, decided once and handed back to `ensure` on every later turn.
         const worktree = await ensureComposedWorktree(services, input, conversationId, worktreeBase, entersNamespace(input));
         // Rebases onto today's main line before the model reads it, and again whenever a parked card settles.
@@ -578,7 +578,7 @@ async function* runConversationTurn(
                 } catch (error) {
                     services.logger.warn({ err: error, id: conversationId }, "agents: pre-land sync failed, landing on the old base");
                 }
-                // Re-read after the sync: the frozen composition would hand anchorOf an orphaned base.
+                // Re-read after the sync: the frozen composition would hand checkpointOf an orphaned base.
                 const resynced = services.agents.entry(conversationId);
                 const landing = resynced !== undefined && isIsolated(resynced) ? resynced : finished;
                 const mode = decided.land ? "check" : "measure";
@@ -1201,7 +1201,7 @@ async function* runTurn(
         if (checkpointId !== undefined) {
             // Written down as well as streamed: the frame alone reaches only today's browser.
             if (turn !== undefined) {
-                await services.turnAnchors
+                await services.turnCheckpoints
                     .record(turn.conversationId, turn.index, { kind: "tree", snapshot: checkpointId })
                     .catch((error: unknown) => services.logger.warn({ err: error }, "anchors: recording the turn's checkpoint failed"));
             }
@@ -1758,7 +1758,7 @@ export const createAgentRoutes = (services: Services) => {
                 ...((input.attachments ?? []).length > 0 ? { attachments: [...(input.attachments ?? [])] } : {}),
             });
             // Reserves this steer's rewind slot in the same synchronous breath as the frame.
-            await anchorSteeredMessage(services, input.conversationId);
+            await checkpointSteeredMessage(services, input.conversationId);
             // Indexed here, since the prompt index reads a session file once and would miss this.
             const sessionId = services.agents.sessionIdOf(input.conversationId);
             recordConversationPrompt(input.conversationId, input.text);

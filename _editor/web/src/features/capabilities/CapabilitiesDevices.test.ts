@@ -42,7 +42,7 @@ const devicesExtension = {
             capabilities: [
                 {
                     id: `linux`,
-                    kind: `host`,
+                    kind: `device`,
                     catalog: { name: `Linux PC`, logo: `linux`, description: `Your Linux PC, shell, files, desktop.`, category: `devices` },
                     fields: [],
                 },

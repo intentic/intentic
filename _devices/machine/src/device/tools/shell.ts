@@ -1,7 +1,7 @@
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { homedir } from "node:os";
-import { COMMAND_CLASS_LABELS, type CommandClass, type HostScopes, matchCommand, wslPathOf } from "@intentic/sandbox-contract";
+import { COMMAND_CLASS_LABELS, type CommandClass, type DeviceScopes, matchCommand, wslPathOf } from "@intentic/sandbox-contract";
 import { assertPath, assertScope, rootsOf, ScopeError } from "../policy.js";
 import { wslEnvironment } from "../../wsl.js";
 
@@ -161,7 +161,7 @@ export const destructiveClasses = (command: string): CommandClass[] =>
 
 // This environment's own interpreter. The working directory is inside the roots like any other path: a command is a
 // file operation with extra steps.
-const nativeInterpreter = (script: string, cwd: string | undefined, scopes: HostScopes): Interpreter => {
+const nativeInterpreter = (script: string, cwd: string | undefined, scopes: DeviceScopes): Interpreter => {
     const shell = shellFor(process.platform);
     return {
         command: shell.command,
@@ -173,7 +173,7 @@ const nativeInterpreter = (script: string, cwd: string | undefined, scopes: Host
 
 export const runCommand = async (
     input: { readonly command: string; readonly cwd?: string; readonly timeoutMs?: number; readonly in?: string },
-    scopes: HostScopes,
+    scopes: DeviceScopes,
 ): Promise<CommandResult> => {
     assertScope(scopes, "shell");
     // Read before the cwd is resolved, so a destructive command aimed outside the roots is refused for what it does

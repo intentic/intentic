@@ -17,7 +17,7 @@ export const awaitingLogin = (instance: CapabilitySummary): boolean =>
 // rebuild (which happens on the Sandbox screen) still needs a link. A function, not a `v-if`, so a signed-in-needed
 // reader is never sent to /sandbox by mistake.
 export const rebuildStep = (kind: CapabilityKind | undefined, instance: CapabilitySummary): boolean =>
-    instance.status.state === `pending` && kind !== `host` && !awaitingLogin(instance);
+    instance.status.state === `pending` && kind !== `device` && !awaitingLogin(instance);
 
 // What identifies a connection, in the order a person would say it. `provider`/`platform` are excluded since the
 // row already names the tile; secrets never reach here (the daemon strips them). `purpose` sits last, the widest
@@ -83,7 +83,7 @@ export const machineGrants = (instance: CapabilitySummary | undefined): string =
     // Asked of a tile that hands on no machine — or of nothing at all, while the manifest is still arriving — the
     // answer is the floor rather than a guess, and never the throw an unknown kind would cost (capabilityEffects
     // indexes its kinds).
-    if (instance?.kind !== `host`) {
+    if (instance?.kind !== `device`) {
         return `read files`;
     }
     const machine = capabilityEffects({ kind: instance.kind, id: instance.id, config: instance.config }).find((effect) => effect.kind === `machine`);
@@ -101,7 +101,7 @@ export const connectionState = (kind: CapabilityKind, instance: CapabilitySummar
     if (signsInByHand(kind) && awaitingLogin(instance)) {
         return NEEDS_SIGN_IN;
     }
-    if (kind === `host` && instance.status.state === `active`) {
+    if (kind === `device` && instance.status.state === `active`) {
         return hostOnline === true ? ONLINE : OFFLINE;
     }
     return connectionStates()[instance.status.state];

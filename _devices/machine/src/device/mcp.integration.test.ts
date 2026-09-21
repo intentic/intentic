@@ -2,11 +2,11 @@ import { mkdtempSync } from "node:fs";
 import { readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { HostScopes } from "@intentic/sandbox-contract";
+import type { DeviceScopes } from "@intentic/sandbox-contract";
 import { afterEach, expect, test, vi } from "vitest";
 import { handleMcpMessage } from "./mcp.js";
 
-const scopes = (overrides: Partial<HostScopes> = {}): HostScopes => ({
+const scopes = (overrides: Partial<DeviceScopes> = {}): DeviceScopes => ({
     shell: "on",
     write: "on",
     screen: "on",
@@ -19,7 +19,7 @@ const scopes = (overrides: Partial<HostScopes> = {}): HostScopes => ({
 // Without a vitest config there is no unstubEnvs, so a stub outlives its test and the home leaks down the file.
 afterEach(() => vi.unstubAllEnvs());
 
-const call = async (name: string, args: Record<string, unknown>, grant: HostScopes): Promise<{ text: string; isError: boolean }> => {
+const call = async (name: string, args: Record<string, unknown>, grant: DeviceScopes): Promise<{ text: string; isError: boolean }> => {
     const response = (await handleMcpMessage({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name, arguments: args } }, grant)) as {
         result: { content: { text?: string }[]; isError: boolean };
     };

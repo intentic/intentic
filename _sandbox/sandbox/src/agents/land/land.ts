@@ -7,7 +7,7 @@ import { defaultGit, type GitRunner } from "@intentic/scaffold";
 import { headSha } from "../../git/changes/changes.js";
 import { parseNameStatusZ, parseNumstatZ, parseStatusV2 } from "../../git/changes/changes-porcelain.js";
 import { commitWorktreeRemainder } from "../../git/remote/root-repo.js";
-import { agentRepoChanges, anchorOf } from "./agent-changes.js";
+import { agentRepoChanges, checkpointOf } from "./agent-changes.js";
 import { branchSha, mainBranchOf } from "./agent-refs.js";
 import { reconcileLockfile } from "./lockfile-reconcile.js";
 import type { IsolatedAgent, PersistedAgent } from "../registry/agents-store.js";
@@ -299,7 +299,7 @@ export const outstandingConflicts = async (worktrees: AgentWorktrees, entry: Iso
                     return;
                 }
                 const refDir = attached ? worktree : main;
-                const from = await anchorOf(refDir, main, tip, landedTip, base, git);
+                const from = await checkpointOf(refDir, main, tip, landedTip, base, git);
                 if (tip === from) {
                     return;
                 }
@@ -541,7 +541,7 @@ const planRepo = async (run: LandRun, composed: PersistedAgent["repos"][number])
     }
     const { tip, refDir } = found;
     const diff = await cumulativeDiff(run, composed);
-    const from = await anchorOf(refDir, main, tip, run.span === "cumulative" ? undefined : composed.landedTip, base, git);
+    const from = await checkpointOf(refDir, main, tip, run.span === "cumulative" ? undefined : composed.landedTip, base, git);
     if (tip === from) {
         // Ancestry alone can mean landed; still persisted, or the review re-offers this delta forever.
         const landed = (composed.landedTip ?? base) !== tip;

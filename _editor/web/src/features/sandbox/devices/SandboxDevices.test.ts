@@ -397,7 +397,7 @@ const labels = (el: HTMLElement): string[] => [...el.querySelectorAll(`button, a
 // Every switch granted: the state the verb tests below assume; without it the row states the missing grant
 // instead.
 const granted = (): void => {
-    capabilities.value = [{ id: `host-1`, kind: `host`, config: { platform: `linux`, shell: `on`, sandboxes: `on` } }];
+    capabilities.value = [{ id: `host-1`, kind: `device`, config: { platform: `linux`, shell: `on`, sandboxes: `on` } }];
 };
 
 it(`puts one verb on the row and everything else behind a menu`, () => {
@@ -538,7 +538,7 @@ it(`explains the gap without a button when there is no card to connect the machi
 });
 
 it(`names the switch a connected device is missing before anything is clicked`, () => {
-    capabilities.value = [{ id: `host-1`, kind: `host`, config: { platform: `linux`, shell: `on` } }];
+    capabilities.value = [{ id: `host-1`, kind: `device`, config: { platform: `linux`, shell: `on` } }];
     const el = mount([managed(true)]);
     expect(el.textContent ?? ``).toContain(`Manage sandboxes on this device`);
     expect(labels(el)).toContain(`Open its permissions`);
@@ -546,7 +546,7 @@ it(`names the switch a connected device is missing before anything is clicked`, 
 
 // One switch for the whole lifecycle: granting it leaves no second gate to explain, removal included.
 it(`asks for nothing more on a machine granted sandbox management`, () => {
-    capabilities.value = [{ id: `host-1`, kind: `host`, config: { platform: `linux`, shell: `on`, sandboxes: `on` } }];
+    capabilities.value = [{ id: `host-1`, kind: `device`, config: { platform: `linux`, shell: `on`, sandboxes: `on` } }];
     const el = mount([managed(true)]);
     expect(el.textContent ?? ``).not.toContain(`Turn on "Manage sandboxes on this device"`);
     expect(labels(el)).not.toContain(`Open its permissions`);
@@ -1180,7 +1180,7 @@ it(`accuses a machine of nothing on a reading held since an earlier visit`, asyn
     const text = el.textContent ?? ``;
     expect(text).not.toContain(`Last heard from`);
     expect(text).not.toContain(`gone quiet`);
-    expect(text).not.toContain(`Loop stalled`);
+    expect(text).not.toContain(`Agent stalled`);
 
     // The same reading handed over now is a machine that really has stopped answering, and says so.
     readAt.value = Date.now();
@@ -1437,7 +1437,7 @@ const distroSide = (): Device => ({
 // ONE CARD, not two: the owner connected a computer, and each OS install on it is a connection of that card. Both
 // rows read their switches through it.
 const bothDoors = (): void => {
-    capabilities.value = [{ id: `rog`, kind: `host`, config: { platform: `windows`, shell: `on`, sandboxes: `on` } }];
+    capabilities.value = [{ id: `rog`, kind: `device`, config: { platform: `windows`, shell: `on`, sandboxes: `on` } }];
 };
 
 it(`draws a Windows PC and its distro as one card, with the container once and each side's own state`, async () => {

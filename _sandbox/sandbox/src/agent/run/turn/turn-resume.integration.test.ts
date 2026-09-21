@@ -28,7 +28,7 @@ import { automationConfig } from "../../../harness/route-stores.testing.js";
 import { fileTranscriptRecord } from "../../../sessions/transcript-record.js";
 import { fileSandboxSettingsStore } from "../../../settings/settings-store.js";
 import { resolveRequest } from "../../tools/agent-requests.js";
-import { stopTurn } from "../../anchors/agent-steering.js";
+import { stopTurn } from "../../checkpoints/agent-steering.js";
 import { OUTAGE_MAX_ATTEMPTS, recordProviderFailure, recordProviderSuccess } from "../../providers/provider-health.js";
 import { fileTurnJournal, type JournalledTurn } from "./turn-journal.js";
 import { turnRunOf } from "./turn-runs.js";

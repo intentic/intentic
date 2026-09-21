@@ -16,6 +16,6 @@ export const turnToolsOf = (
     ...services.tools,
     ...mcpToolsOf(granted),
     // The conversation rides the host bridge's URL alone: it only lets the command gate judge a call in context.
-    ...peerToolsOf("host", granted, services.config.sandbox.port, services.hostBridgeToken, conversationId),
+    ...peerToolsOf("device", granted, services.config.sandbox.port, services.hostBridgeToken, conversationId),
     ...peerToolsOf("webext", granted, services.config.sandbox.port, services.webextBridgeToken),
 ];

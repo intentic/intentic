@@ -9,7 +9,7 @@ import { contributedSkill, contributionKey, contributionRegistry, hostOf } from 
 // token on /history, never the manifest: rotating means re-pairing, not a /secrets edit.
 
 export interface PeerHandlerSpec<Scopes extends { readonly platform: string }> {
-    readonly kind: "host" | "webext";
+    readonly kind: "device" | "webext";
     readonly noun: string;
     // Where the permissions take effect once pushed: "on that device", "in that browser".
     readonly where: string;

@@ -23,7 +23,7 @@ const {
     panel: AgentPanel<Op>;
     /** The group's own label; a surface drawing several machines names which one this is. */
     label?: string;
-    /** The machine this loop runs on, for the sentence the duty strip replaced. */
+    /** The machine this agent runs on, for the sentence the duty strip replaced. */
     subject: string;
     /** True while any op on this surface holds its one-at-a-time lock, whichever control started it. */
     busy?: boolean;

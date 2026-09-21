@@ -1,6 +1,6 @@
 import { homedir } from "node:os";
 import { isAbsolute, join, resolve, sep } from "node:path";
-import type { HostScopes } from "@intentic/sandbox-contract";
+import type { DeviceScopes } from "@intentic/sandbox-contract";
 
 // The enforcement point: every scope the owner ticked is checked here, on the machine, and nowhere else. The
 // sandbox only asks; a compromised sandbox cannot widen what happens on this device. A refusal is a value, not
@@ -9,7 +9,7 @@ import type { HostScopes } from "@intentic/sandbox-contract";
 export class ScopeError extends Error {}
 
 // The directories reads and writes are confined to. Empty config means the user's home.
-export const rootsOf = (scopes: HostScopes): string[] => {
+export const rootsOf = (scopes: DeviceScopes): string[] => {
     const declared = (scopes.roots ?? "")
         .split(/\r?\n/)
         .map((line) => line.trim())
@@ -31,7 +31,7 @@ export const withinRoots = (path: string, roots: readonly string[]): boolean => 
 
 // Throws unless `path` is inside the roots. `intent` names the operation in the refusal so the user can see
 // which file was reached for.
-export const assertPath = (path: string, scopes: HostScopes, intent: string): string => {
+export const assertPath = (path: string, scopes: DeviceScopes, intent: string): string => {
     const roots = rootsOf(scopes);
     if (!withinRoots(path, roots)) {
         throw new ScopeError(
@@ -44,7 +44,7 @@ export const assertPath = (path: string, scopes: HostScopes, intent: string): st
 
 // Throws unless the named switch is on. One message shape for all of them, naming the card's own label.
 export const assertScope = (
-    scopes: HostScopes,
+    scopes: DeviceScopes,
     scope: "shell" | "write" | "screen" | "control" | "sandboxes" | "destructive",
 ): void => {
     if (scopes[scope] === "on") {

@@ -5,7 +5,7 @@ import { openSpawnedChild, resetSubagents, settleSpawnedChild, type SubagentTurn
 import type { AgentRequest } from "../../agent/run/agent.js";
 import type { ChildSupervisor } from "../../agent/subagents/children.js";
 import type { JsExecutionPlan } from "../../execution/js-runtime.js";
-import type { CommandGate } from "../../guard/command-gate.js";
+import type { CommandGuard } from "../../guard/command-guard.js";
 import { createTurnTaint } from "../../guard/turn-taint.js";
 import type { CursorGuard } from "./cursor-tools.js";
 import { cursorCustomTools } from "./cursor-tools.js";
@@ -23,16 +23,16 @@ const request = (over: Partial<AgentRequest> = {}): AgentRequest =>
 
 const push = (): ((event: AgentEvent) => void) => () => {};
 
-const guard = (gate: CommandGate): CursorGuard => ({ gate, taint: createTurnTaint() });
+const guard = (gate: CommandGuard): CursorGuard => ({ gate, taint: createTurnTaint() });
 
-const allowing = (): CommandGate => ({
+const allowing = (): CommandGuard => ({
     enforcing: true,
     // eslint-disable-next-line require-yield
     async *consult() {
         return { allow: true };
     },
 });
-const denying = (reason: string): CommandGate => ({
+const denying = (reason: string): CommandGuard => ({
     enforcing: true,
     // eslint-disable-next-line require-yield
     async *consult() {
@@ -101,7 +101,7 @@ describe("the JS backend's gate", () => {
 
     it("the script the gate is asked about is the script the model wrote, verbatim", async () => {
         const asked: string[] = [];
-        const watching: CommandGate = {
+        const watching: CommandGuard = {
             enforcing: true,
             // eslint-disable-next-line require-yield
             async *consult(program) {
@@ -139,7 +139,7 @@ describe("the JS backend's gate", () => {
 
     it("an empty script is answered without troubling the gate", async () => {
         let consulted = 0;
-        const counting: CommandGate = {
+        const counting: CommandGuard = {
             enforcing: true,
             // eslint-disable-next-line require-yield
             async *consult() {

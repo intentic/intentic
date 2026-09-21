@@ -151,9 +151,9 @@ const routes: RouteRecordRaw[] = [
         beforeEnter: [requireAuth, requireSetup],
         component: () => import(`../shell/WorkspaceShell.vue`),
         children: [
-            // Where setup lets go of the user: mobile lands on the agent fleet, desktop on the home seat, where its
+            // Where setup lets go of the user: mobile lands on the agent fleet, desktop on the home tile, where its
             // chat is already docked: the file tree, or a maker's Project page once that extension has registered.
-            // A guest has no home seat but the chat: the tree and the Project page are reads the daemon refuses it.
+            // A guest has no home tile but the chat: the tree and the Project page are reads the daemon refuses it.
             {
                 path: ``,
                 redirect: () =>

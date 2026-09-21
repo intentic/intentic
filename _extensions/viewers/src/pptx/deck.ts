@@ -153,7 +153,7 @@ const boxOf = (chain: readonly (Element | undefined)[], context: SlideContext, m
     return context.whole;
 };
 
-const anchorOf = (chain: readonly (Element | undefined)[]): TextBox["anchor"] => {
+const checkpointOf = (chain: readonly (Element | undefined)[]): TextBox["anchor"] => {
     for (const shape of chain) {
         const anchor = ANCHORS[attr(kid(kid(shape, "txBody"), "bodyPr"), "anchor") ?? ""];
         if (anchor !== undefined) {
@@ -198,7 +198,7 @@ const textBoxOf = (shape: Element, context: SlideContext, map: Mapper): TextBox 
         fill,
         outline,
         shape: GEOMETRIES[attr(kid(kid(shape, "spPr"), "prstGeom"), "prst") ?? ""] ?? "rect",
-        anchor: anchorOf(chain),
+        anchor: checkpointOf(chain),
         paragraphs: words ? paragraphs : [],
     };
 };

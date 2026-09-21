@@ -100,10 +100,10 @@ const SAMPLES: Record<CapabilityKind, readonly Capability[]> = {
             config: { email: "a@example.com", password: "pw", mailbox: "gmail", loginUrl: "https://mail.example.com", openAccounts: "on" },
         },
     ],
-    host: [
+    device: [
         {
             id: "laptop",
-            kind: "host",
+            kind: "device",
             config: {
                 platform: "linux",
                 shell: "on",

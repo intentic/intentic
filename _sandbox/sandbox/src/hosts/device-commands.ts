@@ -1,5 +1,5 @@
 import { installScriptUrl } from "@intentic/constants";
-import type { Capability, Device, DeviceCommand, DeviceCommandInput, DeviceCommandResult, HostFacts } from "@intentic/sandbox-contract";
+import type { Capability, Device, DeviceCommand, DeviceCommandInput, DeviceCommandResult, DeviceFacts } from "@intentic/sandbox-contract";
 
 import {
     DEV_REBUILD_EXIT_MARK,
@@ -46,7 +46,7 @@ export interface DeviceCommandFacts {
     readonly platform: string | undefined;
     // That door's connect-time self-description, which is what says whether a Windows PC has a distro to cross into
     // and whether its agent is new enough to be asked (`wslDistros`). Absent for a card that has never connected.
-    readonly hostFacts: HostFacts | undefined;
+    readonly hostFacts: DeviceFacts | undefined;
     readonly mode: "sync" | "mirror" | undefined;
     readonly localDir: string | undefined;
     /** The two per-port mirror switches only; already bounded to 1-65535 by the contract. */
@@ -270,7 +270,7 @@ export const DEVICE_COMMANDS: Readonly<Record<DeviceCommand, DeviceCommandSpec>>
 // platform here would write PowerShell for it and send every path through a crossing it doesn't need. The card answers
 // for a door this daemon has no reading of.
 const doorPlatform = (door: Device | undefined, card: Capability | undefined): string | undefined =>
-    door?.platform ?? (card?.kind === "host" ? card.config.platform : undefined);
+    door?.platform ?? (card?.kind === "device" ? card.config.platform : undefined);
 
 // Everything a line is built from, gathered once per call. A pairing is minted only for the command that asks for one,
 // so no other action mints a credential as a side effect of being run.

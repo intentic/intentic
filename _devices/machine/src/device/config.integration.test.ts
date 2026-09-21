@@ -1,7 +1,7 @@
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { HostScopes } from "@intentic/sandbox-contract";
+import type { DeviceScopes } from "@intentic/sandbox-contract";
 import { afterAll, beforeAll, expect, test, vi } from "vitest";
 
 // Decides which sandboxes may drive this device; upsertLink must merge, not overwrite (setup once dropped an existing
@@ -10,7 +10,7 @@ import { afterAll, beforeAll, expect, test, vi } from "vitest";
 let home: string;
 let config: typeof import("./config.js");
 
-const scopes = (shell: HostScopes["shell"]): HostScopes => ({
+const scopes = (shell: DeviceScopes["shell"]): DeviceScopes => ({
     shell,
     write: "off",
     screen: "off",
@@ -19,7 +19,7 @@ const scopes = (shell: HostScopes["shell"]): HostScopes => ({
     destructive: "off",
 });
 
-const link = (url: string, id: string, shell: HostScopes["shell"] = "off") => ({
+const link = (url: string, id: string, shell: DeviceScopes["shell"] = "off") => ({
     sandboxUrl: url,
     id,
     token: `token-for-${id}`,
@@ -96,7 +96,7 @@ test("a machine whose agent never stamped its links has no answer, rather than a
     expect(await config.readLinkStates()).toBeUndefined();
 });
 
-test("a stamp inside its window is the answer; past it, the loop that wrote it is presumed gone", async () => {
+test("a stamp inside its window is the answer; past it, the agent that wrote it is presumed gone", async () => {
     const states = { "https://one.example": "open", "https://two.example": "connecting" } as const;
     await config.stampLinkStates(states);
     // The instant the writer recorded, read back from the stamp rather than sampled beside it: the boundary is

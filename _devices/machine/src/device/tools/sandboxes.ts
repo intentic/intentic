@@ -3,7 +3,7 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
-import type { HostScopes, DeviceSandbox, SandboxResources, SandboxResourcesAsk } from "@intentic/sandbox-contract";
+import type { DeviceScopes, DeviceSandbox, SandboxResources, SandboxResourcesAsk } from "@intentic/sandbox-contract";
 import { HOST_RUNTIME_ENV, OVERLAY_RUNTIME_ENV } from "@intentic/sandbox-run";
 import { z } from "zod";
 import { assertScope } from "../policy.js";
@@ -69,7 +69,7 @@ export const sandboxesFrom = (rows: readonly DockerRow[]): DeviceSandbox[] => {
         });
 };
 
-// `windowsHide` here and on every other spawn in this agent: the connection loop runs detached with no console
+// `windowsHide` here and on every other spawn in this agent: the connection agent runs detached with no console
 // of its own, and a console child of a console-less process gets a brand-new console, window and all.
 const docker = async (args: readonly string[]): Promise<string> => {
     const { stdout } = await exec("docker", [...args], { timeout: DOCKER_TIMEOUT_MS, windowsHide: true }).catch((error: NodeJS.ErrnoException) => {
@@ -115,7 +115,7 @@ const tokensOf = (value: string | undefined): string[] => (value ?? "").split(/\
 // A docker limit field: a positive number is a cap, 0 (docker's "unbounded") and anything else is none.
 const capOf = (value: unknown): number | undefined => (typeof value === "number" && value > 0 ? value : undefined);
 
-// Whether a HostConfig's DeviceRequests carry the GPU, in either spelling docker writes for `--gpus`.
+// Whether a DeviceConfig's DeviceRequests carry the GPU, in either spelling docker writes for `--gpus`.
 const gpuRequested = (host: Record<string, unknown>): boolean =>
     (Array.isArray(host["DeviceRequests"]) ? host["DeviceRequests"] : []).some(
         (request) =>
@@ -128,7 +128,7 @@ export const resourcesFrom = (inspected: unknown): SandboxResources | undefined 
     if (!isRecord(inspected)) {
         return undefined;
     }
-    const host = isRecord(inspected["HostConfig"]) ? inspected["HostConfig"] : {};
+    const host = isRecord(inspected["DeviceConfig"]) ? inspected["DeviceConfig"] : {};
     const env = isRecord(inspected["Config"]) ? inspected["Config"]["Env"] : undefined;
     const memory = capOf(host["Memory"]);
     const nanos = capOf(host["NanoCpus"]);
@@ -143,7 +143,7 @@ export const resourcesFrom = (inspected: unknown): SandboxResources | undefined 
 };
 
 // The fleet WITH each container's share of the machine: one `docker inspect` on top of the `docker ps` above.
-// `fleet()` answers "which slug is this" for every op, none of which need a HostConfig; this is for the listing
+// `fleet()` answers "which slug is this" for every op, none of which need a DeviceConfig; this is for the listing
 // a person or model reads, where the caps and privileges are the point. A container that vanished between the
 // two calls makes `docker inspect` exit non-zero with the others still on stdout, so the partial answer is kept.
 export const fleetDetailed = async (): Promise<DeviceSandbox[]> => {
@@ -188,7 +188,7 @@ export const icInFlight = new Set<string>();
 
 // The answer is the JSON itself: the daemon's Devices view reads it verbatim (device-reports.ts), and a model
 // reads keys as well as prose.
-export const listSandboxes = async (scopes: HostScopes): Promise<string> => {
+export const listSandboxes = async (scopes: DeviceScopes): Promise<string> => {
     if (scopes.shell !== "on") {
         assertScope(scopes, "sandboxes");
     }
@@ -212,7 +212,7 @@ const find = async (slug: string): Promise<DeviceSandbox> => {
     throw new Error(`No sandbox "${slug}" on this device. ${known === "" ? "It runs none." : `It has: ${known}.`}`);
 };
 
-export const manageSandbox = async (op: SandboxOp, slug: string, scopes: HostScopes): Promise<string> => {
+export const manageSandbox = async (op: SandboxOp, slug: string, scopes: DeviceScopes): Promise<string> => {
     assertScope(scopes, "sandboxes");
     const target = await find(slug);
     // The tunnel sidecar goes wherever its sandbox goes, a "started" sandbox nobody can reach is not started.
@@ -354,7 +354,7 @@ export const runnerFlow = async (
     parentUrl: string | undefined,
     pair: string | undefined,
     shape: { definition?: string; overlay?: string; overlayHash?: string },
-    scopes: HostScopes,
+    scopes: DeviceScopes,
     onLine: (line: string) => void,
 ): Promise<string> => {
     assertScope(scopes, "sandboxes");
@@ -446,7 +446,7 @@ export const runIc = async (args: readonly string[], onLine: (line: string) => v
             );
         }
     }
-    // Unreachable: the loop either returns a run or throws on the last candidate.
+    // Unreachable: the agent either returns a run or throws on the last candidate.
     throw new Error("no ic candidate was tried");
 };
 
@@ -454,7 +454,7 @@ export const swapSandbox = async (
     swap: SandboxSwap,
     slug: string,
     hash: string | undefined,
-    scopes: HostScopes,
+    scopes: DeviceScopes,
     onLine: (line: string) => void,
 ): Promise<string> => {
     assertScope(scopes, "sandboxes");
@@ -488,7 +488,7 @@ export const swapSandbox = async (
 export const reshapeSandbox = async (
     slug: string,
     ask: SandboxResourcesAsk | undefined,
-    scopes: HostScopes,
+    scopes: DeviceScopes,
     onLine: (line: string) => void,
 ): Promise<string> => {
     assertScope(scopes, "sandboxes");
@@ -511,7 +511,7 @@ export const reshapeSandbox = async (
 export const reconnectSandbox = async (
     slug: string,
     setupCode: string | undefined,
-    scopes: HostScopes,
+    scopes: DeviceScopes,
     onLine: (line: string) => void,
 ): Promise<string> => {
     assertScope(scopes, "sandboxes");
@@ -536,7 +536,7 @@ export const reconnectSandbox = async (
 // hostname the platform minted), so a container already answering to it means the claim would recreate somebody else's
 // sandbox — refused here, before the code is spent, because a setup code is single-use and burning one costs the
 // caller a whole round trip to the platform.
-export const createSandbox = async (slug: string, setupCode: string | undefined, scopes: HostScopes, onLine: (line: string) => void): Promise<string> => {
+export const createSandbox = async (slug: string, setupCode: string | undefined, scopes: DeviceScopes, onLine: (line: string) => void): Promise<string> => {
     assertScope(scopes, "sandboxes");
     const args = icConnectArgs(setupCode);
     if ((await fleet()).some((box) => box.slug === slug)) {
@@ -558,7 +558,7 @@ export const createSandbox = async (slug: string, setupCode: string | undefined,
 // Rides `sandboxes` like every other verb: a fleet nobody may delete from is one the owner can't clean up. The
 // data outlives this by a week (`ic sandbox restore`), but the interruption does not, so the confirmation is
 // still the caller's job.
-export const removeSandbox = async (slug: string, scopes: HostScopes, onLine: (line: string) => void): Promise<string> => {
+export const removeSandbox = async (slug: string, scopes: DeviceScopes, onLine: (line: string) => void): Promise<string> => {
     assertScope(scopes, "sandboxes");
     await find(slug);
     icInFlight.add(slug);
@@ -584,7 +584,7 @@ export const MAX_LOG_LINES = 2_000;
 // The container's own log, gated like `list_sandboxes` since it's a way of seeing what you already manage. Both
 // streams, since a container that died wrote its reason to stderr. `--timestamps` is off: the daemon stamps its
 // own lines. Raw and possibly empty, since the two readers phrase "it has said nothing" differently.
-const readLogs = async (slug: string, lines: number, scopes: HostScopes): Promise<string> => {
+const readLogs = async (slug: string, lines: number, scopes: DeviceScopes): Promise<string> => {
     if (scopes.shell !== "on") {
         assertScope(scopes, "sandboxes");
     }
@@ -597,7 +597,7 @@ const readLogs = async (slug: string, lines: number, scopes: HostScopes): Promis
     return [stdout, stderr].filter((part) => part !== "").join("\n");
 };
 
-export const sandboxLogs = async (slug: string, lines: number | undefined, scopes: HostScopes): Promise<string> => {
+export const sandboxLogs = async (slug: string, lines: number | undefined, scopes: DeviceScopes): Promise<string> => {
     const text = await readLogs(slug, lines ?? DEFAULT_LOG_LINES, scopes);
     return text === "" ? `Sandbox "${slug}" has logged nothing yet.` : text;
 };
@@ -605,7 +605,7 @@ export const sandboxLogs = async (slug: string, lines: number | undefined, scope
 // The same reading, as a flow: the Devices view's Logs button, travelling the machine door every other button
 // on that row travels. It changes nothing, and needs no separate route since the stream's shape is already
 // "many lines, then an outcome".
-export const tailSandboxLogs = async (slug: string, scopes: HostScopes, onLine: (line: string) => void): Promise<string> => {
+export const tailSandboxLogs = async (slug: string, scopes: DeviceScopes, onLine: (line: string) => void): Promise<string> => {
     const lines = (await readLogs(slug, DEFAULT_LOG_LINES, scopes)).split(/\r?\n/).filter((line) => line !== "");
     for (const line of lines) {
         onLine(line);

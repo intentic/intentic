@@ -319,7 +319,7 @@ const DEFECTS: readonly Defect[] = [
         why: "the queue must finish iteration once ended; inverted, it returns while still open and hangs when closed",
     },
     {
-        file: "src/agent/anchors/agent-steering.ts",
+        file: "src/agent/checkpoints/agent-steering.ts",
         find: "        this.delivered += 1;",
         replace: "        this.delivered = 1;",
         why: "`delivered` counts how many messages were accepted (see its comment); assignment makes it a flag stuck at 1",

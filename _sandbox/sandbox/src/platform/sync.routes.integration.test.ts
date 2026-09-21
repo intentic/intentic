@@ -29,7 +29,7 @@ const hostDoor = (enrolled: string[]) => ({
     }),
 });
 
-const linux = (id: string): Capability => ({ id, kind: "host", config: { platform: "linux" } }) as unknown as Capability;
+const linux = (id: string): Capability => ({ id, kind: "device", config: { platform: "linux" } }) as unknown as Capability;
 
 const app = (enrolled: string[], cards: Capability[]) => {
     // authorized_keys is derived from the store on every write; HOME stays a temp dir so no suite touches the real one.

@@ -195,7 +195,7 @@ test("an anchored turn is checked in its own names, by a compiler entered into i
 });
 
 // No namespace was built, so the worktree is reachable directly and path translation is the whole of the check.
-test("an unanchored turn is checked on the worktree path, with no compiler to enter", async () => {
+test("an uncheckpointed turn is checked on the worktree path, with no compiler to enter", async () => {
     const { requests, diag } = asked();
     await fire(editDiagnosticsHooks(UNANCHORED, diag, RESOLVABLE), { file_path: `${WORKSPACE_ROOT}/src/app.ts` });
     expect(requests[0]?.file).toBe("/history/worktrees/c1/src/app.ts");
@@ -204,7 +204,7 @@ test("an unanchored turn is checked on the worktree path, with no compiler to en
 
 // A worktree path is real but the wrong one to hand back to the agent. Whatever the check was asked in, the report
 // comes back renamed to the names the agent uses.
-test("an unanchored report is renamed back to the paths the agent knows", async () => {
+test("an uncheckpointed report is renamed back to the paths the agent knows", async () => {
     const { requests, diag } = asked();
     await fire(editDiagnosticsHooks(UNANCHORED, diag, RESOLVABLE), { file_path: `${WORKSPACE_ROOT}/src/app.ts` });
     expect(requests[0]?.named("/history/worktrees/c1/src/app.ts")).toBe("/work/src/app.ts");
@@ -312,7 +312,7 @@ test("a command that changed nothing checkable, or nothing at all, is silent", a
     expect(await bash(editDiagnosticsHooks(undefined, withErrors, RESOLVABLE, tracked([])), "PostToolUse")).toEqual({});
 });
 
-test("an unanchored turn reviews the worktree copy of a file the command changed", async () => {
+test("an uncheckpointed turn reviews the worktree copy of a file the command changed", async () => {
     const reviewed: string[] = [];
     const diag: DiagRunner = async ({ file }) => {
         reviewed.push(file);

@@ -5,7 +5,7 @@ import { agentHome } from "@intentic/local-agent";
 const home = agentHome("machine");
 export const baseDir = home.dir;
 
-// Resident loop's pidfile (pid+boot, see detached.ts) and log; shared since both halves run one loop.
+// Resident agent's pidfile (pid+boot, see detached.ts) and log; shared since both halves run one agent.
 export const runPidPath = join(baseDir, "machine.pid");
 export const runLogPath = join(baseDir, "machine.log");
 

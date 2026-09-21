@@ -3,7 +3,7 @@ import type { AgentEvent } from "@intentic/sandbox-contract";
 import { expect, test, vi } from "vitest";
 import type { AgentRequest } from "../../agent/run/agent.js";
 import { resolveRequest } from "../../agent/tools/agent-requests.js";
-import { SteeringQueue } from "../../agent/anchors/agent-steering.js";
+import { SteeringQueue } from "../../agent/checkpoints/agent-steering.js";
 import { createPiAgent, type PiTimeouts } from "./pi-agent.js";
 import type { PiEvent, PiProcessHandlers, PiResponse, PiSpawn } from "./pi-rpc.js";
 

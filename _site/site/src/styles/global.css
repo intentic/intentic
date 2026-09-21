@@ -179,7 +179,7 @@ html[data-variant="maker"] {
     --role-scrim-well: 9 6 4;
     --role-scrim-crop: 10 7 5;
     /* The art on the plate, at the rung this width wants. */
-    --role-plate-art: url("/assets/angkor/temple-1600.avif");
+    --role-plate-art: url("/assets/plate/temple-1600.avif");
     /* How much of the photograph survives, and the flat tint laid over whatever does. */
     --role-plate-dim: 1;
     --role-plate-tint: 0.05;
@@ -1198,7 +1198,7 @@ html[data-variant="maker"] {
 @media (max-width: 48rem) {
     :root {
         --bar-height: 4rem;
-        --role-plate-art: url("/assets/angkor/temple-900.avif");
+        --role-plate-art: url("/assets/plate/temple-900.avif");
         --role-plate-dim: 0.85;
         --role-plate-well-veil: 0.6;
     }
@@ -1225,7 +1225,7 @@ html[data-variant="maker"] {
 }
 @media (min-width: 100rem) {
     :root {
-        --role-plate-art: url("/assets/angkor/temple-2400.avif");
+        --role-plate-art: url("/assets/plate/temple-2400.avif");
     }
     .plate-img {
     }

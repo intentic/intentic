@@ -13,7 +13,7 @@ import type {
     WorkflowStepRun,
 } from "@intentic/sandbox-contract";
 import type { Services } from "../composition.js";
-import { stopTurn } from "../agent/anchors/agent-steering.js";
+import { stopTurn } from "../agent/checkpoints/agent-steering.js";
 import { resumeLoops, runLoop, stopLoop, type TurnFn } from "../loops/loop-runner.js";
 import { resolvedBranches } from "./handover-branches.js";
 import { briefForStep, type Handover, stepConversations } from "./workflow-brief.js";

@@ -2,7 +2,7 @@ import type { RequestPermissionRequest } from "@agentclientprotocol/sdk";
 import { expect, test } from "vitest";
 import { resolveRequest } from "../../agent/tools/agent-requests.js";
 import { DEFAULT_SAFETY_POLICY } from "@intentic/sandbox-contract";
-import { createCommandGate } from "../../guard/command-gate.js";
+import { createCommandGuard } from "../../guard/command-guard.js";
 import { createTurnTaint, NO_TAINT } from "../../guard/turn-taint.js";
 import { decidePermission } from "./acp-permissions.js";
 
@@ -56,16 +56,16 @@ const OPTIONS: Parameters<typeof request>[1] = [
     { optionId: "no", kind: "reject_once" },
 ];
 
-const judging = (decision: "allow" | "ask" | "refuse"): Parameters<typeof createCommandGate>[0]["judge"] => async () => ({
+const judging = (decision: "allow" | "ask" | "refuse"): Parameters<typeof createCommandGuard>[0]["judge"] => async () => ({
     decision,
     sentence: "It does the thing.",
 });
 
 const gateWith = (
     decision: "allow" | "ask" | "refuse",
-    extras: Partial<Parameters<typeof createCommandGate>[0]> = {},
-): ReturnType<typeof createCommandGate> =>
-    createCommandGate({
+    extras: Partial<Parameters<typeof createCommandGuard>[0]> = {},
+): ReturnType<typeof createCommandGuard> =>
+    createCommandGuard({
         policy: DEFAULT_SAFETY_POLICY,
         judging: "on",
         judge: judging(decision),
@@ -102,7 +102,7 @@ test("with no rejection option offered, the call is allowed rather than cancelli
 
 test("the outside-content source is handed to the judge on this transport too", async () => {
     const seen: (string | undefined)[] = [];
-    const gate = createCommandGate({
+    const gate = createCommandGuard({
         policy: DEFAULT_SAFETY_POLICY,
         judging: "on",
         judge: async (_program, facts) => {
@@ -134,7 +134,7 @@ test("a hostile rawInput shape is survived rather than thrown on", async () => {
 
 test("an asked command raises a permission card and the call runs when the user allows it", async () => {
     const events: { kind: string; requestId?: string }[] = [];
-    const gate = createCommandGate({
+    const gate = createCommandGuard({
         policy: DEFAULT_SAFETY_POLICY,
         judging: "on",
         judge: judging("ask"),

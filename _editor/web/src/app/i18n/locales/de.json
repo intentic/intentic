@@ -3224,7 +3224,7 @@
             "rawShellOutputBy": "Rohe Shell-Ausgabe, danach aufgeschlüsselt, was sie entfernt hat, und was für den Assistenten übrig blieb.",
             "reachedAssistant": "erreichte den Assistenten"
         },
-        "signinGate": {
+        "signInWall": {
             "addPasskey": "Einen Passkey hinzufügen",
             "addPasskeyToContinue": "Fügen Sie einen Passkey hinzu, um fortzufahren",
             "backToSetup": "Zurück zur Einrichtung",

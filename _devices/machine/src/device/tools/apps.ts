@@ -1,5 +1,5 @@
 import { type Desktop, DesktopError, type WindowInfo } from "@intentic/desktop-automation";
-import type { HostScopes } from "@intentic/sandbox-contract";
+import type { DeviceScopes } from "@intentic/sandbox-contract";
 import { assertScope } from "../policy.js";
 
 // Operating the machine's applications, as opposed to its pixels: knowing what's on screen and which window
@@ -19,14 +19,14 @@ export const describeWindows = (windows: readonly WindowInfo[]): string => {
     return [`${windows.length} window${windows.length === 1 ? "" : "s"} (* = focused). Pass the id in brackets to focus_window.`, ...rows].join("\n");
 };
 
-export const listWindows = async (screen: Desktop, scopes: HostScopes): Promise<string> => {
+export const listWindows = async (screen: Desktop, scopes: DeviceScopes): Promise<string> => {
     assertScope(scopes, "screen");
     return describeWindows(await screen.windows());
 };
 
 // Focus is the precondition for typing, so this reports what it left focused rather than answering "ok": a
 // focus that silently did not take is the most confusing way for a GUI sequence to go wrong.
-export const focusWindow = async (screen: Desktop, id: string, scopes: HostScopes): Promise<string> => {
+export const focusWindow = async (screen: Desktop, id: string, scopes: DeviceScopes): Promise<string> => {
     assertScope(scopes, "control");
     if (id === "") {
         throw new DesktopError(`"id" is required: take a window list first and pass the id in brackets.`);
@@ -36,7 +36,7 @@ export const focusWindow = async (screen: Desktop, id: string, scopes: HostScope
     return focused === undefined ? `Asked this device to focus window ${id}.` : `Focused: ${focused.app}, ${focused.title}. Typing now goes here.`;
 };
 
-export const openTarget = async (screen: Desktop, target: string, scopes: HostScopes): Promise<string> => {
+export const openTarget = async (screen: Desktop, target: string, scopes: DeviceScopes): Promise<string> => {
     // Starting a program is what the shell switch is about, whichever verb gets it started.
     assertScope(scopes, "shell");
     if (target === "") {
@@ -48,13 +48,13 @@ export const openTarget = async (screen: Desktop, target: string, scopes: HostSc
 
 // Length, not content: a clipboard routinely holds a password the user copied a minute ago, and this string
 // travels back into a transcript.
-export const readClipboard = async (screen: Desktop, scopes: HostScopes): Promise<string> => {
+export const readClipboard = async (screen: Desktop, scopes: DeviceScopes): Promise<string> => {
     assertScope(scopes, "screen");
     const text = await screen.readClipboard();
     return text === "" ? "The clipboard is empty." : text;
 };
 
-export const writeClipboard = async (screen: Desktop, text: string, scopes: HostScopes): Promise<string> => {
+export const writeClipboard = async (screen: Desktop, text: string, scopes: DeviceScopes): Promise<string> => {
     assertScope(scopes, "control");
     await screen.writeClipboard(text);
     return `Put ${text.length} characters on this device's clipboard.`;

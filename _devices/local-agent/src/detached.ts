@@ -6,7 +6,7 @@ import { basename } from "node:path";
 import { setTimeout } from "node:timers/promises";
 import { type CliLauncher, stubCommand, windowsLaunchStub } from "./launcher.js";
 
-// Resident background loop, one per machine, found again across processes via a pidfile. A stale pid (crash, power
+// Resident background agent, one per machine, found again across processes via a pidfile. A stale pid (crash, power
 // loss) must read as not-running, not a lie, so it's probed and paired with a boot token, never trusted alone.
 
 // Signal 0 probes without touching the process: ESRCH means gone, EPERM means it exists (owned by another user), both
@@ -20,7 +20,7 @@ export const isProcessAlive = (pid: number): boolean => {
     }
 };
 
-// Records which boot wrote the pidfile: probing a pid alone can't tell today's loop from an unrelated process that
+// Records which boot wrote the pidfile: probing a pid alone can't tell today's agent from an unrelated process that
 // reused its number after reboot. A record from another boot is stale by construction and its pid is never probed.
 const bootToken = async (): Promise<string> => {
     // Linux/WSL: a fresh UUID per boot, exact and immune to clock changes (e.g. a resynced WSL clock).
@@ -29,7 +29,7 @@ const bootToken = async (): Promise<string> => {
     return bootId === "" ? `at:${Math.round(Date.now() - uptime() * 1000)}` : `id:${bootId}`;
 };
 
-// Tolerance for `at:` stamps only (anchored to Date.now, which can step); a false mismatch risks a duplicate loop.
+// Tolerance for `at:` stamps only (anchored to Date.now, which can step); a false mismatch risks a duplicate agent.
 // `id:` stamps compare exactly.
 const SAME_BOOT_MS = 120_000;
 
@@ -41,11 +41,11 @@ const sameBoot = (written: string, current: string): boolean => {
 };
 
 // Writes pid, boot token, and an optional build note as one line; one producer keeps `livePidRecord`'s shape single.
-// The note is the only way another process (upgrade, status) can tell a fresh loop from an old one.
+// The note is the only way another process (upgrade, status) can tell a fresh agent from an old one.
 export const pidFileBody = async (pid: number = process.pid, note?: string): Promise<string> =>
     `${pid} ${await bootToken()}${note === undefined ? "" : ` ${note}`}`;
 
-// The loop behind a pidfile: its pid and whatever it stamped. Undefined covers every case with nothing to reach (no
+// The agent behind a pidfile: its pid and whatever it stamped. Undefined covers every case with nothing to reach (no
 // file, half-written, stale boot, exited pid), since callers treat them alike.
 export interface PidRecord {
     readonly pid: number;
@@ -68,15 +68,15 @@ export const livePidRecord = async (pidPath: string): Promise<PidRecord | undefi
     return { pid, ...(note === undefined || note === "" ? {} : { note }) };
 };
 
-// The pid alone, for callers that only ask whether a loop exists (e.g. VPN and exit-node pidfiles, which stamp no
+// The pid alone, for callers that only ask whether an agent exists (e.g. VPN and exit-node pidfiles, which stamp no
 // note).
 export const livePid = async (pidPath: string): Promise<number | undefined> => (await livePidRecord(pidPath))?.pid;
 
-// `detached` on every platform: POSIX gives the loop its own session; on Windows, without it the loop dies with its
-// parent. DETACHED_PROCESS and CREATE_NO_WINDOW cannot be combined, so every child spawned from inside the loop passes
+// `detached` on every platform: POSIX gives the agent its own session; on Windows, without it the agent dies with its
+// parent. DETACHED_PROCESS and CREATE_NO_WINDOW cannot be combined, so every child spawned from inside the agent passes
 // windowsHide itself; the launcher stub uses CREATE_NO_WINDOW instead, which its own children inherit.
 
-// How long to wait to confirm the loop is really up: short enough for a setup command, long enough that slow process
+// How long to wait to confirm the agent is really up: short enough for a setup command, long enough that slow process
 // creation isn't mistaken for a crash.
 const SETTLE_MS = 2_000;
 const SETTLE_POLL_MS = 100;
@@ -89,7 +89,7 @@ const STUB_REPLY_MS = 10_000;
 // stderr, and that text is the whole of the error message.
 const STUB_DRAIN_MS = 250;
 
-// Starts the loop directly, the way every platform without a stub does.
+// Starts the agent directly, the way every platform without a stub does.
 const spawnHere = (logPath: string, launcher: CliLauncher, args: readonly string[]): number => {
     const logFd = openSync(logPath, "a");
     const [command, ...leading] = launcher;
@@ -120,7 +120,7 @@ export const spawnThroughStub = async (stub: string, logPath: string, launcher: 
             };
             const refused = (): Error => {
                 const said = complained.trim();
-                return new Error(`${basename(stub)} could not start the background loop${said === "" ? "" : `: ${said}`}. Details: ${logPath}`);
+                return new Error(`${basename(stub)} could not start the background agent${said === "" ? "" : `: ${said}`}. Details: ${logPath}`);
             };
             child.stdout?.on("data", (chunk: Buffer) => {
                 answered += chunk.toString();
@@ -134,7 +134,7 @@ export const spawnThroughStub = async (stub: string, logPath: string, launcher: 
             child.stderr?.on("data", (chunk: Buffer) => (complained += chunk.toString()));
             child.once("error", (error) => settle(() => reject(error)));
             // A stub that exits 0 has started something and printed its pid; the line is already in flight and the
-            // timeout above covers one that never arrives. Only a non-zero exit is news, and it comes with no loop
+            // timeout above covers one that never arrives. Only a non-zero exit is news, and it comes with no agent
             // holding the pipes open, so its stderr ends on its own.
             child.once("exit", (code) => {
                 if (code === 0) {
@@ -150,7 +150,7 @@ export const spawnThroughStub = async (stub: string, logPath: string, launcher: 
     }
 };
 
-// Answers the pid only once the loop survives the settle window: a pid alone proves only that a process was created,
+// Answers the pid only once the agent survives the settle window: a pid alone proves only that a process was created,
 // not that it kept running.
 export const spawnDetached = async (logPath: string, launcher: CliLauncher, args: readonly string[]): Promise<number> => {
     const stub = windowsLaunchStub(launcher);
@@ -158,7 +158,7 @@ export const spawnDetached = async (logPath: string, launcher: CliLauncher, args
     for (let waited = 0; waited < SETTLE_MS; waited += SETTLE_POLL_MS) {
         await setTimeout(SETTLE_POLL_MS);
         if (!isProcessAlive(pid)) {
-            throw new Error(`the background loop started and stopped immediately (pid ${pid}). Details: ${logPath}`);
+            throw new Error(`the background agent started and stopped immediately (pid ${pid}). Details: ${logPath}`);
         }
     }
     return pid;

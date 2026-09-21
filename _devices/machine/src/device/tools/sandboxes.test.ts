@@ -1,4 +1,4 @@
-import type { HostScopes } from "@intentic/sandbox-contract";
+import type { DeviceScopes } from "@intentic/sandbox-contract";
 import { expect, test } from "vitest";
 import { ScopeError } from "../policy.js";
 import {
@@ -23,7 +23,7 @@ import {
     tailSandboxLogs,
 } from "./sandboxes.js";
 
-const scopes = (overrides: Partial<HostScopes> = {}): HostScopes => ({
+const scopes = (overrides: Partial<DeviceScopes> = {}): DeviceScopes => ({
     shell: "on",
     write: "on",
     screen: "on",
@@ -178,10 +178,10 @@ test("reshaping is refused by the sandboxes switch, like the swaps it shares a d
 
 // What a container runs with, off docker's own inspect object. The two zeros are the reading that matters:
 // docker writes 0 for "no limit", so 0 must read as absent, not as a cap of zero.
-test("a container's share of the machine is read off its HostConfig and its two directive stamps", () => {
+test("a container's share of the machine is read off its DeviceConfig and its two directive stamps", () => {
     const inspected = {
         Name: "/intentic-sandbox-work",
-        HostConfig: {
+        DeviceConfig: {
             Memory: 12 * 1024 ** 3,
             NanoCpus: 4_000_000_000,
             Privileged: true,
@@ -202,14 +202,14 @@ test("a container's share of the machine is read off its HostConfig and its two 
 test("an unbounded container reads as having no caps, no privileges and no asks", () => {
     const bare = resourcesFrom({
         Name: "/intentic-sandbox-work",
-        HostConfig: { Memory: 0, NanoCpus: 0, Privileged: false, DeviceRequests: null },
+        DeviceConfig: { Memory: 0, NanoCpus: 0, Privileged: false, DeviceRequests: null },
         Config: { Env: [] },
     });
     expect(bare).toEqual({ privileged: false, gpu: false, hostRuntime: [], overlayRuntime: [] });
     expect(bare).not.toHaveProperty("memoryBytes");
     expect(bare).not.toHaveProperty("cpus");
     // The nvidia driver spelling counts as a GPU too, and a non-object is no reading at all.
-    expect(resourcesFrom({ HostConfig: { DeviceRequests: [{ Driver: "nvidia" }] } })?.gpu).toBe(true);
+    expect(resourcesFrom({ DeviceConfig: { DeviceRequests: [{ Driver: "nvidia" }] } })?.gpu).toBe(true);
     expect(resourcesFrom("not an object")).toBeUndefined();
 });
 

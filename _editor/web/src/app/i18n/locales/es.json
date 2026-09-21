@@ -3224,7 +3224,7 @@
             "rawShellOutputBy": "Salida de shell en crudo, por lo que la quitó, y lo que quedó para el asistente.",
             "reachedAssistant": "llegó al asistente"
         },
-        "signinGate": {
+        "signInWall": {
             "addPasskey": "Añadir una passkey",
             "addPasskeyToContinue": "Añade una passkey para continuar",
             "backToSetup": "Volver a la configuración",

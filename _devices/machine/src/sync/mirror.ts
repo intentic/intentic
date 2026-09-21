@@ -43,14 +43,14 @@ import { createTunnelPool, tunnelTargets } from "./tunnel.js";
 // How often the watcher re-reads a sandbox's ports; fast enough to catch a fresh dev server quickly.
 const POLL_MS = 5000;
 
-// Bounds the ports read; the loop is sequential, so a hang here delays every later pairing too.
+// Bounds the ports read; the agent is sequential, so a hang here delays every later pairing too.
 const PORTS_TIMEOUT_MS = 10_000;
 
 // How many ticks between repo-list refreshes; the repo set rarely changes, sparing a round trip most ticks.
 const REPO_LIST_EVERY_TICKS = 12;
 
 // How often reports go out; slower than POLL_MS since a report costs a `mutagen sync list` per pairing. It rides
-// the tick loop rather than its own timer, so it can never outlive a stopped watcher.
+// the tick agent rather than its own timer, so it can never outlive a stopped watcher.
 const REPORT_EVERY_TICKS = 3;
 
 // A report is small; anything slower than this is a tunnel problem, and the next pass is seconds away.
@@ -79,7 +79,7 @@ interface Unreachable {
 }
 
 // Whether this tick owes a failing pairing a poll. Pure so the ladder above is a rule with a test rather than a
-// comparison buried in the loop.
+// comparison buried in the agent.
 export const pollDue = (held: Unreachable | undefined, now: number): boolean =>
     held === undefined || now - held.lastTried >= pollBackoffMs(now - held.since);
 
@@ -345,7 +345,7 @@ const postReports = async (dialed: readonly Dialed<Pairing>[], mutagen: string, 
     const report = await deviceReport(mutagen);
     for (const { pairing, base } of reportable) {
         try {
-            // oxlint-disable-next-line eslint/no-await-in-loop -- one sandbox at a time, like every other pass in this loop
+            // oxlint-disable-next-line eslint/no-await-in-loop -- one sandbox at a time, like every other pass in this agent
             const response = await fetch(`${base.replace(/\/$/, "")}/system/sync/report`, {
                 method: "POST",
                 headers: { "content-type": "application/json", "x-intentic-sync": pairing.syncToken ?? "" },
@@ -370,7 +370,7 @@ const dropRevokedPairing = async (mutagen: string, sandboxId: string, log: Log):
     retireOrphanSessions(mutagen, (await readState()).pairings, log);
 };
 
-// Isolates one fallible step: a rejection here costs only this step, not the whole loop, and is always logged.
+// Isolates one fallible step: a rejection here costs only this step, not the whole agent, and is always logged.
 const guard = async (log: Log, what: string, step: () => void | Promise<void>): Promise<boolean> => {
     try {
         await step();
@@ -389,7 +389,7 @@ const SESSION_RETRY_EVERY_TICKS = 60;
 // this is what stops them ever having to press it.
 const HEAL_EVERY_TICKS = 12;
 
-// The sync half of the resident loop: run by resident.ts, which owns the pidfile, signals and autostart. This
+// The sync half of the resident agent: run by resident.ts, which owns the pidfile, signals and autostart. This
 // half must never process.exit() or touch autostart; it just returns when the last pairing is gone.
 // One rejected token is a blip; REVOKED_POLLS in a row means the enrollment is gone. Returns whether the pairing
 // was dropped, the caller's cue to stop serving it this tick.
@@ -456,7 +456,7 @@ const absorbPairingFailure = async (
     return { drop: false, paused: await absorbUnreachablePoll(mutagen, pairing, tracking.unreachable, log) };
 };
 
-// The heal as ONE STEP of a pass, cadence included: the loop below is a list of things done to a pairing, and how often
+// The heal as ONE STEP of a pass, cadence included: the agent below is a list of things done to a pairing, and how often
 // this one runs is this step's business rather than another branch in it.
 const healPairing = async (mutagen: string, pairing: Pairing, tick: number, log: Log): Promise<void> => {
     if (tick % HEAL_EVERY_TICKS !== 0) {
@@ -513,8 +513,8 @@ interface PassContext {
     readonly say: Log;
 }
 
-// One pairing's whole pass: poll and reconcile its ports, sweep what it strands, heal, bridge. Lifted out of the loop
-// so the loop stays a list of what a tick does, rather than one function in which every branch is one pairing's
+// One pairing's whole pass: poll and reconcile its ports, sweep what it strands, heal, bridge. Lifted out of the agent
+// so the agent stays a list of what a tick does, rather than one function in which every branch is one pairing's
 // business.
 const runPairingPass = async (context: PassContext, pairing: Pairing, base: string): Promise<void> => {
     const { mutagen, tick, claimedBy, tracking, bases, say } = context;
@@ -546,7 +546,7 @@ const runPairingPass = async (context: PassContext, pairing: Pairing, base: stri
             return;
         }
         pausedThisPass = outcome.paused;
-        // A transient tunnel blip must not kill the loop, log and try again next tick.
+        // A transient tunnel blip must not kill the agent, log and try again next tick.
         say(`  ${pairing.sandboxId}: reconcile skipped: ${errorMessage(error)}`);
     }
     // Auto-paused pairings still get the probe above but skip the SSH-heavy git bridge below.
@@ -678,7 +678,7 @@ const teardownForwards = async (mutagen: string, sandboxId?: string): Promise<nu
     return names.length;
 };
 
-// Retires one pairing's mirroring; the loop re-reads the pairing list each tick, so others keep running.
+// Retires one pairing's mirroring; the agent re-reads the pairing list each tick, so others keep running.
 export const retirePairingMirror = async (mutagen: string, sandboxId: string): Promise<number> => await teardownForwards(mutagen, sandboxId);
 
 // Takes ONE port off this device's localhost now rather than at the watcher's next pass, and moves its record with
@@ -713,7 +713,7 @@ export const retireMirroredPort = async (mutagen: string, sandboxId: string, por
 };
 
 // Tears down every forward this agent owns (full uninstall path). The caller has already stopped the resident
-// loop; Mutagen's daemon holds forwards regardless.
+// agent; Mutagen's daemon holds forwards regardless.
 export const teardownAllForwards = async (mutagen: string, log: Log): Promise<void> => {
     const forwards = await teardownForwards(mutagen);
     log(forwards === 0 ? "port mirroring stopped." : `port mirroring stopped; tore down ${plural(forwards, "forward")}.`);

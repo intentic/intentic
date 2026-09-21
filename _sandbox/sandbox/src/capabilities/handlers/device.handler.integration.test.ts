@@ -10,12 +10,12 @@ import { readWorkspaceFile, removeWorkspacePath, writeWorkspaceFile } from "../.
 import type { CapabilityCtx } from "../capability.js";
 import { contributionRegistry } from "../contributions.js";
 import { echoConfig, secretField } from "../summary.js";
-import { hostHandler } from "./host.handler.js";
+import { deviceHandler } from "./device.handler.js";
 
 // The real first-party `devices` extension provides each OS pack; the tool surface it wraps is core.
 const EXTENSIONS_DIR = join(repoRoot(import.meta.url), "_extensions");
 
-// A ctx exposing only what hostHandler touches. The machine is never enrolled here, which is the pre-Connect
+// A ctx exposing only what deviceHandler touches. The machine is never enrolled here, which is the pre-Connect
 // state every add starts in: enrolling one needs a real socket from a real device.
 const tempCtx = (): { ctx: CapabilityCtx; root: string } => {
     const root = mkdtempSync(join(tmpdir(), "host-cap-"));
@@ -39,7 +39,7 @@ const host: ExtensionHost = {
 
 const laptop: Capability = {
     id: "my-laptop",
-    kind: "host",
+    kind: "device",
     config: {
         platform: "windows",
         shell: "on",
@@ -60,9 +60,9 @@ const drain = async (gen: AsyncGenerator<unknown>): Promise<void> => {
 
 test("apply installs the contributed OS pack with the core tools note and this instance's name", async () => {
     const { ctx, root } = tempCtx();
-    expect(await hostHandler.status(ctx, "my-laptop", laptop.config)).toEqual({ state: "inactive" });
+    expect(await deviceHandler.status(ctx, "my-laptop", laptop.config)).toEqual({ state: "inactive" });
 
-    await drain(hostHandler.apply(ctx, "my-laptop", laptop.config));
+    await drain(deviceHandler.apply(ctx, "my-laptop", laptop.config));
 
     const skill = await readWorkspaceFile(skillPath(root));
     // The pack is the OS half (PowerShell here); `${tools}` is the core half, and `${id}` makes the tool names
@@ -73,7 +73,7 @@ test("apply installs the contributed OS pack with the core tools note and this i
     expect(skill).not.toContain("${tools}");
     expect(skill).not.toContain("${id}");
     // Added but never connected: the user's next action is running the one-liner over there, and the entry says so.
-    expect(await hostHandler.status(ctx, "my-laptop", laptop.config)).toEqual({
+    expect(await deviceHandler.status(ctx, "my-laptop", laptop.config)).toEqual({
         state: "pending",
         detail: "click Connect and run the one-liner on that device",
     });
@@ -81,13 +81,13 @@ test("apply installs the contributed OS pack with the core tools note and this i
 
 test("an OS with no installed pack is refused rather than writing an empty skill", async () => {
     const { ctx, root } = tempCtx();
-    await expect(drain(hostHandler.apply(ctx, "my-laptop", { ...laptop.config, platform: "plan9" }))).rejects.toThrow(/plan9/);
+    await expect(drain(deviceHandler.apply(ctx, "my-laptop", { ...laptop.config, platform: "plan9" }))).rejects.toThrow(/plan9/);
     expect(await readWorkspaceFile(skillPath(root))).toBeUndefined();
 });
 
 test("every contributed OS pack carries both halves' placeholders", async () => {
     const registry = await contributionRegistry(host);
-    const packs = [...registry.values()].filter((entry) => entry.spec.kind === "host");
+    const packs = [...registry.values()].filter((entry) => entry.spec.kind === "device");
     expect(packs.map((entry) => entry.spec.id).toSorted()).toEqual(["linux", "windows"]);
 });
 

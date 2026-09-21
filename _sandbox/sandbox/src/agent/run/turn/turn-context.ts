@@ -65,7 +65,7 @@ const CODEISH = /[_/.()[\]{}=<>:;$#@|\\]|[a-z][A-Z]/;
 // phrase — grepping it burns a call and returns noise, which is why the length floor alone is not the test.
 const isGreppable = (literal: string): boolean => /[A-Za-z0-9_]/.test(literal) && (CODEISH.test(literal) || literal.length >= 20);
 
-// A bare filename that some fuller path already covers, and an unanchored path that a `path:line` already covers, are
+// A bare filename that some fuller path already covers, and an uncheckpointed path that a `path:line` already covers, are
 // the same evidence twice: the regexes overlap by design, so the narrower form wins.
 const isCoveredBy = (path: string, others: readonly string[]): boolean =>
     others.some((other) => other !== path && (other.endsWith(`/${path}`) || new RegExp(`^${path.replaceAll(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`)}:\\d+$`).test(other)));

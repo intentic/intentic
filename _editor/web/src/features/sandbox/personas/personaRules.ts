@@ -7,13 +7,13 @@ import type { Persona, PersonaPowers, TurnBriefingNoteId } from "@intentic/sandb
 /** One connected thing a persona can be granted or denied, in the words the Capabilities page uses. */
 export interface PersonaGrantable {
     id: string;
-    kind: `cli` | `host` | `mcp`;
+    kind: `cli` | `device` | `mcp`;
     label: string;
 }
 
 // Grantable kinds: cli, host, mcp. Agent-runtime and platform kinds are excluded so a persona cannot disable the
 // runtime serving its own turn.
-const GRANTABLE_KINDS = new Set([`cli`, `host`, `mcp`]);
+const GRANTABLE_KINDS = new Set([`cli`, `device`, `mcp`]);
 export const grantablesFrom = (capabilities: readonly { id: string; kind: string }[]): PersonaGrantable[] =>
     capabilities
         .filter((capability) => GRANTABLE_KINDS.has(capability.kind))

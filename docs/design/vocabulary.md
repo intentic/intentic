@@ -50,16 +50,23 @@ and was reverted, which is the distinction working rather than failing.
 verdict ([@intentic/gate](../../_sandbox/gate/README.md)). Everything else is a check, an approval, a guard or
 a wall, and all four words are already in the tree.
 
-| today | becomes |
-| --- | --- |
-| checkout gates | checkout **checks** (`_tools/checks/` already says so) |
-| turn gate, `createTurnGate` | **turn check** |
-| push gate, `prepush` | **push checks** |
-| billing gate | **billing check** |
-| `CredentialGate` | **CredentialApproval** |
-| `command-gate.ts` | **command-guard.ts**, already under [guard/](../../_sandbox/sandbox/src/guard/command-gate.ts) |
-| `signinGate` | **signInWall** |
-| a "gated" e2e suite | a **credentialed** suite |
+| today | becomes | state |
+| --- | --- | --- |
+| `command-gate.ts`, `GateSubject`, `GateOutcome` | **command-guard.ts**, `GuardSubject`, `GuardOutcome`, already under [guard/](../../_sandbox/sandbox/src/guard/command-guard.ts) | done |
+| `outbound-gate.ts`, `outboundGateHooks` | **outbound-guard.ts**, `outboundGuardHooks` | done |
+| `SigninGate.vue`, `signinGate.*` keys | **SignInWall.vue**, `signInWall.*` | done |
+| the release, push, checkout, turn and billing gates, and a "gated" suite | **`gate`** | kept, see below |
+| `CredentialGate` | **`gate`** | kept: a credential held for a named approver is a check that refuses until someone says yes |
+
+**Three renames, not eight, and the reason is the definition.** `gate` now means exactly one thing: *a check
+that can refuse an action.* Substitute that into each remaining use and it reads true — the release gate
+refuses a deploy, the push gate a push, the checkout gates a land, the turn gate a turn's end, the billing gate
+a spend, a credential gate the use of a secret.
+
+The three that were renamed are the three where the substitution read FALSE. `CommandGate` did not refuse a
+command, it filtered one, which is a **guard**. `signinGate` did not refuse an action, it stood in front of a
+screen, which is a **wall**. `outboundGateHooks` filtered traffic, so: guard. Those three were the collision;
+the other five were one idea wearing one word, which is what good vocabulary looks like.
 
 ### area
 
@@ -88,51 +95,55 @@ Five meanings, and the repository already owns better words for four of them.
 
 ### lane, tier, slot
 
-| today | becomes |
-| --- | --- |
-| "Free lane" | **free plan** |
-| a column on the agents board | **column** |
-| `LocalModelLane` on Connect | **LocalModelOption** |
-| `HOSTED_TIERS` | **HOSTED_PLANS** |
-| a model pinned to "a tier of its own" | "a **model** of its own" |
-| the topology's "two tiers" | name them: the sandbox and the platform |
-| `e2eTier` | unchanged, `tier` is reserved for test levels |
-| a billing slot | **included sandbox**, `slots` in [hosted-plan.ts](../../_platform/api/src/sandbox/hosted/hosted-plan.ts) to `includedSandboxes` |
-| `portLabel(slot)`, `publicLabel(slot)` | `portLabel(name)`, [hostnames.ts](../../_shared/sandbox-contract/src/ids/hostnames.ts) already documents the shape as `<label>-<sandboxId>` |
-| a concurrency slot | unchanged, that is the ordinary programming word |
+Same story as `gate`: one sense was wrong, the rest were one idea.
+
+A **lane** is one of a few parallel tracks something is sorted into or travels down — a column on the agents
+board (`FleetLane`), a column on Connect (`ConnectLaneKey`), a route a probe takes (`ProbeLane`). All true, all
+kept. The exception was billing, where "Free lane" meant a subscription level and nothing was travelling down
+anything: **that became "free plan"**, done, across 20 files.
+
+`tier` (a rung on a graded ladder) and `slot` (one of a fixed number of places) survive the same substitution
+everywhere, so both are kept. See the audit's
+[correction](../audits/vocabulary-audit.md#correction-seven-of-these-are-not-collisions).
 
 ### the rest of class A
 
-| word | reserved for | the other meanings become |
-| --- | --- | --- |
-| loop | the workflows feature | a device's agent **process**, not "its loop" |
-| host | `extension-host` and `docker host` | the `host` capability kind and [host.contract.ts](../../_shared/sandbox-contract/src/contracts/host.contract.ts) become **device**, which the screens and the `devices` extension already say |
-| probe | dialling a service to see if it answers | `/chores/probe` becomes `/maintenance/measure` |
-| registry | the extension registry package | the capability handler map becomes **handlers** ([registry.ts](../../_sandbox/sandbox/src/capabilities/registry.ts)), the agents registry becomes **fleet** |
-| ledger | money | the shell ledger becomes a **command log**, the workflow ledger **run history**, the chore ledger **answers** |
-| plane | control plane, data plane | "app plane" becomes **the editor**, "hosted/account/platform plane" becomes **the platform** |
-| powers | nothing | an extension asks for **permissions**, a persona is given **limits** |
-| kit | the design kit | `PersonaKitFields` becomes **PersonaInstructionsFields** |
-| runner | a paired device that runs agents | unchanged, including "test runner" |
+| word | verdict |
+| --- | --- |
+| loop | **split, done.** The workflows feature and ordinary control flow keep the word; a paired device's resident loop became **the agent** (or **the process** where the sentence is about the OS): "the background agent", `agentProcessState`, `Agent stopped —` |
+| host | **split, done.** The capability kind is now `device`, the contract is [device.contract.ts](../../_shared/sandbox-contract/src/contracts/device.contract.ts), and the types are `DeviceFacts`/`DeviceScopes`/`DeviceConfig` — which is what the screens and the `devices` extension already said. `extension-host`, `docker host`, `dind-host` and the `host` ADDRESS field (ssh, imap, a database) all keep the word, because there it means a machine serving something, not the user's own computer |
+| probe, registry, ledger, powers, kit, tier, slot | **kept.** Each is one idea across several subjects, not several ideas under one word. See the audit's [correction](../audits/vocabulary-audit.md#correction-seven-of-these-are-not-collisions) |
+| plane | **kept.** `control plane` and `data plane` are industry terms; "app plane" is this repo's own and reads fine beside them |
+| runner | **kept**, including "test runner" |
 
 ## The opaque words
 
-One idea each, under a word that has to be looked up.
+The audit listed thirteen. Working through them one at a time, most did not survive contact, and the reason is
+the same every time: **a word is only worth replacing if the replacement is free.** Counting occurrences finds
+candidates; reading what the word names, and then checking whether the plain alternative is already spoken for,
+decides them. Three renames were right. Six were wrong, and this records why so nobody re-attempts them.
 
-| today | becomes | note |
+### Renamed
+
+| was | is | why it was free |
 | --- | --- | --- |
-| chore | **maintenance** | its schema file is already [maintenance.ts](../../_shared/sandbox-contract/src/schemas/maintenance.ts), and `chore:` is a commit type in the same repo |
-| fence, fenced | **scope, scoped** | beside an [area-scope.ts](../../_sandbox/sandbox/src/areas/area-scope.ts) that already says it |
-| seat, seated, ghost seat | **pinned tile, placeholder tile** | [railMemory.ts](../../_editor/web/src/shell/rail/railMemory.ts); "Keep on the rail" is already the copy |
-| anchor | **snapshot** | [steer-anchors.ts](../../_sandbox/sandbox/src/agent/anchors/steer-anchors.ts) to `steer-snapshots.ts` |
-| netdisk | **disk** | the UI says "Your disks" already; `/mnt/netdisk` becomes `/mnt/disks/<name>` |
-| inventory | **machines** | "Couldn't read your inventory" becomes "Couldn't read your machines" |
-| ceiling, pool | **limit, allowance** | four words for one idea; `allowance` is what you get, `limit` is where it stops |
-| briefing | **context notes** | the chat already labels them "Sent with your message" |
-| episode | **entry** | [episodes.ts](../../_extensions/activity/src/episodes.ts) |
-| capsule | **summary** | the header block of an `iq` answer ([app.ts](../../_search/iq/src/app.ts)) |
-| geo exit | **egress** | frees `exit` for `process.exit`, which owns it anyway |
-| angkor | **plate** | the script already calls the source "the master plate" ([angkor-plate.mjs](../../_site/site/scripts/angkor-plate.mjs)) |
+| angkor | **plate** | a code name for the site's background art; the script already called its source "the master plate" ([plate-art.mjs](../../_site/site/scripts/plate-art.mjs)) |
+| seat (the rail sense) | **tile** | the same object was called both: `SectionTile extends RailSeat`. Two words for one thing, and `tile` is what the UI and the rest of the code say. The ACCOUNT-seat sense (`claudeSeats`, a paid licence) is untouched: that one is standard and means something else |
+| inventory (two strings only) | **your machines** | the word stays in code, where it consistently means "the list of things of a kind you have" across skills, secrets and providers. Only the two sentences a non-technical reader meets were vague |
+
+### Kept, and why
+
+| word | why it stays |
+| --- | --- |
+| chore | ordinary countable English, one idea here. `maintenance` is a mass noun: "a chore" has no singular form in it, so the prose gets worse. Its only clash is with the `chore:` commit type, which is an external convention in a different syntactic position |
+| netdisk | `disk` is already taken 1,178 times for the LOCAL disk (`onDisk`, `freeDiskMb`, `staleOnDisk`). The `net` prefix is doing real work: it is the word that tells the two apart |
+| fence | one idea, 593 uses, and every plain alternative is already in service for something else here: `scope` (catalog filter, fleet visibility, host scopes), `reach` (`persona-reach.ts`), `bounds` (`personaBounds`) |
+| capsule | the header block of an `iq`/`webq`/`fileq` answer. `summary` already appears in those very packages; `header` would collide with HTTP headers in a tool that fetches pages. Taught in one place (the `iq` skill), which is the Class C bargain |
+| episode | one turn, message or event, assembled from several raw log lines. Not `event` (that is what it collapses FROM), not `entry` (catalog entries), not `row` (`EpisodeRow` draws one). Defined at the top of its own file |
+| briefing, powers, kit | each names one idea in plain English, and each reuses one word across subjects the way `verdict` does: an extension's powers and a persona's powers are the same idea asked of different things |
+
+`ceiling`/`pool`/`allowance`/`limit` remain four words around one meter. That one is a copy problem for whoever
+writes the billing screens, not a rename.
 
 ## What is deliberately not renamed
 

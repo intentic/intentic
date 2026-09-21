@@ -8,7 +8,7 @@ import { reconcileResidency } from "../resident.js";
 import { auditPath, configPath, type HostLink, readLinks, readPrepareUpdates, removeLinks, upsertLink, writePrepareUpdates } from "./config.js";
 
 // device: setup (redeem a pairing, connect and stay connected), uninstall (disconnect, keep the audit log), and updates
-// (the background-download switch). The connection loop is the shared resident loop (../resident.ts); there's no OAuth,
+// (the background-download switch). The connection agent is the shared resident agent (../resident.ts); there's no OAuth,
 // only the short-lived pairing token minted in the sandbox's UI.
 
 // Retries through a tunnel that may still be warming, but never through a 401: an expired pairing is definitive, and
@@ -130,7 +130,7 @@ const uninstall = buildCommand<UninstallFlags>({
     },
 });
 
-// Drops the named link (or all), then reconciles the resident loop so it keeps running for what's left and retires only
+// Drops the named link (or all), then reconciles the resident agent so it keeps running for what's left and retires only
 // when nothing remains.
 export const deviceUninstall = async (out: Log, sandbox?: string): Promise<void> => {
     const only = sandbox === undefined || sandbox === "" ? undefined : sandbox;
@@ -188,7 +188,7 @@ const updates = buildCommand<UpdatesFlags>({
             return;
         }
         await writePrepareUpdates(flags.on);
-        // Restarts the loop now, not at its next tick: 'off' on a metered connection must take effect immediately.
+        // Restarts the agent now, not at its next tick: 'off' on a metered connection must take effect immediately.
         await reconcileResidency(out);
         out(
             flags.on

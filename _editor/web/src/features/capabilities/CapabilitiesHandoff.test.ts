@@ -32,7 +32,7 @@ vi.mock(`../extensions/useExtensions`, () => ({
                         capabilities: [
                             {
                                 id: `linux`,
-                                kind: `host`,
+                                kind: `device`,
                                 catalog: { name: `Linux PC`, category: `devices`, description: `Let the agent work on your Linux device.` },
                                 fields: [],
                             },
@@ -66,7 +66,7 @@ let applied: CapabilityStatus = { state: `pending` };
 const add = vi.fn<(input: AddCapabilityInput) => Promise<void>>(async (input) => {
     capabilities.value = [
         ...capabilities.value,
-        { id: input.id, kind: entry === `linux` ? `host` : `browser`, status: applied, config: input.config, secrets: [] },
+        { id: input.id, kind: entry === `linux` ? `device` : `browser`, status: applied, config: input.config, secrets: [] },
     ];
 });
 vi.mock(`./connect/useCapabilities`, () => ({

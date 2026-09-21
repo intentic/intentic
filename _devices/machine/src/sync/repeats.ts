@@ -1,6 +1,6 @@
 import type { Log } from "@intentic/local-agent";
 
-// A log for a loop that runs every few seconds: a line it has already said is repeated a few more times and then only
+// A log for a agent that runs every few seconds: a line it has already said is repeated a few more times and then only
 // occasionally, carrying its run length, until it changes. Nothing else quiets these — a pairing that stays broken
 // wrote the same two sentences every tick, which is how one dogfooding machine's machine.log reached 31 MB in two
 // days and buried every line worth reading in it.
@@ -25,7 +25,7 @@ export const quieted = (log: Log, now: () => number = Date.now): Log => {
     const runs = new Map<string, Run>();
     return (message: string): void => {
         const at = now();
-        // Aged out rather than capped: the table then holds only what is actually repeating, which for this loop is a
+        // Aged out rather than capped: the table then holds only what is actually repeating, which for this agent is a
         // handful of lines, and a line forgotten here is one that has already gone quiet on its own.
         for (const [line, run] of runs) {
             if (at - run.seenAt >= QUIET_MS) {
@@ -45,7 +45,7 @@ export const quieted = (log: Log, now: () => number = Date.now): Log => {
             log(message);
             return;
         }
-        // Said once, at the boundary: a reader who stops seeing a line needs to know the loop went quiet on purpose
+        // Said once, at the boundary: a reader who stops seeing a line needs to know the agent went quiet on purpose
         // rather than that the condition cleared.
         if (held.runs === LOUD_RUNS + 1) {
             held.saidAt = at;

@@ -25,26 +25,26 @@ import { MACHINE_VERSION } from "./version.js";
 
 // The one resident process on this machine, serving both halves at once: the outbound WebSocket per linked
 // sandbox (device/connection.ts) and the mirror watcher (sync/mirror.ts). One process replaces what used to be
-// two loops, two pidfiles, two updaters. Config changes are picked up differently by each half deliberately:
+// two agents, two pidfiles, two updaters. Config changes are picked up differently by each half deliberately:
 // sync re-reads its pairing list every tick, while the device half's link list is fixed at startup, so every
 // `setup`/`uninstall` restarts this process (reconcileResidency) rather than poking it.
 
 export const machineLauncher = (): CliLauncher => cliLauncher("intentic-machine");
 
-// The pid in the shared pidfile, if the loop that wrote it is still running in this boot.
+// The pid in the shared pidfile, if the agent that wrote it is still running in this boot.
 export const readResidentPid = async (): Promise<number | undefined> => (await livePidRecord(runPidPath))?.pid;
 
-// Which build is actually SERVING: what the loop stamped into the pidfile when it claimed it, the only place
-// that fact exists. The binary on disk can be replaced under a running loop without touching the process, so
+// Which build is actually SERVING: what the agent stamped into the pidfile when it claimed it, the only place
+// that fact exists. The binary on disk can be replaced under a running agent without touching the process, so
 // this and the installed build (installed.ts) drift; everything that reads liveness reads this beside the pid.
 export const readResidentBuild = async (): Promise<string | undefined> => (await livePidRecord(runPidPath))?.note;
 
-// How long to wait for a signalled loop to actually exit, and how often to look. It sleeps between polls, so
+// How long to wait for a signalled agent to actually exit, and how often to look. It sleeps between polls, so
 // this bound only covers one wedged in a fetch.
 const RESIDENT_EXIT_TIMEOUT_MS = 2000;
 const RESIDENT_EXIT_POLL_MS = 50;
 
-// Start the loop so it outlives the terminal that launched it. Idempotent: a live loop already serves
+// Start the agent so it outlives the terminal that launched it. Idempotent: a live agent already serves
 // everything this machine holds.
 export const startResident = async (log: Log): Promise<void> => {
     const existing = await readResidentPid();
@@ -56,7 +56,7 @@ export const startResident = async (log: Log): Promise<void> => {
     log(`machine agent running in the background (pid ${pid}). Details: ${runLogPath}`);
 };
 
-// Stop the resident loop, signalled AND gone, not merely signalled. It re-reads sync state every tick and
+// Stop the resident agent, signalled AND gone, not merely signalled. It re-reads sync state every tick and
 // holds the agent binary open on Windows, so a caller about to replace either must wait it out. The forwards
 // stay up; Mutagen's daemon holds them.
 export const stopResident = async (): Promise<number | undefined> => {
@@ -72,12 +72,12 @@ export const stopResident = async (): Promise<number | undefined> => {
             await sleep(RESIDENT_EXIT_POLL_MS);
         }
     }
-    // The heartbeat goes with the pidfile, always: a stopped loop must not leave a stamp for the next reader to age.
+    // The heartbeat goes with the pidfile, always: a stopped agent must not leave a stamp for the next reader to age.
     await cleanup();
     return pid;
 };
 
-// What a leaving loop must not leave behind: a pidfile claiming a gone pid, a heartbeat reading as a recent
+// What a leaving agent must not leave behind: a pidfile claiming a gone pid, a heartbeat reading as a recent
 // pass, and a link stamp reading as a live socket.
 const cleanup = async (): Promise<void> => {
     await rm(runPidPath, { force: true });
@@ -85,7 +85,7 @@ const cleanup = async (): Promise<void> => {
     await rm(linkStatePath, { force: true });
 };
 
-// The loop after a change it absorbs by itself: started only if nothing is serving, and silent when something
+// The agent after a change it absorbs by itself: started only if nothing is serving, and silent when something
 // is. This process also holds the outbound socket to every linked sandbox, so bouncing it for a change the
 // mirror watcher already re-reads each tick would drop the connection the change was asked for over.
 export const startResidentIfStopped = async (log: Log): Promise<void> => {
@@ -95,7 +95,7 @@ export const startResidentIfStopped = async (log: Log): Promise<void> => {
 };
 
 // Bring the resident state in line with the config: restart when there is anything to serve, retire the login
-// entry when there is nothing. The stop comes first even when a restart follows, since the running loop fixes
+// entry when there is nothing. The stop comes first even when a restart follows, since the running agent fixes
 // its link list at startup and would otherwise keep serving the old config indefinitely.
 export const reconcileResidency = async (log: Log): Promise<void> => {
     await stopResident();
@@ -132,8 +132,8 @@ const stampLinks = (links: readonly HostLink[], connections: readonly PeerLink[]
     return () => clearInterval(timer);
 };
 
-// The foreground loop, what a supervisor (systemd, launchd, the Windows launcher stub) runs. Claims the shared
-// pidfile and refuses if a live loop already holds it, since two of these tear down each other's sessions
+// The foreground agent, what a supervisor (systemd, launchd, the Windows launcher stub) runs. Claims the shared
+// pidfile and refuses if a live agent already holds it, since two of these tear down each other's sessions
 // rather than merely wasting a process; the refusal exits 0 so a supervisor doesn't restart it into refusing
 // again. On a signal it exits 128+SIGNAL, not 0, since exiting 0 told systemd this was a clean stop under
 // `Restart=on-failure` and it never restarted a deliberate stop.
@@ -149,7 +149,7 @@ export const runForeground = async (log: Log): Promise<void> => {
 
     const [links, state] = await Promise.all([readLinks(), readState()]);
     if (links.length === 0 && state.pairings.length === 0) {
-        // Terminal, and said once: this runs at every login, and a loop that treated it as a bad tick would log the
+        // Terminal, and said once: this runs at every login, and a agent that treated it as a bad tick would log the
         // same line every few seconds for the session's life.
         log("nothing to serve: no sandbox is linked to this device and none is paired for sync. Connect one from a card in your sandbox.");
         await unregisterAutostart(MACHINE_AUTOSTART, log);
@@ -157,7 +157,7 @@ export const runForeground = async (log: Log): Promise<void> => {
         return;
     }
 
-    // The device half: one outbound socket per linked sandbox, each with its own token, grant and retry loop.
+    // The device half: one outbound socket per linked sandbox, each with its own token, grant and retry agent.
     // Nothing is multiplexed or shared but this log.
     const connections = links.map((link) => connect(link, MACHINE_VERSION, log));
     const autoPrepare = deviceTick(links.length, log);

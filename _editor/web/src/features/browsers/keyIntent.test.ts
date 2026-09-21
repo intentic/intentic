@@ -33,7 +33,7 @@ describe("typing", () => {
     });
 
     test("a key that is neither text nor a control key is nobody's", () => {
-        expect(keyIntent(press(`F1`))).toEqual({ kind: `host` });
+        expect(keyIntent(press(`F1`))).toEqual({ kind: `device` });
     });
 });
 
@@ -74,8 +74,8 @@ describe("the clipboard", () => {
     // Left alone deliberately: forwarding it would paste the sandbox's own clipboard instead of the host's real one,
     // silently breaking password paste.
     test("paste stays with the host, whose clipboard is the real one", () => {
-        expect(keyIntent(press(`v`, { ctrl: true }))).toEqual({ kind: `host` });
-        expect(keyIntent(press(`v`, { meta: true }))).toEqual({ kind: `host` });
+        expect(keyIntent(press(`v`, { ctrl: true }))).toEqual({ kind: `device` });
+        expect(keyIntent(press(`v`, { meta: true }))).toEqual({ kind: `device` });
     });
 });
 
@@ -115,17 +115,17 @@ describe("what the host keeps", () => {
     // the user their own browser.
     test("window shortcuts are not the page's to take", () => {
         for (const key of [`n`, `p`, `s`]) {
-            expect(keyIntent(press(key, { ctrl: true }))).toEqual({ kind: `host` });
+            expect(keyIntent(press(key, { ctrl: true }))).toEqual({ kind: `device` });
         }
-        expect(keyIntent(press(`F11`))).toEqual({ kind: `host` });
+        expect(keyIntent(press(`F11`))).toEqual({ kind: `device` });
     });
 
     // Shift moves a letter chord into the browser's own territory (devtools, reopen tab, incognito); `i` sits in both
     // worlds (Ctrl+I italicizes, Ctrl+Shift+I opens devtools), and redo is the exception that stays on the page.
     test("shifted letter chords are the browser's, redo excepted", () => {
-        expect(keyIntent(press(`I`, { ctrl: true, shift: true }))).toEqual({ kind: `host` });
-        expect(keyIntent(press(`T`, { ctrl: true, shift: true }))).toEqual({ kind: `host` });
-        expect(keyIntent(press(`C`, { ctrl: true, shift: true }))).toEqual({ kind: `host` });
+        expect(keyIntent(press(`I`, { ctrl: true, shift: true }))).toEqual({ kind: `device` });
+        expect(keyIntent(press(`T`, { ctrl: true, shift: true }))).toEqual({ kind: `device` });
+        expect(keyIntent(press(`C`, { ctrl: true, shift: true }))).toEqual({ kind: `device` });
         expect(keyIntent(press(`Z`, { ctrl: true, shift: true }))).toEqual({
             kind: `key`,
             frame: { type: `key`, key: `z`, ctrl: true, shift: true },
@@ -141,7 +141,7 @@ describe("what the host keeps", () => {
     });
 
     test("alt chords other than history belong to the host's own menus", () => {
-        expect(keyIntent(press(`f`, { alt: true }))).toEqual({ kind: `host` });
-        expect(keyIntent(press(`a`, { ctrl: true, alt: true }))).toEqual({ kind: `host` });
+        expect(keyIntent(press(`f`, { alt: true }))).toEqual({ kind: `device` });
+        expect(keyIntent(press(`a`, { ctrl: true, alt: true }))).toEqual({ kind: `device` });
     });
 });

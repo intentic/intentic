@@ -75,7 +75,7 @@ test("a connected browser extension reaches the turn as an http MCP server named
 // The conversation only lets the host bridge judge a command in context; it grants nothing, and its absence made the
 // gate read every Cursor call as conversationless.
 test("a connected machine reaches the turn with the conversation the command gate judges it in", async () => {
-    const request = await planned([{ kind: "host", id: "radarsu-rog", config: {} } as Capability]);
+    const request = await planned([{ kind: "device", id: "radarsu-rog", config: {} } as Capability]);
 
     expect(request.tools).toEqual([
         { name: "radarsu-rog", url: `http://127.0.0.1:${testConfig.sandbox.port}/mcp/hosts/radarsu-rog?conversation=conv-1`, token: "host-bridge" },

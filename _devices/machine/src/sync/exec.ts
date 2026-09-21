@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 
-// Children of the mirror watcher spawn asynchronously: spawnSync would block the event loop serving the SSH transport
+// Children of the mirror watcher spawn asynchronously: spawnSync would block the event agent serving the SSH transport
 // (tunnel.ts) they ride, deadlocking every sync/forward/git-bridge call. spawnSync remains correct for one-shot CLI
 // commands (setup, status, uninstall), which hold no listener.
 

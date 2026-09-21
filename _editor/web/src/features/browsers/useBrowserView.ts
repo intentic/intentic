@@ -478,7 +478,7 @@ export const useBrowserView = (name: Ref<string | undefined>): BrowserView => {
                 return;
             }
             const intent = keyIntent(event);
-            if (intent.kind === `host`) {
+            if (intent.kind === `device`) {
                 return;
             }
             event.preventDefault();

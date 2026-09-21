@@ -4,13 +4,13 @@ import type { Logger } from "pino";
 import { headSha } from "../../git/changes/changes.js";
 import { commitWorktreeRemainder } from "../../git/remote/root-repo.js";
 import type { AgentWorktrees } from "../../agents/worktrees/worktrees.js";
-import type { TurnAnchor } from "./turn-anchors.js";
+import type { TurnCheckpoint } from "./turn-checkpoints.js";
 
-// Pins an isolated conversation's checkout (an isolated turn has no workspace-history capture to anchor on): commits
+// Pins an isolated conversation's checkout (an isolated turn has no workspace-history capture to checkpoint on): commits
 // what the checkout holds, then reads back the commit per repo, since HEAD alone would miss prior turns' uncommitted
-// work. A failing repo drops out without failing the others; an anchor covering some repos beats none.
+// work. A failing repo drops out without failing the others; an checkpoint covering some repos beats none.
 
-export interface AnchorDeps {
+export interface CheckpointDeps {
     readonly agentWorktrees: Pick<AgentWorktrees, "worktreeDir">;
     readonly logger: Logger;
 }
@@ -18,18 +18,18 @@ export interface AnchorDeps {
 // Resolves `forkOf.files: 'then'` to the source's own commits, or undefined when it can't; the caller then falls back
 // to today's files rather than refuse the fork. Shas come from the daemon's own record only, never the request.
 export const forkWorktreeBase = async (
-    anchors: { readonly of: (conversationId: string, index: number) => Promise<TurnAnchor | undefined> },
+    checkpoints: { readonly of: (conversationId: string, index: number) => Promise<TurnCheckpoint | undefined> },
     forkOf: { readonly conversationId: string; readonly keep: number; readonly files: "then" | "now" } | undefined,
 ): Promise<RepoBase[] | undefined> => {
     if (forkOf?.files !== "then") {
         return undefined;
     }
-    const anchor = await anchors.of(forkOf.conversationId, forkOf.keep);
-    return anchor?.kind === "worktree" ? [...anchor.repos] : undefined;
+    const checkpoint = await checkpoints.of(forkOf.conversationId, forkOf.keep);
+    return checkpoint?.kind === "worktree" ? [...checkpoint.repos] : undefined;
 };
 
-export const anchorWorktree = async (
-    services: AnchorDeps,
+export const checkpointWorktree = async (
+    services: CheckpointDeps,
     conversationId: string,
     repos: readonly { readonly repo: string; readonly base: string }[],
     // Commit message shown in `git log`; a steered message needs its own title, distinct from the turn boundary's.
@@ -53,7 +53,7 @@ export const anchorWorktree = async (
                 anchored.push({ repo, base });
             }
         } catch (error) {
-            services.logger.warn({ err: error, conversationId, repo }, "anchors: pinning the worktree failed");
+            services.logger.warn({ err: error, conversationId, repo }, "checkpoints: pinning the worktree failed");
         }
     }
     return anchored;

@@ -48,7 +48,7 @@ describe(`container answers`, () => {
                 State: { Running: false, StartedAt: `2026-09-17T13:17:20.5Z` },
                 Config: { Image: `x` },
                 NetworkSettings: { Ports: {} },
-                HostConfig: { PortBindings: { "80/tcp": [{ HostIp: `127.0.0.1`, HostPort: `43657` }] }, RestartPolicy: { Name: `unless-stopped` } },
+                DeviceConfig: { PortBindings: { "80/tcp": [{ HostIp: `127.0.0.1`, HostPort: `43657` }] }, RestartPolicy: { Name: `unless-stopped` } },
             }),
         );
         expect(state).toEqual({ running: false, hostPort: 43657, image: `x`, env: [], labels: {}, restart: `unless-stopped`, startedAt: Math.floor(Date.parse(`2026-09-17T13:17:20.5Z`) / 1000) });
@@ -73,7 +73,7 @@ describe(`container answers`, () => {
             Env: [`A=1`],
             Labels: { owner: `intentic.onlyoffice` },
             ExposedPorts: { "80/tcp": {} },
-            HostConfig: {
+            DeviceConfig: {
                 PortBindings: { "80/tcp": [{ HostIp: `127.0.0.1`, HostPort: `5000` }] },
                 ExtraHosts: [`host.docker.internal:host-gateway`],
                 RestartPolicy: { Name: `unless-stopped` },

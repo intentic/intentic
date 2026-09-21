@@ -1,7 +1,7 @@
 import { existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 
-// Builds the argv to re-invoke this CLI, for autostart and the background loop. A bun-compiled binary re-injects a
+// Builds the argv to re-invoke this CLI, for autostart and the background agent. A bun-compiled binary re-injects a
 // virtual argv[1] on every launch, so passing it again shifts the real command to argv[2] where stricli never looks;
 // only `node dist/cli.js` needs the script path repeated.
 

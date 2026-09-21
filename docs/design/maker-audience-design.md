@@ -21,7 +21,7 @@ What that person meets today, by surface:
 
 | Surface | What it says | Where |
 | --- | --- | --- |
-| Rail | Chat, Agents, Workspace, Preview always seated | `_editor/web/src/core-views/registry.ts` `RAIL_GROUPS` |
+| Rail | Chat, Agents, Workspace, Preview always on the rail | `_editor/web/src/core-views/registry.ts` `RAIL_GROUPS` |
 | Workspace | a file tree of every repo, dotfiles, lockfiles, `.intentic/`, config, tests | `features/workspace/explorer/WorkspaceTree.vue` |
 | Workspace sidebar | Files / Changes, the second being VSCode's SCM: repos, staged and unstaged sides, Stage, Unstage, Commit with a message box, Discard, Publish, Sync, Push, ahead and behind counts, Fetch every repo | `features/workspace/changes/ReviewPanel.vue`, `push/outgoingWork.ts` |
 | Row actions | personas, checks, and the cog onto a repository's management panel (git history, docs, codebase health, apps, dependencies as its tabs) | `features/workspace/explorer/rowActions.ts`, `directory-ui/directoryTabs.ts` |
@@ -31,7 +31,7 @@ What that person meets today, by surface:
 | Terminal | a shell | the shell's own panel |
 
 Two things make this a wall rather than a learning curve. The **centre of gravity is the file tree**: the
-always seated Workspace tile opens on files, and everything the maker wants (what did the assistant do, is it
+always on the rail Workspace tile opens on files, and everything the maker wants (what did the assistant do, is it
 live, can I undo it) is a click away from a screen that shows `pnpm-lock.yaml`. And the **review boundary is
 git's index**: an assistant's work is held on a branch until someone reads a diff and presses Land, then stays
 uncommitted until someone writes a commit message. Both steps are the point for a developer. For a
@@ -48,7 +48,7 @@ The good news is that most of what a maker needs already exists under a develope
   Changes panel fills its box from it (`changes/commitMessage.ts`).
 - **Roles** already split "may drive" from "may land": a collaborator sees Request land instead of Land now
   (`auth/role-floor.ts`, `AgentCard.vue`).
-- **Preview** is an always seated tile, **`public/`** is a shareable outbox with a share view
+- **Preview** is an always on the rail tile, **`public/`** is a shareable outbox with a share view
   (`_extensions/preview`), **viewers** render docx, xlsx, pdf and media (`_extensions/viewers`), and the
   design kit has an editable `MarkdownDocument` with autosave.
 - **`AGENTS.md` already has a settings page** (`/sandbox/agent?section=instructions`), so "tell the assistant how
@@ -94,7 +94,7 @@ Workspace is not an extension: it is 5,800 lines of core (`features/workspace/`)
 Monaco and markdown viewers, diff opening, uploads, presence, search and the `/workspace/<path>` route every
 file link in a transcript points at (`lib/markdown/markdownFileLinks.ts`). An extension cannot reach any of
 that (`_extensions/README.md`, the lint boundary), so a replacement would rebuild it, and a second copy of the
-viewer stack is the thing that drifts. The rail's four permanent seats are also a core table an extension
+viewer stack is the thing that drifts. The rail's four permanent tiles are also a core table an extension
 cannot unseat (`registry.ts`, `always`).
 
 **A "simple mode" switch inside the existing screens** keeps one implementation, which is the attraction. But
@@ -110,7 +110,7 @@ Core owns the shared mechanism, each a small table or default:
 
 - the `audience` preference and its one reader, `useAudience` (section 4)
 - the vocabulary table (section 7)
-- the rail table per audience, with the rule that an `always` seat may name an extension's view id
+- the rail table per audience, with the rule that an `always` tile may name an extension's view id
 - the tree's "technical files" filter, one predicate beside `explorerShows`
 - the finishing defaults for makers (section 5), which are daemon rules rather than UI
 - a read of the audience on the extension API, `api.audience()`, the way `api.theme.mode()` is read now
@@ -120,9 +120,9 @@ maker's home: the Projects dashboard (section 6). It uses only what the public A
 for detection, `GET /workspace/repos`, `GET /workspace/file` and `POST /workspace/repos/new` through
 `permissions.sandbox`, and `api.href`/`api.navigate` to hand a project to the core workspace.
 
-What this buys: a developer sees nothing change, because every maker thing is a seat, a word or a default. A
+What this buys: a developer sees nothing change, because every maker thing is a tile, a word or a default. A
 maker who turns the extension off falls back to the Workspace tile, because the rail resolves its `always`
-seat to whichever of `projects` and `workspace` is registered. And the first extension to need the audience
+tile to whichever of `projects` and `workspace` is registered. And the first extension to need the audience
 proves the API read is enough, which is the dogfooding rule the first party packs exist for.
 
 ## 4. The audience preference
@@ -148,7 +148,7 @@ is wanted later it is one platform setting, and the reader does not change.
   hides nothing permanently: every screen below has "All files", "Show details" or "Switch to the developer
   view" on it.
 
-**What it changes**: the home seat, the words, the tree filter, which row actions and panels show, the
+**What it changes**: the home tile, the words, the tree filter, which row actions and panels show, the
 default view for a markdown file (rendered, with Edit opening the prose editor), whether the terminal panel is
 offered, and the setup proposal. **What it does not change**: routes, the daemon's behaviour (those are the
 sandbox's rules, set once at setup and visible in Sandbox ▸ Agent), roles, and anything an agent does.
@@ -207,7 +207,7 @@ Request land, which the role floor already produces. The setup proposal is only 
 
 ### 6.1 Projects: the home
 
-One rail tile, `projects`, always seated in the maker audience in the seat Workspace holds now. It draws the
+One rail tile, `projects`, always on the rail in the maker audience in the tile Workspace holds now. It draws the
 workspace's repositories as tiles: the name, the README's first paragraph, and whether the Preview area can show
 it running. A press on a tile opens the Workspace rooted at that repository (6.2). The last tile is **New
 project**: one press offers a free name (`new-project`, `new-project-2`), Enter makes the repository (a folder,
@@ -260,7 +260,7 @@ where one applies. "Mark as reviewed" stays, since a tick is not a developer con
 
 ### 6.6 See it and Share
 
-Preview keeps its always seat and is renamed **See it** in the maker audience, and the dashboard links each
+Preview keeps its always tile and is renamed **See it** in the maker audience, and the dashboard links each
 running project's own target. `public/` keeps its Public tab. In the tree its chip reads "shared" for a maker,
 and Publish is reserved for it (section 2).
 
@@ -356,7 +356,7 @@ before the home, because a maker who gets the home first and the trap later lose
 - `core-views/vocabulary.ts`, and the ~20 call sites in `AgentCard.vue`, `AgentDetail.vue`,
   `ReviewPanel.vue`, `HistoryPanel.vue`, `WorkspaceDesktop.vue`, `WorkspaceMobile.vue`, `mobileTabs.ts`,
   `specialPaths.ts` reading it.
-- `registry.ts`: `RAIL_GROUPS` per audience, and an `always` seat resolves to the first registered id of a
+- `registry.ts`: `RAIL_GROUPS` per audience, and an `always` tile resolves to the first registered id of a
   list (`[project, workspace]`).
 - `explorerFilter.ts`: the technical predicate and its chip.
 - `extension-api`: `api.audience()`, `onDidChange`, version bump.
@@ -416,7 +416,7 @@ Written after phases 0 to 4 were built, where the code disagreed with the plan a
   committed with `git commit --only` after staging them (`changes-index.ts`, `commitOnly`), which leaves the
   owner's other staging alone. The subject is awaited from `landed-subject.ts` first, so nothing is amended.
 - **The rail's stand-in is a field, not a list.** `RailItem.standIn` names the core id that takes an
-  extension's `always` seat while that extension is not registered; `seatPolicy` reads the registry to decide.
+  extension's `always` tile while that extension is not registered; `railPolicy` reads the registry to decide.
   `homeViewId()` is the one answer the desktop rail, the phone's tab bar and the mobile menu share.
 - **The prose diff is the app's own.** No diff library is a dependency of the web app, so
   `viewers/proseDiff.ts` is a table LCS over paragraphs and then over words, with a cell ceiling past which a

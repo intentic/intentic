@@ -10,7 +10,7 @@ import { splitAttachments, withFileNote } from "../../agent/prompt/attachment-no
 import { EXECUTE_PROMPT, type ExecutePhase, PLAN_PREAMBLE, type PlanPhase, runPlanEmulation } from "../../agent/prompt/plan-emulation.js";
 import type { AcpConnection, AcpConnections } from "./acp-connection.js";
 import { sessionUpdateEvent } from "./acp-events.js";
-import type { CommandGate } from "../../guard/command-gate.js";
+import type { CommandGuard } from "../../guard/command-guard.js";
 import { createTurnGate } from "../../guard/turn-gate.js";
 import { decidePermission, type PermissionPhase } from "./acp-permissions.js";
 
@@ -84,7 +84,7 @@ async function* runAcpTurn(
     captureText: boolean,
     timeouts: AcpTimeouts,
     // This turn's rulebook gate; one gate for the whole turn, its sink repointed per phase rather than rebuilt.
-    gate: CommandGate,
+    gate: CommandGuard,
     sink: { push: (event: AgentEvent) => void },
 ): AsyncGenerator<AgentEvent, TurnOutcome> {
     let sid = sessionId;

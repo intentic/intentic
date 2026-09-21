@@ -58,7 +58,7 @@ machine's buttons on the other's row — the fault the fold existed to avoid.
 
 The fact has to arrive at connect time. It used to ride only the sync report, which is `intentic-machine status
 --json` behind "Run commands"; a card with that switch off could never say which environment it was, and the daemon's
-fold read that silence as agreement. `HostFacts` carries `hostname` and `wsl` now, and an agent old enough to send
+fold read that silence as agreement. `DeviceFacts` carries `hostname` and `wsl` now, and an agent old enough to send
 neither says nothing rather than something false.
 
 ## 2b. One install, and where sync lands

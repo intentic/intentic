@@ -62,7 +62,7 @@ export const CredentialGatesSchema = z.object({
 });
 export type CredentialGates = z.infer<typeof CredentialGatesSchema>;
 
-export const CredentialGateSubjectParamSchema = z.object({
+export const CredentialGuardSubjectParamSchema = z.object({
     subject: z.string().min(1).describe("Which gate, by the secret name or capability id it covers."),
 });
 

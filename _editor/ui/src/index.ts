@@ -89,8 +89,8 @@ export {
     // The panel's notes and its blocked reason as one column, for a surface drawing them outside the group.
     agentLines,
     // The wording both callers share: the badge's word for a reported loop, and the two errands it can carry.
-    agentLoopNote,
-    agentLoopState,
+    agentStateNote,
+    agentProcessState,
     agentSkewNote,
     type DeviceAgentState,
     restartAgent,

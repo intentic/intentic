@@ -21,7 +21,7 @@ const starterConfig = (): string => renderTemplate("scaffold/deploy.config.ts", 
 
 // Scaffolds onto `self`, the host the daemon auto-registers; referenced here, never declared (the daemon owns that).
 // Domain is `app.<zone>` (falls back to a placeholder if the zone is unknown).
-export const selfHostConfig = (zone: string | undefined): string =>
+export const selfDeviceConfig = (zone: string | undefined): string =>
     renderTemplate("scaffold/deploy.config.selfhost.ts", { zone: zone ?? "example.com" });
 
 // Scaffolds separate git repos (intent, desired-state, and unless `minimal` an app), each independently PR-manageable
@@ -41,7 +41,7 @@ export const scaffold = async (
     try {
         await gitInit(intentDir);
         await gitInit(targetDir);
-        await writeFile(join(intentDir, CONFIG_FILE), minimal ? scaffoldDeployConfig([]) : selfHost ? selfHostConfig(zone) : starterConfig());
+        await writeFile(join(intentDir, CONFIG_FILE), minimal ? scaffoldDeployConfig([]) : selfHost ? selfDeviceConfig(zone) : starterConfig());
         await writeFile(
             join(intentDir, "package.json"),
             intentPackageJson(link ? libsLinkSpec("graph") : `~${version}`, link ? libsLinkSpec("sdk") : `~${version}`),

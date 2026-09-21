@@ -64,8 +64,8 @@
         "agentAliveStoppedMaking": "Jego agent żyje, ale przestał robić obchody, więc obraz folderów i portów, jaki ma ten sandbox, jest tak stary jak ostatni obchód.",
         "commands": "Polecenia",
         "folders": "Foldery",
-        "loopKeepsBuildStarted": "Pętla trzyma build, z którym wystartowała, aż do restartu — podmiana pliku na dysku sama z siebie niczego nie zmienia.",
         "ports": "Porty",
+        "processKeepsBuildStarted": "Pętla trzyma build, z którym wystartowała, aż do restartu — podmiana pliku na dysku sama z siebie niczego nie zmienia.",
         "restartAgent": "Uruchom agenta ponownie",
         "stopsStartsDevicesAgent": "Zatrzymuje i uruchamia pętlę agenta na tym urządzeniu. Nic nie jest pobierane — podnosi się build, który już tam jest zainstalowany."
     },

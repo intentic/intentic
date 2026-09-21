@@ -1,5 +1,5 @@
 import { type AgentCapabilities, type CommandJudgeMode, DEFAULT_SAFETY_POLICY } from "@intentic/sandbox-contract";
-import { type CommandGate, type CommandGateOptions, createCommandGate } from "./command-gate.js";
+import { type CommandGuard, type CommandGuardOptions, createCommandGuard } from "./command-guard.js";
 import { clearTurnTaint, createTurnTaint, publishTurnTaint, type TurnTaint } from "./turn-taint.js";
 
 // One place every vendor runtime mints a gate and publishes a taint bit, instead of copying it into Codex, OpenCode,
@@ -11,12 +11,12 @@ export interface TurnGateInput {
     readonly safetyPolicy?: string;
     // How much of the gate is on; absent means `on`, so a request built by hand still judges something.
     readonly judging?: CommandJudgeMode;
-    // Ask the judge. Absent ⇒ every triage hit takes the judge-unavailable path; see CommandGateOptions.judge.
-    readonly judge?: CommandGateOptions["judge"];
+    // Ask the judge. Absent ⇒ every triage hit takes the judge-unavailable path; see CommandGuardOptions.judge.
+    readonly judge?: CommandGuardOptions["judge"];
     // Record, amend and remember verdicts; all three absent for a turn with no workspace to write to.
-    readonly log?: CommandGateOptions["log"];
-    readonly answered?: CommandGateOptions["answered"];
-    readonly remember?: CommandGateOptions["remember"];
+    readonly log?: CommandGuardOptions["log"];
+    readonly answered?: CommandGuardOptions["answered"];
+    readonly remember?: CommandGuardOptions["remember"];
     // Nobody is at a composer, so an ask refuses instead of parking on a card.
     readonly unattended?: boolean;
     // What caused this wake when the owner didn't write it (a listener, a webchat visitor); taint's birth half.
@@ -31,7 +31,7 @@ export interface TurnGateInput {
 }
 
 export interface TurnGate {
-    readonly gate: CommandGate;
+    readonly gate: CommandGuard;
     readonly taint: TurnTaint;
     // Drop the conversation's published bit; every caller owes this once its turn settles, in a finally.
     readonly release: () => void;
@@ -56,7 +56,7 @@ export const createTurnGate = (turn: TurnGateInput): TurnGate => {
     }
     return {
         taint,
-        gate: createCommandGate({
+        gate: createCommandGuard({
             policy: turn.safetyPolicy ?? DEFAULT_SAFETY_POLICY,
             judging: turn.judging ?? "on",
             unattended: turn.unattended === true,

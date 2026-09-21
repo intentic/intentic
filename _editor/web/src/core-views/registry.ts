@@ -56,16 +56,16 @@ export interface ActiveExtension {
 export const extensionPath = (extension: ViewRegistration, activation: Activation): string =>
     activation.key === extension.id ? `/ext/${extension.id}` : `/ext/${extension.id}/${encodeURIComponent(activation.key)}`;
 
-// Rail order and which tiles show, declared here so the desktop rail and mobile menu agree. `always` seats
-// are constant destinations (chat, agents, workspace, preview); everything else is `signal`, seated only
+// Rail order and which tiles show, declared here so the desktop rail and mobile menu agree. `always` tiles
+// are constant destinations (chat, agents, workspace, preview); everything else is `signal`, on the rail only
 // while it badges. Bands are declared, not derived, covering core shell tiles alongside extensions in one table.
-// Whether a tile holds its seat unconditionally or only while it has something to say (see railSeated).
-export type SeatPolicy = "always" | "signal";
+// Whether a tile holds its place unconditionally or only while it has something to say (see onRail).
+export type RailPolicy = "always" | "signal";
 
 export interface RailItem {
     readonly id: string;
-    readonly seat: SeatPolicy;
-    // For an `always` seat an extension's view fills: the core id that takes the seat while that view is not
+    readonly policy: RailPolicy;
+    // For an `always` tile an extension's view fills: the core id that takes the tile while that view is not
     // registered, so switching the extension off leaves a home rather than a hole.
     readonly standIn?: string;
 }
@@ -77,16 +77,16 @@ export interface RailGroup {
     readonly items: readonly RailItem[];
 }
 
-const always = (id: string, standIn?: string): RailItem => (standIn === undefined ? { id, seat: `always` } : { id, seat: `always`, standIn });
-const signal = (id: string): RailItem => ({ id, seat: `signal` });
+const always = (id: string, standIn?: string): RailItem => (standIn === undefined ? { id, policy: `always` } : { id, policy: `always`, standIn });
+const signal = (id: string): RailItem => ({ id, policy: `signal` });
 
-// The maker's home is the Projects dashboard (`@intentic/ext-projects`), seated where a developer has the file tree.
+// The maker's home is the Projects dashboard (`@intentic/ext-projects`), on the rail where a developer has the file tree.
 export const PROJECTS_VIEW_ID = `projects`;
 export const WORKSPACE_VIEW_ID = `workspace`;
 
 // Every tile here badges when it needs the owner, and lights while a run of its own is in flight; being
-// seated by lighting up costs them nothing. acceptance, deployments, maintenance and documentation (below) are LISTED
-// first-party extensions, installed from the registry: their seats are declared here so an install lands them in the
+// on the rail by lighting up costs them nothing. acceptance, deployments, maintenance and documentation (below) are LISTED
+// first-party extensions, installed from the registry: their tiles are declared here so an install lands them in the
 // band a product decision put them in, not at the end of the column like an unlisted stranger.
 const judge = (): RailGroup => ({
     id: `judge`,
@@ -104,7 +104,7 @@ const know = (): RailGroup => ({
 
 // One table per audience; only the Work band differs. Preview is `always` for being visited constantly, not for its
 // badge, which counts an inventory, not a claim.
-// The Projects tile is seated for everyone and heads the rail: it is where the project scope (app/projectScope.ts) is
+// The Projects tile is on the rail for everyone and heads the rail: it is where the project scope (app/projectScope.ts) is
 // read and changed, and every tile below it is narrowed by what it says, so it sits above them the way a switcher
 // sits above what it switches. For a maker the file tree stands in for it when the extension is off.
 const railGroupsByAudience = (): Record<Audience, readonly RailGroup[]> => ({
@@ -118,7 +118,7 @@ const railGroupsByAudience = (): Record<Audience, readonly RailGroup[]> => ({
         setup(),
         know(),
     ],
-    // The file tree keeps a rank of its own below the work loop, so a maker who opens it finds it in the same seat.
+    // The file tree keeps a rank of its own below the work loop, so a maker who opens it finds it in the same tile.
     maker: [
         {
             id: `work`,
@@ -134,13 +134,13 @@ const railGroupsByAudience = (): Record<Audience, readonly RailGroup[]> => ({
 export const railGroupsFor = (audience: Audience): readonly RailGroup[] => railGroupsByAudience()[audience];
 
 // A guest's rail: the chat it drives and the board of its own conversations, whichever audience it answered. Every
-// other seat opens on a read the daemon refuses a guest, and a tile that only ever shows a refusal is not a seat.
+// other tile opens on a read the daemon refuses a guest, and a tile that only ever shows a refusal is not a tile.
 export const makerRailGroups = (): readonly RailGroup[] => [{ id: `work`, label: t(`views.registry.work`), items: [always(`chat`), always(`agents`)] }];
 
-// Whether this reader can open a tile at all, asked of every list of sections the shell draws: the rail's seats, its
+// Whether this reader can open a tile at all, asked of every list of sections the shell draws: the rail's tiles, its
 // More menu, the phone's menu and tab bar. A guest is fenced to a handful of paths (shell/guestPaths.ts) and a tile
 // outside them answers a press by bouncing to the chat, which reads as a broken tile rather than as a boundary —
-// so the offer is withdrawn instead. Keyed on the destination, not the id, so an section added later is covered by the
+// so the offer is withdrawn instead. Keyed on the destination, not the id, so a section added later is covered by the
 // fence it will actually meet.
 export const sectionReachable = (to: string): boolean => !useRole().isGuest.value || guestAllowedPath(to);
 
@@ -153,40 +153,40 @@ const activeGroups = (): readonly RailGroup[] => (useRole().isGuest.value ? make
 const isRegistered = (id: string): boolean => views.value.some((entry) => entry.registration.id === id);
 
 // An unlisted id is `signal`, matching railRank's default: it appends and earns its place by badging. A stand-in
-// inherits the `always` seat of the view it fills in for while that view is not registered.
-export const seatPolicy = (id: string): SeatPolicy => {
+// inherits the `always` tile of the view it fills in for while that view is not registered.
+export const railPolicy = (id: string): RailPolicy => {
     const items = activeGroups().flatMap((group) => group.items);
-    const own = items.find((item) => item.id === id)?.seat ?? `signal`;
+    const own = items.find((item) => item.id === id)?.policy ?? `signal`;
     if (own === `always`) {
         return own;
     }
-    const filling = items.find((item) => item.standIn === id && item.seat === `always`);
+    const filling = items.find((item) => item.standIn === id && item.policy === `always`);
     return filling !== undefined && !isRegistered(filling.id) ? `always` : own;
 };
 
-// The view a tile press on the home seat opens: the Project view when a maker has it, else the file tree.
+// The view a tile press on the home tile opens: the Project view when a maker has it, else the file tree.
 export const homeViewId = (): string => (useAudience().maker.value && isRegistered(PROJECTS_VIEW_ID) ? PROJECTS_VIEW_ID : WORKSPACE_VIEW_ID);
 
 // Whether a tile is on the rail now, in one predicate: the rail and the More menu ask its positive and
-// negative of the same list. `pinned` overrules the table; `active` keeps the current section seated while you're in it.
-// A badge seats a tile whatever it says, an errand or only that something is running there. The rail has always
-// seated live work (an open browser, a subagent, a workflow run), so a running pipeline earning no seat would be
+// negative of the same list. `pinned` overrules the table; `active` keeps the current section on the rail while you're in it.
+// A badge tiles a tile whatever it says, an errand or only that something is running there. The rail has always
+// on the rail live work (an open browser, a subagent, a workflow run), so a running pipeline earning no tile would be
 // arbitrary — and a tile that stays away until the run fails hides the half hour when watching it is the point.
-export const railSeated = (
+export const onRail = (
     tile: { readonly id: string; readonly badge?: ViewBadge | undefined },
     context: { readonly pinned: boolean; readonly active: boolean },
-): boolean => seatPolicy(tile.id) === `always` || context.pinned || context.active || tile.badge !== undefined;
+): boolean => railPolicy(tile.id) === `always` || context.pinned || context.active || tile.badge !== undefined;
 
-// Seated only because you're standing on it (the `active` clause alone): the one tile gone the moment you
-// leave. A label predicate for that case, not a seat one; derived from railSeated so the two can't drift.
-export const seatedOnlyByVisit = (
+// On the rail only because you're standing on it (the `active` clause alone): the one tile gone the moment you
+// leave. A label predicate for that case, not a tile one; derived from onRail so the two can't drift.
+export const onRailOnlyByVisit = (
     tile: { readonly id: string; readonly badge?: ViewBadge | undefined },
     context: { readonly pinned: boolean; readonly active: boolean },
-): boolean => context.active && !railSeated(tile, { pinned: context.pinned, active: false });
+): boolean => context.active && !onRail(tile, { pinned: context.pinned, active: false });
 
 // What the mobile tab bar already promotes, so the mobile menu doesn't list it again. View ids, the same
-// key RAIL_GROUPS and detectActivations use, not package ids. The home seat is not among them: on a phone the file
-// tree and the Project page live on the Menu, and Chat takes the seat.
+// key RAIL_GROUPS and detectActivations use, not package ids. The home tile is not among them: on a phone the file
+// tree and the Project page live on the Menu, and Chat takes the tile.
 export const APPROVALS_VIEW_ID = `approvals`;
 export const tabBarIds = (): readonly string[] => [APPROVALS_VIEW_ID, `chat`, `agents`];
 
@@ -246,7 +246,7 @@ export const detectActivations = (repos: readonly RepoFacts[], capabilities: rea
 // An element's badge, contained like detect(): a throwing badge costs its own tile, not the whole rail.
 // Normalizes to undefined when there's nothing to draw, so callers only test for presence. `badgeSpeaks`
 // counts a running mark as something to draw: a view whose only news is "this is happening now" keeps its
-// badge, and with it its seat.
+// badge, and with it its tile.
 export const activationBadge = ({ extension, activation }: ActiveExtension): ViewBadge | undefined => {
     if (extension.badge === undefined) {
         return undefined;

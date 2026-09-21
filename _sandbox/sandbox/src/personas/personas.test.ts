@@ -25,7 +25,7 @@ const browser = (id: string): Capability => ({ id, kind: "browser", config: { pl
 const connector = (id: string): Capability => ({ id, kind: "cli", config: { provider: id } });
 const device = (id: string): Capability => ({
     id,
-    kind: "host",
+    kind: "device",
     config: {
         platform: "linux",
         shell: "on",

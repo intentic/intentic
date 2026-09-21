@@ -91,7 +91,7 @@ describe("openingRows", () => {
         expect(openingRows({ prompt: "" }, "/work", SENT_AT)).toEqual([]);
     });
 
-    // A steer's row index is only known once the fold has run (agent/steer-anchors.ts); off by one and a rewind
+    // A steer's row index is only known once the fold has run (agent/steer-checkpoints.ts); off by one and a rewind
     // restores a point the reader never saw.
     it("names the rows a turn's steers landed on, whatever the opener did", () => {
         const events: AgentEvent[] = [

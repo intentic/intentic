@@ -1,10 +1,10 @@
-import type { HostConfig } from "@intentic/sandbox-contract";
+import type { DeviceConfig } from "@intentic/sandbox-contract";
 import { HOST_TOOLS_NOTE } from "../../hosts/host-skills.js";
 import { peerHandler } from "./peer.handler.js";
 
 /* A device of the user's OWN, one capability per machine, the id being its name: the peer handler (peers/) over the host door. */
-export const hostHandler = peerHandler<HostConfig>({
-    kind: "host",
+export const deviceHandler = peerHandler<DeviceConfig>({
+    kind: "device",
     noun: "device",
     where: "on that device",
     note: HOST_TOOLS_NOTE,

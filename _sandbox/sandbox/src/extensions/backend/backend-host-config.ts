@@ -18,7 +18,7 @@ export interface BackendHostExtension {
     readonly daemonToken: string;
 }
 
-export interface BackendHostConfig {
+export interface BackendDeviceConfig {
     // Loopback port the host serves on, assigned by the supervisor, which also proxies to it.
     readonly port: number;
     readonly hostToken: string;

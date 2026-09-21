@@ -494,7 +494,7 @@ fn env_tokens(env: &serde_json::Value, name: &str) -> Vec<String> {
         .unwrap_or_default()
 }
 
-/// Whether a HostConfig's DeviceRequests carry the GPU, in either spelling docker writes for `--gpus`: the
+/// Whether a DeviceConfig's DeviceRequests carry the GPU, in either spelling docker writes for `--gpus`: the
 /// nvidia driver by name, or the `gpu` capability.
 fn gpu_requested(host: &serde_json::Value) -> bool {
     host["DeviceRequests"]
@@ -519,7 +519,7 @@ fn gpu_requested(host: &serde_json::Value) -> bool {
 /// Pure over one `docker inspect` object, so docker's shape is asserted without a daemon (the tests below).
 /// Anything unreadable reads as its default rather than as a guess.
 pub fn resources_from(inspected: &serde_json::Value) -> SandboxResources {
-    let host = &inspected["HostConfig"];
+    let host = &inspected["DeviceConfig"];
     let env = &inspected["Config"]["Env"];
     SandboxResources {
         memory_bytes: cap_of(&host["Memory"]),
@@ -1491,7 +1491,7 @@ mod tests {
     fn a_containers_share_is_read_off_docker_inspect() {
         let inspected = serde_json::json!({
             "Name": "/intentic-sandbox-work",
-            "HostConfig": {
+            "DeviceConfig": {
                 "Memory": 12_884_901_888u64,
                 "NanoCpus": 4_000_000_000u64,
                 "Privileged": true,
@@ -1514,7 +1514,7 @@ mod tests {
         );
         // Unbounded, unprivileged, and a GPU spelled by capability alone, with no stamps at all.
         let bare = serde_json::json!({
-            "HostConfig": { "Memory": 0, "NanoCpus": 0, "Privileged": false, "DeviceRequests": [{ "Capabilities": [["gpu"]] }] },
+            "DeviceConfig": { "Memory": 0, "NanoCpus": 0, "Privileged": false, "DeviceRequests": [{ "Capabilities": [["gpu"]] }] },
             "Config": { "Env": [] }
         });
         assert_eq!(

@@ -27,7 +27,7 @@ export interface AutostartSpec {
     readonly desktopComment: string;
     // Absent: no macOS autostart for this agent (see registerAutostart).
     readonly launchAgent?: LaunchAgentSpec;
-    // foreground: args for mechanisms that supervise the loop. detached: Windows fallback, spawns and exits.
+    // foreground: args for mechanisms that supervise the agent. detached: Windows fallback, spawns and exits.
     readonly detachedArgs: readonly string[];
     readonly foregroundArgs: readonly string[];
     // What the user is told when registration fails; agent-specific, since what's lost and how to retry differs.

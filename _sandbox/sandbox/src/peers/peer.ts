@@ -53,7 +53,7 @@ export interface PeerDoor<Hello extends { readonly token: string }, Announced, S
         // What of the hello is kept beside the socket: a build number, or a runner's whole parity claim.
         readonly announced: (hello: Hello) => Announced;
     };
-    readonly scopesKind?: "host" | "webext";
+    readonly scopesKind?: "device" | "webext";
     // Which capability a connection's grant comes from, where a peer's id is finer than its card: a machine card is
     // one computer and each OS install on it connects under its own key, all on the one grant. Absent ⇒ the id IS the
     // card, which is every other door.
@@ -64,7 +64,7 @@ export interface PeerDoor<Hello extends { readonly token: string }, Announced, S
 }
 
 // Doors reachable through the MCP bridge, by capability kind, so the turn planner needn't import a door's code.
-export const PEER_BRIDGES = { host: "hosts", webext: "webext" } as const satisfies Record<"host" | "webext", PeerSlug>;
+export const PEER_BRIDGES = { device: "hosts", webext: "webext" } as const satisfies Record<"device" | "webext", PeerSlug>;
 
 // The two doors an anonymous caller may reach on every peer: the socket, and the one-time redemption.
 export const peerConnectPath = (slug: PeerSlug): string => `/system/${slug}/connect`;

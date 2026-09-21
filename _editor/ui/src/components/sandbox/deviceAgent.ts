@@ -1,5 +1,5 @@
-// One device's agent as the panel that both states it and changes it: the build its loop serves, what that
-// loop wants, and the verbs that move it. DOM-free, so both callers (the web Devices tab, which reads a
+// One device's agent as the panel that both states it and changes it: the build its process serves, what that
+// process wants, and the verbs that move it. DOM-free, so both callers (the web Devices tab, which reads a
 // daemon's device registry, and the desktop app, which asks the machine it runs on) build the same object
 // from their own facts and hand it to <DeviceAgentGroup>.
 
@@ -15,7 +15,7 @@ export interface DeviceAgentState {
     stalled?: boolean | undefined;
     pid?: number | undefined;
     // The build serving now, and the newer one installed beside it, when a machine hasn't picked up an update yet.
-    // Optional: a loop old enough to predate the build stamp reports no build at all, while still running.
+    // Optional: a process old enough to predate the build stamp reports no build at all, while still running.
     staleBuild?: { readonly running: string | undefined; readonly installed: string } | undefined;
 }
 
@@ -48,9 +48,9 @@ export const agentDuties = (): readonly { readonly icon: IconName; readonly labe
 export const agentCarries = (machine: string): string => `Everything this sandbox does on ${machine} goes through this one process.`;
 
 export interface AgentPanel<Op extends string = string> {
-    /** The build the loop serves, or the best-known version; absent when no door has named one. */
+    /** The build the process serves, or the best-known version; absent when no door has named one. */
     readonly version: string | undefined;
-    /** The loop's own state, in the badge's word and colour. */
+    /** The process's own state, in the badge's word and colour. */
     readonly state: { readonly word: string; readonly variant: StatusVariant };
     /** Facts too small for a sentence, in the meta cluster's ink. */
     readonly facts: readonly string[];
@@ -74,31 +74,31 @@ export const restartAgent = (): AgentAction<`restart`> => ({
 });
 
 /** The badge's word for an agent that has reported; a caller states a device it hasn't heard from itself. */
-export const agentLoopState = (agent: DeviceAgentState): AgentPanel[`state`] => {
+export const agentProcessState = (agent: DeviceAgentState): AgentPanel[`state`] => {
     if (!agent.running) {
         return { word: `stopped`, variant: `warning` };
     }
     return agent.stalled === true ? { word: `stalled`, variant: `warning` } : { word: `running`, variant: `success` };
 };
 
-// A dead loop and a stalled one are the same errand — bring the loop back — so at most one of them is said.
-export const agentLoopNote = (agent: DeviceAgentState | undefined): AgentNote | undefined => {
+// A dead process and a stalled one are the same errand — bring the process back — so at most one of them is said.
+export const agentStateNote = (agent: DeviceAgentState | undefined): AgentNote | undefined => {
     if (agent === undefined) {
         return undefined;
     }
     if (!agent.running) {
-        return { text: `Loop stopped — nothing reaches its folders or ports.`, tone: `warning` };
+        return { text: `Agent stopped — nothing reaches its folders or ports.`, tone: `warning` };
     }
     return agent.stalled === true
         ? {
-              text: `Loop stalled — what is below may be out of date.`,
+              text: `Agent stalled — what is below may be out of date.`,
               tone: `warning`,
               hint: t(`ui.deviceAgent.agentAliveStoppedMaking`),
           }
         : undefined;
 };
 
-// A separate errand from the loop's own state: the file on disk is newer than what the process runs, which a
+// A separate errand from the process's own state: the file on disk is newer than what the process runs, which a
 // restart alone closes and a download would not.
 export const agentSkewNote = (skew: DeviceAgentState[`staleBuild`]): AgentNote | undefined =>
     skew === undefined
@@ -109,5 +109,5 @@ export const agentSkewNote = (skew: DeviceAgentState[`staleBuild`]): AgentNote |
                       ? `Serving a build older than the ${skew.installed} installed — a restart picks it up.`
                       : `Serving ${skew.running}, ${skew.installed} installed — a restart picks it up.`,
               tone: `warning`,
-              hint: t(`ui.deviceAgent.loopKeepsBuildStarted`),
+              hint: t(`ui.deviceAgent.processKeepsBuildStarted`),
           };

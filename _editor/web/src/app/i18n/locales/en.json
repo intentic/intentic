@@ -2192,10 +2192,10 @@
             "waitingFirstLineDevice": "Waiting for the first line from that device…"
         },
         "deviceAgent": {
-            "fetchesNewestAgentOnto": "Fetches the newest agent onto this device, installs it, and restarts its loop — the one process this sandbox reaches the device through. Safe on an agent that is already current; its folders, pairings and mirrored ports are untouched either way.",
-            "socketDroppedMomentAgo": "Its socket dropped a moment ago, which is what restarting an agent does. A fresh loop dials back in by itself, and nothing can be run on the machine until it has.",
+            "fetchesNewestAgentOnto": "Fetches the newest agent onto this device, installs it, and restarts the one process this sandbox reaches the device through. Safe on an agent that is already current; its folders, pairings and mirrored ports are untouched either way.",
+            "socketDroppedMomentAgo": "Its socket dropped a moment ago, which is what restarting an agent does. A fresh process dials back in by itself, and nothing can be run on the machine until it has.",
             "updateAgent": "Update agent",
-            "updateAgentFetchesInstalls": "Update agent fetches it, installs it, and restarts the loop on that device.",
+            "updateAgentFetchesInstalls": "Update agent fetches it, installs it, and restarts the process on that device.",
             "updatingAgentRunsCommand": "Updating its agent runs a command on it, which needs the machine connected as a device, not just syncing folders and ports."
         },
         "deviceAttention": {
@@ -3196,7 +3196,7 @@
             "rawShellOutputBy": "Raw shell output by what removed it, and what was left for the assistant.",
             "reachedAssistant": "reached the assistant"
         },
-        "signinGate": {
+        "signInWall": {
             "addPasskey": "Add a passkey",
             "addPasskeyToContinue": "Add a passkey to continue",
             "backToSetup": "Back to setup",
@@ -4076,7 +4076,7 @@
             "connectStripe": "Connect Stripe",
             "connectStripeAccountApps": "Connect your Stripe account so your apps can take payments.",
             "connected": "Connected",
-            "couldntReadInventory": "Couldn't read your inventory.",
+            "couldntReadInventory": "Couldn't read your machines.",
             "declared": "Declared",
             "defaultSelfHosted": "Default is self-hosted",
             "deploymentEngineKomodoUnreachable": "Your deployment engine (Komodo) is unreachable on your server: deployments can't go live until it's back.",
@@ -4095,7 +4095,7 @@
             "includingOnHostBackup": "including the on-host backup repo",
             "installsKomodo": "Installs Komodo on your server to run deployments, then deploys what you configured. Takes a few minutes.",
             "installsKomodoAndForgejo": "Installs Komodo and Forgejo on your server to run deployments, then deploys what you configured. Takes a few minutes.",
-            "inventoryEntryStoredSsh": "from your inventory: its entry and stored SSH key. The machine itself is not touched:",
+            "inventoryEntryStoredSsh": "from your machines: its entry and stored SSH key. The machine itself is not touched:",
             "leaveBlankGitlabCom": "Leave blank for gitlab.com.",
             "likeOutlineSignozPick": "like Outline or SigNoz. Pick either from the catalog with",
             "linkGithub": "Link GitHub",

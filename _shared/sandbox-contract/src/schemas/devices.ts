@@ -1,6 +1,6 @@
 // What one of the user's own machines is running.
 import { z } from "zod";
-import { hostEntryOf, hostEnvironmentOf, type HostFacts, HostFactsSchema, WslEnvironmentSchema } from "./hosts.js";
+import { hostEntryOf, hostEnvironmentOf, type DeviceFacts, DeviceFactsSchema, WslEnvironmentSchema } from "./hosts.js";
 import { DEV_VERSION } from "../state/versions.js";
 // Desktop-sync report shape shared by the agent, daemon and browser, produced only by `intentic-machine status --json`.
 // The agent never reports `sandboxes`; the docker half is filled in by whoever reads the report, scoped to the reader's
@@ -373,7 +373,7 @@ export const reportQuiet = (report: DeviceReport, receivedAt: number): boolean =
 // distro, `native` for an install on the metal. Connect-time facts are read first, since no scope can withhold them;
 // facts from an agent too old to carry `hostname` say nothing, and a report without `wsl` is native, as it always
 // was. Undefined is an absence of evidence, never read as agreement.
-export const environmentOf = (facts: Pick<HostFacts, "hostname" | "wsl"> | undefined, report: DeviceReport | undefined): string | undefined => {
+export const environmentOf = (facts: Pick<DeviceFacts, "hostname" | "wsl"> | undefined, report: DeviceReport | undefined): string | undefined => {
     const wsl = facts?.wsl ?? report?.wsl;
     if (wsl !== undefined) {
         return `wsl:${wsl.distro}`;
@@ -436,7 +436,7 @@ export const DeviceSchema = z.object({
     // Carried beside the report so a device with no report still has an OS; `platform` is the normalised slug, `facts`
     // its connect-time self-description.
     platform: z.string().optional(),
-    facts: HostFactsSchema.optional(),
+    facts: DeviceFactsSchema.optional(),
     // Announced at connect; matches `report.agent.build` when known, the only version a report-less device has.
     agentVersion: z.string().optional(),
     lastSeen: z.number().optional(),
@@ -594,7 +594,7 @@ export type PathReach =
 // an argument it would reject. Two real distros stay a refusal that names them — nothing here knows which one has the
 // folder, and the distro's own door, once connected, answers directly.
 // A platform that never said what it is stays a candidate, as every other reading of device evidence does.
-export const pathReach = (platform: string | undefined, facts: HostFacts | undefined, path: string): PathReach => {
+export const pathReach = (platform: string | undefined, facts: DeviceFacts | undefined, path: string): PathReach => {
     if (platform === undefined || (platform === "windows") === windowsPath(path)) {
         return { kind: "direct" };
     }

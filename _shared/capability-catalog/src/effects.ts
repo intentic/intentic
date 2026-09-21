@@ -198,7 +198,7 @@ const KIND_EFFECTS: Record<CapabilityKind, (input: CapabilityEffectInput) => rea
         }
         return effects;
     },
-    host: (input) => {
+    device: (input) => {
         // Reads are the floor, the rest are toggles; unset falls to the schema defaults the untouched form posts.
         const grants = [
             ...(input.config["shell"] === "off" ? [] : ["run commands"]),

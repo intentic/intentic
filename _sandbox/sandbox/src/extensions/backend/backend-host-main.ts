@@ -1,6 +1,6 @@
 import { serve } from "@hono/node-server";
 import { extensionApiVersion } from "@intentic/extension-api/protocol";
-import { BACKEND_CONFIG_ENV, type BackendHostConfig } from "./backend-host-config.js";
+import { BACKEND_CONFIG_ENV, type BackendDeviceConfig } from "./backend-host-config.js";
 import { createBackendHostApp } from "./backend-host.js";
 
 /* The backend host's process entry, spawned and supervised by the daemon (backend-supervisor.ts). */
@@ -10,7 +10,7 @@ if (raw === undefined || raw === "") {
     console.error(`missing ${BACKEND_CONFIG_ENV}: this process is only ever started by the sandbox daemon`);
     process.exit(1);
 }
-const config = JSON.parse(raw) as BackendHostConfig;
+const config = JSON.parse(raw) as BackendDeviceConfig;
 // The supervisor injects the version it compiled against rather than trusting the config to stay honest, but
 // a mismatch here would mean two builds in one dist, so it is asserted, not handled.
 if (config.apiVersion !== extensionApiVersion) {

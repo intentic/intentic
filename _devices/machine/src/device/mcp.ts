@@ -1,7 +1,7 @@
 import { errorMessage } from "@intentic/base/errors";
 import { browser } from "@intentic/browser";
 import { desktop, pngSize } from "@intentic/desktop-automation";
-import { type HostScopes, SandboxResourcesAskFieldsSchema } from "@intentic/sandbox-contract";
+import { type DeviceScopes, SandboxResourcesAskFieldsSchema } from "@intentic/sandbox-contract";
 import { createMcpServer, type McpTool, textResult, tool } from "@intentic/sandbox-contract/peer-mcp-server";
 import { z } from "zod";
 import { audit } from "./audit.js";
@@ -34,7 +34,7 @@ const NO_ARGS = z.object({});
 
 // The screen plus its size: the frame every coordinate the agent sends back is in. A click outside the bounds
 // is refused rather than clamped (tools/device.ts).
-const screenshotResult = async (scopes: HostScopes): Promise<Record<string, unknown>> => {
+const screenshotResult = async (scopes: DeviceScopes): Promise<Record<string, unknown>> => {
     assertScope(scopes, "screen");
     const screen = desktop();
     const png = await screen.capture();
@@ -62,7 +62,7 @@ const required = z.string().min(1);
 
 // The tool list. Descriptions carry the judgement calls the schema cannot: writes are off by default, there is
 // no delete, one big command beats ten small ones over a link like this.
-const TOOLS: readonly McpTool<HostScopes>[] = [
+const TOOLS: readonly McpTool<DeviceScopes>[] = [
     tool({
         name: "describe",
         description:
@@ -338,7 +338,7 @@ const auditDetail = (name: string, args: Record<string, unknown>): string => {
 };
 
 // Handle one JSON-RPC message against the grant as it stands at that moment.
-export const handleMcpMessage = createMcpServer<HostScopes>({
+export const handleMcpMessage = createMcpServer<DeviceScopes>({
     serverInfo: () => ({ name: "intentic-machine", version: MACHINE_VERSION }),
     tools: TOOLS,
     noSuchTool: (name) => `This device has no tool called "${name}".`,

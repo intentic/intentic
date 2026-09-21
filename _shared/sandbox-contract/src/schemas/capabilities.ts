@@ -24,7 +24,7 @@ export const CapabilityKindSchema = z.enum([
     "docker",
     "browser",
     "identity",
-    "host",
+    "device",
     "webext",
     "agent",
     "endpoint",
@@ -165,7 +165,7 @@ export type IdentityConfig = z.infer<typeof IdentityConfigSchema>;
 // machine, never here, so a compromised sandbox can't exceed what the owner ticked.
 // on/off, not boolean: capability configs arrive from the form as strings, and a select renders an enum.
 const hostScope = z.enum(["on", "off"]);
-export const HostScopesSchema = z.object({
+export const DeviceScopesSchema = z.object({
     // Run commands in a real shell (PowerShell on Windows, the login shell on Linux). Off ⇒ files/screen only.
     shell: hostScope.default("on"),
     // Create, modify and trash files under `roots`. Reads are always allowed within them; this is the write half.
@@ -182,8 +182,8 @@ export const HostScopesSchema = z.object({
     // One directory per line. Empty ⇒ the machine's home directory, which is what the agent reports at connect.
     roots: z.string().optional(),
 });
-export type HostScopes = z.infer<typeof HostScopesSchema>;
-export const HostConfigSchema = HostScopesSchema.extend({ platform: z.string().min(1) });
+export type DeviceScopes = z.infer<typeof DeviceScopesSchema>;
+export const DeviceConfigSchema = DeviceScopesSchema.extend({ platform: z.string().min(1) });
 // An ACP agent served as a chat provider: the daemon spawns `command` as a long-lived JSON-RPC subprocess, and the
 // capability id becomes the provider id. `env` is a pasted KEY=VALUE block, the whole secret field; `loginCommand` runs
 // an interactive device-code login in a visible terminal.
@@ -303,7 +303,7 @@ export type ExtensionConfig = z.infer<typeof ExtensionConfigSchema>;
 export type SshConfig = z.infer<typeof SshConfigSchema>;
 export type DockerConfig = z.infer<typeof DockerConfigSchema>;
 export type BrowserConfig = z.infer<typeof BrowserConfigSchema>;
-export type HostConfig = z.infer<typeof HostConfigSchema>;
+export type DeviceConfig = z.infer<typeof DeviceConfigSchema>;
 export type AcpAgentConfig = z.infer<typeof AcpAgentConfigSchema>;
 export type EndpointConfig = z.infer<typeof EndpointConfigSchema>;
 export const CapabilitySchema = z.discriminatedUnion("kind", [
@@ -330,7 +330,7 @@ export const CapabilitySchema = z.discriminatedUnion("kind", [
     z.object({ id: entryId, kind: z.literal("browser"), config: BrowserConfigSchema }),
     // One email identity browser accounts are born from; they join it via their own `identity` field.
     z.object({ id: entryId, kind: z.literal("identity"), config: IdentityConfigSchema }),
-    z.object({ id: entryId, kind: z.literal("host"), config: HostConfigSchema }),
+    z.object({ id: entryId, kind: z.literal("device"), config: DeviceConfigSchema }),
     // The user's own browser, through their installed extension; `host`'s sibling, one capability per browser. Distinct
     // from `browser`, the sandbox's own Chromium profile: this one is the person's, already signed into everything,
     // only ever borrowed.

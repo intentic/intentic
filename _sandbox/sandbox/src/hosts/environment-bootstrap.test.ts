@@ -1,4 +1,4 @@
-import { HOST_NATIVE_ENVIRONMENT, type HostFacts } from "@intentic/sandbox-contract";
+import { HOST_NATIVE_ENVIRONMENT, type DeviceFacts } from "@intentic/sandbox-contract";
 import { afterEach, expect, test, vi } from "vitest";
 import type { Services } from "../composition.js";
 import { bootstrapEnvironments, bootstrapTargets, forgetBootstrap } from "./environment-bootstrap.js";
@@ -6,7 +6,7 @@ import { bootstrapEnvironments, bootstrapTargets, forgetBootstrap } from "./envi
 // ONE INSTALL, WHOLE COMPUTER. Whichever side of a PC the owner ran the one-liner on, the rest of it ends up
 // connected — as environments of the same card, so there is no second grant and no second thing to click.
 
-const WINDOWS: HostFacts = {
+const WINDOWS: DeviceFacts = {
     os: "Microsoft Windows 11 Home",
     arch: "x64",
     shell: "PowerShell 7",
@@ -15,7 +15,7 @@ const WINDOWS: HostFacts = {
     hostname: "rog",
     wslDistros: ["archlinux", "docker-desktop"],
 };
-const ARCH: HostFacts = {
+const ARCH: DeviceFacts = {
     os: "Arch Linux",
     arch: "x64",
     shell: "/usr/bin/zsh",

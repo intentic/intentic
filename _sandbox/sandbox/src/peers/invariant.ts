@@ -69,7 +69,7 @@ export const checks = (deps: PeerRegistryDeps): readonly InvariantCheck[] => [
         "enrolled-devices-have-cards",
         deps.hosts,
         deps.capabilities,
-        "host",
+        "device",
         "a key into this sandbox that no screen lists and no button can withdraw",
     ),
     grantCheck(

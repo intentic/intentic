@@ -1,7 +1,7 @@
 import { execFile } from "node:child_process";
 import { arch, homedir, hostname, platform, release, type } from "node:os";
 import { promisify } from "node:util";
-import type { HostFacts, HostScopes } from "@intentic/sandbox-contract";
+import type { DeviceFacts, DeviceScopes } from "@intentic/sandbox-contract";
 import { rootsOf } from "../policy.js";
 import { shellFor } from "./shell.js";
 import { wslEnvironment } from "../../wsl.js";
@@ -17,7 +17,7 @@ const osName = async (): Promise<string> => {
         const { stdout } = await exec(
             "powershell.exe",
             ["-NoProfile", "-NonInteractive", "-Command", "(Get-CimInstance Win32_OperatingSystem).Caption"],
-            // The loop that calls this has no console (see tools/sandboxes.ts), so this asks for its own windowless one
+            // The agent that calls this has no console (see tools/sandboxes.ts), so this asks for its own windowless one
             // rather than being given a visible console by Windows.
             { windowsHide: true },
         ).catch(() => ({ stdout: "" }));
@@ -33,7 +33,7 @@ const osName = async (): Promise<string> => {
 // How big the Docker engine is, the ceiling every sandbox is bounded by (the WSL guest, the Desktop VM, or the
 // host). Read via `docker info` since on two of the three platforms that's a different computer from this
 // one's own /proc. Bounded by a short timeout; absent, never guessed.
-const engineFacts = async (): Promise<HostFacts["engine"]> => {
+const engineFacts = async (): Promise<DeviceFacts["engine"]> => {
     const { stdout } = await exec("docker", ["info", "--format", "{{.MemTotal}} {{.NCPU}}"], { timeout: 5_000, windowsHide: true }).catch(() => ({
         stdout: "",
     }));
@@ -63,7 +63,7 @@ const wslDistros = async (): Promise<string[] | undefined> => {
     return distros.length === 0 ? undefined : distros;
 };
 
-export const hostFacts = async (scopes: HostScopes): Promise<HostFacts> => {
+export const hostFacts = async (scopes: DeviceScopes): Promise<DeviceFacts> => {
     const [os, engine, wsl, distros] = await Promise.all([osName(), engineFacts(), wslEnvironment(), wslDistros()]);
     return {
         os,
@@ -80,7 +80,7 @@ export const hostFacts = async (scopes: HostScopes): Promise<HostFacts> => {
 
 // The other environments of this same computer, and how a command crosses into them: the one fact about a Windows
 // PC an agent cannot see from the tool list.
-const environmentLines = (facts: HostFacts): string[] => {
+const environmentLines = (facts: DeviceFacts): string[] => {
     if (facts.wsl !== undefined) {
         return [
             `Environment: the WSL distro "${facts.wsl.distro}" on the Windows PC ${facts.hostname ?? hostname()}. The screen, the GUI and the clipboard are the Windows side's; run_command with in: "windows" runs PowerShell there (a Windows path as cwd, e.g. C:\\Users\\you). Windows drives are under /mnt here (C:\\ is /mnt/c).`,
@@ -96,7 +96,7 @@ const environmentLines = (facts: HostFacts): string[] => {
 
 // The agent-facing rendering. Includes the session type on Linux (Wayland vs X11 decides clipboard, screenshot
 // and input idioms) and the machine's own name.
-export const describeText = async (scopes: HostScopes): Promise<string> => {
+export const describeText = async (scopes: DeviceScopes): Promise<string> => {
     const facts = await hostFacts(scopes);
     const session = platform() === "linux" ? `\nGraphical session: ${process.env["XDG_SESSION_TYPE"] ?? "none detected (headless)"}` : "";
     return (

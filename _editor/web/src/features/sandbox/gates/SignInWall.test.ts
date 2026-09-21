@@ -45,7 +45,7 @@ vi.mock(`../session/passkeySignIn`, () => ({
     recoverWithCode: (...args: unknown[]) => recoverWithCode(...(args as [])),
 }));
 
-const { default: SigninGate } = await import("./SigninGate.vue");
+const { default: SignInWall } = await import("./SignInWall.vue");
 const { dismissSignIn, offerPasskey, raiseSignIn } = await import("../session/signInPrompt");
 
 const TARGET = { sandboxId: `sb-1`, base: `https://daemon.test`, connectToken: `connect` };
@@ -54,7 +54,7 @@ let app: App | undefined;
 const mount = async (): Promise<HTMLElement> => {
     const el = document.createElement(`div`);
     document.body.append(el);
-    app = createApp({ render: () => h(SigninGate) });
+    app = createApp({ render: () => h(SignInWall) });
     app.component(`Icon`, IconStub);
     app.mount(el);
     await nextTick();
