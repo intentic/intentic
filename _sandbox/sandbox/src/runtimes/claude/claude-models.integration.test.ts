@@ -207,3 +207,76 @@ test("the default is the provider's own first-listed model, never a tier matched
 
     expect(catalog.default).toBe("claude-haiku-9");
 });
+
+// One account whose token the REST catalog refuses (an org that forbids OAuth REST, a revoked or rate-limited token).
+const storeOf = (...ids: string[]): ClaudeStore =>
+    ({
+        list: async () => ids.map((id, index) => ({ id, connectedAt: index })),
+        read: async (id: string) => ({ id, accessToken: `token-${id}`, refreshToken: `refresh-${id}`, expiresAt: Date.now() + 3_600_000 }),
+    }) as unknown as ClaudeStore;
+// Answers 200 for one bearer token only; every other is refused the way Anthropic refuses an org's OAuth REST.
+const apiServing =
+    (token: string, models: { id: string; display_name: string }[]): typeof fetch =>
+    async (_url, init) =>
+        new Headers(init?.headers).get("authorization") === `Bearer ${token}`
+            ? new Response(JSON.stringify({ data: models }), { status: 200 })
+            : new Response(JSON.stringify({ error: { type: "permission_error" } }), { status: 403 });
+
+test("a CLI alias carrying a versioned id can't shrink the persisted catalog while REST is refused", async () => {
+    // The CLI publishes Fable with a full id; with REST out, that one row used to be filed as the whole catalog.
+    const fable: Model = { id: "claude-fable-5-1", label: "Fable", efforts: ["low", "max"], badges: ["reasoning"] };
+    const recorded: Model[] = [
+        { id: "claude-opus-5", label: "Claude Opus 5" },
+        { id: "claude-sonnet-5", label: "Claude Sonnet 5" },
+    ];
+    const dir = await mkdtemp(join(tmpdir(), "claude-models-"));
+    const persistPath = join(dir, "models.json");
+    await writeFile(persistPath, JSON.stringify(recorded));
+
+    const catalog = await createClaudeCatalog(emptyStore, containerToken, dir, persistPath, async () => [fable], apiFails).models();
+
+    expect(catalog.models).toEqual([fable, ...recorded]);
+    expect(catalog.default).toBe("claude-fable-5-1");
+    // The file holds the union too, so a restart doesn't open on the one row either.
+    const reread = await createClaudeCatalog(emptyStore, noContainerToken, dir, persistPath, discoveryFails, apiFails).models();
+    expect(reread.models).toEqual([fable, ...recorded]);
+});
+
+test("with nothing persisted, a refused REST read pads the CLI's versioned rows with the seed floor", async () => {
+    const fable: Model = { id: "claude-fable-5-1", label: "Fable" };
+    const dir = await mkdtemp(join(tmpdir(), "claude-models-"));
+
+    const catalog = await createClaudeCatalog(emptyStore, containerToken, dir, join(dir, "models.json"), async () => [fable], apiFails).models();
+
+    expect(catalog.models).toEqual([fable, ...CLAUDE_SEED_MODELS]);
+});
+
+test("the REST catalog is read on the first account that answers, not only the first connected", async () => {
+    // The first-connected account's org forbids OAuth REST; the second's answers, and the catalog is the same for both.
+    const rest = [{ id: "claude-opus-5", display_name: "Claude Opus 5" }];
+    const dir = await mkdtemp(join(tmpdir(), "claude-models-"));
+
+    const catalog = await createClaudeCatalog(
+        storeOf("forbidden-org", "personal"),
+        noContainerToken,
+        dir,
+        join(dir, "models.json"),
+        async () => [{ id: "opus", label: "Opus", efforts: ["low", "high"] }],
+        apiServing("token-personal", rest),
+    ).models();
+
+    expect(catalog.models).toEqual([{ id: "claude-opus-5", label: "Claude Opus 5", efforts: ["low", "high"] }]);
+});
+
+test("a refused REST read is logged with its status, never swallowed", async () => {
+    const warned: unknown[] = [];
+    const dir = await mkdtemp(join(tmpdir(), "claude-models-"));
+
+    await createClaudeCatalog(storeOf("forbidden-org"), noContainerToken, dir, join(dir, "models.json"), discoveryFails, apiServing("other", []), {
+        warn: (payload: unknown) => {
+            warned.push(payload);
+        },
+    }).models();
+
+    expect(warned).toEqual([expect.objectContaining({ status: 403 })]);
+});

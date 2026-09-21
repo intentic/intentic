@@ -32,7 +32,7 @@ export const createClaudeSlice = (input: {
     return {
         claudeStore,
         claudeSeats: fileClaudeSeatStore(join(input.authRoot, "claude", "seats.json"), input.logger),
-        claudeModels: createClaudeCatalog(claudeStore, input.config, input.workspaceRoot, join(input.authRoot, "claude", "models.json")),
+        claudeModels: createClaudeCatalog(claudeStore, input.config, input.workspaceRoot, join(input.authRoot, "claude", "models.json"), undefined, undefined, input.logger),
     };
 };
 

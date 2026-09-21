@@ -2,6 +2,7 @@ import type { Options, SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
 import { sdk } from "./claude-sdk.js";
 import { CLAUDE_SEED_MODELS, type Model, type ModelBadge, ModelSchema } from "@intentic/sandbox-contract";
 import { z } from "zod";
+import type { Logger } from "pino";
 import { discoveredCatalog } from "../../agent/models/model-catalog.js";
 import type { Config } from "../../env.config.js";
 import { jsonFile } from "../../store/json-file.js";
@@ -96,24 +97,46 @@ const discoverClaudeModels = async (oauthToken: string | undefined, cwd: string)
     }
 };
 
-// Versioned catalog from Anthropic's REST /v1/models, using the same OAuth token the CLI runs on; display_name rides
-// straight into label. Returns [] on a missing token or any failure, so a REST hiccup never loses the alias catalog.
-const discoverApiModels = async (oauthToken: string | undefined, fetchImpl: typeof fetch): Promise<Model[]> => {
-    if (oauthToken === undefined) {
-        return [];
-    }
+// Versioned catalog from Anthropic's REST /v1/models under one OAuth token; display_name rides straight into label.
+// undefined is a refusal or outage, distinct from an empty list, so the caller can try the next credential.
+const fetchApiModels = async (oauthToken: string, fetchImpl: typeof fetch, logger: Pick<Logger, "warn">): Promise<Model[] | undefined> => {
     const response = await fetchImpl(ANTHROPIC_MODELS_URL, {
         headers: {
             authorization: `Bearer ${oauthToken}`,
             "anthropic-version": "2023-06-01",
             "anthropic-beta": "oauth-2025-04-20",
         },
-    }).catch(() => undefined);
-    if (response === undefined || !response.ok) {
-        return [];
+    }).catch((error: unknown) => {
+        logger.warn({ error: error instanceof Error ? error.message : String(error) }, "claude models: REST catalog unreachable");
+        return undefined;
+    });
+    if (response === undefined) {
+        return undefined;
+    }
+    if (!response.ok) {
+        const body = await response.text().catch(() => "");
+        logger.warn({ status: response.status, body: body.slice(0, 300) }, "claude models: REST catalog refused");
+        return undefined;
     }
     const json = (await response.json().catch(() => undefined)) as { data?: { id: string; display_name?: string }[] } | undefined;
     return (json?.data ?? []).map((model) => ({ id: model.id, label: model.display_name ?? model.id }));
+};
+
+// The first credential the REST catalog answers for, tried in order. One account's org can forbid OAuth REST
+// (oauth_not_allowed_for_organization) or be rate-limited while another answers; the catalog is the same for every
+// subscription, so any 200 is the catalog. undefined only when every token was refused; with no token there was
+// nothing to refuse, and the CLI's own list stands.
+const discoverApiModels = async (tokens: readonly string[], fetchImpl: typeof fetch, logger: Pick<Logger, "warn">): Promise<Model[] | undefined> => {
+    if (tokens.length === 0) {
+        return [];
+    }
+    for (const token of tokens) {
+        const models = await fetchApiModels(token, fetchImpl, logger);
+        if (models !== undefined) {
+            return models;
+        }
+    }
+    return undefined;
 };
 
 // Versioned rows are the catalog, in the REST order (newest first), so models[0] is the newest model with no local
@@ -145,29 +168,45 @@ export const createClaudeCatalog = (
     persistPath: string,
     discover: (oauthToken: string | undefined, cwd: string) => Promise<Model[]> = discoverClaudeModels,
     fetchImpl: typeof fetch = fetch,
+    logger: Pick<Logger, "warn"> = { warn: () => {} },
 ): ClaudeCatalog => {
-    const oauthToken = async (accountId?: string): Promise<string | undefined> => {
-        const id = accountId ?? (await claudeStore.list())[0]?.id;
-        if (id !== undefined) {
-            const token = await ensureFreshToken(claudeStore, id).catch(() => undefined);
+    // Every usable credential, the asked-for (else first-connected) account first, the container token last.
+    const oauthTokens = async (accountId?: string): Promise<string[]> => {
+        const accounts = await claudeStore.list();
+        const ordered = accountId === undefined ? accounts : [...accounts.filter((a) => a.id === accountId), ...accounts.filter((a) => a.id !== accountId)];
+        const tokens: string[] = [];
+        for (const account of ordered) {
+            const token = await ensureFreshToken(claudeStore, account.id).catch(() => undefined);
             if (token !== undefined) {
-                return token;
+                tokens.push(token);
             }
         }
-        return config.claudeCodeOauthToken !== "" ? config.claudeCodeOauthToken : undefined;
+        if (config.claudeCodeOauthToken !== "") {
+            tokens.push(config.claudeCodeOauthToken);
+        }
+        return tokens;
     };
+
+    // Parsed through the schema, not trusted; an older or truncated record degrades to the floor, not a half-row.
+    const store = jsonFile<Model[]>(persistPath, { parse: (raw) => z.array(ModelSchema).safeParse(raw).data?.filter(namesVersion), fallback: () => [] });
 
     const catalog = discoveredCatalog({
         ttlMs: MODELS_TTL_MS,
-        // Both sources answer for the same account and run concurrently; either alone still yields a usable list.
+        // Both sources run concurrently; either alone still yields a usable list.
         discover: async (accountId?: string) => {
-            const token = await oauthToken(accountId);
-            const [aliases, versioned] = await Promise.all([discover(token, cwd).catch(() => []), discoverApiModels(token, fetchImpl)]);
-            return mergeCatalogs(aliases, versioned);
+            const tokens = await oauthTokens(accountId);
+            const [aliases, versioned] = await Promise.all([discover(tokens[0], cwd).catch(() => []), discoverApiModels(tokens, fetchImpl, logger)]);
+            if (versioned !== undefined) {
+                return mergeCatalogs(aliases, versioned);
+            }
+            // Every REST token refused: the CLI alone names at most the tiers it ships with ids (claude-fable-5-1),
+            // and serving that as live would file it as last-known-good and shrink the picker to one row. The
+            // persisted list (else the seed floor) stands in for the missing REST rows.
+            const stored = await store.read();
+            return mergeCatalogs(aliases, stored.length > 0 ? stored : CLAUDE_SEED_MODELS);
         },
         idOf: (model) => model.id,
-        // Parsed through the schema, not trusted; an older or truncated record degrades to the floor, not a half-row.
-        store: jsonFile<Model[]>(persistPath, { parse: (raw) => z.array(ModelSchema).safeParse(raw).data?.filter(namesVersion), fallback: () => [] }),
+        store,
         toStored: (models) => [...models],
         seed: CLAUDE_SEED_MODELS,
         fromLive: withDefault,
