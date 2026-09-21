@@ -482,4 +482,29 @@ describe(`a refusal that ran nothing`, () => {
         // The provider's own sentence still leads, whichever clause follows it.
         expect(rows.at(-1)?.text).toContain(`16,384 tokens`);
     });
+
+    // A refusal the reader can act on offers the press, and one they cannot does not. The reading is what tells
+    // the two apart: the headroom refusal carries it, the stall refusal names no ceiling to move.
+    it(`offers the memory raise only on a refusal that carried a reading`, () => {
+        const GIB = 1024 ** 3;
+        const outOfMemory = {
+            kind: `error`,
+            code: `sandbox-memory-low`,
+            message: `Not enough sandbox memory to start this turn.`,
+            memory: { limitBytes: 16 * GIB, residentBytes: 12 * GIB, swapBytes: 4 * GIB },
+        } as const satisfies AgentEvent;
+
+        const offered = foldOf(`land it`, [outOfMemory]).at(-1);
+        expect(offered?.noticeAction).toBe(`sandboxMemory`);
+        // Still a held refusal: the press is an addition to that row, not a replacement for it.
+        expect(offered?.text).toContain(`held for you to send again`);
+
+        const { memory: _stalled, ...noReading } = outOfMemory;
+        expect(foldOf(`land it`, [noReading]).at(-1)?.noticeAction).toBeUndefined();
+    });
+
+    // The other held refusals share the sentence, not the button: nothing about a dead credential is fixed by a cap.
+    it(`offers no press on the held refusals that a raise would not fix`, () => {
+        expect(foldOf(`land it`, [REFUSED]).at(-1)?.noticeAction).toBeUndefined();
+    });
 });

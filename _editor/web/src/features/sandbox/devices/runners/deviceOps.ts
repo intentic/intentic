@@ -29,9 +29,11 @@ const OP: Record<SandboxVerb, DeviceSandboxOp> = {
     remove: `remove`,
 };
 
-// Ops that end this browser's own connection when aimed at the sandbox serving it; `resources` carries its
-// own warning instead.
-const SEVERING = new Set<DeviceSandboxOp>([`stop`, `restart`, `update`, `rebuild`, `rollback`, `remove`]);
+// Ops that end this browser's own connection when aimed at the sandbox serving it. `reshape` belongs here like
+// the rest: it recreates the container, so the relay carrying the call dies with it and no result frame can
+// arrive. Its own dialog warns beforehand — a separate question from what a dropped stream MEANS afterwards,
+// and leaving it out made a reshape that worked report "Lost contact with that device".
+const SEVERING = new Set<DeviceSandboxOp>([`stop`, `restart`, `update`, `rebuild`, `rollback`, `remove`, `reshape`]);
 
 // Everything this page can do to one machine's file sync: the switches over a pairing that exists, and the one that
 // starts one. Enrolling belongs with them rather than in the add-a-device dialog — a folder on a machine already

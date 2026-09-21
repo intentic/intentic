@@ -272,6 +272,16 @@ export const AgentEventSchema = z.discriminatedUnion("kind", [
             .optional(),
         // provider-outage only: `retryAt` is the next attempt on backoff; `attempt`/`maxAttempts` bound it.
         outage: z.object({ retryAt: z.number(), attempt: z.number(), maxAttempts: z.number() }).optional(),
+        // sandbox-memory-low only: the cgroup reading the refusal was decided on, so a client can offer to raise the
+        // cap rather than only restate the sentence. Resident and swapped are apart for the reason the message keeps
+        // them apart — their sum can exceed the cap, since the ceiling bounds resident pages and not swapped anon.
+        memory: z
+            .object({
+                limitBytes: z.number().describe("The cgroup's ceiling: what a raise would move."),
+                residentBytes: z.number().describe("memory.current, the resident charge alone."),
+                swapBytes: z.number().describe("memory.swap.current; 0 when swap is off or unaccounted."),
+            })
+            .optional(),
         // Nobody was at the composer when this turn was refused. The codes that ran nothing otherwise read as "held
         // for you to send again", which on an automation, a loop or a watch wake names a message no one typed and a
         // composer no one is looking at.

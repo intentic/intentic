@@ -178,10 +178,10 @@ test("reshaping is refused by the sandboxes switch, like the swaps it shares a d
 
 // What a container runs with, off docker's own inspect object. The two zeros are the reading that matters:
 // docker writes 0 for "no limit", so 0 must read as absent, not as a cap of zero.
-test("a container's share of the machine is read off its DeviceConfig and its two directive stamps", () => {
+test("a container's share of the machine is read off its HostConfig and its two directive stamps", () => {
     const inspected = {
         Name: "/intentic-sandbox-work",
-        DeviceConfig: {
+        HostConfig: {
             Memory: 12 * 1024 ** 3,
             NanoCpus: 4_000_000_000,
             Privileged: true,
@@ -202,15 +202,38 @@ test("a container's share of the machine is read off its DeviceConfig and its tw
 test("an unbounded container reads as having no caps, no privileges and no asks", () => {
     const bare = resourcesFrom({
         Name: "/intentic-sandbox-work",
-        DeviceConfig: { Memory: 0, NanoCpus: 0, Privileged: false, DeviceRequests: null },
+        HostConfig: { Memory: 0, NanoCpus: 0, Privileged: false, DeviceRequests: null },
         Config: { Env: [] },
     });
     expect(bare).toEqual({ privileged: false, gpu: false, hostRuntime: [], overlayRuntime: [] });
     expect(bare).not.toHaveProperty("memoryBytes");
     expect(bare).not.toHaveProperty("cpus");
     // The nvidia driver spelling counts as a GPU too, and a non-object is no reading at all.
-    expect(resourcesFrom({ DeviceConfig: { DeviceRequests: [{ Driver: "nvidia" }] } })?.gpu).toBe(true);
+    expect(resourcesFrom({ HostConfig: { DeviceRequests: [{ Driver: "nvidia" }] } })?.gpu).toBe(true);
     expect(resourcesFrom("not an object")).toBeUndefined();
+});
+
+// The key is DOCKER's, not this repo's vocabulary. A sweep once renamed it to `DeviceConfig` — this repo's own
+// type name — in the reader AND in the fixtures above, so every cap silently read as absent while the suite
+// stayed green. Pinned against a verbatim `docker inspect` object, which is the only thing that can catch that:
+// captured from `docker inspect intentic-sandbox-… --format '{{json .}}'` on a 16 GiB privileged sandbox.
+test("the share is read under docker's own key, so a renamed one cannot pass", () => {
+    const asDockerEmitsIt = {
+        Id: "9f0b1c",
+        Name: "/intentic-sandbox-work",
+        HostConfig: { Memory: 17_179_869_184, NanoCpus: 0, Privileged: true, DeviceRequests: null },
+        Config: { Env: ["SANDBOX_RUNTIME=--privileged"] },
+    };
+    expect(resourcesFrom(asDockerEmitsIt)).toEqual({
+        memoryBytes: 17_179_869_184,
+        privileged: true,
+        gpu: false,
+        hostRuntime: ["--privileged"],
+        overlayRuntime: [],
+    });
+    // Docker emits no `DeviceConfig` at all, so a reader aimed there sees an unbounded, unprivileged container.
+    const underTheRenamedKey = { ...asDockerEmitsIt, DeviceConfig: asDockerEmitsIt.HostConfig, HostConfig: undefined };
+    expect(resourcesFrom(underTheRenamedKey)).toEqual({ privileged: false, gpu: false, hostRuntime: ["--privileged"], overlayRuntime: [] });
 });
 
 test("removal confirms itself, because there is no terminal on this end to answer ic's prompt", () => {

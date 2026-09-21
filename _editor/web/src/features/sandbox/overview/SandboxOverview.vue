@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { AnchoredOverlay, Card, InlineRename, StatusBadge, vAction } from "@intentic/ui";
+import { AnchoredOverlay, Card, InlineRename, resourcesSummary, SandboxResourcesDialog, StatusBadge, vAction } from "@intentic/ui";
+import type { ResourcesAsk } from "@intentic/ui";
 import { errorMessage } from "@intentic/ui/async";
 import { computed, ref } from "vue";
 import { fileToSquareDataUrl } from "../../../lib/imageDataUrl";
@@ -11,6 +12,7 @@ import { sandboxAvailabilityVisual } from "./availability";
 import { useSandboxAvailability } from "./useSandboxAvailability";
 import { useSandboxPlacement } from "./useSandboxPlacement";
 import { useWorkspaceTree } from "../../workspace/explorer/useWorkspaceTree";
+import { useSelfResources } from "../devices/useSelfResources";
 import SandboxBackupCard from "./backup/SandboxBackupCard.vue";
 import SandboxBehindCard from "./version/SandboxBehindCard.vue";
 import SandboxManifestCard from "./manifest/SandboxManifestCard.vue";
@@ -40,6 +42,24 @@ const hosted = computed(() => (sandbox.active.value?.hosted ?? null) !== null);
 const placement = useSandboxPlacement();
 // Same standing sentence Billing and the avatar row use, kept in sync by sharing the source.
 const { machineStanding, offered: planOffered } = useHostedPlan();
+
+// THIS SANDBOX'S SHARE OF ITS MACHINE, beside the image and the URL it already reports. The Devices tab can change
+// it too, but only for a reader who knows which machine to open first; this is the same form reached from the facts
+// about the sandbox itself. Self-hides when its machine is not a connected device — there is no door to send a
+// reshape through, and a row saying so would be a row about somebody else's problem.
+const selfResources = useSelfResources();
+const shareLine = computed(() => (selfResources.row.value === undefined ? undefined : resourcesSummary(selfResources.row.value)));
+const resizing = ref(false);
+const resizeFailed = ref<string | undefined>();
+const applyResize = async (ask: ResourcesAsk): Promise<void> => {
+    resizing.value = false;
+    resizeFailed.value = undefined;
+    // The sandbox recreates under this page, so success is the reconnect, not a sentence here. Only a refusal the
+    // machine actually sent has anything to say.
+    await selfResources.apply(ask).catch((error: unknown) => {
+        resizeFailed.value = errorMessage(error, `That didn't work on this device.`);
+    });
+};
 
 // The name renames itself in place (<InlineRename>, owner only). The logo is separate and live at all times;
 // picking a file saves immediately (`pickFile`), no commit step needed.
@@ -282,8 +302,38 @@ const removeLogo = async (): Promise<void> => {
                         </a>
                     </dd>
                 </div>
+                <!-- Its share of the machine, and the one form that changes it. Owner only: acting on a device is
+                     maintainer-floored at the daemon, so a member gets the fact without a button that would refuse. -->
+                <div v-if="shareLine" class="flex items-center justify-between gap-3">
+                    <dt class="text-subtle">{{ t(`sandbox.sandboxOverview.resources`) }}</dt>
+                    <dd class="flex min-w-0 items-center gap-2">
+                        <span class="truncate text-content">{{ shareLine }}</span>
+                        <button
+                            v-if="isOwner"
+                            type="button"
+                            class="shrink-0 font-medium text-link hover:underline"
+                            :disabled="selfResources.applying.value"
+                            @click="resizing = true"
+                        >
+                            {{ t(`sandbox.sandboxOverview.change`) }}
+                        </button>
+                    </dd>
+                </div>
+                <p v-if="resizeFailed !== undefined" class="text-warning">{{ resizeFailed }}</p>
             </dl>
         </Card>
+
+        <!-- Recreates the container serving this page, so it warns before it is applied and the reconnect is the answer. -->
+        <SandboxResourcesDialog
+            v-if="isOwner && selfResources.reshapable.value"
+            :open="resizing"
+            :name="sandbox.active.value?.name ?? selfResources.slug.value ?? ``"
+            :current="selfResources.current.value"
+            :engine="selfResources.engine.value"
+            :self-warning="true"
+            @cancel="resizing = false"
+            @apply="applyResize"
+        />
 
         <!-- Upgrade path for hosted sandboxes only (a member can't create one for the owner). -->
         <Card v-if="hosted && isOwner" class="flex flex-col gap-2">

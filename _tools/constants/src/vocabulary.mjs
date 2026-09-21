@@ -58,7 +58,9 @@ export const RETIRED = [
     },
     {
         id: "host-device",
-        pattern: /\b(hostContract|HostFacts|HostFactsSchema|HostScopes|HostScopesSchema|HostConfig|HostConfigSchema|hostHandler)\b|host\.contract|host\.handler|kind: "host"|kind === "host"|kind !== "host"|z\.literal\("host"\)|"kind": "host"/,
+        // `HostConfig` is absent on purpose: it is DOCKER's own inspect key, which the carve-out below already
+        // exempts, and matching the bare word renamed five `docker inspect` readers to a key that never exists.
+        pattern: /\b(hostContract|HostFacts|HostFactsSchema|HostScopes|HostScopesSchema|HostConfigSchema|hostHandler)\b|host\.contract|host\.handler|kind: "host"|kind === "host"|kind !== "host"|z\.literal\("host"\)|"kind": "host"/,
         became: "device (extension-host, docker host and the `host` ADDRESS field are untouched)",
         since: "2026-09-21",
     },

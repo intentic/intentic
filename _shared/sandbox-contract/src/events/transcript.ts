@@ -228,7 +228,7 @@ export const TranscriptRowSchema = z.object({
         ),
     // The one-press follow-up this notice offers, by name; the chat decides what it does, and whether it stands.
     noticeAction: z
-        .enum(["landHold", "depsInstall", "watchStop"])
+        .enum(["landHold", "depsInstall", "watchStop", "sandboxMemory"])
         .optional()
         .describe("A one-press follow-up this notice offers, by name. The chat decides what it does and whether it still applies."),
     // An unfinished wait this notice describes, by name; whether it's still running is live state, not stored here.

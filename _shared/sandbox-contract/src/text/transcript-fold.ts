@@ -104,6 +104,18 @@ const undelivered = (unattended: boolean): string =>
         ? `Nothing ran, and nothing is held: this run started on its own, so there is no message waiting to be sent again.`
         : `Your message was not delivered: it is held for you to send again.`;
 
+// Refused before the model saw it, so the composer still holds the message. A set rather than a run of case labels:
+// each one costs the switch below a branch, and what they share is a fact about the turn, not a shape.
+const HELD_FOR_RESEND: ReadonlySet<string> = new Set([
+    "claude-reauth",
+    "unknown-command",
+    "context-window-too-small",
+    "sandbox-memory-low",
+    "trial-unavailable",
+    "trial-model-unavailable",
+    "trial-exhausted",
+]);
+
 // Row for a turn-ending error: the provider's own message plus one clause on what happens next. The live wait itself is
 // drawn by the chat, not stored here.
 const errorRow = (event: Extract<AgentEvent, { kind: "error" }>): TranscriptRow => {
@@ -119,18 +131,19 @@ const errorRow = (event: Extract<AgentEvent, { kind: "error" }>): TranscriptRow 
                 : { role: "notice", text: `${message} Reconnect the account to pick this conversation back up.` };
         case "rate_limit":
             return { role: "notice", text: message };
-        // Refused before the model saw it; the composer holds the message so the user can resend it.
-        case "claude-reauth":
-        case "unknown-command":
-        case "context-window-too-small":
-        case "sandbox-memory-low":
-        case "trial-unavailable":
-        case "trial-model-unavailable":
-        case "trial-exhausted":
-            return { role: "notice", text: `${message} ${undelivered(event.unattended === true)}` };
         default:
-            return { role: "notice", text: message };
+            break;
     }
+    if (code === undefined || !HELD_FOR_RESEND.has(code)) {
+        return { role: "notice", text: message };
+    }
+    return {
+        role: "notice",
+        text: `${message} ${undelivered(event.unattended === true)}`,
+        // The one press that changes the answer, offered only when the refusal carried a reading to size it by:
+        // the stall refusal names no ceiling, and raising one would not clear it.
+        ...(event.memory === undefined ? {} : { noticeAction: "sandboxMemory" as const }),
+    };
 };
 
 // The turn's opening user row: text, timestamp, attachments, and whatever the daemon later stamps onto it (checkpoint,

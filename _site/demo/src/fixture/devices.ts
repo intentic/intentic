@@ -41,6 +41,34 @@ const SYNCED_ELSEWHERE: NonNullable<Device[`report`]>[`pairings`][number] = {
 
 const AGENT = { running: true, pid: 48211, build: `1.275.0`, installed: `1.275.0` };
 
+// The containers this PC's docker actually runs. Without these the fixture served a machine that hosts nothing, so
+// every surface built on "which machine runs this sandbox" — the Devices row's Resources… form, the Resources row on
+// Overview, the raise offered on an out-of-memory refusal — drew nothing and could only be read in the source.
+// `sandbox` is the slug the demo daemon's own origin gives (DEMO_DAEMON_ORIGIN, `sandbox.demo.invalid`), which is
+// what makes this the sandbox serving the page rather than a stranger's; the second is a sibling, for the rows that
+// have to look different from the self row.
+const ENGINE = { memoryBytes: 32 * 1024 ** 3, cpus: 16 };
+const GIB = 1024 ** 3;
+const SANDBOXES: NonNullable<Device[`sandboxes`]> = [
+    {
+        slug: `sandbox`,
+        container: `intentic-sandbox-sandbox`,
+        running: true,
+        image: `ghcr.io/intentic/sandbox:latest`,
+        tunnelRunning: true,
+        // Capped well under the engine's ceiling, so a raise has somewhere to go: the offer withdraws itself when
+        // the cap is already everything the machine will give.
+        resources: { memoryBytes: 16 * GIB, cpus: 8, privileged: true, gpu: false, hostRuntime: [`--privileged`], overlayRuntime: [] },
+    },
+    {
+        slug: `billing-api`,
+        container: `intentic-sandbox-billing-api`,
+        running: false,
+        image: `ghcr.io/intentic/sandbox:latest`,
+        resources: { memoryBytes: 8 * GIB, privileged: false, gpu: false, hostRuntime: [], overlayRuntime: [] },
+    },
+];
+
 export const demoDevices = (now: number): Device[] => [
     {
         key: `ada-pc`,
@@ -60,7 +88,9 @@ export const demoDevices = (now: number): Device[] => [
             home: `C:\\Users\\ada`,
             roots: [`C:\\Users\\ada`],
             wslDistros: [`archlinux`],
+            engine: ENGINE,
         },
+        sandboxes: SANDBOXES,
         report: {
             hostname: `ada-pc`,
             os: `win32`,
@@ -81,7 +111,19 @@ export const demoDevices = (now: number): Device[] => [
         platform: `linux`,
         agentVersion: `1.275.0`,
         lastSeen: now - 3_000,
-        facts: { hostname: `ada-pc`, os: `Arch Linux`, arch: `x64`, shell: `/usr/bin/zsh`, home: `/home/ada`, roots: [`/home/ada`], wsl: { distro: `archlinux` } },
+        // One Docker engine serves a PC and every distro on it, so this side answers for the same containers and
+        // reports the same engine; `hostRunningSandbox` picking either door is correct, not a conflict.
+        facts: {
+            hostname: `ada-pc`,
+            os: `Arch Linux`,
+            arch: `x64`,
+            shell: `/usr/bin/zsh`,
+            home: `/home/ada`,
+            roots: [`/home/ada`],
+            wsl: { distro: `archlinux` },
+            engine: ENGINE,
+        },
+        sandboxes: SANDBOXES,
         report: {
             hostname: `ada-pc`,
             os: `linux`,

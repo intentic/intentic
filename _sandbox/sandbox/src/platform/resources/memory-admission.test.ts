@@ -69,6 +69,32 @@ test("a refusal on a paging box names the swap, since the sum can exceed the cap
     expect(refusal(admitTurn(headroomFrom(reading(16, 12, 7))))).toContain("12.0 GiB resident + 7.0 GiB swapped, against 16.0 GiB");
 });
 
+// The reading rides the refusal so the composer's notice can offer a raise sized against this box, rather than
+// re-deriving one from prose. Resident and swapped stay apart, as the message keeps them apart.
+test("a headroom refusal carries the reading it was decided on", () => {
+    const refused = admitTurn(headroomFrom(reading(16, 12, 7)));
+    expect(refused.admit).toBe(false);
+    expect(refused.admit === false && refused.memory).toEqual({ limitBytes: 16 * GIB, residentBytes: 12 * GIB, swapBytes: 7 * GIB });
+    // An unattended refusal is the same fact about the same box, so it carries the same reading.
+    const background = admitTurn({ ...box(10, 8), freeBytes: 2 * GIB - 1 }, true);
+    expect(background.admit === false && background.memory).toEqual({ limitBytes: 10 * GIB, residentBytes: 8 * GIB, swapBytes: 0 });
+});
+
+// A stalled box is refused on PSI, not on its ceiling: raising the cap is not the answer, so no reading is offered
+// and the notice draws no button.
+test("a stall refusal carries no reading, since its ceiling is not what is wrong", () => {
+    const stalled = admitTurn(box(10, 3, 87));
+    expect(stalled.admit).toBe(false);
+    expect(stalled.admit === false && stalled.memory).toBeUndefined();
+});
+
+// The sentence points at the control, not at the headless spelling: a reader at a composer has a button for this.
+test("an interactive refusal names the raise rather than the environment variable", () => {
+    const refused = refusal(admitTurn(box(10, 9.5)));
+    expect(refused).toContain("raise the sandbox's memory");
+    expect(refused).not.toContain("SANDBOX_MEMORY");
+});
+
 // Swap being unaccounted (cgroup v1, swapaccount off) must narrow nothing: it is the pre-existing reading, not a
 // reason to stop measuring the ceiling that IS readable.
 test("an unaccounted swap file reads as none rather than blanking the ceiling", () => {

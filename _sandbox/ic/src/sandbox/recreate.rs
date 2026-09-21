@@ -508,7 +508,9 @@ fn recreate(mode: Mode, slug: Option<String>, reach: Reach, auto: bool) -> Resul
     // The resolvers the container was created with. The hand-written recreates silently DROPPED these on
     // every swap — a restricted-network sandbox lost its split-horizon config the first time its owner
     // rebuilt it; replaying them through the contract is what fixed that class.
-    let dns = docker::inspect(&container, "{{join .DeviceConfig.Dns \" \"}}")
+    // `HostConfig` is docker's key, not this repo's vocabulary: under any other name the template errors, the
+    // inspect returns None, and the resolvers are dropped exactly as the hand-written recreates used to drop them.
+    let dns = docker::inspect(&container, "{{join .HostConfig.Dns \" \"}}")
         .filter(|servers| !servers.is_empty());
 
     /* What the record's `previous` becomes — the rollback target — decided by identity above and pinned under a protected local tag. */
@@ -721,15 +723,15 @@ fn apply_switches(carried: &str, privileged: Option<bool>, gpus: Option<bool>) -
 /// cgroup caps (0 = unbounded) and whether it runs privileged. Read, not echoed — see the caller.
 fn describe_shape(container: &str) -> String {
     let field = |format: &str| docker::inspect(container, format).unwrap_or_default();
-    let memory = match field("{{.DeviceConfig.Memory}}").parse::<u64>() {
+    let memory = match field("{{.HostConfig.Memory}}").parse::<u64>() {
         Ok(0) | Err(_) => "memory unbounded".to_string(),
         Ok(bytes) => format!("memory {}g", bytes / (1024 * 1024 * 1024)),
     };
-    let cpus = match field("{{.DeviceConfig.NanoCpus}}").parse::<u64>() {
+    let cpus = match field("{{.HostConfig.NanoCpus}}").parse::<u64>() {
         Ok(0) | Err(_) => "every CPU".to_string(),
         Ok(nanos) => format!("{} CPUs", nanos / 1_000_000_000),
     };
-    let privileged = if field("{{.DeviceConfig.Privileged}}") == "true" {
+    let privileged = if field("{{.HostConfig.Privileged}}") == "true" {
         "privileged"
     } else {
         "unprivileged"

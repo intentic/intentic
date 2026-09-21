@@ -31,6 +31,7 @@ const {
     current,
     engine,
     selfWarning = false,
+    suggestMemoryGib,
 } = defineProps<{
     open: boolean;
     /** What to call the sandbox in the header: the row's own title. */
@@ -43,6 +44,12 @@ const {
     engine?: EngineFacts | undefined;
     /** Whether this is the sandbox serving the page, which the restart will take down. */
     selfWarning?: boolean;
+    /**
+     * A memory cap to open with already typed in, for a caller that opened this form BECAUSE of the cap (the
+     * out-of-memory notice). Only the field moves: `initial` stays the container's real share, so Apply sends the
+     * difference and the reader sees what they are about to change from.
+     */
+    suggestMemoryGib?: number | undefined;
 }>();
 
 const emit = defineEmits<{ cancel: []; apply: [ask: ResourcesAsk] }>();
@@ -53,11 +60,11 @@ const EMPTY: ResourcesForm = { memoryGib: null, cpus: null, privileged: false, g
 const initial = ref<ResourcesForm>(EMPTY);
 const form = ref<ResourcesForm>(EMPTY);
 watch(
-    () => [open, current] as const,
-    ([showing, share]) => {
+    () => [open, current, suggestMemoryGib] as const,
+    ([showing, share, suggested]) => {
         if (showing && share !== undefined) {
             initial.value = formFrom(share);
-            form.value = { ...initial.value };
+            form.value = { ...initial.value, ...(suggested === undefined ? {} : { memoryGib: suggested }) };
         }
     },
     { immediate: true },

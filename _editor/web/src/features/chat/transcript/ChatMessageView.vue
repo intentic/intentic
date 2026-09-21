@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { MarkdownFigure, useDevice, ui } from "@intentic/ui";
+import { MarkdownFigure, SandboxResourcesDialog, useDevice, ui } from "@intentic/ui";
+import { memoryBounds, type ResourcesAsk } from "@intentic/ui/sandbox-resources";
 import { useNow } from "@intentic/ui/async";
 import { formatClock, formatDateTime } from "@intentic/ui/format";
 import { copyCodeFromEvent } from "@intentic/ui/markdown";
@@ -26,6 +27,7 @@ import { useSandboxSettings } from "../../sandbox/overview/useSandboxSettings";
 import { openWorkTerminal, useWorkTerminals } from "../../terminal/useWorkTerminals";
 import { useTerminalPanel } from "../../terminal/useTerminalPanel";
 import { useSandboxSession } from "../../sandbox/session/sandboxSession";
+import { useSelfResources } from "../../sandbox/devices/useSelfResources";
 import ChatAttachmentStrip from "../composer/ChatAttachmentStrip.vue";
 import ChatCard from "./cards/ChatCard.vue";
 import ChatCommandBlock from "../tools/ChatCommandBlock.vue";
@@ -155,6 +157,43 @@ const armedWatch = computed(() => {
 const watchStopOffer = computed(() => props.message.noticeAction === `watchStop` && armedWatch.value !== undefined);
 const stopThisWatch = async (): Promise<void> => {
     await stopWatching(conversation.value.conversationId, props.message.noticeWaitId).catch(() => undefined);
+};
+
+// THE RAISE OFFERED ON AN OUT-OF-MEMORY REFUSAL. The daemon says the box had no room; this says whether anything
+// can be done about it from here, which only the fleet knows: a machine that is not a connected device has no door
+// a reshape travels, and an engine already given away to the ceiling has nothing left to give.
+const selfResources = useSelfResources();
+// How much to offer, above what the container has now. Smaller than this and a raise buys less than the gibibyte a
+// turn must find free; larger and one press hands the box most of the machine without being asked.
+const MEMORY_STEP_GIB = 4;
+const currentMemoryGib = computed(() => {
+    const bytes = selfResources.current.value?.memoryBytes;
+    return bytes === undefined ? undefined : Math.floor(bytes / 1024 ** 3);
+});
+// The cap the form opens on, bounded by what this engine will allow; undefined when there is no room above the
+// current one, which is also what withdraws the offer. An uncapped container is left alone: it has no ceiling to
+// raise, and naming a number would lower it.
+const suggestedMemoryGib = computed(() => {
+    const now = currentMemoryGib.value;
+    const ceiling = memoryBounds(selfResources.engine.value).max;
+    if (now === undefined || ceiling === undefined || ceiling <= now) {
+        return undefined;
+    }
+    return Math.min(now + MEMORY_STEP_GIB, ceiling);
+});
+const memoryOffer = computed(
+    () => props.message.noticeAction === `sandboxMemory` && selfResources.reshapable.value && suggestedMemoryGib.value !== undefined,
+);
+const resizing = ref(false);
+const resizeFailed = ref<string | undefined>();
+const applyResize = async (ask: ResourcesAsk): Promise<void> => {
+    resizing.value = false;
+    resizeFailed.value = undefined;
+    // The sandbox recreates under this page, so nothing here reports success: the reconnect is the answer. Only a
+    // refusal the machine actually sent lands in a sentence.
+    await selfResources.apply(ask).catch((error: unknown) => {
+        resizeFailed.value = error instanceof Error ? error.message : `That didn't work on this device.`;
+    });
 };
 
 // Both prose surfaces share one composable (useMarkdown); one renderer per message, held for the component's life.
@@ -588,6 +627,31 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
                     {{ t(`chat.chatMessageView.watchInstall`) }}
                 </button>
             </template>
+            <!-- The refusal named a ceiling; this is the one press that moves it. Absent when nothing here could. -->
+            <template v-if="memoryOffer">
+                <button
+                    type="button"
+                    class="shrink-0 font-medium text-link hover:underline"
+                    :disabled="selfResources.applying.value"
+                    @click="resizing = true"
+                >
+                    {{ t(`chat.chatMessageView.raiseMemoryTo`, { gib: suggestedMemoryGib }) }}
+                </button>
+                <span class="shrink-0">{{ t(`chat.chatMessageView.sandboxRestartsMessageWaits`) }}</span>
+            </template>
+            <!-- Only a refusal the machine actually sent; a dropped stream is the restart, and reads as one. -->
+            <span v-if="resizeFailed !== undefined" class="w-full text-warning">{{ resizeFailed }}</span>
+            <SandboxResourcesDialog
+                v-if="memoryOffer"
+                :open="resizing"
+                :name="selfResources.slug.value ?? ``"
+                :current="selfResources.current.value"
+                :engine="selfResources.engine.value"
+                :suggest-memory-gib="suggestedMemoryGib"
+                :self-warning="true"
+                @cancel="resizing = false"
+                @apply="applyResize"
+            />
         </div>
         <template v-else>
             <!-- Shared with the Subagents area: a delegated agent's reasoning and run read as this turn's own do. -->

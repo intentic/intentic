@@ -85,7 +85,15 @@ const STALL_REFUSAL_PERCENT = 20;
 
 const gib = (bytes: number): string => `${(bytes / GIB).toFixed(1)} GiB`;
 
-export type TurnAdmission = { readonly admit: true } | { readonly admit: false; readonly message: string };
+// The reading a refusal was decided on, carried so a client can offer to raise the cap instead of only restating the
+// sentence. Absent on the stall refusal: PSI says the box is grinding, not that its ceiling is the thing to move.
+export interface RefusedMemory {
+    readonly limitBytes: number;
+    readonly residentBytes: number;
+    readonly swapBytes: number;
+}
+
+export type TurnAdmission = { readonly admit: true } | { readonly admit: false; readonly message: string; readonly memory?: RefusedMemory };
 
 // Pure function of a reading, so the policy is testable without a cgroup. An unknown ceiling admits: only a measured
 // box can be refused.
@@ -114,9 +122,12 @@ export const admitTurn = (headroom: MemoryHeadroom, unattended: boolean = false)
             : `${gib(usedBytes)} of ${gib(limitBytes)} used`;
     return {
         admit: false,
+        // The reading rides along so the client can offer the raise as a press. The sentence stops naming
+        // SANDBOX_MEMORY: that is the headless spelling, and a reader at a composer has a control for this.
+        memory: { limitBytes, residentBytes: usedBytes - headroom.swapBytes, swapBytes: headroom.swapBytes },
         message: unattended
             ? `Not enough sandbox memory to start a background turn (${used}). It will run once the box has room; nothing is lost.`
-            : `Not enough sandbox memory to start this turn (${used}). Close some agent sessions or let a running task finish, then send again. Raise the ceiling with SANDBOX_MEMORY if this machine has room to spare.`,
+            : `Not enough sandbox memory to start this turn (${used}). Close some agent sessions or let a running task finish, then send again — or raise the sandbox's memory, if this machine has room to spare.`,
     };
 };
 

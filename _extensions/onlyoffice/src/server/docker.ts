@@ -227,7 +227,9 @@ export const createBody = (spec: ContainerSpec): Record<string, unknown> => ({
     Env: spec.env,
     Labels: spec.labels,
     ExposedPorts: { "80/tcp": {} },
-    DeviceConfig: {
+    // Docker's own create-API key. Spelled anything else the engine keeps none of it: no published port, no
+    // host-gateway entry, no restart policy.
+    HostConfig: {
         PortBindings: { "80/tcp": [{ HostIp: "127.0.0.1", HostPort: String(spec.hostPort) }] },
         ExtraHosts: ["host.docker.internal:host-gateway"],
         RestartPolicy: { Name: "unless-stopped" },
@@ -239,9 +241,9 @@ type PortBindings = Record<string, { readonly HostPort?: string }[] | null>;
 interface InspectBody {
     readonly State?: { readonly Running?: boolean; readonly StartedAt?: string };
     readonly Config?: { readonly Image?: string; readonly Env?: string[]; readonly Labels?: Record<string, string> | null };
-    // Live bindings, populated only while running; the created-with bindings live under DeviceConfig either way.
+    // Live bindings, populated only while running; the created-with bindings live under HostConfig either way.
     readonly NetworkSettings?: { readonly Ports?: PortBindings };
-    readonly DeviceConfig?: { readonly PortBindings?: PortBindings; readonly RestartPolicy?: { readonly Name?: string } };
+    readonly HostConfig?: { readonly PortBindings?: PortBindings; readonly RestartPolicy?: { readonly Name?: string } };
 }
 
 const portOf = (bindings: PortBindings | undefined): number | undefined => {
@@ -251,7 +253,7 @@ const portOf = (bindings: PortBindings | undefined): number | undefined => {
 };
 
 // The loopback port the container's port 80 is published on, running or stopped.
-const publishedPort = (parsed: InspectBody): number | undefined => portOf(parsed.NetworkSettings?.Ports) ?? portOf(parsed.DeviceConfig?.PortBindings);
+const publishedPort = (parsed: InspectBody): number | undefined => portOf(parsed.NetworkSettings?.Ports) ?? portOf(parsed.HostConfig?.PortBindings);
 
 // Unix seconds of an ISO time; 0 for the engine's zero time or nothing.
 const secondsOf = (iso: string | undefined): number => {
@@ -259,7 +261,7 @@ const secondsOf = (iso: string | undefined): number => {
     return Number.isNaN(millis) || millis <= 0 ? 0 : Math.floor(millis / 1000);
 };
 
-const restartPolicyOf = (parsed: InspectBody): string => parsed.DeviceConfig?.RestartPolicy?.Name ?? "no";
+const restartPolicyOf = (parsed: InspectBody): string => parsed.HostConfig?.RestartPolicy?.Name ?? "no";
 
 // The state an inspect answer describes.
 export const parseInspect = (body: string): ContainerState => {

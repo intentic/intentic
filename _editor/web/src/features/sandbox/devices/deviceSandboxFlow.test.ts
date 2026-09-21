@@ -60,6 +60,24 @@ it(`reads a severing op that simply stops talking the same way`, async () => {
     );
 });
 
+// A reshape recreates the container, so it severs exactly like a restart does. It was left off that list on the
+// reasoning that its own form warns beforehand — a different question from what a dropped stream means — and a
+// raise that worked came back as "Lost contact with that device". Both the Devices row and the out-of-memory
+// notice send it with `severing`, so both read the drop as the restart they asked for.
+it(`reads a reshape's dropped stream as the restart it asked for, not as a failure`, async () => {
+    answer = () => streamOf([{ kind: `line`, text: `Recreating intentic-sandbox-work…` }], true);
+    await expect(manageDeviceSandbox(`rog`, `work`, `reshape`, { severing: true, resources: { memoryGib: 20 } })).resolves.toBe(
+        `"work" took this connection down with it, which is what reshape does from inside it. What it is now shows up once the page reconnects.`,
+    );
+});
+
+// The ask is the whole point of a reshape, so it has to reach the machine; `severing` still must not.
+it(`sends the reshape's ask and keeps the severing hint back`, async () => {
+    answer = () => streamOf([{ kind: `result`, message: `Reshaped sandbox "work".` }]);
+    await manageDeviceSandbox(`rog`, `work`, `reshape`, { severing: true, resources: { memoryGib: 20 } });
+    expect(JSON.parse(String(requests.at(-1)?.init?.body))).toEqual({ id: `rog`, slug: `work`, op: `reshape`, resources: { memoryGib: 20 } });
+});
+
 // The machine's own refusal arrives as a frame before anything is severed, so it outranks the severing hint: a
 // switch that is off must never read as a container that is gone.
 it(`still throws the device's own refusal on a severing op`, async () => {

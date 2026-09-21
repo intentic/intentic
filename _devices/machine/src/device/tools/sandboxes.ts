@@ -112,10 +112,12 @@ const tokensOf = (value: string | undefined): string[] => (value ?? "").split(/\
 // "unbounded" (absent here), a GPU is a DeviceRequest for the nvidia driver or the `gpu` capability, and which
 // directive is whose is the pair of env stamps the run contract leaves on the container (SANDBOX_RUNTIME the
 // owner's, SANDBOX_OVERLAY_RUNTIME the approved environment's).
+// `HostConfig` is DOCKER's key, not this project's vocabulary: renaming it to `DeviceConfig` reads a key that
+// never exists, and every cap comes back absent while the fixtures renamed with it keep passing.
 // A docker limit field: a positive number is a cap, 0 (docker's "unbounded") and anything else is none.
 const capOf = (value: unknown): number | undefined => (typeof value === "number" && value > 0 ? value : undefined);
 
-// Whether a DeviceConfig's DeviceRequests carry the GPU, in either spelling docker writes for `--gpus`.
+// Whether a HostConfig's DeviceRequests carry the GPU, in either spelling docker writes for `--gpus`.
 const gpuRequested = (host: Record<string, unknown>): boolean =>
     (Array.isArray(host["DeviceRequests"]) ? host["DeviceRequests"] : []).some(
         (request) =>
@@ -128,7 +130,7 @@ export const resourcesFrom = (inspected: unknown): SandboxResources | undefined 
     if (!isRecord(inspected)) {
         return undefined;
     }
-    const host = isRecord(inspected["DeviceConfig"]) ? inspected["DeviceConfig"] : {};
+    const host = isRecord(inspected["HostConfig"]) ? inspected["HostConfig"] : {};
     const env = isRecord(inspected["Config"]) ? inspected["Config"]["Env"] : undefined;
     const memory = capOf(host["Memory"]);
     const nanos = capOf(host["NanoCpus"]);
@@ -143,7 +145,7 @@ export const resourcesFrom = (inspected: unknown): SandboxResources | undefined 
 };
 
 // The fleet WITH each container's share of the machine: one `docker inspect` on top of the `docker ps` above.
-// `fleet()` answers "which slug is this" for every op, none of which need a DeviceConfig; this is for the listing
+// `fleet()` answers "which slug is this" for every op, none of which need a HostConfig; this is for the listing
 // a person or model reads, where the caps and privileges are the point. A container that vanished between the
 // two calls makes `docker inspect` exit non-zero with the others still on stdout, so the partial answer is kept.
 export const fleetDetailed = async (): Promise<DeviceSandbox[]> => {

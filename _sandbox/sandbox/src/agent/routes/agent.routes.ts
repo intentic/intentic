@@ -1014,11 +1014,20 @@ const settleRefusals = (services: Services, provider: string, account: string | 
 // A refusal that ran nothing, as the frame the chat draws. `unattended` rides with it because the row it becomes
 // offers to send the message again (transcript-fold.ts errorRow), which is only true where somebody typed one: an
 // automation, a loop or a watch wake has no composer holding anything.
-const refusalFrame = (refusal: { readonly code?: Extract<AgentEvent, { kind: "error" }>["code"]; readonly message: string }, unattended: boolean) =>
+const refusalFrame = (
+    refusal: {
+        readonly code?: Extract<AgentEvent, { kind: "error" }>["code"];
+        readonly message: string;
+        // The cgroup reading behind a `sandbox-memory-low`, so the row it becomes can offer the raise as a press.
+        readonly memory?: Extract<AgentEvent, { kind: "error" }>["memory"];
+    },
+    unattended: boolean,
+) =>
     ({
         kind: "error",
         ...(refusal.code !== undefined ? { code: refusal.code } : {}),
         ...(unattended ? { unattended: true } : {}),
+        ...(refusal.memory !== undefined ? { memory: refusal.memory } : {}),
         message: refusal.message,
     }) as const satisfies AgentEvent;
 

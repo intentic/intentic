@@ -110,6 +110,9 @@ export type TurnRefusal = {
     // The machine-readable discriminator the UI keys off (AgentEvent's `error`); absent on plain failures.
     readonly code?: Extract<AgentEvent, { kind: "error" }>["code"];
     readonly message: string;
+    // `sandbox-memory-low` only: the cgroup reading behind it, so the refusal can offer the raise rather than
+    // describe it. Rides the refusal onto the error frame of the same name.
+    readonly memory?: Extract<AgentEvent, { kind: "error" }>["memory"];
 };
 
 // What one runtime's arm answers: refuse, or hand back the loop and the request it is to be called with. Nothing about
@@ -372,7 +375,10 @@ export const planTurn = async (services: Services, input: AgentTurn, context: Tu
     // cgroup-blind daemons admit unconditionally.
     const admission = admitTurn(await services.memoryHeadroom(), context.base.unattended === true);
     if (!admission.admit) {
-        return { ok: false, code: "sandbox-memory-low", message: admission.message };
+        // Spread whole rather than field by field: the reading rides through to the composer's notice, which can
+        // only size a raise it was told, and the stall refusal carries no `memory` key to begin with.
+        const { admit: _refused, ...refusal } = admission;
+        return { ok: false, code: "sandbox-memory-low", ...refusal };
     }
     // Harness is orthogonal to provider: "native" runs each provider on its own runtime, "claude-code" forces the
     // Claude Code Agent SDK loop for any provider. The arm that serves a turn and capabilitiesOf read the same
