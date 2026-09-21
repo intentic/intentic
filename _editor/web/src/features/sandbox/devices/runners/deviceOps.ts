@@ -4,7 +4,7 @@ import { sandboxVerbPrompt, VERB_LABEL } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
 import { computed, type ComputedRef, type Ref, ref, watch } from "vue";
 import { agentFallback, sandboxFallback, syncFallback } from "./deviceFallback";
-import { type DeviceRow, isSelfMachine, type MachineRow, managerOf } from "../deviceRows";
+import { type DeviceRow, folderOwner, isSelfMachine, type MachineRow, managerOf, rowRemoval } from "../deviceRows";
 import { manageDeviceSandbox, revokeSyncDevice, runDeviceAgentFlow, runDeviceCommand } from "../useDevices";
 import { useSandbox } from "../../client/useSandbox";
 import { type HubWork, useHubWork } from "../../../../shell/hub/hubWork";
@@ -112,19 +112,56 @@ const SYNC_WORKING: Record<SyncCommand, string> = {
 
 const AGENT_WORKING: Record<DeviceAgentOp, string> = { upgrade: `Updating a device's agent`, restart: `Restarting a device's agent` };
 
+const counted = (count: number, one: string, many: string): string => `${count} ${count === 1 ? one : many}`;
+
+/** The device's own sentence, whatever shape it arrived in. */
+const refusalText = (error: unknown): string => (error instanceof Error ? error.message : `that device didn't say why`);
+
+// What agreeing to a removal does, counted over the rows it was asked for. One line per half, because they are
+// unlike: the first ends a sandbox, the second only stops this machine keeping a copy of one.
+const removalEffects = (label: string, containers: number, pairings: number): string[] => [
+    ...(containers === 0
+        ? []
+        : [
+              `${counted(containers, `sandbox is`, `sandboxes are`)} deleted on ${label}: the container, its files and its history. ` +
+                  `Running "ic sandbox restore" there brings one back for a week.`,
+          ]),
+    ...(pairings === 0
+        ? []
+        : [
+              `${counted(pairings, `sandbox stops`, `sandboxes stop`)} syncing and mirroring ports on ${label}. ` +
+                  `The folders already on that device are left exactly as they are.`,
+          ]),
+];
+
+/** The same two halves once they have happened, for the line under the list. */
+const removalSettled = (containers: number, pairings: number): string[] => [
+    ...(containers === 0 ? [] : [`${counted(containers, `sandbox`, `sandboxes`)} deleted`]),
+    ...(pairings === 0 ? [] : [`${counted(pairings, `pairing`, `pairings`)} ended`]),
+];
+
 /** The row's mark for a verb that does something, and an inert end for one that only reads. */
 const markVerb = (hubWork: HubWork, group: DeviceSandboxGroup, verb: SandboxVerb): (() => void) => {
     const says = VERB_WORKING[verb];
     return says === undefined ? (): void => {} : hubWork.begin(`${says} ${group.title}`);
 };
 
+/** The question a removal asks, over one row or several. */
+export interface RemovalPrompt {
+    readonly header: string;
+    readonly effects: readonly string[];
+    /** The sandboxes by name: nobody should have to agree to a count. */
+    readonly names: readonly string[];
+    /** Whether one of them is the sandbox serving this page, which goes with it. Only ever a single-row removal. */
+    readonly severing: boolean;
+}
+
 export interface ActPrompt {
     readonly header: string;
     readonly body: string | undefined;
-    /** A destructive warning and a self-severing warning are two different facts, so this rides the prompt. */
+    /** Whether agreeing takes down the connection this page is watching through; nothing that reaches here destroys. */
     readonly severing: boolean;
     readonly label: string;
-    readonly destructive: boolean;
 }
 
 /**
@@ -162,6 +199,14 @@ export interface DeviceOps {
     readonly reshaping: Ref<{ group: DeviceSandboxGroup } | undefined>;
     readonly applyReshape: (ask: ResourcesAsk) => void;
     readonly selfGroup: (group: DeviceSandboxGroup) => boolean;
+
+    // Letting this machine go of one sandbox or of several: per row the container verb, the unpair command, or both,
+    // in whatever combination that row holds. One key for the whole run, since one press asked for all of it.
+    readonly confirmingRemoval: Ref<readonly DeviceSandboxGroup[] | undefined>;
+    readonly removalPrompt: ComputedRef<RemovalPrompt | undefined>;
+    readonly confirmRemoval: () => void;
+    readonly removing: Ref<boolean>;
+    readonly removalKey: string;
 
     // Everything one machine's file sync can be told to do: the switches over a pairing, and the one that starts
     // one. `mode`/`localDir` ride enrolling alone, and are what pick the environment that ends up running mutagen;
@@ -232,6 +277,7 @@ export function useDeviceOps(machine: () => MachineRow, refetch: () => void): De
     // The op running across the whole machine, for the control that started it; the per-row spinner is `agentOp`.
     const agentEvery = ref<DeviceAgentOp | undefined>();
     const revoking = ref(false);
+    const removing = ref(false);
     // `agentEvery` is read too, not just the flow in flight: between two environments of one machine nothing is on the
     // wire for an instant, and the page's buttons must not come back to life inside it.
     const working = computed(
@@ -240,7 +286,8 @@ export function useDeviceOps(machine: () => MachineRow, refetch: () => void): De
             syncBusy.value !== undefined ||
             agentOp.value !== undefined ||
             agentEvery.value !== undefined ||
-            revoking.value,
+            revoking.value ||
+            removing.value,
     );
 
     const failure = ref<OpFailure | undefined>();
@@ -262,6 +309,10 @@ export function useDeviceOps(machine: () => MachineRow, refetch: () => void): De
     };
 
     const confirmingAct = ref<{ group: DeviceSandboxGroup; verb: SandboxVerb } | undefined>();
+    // The rows one press asked to let go of, and the one key their answer lands under: a run over four rows has one
+    // reason it went wrong, said once, rather than four notices under four rows nobody pressed.
+    const confirmingRemoval = ref<readonly DeviceSandboxGroup[] | undefined>();
+    const removalKey = `${machine().key}:removal`;
     const reshaping = ref<{ group: DeviceSandboxGroup } | undefined>();
     const confirmingUnpair = ref<{ environment: DeviceRow; group: DeviceSandboxGroup } | undefined>();
     const confirmingRevoke = ref<DeviceRow | undefined>();
@@ -281,7 +332,6 @@ export function useDeviceOps(machine: () => MachineRow, refetch: () => void): De
             body: asked?.body,
             severing: severs(pending.group, pending.verb),
             label,
-            destructive: pending.verb === `remove`,
         };
     });
 
@@ -353,6 +403,13 @@ export function useDeviceOps(machine: () => MachineRow, refetch: () => void): De
             openResources(group);
             return;
         }
+        // ONE REMOVAL IN THE PRODUCT. The menu's Remove is the list's own act, so a container can never be taken
+        // while the enrollment that pointed at it stays behind — which is how a machine collects rows for sandboxes
+        // that no longer exist.
+        if (verb === `remove`) {
+            confirmingRemoval.value = [group];
+            return;
+        }
         // The log button toggles: reopening what you closed is the same click, not a second control.
         if (verb === `logs` && openLog.value === rowKey(group)) {
             openLog.value = undefined;
@@ -380,6 +437,130 @@ export function useDeviceOps(machine: () => MachineRow, refetch: () => void): De
         reshaping.value = undefined;
         if (pending !== undefined) {
             void runAct(pending.group, `resources`, ask);
+        }
+    };
+
+    const removalPrompt = computed<RemovalPrompt | undefined>(() => {
+        const pending = confirmingRemoval.value;
+        if (pending === undefined || pending.length === 0) {
+            return undefined;
+        }
+        const taken = pending.map((group) => rowRemoval(machine(), group));
+        const label = machine().label;
+        return {
+            header: pending.length === 1 ? `Remove ${pending[0]?.title} from ${label}?` : `Remove ${pending.length} sandboxes from ${label}?`,
+            effects: removalEffects(label, taken.filter((removal) => removal.container).length, taken.filter((removal) => removal.pairing).length),
+            names: pending.map((group) => group.title),
+            severing: pending.some((group) => severs(group, `remove`)),
+        };
+    });
+
+    /** The container half, through whichever door is open; the refusal, or undefined for done. */
+    const removeContainer = async (group: DeviceSandboxGroup): Promise<string | undefined> => {
+        const hostId = door();
+        const slug = group.sandbox?.slug;
+        if (hostId === undefined || slug === undefined) {
+            return `no open door onto that container`;
+        }
+        // The stream dies with the container when this is the sandbox serving the page, so that drop is the answer
+        // rather than a failure — which is what the dialog warned about, and why `removalOrder` puts the unpair first.
+        return await manageDeviceSandbox(hostId, slug, `remove`, { severing: severs(group, `remove`) }).then(
+            () => undefined,
+            (error: unknown) => refusalText(error),
+        );
+    };
+
+    /** The enrollment half, through the FOLDER's own door, which on a many-sided machine is not the container's. */
+    const endPairing = async (group: DeviceSandboxGroup): Promise<string | undefined> => {
+        const pairHost = folderOwner(machine(), group)?.device.hostId;
+        if (pairHost === undefined) {
+            return `no open door onto that pairing`;
+        }
+        return await runDeviceCommand(pairHost, `sync-unpair`, { sandboxId: group.sandboxId }).then(
+            (result) => (result.ok ? undefined : result.message),
+            (error: unknown) => refusalText(error),
+        );
+    };
+
+    // CONTAINER BEFORE PAIRING, except on the sandbox serving this page. An enrollment outlives a removal that
+    // failed, so it is left pointing at something that still exists rather than at a hole — but removing THIS sandbox
+    // takes down the daemon that would have carried the unpair, so there the order reverses or the pairing is
+    // stranded on the device with nothing left here able to end it.
+    const removalOrder = (group: DeviceSandboxGroup): readonly (`container` | `pairing`)[] =>
+        severs(group, `remove`) ? [`pairing`, `container`] : [`container`, `pairing`];
+
+    // What the machine refused is returned rather than thrown, so the rows queued behind this one still run: they
+    // were asked for together, but nothing about one of them decides another.
+    const removeRow = async (group: DeviceSandboxGroup): Promise<{ container: boolean; pairing: boolean; refusal: string | undefined }> => {
+        const removal = rowRemoval(machine(), group);
+        const done = { container: false, pairing: false };
+        for (const half of removalOrder(group)) {
+            if (!removal[half]) {
+                continue;
+            }
+            const refusal = half === `container` ? await removeContainer(group) : await endPairing(group);
+            if (refusal !== undefined) {
+                return { ...done, refusal };
+            }
+            done[half] = true;
+        }
+        return { ...done, refusal: undefined };
+    };
+
+    // The run's one answer, under the key the press came from. A refusal names the rows that stayed AND what did come
+    // off, since a run that half worked is neither a success nor a failure and must not read as either.
+    const sayRemoval = (settled: readonly string[], refused: readonly string[]): void => {
+        if (refused.length === 0) {
+            // Nothing done is still something to say: a poll landing between the dialog and the press can leave a
+            // row with neither half still on this machine.
+            const said = settled.length === 0 ? `already held none of them` : settled.join(`, `);
+            outcome.value = { key: removalKey, message: `${machine().label}: ${said}.` };
+            return;
+        }
+        failure.value = {
+            key: removalKey,
+            notice: {
+                tone: `warning`,
+                title: `${counted(refused.length, `sandbox`, `sandboxes`)} stayed on ${machine().label}.`,
+                detail: [...refused, ...(settled.length === 0 ? [] : [`What did come off: ${settled.join(`, `)}.`])].join(` · `),
+            },
+        };
+    };
+
+    const runRemoval = async (groups: readonly DeviceSandboxGroup[]): Promise<void> => {
+        if (working.value || groups.length === 0) {
+            return;
+        }
+        removing.value = true;
+        failure.value = undefined;
+        outcome.value = undefined;
+        const endMark = hubWork.begin(`Removing ${counted(groups.length, `sandbox`, `sandboxes`)} from ${machine().label}`);
+        let containers = 0;
+        let pairings = 0;
+        const refused: string[] = [];
+        try {
+            for (const group of groups) {
+                const done = await removeRow(group);
+                containers += done.container ? 1 : 0;
+                pairings += done.pairing ? 1 : 0;
+                if (done.refusal !== undefined) {
+                    refused.push(`${group.title}: ${done.refusal}`);
+                }
+            }
+        } finally {
+            removing.value = false;
+            endMark();
+            // Always, including after a refusal: a run that stopped halfway still changed the machine.
+            refetch();
+        }
+        sayRemoval(removalSettled(containers, pairings), refused);
+    };
+
+    const confirmRemoval = (): void => {
+        const pending = confirmingRemoval.value;
+        confirmingRemoval.value = undefined;
+        if (pending !== undefined) {
+            void runRemoval(pending);
         }
     };
 
@@ -597,6 +778,11 @@ export function useDeviceOps(machine: () => MachineRow, refetch: () => void): De
         reshaping,
         applyReshape,
         selfGroup,
+        confirmingRemoval,
+        removalPrompt,
+        confirmRemoval,
+        removing,
+        removalKey,
         runSync,
         syncRunning,
         confirmingUnpair,

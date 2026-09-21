@@ -249,6 +249,13 @@ const readSessions = (mutagen: string, name: string): LiveSession[] => {
 // again here.
 export const CONFLICT_PATHS_MAX = 24;
 
+// A REPOSITORY IS NOT BUILD OUTPUT. `.git` sits in the session's ignore list beside `node_modules`, so Mutagen scans
+// it the same way and calls it untracked — but no build puts a repository back, and a clone whose remote has gone has
+// its history nowhere else. Reported as a creation, which is what it is: the classification below then reads the
+// standoff as two real copies, which is a person's call, rather than as residue a button may delete unasked.
+const REPOSITORY = ".git";
+const isRepository = (path: string | undefined): boolean => (path ?? "").split("/").includes(REPOSITORY);
+
 // Created, deleted, or modified, from which side of a change is present; neither present says nothing rather
 // than guessing. A creation whose content is ignored is reported as `untracked` instead, because nobody created it and
 // nothing is lost by removing it — the distinction the whole classification below rests on.
@@ -259,7 +266,8 @@ const changeKind = (change: LiveChange | undefined): DeviceConflictChange | unde
     const before = change.old !== undefined && change.old !== null;
     const after = change.new !== undefined && change.new !== null;
     if (!before) {
-        return after ? (change.new?.kind === UNTRACKED ? "untracked" : "created") : undefined;
+        const ignored = change.new?.kind === UNTRACKED && !isRepository(change.path);
+        return after ? (ignored ? "untracked" : "created") : undefined;
     }
     return after ? "modified" : "deleted";
 };

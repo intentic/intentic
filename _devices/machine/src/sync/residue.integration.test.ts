@@ -122,6 +122,13 @@ describe("isDerivedHusk", () => {
         expect(await isDerivedHusk(root, `empty`, ignored)).toBe(true);
     });
 
+    // The second defence, so a report that classified a repository as residue still removes nothing: `.git` is under
+    // the same ignore patterns as `node_modules`, and reading those alone calls this directory empty.
+    it("is false for a directory whose only content is a git repository", async () => {
+        const root = await tree({ "pkg/.git/HEAD": `ref: refs/heads/main`, "pkg/node_modules/x.js": `1` });
+        expect(await isDerivedHusk(root, `pkg`, ignored)).toBe(false);
+    });
+
     it("is false for a path that cannot be read at all, rather than assuming", async () => {
         const root = await tree({ "pkg/README.md": `#` });
         expect(await isDerivedHusk(root, `nothing-here`, ignored)).toBe(false);
@@ -141,6 +148,13 @@ describe("findDerivedHusks", () => {
         const husks = await findDerivedHusks(root, ignored);
         // `gone` and `group/inner` are residue; `keep` holds real source and `group` holds a real package.
         expect([...husks].sort()).toEqual([`gone`, `group/inner`]);
+    });
+
+    // The sweep runs unprompted whenever a session is made from nothing, so this is the pass that would have taken
+    // the four extension clones without anybody pressing anything.
+    it("leaves a directory holding a git repository alone", async () => {
+        const root = await tree({ "clone/.git/HEAD": `ref: refs/heads/main`, "clone/node_modules/x.js": `1`, "gone/dist/main.js": `1` });
+        expect(await findDerivedHusks(root, ignored)).toEqual([`gone`]);
     });
 
     it("never returns the sync root, even when the whole folder reads as residue", async () => {

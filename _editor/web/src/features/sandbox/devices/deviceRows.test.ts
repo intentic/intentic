@@ -16,7 +16,10 @@ import {
     machineRows,
     machineState,
     managerOf,
+    massRemovable,
+    removableHere,
     rowMatches,
+    rowRemoval,
     showFilter,
 } from "./deviceRows";
 import { boardRoute, deviceRoute, selectedKey } from "./deviceLinks";
@@ -318,6 +321,51 @@ test(`finds a machine by a port number, by its sandbox, and by its folder`, () =
     expect(rowMatches(entry, `intentic-dev`)).toBe(true);
     expect(rowMatches(entry, `/home/ada`)).toBe(true);
     expect(rowMatches(entry, `nothing-here`)).toBe(false);
+});
+
+// what removing a sandbox from a machine would actually take
+
+// A machine holding one container it runs and one sandbox it only keeps the files of — the shape this page is read
+// on most, and the one whose second row used to carry no verb at all.
+const MIXED: Held = {
+    pairings: [
+        { sandboxId: `work-abc`, mode: `sync`, localDir: `/home/ada/work`, mutagenStatus: `watching` },
+        { sandboxId: `elsewhere`, mode: `sync`, localDir: `/home/ada/elsewhere`, mutagenStatus: `watching` },
+    ],
+    sandboxes: [{ slug: `work-abc`, container: `sandbox-work-abc`, name: `intentic-dev`, running: true, image: `img:1` }],
+};
+
+const bothKinds = () => card(row({}, MIXED));
+const groupOf = (id: string) => bothKinds().groups.find((group) => group.sandboxId === id)!;
+
+test(`tells the two halves of a removal apart, so the confirmation can name each`, () => {
+    expect(rowRemoval(bothKinds(), groupOf(`work-abc`))).toEqual({ container: true, pairing: true });
+    // A sandbox running somewhere else: this machine holds its files and nothing to stop.
+    expect(rowRemoval(bothKinds(), groupOf(`elsewhere`))).toEqual({ container: false, pairing: true });
+    expect(removableHere(bothKinds(), groupOf(`elsewhere`))).toBe(true);
+});
+
+// The row that used to be a dead end: a container-less pairing is exactly what a machine accumulates, and the page
+// offered no verb for it because every verb it had was a container's.
+test(`gives a sandbox with no container here something to press`, () => {
+    const containerless = card(row({}, { pairings: MIXED.pairings }));
+    expect(containerless.groups.every((group) => removableHere(containerless, group))).toBe(true);
+    // A machine that only listed containers has no enrollment to end, and its rows say so.
+    const listed = card(row({ report: undefined, gap: `scope-off` }, {}));
+    expect(listed.groups.map((group) => removableHere(listed, group))).toEqual([]);
+});
+
+// A reachable door is the whole of what a verb needs; an asleep machine draws none, rather than one that fails.
+test(`offers nothing on a machine that cannot be reached`, () => {
+    const asleep = card(deviceRow(device({ online: false, gap: `offline`, report: report(MIXED), sandboxes: MIXED.sandboxes }), undefined));
+    expect(asleep.groups.map((group) => removableHere(asleep, group))).toEqual([false, false]);
+});
+
+// REMOVING THE SANDBOX SERVING THE PAGE TAKES THE PAGE DOWN, and with it the loop working through the rest of the
+// batch. It keeps its own row's verb, which warns about exactly that; it is the batch it cannot join.
+test(`keeps the sandbox you are using out of a batch, and everything else in`, () => {
+    expect(massRemovable(bothKinds(), `work-abc`).map((group) => group.sandboxId)).toEqual([`elsewhere`]);
+    expect(massRemovable(bothKinds(), undefined).map((group) => group.sandboxId)).toEqual([`work-abc`, `elsewhere`]);
 });
 
 test(`offers no filter over a board small enough to read`, () => {

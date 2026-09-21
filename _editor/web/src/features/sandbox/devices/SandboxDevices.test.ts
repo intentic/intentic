@@ -34,6 +34,9 @@ vi.mock(`../../agents/fleet/agentActions`, () => ({ startAgent: (prompt?: string
 // Container verbs, recorded the same way: which op left for which machine, and for `reshape`, what the form
 // asked for.
 const verbCalls: { hostId: string; slug: string; op: string; resources?: unknown }[] = [];
+// Both of the above in one list, in the order they left: which half of a removal goes first is a rule of its own,
+// and two arrays cannot say.
+const flow: string[] = [];
 // The agent's own flow, recorded rather than streamed: which connection was asked to update, and in what order, which
 // is the whole of what a machine-wide press decides.
 const agentCalls: { hostId: string; op: string }[] = [];
@@ -48,10 +51,12 @@ vi.mock(`./useDevices`, async () => {
         useDevices: () => ({ devices, readAt, error: ref(undefined), isLoading: devicesLoading, refetch: () => {} }),
         manageDeviceSandbox: (hostId: string, slug: string, op: string, payload?: { resources?: unknown }) => {
             verbCalls.push({ hostId, slug, op, ...(payload?.resources === undefined ? {} : { resources: payload.resources }) });
+            flow.push(`${op}:${slug}`);
             return Promise.resolve(`Reshaped sandbox "${slug}".`);
         },
         runDeviceCommand: (hostId: string, command: string, ask?: { sandboxId?: string }) => {
             mirrorCalls.push({ hostId, command, sandboxId: ask?.sandboxId });
+            flow.push(`${command}:${ask?.sandboxId ?? ``}`);
             return Promise.resolve(mirrorAnswer);
         },
         revokeSyncDevice: (machine: string) => {
@@ -89,8 +94,10 @@ vi.mock(`./usePeerConnect`, async () => ({
 const owner = ref(true);
 vi.mock(`../secrets/useRole`, () => ({ useRole: () => ({ isOwner: owner }) }));
 // sandboxKey is reached at module eval by the real useDevices, so it's mocked here too.
+// Which sandbox is serving the page, by the hostname of its daemon: what marks a row as "the one you're using".
+const daemon = ref<string | undefined>();
 vi.mock(`../client/useSandbox`, () => ({
-    useSandbox: () => ({ daemonUrl: ref(undefined) }),
+    useSandbox: () => ({ daemonUrl: daemon }),
     sandboxKey: (name: string) => [name],
 }));
 // The release this sandbox knows about; mocked like useDevices since the subject is what a row says, and
@@ -207,8 +214,10 @@ afterEach(() => {
     devicesLoading.value = false;
     capabilities.value = [];
     owner.value = true;
+    daemon.value = undefined;
     mirrorCalls.length = 0;
     verbCalls.length = 0;
+    flow.length = 0;
     agentCalls.length = 0;
     agentAnswer = () => Promise.resolve(AGENT_UPDATED);
     revokeCalls.length = 0;
@@ -1384,6 +1393,151 @@ it(`states the halves without offering the switches on a device it cannot run co
 
 it(`draws no switches on a connected device with no pairings`, () => {
     expect(labels(mount([managed(true)]))).not.toContain(`Stop all`);
+});
+
+// letting a machine go of a sandbox, one row or several
+
+// What a machine collects: one sandbox it runs, and one it only holds the files of because that sandbox lives
+// somewhere else. The second row is the one this page used to draw with no verb at all.
+const holdings = (): Device => {
+    const row = twoPairings();
+    return { ...row, sandboxes: [{ slug: `work-a`, container: `intentic-sandbox-work-a`, running: true, image: `img:a` }] };
+};
+
+const rowButton = (el: HTMLElement, label: string): HTMLButtonElement | undefined =>
+    [...el.querySelectorAll(`button`)].find((control) => (control.textContent ?? ``).trim() === label);
+
+// A removal is a chain of awaits per row, and a tick only flushes what is already queued: this runs the queue out.
+const settle = async (): Promise<void> => {
+    for (let turn = 0; turn < 10; turn += 1) {
+        // oxlint-disable-next-line eslint/no-await-in-loop -- each tick is what queues the next, so they cannot overlap
+        await nextTick();
+    }
+};
+
+// A row whose container is somewhere else has no power state to change, so every verb the page had was about
+// somebody else's row; its only exit was a button two clicks inside it.
+it(`gives a sandbox this machine only syncs a verb of its own`, () => {
+    granted();
+    const el = mount([holdings()]);
+    // One row carries the container verbs, the other the one act that applies to it.
+    expect(labels(el)).toContain(`Stop`);
+    expect(labels(el)).toContain(`Remove`);
+    expect(hovers(el)).toContain(`Its files stop syncing and its ports come off localhost`);
+});
+
+// A container removed on its own leaves an enrollment pointing at nothing, which is exactly the row this page was
+// full of. So the menu's Remove is the list's own act: both halves, whichever of them the row holds.
+it(`takes the container and the pairing together, and names each before it does`, async () => {
+    granted();
+    const el = mount([holdings()]);
+    // Only the row with a container has a menu; the other's verb is on the row itself.
+    el.querySelector<HTMLButtonElement>(`button[aria-label="More actions"]`)?.click();
+    await nextTick();
+    menuRow(`Remove`)?.click();
+    await nextTick();
+    expect(mirrorCalls).toEqual([]);
+    expect(verbCalls).toEqual([]);
+    expect(everything()).toContain(`1 sandbox is deleted on radarsu-rog`);
+    expect(everything()).toContain(`1 sandbox stops syncing and mirroring ports`);
+
+    dialogButton(`Remove`)?.click();
+    await settle();
+    expect(verbCalls).toEqual([{ hostId: `host-1`, slug: `work-a`, op: `remove` }]);
+    expect(mirrorCalls).toEqual([{ hostId: `host-1`, command: `sync-unpair`, sandboxId: `work-a` }]);
+});
+
+// The row whose container lives elsewhere: one half applies, and the dialog says only that half.
+it(`ends the pairing alone on a sandbox this machine does not run`, async () => {
+    granted();
+    const el = mount([holdings()]);
+    rowButton(el, `Remove`)?.click();
+    await nextTick();
+    expect(everything()).toContain(`Remove b from radarsu-rog?`);
+    expect(everything()).not.toContain(`deleted on radarsu-rog`);
+
+    dialogButton(`Remove`)?.click();
+    await settle();
+    expect(verbCalls).toEqual([]);
+    expect(mirrorCalls).toEqual([{ hostId: `host-1`, command: `sync-unpair`, sandboxId: `work-b` }]);
+});
+
+// Ticking rows is opt-in: the list is read far more often than it is pruned.
+it(`removes several sandboxes on one press, once selecting is asked for`, async () => {
+    granted();
+    const el = mount([holdings()]);
+    expect(el.querySelectorAll(`input[type="checkbox"]`)).toHaveLength(0);
+
+    rowButton(el, `Select`)?.click();
+    await nextTick();
+    rowButton(el, `All`)?.click();
+    await nextTick();
+    expect(el.textContent ?? ``).toContain(`2 selected`);
+
+    rowButton(el, `Remove from this device`)?.click();
+    await nextTick();
+    // Both halves are named, each counted over the rows it is about.
+    expect(everything()).toContain(`1 sandbox is deleted on radarsu-rog`);
+    expect(everything()).toContain(`2 sandboxes stop syncing`);
+
+    dialogButton(`Remove`)?.click();
+    await settle();
+    expect(verbCalls).toEqual([{ hostId: `host-1`, slug: `work-a`, op: `remove` }]);
+    expect(mirrorCalls).toEqual([
+        { hostId: `host-1`, command: `sync-unpair`, sandboxId: `work-a` },
+        { hostId: `host-1`, command: `sync-unpair`, sandboxId: `work-b` },
+    ]);
+});
+
+// Removing the sandbox serving this page takes the connection down with it, abandoning every row still queued
+// behind it. Its own row still removes it, and that dialog warns.
+it(`keeps the sandbox you are using out of a batch, and says why its box is dead`, async () => {
+    granted();
+    const row = holdings();
+    // Three rows, so two are batchable with the one in use out of it: the bar is never drawn over a single row.
+    const three = {
+        ...row,
+        report: {
+            ...row.report!,
+            pairings: [...row.report!.pairings, { sandboxId: `work-c`, mode: `sync` as const, localDir: `/home/ada/c`, mutagenStatus: `watching` }],
+        },
+    };
+    daemon.value = `https://work-a.example.com`;
+    const el = mount([three]);
+    rowButton(el, `Select`)?.click();
+    await nextTick();
+    const boxes = [...el.querySelectorAll<HTMLInputElement>(`input[type="checkbox"]`)];
+    expect(boxes.map((box) => box.disabled)).toEqual([true, false, false]);
+    expect(hovers(el)).toContain(`can't go in a batch`);
+});
+
+// Removing the sandbox serving this page takes down the daemon that would have carried the unpair, so this one row
+// reverses the two halves: unpair first, or the device keeps a pairing nothing here can ever end.
+it(`unpairs before removing the sandbox that is serving the page`, async () => {
+    granted();
+    daemon.value = `https://work-a.example.com`;
+    const el = mount([holdings()]);
+    el.querySelector<HTMLButtonElement>(`button[aria-label="More actions"]`)?.click();
+    await nextTick();
+    menuRow(`Remove`)?.click();
+    await nextTick();
+    expect(everything()).toContain(`This is the sandbox you are using right now`);
+
+    dialogButton(`Remove`)?.click();
+    await settle();
+    expect(flow).toEqual([`sync-unpair:work-a`, `remove:work-a`]);
+});
+
+// Over one row this would be that row's own button twenty pixels away in a wider, scarier label — the same floor
+// the machine-wide sync switches keep.
+it(`draws no batch bar over a single removable row`, () => {
+    granted();
+    const row = holdings();
+    const one = { ...row, report: { ...row.report!, pairings: [row.report!.pairings[0]!] } };
+    const found = labels(mount([one]));
+    expect(found).not.toContain(`Select`);
+    // The row itself still has its menu, which is where a single removal belongs.
+    expect(found).toContain(`Stop`);
 });
 
 // one PC, two doors

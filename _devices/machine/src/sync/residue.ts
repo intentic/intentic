@@ -21,6 +21,12 @@ import { clearableOnDevice, type DeviceConflict } from "@intentic/sandbox-contra
 // widen what gets deleted.
 const PLAIN_PATTERN = /^[^/*?[\]!\\]+$/;
 
+// A REPOSITORY IS NOT BUILD OUTPUT, however the session's patterns classify it. `.git` is ignored here exactly as
+// `node_modules` is, so a husk check reading those patterns would call a clone's directory empty and remove it —
+// and no build puts a repository back. Checked by name at every level rather than by descending into it, so the
+// walk still prunes there and costs nothing.
+const REPOSITORY = ".git";
+
 export const ignoreMatcher = (patterns: readonly string[]): ((path: string) => boolean) => {
     const anywhere = new Set<string>();
     const atRoot = new Set<string>();
@@ -62,6 +68,9 @@ export const isDerivedHusk = async (root: string, path: string, ignored: (path: 
     }
     for (const entry of entries) {
         const child = `${path}/${entry.name}`;
+        if (entry.name === REPOSITORY) {
+            return false;
+        }
         if (ignored(child)) {
             continue;
         }
@@ -91,6 +100,10 @@ export const findDerivedHusks = async (root: string, ignored: (path: string) => 
         const nested: string[] = [];
         for (const entry of entries) {
             const child = path === "" ? entry.name : `${path}/${entry.name}`;
+            if (entry.name === REPOSITORY) {
+                husk = false;
+                continue;
+            }
             if (ignored(child)) {
                 continue;
             }

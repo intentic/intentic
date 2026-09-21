@@ -27,6 +27,18 @@ const PAIRING: NonNullable<Device[`report`]>[`pairings`][number] = {
     ],
 };
 
+// The other half of what a machine actually holds: a sandbox it keeps the files of and does not run — one living
+// somewhere else, or one already gone. A PC collects these, and the list is only worth pruning because they pile up.
+const SYNCED_ELSEWHERE: NonNullable<Device[`report`]>[`pairings`][number] = {
+    sandboxId: `billing-api`,
+    mode: `sync`,
+    localDir: `/home/ada/intentic/billing-api`,
+    mirroring: `on`,
+    mutagenStatus: `watching`,
+    backupStatus: `watching`,
+    paused: true,
+};
+
 const AGENT = { running: true, pid: 48211, build: `1.275.0`, installed: `1.275.0` };
 
 export const demoDevices = (now: number): Device[] => [
@@ -74,7 +86,7 @@ export const demoDevices = (now: number): Device[] => [
             hostname: `ada-pc`,
             os: `linux`,
             wsl: { distro: `archlinux` },
-            pairings: [PAIRING],
+            pairings: [PAIRING, SYNCED_ELSEWHERE],
             ports: [
                 { port: 5173, host: `127.0.0.1`, sandboxId: `demo`, state: `mirrored`, command: `node vite` },
                 { port: 6379, host: `127.0.0.1`, sandboxId: `demo`, state: `busy`, command: `docker-proxy` },

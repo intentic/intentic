@@ -254,6 +254,39 @@ export const commandable = (device: Device, group: DeviceSandboxGroup): boolean 
 // pause that one is asking Mutagen for a name it cannot resolve.
 export const pausable = (device: Device, group: DeviceSandboxGroup): boolean => commandable(device, group) && syncSessionLive(group.folder);
 
+// WHAT "REMOVE FROM THIS DEVICE" TAKES, per row. Two independent halves, because a row can be either or both: the
+// container this machine's docker holds, and the enrollment its agent keeps. Stated as a pair rather than a boolean
+// so the confirmation can name each consequence separately — one ends a sandbox, the other only stops it being
+// copied here — and so a row that is neither draws no verb at all.
+export interface RowRemoval {
+    /** The container goes, with its files and its history; `ic sandbox restore` brings it back for a week. */
+    readonly container: boolean;
+    /** File syncing and port mirroring stop; the folder on the device is left exactly where it is. */
+    readonly pairing: boolean;
+}
+
+export const rowRemoval = (machine: MachineRow, group: DeviceSandboxGroup): RowRemoval => {
+    const manager = managerOf(machine);
+    const owner = folderOwner(machine, group);
+    return {
+        container: manager !== undefined && manageable(manager.device, group),
+        pairing: owner !== undefined && commandable(owner.device, group),
+    };
+};
+
+// Whether this machine holds anything of this sandbox that a click here could let go of. False on a row the machine
+// only knows about — a port reading with no container and no pairing behind it.
+export const removableHere = (machine: MachineRow, group: DeviceSandboxGroup): boolean => {
+    const removal = rowRemoval(machine, group);
+    return removal.container || removal.pairing;
+};
+
+// The rows a several-at-once removal may take. The sandbox serving the page is excluded on purpose: removing it
+// takes down the connection running the loop, abandoning every row still queued behind it. Its own row keeps the
+// single-sandbox verb, which warns about exactly that.
+export const massRemovable = (machine: MachineRow, ownSlug: string | undefined): DeviceSandboxGroup[] =>
+    machine.groups.filter((group) => removableHere(machine, group) && !isSelfMachine(machine, group, ownSlug));
+
 // A conflict between two EDITED copies has no switch: choosing between them is judgement per file, so the
 // control is a turn an agent can run against both ends, not a one-click winner. Offered only where at least
 // one conflict is of that kind — a folder stuck entirely on its own build output needs no judgement and no

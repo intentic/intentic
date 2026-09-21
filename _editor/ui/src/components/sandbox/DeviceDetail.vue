@@ -49,6 +49,9 @@ const {
 }>();
 
 defineSlots<{
+    // A tick box for a caller that acts on several rows at once. Drawn outside the disclosure button, so choosing
+    // a row never unfolds it, and before the chevron, so a list mid-selection reads as a column of choices.
+    select?: (props: { group: DeviceSandboxGroup }) => unknown;
     /** Anything else worth saying about one sandbox, beside its name. */
     badges?: (props: { group: DeviceSandboxGroup }) => unknown;
     /** What can be done to it, right-aligned on the same line; the caller owns the verbs. */
@@ -152,8 +155,9 @@ onBeforeUnmount(() => clearTimeout(flashTimer));
                     flashing === blockId(group) ? `bg-warning/10` : ``,
                 ]"
             >
-                <!-- The chevron and name are one button; verbs keep their own hit areas outside it. -->
+                <!-- The chevron and name are one button; verbs and the tick box keep their own hit areas outside it. -->
                 <div class="flex min-w-0 items-center gap-x-2">
+                    <span v-if="$slots[`select`]" class="flex shrink-0 items-center"><slot name="select" :group="group" /></span>
                     <button
                         type="button"
                         class="group/row flex min-w-0 flex-1 cursor-pointer items-center gap-2 py-0.5 text-left"

@@ -35,10 +35,10 @@ export const guideParts = (line: string): readonly GuidePart[] => {
 
 // Scopes lines lead with a translated prefix; its trailing space must live on the first catalog part, not after it.
 export const guidePartsPrefixed = (prefix: string, line: string): readonly GuidePart[] => {
-    const parts = guideParts(line);
-    if (parts.length === 0) {
+    // Guarded on the head itself, not on a length: a checked index is what makes the part below safe to read.
+    const [first, ...rest] = guideParts(line);
+    if (first === undefined) {
         return [{ text: prefix, literal: false }];
     }
-    const [first, ...rest] = parts;
     return [{ text: prefix, literal: false }, { text: ` ${first.text}`, literal: first.literal }, ...rest];
 };

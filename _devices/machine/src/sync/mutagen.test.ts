@@ -209,6 +209,24 @@ describe("conflictsFrom", () => {
         expect(read?.paths).toEqual([{ path: "pkg", local: "created", sandbox: "deleted", nature: "both-edited" }]);
     });
 
+    // MEASURED ON A DOGFOODING MACHINE: four standalone extension repositories the sandbox deleted stood on rog for
+    // days, each held open by its own `.git`. Mutagen scans a repository exactly as it scans `node_modules` — both are
+    // ignored — so the side read as build output, the card offered a one-click clear, and its sentence said nothing of
+    // the reader's was in there. A clone whose remote has gone is the one thing in that directory with no other copy.
+    it("refuses to call a git repository build output, however the session ignores it", () => {
+        const read = conflictsFrom({
+            conflicts: [
+                {
+                    root: "extensions/homelab",
+                    alphaChanges: [{ path: "extensions/homelab/.git", old: null, new: untracked }],
+                    betaChanges: [{ path: "extensions/homelab", old: directory, new: null }],
+                },
+            ],
+        });
+        expect(read?.paths).toEqual([{ path: "extensions/homelab", local: "created", sandbox: "deleted", nature: "both-edited" }]);
+        expect(read?.paths.map((conflict) => clearableOnDevice(conflict))).toEqual([false]);
+    });
+
     // The same standoff the other way round: the sandbox holds the residue, this device made the deletion. Named as
     // derived so a reader is told what it is — but `clearableOnDevice` is what decides anything is removed, and this
     // is not it.
