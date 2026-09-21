@@ -12,7 +12,12 @@ const whenSuffix = (rule: Rule): string => {
         return "";
     }
     const paths = rule.when.paths ?? [];
-    return paths.length === 0 ? " (when its condition matches)" : ` (after edits to ${paths.map((glob) => `\`${glob}\``).join(" or ")})`;
+    if (paths.length > 0) {
+        return ` (after edits to ${paths.map((glob) => `\`${glob}\``).join(" or ")})`;
+    }
+    // A repository on its own is not an unstated condition: whereClause has already named it, and saying both left a
+    // repo-scoped check reading "run in `intentic` (when its condition matches)".
+    return Object.keys(rule.when).every((key) => key === "repo") ? "" : " (when its condition matches)";
 };
 
 // Where it runs, when that isn't simply here. Worth a clause of its own: a check named for a repository runs INSIDE it,

@@ -46,3 +46,13 @@ test("includes a path condition", () => {
         "(after edits to `intentic/**` or `docs/**`)",
     );
 });
+
+test("a repository is named once, as the place it runs", () => {
+    const text = turnEndingNote([command({ when: { repo: "intentic" } })])?.text;
+    expect(text).toContain("- **Verify before you finish:** `pnpm verify`, run in `intentic`");
+    expect(text).not.toContain("when its condition matches");
+});
+
+test("still says a condition stands when it is one this note cannot spell", () => {
+    expect(turnEndingNote([command({ when: { repo: "intentic", sample: 0.5 } })])?.text).toContain("(when its condition matches)");
+});

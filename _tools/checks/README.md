@@ -38,9 +38,10 @@ Every check that reads the checkout and nothing else, listed once and run everyw
 
 Who reads the list: CI's `preflight` job (before any install) and `nightly.yml`'s `tidy` job, the pre-push
 hook's first tier (`_tools/scripts/verify/verify-push.mjs`), the turn-ending check
-(`_tools/scripts/verify/verify-turn.mjs`), the per-edit moment this repository declares for itself
-(`.intentic/checks.json`, `run.mjs --paths {file}`), `pnpm prepass` (the checks, then
-`_tools/scripts/build/emit-declarations.mjs`), and `pnpm checks` by hand.
+(`_tools/scripts/verify/verify-turn.mjs`), the per-edit run (`run.mjs --paths {file}`), `pnpm prepass` (the
+checks, then `_tools/scripts/build/emit-declarations.mjs`), and `pnpm checks` by hand. The middle two are the
+two moments this repository declares for itself in `.intentic/checks.json`, and the only two: the push is the
+checkout's own git hook, which needs nobody's permission to run and is told its range by git.
 
 The turn-ending check reads it twice on a red run: once on the working tree, and once on a throwaway worktree
 at `HEAD`, so that a problem already standing before the turn started is reported and not held against it. That

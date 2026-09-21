@@ -47,21 +47,26 @@ described, changing an implementation detail it deliberately does not mention.
 
 ## What reads your edit, and when
 
-Four moments, each the cheapest one that can see the defect it is for. Every one of them is a rule in
-`.intentic/config/settings.json` (the Rules screen lists them), so none is a convention.
+Four moments, each the cheapest one that can see the defect it is for, and each read by exactly one thing —
+there is no moment at which two of these run the same command. Two of them this repository declares for itself
+in `.intentic/checks.json` (the sandbox runs them once its owner has adopted that file); the push is the
+checkout's own git hook; the rest are rules in `.intentic/config/settings.json` (the Rules screen lists them).
+None of them is a convention.
 
 **After every file you write** (`file.edited` rules, every runtime, edit tools and shell commands alike: the
 daemon reads the edit off the tree, so `sed`, a heredoc and a script count like Edit): the linter with
 `.oxlintrc.agent.json` (`.intentic/config/hooks/lint-edit.mjs`, autofixes silently and reports only what the
-edit introduced), the byte scan (`bytes-edit.mjs`), and every checkout gate that can judge a file on its own
+edit introduced), and every checkout gate that can judge a file on its own
 (`node _tools/checks/run.mjs --paths {file}`, declared at `.intentic/checks.json`'s `edit` moment, ~100ms) —
 a hand-spelled `/work`, a `bg-[#4c4c58]` where a token belongs, a bare `<button>`, a script tag in an
-`.astro` frontmatter. On Claude Code turns the same moment also type-checks the file. What a failing one
+`.astro` frontmatter, a literal control byte. That last one is also what the sandbox's own `bytes-edit.mjs`
+rule reads, so that rule is aimed at the workspace's other repositories and stands down here, where
+`control-chars` already sees every edit. On Claude Code turns the same moment also type-checks the file. What a failing one
 prints rides back with the edit's own result, and says nothing at all when the file is clean. Fix it there:
 that is one edit, and nothing has been built on it yet.
 
-**When the turn tries to end** (`Verify before you finish`, `cd intentic && pnpm verify:turn`, after edits
-under `intentic/**`): the checkout gates (`_tools/checks/run.mjs`, ~1s), the linter over YOUR CHANGED FILES,
+**When the turn tries to end** (`Verify before you finish`, `pnpm verify:turn`, declared at
+`.intentic/checks.json`'s `turn` moment and run in this repository, after edits to it): the checkout gates (`_tools/checks/run.mjs`, ~1s), the linter over YOUR CHANGED FILES,
 the declarations emit, and `turbo run typecheck test --only` over the AFFECTED CLOSURE, the packages holding a
 changed file plus every package that depends on one. That is exactly the set whose fixtures can name a shape
 you just changed; nothing outside it can have been broken by this turn, and nothing inside it is somebody
@@ -103,10 +108,12 @@ refused.
 
 ## Before it leaves the machine
 
-The push is the one gate nothing routes around, and it runs `_tools/scripts/verify/verify-push.mjs`: from the app's
-"Check before you push" rule (`pnpm verify:push`), in a terminal the owner can watch, and again from
-`.githooks/pre-push` for any BRANCH push git makes from the checkout — a tag push is a pointer move onto
-commits a branch push already measured (the release tag, `stable`), so it stands down. Cheapest first: every check the manifest lists
+The push is the one gate nothing routes around, and it runs `_tools/scripts/verify/verify-push.mjs` once, from
+`.githooks/pre-push`, for any BRANCH push git makes from the checkout — the app's Push button included, since it
+pushes by running `git push` here. A tag push is a pointer move onto commits a branch push already measured (the
+release tag, `stable`), so it stands down. The hook is the one reader that is TOLD its range, on stdin, rather
+than guessing it from `@{u}`, which is why neither this repository's `.intentic/checks.json` nor the sandbox's
+rules declare a push check of their own: either would be this same script, run a second time, over the same tree. Cheapest first: every check the manifest lists
 (`_tools/checks/run.mjs`, under two seconds, needing nothing installed), the assertion ratchet over the
 range's test files (`_tools/scripts/verify/assertion-ratchet.mjs`: a test file may get stronger by itself and weaker
 only with a `test!:` subject or a `Test-Note:` trailer saying why), the manifest/lockfile lockstep, the
