@@ -315,7 +315,8 @@ const assistantsIn = (area: Area): string[] => namesOf([area.id]);
                         <StatusBadge v-if="!isOpen(area)" variant="neutral" size="xs">{{ folderLine(area) }}</StatusBadge>
                         <!-- Derived from the folders and editable nowhere, so it stands while the row is open. No badge
                              at all means holding this area grants no assistant: fine for a viewer or a writer, and the
-                             whole of what a desk would get. -->
+                             whole of what a guest would get. -->
+
                         <StatusBadge v-for="name in assistantsIn(area)" :key="name" variant="info" :label="name" size="xs" />
                     </template>
 

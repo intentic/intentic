@@ -1,0 +1,90 @@
+---
+import DocsLayout from "../../components/docs/DocsLayout.astro";
+---
+
+<DocsLayout
+    pageId="visitor-chat"
+    heading="Visitor chat · put your agent on your website"
+    lead="One script tag on your site gives visitors a chat bubble. Each conversation opens on your fleet board, where you can watch it live and take over mid-sentence."
+>
+    <h2>What it is</h2>
+    <p>
+        A <strong>Visitor chat</strong> is an automation with a chat widget in front of it. A visitor types a question and your sandbox agent answers, streaming as it writes. Unlike a support bot bolted onto a help centre, the thing answering has your repository, your docs and your connected tools, so it answers from what is true today.
+    </p>
+    <p>
+        Every visitor's thread becomes <strong>one conversation on your fleet board</strong>: a card you can open, read, and type into. If a
+        visitor asks something the agent should not answer alone, you take the thread over from the same tab.
+    </p>
+
+    <h2>1 · Create it</h2>
+    <p>
+        Open <strong>Automations</strong> and pick <strong>Visitor chat</strong> under "Reach this agent from elsewhere", or press{" "}
+        <strong>New automation</strong>, choose <strong>Listen (live)</strong>, then <strong>Visitor chat</strong>. The prompt comes prefilled
+        with instructions that tell the agent to answer visitors' questions and refuse anything that asks it to change files or run commands.
+        Edit it to say what your site is about.
+    </p>
+
+    <h2>2 · List the sites that may use it</h2>
+    <p>
+        Under <strong>Allowed sites</strong>, one origin per line. An origin is scheme and host only: no path, no trailing slash:
+    </p>
+    <pre><code>https://example.com
+https://www.example.com</code></pre>
+    <p>
+        <strong>Those two are different origins.</strong> This is the commonest reason a fresh Visitor chat stays silent: the site redirects one to the other, the browser lands on the one you did not list, and every request is refused. List both. The install panel names the origin it turned away and offers to add it.
+    </p>
+
+    <h2>3 · Paste the snippet</h2>
+    <p>Press <strong>Install</strong> on the row and copy the line it gives you. It goes on any page you listed, just before <code>&lt;/body&gt;</code>:</p>
+    <pre><code>&lt;script src="https://sandbox-&lt;id&gt;.&lt;zone&gt;/webchat/widget.js" data-automation="visitor-chat" defer&gt;&lt;/script&gt;</code></pre>
+    <p>
+        The script carries one piece of information: which automation to talk to. The sandbox it calls is the origin the script came from, so there is no second address to keep in sync and no key to leak. The widget is about 6 kB gzipped, renders in a shadow root so neither stylesheet can reach the other, and loads no framework.
+    </p>
+
+    <h2>4 · Check that it landed</h2>
+    <p>
+        Reload your site, then look at the <strong>Install</strong> panel again. It lists every origin that has asked for this Visitor chat and
+        whether it was let in, so "installed, nobody has written yet" is visibly different from "the snippet never ran". A refused origin
+        appears with an <strong>Allow</strong> button beside it.
+    </p>
+
+    <h2>Who can chat</h2>
+    <ul>
+        <li>
+            <strong>Anyone</strong>: the default. Visitors are anonymous; the widget keeps a thread id in their browser so a follow-up
+            continues the same conversation.
+        </li>
+        <li>
+            <strong>Google sign-in</strong>: a visitor must sign in before they can write. This uses <em>your own</em> Google OAuth client, not ours: Google issues a token only to an origin authorized on the client, and ours cannot list every customer's domain. Create a web client, add each allowed site as an authorized origin, and paste the client id.
+        </li>
+    </ul>
+    <p>
+        Either way, <strong>the visitor never holds a credential for your sandbox.</strong> The only routes they can reach are the widget's
+        own. A signed-in visitor's verified email travels to the agent as a fact about who is asking, never as permission to do more.
+    </p>
+
+    <h2>Keeping bots out</h2>
+    <ul>
+        <li><strong>Built-in check</strong>: the visitor's browser solves a small puzzle once per conversation. Costs them about a second, costs a bot the same for every conversation it wants. No accounts, no keys.</li>
+        <li><strong>Cloudflare Turnstile</strong>: invisible for most visitors. Needs a Turnstile widget on your Cloudflare account; the secret key stays in your sandbox and only the site key is ever sent to a browser.</li>
+        <li><strong>Off</strong>: the allowed-sites list and the rate limit are then the whole boundary. Reasonable for an internal or unlisted page.</li>
+    </ul>
+
+    <h2>What the agent may do behind it</h2>
+    <p>
+        A Visitor chat is driven by strangers, so it runs with a <strong>read-only toolbox</strong> by default: it reads files, searches the workspace and fetches a page, and it cannot run commands or write anything. That is enforced as a list of allowed tools on the automation, not asked for in the prompt, so an instruction smuggled into a question has nothing to reach.
+    </p>
+    <p>
+        On top of that, each visitor thread runs in its own throwaway git worktree. There is a per-conversation rate limit and a daily message
+        ceiling you can set, and turning on <strong>Require my approval</strong> holds every wake for you instead of answering.
+    </p>
+
+    <h2>Good to know</h2>
+    <ul>
+        <li>The widget loads from your sandbox, so while the sandbox is off the launcher does not appear on your site.</li>
+        <li>A visitor's thread keeps its conversation for a day of quiet, then the next message starts a fresh one.</li>
+        <li>
+            <strong>A reply written later still arrives.</strong> An approval-gated maker tells the visitor a human will look, and closes the connection: nothing can be streamed to a browser while the answer waits on you. So the answer is queued instead, and the widget collects it the next time that visitor loads a page carrying it, with a mark on the launcher to say so. The same is true of anything you type yourself with <strong>Write as agent</strong> on the conversation: it reaches the visitor, not just the transcript. A queued reply waits a month, and a visitor who never comes back never reads it.
+        </li>
+    </ul>
+</DocsLayout>

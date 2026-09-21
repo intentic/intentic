@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { hostCardOf } from "@intentic/sandbox-contract";
+import { hostEntryOf } from "@intentic/sandbox-contract";
 import {
     Button,
     ConfirmDialog,
@@ -51,7 +51,7 @@ import { type DeviceScopes, manageBlock } from "./deviceFacts";
 import { startAgent } from "../../agents/fleet/agentActions";
 import HostConnectDialog from "../../capabilities/connect/HostConnectDialog.vue";
 import { useCapabilities } from "../../capabilities/connect/useCapabilities";
-import { isDefaultName } from "../../capabilities/model/cards";
+import { isDefaultName } from "../../capabilities/model/tiles";
 import { machineGrants } from "../../capabilities/model/connections";
 import { useRole } from "../secrets/useRole";
 import { useT } from "@intentic/ui/i18n";
@@ -92,7 +92,7 @@ const ops = useDeviceOps(() => machine, refetch);
 const { capabilities } = useCapabilities();
 const capabilityOf = (row: DeviceRow) => {
     const hostId = row.device.hostId;
-    return hostId === undefined ? undefined : capabilities.value.find((entry) => entry.id === hostCardOf(hostId));
+    return hostId === undefined ? undefined : capabilities.value.find((entry) => entry.id === hostEntryOf(hostId));
 };
 const scopesOf = (row: DeviceRow): DeviceScopes | undefined => capabilityOf(row)?.config;
 

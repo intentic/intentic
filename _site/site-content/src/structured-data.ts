@@ -1,7 +1,7 @@
 import { LEGAL_CONTACT_EMAIL } from "@intentic/constants";
 import { creatorRole } from "./about";
-import { deskLanding } from "./landing";
-import { APP_URL, DESK_PATH, FOUNDER_NAME, FOUNDER_SAME_AS, githubProfileUrl, LOGO_URL, ORG_DESCRIPTION, ORG_NAME, SAME_AS, SITE_URL } from "./site";
+import { makerLanding } from "./landing";
+import { APP_URL, MAKER_PATH, FOUNDER_NAME, FOUNDER_SAME_AS, githubProfileUrl, LOGO_URL, ORG_DESCRIPTION, ORG_NAME, SAME_AS, SITE_URL } from "./site";
 
 // One JSON-LD graph per page: each entity is declared once under a stable @id, so publisher and organization resolve to
 // the same node rather than duplicating. @ids anchor on SITE_URL + "/", matching <link rel="canonical">; a page's own
@@ -13,8 +13,8 @@ const WEBSITE_ID = `${ORIGIN}#website`;
 const FOUNDER_ID = `${ORIGIN}#founder`;
 const LOGO_ID = `${ORIGIN}#logo`;
 const SOFTWARE_ID = `${ORIGIN}#software`;
-// The desk product's own node, anchored on its own page: two products, two applications, one organisation.
-const DESK_SOFTWARE_ID = `${ORIGIN}desk/#software`;
+// The maker product's own node, anchored on its own page: two products, two applications, one organisation.
+const MAKER_SOFTWARE_ID = `${ORIGIN}maker/#software`;
 
 const orgRef = { "@id": ORG_ID } as const;
 const founderRef = { "@id": FOUNDER_ID } as const;
@@ -205,7 +205,7 @@ export function buildSoftwareAppSchema() {
             "Bring your own agent: Claude Code, Codex, Grok, Kimi Code, or Google",
             "Environment overlays: the job's dev-tools really installed",
             "Capabilities: repos, databases, and services wired in as credentials the agent operates",
-            "Extensions: automations, Discord and Slack, a website Front Desk, memory, pipelines",
+            "Extensions: automations, Discord and Slack, a website Visitor chat, memory, pipelines",
         ],
         author: founderRef,
         publisher: orgRef,
@@ -213,27 +213,27 @@ export function buildSoftwareAppSchema() {
     };
 }
 
-// intentic desk as search should file it: the same maker, the same price, a different application — for documents,
+// intentic maker as search should file it: the same maker, the same price, a different application — for documents,
 // on Windows and Linux — with its own address, so it is never read as a copy of the developer product's page.
-export function buildDeskAppSchema() {
+export function buildMakerAppSchema() {
     return {
         "@type": "SoftwareApplication",
-        "@id": DESK_SOFTWARE_ID,
-        name: `${ORG_NAME} desk`,
-        url: `${SITE_URL}${DESK_PATH}`,
+        "@id": MAKER_SOFTWARE_ID,
+        name: `${ORG_NAME} maker`,
+        url: `${SITE_URL}${MAKER_PATH}`,
         downloadUrl: `${SITE_URL}/download/`,
-        description: deskLanding.meta.description,
+        description: makerLanding.meta.description,
         applicationCategory: "BusinessApplication",
         operatingSystem: "Windows, Linux",
         offers: {
             "@type": "Offer",
-            url: `${SITE_URL}${DESK_PATH}`,
+            url: `${SITE_URL}${MAKER_PATH}`,
             price: "0",
             priceCurrency: "USD",
             availability: "https://schema.org/InStock",
             description: "Free and MIT open source. Runs on the AI plan you already have.",
         },
-        // Ordered like the desk page argues: one assistant, your documents, your say, saved versions, on your machine.
+        // Ordered like the maker page argues: one assistant, your documents, your say, saved versions, on your machine.
         featureList: [
             "One assistant for your documents, on your own computer",
             "A plan first, and nothing changes until you say yes",

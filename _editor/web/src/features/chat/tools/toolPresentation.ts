@@ -1,5 +1,5 @@
 import type { IconName } from "@intentic/ui";
-import { type CardDocument, documentOf, type ToolCallContent, type TranscriptTool } from "@intentic/sandbox-contract";
+import { type RequestDocument, documentOf, type ToolCallContent, type TranscriptTool } from "@intentic/sandbox-contract";
 import { codeLangForPath } from "@intentic/code-read";
 import { plural } from "@intentic/base/format";
 import { diffStat } from "./chatToolDiff";
@@ -26,7 +26,7 @@ export interface ToolFileEntry {
 export interface ToolPresentation {
     readonly icon: IconName;
     // Document this call wrote, drawn as prose; a whole-file write's diff lives only here, not in `diffs`.
-    readonly document: CardDocument | undefined;
+    readonly document: RequestDocument | undefined;
     // Structured diffs to render above the body (Edit/Write and any ACP agent that sends them ready-made).
     readonly diffs: readonly Extract<ToolCallContent, { type: "diff" }>[];
     // Images the call produced, as workspace paths the card fetches.

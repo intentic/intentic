@@ -1,7 +1,7 @@
 import { createHmac, randomBytes, timingSafeEqual, createHash } from "node:crypto";
 import type { PowChallenge, WebchatConfig, WebchatMessage } from "@intentic/sandbox-contract";
 
-// The bot ceiling for an anonymous endpoint (two flavours), shared by the Front Desk widget and the bug intake: both
+// The bot ceiling for an anonymous endpoint (two flavours), shared by the Visitor chat widget and the bug intake: both
 // face a browser with no credential.
 // A ceiling, not a wall: neither stops a determined human, the automation's tool allowlist and budget caps bound the
 // damage if one gets through.

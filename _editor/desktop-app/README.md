@@ -599,11 +599,11 @@ all. Seven things changed, and each is the smallest fix for what was actually ob
   to press. It offers **Get a fresh code** now: inside this app the setup page mints one and hands it straight
   back here.
 - **The card is drawn in the workspace's light.** `index.html` pinned `data-mode="dark"`, so a reader who
-  chose the light look (the `desk` profile, intentic.dev/desk) got a dark card in the middle of a light
+  chose the light look (the `maker` profile, intentic.dev/maker) got a dark card in the middle of a light
   workspace. The page announces its scheme to the app (`intentic://window?do=mode`, on load and on change),
   the app remembers it (`ui-mode.json`) and hands it to its own faces before they paint
   (`face_init_script`); a face that has heard nothing follows the OS. The sign-in handoff carries the
-  browser's profile the same way (`intentic://auth?…&profile=desk` → `/desktop-auth/complete?…&profile=desk`),
+  browser's profile the same way (`intentic://auth?…&profile=maker` → `/desktop-auth/complete?…&profile=maker`),
   so the workspace this app opens is in the look the reader arrived from rather than the app's default.
 - **The Windows installer itself is unchanged** — it is stock NSIS and cannot be built or looked at from this
   workspace (see *What the installer looks like* above). It is the one screen of this walk still wearing a

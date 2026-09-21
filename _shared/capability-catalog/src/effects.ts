@@ -33,7 +33,7 @@ export type CapabilityEffect =
     | { readonly kind: "trusted-code" }
     // Chromium profile at .intentic/local/browser/<id>, one per account; `platform` names what it's a profile of.
     | { readonly kind: "profile"; readonly platform: string }
-    // Hands on a user-owned device; `grants` are the scopes ticked on the card, enforced by its own agent.
+    // Hands on a user-owned device; `grants` are the scopes ticked on the tile, enforced by its own agent.
     | { readonly kind: "machine"; readonly platform: string; readonly grants: readonly string[] }
     // The person's own browser, reached through an extension in it; its own member since the grant is bounded to sites
     // they allow one at a time, not the whole machine.
@@ -53,7 +53,7 @@ export interface CapabilityEffectInput {
     readonly id?: string | undefined;
     // Live form values, or a CapabilitySummary's secret-stripped config echo (hasToken/hasSecret booleans).
     readonly config: Record<string, string | number | boolean | undefined>;
-    // The card's contribution, the source of truth for its secret/fragment declarations (cli/browser/host).
+    // The tile's contribution, the source of truth for its secret/fragment declarations (cli/browser/host).
     readonly contribution?: CapabilityContribution | undefined;
     // An installed extension's manifest, resolves its process/image contributions (unknowable before install).
     readonly manifest?: ExtensionManifest | undefined;
@@ -170,8 +170,8 @@ const KIND_EFFECTS: Record<CapabilityKind, (input: CapabilityEffectInput) => rea
     ],
     browser: (input) => {
         const effects: CapabilityEffect[] = [{ kind: "skill", name: input.id }, { kind: "image" }];
-        // Which site the stored session belongs to: a site card's `platform` slug IS the site, but a generic session's
-        // card is "website", so the typed address's host stands in instead, updating live while typed.
+        // Which site the stored session belongs to: a site tile's `platform` slug IS the site, but a generic session's
+        // tile is "website", so the typed address's host stands in instead, updating live while typed.
         const site = host(input.config["homeUrl"]) ?? host(input.config["loginUrl"]) ?? input.config["platform"];
         if (typeof site === "string" && site !== "") {
             effects.push({ kind: "profile", platform: site });

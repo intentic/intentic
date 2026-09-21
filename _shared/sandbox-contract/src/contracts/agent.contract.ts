@@ -1,6 +1,6 @@
 import { oc } from "@orpc/contract";
 import { streamOf } from "../protocol/routes.js";
-import { AgentCommandsQuerySchema, AgentCommandsSchema } from "../events/cards.js";
+import { AgentCommandsQuerySchema, AgentCommandsSchema } from "../events/requests.js";
 import { AttachFrameSchema } from "../events/agent-events.js";
 import { AgentTurnSchema, AttachTurnSchema, StartedTurnSchema } from "../schemas/agent.js";
 import { RewindResultSchema, RewindTurnSchema } from "../schemas/history.js";

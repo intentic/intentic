@@ -86,14 +86,14 @@ pub struct AuthArgs {
     pub handoff: String,
     pub state: String,
     /// The profile that browser was reading the app in (`@intentic/constants` profile.ts: `default`,
-    /// `desk`), carried so the workspace this app opens is in the same look the reader arrived from. The
+    /// `maker`), carried so the workspace this app opens is in the same look the reader arrived from. The
     /// page adopts it off its own query string; nothing here interprets it beyond checking it is a name.
     pub profile: Option<String>,
 }
 
 /// The profile names the page will adopt. Anything else is dropped rather than forwarded: the value lands
 /// on a URL this app navigates to, and a name is the only thing it is allowed to be.
-const PROFILES: [&str; 2] = ["default", "desk"];
+const PROFILES: [&str; 2] = ["default", "maker"];
 
 /* Window links carry their action in the `do` query parameter. */
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -470,13 +470,13 @@ mod tests {
     /* THE LOOK THE READER ARRIVED IN rides the handoff — and only a name this app knows does. */
     #[test]
     fn an_auth_handoff_carries_a_known_profile_and_drops_anything_else() {
-        let Some(Link::Auth(desk)) = parse_link(
-            "intentic://auth?handoff=tok&state=nonce&profile=desk",
+        let Some(Link::Auth(maker)) = parse_link(
+            "intentic://auth?handoff=tok&state=nonce&profile=maker",
             Source::External,
         ) else {
             panic!("expected an auth link");
         };
-        assert_eq!(desk.profile.as_deref(), Some("desk"));
+        assert_eq!(maker.profile.as_deref(), Some("maker"));
         let Some(Link::Auth(odd)) = parse_link(
             "intentic://auth?handoff=tok&state=nonce&profile=..%2Fevil",
             Source::External,

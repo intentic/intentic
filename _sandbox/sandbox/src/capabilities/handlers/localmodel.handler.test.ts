@@ -71,7 +71,7 @@ test("the echo carries every field", () => {
     });
 });
 
-// The one hard refusal: a card that can't name which bytes to fetch must not be stored gesturing at a download nothing
+// The one hard refusal: a entry that can't name which bytes to fetch must not be stored gesturing at a download nothing
 // can perform. Everywhere else (missing binary, pending rebuild) is soft and stores.
 test("apply refuses a custom model with no URL before anything is stored", async () => {
     const generator = registry.localmodel.apply({} as never, "m", { model: "custom", gpu: "off" });

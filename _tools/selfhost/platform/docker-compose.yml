@@ -128,7 +128,7 @@ services:
             # 0 = never sleep, which bills around the clock; the default stops an unused machine after 20 quiet
             # minutes and the platform wakes it on the next visit.
             HOSTED_IDLE_STOP_MINUTES: ${HOSTED_IDLE_STOP_MINUTES:-}
-            # The free lane's ceiling (awake hours per calendar month for a non-member) and its expiry (days
+            # The free plan's ceiling (awake hours per calendar month for a non-member) and its expiry (days
             # since last wake before the disk is collected, with one warning email first). Either at 0 disables.
             HOSTED_MONTHLY_HOURS: ${HOSTED_MONTHLY_HOURS:-}
             # How far past the ceiling a running free machine gets before the hourly meter tick stops it (the
@@ -157,7 +157,7 @@ services:
             HOSTED_BUILDS_PER_DAY: ${HOSTED_BUILDS_PER_DAY:-}
             HOSTED_BUILD_CONCURRENCY: ${HOSTED_BUILD_CONCURRENCY:-}
             HOSTED_BUILD_MINUTES_PER_DAY: ${HOSTED_BUILD_MINUTES_PER_DAY:-}
-            # The free lane's abuse defences (docs/design/hosted-abuse.md). The newcomer ramp: a smaller ceiling
+            # The free plan's abuse defences (docs/design/hosted-abuse.md). The newcomer ramp: a smaller ceiling
             # for an account's first days. The same-source caps: distinct accounts handed a machine per day from
             # one address and one email domain. The abuse watch: a machine at full load for a whole window, by
             # the provider's own meter, is stopped; the strike after the line suspends the account's hosted lane.

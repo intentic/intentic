@@ -1681,14 +1681,14 @@ describe(`Conversation`, () => {
     // ended. "Not now" leaves the turn running; both travel the same /agent/reply channel.
     it(`parks the turn on a capability card; Connect moves it to connecting and the outcome patches on`, async () => {
         const conversation = new Conversation(`c1`);
-        const offer = { card: `notion`, name: `Notion`, why: `I'll create a page there for each research writeup` };
+        const offer = { entry: `notion`, name: `Notion`, why: `I'll create a page there for each research writeup` };
         sandboxRequestMock.mockImplementation(sseResponse([{ kind: `capability_offer`, requestId: `k1`, offer }], { stayOpen: true }));
 
         const turn = conversation.send(`write it up in notion`, settings);
         await vi.waitFor(() => expect(conversation.awaitingDecision.value).toBe(true));
 
         const card = (): ChatMessage => conversation.messages.value.find((message) => message.capabilityOffer !== undefined)!;
-        expect(card().capabilityOffer).toMatchObject({ requestId: `k1`, status: `pending`, offer: { card: `notion`, name: `Notion` } });
+        expect(card().capabilityOffer).toMatchObject({ requestId: `k1`, status: `pending`, offer: { entry: `notion`, name: `Notion` } });
 
         await conversation.decideCapabilityOffer(card(), true);
         expect(sandboxRequestMock).toHaveBeenLastCalledWith(`/agent/reply`, expect.objectContaining({ method: `POST` }));
@@ -1702,7 +1702,7 @@ describe(`Conversation`, () => {
 
     it(`"Not now" on a capability card connects nothing and leaves the turn running`, async () => {
         const conversation = new Conversation(`c1`);
-        const offer = { card: `notion`, name: `Notion` };
+        const offer = { entry: `notion`, name: `Notion` };
         sandboxRequestMock.mockImplementation(sseResponse([{ kind: `capability_offer`, requestId: `k1`, offer }], { stayOpen: true }));
 
         const turn = conversation.send(`write it up in notion`, settings);
@@ -1719,7 +1719,7 @@ describe(`Conversation`, () => {
 
     it(`a replayed capability card freezes from the resolved frame and wears its outcome`, async () => {
         const conversation = new Conversation(`c1`);
-        const offer = { card: `notion`, name: `Notion` };
+        const offer = { entry: `notion`, name: `Notion` };
         sandboxRequestMock.mockImplementation(
             sseResponse([
                 { kind: `capability_offer`, requestId: `k1`, offer },
@@ -2819,7 +2819,7 @@ describe(`Conversation`, () => {
         expect(conversation.messages.value.map((message) => message.id)).toEqual(ids);
     });
 
-    // The daemon settles a card's status on the row itself (card-status.ts), live and in the record alike, so a
+    // The daemon settles a card's status on the row itself (request-status.ts), live and in the record alike, so a
     // restored card reads identically to a live one.
     it(`restores the cards a record kept, frozen with the decisions that settled them`, () => {
         const conversation = new Conversation(`c1`);

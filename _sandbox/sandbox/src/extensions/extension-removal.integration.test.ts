@@ -101,7 +101,7 @@ test("the removal plan names the connections, credentials and stranded automatio
     expect(plan.blocked).toBeUndefined();
     // The connection configured from this extension's own card, and only that one.
     expect(plan.connections).toEqual([
-        { id: "acme", kind: "cli", card: "Acme CLI", secrets: ["token"], effect: expect.stringContaining("skill file") },
+        { id: "acme", kind: "cli", entry: "Acme CLI", secrets: ["token"], effect: expect.stringContaining("skill file") },
     ]);
     // Both halves of what the owner typed: the open setting and the vaulted one, the latter flagged as a credential.
     expect(plan.settings.toSorted((a, b) => a.key.localeCompare(b.key))).toEqual([
@@ -142,7 +142,7 @@ test("a switched-off extension still names exactly which of a connection's field
     await client.extensions.setEnabled({ id: "acme.toolbox", enabled: false });
 
     const plan = await client.extensions.removalPlan({ id: "acme.toolbox" });
-    expect(plan.connections).toEqual([{ id: "acme", kind: "cli", card: "Acme CLI", secrets: ["token"], effect: expect.any(String) }]);
+    expect(plan.connections).toEqual([{ id: "acme", kind: "cli", entry: "Acme CLI", secrets: ["token"], effect: expect.any(String) }]);
 });
 
 test("removing a git-installed extension drops its capability entry and its checkout", async () => {

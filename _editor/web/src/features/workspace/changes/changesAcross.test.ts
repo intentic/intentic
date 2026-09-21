@@ -30,14 +30,14 @@ const box = (repos: RepoChanges[]) => ({
 
 beforeEach(() => {
     sandboxes.value = [
-        { id: `sbx-here`, name: `Desk`, lastSeenAt: `2026-01-01T00:00:00Z` },
+        { id: `sbx-here`, name: `Home`, lastSeenAt: `2026-01-01T00:00:00Z` },
         { id: `sbx-laptop`, name: `Laptop`, lastSeenAt: `2026-01-01T00:00:00Z` },
     ];
 });
 
 describe("whether the ledger draws at all", () => {
     it("has nowhere to look on an account with one sandbox", () => {
-        sandboxes.value = [{ id: `sbx-here`, name: `Desk`, lastSeenAt: `2026-01-01T00:00:00Z` }];
+        sandboxes.value = [{ id: `sbx-here`, name: `Home`, lastSeenAt: `2026-01-01T00:00:00Z` }];
         expect(hasOtherSandboxes.value).toBe(false);
     });
 
@@ -48,7 +48,7 @@ describe("whether the ledger draws at all", () => {
     // lastSeenAt: null means the sandbox never announced an address; nothing to ask yet.
     it("does not count an unfinished setup", () => {
         sandboxes.value = [
-            { id: `sbx-here`, name: `Desk`, lastSeenAt: `2026-01-01T00:00:00Z` },
+            { id: `sbx-here`, name: `Home`, lastSeenAt: `2026-01-01T00:00:00Z` },
             { id: `sbx-half`, name: `Half`, lastSeenAt: null },
         ];
         expect(hasOtherSandboxes.value).toBe(false);

@@ -103,7 +103,7 @@
 /* THE TINT — one warm source, stirred into all five surface steps. */
     --paper-tint: var(--color-brand-300);
 
-/* The desk, the floating thing, and the plate. */
+/* The home, the floating thing, and the plate. */
     --role-canvas:      color-mix(in oklab, var(--color-surface-100) 94%, var(--paper-tint));
     --role-card:        color-mix(in oklab, var(--color-surface-0) 97%, var(--paper-tint));
 /* OVERLAY SITS BETWEEN THE OTHER TWO, WHICH IS NOT THE ORDER THE DARK SCHEME USES, and the reason is that this token has two jobs. */

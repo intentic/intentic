@@ -2,7 +2,7 @@
 import type { ViewBadge } from "@intentic/extension-api";
 import type { NavGroup } from "@intentic/ui";
 import { computed } from "vue";
-import { DESK_SECTION, sandboxBuiltInSlugs, SANDBOX_DEFAULT_SECTION, sandboxSectionGroups } from "./sandboxNav";
+import { GUEST_SECTION, sandboxBuiltInSlugs, SANDBOX_DEFAULT_SECTION, sandboxSectionGroups } from "./sandboxNav";
 import { useCapabilities } from "../capabilities/connect/useCapabilities";
 import { useExtensions } from "../extensions/useExtensions";
 import { usePanels } from "../extensions/usePanels";
@@ -53,9 +53,9 @@ const sectionBadge = (slug: string, updates: number, heldPorts: number, running:
 
 const sandbox = useSandbox();
 // Operating surfaces need the top revokable grant too; the daemon enforces it, this just keeps the index honest.
-const { canShip, isDesk } = useRole();
-// A desk's hub is one section, so it opens on it rather than on an overview the daemon would refuse.
-const defaultSlug = computed(() => (isDesk.value ? DESK_SECTION : DEFAULT));
+const { canShip, isGuest } = useRole();
+// A guest's hub is one section, so it opens on it rather than on an overview the daemon would refuse.
+const defaultSlug = computed(() => (isGuest.value ? GUEST_SECTION : DEFAULT));
 // The one count in this index anyone looks for; rides the /system/sync poll the sandbox chip already does, free.
 const { heldPorts } = useSyncHealth();
 const { allPanels: panels, isLoading } = usePanels();
@@ -99,7 +99,7 @@ const groups = computed<readonly NavGroup<HubTab>[]>(() => [
             key: group.key,
             label: group.label,
             items: group.items
-                .filter((section) => (isDesk.value ? section.slug === DESK_SECTION : canShip.value || section.maintainer !== true))
+                .filter((section) => (isGuest.value ? section.slug === GUEST_SECTION : canShip.value || section.maintainer !== true))
                 .map((section) => ({
                     ...section,
                     badge: sectionBadge(section.slug, updatable.value, heldPorts.value.length, runningIn(section.slug)),
@@ -117,7 +117,7 @@ const groups = computed<readonly NavGroup<HubTab>[]>(() => [
         :title="sandbox.active.value?.name ?? t(`sandbox.sandboxHub.sandbox`)"
         :route-name="HUB"
         :default-slug="defaultSlug"
-        :addressable="isDesk"
+        :addressable="isGuest"
         :groups="groups"
         :ready="!isLoading"
     >

@@ -231,7 +231,7 @@ import { type RuleFiringsStore, fileRuleFiringsStore } from "./rules/rule-firing
 import { type DriftSweep, createDriftSweep } from "./environment/drift-sweep.js";
 import { type RuntimeInstallsStore, fileRuntimeInstallsStore } from "./environment/runtime-installs.js";
 import { agentSessionName } from "@intentic/sandbox-contract/session-names";
-import { liveCardRun } from "./agent/run/offer-card.js";
+import { liveRequestRun } from "./agent/run/offer-request.js";
 import { onTurnSettled, turnRunOf } from "./agent/run/turn/turn-runs.js";
 import { turnActive } from "./agent/anchors/agent-steering.js";
 import { clearTurnTaint } from "./guard/turn-taint.js";
@@ -429,7 +429,7 @@ export interface Services extends ClaudeSlice, CodexSlice, CursorSlice, GrokSlic
     readonly threadSessions: ThreadSessionsStore;
     // Who has written to each listener source, admitted or not; what the sender rules picker offers by name.
     readonly senders: SendersStore;
-    // Front Desk replies written after the visitor's stream closed (an approved wake, a human writing as the agent);
+    // Visitor chat replies written after the visitor's stream closed (an approved wake, a human writing as the agent);
     // the widget's poll drains them on the next page load.
     readonly webchatOutbox: WebchatOutbox;
     // Where a wake with no live visitor writes its answer. Composed here so the scheduler can attach the queue without
@@ -1148,7 +1148,7 @@ export const createServices = (config: Config, logger: Logger): Services => {
         credentialGate: createCredentialGate({
             gates: credentialGates,
             grants: credentialGrants,
-            liveRun: liveCardRun,
+            liveRun: liveRequestRun,
             observe: agents.observe,
             notify: (conversationId) => void pushSender.notifyIfAway(turnAwaiting(conversationId, "credential_offer")),
         }),

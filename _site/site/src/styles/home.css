@@ -61,8 +61,8 @@
     display: block;
     white-space: nowrap;
 }
-/* The hero beats alone — Spectral 200 on dark, the global `.display` pin on desk. */
-html:not([data-variant="desk"]) .home .headline .display {
+/* The hero beats alone — Spectral 200 on dark, the global `.display` pin on maker. */
+html:not([data-variant="maker"]) .home .headline .display {
     font-weight: 200;
 }
 /* A little more air between the three beats than the line-height alone gives. */

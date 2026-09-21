@@ -31,7 +31,7 @@ describe(`uniformRows`, () => {
 });
 
 describe(`variableRows`, () => {
-    // A desk-shaped list: a label, two tile rows, a label, one tile row.
+    // A guest-shaped list: a label, two tile rows, a label, one tile row.
     const rows = variableRows([30, 100, 100, 30, 100]);
 
     it(`sums the heights it was given`, () => {

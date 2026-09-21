@@ -3,10 +3,10 @@ import type { Persona, PersonaRoute, PersonaRouteAsk } from "@intentic/sandbox-c
 import type { RoleAnswer } from "../models/role-answer.js";
 import { askRoleModel } from "../models/role-model.js";
 import type { Services } from "../../composition.js";
-import { reachableCards } from "../../personas/persona-reach.js";
+import { reachablePersonas } from "../../personas/persona-reach.js";
 import { BULLET, FENCE, modelPinKey } from "@intentic/sandbox-contract";
 
-// Routes a new chat to one persona card by classification (pick one of N), not composition; `none` is a real, safe
+// Routes a new chat to one persona persona by classification (pick one of N), not composition; `none` is a real, safe
 // default, never a failure. Attended chats only — an unattended wake must not gain a persona's accounts from a model's
 // guess. A folder match is tried before asking any model.
 
@@ -22,18 +22,18 @@ const excerpt = (text: string): string => {
     return clean.length <= MESSAGE_MAX_CHARS ? clean : `${clean.slice(0, MESSAGE_MAX_CHARS)}\n… (truncated)`;
 };
 
-// One line per card: its own brief, then what it carries, where it starts, and which sites it speaks through — words a
+// One line per persona: its own brief, then what it carries, where it starts, and which sites it speaks through — words a
 // message could echo. Account ids are excluded; only their sites are (`reddit`, not `reddit-work`).
-export const candidateLine = (card: Persona, siteOf: (capability: string) => string | undefined): string => {
+export const candidateLine = (persona: Persona, siteOf: (capability: string) => string | undefined): string => {
     const facts = [
-        ...(card.brief === undefined ? [] : [card.brief.trim().replace(/\.$/u, "")]),
-        ...(card.context === undefined
+        ...(persona.brief === undefined ? [] : [persona.brief.trim().replace(/\.$/u, "")]),
+        ...(persona.context === undefined
             ? []
-            : [`Carries: ${card.context.repos.length === 0 ? "the workspace repository only" : card.context.repos.join(", ")}`]),
-        ...(card.workspace?.startIn === undefined ? [] : [`Starts in: ${card.workspace.startIn}`]),
-        ...(card.capabilities.length === 0 ? [] : [`Speaks through: ${[...new Set(card.capabilities.map((id) => siteOf(id) ?? id))].join(", ")}`]),
+            : [`Carries: ${persona.context.repos.length === 0 ? "the workspace repository only" : persona.context.repos.join(", ")}`]),
+        ...(persona.workspace?.startIn === undefined ? [] : [`Starts in: ${persona.workspace.startIn}`]),
+        ...(persona.capabilities.length === 0 ? [] : [`Speaks through: ${[...new Set(persona.capabilities.map((id) => siteOf(id) ?? id))].join(", ")}`]),
     ];
-    const name = card.label === undefined || card.label === card.id ? card.id : `${card.id} (${card.label})`;
+    const name = persona.label === undefined || persona.label === persona.id ? persona.id : `${persona.id} (${persona.label})`;
     return `- ${name}${facts.length === 0 ? "" : `: ${facts.join(". ")}.`}`;
 };
 
@@ -65,7 +65,7 @@ export const routerPrompt = (ask: PersonaRouteAsk, lines: readonly string[]): st
 const LABEL = /^(?:persona|id|answer)\s*:\s*/iu;
 
 export interface RouteVerdict {
-    // Card named, or undefined when the reply was `none`.
+    // Persona named, or undefined when the reply was `none`.
     readonly persona: string | undefined;
     // Reply's literal answer, for the refusal sentence when it named nothing on the list.
     readonly token: string;
@@ -112,46 +112,46 @@ const siteLookup = (
     return (id) => sites.get(id);
 };
 
-// Cards whose folder the chat was opened in: those that start there or carry it as a repository.
-const homedIn = (cards: readonly Persona[], folder: string): Persona[] =>
-    cards.filter((card) => card.workspace?.startIn === folder || card.context?.repos.includes(folder) === true);
+// Personas whose folder the chat was opened in: those that start there or carry it as a repository.
+const homedIn = (personas: readonly Persona[], folder: string): Persona[] =>
+    personas.filter((persona) => persona.workspace?.startIn === folder || persona.context?.repos.includes(folder) === true);
 
-const nameOf = (card: Persona): string => card.label ?? card.id;
+const nameOf = (persona: Persona): string => persona.label ?? persona.id;
 
-// `held` is the asker's areas, undefined for an unfenced one: the router picks only from cards that person may
-// actually wear, since routing onto one they cannot use would open the chat on a card every message is refused by.
+// `held` is the asker's areas, undefined for an unfenced one: the router picks only from personas that person may
+// actually wear, since routing onto one they cannot use would open the chat on a persona every message is refused by.
 export const routePersona = async (
     services: Services,
     ask: PersonaRouteAsk,
     held: readonly string[] | undefined,
     signal?: AbortSignal,
 ): Promise<PersonaRoute> => {
-    const cards = await reachableCards(services, held);
-    if (cards.length === 0) {
+    const personas = await reachablePersonas(services, held);
+    if (personas.length === 0) {
         return { reason: `No personas to route onto.` };
     }
     if (ask.folder !== undefined) {
-        const homed = homedIn(cards, ask.folder);
+        const homed = homedIn(personas, ask.folder);
         if (homed.length === 1 && homed[0] !== undefined) {
             return { persona: homed[0].id, reason: `Opened in ${ask.folder}, which ${nameOf(homed[0])} works in.` };
         }
     }
     const siteOf = siteLookup(await services.capabilities.list());
-    const lines = cards.map((card) => candidateLine(card, siteOf));
+    const lines = personas.map((persona) => candidateLine(persona, siteOf));
     const deadline = AbortSignal.any([...(signal === undefined ? [] : [signal]), AbortSignal.timeout(ROUTE_DEADLINE_MS)]);
     try {
         const answer = await askRoleModel(
             services,
             "persona-router",
-            { prompt: routerPrompt(ask, lines), answer: routeAnswer(new Set(cards.map((card) => card.id))) },
+            { prompt: routerPrompt(ask, lines), answer: routeAnswer(new Set(personas.map((persona) => persona.id))) },
             deadline,
         );
-        // Named whether or not a card was: the reading was paid for either way, and the chat says so.
+        // Named whether or not a persona was: the reading was paid for either way, and the chat says so.
         const model = modelPinKey(answer.choice);
-        const card = cards.find((entry) => entry.id === answer.value.persona);
-        return card === undefined
+        const persona = personas.find((entry) => entry.id === answer.value.persona);
+        return persona === undefined
             ? { reason: `No persona fits this message.`, model }
-            : { persona: card.id, reason: `The message reads like ${nameOf(card)}'s work.`, model };
+            : { persona: persona.id, reason: `The message reads like ${nameOf(persona)}'s work.`, model };
     } catch (error: unknown) {
         // A spent chain, no account, or the deadline: the chat opens unrouted, with a reason the chip can show.
         services.logger.warn({ err: error }, "persona router: no answer, the chat stays open");

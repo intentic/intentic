@@ -62,7 +62,7 @@ ALTER TABLE "hosted_migration" ADD CONSTRAINT "hosted_migration_hostedMachineId_
 
 -- The hour meter gains a machine, and keeps its account. The CEILING becomes the machine's rung's, so the row is
 -- keyed by sandbox; the account's month still has to survive the sandbox that spent it, or releasing a machine and
--- asking for another would reset the free lane. On the day this runs an account holds one hosted machine, so this
+-- asking for another would reset the free plan. On the day this runs an account holds one hosted machine, so this
 -- month's minutes attach to it and an account with none keeps its row with a null sandbox, which is the same shape
 -- a later release leaves behind.
 ALTER TABLE "hosted_usage" RENAME COLUMN "userId" TO "ownerId";

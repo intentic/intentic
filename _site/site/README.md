@@ -65,16 +65,16 @@ The public website at intentic.dev: an Astro build, all copy imported rather tha
   parser for the "What's new" section `_tools/scripts/release/publish-github.sh` writes into each release body.
 - [src/lib/desktop-downloads.ts](src/lib/desktop-downloads.ts): the desktop builds, named once, so the download
   page and the landing page's download button can never point at different files.
-- [src/lib/variant.ts](src/lib/variant.ts): the site's two skins, dark and `desk`, decided in the browser before
+- [src/lib/variant.ts](src/lib/variant.ts): the site's two skins, dark and `maker`, decided in the browser before
   first paint and carried into the app on every link and on a domain cookie. The skin is the LOOK of the shared
-  pages for a reader who came in through intentic desk; it never switches words. The two products each have a page
-  of their own: `/` ([src/components/Landing.astro](src/components/Landing.astro)) and `/desk/`
-  ([src/components/DeskLanding.astro](src/components/DeskLanding.astro)), sharing the shell and nothing search
-  would read twice. `docs/design/desk-edition.md` has the whole of it.
+  pages for a reader who came in through intentic maker; it never switches words. The two products each have a page
+  of their own: `/` ([src/components/Landing.astro](src/components/Landing.astro)) and `/maker/`
+  ([src/components/MakerLanding.astro](src/components/MakerLanding.astro)), sharing the shell and nothing search
+  would read twice. `docs/design/maker-edition.md` has the whole of it.
 - [src/components/DownloadCta.astro](src/components/DownloadCta.astro): the download button, which names the
   reader's own platform. It renders the general case and narrows it in the browser; see the file for why that
   order matters.
-- [src/components/FrontDesk.astro](src/components/FrontDesk.astro): our own Front Desk, the chat bubble in the
+- [src/components/VisitorChat.astro](src/components/VisitorChat.astro): our own Visitor chat, the chat bubble in the
   corner of every page. The same one-line snippet the docs hand a customer, pointed at whichever sandbox
   answers for us.
 - [astro.config.mjs](astro.config.mjs): where the build-time integrations are wired in.
@@ -108,10 +108,10 @@ This package is layout and routing; a wording change should not need to touch it
   matched by what they are (`a.btn` pointing at the app, `a[data-download-cta]`) rather than by a `data-`
   attribute somebody has to remember to add. A failed fetch or a malformed document leaves the page untouched.
   Nothing is ever injected as HTML — see `withLiveContent` in [worker.ts](worker.ts).
-- **The Front Desk is two environment variables, not a code change.** `PUBLIC_FRONT_DESK_ORIGIN` (the
-  sandbox's own public HTTPS origin, no trailing slash) and `PUBLIC_FRONT_DESK_AUTOMATION` (the automation id)
+- **The Visitor chat is two environment variables, not a code change.** `PUBLIC_VISITOR_CHAT_ORIGIN` (the
+  sandbox's own public HTTPS origin, no trailing slash) and `PUBLIC_VISITOR_CHAT_AUTOMATION` (the automation id)
   are read at build time on the Cloudflare project; with either unset the tag is not emitted, which is why a
-  dev server and a preview build carry no bubble. Moving the desk to a different sandbox is a variable and a
+  dev server and a preview build carry no bubble. Moving the maker to a different sandbox is a variable and a
   redeploy. Two things the sandbox side must be true for: the origin has to be **https**, because the widget's
   proof-of-work check needs `crypto.subtle` and a plain-http page has none; and `https://intentic.dev` has to
   be on that automation's allowed-origins list, or every call is refused. While the sandbox is off the script

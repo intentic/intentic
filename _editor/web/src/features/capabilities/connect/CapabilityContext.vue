@@ -1,4 +1,4 @@
-<!-- Reference column beside a capability's form: the credential guide, what applying it does to the sandbox, and the card's own note. -->
+<!-- Reference column beside a capability's form: the credential guide, what applying it does to the sandbox, and the tile's own note. -->
 <script setup lang="ts">
 import type { CapabilityCatalogEntry, CapabilityEffect } from "@intentic/capability-catalog";
 import CapabilityEffects from "./CapabilityEffects.vue";

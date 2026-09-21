@@ -10,11 +10,11 @@ const DEMO_DIR = join(repoRoot(import.meta.url), "_site/site/public/demo");
 // The site ships two skins, so it needs two sets of these. `--light` drives the app in its light scheme and writes
 // the twin set; the site pairs them by filename (see _site/site/src/lib/shots.ts).
 //
-// `--desk` is a third run over the light set: the desk recording (_site/demo/src/fixture/desk.ts, documents rather
-// than code, read as a maker) shot for the desk edition of the landing page. Those shots have no dark twin — the desk
-// edition is only ever light — so they frame themselves, and are named `desk-*` in the same directory.
-const DESK = process.argv.includes("--desk");
-const LIGHT = process.argv.includes("--light") || DESK;
+// `--maker` is a third run over the light set: the maker recording (_site/demo/src/fixture/maker.ts, documents rather
+// than code, read as a maker) shot for the maker edition of the landing page. Those shots have no dark twin — the maker
+// edition is only ever light — so they frame themselves, and are named `maker-*` in the same directory.
+const MAKER = process.argv.includes("--maker");
+const LIGHT = process.argv.includes("--light") || MAKER;
 const OUT_DIR = join(repoRoot(import.meta.url), `_site/site/src/assets/${LIGHT ? "product-light" : "product"}`);
 const PORT = 47_147;
 const ORIGIN = `http://localhost:${PORT}`;
@@ -49,9 +49,9 @@ const COMPOSER = 'textarea[name="draft"]';
 /* Match the platform-independent start of the chat popout label. */
 const POPOUT_BUTTON = 'button[aria-label^="Move chat into new window"]';
 
-// The desk recording's two special conversations (_site/demo/src/fixture/desk.ts): the scripted run, and the finished draft.
-const DESK_FEATURED = "cnv_desk_newsletter";
-const DESK_REVIEW = "cnv_desk_september";
+// The maker recording's two special conversations (_site/demo/src/fixture/maker.ts): the scripted run, and the finished draft.
+const MAKER_FEATURED = "cnv_maker_newsletter";
+const MAKER_REVIEW = "cnv_maker_september";
 
 /* Keep popped-out chat readable within the landing frame. */
 const POPOUT_WINDOW = { width: 800, height: 660 } as const;
@@ -78,8 +78,8 @@ interface Shot {
     clip?: "area" | "chat";
     /* Stop trimming at this content-specific editorial floor. */
     stopAt?: number;
-    /* Select the demo fixture density used for this shot; `desk` is the documents recording rather than a density. */
-    mode?: "minimal" | "default" | "full" | "desk";
+    /* Select the demo fixture density used for this shot; `maker` is the documents recording rather than a density. */
+    mode?: "minimal" | "default" | "full" | "maker";
     /**
      * Which extensions are switched on, overriding the density's own list.
      *
@@ -111,17 +111,17 @@ interface Shot {
 }
 
 const SHOTS: Shot[] = [
-    /* Capture the built Front Desk widget in a standalone visitor page. */
+    /* Capture the built Visitor chat widget in a standalone visitor page. */
     {
-        name: "front-desk",
-        path: "/front-desk/",
+        name: "visitor-chat",
+        path: "/visitor-chat/",
         raw: true,
         // Keeps the old window: this shot's subject is a CUSTOMER's website, and that page is a 54rem column.
         // Widening it for our app's sake would only add margin either side of someone else's design.
         viewport: { width: 1440, height: 900 },
-        waitFor: "intentic-front-desk",
-        click: ["intentic-front-desk .launcher"],
-        type: { target: "intentic-front-desk textarea", text: "Do these arms work outdoors?", settleMs: 2600 },
+        waitFor: "intentic-visitor-chat",
+        click: ["intentic-visitor-chat .launcher"],
+        type: { target: "intentic-visitor-chat textarea", text: "Do these arms work outdoors?", settleMs: 2600 },
         settleMs: 900,
     },
     // Run agents
@@ -361,82 +361,82 @@ const SHOTS: Shot[] = [
     },
 ];
 
-// THE DESK EDITION'S SHOTS: the same surfaces the landing page shows a developer, on the desk recording. Every one
-// runs in `desk` mode, whose own two extensions (the Projects home and the viewers) stay on: a maker's rail is those and
+// THE MAKER EDITION'S SHOTS: the same surfaces the landing page shows a developer, on the maker recording. Every one
+// runs in `maker` mode, whose own two extensions (the Projects home and the viewers) stay on: a maker's rail is those and
 // the core, and the shot should be of what they see.
-const DESK_SHOTS: Shot[] = [
+const MAKER_SHOTS: Shot[] = [
     // The board, as the hero's first frame: one assistant working on the newsletter, one waiting on a question about a
     // letter, one finished draft to read, one sorting job already accepted.
     {
-        name: "desk-hero-agents",
+        name: "maker-hero-agents",
         path: "/agents",
-        openFirst: `/agents/${DESK_FEATURED}`,
+        openFirst: `/agents/${MAKER_FEATURED}`,
         waitFor: "text=ATTENTION",
         settleMs: 1400,
         clip: "area",
         viewport: HERO_WINDOW,
         fullHeight: true,
-        mode: "desk",
+        mode: "maker",
     },
-    // The desk's files with the newsletter folder open: the drafts, the template, the list and the pictures. Exact
+    // The maker's files with the newsletter folder open: the drafts, the template, the list and the pictures. Exact
     // matches, since the open chat's title carries the word "newsletter" too and a substring match lands on it first.
     {
-        name: "desk-hero-files",
+        name: "maker-hero-files",
         path: "/workspace",
-        openFirst: `/agents/${DESK_FEATURED}`,
+        openFirst: `/agents/${MAKER_FEATURED}`,
         waitFor: 'text="newsletter"',
         click: ['text="newsletter"'],
         settleMs: 1400,
         clip: "area",
         viewport: HERO_WINDOW,
         fullHeight: true,
-        mode: "desk",
+        mode: "maker",
     },
     // The docked chat on the plan card, cropped to the chat: the hero's left wing.
     {
-        name: "desk-hero-plan",
+        name: "maker-hero-plan",
         path: "/workspace",
-        openFirst: `/agents/${DESK_FEATURED}`,
+        openFirst: `/agents/${MAKER_FEATURED}`,
         waitFor: "text=No, keep planning",
         settleMs: 3200,
         clip: "chat",
         dpr: DENSE_DPR,
         stopAt: 640,
-        mode: "desk",
+        mode: "maker",
     },
     // The chat in its own window, on the plan the assistant wrote for the newsletter, Approve under it. The plan card
     // lands three seconds into the run and the popped-out window starts its own copy of it, so it waits longer than
     // the code demo's twin.
     {
-        name: "desk-hero-chat",
-        path: `/agents/${DESK_FEATURED}`,
-        openFirst: `/agents/${DESK_FEATURED}`,
+        name: "maker-hero-chat",
+        path: `/agents/${MAKER_FEATURED}`,
+        openFirst: `/agents/${MAKER_FEATURED}`,
         waitFor: POPOUT_BUTTON,
         settleMs: 3200,
         popout: { ...POPOUT_WINDOW, settleMs: 4_500 },
         dpr: DENSE_DPR,
-        mode: "desk",
+        mode: "maker",
     },
     {
-        name: "desk-stage-run",
+        name: "maker-stage-run",
         path: "/agents",
-        openFirst: `/agents/${DESK_FEATURED}`,
+        openFirst: `/agents/${MAKER_FEATURED}`,
         waitFor: "text=ATTENTION",
         settleMs: 3200,
         viewport: SHOWCASE,
         dpr: SHOWCASE_DPR,
-        mode: "desk",
+        mode: "maker",
     },
     // A finished draft, read as what changed in the document: the September newsletter moved into the template.
     {
-        name: "desk-stage-review",
-        path: `/agents/${DESK_REVIEW}`,
-        openFirst: `/agents/${DESK_FEATURED}`,
+        name: "maker-stage-review",
+        path: `/agents/${MAKER_REVIEW}`,
+        openFirst: `/agents/${MAKER_FEATURED}`,
         waitFor: "text=september.md",
         settleMs: 3200,
         viewport: SHOWCASE,
         dpr: SHOWCASE_DPR,
-        mode: "desk",
+        mode: "maker",
     },
 ];
 
@@ -460,12 +460,12 @@ const TYPES: Record<string, string> = {
 /* Serve the built widget with stubbed daemon endpoints for the visitor-page shot. */
 const WIDGET_BUNDLE = join(repoRoot(import.meta.url), "_sandbox/webchat-widget/dist/widget.js");
 
-const FRONT_DESK_CONFIG = {
-    automationId: "front-desk",
+const VISITOR_CHAT_CONFIG = {
+    automationId: "visitor-chat",
     title: "Ask Northwind",
     greeting: "Hi! I'm the agent that builds this site. Ask me anything about the arms.",
     // Left as the daemon's own default (webchat-config.ts) rather than a colour picked for the shot: the
-    // marketing image must show what an unconfigured Front Desk actually looks like.
+    // marketing image must show what an unconfigured Visitor chat actually looks like.
     accent: "#e47100",
     position: "bottom-right",
     access: "public",
@@ -475,11 +475,11 @@ const FRONT_DESK_CONFIG = {
 
 // Written in the deliberate voice of the thing being sold: an answer with a real detail in it, not "Hello! How
 // may I assist you today?" — the sentence is doing the same job as the rest of the page's copy.
-const FRONT_DESK_REPLY =
+const VISITOR_CHAT_REPLY =
     "Yes — the RX-4 is rated IP66, so rain and dust are fine. Below -10°C you'll want the cold-weather grease kit, " +
     "which is a five-minute swap.\n\nWant me to open a ticket with our hardware team for your specific setup?";
 
-const FRONT_DESK_PAGE = `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Northwind Robotics</title>
+const VISITOR_CHAT_PAGE = `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Northwind Robotics</title>
 <style>
   :root{color-scheme:${LIGHT ? `light` : `dark`}}
   body{margin:0;background:${LIGHT ? `#fbfaf9` : `#0b0d10`};color:${LIGHT ? `#1b1d20` : `#e6e8eb`};font:16px/1.65 ui-serif,Georgia,serif}
@@ -503,19 +503,19 @@ const FRONT_DESK_PAGE = `<!doctype html><html lang="en"><head><meta charset="utf
   <div class="card"><h3>-30°C to 55°C</h3><p>Cold-store rated with the winter grease kit.</p></div>
   <div class="card"><h3>One controller</h3><p>Every arm in the range speaks the same protocol.</p></div>
 </div></main>
-<script src="/webchat/widget.js" data-automation="front-desk" defer></script>
+<script src="/webchat/widget.js" data-automation="visitor-chat" defer></script>
 </body></html>`;
 
 // The three widget routes, answered inline. Returns true when it handled the request.
-const serveFrontDesk = (path: string, response: import("node:http").ServerResponse): boolean => {
-    if (path === "/front-desk/") {
+const serveVisitorChat = (path: string, response: import("node:http").ServerResponse): boolean => {
+    if (path === "/visitor-chat/") {
         response.writeHead(200, { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" });
-        response.end(FRONT_DESK_PAGE);
+        response.end(VISITOR_CHAT_PAGE);
         return true;
     }
     if (path === "/webchat/widget.js") {
         if (!existsSync(WIDGET_BUNDLE)) {
-            throw new Error(`the Front Desk shot needs the widget built first: pnpm --filter @intentic/webchat-widget build`);
+            throw new Error(`the Visitor chat shot needs the widget built first: pnpm --filter @intentic/webchat-widget build`);
         }
         response.writeHead(200, { "content-type": "text/javascript; charset=utf-8", "cache-control": "no-store" });
         createReadStream(WIDGET_BUNDLE).pipe(response);
@@ -523,7 +523,7 @@ const serveFrontDesk = (path: string, response: import("node:http").ServerRespon
     }
     if (path.endsWith("/config")) {
         response.writeHead(200, { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" });
-        response.end(JSON.stringify(FRONT_DESK_CONFIG));
+        response.end(JSON.stringify(VISITOR_CHAT_CONFIG));
         return true;
     }
     if (path.endsWith("/message")) {
@@ -531,7 +531,7 @@ const serveFrontDesk = (path: string, response: import("node:http").ServerRespon
         // Streamed in pieces, like the real thing, so the shot can be taken mid- or post-stream either way.
         let at = 0;
         const tick = setInterval(() => {
-            const chunk = FRONT_DESK_REPLY.slice(at, at + 14);
+            const chunk = VISITOR_CHAT_REPLY.slice(at, at + 14);
             at += 14;
             if (chunk === "") {
                 clearInterval(tick);
@@ -554,7 +554,7 @@ const serveFrontDesk = (path: string, response: import("node:http").ServerRespon
 const serveDemo = (): Server => {
     const server = createServer((request, response) => {
         const path = new URL(request.url ?? "/", ORIGIN).pathname;
-        if ((path === "/front-desk/" || path.startsWith("/webchat/")) && serveFrontDesk(path, response)) {
+        if ((path === "/visitor-chat/" || path.startsWith("/webchat/")) && serveVisitorChat(path, response)) {
             return;
         }
         const routed = path.startsWith(`${BASE}/`) ? path.slice(BASE.length) : path;
@@ -823,11 +823,11 @@ const contextOptions = (shot: Shot): Parameters<Browser["newContext"]>[0] => ({
 });
 
 // A bare rail unless the shot asks otherwise. `full` is only ever chosen because the extensions ARE the subject — the
-// capability catalogue is built from them — and `desk` because its two are the maker's home and viewers; those keep the
+// capability catalogue is built from them — and `maker` because its two are the maker's home and viewers; those keep the
 // mode's own list. Everything else is a shot of some other surface, and the extension icons beside it are chrome the
 // reader has to look past.
 const pinnedExtensions = (shot: Shot): readonly string[] | undefined =>
-    shot.extensions ?? (shot.mode === "full" || shot.mode === "desk" ? undefined : []);
+    shot.extensions ?? (shot.mode === "full" || shot.mode === "maker" ? undefined : []);
 
 /** A browser context with everything the app reads before it boots already in place: look, audience, mode, rail. */
 const openContext = async (browser: Browser, shot: Shot): Promise<BrowserContext> => {
@@ -836,7 +836,7 @@ const openContext = async (browser: Browser, shot: Shot): Promise<BrowserContext
     //
     // `ui-skin` is the bigger of the two. Sanctum is the site's own carved design worn by the app, and it is DARK BY
     // CONSTRUCTION — its README says turning it on forces the dark scheme — so the light set is the app with no skin,
-    // which is exactly the light theme the desk pages are built from. The dark set keeps Sanctum, which is why those
+    // which is exactly the light theme the maker pages are built from. The dark set keeps Sanctum, which is why those
     // shots sit so well on the carved pages.
     //
     // Both are written before the app boots, and the app applies them itself: `definePreference` reads storage at
@@ -851,8 +851,8 @@ const openContext = async (browser: Browser, shot: Shot): Promise<BrowserContext
         },
         LIGHT ? { scheme: `light`, skin: `none` } : { scheme: `dark`, skin: `sanctum` },
     );
-    // The desk is read as a maker: the third key the desk profile seeds, and the one that changes the words on screen.
-    if (shot.mode === "desk") {
+    // The maker is read as a maker: the third key the maker profile seeds, and the one that changes the words on screen.
+    if (shot.mode === "maker") {
         await context.addInitScript(() => window.localStorage.setItem(`ui-audience`, `maker`));
     }
     // Before first paint, and in every window the context opens. `raw` shots get it too: the visitor page carries
@@ -930,13 +930,13 @@ const shoot = async (browser: Browser, shot: Shot): Promise<boolean> => {
 
 const run = async (): Promise<void> => {
     const only = process.argv.slice(2).filter((argument) => !argument.startsWith(`--`));
-    const catalogue = DESK ? DESK_SHOTS : SHOTS;
+    const catalogue = MAKER ? MAKER_SHOTS : SHOTS;
     const wanted = only.length === 0 ? catalogue : catalogue.filter((shot) => only.includes(shot.name));
     if (wanted.length === 0) {
         throw new Error(`No shot matches ${only.join(", ")} — known: ${catalogue.map((shot) => shot.name).join(", ")}`);
     }
     // Only the app shots need the demo build; a `raw` one brings its own world, so re-shooting just the
-    // Front Desk shouldn't cost a full SPA build.
+    // Visitor chat shouldn't cost a full SPA build.
     if (wanted.some((shot) => shot.raw !== true) && !existsSync(join(DEMO_DIR, "index.html"))) {
         throw new Error(`No demo build at ${DEMO_DIR} — run: pnpm --filter @intentic/demo build`);
     }
@@ -956,7 +956,7 @@ const run = async (): Promise<void> => {
         await browser.close();
         server.close();
     }
-    console.log(`${wanted.length - failed}/${wanted.length} ${DESK ? `desk` : LIGHT ? `light` : `dark`} shots written to ${OUT_DIR}`);
+    console.log(`${wanted.length - failed}/${wanted.length} ${MAKER ? `maker` : LIGHT ? `light` : `dark`} shots written to ${OUT_DIR}`);
 };
 
 await run();

@@ -64,7 +64,7 @@ export const privacyDoc: LegalDoc = {
                 "Sandbox records: sandbox names, their public addresses, and the connection tokens used to reach them. Tokens are stored encrypted.",
                 "Hosted machine records: for a sandbox we host, the machine and volume identifiers at our infrastructure provider and the region it runs in.",
                 "Teammate emails: addresses you enter when sharing a sandbox, stored so the invitee's account can find it. Invitations never accepted are deleted after 90 days.",
-                "Hosted plan records: your subscription status and billing period from Stripe. Hosted usage: the awake minutes of your hosted sandbox each calendar month, so the free lane's allowance can be enforced; kept 13 months so you can query a limit you were told you hit.",
+                "Hosted plan records: your subscription status and billing period from Stripe. Hosted usage: the awake minutes of your hosted sandbox each calendar month, so the free plan's allowance can be enforced; kept 13 months so you can query a limit you were told you hit.",
                 "Trial usage: a per-day count of model messages you used on the free trial, so the daily allowance can be enforced.",
             ],
         },
@@ -263,7 +263,7 @@ export const termsDoc: LegalDoc = {
         {
             heading: "The hosted plan and payment",
             paragraphs: [
-                "The hosted plan is billed monthly in advance through Stripe, renews automatically until cancelled, and is stated exclusive of any VAT that applies to you. You can cancel at any time in Settings; cancellation takes effect at the end of the period you have paid for, and the plan continues until then. If a payment fails, the plan pauses while Stripe retries: the free lane's allowance and removal rules apply to your hosted sandbox until it resumes.",
+                "The hosted plan is billed monthly in advance through Stripe, renews automatically until cancelled, and is stated exclusive of any VAT that applies to you. You can cancel at any time in Settings; cancellation takes effect at the end of the period you have paid for, and the plan continues until then. If a payment fails, the plan pauses while Stripe retries: the free plan's allowance and removal rules apply to your hosted sandbox until it resumes.",
                                 "If you are a consumer in the EU, you have 14 days to withdraw from the subscription. By starting to use the plan within that period you ask us to begin immediately and accept that you will owe a proportionate amount for what you used before withdrawing.",
             ],
         },

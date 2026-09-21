@@ -33,7 +33,7 @@ const siteHeader = (active: string): string =>
         { size: 15, fill: `#6c6862` },
     )}`;
 
-const planCard = (x: number, name: string, price: string, highlight: boolean): string =>
+const planRequest = (x: number, name: string, price: string, highlight: boolean): string =>
     `${box(x, 260, 300, 340, `#ffffff`, 16, highlight ? `#e2582a` : `#e6e3e0`)}${text(x + 32, 310, name, { size: 18, weight: 600 })}${text(
         x + 32,
         368,
@@ -71,7 +71,7 @@ export const pricingPage = (step: number): string => {
             196,
             `Every plan includes the storefront, the API and unlimited products.`,
             { size: 16, fill: `#6c6862` },
-        )}${planCard(48, `Starter`, `$0`, false)}${planCard(378, `Growth`, `$49`, true)}${planCard(708, `Scale`, `$149`, false)}${cta}${spinner}${pointer}`,
+        )}${planRequest(48, `Starter`, `$0`, false)}${planRequest(378, `Growth`, `$49`, true)}${planRequest(708, `Scale`, `$149`, false)}${cta}${spinner}${pointer}`,
     );
 };
 

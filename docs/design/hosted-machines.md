@@ -150,7 +150,7 @@ runs its own hardware; a paid rung's shape is the ladder's and not a deployment'
   means without touching a single machine. Every surface that tells somebody what their machine is reads the row.
 - `HostedUsage` is keyed by sandbox (the ceiling is the machine's rung's) and **also** carries the owner, whose
   column outlives the sandbox (`onDelete: SetNull`). Without that, releasing a spent free machine and asking for
-  another would reset the month — the whole free lane for the price of clicking twice. The account's sum is what the
+  another would reset the month — the whole free plan for the price of clicking twice. The account's sum is what the
   provision gate reads; a machine's own row is what its wake is judged against.
 - `SandboxTrash` carries the rung and shape too: the disk held back from teardown is a particular size, and a restore
   has to put the machine back as it was rather than as a new one would be.
@@ -164,7 +164,7 @@ runs its own hardware; a paid rung's shape is the ladder's and not a deployment'
   at half load. The query no longer divides, and each verdict is normalised by the machine's own CPUs.
 - **The hour meter's stop** is judged per machine rather than per account, so an account holding a spent free machine
   and a Standard one nowhere near its hours loses only the first.
-- **The offer card** states the free lane's hours to subscribers too, because the machine it offers is a free one.
+- **The offer card** states the free plan's hours to subscribers too, because the machine it offers is a free one.
 
 ## 9. What proves it
 

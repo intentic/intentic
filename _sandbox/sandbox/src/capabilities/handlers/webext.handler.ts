@@ -10,7 +10,7 @@ export const webextHandler = peerHandler<WebExtConfig>({
     note: WEBEXT_TOOLS_NOTE,
     pairHint: "click Connect and paste the code into the extension",
     awayHint: "that browser is closed",
-    added: (id) => `Added "${id}". Install the extension in that browser and paste the code its card is offering; the agent can work in it from the next turn.`,
+    added: (id) => `Added "${id}". Install the extension in that browser and paste the code its entry is offering; the agent can work in it from the next turn.`,
     store: (ctx) => ctx.webexts,
     hub: (ctx) => ctx.webextHub,
     echo: (browser) => ({

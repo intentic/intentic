@@ -1,4 +1,4 @@
-<!-- A machine this sandbox already reaches, listed on the card that would give it the door it lacks. -->
+<!-- A machine this sandbox already reaches, listed on the tile that would give it the door it lacks. -->
 <script setup lang="ts">
 import { Button, Row, StatusBadge } from "@intentic/ui";
 import type { DeviceConnection } from "../model/deviceConnections";

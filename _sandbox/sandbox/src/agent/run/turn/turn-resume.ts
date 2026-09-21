@@ -3,7 +3,7 @@ import {
     type AgentReply,
     type ModelPin,
     type AgentTurn,
-    type ParkedCard,
+    type ParkedRequest,
     RESUME_NOTES,
     type ResumeRouting,
     RETRY_LADDER_TRIES,
@@ -45,7 +45,7 @@ const RESUME_MAX_AGE_MS = 6 * 60 * 60_000;
 // Exactly once: written as spent before the resume starts, so the counter survives the crash it guards against.
 const MAX_RESUME_ATTEMPTS = 1;
 
-// Bounds how long a card may promise a resume is coming before abandonResume ends the wait.
+// Bounds how long a request may promise a resume is coming before abandonResume ends the wait.
 const AUTH_RESUME_DEADLINE_MS = 60_000;
 
 // Shown when the deadline lapses; names the fix (reconnect) rather than the mechanism.
@@ -226,7 +226,7 @@ export const fireHeldResume = async (
 // what happens next, and the pass below performs it — so both come through here. Per-conversation override wins;
 // absent, the sandbox-wide policy answers. Asked fresh at the moment it matters (the window opening, the rung falling
 // due), never snapshotted at the failure, so a mind changed in between is honoured; the one exception is the limit's
-// move, booked once at the failure (agent.routes) so the card's message and the fire cannot disagree.
+// move, booked once at the failure (agent.routes) so the request's message and the fire cannot disagree.
 export const breakPolicyFor = async (
     services: Pick<Services, "agents" | "sandboxSettings">,
     conversationId: string,
@@ -366,7 +366,7 @@ const runAuthPass = async (services: Services, wake: WakeFn, now: number): Promi
             // this must catch.
             if (await services.agents.abandonResume(conversationId, now, AUTH_GAVE_UP)) {
                 pendingAuth.delete(conversationId);
-                services.logger.warn({ conversationId, account: failure.account }, "auth auto-resume gave up, the card is settled as failed");
+                services.logger.warn({ conversationId, account: failure.account }, "auth auto-resume gave up, the request is settled as failed");
             }
             continue;
         }
@@ -396,7 +396,7 @@ const runOutagePass = async (services: Services, wake: WakeFn, now: number): Pro
         const conversationId = failure.input.conversationId;
         // Unresumed within the hour means attempts spent or an unanswered toggle; either way the user has moved on.
         if (now - failure.recordedAt > OUTAGE_STALE_AFTER_MS) {
-            // Stops the card promising a return; the entry stays until the abandon lands, for a turn still unwinding.
+            // Stops the request promising a return; the entry stays until the abandon lands, for a turn still unwinding.
             const settled = await services.agents.abandonResume(
                 conversationId,
                 now,
@@ -544,11 +544,11 @@ const sessionAccount = (services: Services, conversationId: string): { account?:
     return account === undefined ? {} : { account };
 };
 
-// Restores parked cards verbatim under their original request ids, via a placeholder turn on the ordinary start path.
+// Restores parked requests verbatim under their original request ids, via a placeholder turn on the ordinary start path.
 // The answer's turn starts on the journalled session only after the placeholder fully unwinds and releases the mutex.
 const rehydrateParkedTurn = async (services: Services, wake: WakeFn, entry: JournalledTurn): Promise<void> => {
     const conversationId = entry.turn.conversationId;
-    const cards = entry.parked ?? [];
+    const requests = entry.parked ?? [];
     const sessionId = entry.sessionId ?? entry.turn.sessionId;
     // Set before the placeholder returns, read after its run unwinds; a closure since the pump owns the generator.
     let followUp: (AgentTurn & { conversationId: string }) | undefined;
@@ -559,20 +559,20 @@ const rehydrateParkedTurn = async (services: Services, wake: WakeFn, entry: Jour
         ...(sessionId !== undefined ? { sessionId } : {}),
         ...(mode !== undefined ? { permissionMode: mode } : {}),
     });
-    // Maps an answered card to the turn that runs next; undefined is the quiet ending live behaviour has too (a
+    // Maps an answered request to the turn that runs next; undefined is the quiet ending live behaviour has too (a
     // dismissed question or a bare permission deny already ends the turn without one).
-    const settlementOf = (card: ParkedCard, reply: AgentReply): (AgentTurn & { conversationId: string }) | undefined => {
-        if (card.kind === "plan" && reply.kind === "plan") {
+    const settlementOf = (request: ParkedRequest, reply: AgentReply): (AgentTurn & { conversationId: string }) | undefined => {
+        if (request.kind === "plan" && reply.kind === "plan") {
             // Approval runs in POST_PLAN_MODE as a live approval would; rejection returns to plan mode with the
             // feedback.
             return reply.approve
                 ? resumed("The user approved the plan: proceed with it.", POST_PLAN_MODE)
                 : resumed(reply.feedback?.trim() || "Keep refining the plan, do not exit plan mode yet.", "plan");
         }
-        if (card.kind === "question" && reply.kind === "question") {
-            return reply.cancelled === true || reply.answers === undefined ? undefined : resumed(formatAnswers(card.questions, reply));
+        if (request.kind === "question" && reply.kind === "question") {
+            return reply.cancelled === true || reply.answers === undefined ? undefined : resumed(formatAnswers(request.questions, reply));
         }
-        if (card.kind === "permission" && reply.kind === "permission") {
+        if (request.kind === "permission" && reply.kind === "permission") {
             if (reply.decision === "deny") {
                 const feedback = reply.feedback?.trim() ?? "";
                 // Feedback is a redirection the turn takes; a bare deny ends it.
@@ -580,26 +580,26 @@ const rehydrateParkedTurn = async (services: Services, wake: WakeFn, entry: Jour
             }
             // A one-shot grant, no waiting tool call to feed; `always` still carries the don't-ask-again flavour
             // through.
-            grantRestoredPermission(conversationId, card.toolName, reply.decision === "always");
-            return resumed(`The user allowed ${card.toolName}: run it and continue where the session left off.`);
+            grantRestoredPermission(conversationId, request.toolName, reply.decision === "always");
+            return resumed(`The user allowed ${request.toolName}: run it and continue where the session left off.`);
         }
         return undefined;
     };
     // Matches what the live raiser registers, so an abort reads identically on either side of a restart.
-    const restore = (card: ParkedCard) => {
-        switch (card.kind) {
+    const restore = (request: ParkedRequest) => {
+        switch (request.kind) {
             case "plan":
                 return restoreRequest(
-                    card.requestId,
+                    request.requestId,
                     "plan",
                     { kind: "plan", requestId: "", approve: false, feedback: "Planning cancelled." },
                     conversationId,
                 );
             case "question":
-                return restoreRequest(card.requestId, "question", { kind: "question", requestId: "", cancelled: true }, conversationId);
+                return restoreRequest(request.requestId, "question", { kind: "question", requestId: "", cancelled: true }, conversationId);
             case "permission":
                 return restoreRequest(
-                    card.requestId,
+                    request.requestId,
                     "permission",
                     { kind: "permission", requestId: "", decision: "deny", feedback: "The turn was cancelled before you answered." },
                     conversationId,
@@ -638,7 +638,7 @@ const rehydrateParkedTurn = async (services: Services, wake: WakeFn, entry: Jour
             return event;
         };
         const controller = new AbortController();
-        // Abort freezes every card cancelled, as a live stop does; there is no steering queue here.
+        // Abort freezes every request cancelled, as a live stop does; there is no steering queue here.
         const unregister = registerTurn(conversationId, { abort: () => controller.abort() });
         try {
             // Session frame first, rebinding to the partial work; without it a second restart rehydrates with no
@@ -647,11 +647,11 @@ const rehydrateParkedTurn = async (services: Services, wake: WakeFn, entry: Jour
                 yield see({ kind: "session", sessionId, ...sessionAccount(svc, conversationId) });
             }
             // Waiters go up before their frames go out, so a reply racing the replay can't land in the gap and 404.
-            const raised = cards.map((card) => ({ card, outcome: restore(card).wait(controller.signal) }));
-            for (const { card } of raised) {
-                yield see(card);
+            const raised = requests.map((request) => ({ request, outcome: restore(request).wait(controller.signal) }));
+            for (const { request } of raised) {
+                yield see(request);
             }
-            const winner = await Promise.race(raised.map(async ({ card, outcome }) => ({ card, ...(await outcome) })));
+            const winner = await Promise.race(raised.map(async ({ request, outcome }) => ({ request, ...(await outcome) })));
             // One answer settles the turn; the rest freeze cancelled and the resumed turn re-asks what it still needs.
             controller.abort();
             for (const { outcome } of raised) {
@@ -659,14 +659,14 @@ const rehydrateParkedTurn = async (services: Services, wake: WakeFn, entry: Jour
             }
             // A resolved frame with a reply is the user's settlement; without one it's just the abort's stand-in.
             if (winner.resolved.reply !== undefined) {
-                followUp = settlementOf(winner.card, winner.reply);
+                followUp = settlementOf(winner.request, winner.reply);
                 if (followUp !== undefined) {
                     // Moves the mode as the live gate does, so an attached window's mode chip follows the turn out of
                     // planning.
-                    if (winner.card.kind === "plan" && winner.reply.kind === "plan" && winner.reply.approve) {
+                    if (winner.request.kind === "plan" && winner.reply.kind === "plan" && winner.reply.approve) {
                         yield see({ kind: "mode", mode: POST_PLAN_MODE });
                     }
-                    // Keep the card in Resuming until the resumed turn begins.
+                    // Keep the request in Resuming until the resumed turn begins.
                     svc.agents.markResuming(conversationId);
                 }
             }
@@ -682,8 +682,8 @@ const rehydrateParkedTurn = async (services: Services, wake: WakeFn, entry: Jour
         // A live turn already owns the conversation; it supersedes the park, as a hand retry would.
         return;
     }
-    services.logger.info({ conversationId, cards: cards.length }, "parked turn rehydrated, its cards are back where they were");
-    // Detached: the handoff waits out the whole run, and a card may sit unanswered for days without blocking boot.
+    services.logger.info({ conversationId, requests: requests.length }, "parked turn rehydrated, its requests are back where they were");
+    // Detached: the handoff waits out the whole run, and a request may sit unanswered for days without blocking boot.
     void (async () => {
         await run.waitUntilFinished();
         if (followUp === undefined) {

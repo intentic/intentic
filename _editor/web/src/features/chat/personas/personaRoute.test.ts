@@ -17,14 +17,14 @@ const personas = ref<Persona[]>([
 ]);
 vi.mock(`../../sandbox/personas/usePersonas`, () => ({ usePersonas: () => ({ personas }) }));
 
-// A desk is never routed: its chat wears one of its own cards from the start.
-const isDesk = ref(false);
-vi.mock(`../../sandbox/secrets/useRole`, () => ({ useRole: () => ({ isDesk }) }));
+// A guest is never routed: its chat wears one of its own personas from the start.
+const isGuest = ref(false);
+vi.mock(`../../sandbox/secrets/useRole`, () => ({ useRole: () => ({ isGuest }) }));
 
 const sandboxJson = vi.fn<(path: string, init?: RequestInit) => Promise<unknown>>();
 vi.mock(`../../sandbox/client/sandboxClient`, () => ({ sandboxJson: (path: string, init?: RequestInit) => sandboxJson(path, init) }));
 
-// Claude connected, nothing else: the backend card's ladder resolves to its one pin.
+// Claude connected, nothing else: the backend persona's ladder resolves to its one pin.
 vi.mock(`../accounts/roleModel`, () => ({ roleSources: ref([{ provider: `claude`, ready: true, models: [] }]) }));
 
 const { SEND_WAIT_MS, personaRouteWait, usePersonaRoute } = await import("./personaRoute");
@@ -69,7 +69,7 @@ afterEach(() => {
     scope.stop();
     vi.useRealTimers();
     settings.value = SandboxSettingsSchema.parse({});
-    isDesk.value = false;
+    isGuest.value = false;
     sandboxJson.mockReset();
     wearModel.mockReset();
     notice.mockClear();
@@ -156,7 +156,7 @@ test("a pick by hand overrules routing for good, and one chat buys one reading",
     routing.byHand();
     expect(routing.beforeSend(`please fix the login flow`)).toBeUndefined();
 
-    // A chat that matched nothing keeps no card, and still never buys a second reading.
+    // A chat that matched nothing keeps no persona, and still never buys a second reading.
     const other = route(chatWith());
     answer(undefined, `No persona fits this message.`);
     await other.beforeSend(`what is a closure exactly?`);

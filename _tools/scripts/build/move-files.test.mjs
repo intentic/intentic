@@ -10,7 +10,7 @@ const tracked = new Set([
     "_sandbox/sandbox/src/agent/prompt/system-prompt.ts",
     "_sandbox/sandbox/src/composition.ts",
     "_sandbox/sandbox/package.json",
-    "_editor/web/src/chat/ChatArea.vue",
+    "_editor/web/src/chat/ChatSection.vue",
     "_editor/web/src/composables/chat/useChat.ts",
     "_editor/web/src/lib/index.ts",
 ]);
@@ -29,19 +29,19 @@ test("a specifier written with the emitted extension resolves to its source", ()
 });
 
 test("an extensionless specifier resolves through the file and through a directory index", () => {
-    assert.equal(resolveRelative("_editor/web/src/chat/ChatArea.vue", "../composables/chat/useChat", tracked), "_editor/web/src/composables/chat/useChat.ts");
-    assert.equal(resolveRelative("_editor/web/src/chat/ChatArea.vue", "../lib", tracked), "_editor/web/src/lib/index.ts");
+    assert.equal(resolveRelative("_editor/web/src/chat/ChatSection.vue", "../composables/chat/useChat", tracked), "_editor/web/src/composables/chat/useChat.ts");
+    assert.equal(resolveRelative("_editor/web/src/chat/ChatSection.vue", "../lib", tracked), "_editor/web/src/lib/index.ts");
 });
 
 test("each style survives the move it is written in", () => {
     // the daemon: keeps the emitted extension
     assert.equal(specifierFor("_sandbox/sandbox/src/agent/run/agent.ts", "_sandbox/sandbox/src/agent/turn-plan.ts", "./turn-plan.js"), "../turn-plan.js");
     // the web: keeps no extension
-    assert.equal(specifierFor("_editor/web/src/features/chat/ChatArea.vue", "_editor/web/src/composables/chat/useChat.ts", "../composables/chat/useChat"), "../../composables/chat/useChat");
+    assert.equal(specifierFor("_editor/web/src/features/chat/ChatSection.vue", "_editor/web/src/composables/chat/useChat.ts", "../composables/chat/useChat"), "../../composables/chat/useChat");
     // a directory import stays a directory import
-    assert.equal(specifierFor("_editor/web/src/features/chat/ChatArea.vue", "_editor/web/src/lib/index.ts", "../lib"), "../../lib");
+    assert.equal(specifierFor("_editor/web/src/features/chat/ChatSection.vue", "_editor/web/src/lib/index.ts", "../lib"), "../../lib");
     // a .vue target keeps its real extension
-    assert.equal(specifierFor("_editor/web/src/pages/Home.vue", "_editor/web/src/features/chat/ChatArea.vue", "../chat/ChatArea.vue"), "../features/chat/ChatArea.vue");
+    assert.equal(specifierFor("_editor/web/src/pages/Home.vue", "_editor/web/src/features/chat/ChatSection.vue", "../chat/ChatSection.vue"), "../features/chat/ChatSection.vue");
     // a sibling is written as a relative path, not bare.
     assert.equal(specifierFor("_sandbox/sandbox/src/agent/run/agent.ts", "_sandbox/sandbox/src/agent/run/turn-plan.ts", "./turn-plan.js"), "./turn-plan.js");
     // unbuilt plumbing imports the .mjs that exists; not re-pointed at an emitted name.

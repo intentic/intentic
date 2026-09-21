@@ -6,8 +6,8 @@ import { threadKey } from "../sessions/thread-sessions.js";
 import { jsonFile } from "../store/json-file.js";
 import { WEBCHAT_PROVIDER } from "./webchat-config.js";
 
-// Replies a Front Desk visitor has not received yet. The widget's SSE is open only for the turn that answers live; an
-// approval-gated desk closes it on a "pending" notice, and a human writing as the agent hours later has no stream at
+// Replies a Visitor chat visitor has not received yet. The widget's SSE is open only for the turn that answers live; an
+// approval-gated guest closes it on a "pending" notice, and a human writing as the agent hours later has no stream at
 // all. Both land here, and the widget's poll drains them on the visitor's next page load.
 //
 // Per thread, not per conversation: the key is the thread key (provider:automation:channel), so a reply survives the
@@ -106,7 +106,7 @@ const evict = (all: OutboxFile): OutboxFile => {
     return Object.fromEntries(entries.toSorted(([, a], [, b]) => b.lastAt - a.lastAt).slice(0, MAX_THREADS));
 };
 
-// The thread an origin names, or undefined when it is not a Front Desk one. The provider check lives here rather than
+// The thread an origin names, or undefined when it is not a Visitor chat one. The provider check lives here rather than
 // at the call sites, so nothing outside this module has to know which providers have an outbox.
 export const outboxKeyOf = (origin: AgentOrigin | undefined): string | undefined =>
     origin === undefined || origin.provider !== WEBCHAT_PROVIDER || origin.channelId === undefined
@@ -122,7 +122,7 @@ export interface OutboxSink {
 
 // A TurnStream that queues the whole answer instead of streaming it: what a wake with no live visitor writes into.
 // Attaching one also earns the run its STREAM_NOTE, which is what stops the model trying to send the reply itself —
-// correct here, since a Front Desk gives it no tool that could.
+// correct here, since a Visitor chat gives it no tool that could.
 export const outboxTurnStream = (services: Services, key: string): OutboxSink => {
     let text = "";
     let write: Promise<void> = Promise.resolve();
@@ -145,7 +145,7 @@ export const outboxTurnStream = (services: Services, key: string): OutboxSink =>
     };
 };
 
-// The sink an approved wake answers into, or undefined when its origin is not a Front Desk. Called by the scheduler's
+// The sink an approved wake answers into, or undefined when its origin is not a Visitor chat. Called by the scheduler's
 // held-wake release, which has no other way to know a visitor is waiting.
 export const outboxStreamFor = (services: Services, origin: AgentOrigin | undefined): OutboxSink | undefined => {
     const key = outboxKeyOf(origin);

@@ -35,7 +35,7 @@ const TREE = {
     barren: ["support", "finance"],
 };
 
-const desk = async (): Promise<{
+const guest = async (): Promise<{
     readonly client: ReturnType<typeof clientFor>;
     readonly app: ReturnType<typeof createApp>;
     readonly actAs: (role: MemberRole, areas?: readonly string[]) => void;
@@ -66,7 +66,7 @@ const desk = async (): Promise<{
 };
 
 test("a fenced member's tree holds their own folders and nothing beside them", async () => {
-    const { client, actAs } = await desk();
+    const { client, actAs } = await guest();
     actAs(`viewer`, [`support`]);
     const tree = await client.workspace.tree({});
     expect(tree.tree.map((entry) => entry.path)).toEqual(["support"]);
@@ -75,13 +75,13 @@ test("a fenced member's tree holds their own folders and nothing beside them", a
 });
 
 test("an unfenced member still sees the whole tree, byte for byte as before", async () => {
-    const { client, actAs } = await desk();
+    const { client, actAs } = await guest();
     actAs(`viewer`);
     expect(await client.workspace.tree({})).toEqual(TREE);
 });
 
 test("a read outside the fence is FORBIDDEN, and inside it is not", async () => {
-    const { client, actAs } = await desk();
+    const { client, actAs } = await guest();
     actAs(`viewer`, [`support`]);
     expect(await errorCode(client.workspace.file({ path: "finance/payroll.csv" }))).toBe("FORBIDDEN");
     expect(await errorCode(client.workspace.file({ path: "support/faq.md" }))).toBeUndefined();
@@ -119,7 +119,7 @@ test("a fenced search runs inside the fence, and inside a folder outside it runs
 });
 
 test("a fenced member may attach a file to a message but may not write into the workspace", async () => {
-    const { app, actAs } = await desk();
+    const { app, actAs } = await guest();
     actAs(`collaborator`, [`support`]);
     const attachment = await app.request(`/workspace/upload?path=.intentic/records/artifacts/attachments/abc/note.txt`, {
         method: "POST",
@@ -133,7 +133,7 @@ test("a fenced member may attach a file to a message but may not write into the 
 // The write half of the same fence. The floor (auth/role-floor.ts) admits a writer to these routes at all; what is
 // pinned here is that the path still has to be one the fence admits, on every door that changes the tree.
 test("a writer changes files inside its areas and is refused on every route outside them", async () => {
-    const { client, app, actAs } = await desk();
+    const { client, app, actAs } = await guest();
     actAs(`writer`, [`support`]);
     await expect(client.workspace.mkdir({ path: "support/tickets" })).resolves.toEqual({ ok: true });
     expect(await errorCode(client.workspace.mkdir({ path: "finance/tickets" }))).toBe("FORBIDDEN");
@@ -151,7 +151,7 @@ test("a writer changes files inside its areas and is refused on every route outs
 // The tier is an editor, not an operator: it changes files and has no way to move them into the owner's tree, read a
 // credential, or operate the workspace it writes in.
 test("a writer ships nothing it wrote", async () => {
-    const { app, actAs } = await desk();
+    const { app, actAs } = await guest();
     actAs(`writer`, [`support`]);
     for (const path of [`/agents/abc/land`, `/workspace/setup`, `/workspace/repos`]) {
         expect((await app.request(path, { method: "POST", body: "{}", headers: { "content-type": "application/json" } })).status).toBe(403);
@@ -162,7 +162,7 @@ test("a writer ships nothing it wrote", async () => {
 // A fence has to be the shape of the workspace as far as this person is concerned, so an ancestor on the way down
 // stays listable while its other branches do not.
 test("a folder leading to the fence lists only what leads somewhere", async () => {
-    const { client, actAs } = await desk();
+    const { client, actAs } = await guest();
     actAs(`viewer`, [`support`]);
     expect(await errorCode(client.workspace.children({ path: "finance" }))).toBe("FORBIDDEN");
     await expect(client.workspace.children({ path: "support" })).resolves.toEqual({

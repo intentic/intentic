@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-// Mounts the vpn card over a live tunnel: filled from the connection not the card, states whose settings are on
+// Mounts the vpn tile over a live tunnel: filled from the connection not the tile, states whose settings are on
 // screen, and a credential never shown survives a save untouched.
 import { expect, it, vi } from "vitest";
 import { createApp, defineComponent, h, nextTick, ref } from "vue";
@@ -10,12 +10,12 @@ import { IconStub } from "@intentic/ui/testing";
 
 // Import-time globals a mounted view needs: ui's useDevice reads matchMedia, environment.ts reads window.env.
 
-// Which connection the form is over lives in the URL (`edit`), mirroring how the page reads the card off the path.
+// Which connection the form is over lives in the URL (`edit`), mirroring how the page reads the tile off the path.
 let query: Record<string, string> = {};
 const replace = vi.fn();
 vi.mock(import(`vue-router`), async (importOriginal) => ({
     ...(await importOriginal()),
-    useRoute: () => ({ params: { card: `vpn` }, query }) as never,
+    useRoute: () => ({ params: { entry: `vpn` }, query }) as never,
     // `resolve` as well as `push`: a row's menu carries the address of what it opens (menuLink.ts).
     useRouter: () => ({ push: vi.fn(), replace, resolve: (to: string) => ({ href: to }) }) as never,
 }));
@@ -111,7 +111,7 @@ const wireguardBox = (el: HTMLElement): HTMLTextAreaElement => el.querySelector(
 it(`opens a live connection's own settings, and says whose they are`, () => {
     const el = start(`office`);
 
-    // Filled from the connection, not the card: the switch is where the user left it.
+    // Filled from the connection, not the tile: the switch is where the user left it.
     expect(el.textContent).toContain(`Editing`);
     expect(el.textContent).toContain(`office`);
     // No name box: renaming is its own migration (see askRename), not a text field here.
@@ -149,7 +149,7 @@ it(`replaces the credential when one is actually typed`, async () => {
     expect(add.mock.calls[0]?.[0].config[`config`]).toBe(`[Interface]\nPrivateKey = NEW`);
 });
 
-// Without `edit` the card is adding, as it always did; the name is pre-filled free (the card's id) so submit makes
+// Without `edit` the tile is adding, as it always did; the name is pre-filled free (the tile's id) so submit makes
 // a second tunnel.
 it(`still adds a second connection when no connection is being edited`, async () => {
     const el = start(undefined);

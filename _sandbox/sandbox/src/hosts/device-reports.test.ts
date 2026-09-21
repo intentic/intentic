@@ -306,7 +306,7 @@ const fakeServices = (id: string, mcp: (call: FakeCall) => Promise<unknown>): { 
         hostHub: {
             state: () => ({ online: true, version: "0.1.0" }),
             // One connection per card here, named after it: these machines have a single OS install.
-            known: () => ["ada-laptop", "desk"],
+            known: () => ["ada-laptop", "guest"],
             mcp: async (asked: string, payload: unknown, options?: { signal?: AbortSignal }) => {
                 const tool = (payload as { params?: { name?: string } }).params?.name ?? "";
                 const call = { id: asked, tool, signal: options?.signal };

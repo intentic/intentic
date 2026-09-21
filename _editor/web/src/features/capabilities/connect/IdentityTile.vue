@@ -1,4 +1,4 @@
-<!-- Session's identity mark, shared by the fleet board card, the chat rail card, and rail search hits so all three stay identical. -->
+<!-- Session's identity mark, shared by the fleet board tile, the chat rail tile, and rail search hits so all three stay identical. -->
 <script setup lang="ts">
 import type { AgentProvider } from "@intentic/sandbox-contract";
 import { computed } from "vue";

@@ -74,7 +74,7 @@ const updateItems = (available: boolean, staged: boolean): SandboxAttentionItem[
 };
 
 export function useSandboxAttention() {
-    const { isDesk } = useRole();
+    const { isGuest } = useRole();
     const { pending, proposal } = useEnvironment();
     const { updateAvailable, updateStaged } = useSandboxVersion();
     const { missingRequiredCount } = useMissingSecretCount();
@@ -89,9 +89,9 @@ export function useSandboxAttention() {
     // item side by side rather than a spread ternary, so adding one is a line and reading the order is a column.
     // No-account is about the sandbox as a whole, not one conversation's missing provider (composer's connect gate).
     const items = computed<readonly SandboxAttentionItem[]>(() => {
-        // Nothing here is a desk's errand: every row resolves on a hub tab the daemon refuses it, and a badge over a
+        // Nothing here is a guest's errand: every row resolves on a hub tab the daemon refuses it, and a badge over a
         // door that will not open is a debt it can never pay down.
-        if (isDesk.value) {
+        if (isGuest.value) {
             return [];
         }
         const rows: { when: boolean; item: SandboxAttentionItem }[] = [

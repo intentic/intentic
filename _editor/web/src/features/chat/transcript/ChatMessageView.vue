@@ -5,7 +5,7 @@ import { formatClock, formatDateTime } from "@intentic/ui/format";
 import { copyCodeFromEvent } from "@intentic/ui/markdown";
 import { basename } from "@intentic/ui/path";
 import { CAPABILITY_CATALOG } from "@intentic/capability-catalog";
-import { type CardDocument, planParts, type TranscriptPlan, type TranscriptTerminalHelp } from "@intentic/sandbox-contract";
+import { type RequestDocument, planParts, type TranscriptPlan, type TranscriptTerminalHelp } from "@intentic/sandbox-contract";
 import { computed, ref, useTemplateRef, watch } from "vue";
 import { useRouter } from "vue-router";
 import { useQueryClient } from "@tanstack/vue-query";
@@ -104,14 +104,14 @@ const openHelpTerminal = (help: TranscriptTerminalHelp): void =>
 const capabilitySetupAt = (card: string): string => `/capabilities/${card}`;
 const connectCapability = async (message: ChatMessage): Promise<void> => {
     // Awaits the decision so the button holds; the navigation is fire-and-forget.
-    navigateInApp(router, capabilitySetupAt(message.capabilityOffer?.offer.card ?? ``));
+    navigateInApp(router, capabilitySetupAt(message.capabilityOffer?.offer.entry ?? ``));
     await decideCapabilityOffer(message, true);
 };
 
-// Catalog description, when the static catalog knows the card; absent for a contributed card.
+// Catalog description, when the static catalog knows the entry; absent for a contributed one.
 const capabilityDescription = computed(() => {
-    const card = props.message.capabilityOffer?.offer.card;
-    return card === undefined ? undefined : CAPABILITY_CATALOG.find((entry) => entry.id === card)?.description;
+    const asked = props.message.capabilityOffer?.offer.entry;
+    return asked === undefined ? undefined : CAPABILITY_CATALOG.find((entry) => entry.id === asked)?.description;
 });
 const { mobile } = useDevice();
 
@@ -172,10 +172,10 @@ const plan = useMarkdown(() => (props.message.plan ? planParts(props.message.pla
 const planTitle = (request: TranscriptPlan): string => planParts(request.text).title ?? `Proposed plan`;
 
 // Whether the document's title differs enough from the card's own to need its own name row.
-const documentTitled = (cardTitle: string, carried: CardDocument): boolean => carried.title.trim() !== cardTitle.trim();
+const documentTitled = (cardTitle: string, carried: RequestDocument): boolean => carried.title.trim() !== cardTitle.trim();
 
 // Whether a bubble already renders a card's document (as the Write that produced it); the card then opens folded.
-const documentDrawn = (document: CardDocument | undefined): boolean =>
+const documentDrawn = (document: RequestDocument | undefined): boolean =>
     // Checked via the tool's own presenter, not the shared rule, so a failed write can't fold the card away.
     document !== undefined && (props.message.tools ?? []).some((tool) => present(tool).document?.path === document.path);
 
@@ -890,7 +890,7 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
                 >
                     <Icon name="spinner" class="text-2xs text-link" spin />
                     <span class="min-w-0 flex-1 truncate text-2xs text-muted">{{ t(`chat.chatMessageView.waitingToFinishSetup`) }}</span>
-                    <ChatDecisionButton tone="secondary" icon="bolt" :to="capabilitySetupAt(message.capabilityOffer.offer.card)">{{
+                    <ChatDecisionButton tone="secondary" icon="bolt" :to="capabilitySetupAt(message.capabilityOffer.offer.entry)">{{
                         t(`chat.chatMessageView.openSetup`)
                     }}</ChatDecisionButton>
                 </div>

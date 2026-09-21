@@ -153,8 +153,8 @@ exactly 1, 2, 4 and 8 GB.
 - **The prefetch's bandwidth.** Visible and stoppable is the mitigation, not a metered-connection detector; there is
   no signal in the browser worth trusting for that. If it proves annoying, the fix is press-to-start, which is one
   `v-if`.
-- **A second free lane.** The design assumes exactly one free provider because the spec table currently has one. Two
+- **A second free plan.** The design assumes exactly one free provider because the spec table currently has one. Two
   would make the lane a list, which it already renders as.
-- **Where a desk lands.** A member who may drive a turn but not read `/accounts` sees lanes derived from
+- **Where a maker lands.** A member who may drive a turn but not read `/accounts` sees lanes derived from
   `nativeReady`; whether such a reader should be offered a sign-in at all is a permissions question this view inherits
   rather than answers.

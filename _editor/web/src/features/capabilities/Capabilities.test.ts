@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-// The FortiClient import is an affordance worth pinning: these tests mount the real card and drop a file on it,
+// The FortiClient import is an affordance worth pinning: these tests mount the real tile and drop a file on it,
 // since anything short of that (finding, opening, copying the config by hand) is slow enough to make re-typing a
 // gateway the faster path.
 import { expect, it, vi } from "vitest";
@@ -9,15 +9,15 @@ import { IconStub } from "@intentic/ui/testing";
 
 // Mounting reads matchMedia (useDevice) and window.env (environment.ts) at module scope; see startAgent.test.ts.
 
-// URL-driven: the route names the vpn card and nothing navigates. Empty `query` isn't padding, the rail and grid
+// URL-driven: the route names the vpn tile and nothing navigates. Empty `query` isn't padding, the rail and grid
 // filter read off it, so a route without one is one vue-router never hands out.
 vi.mock(import(`vue-router`), async (importOriginal) => ({
     ...(await importOriginal()),
-    useRoute: () => ({ params: { card: `vpn` }, query: {} }) as never,
+    useRoute: () => ({ params: { entry: `vpn` }, query: {} }) as never,
     useRouter: () => ({ push: vi.fn(), replace: vi.fn() }) as never,
 }));
 
-// Stubbed to an empty-but-settled sandbox (no capabilities, no extension cards, no tunnels); the vpn card comes
+// Stubbed to an empty-but-settled sandbox (no capabilities, no extension tiles, no tunnels); the vpn tile comes
 // from the static catalog regardless, so it, its form, and the import block are the whole subject.
 vi.mock(`./connect/useCapabilities`, () => ({
     useCapabilities: () => ({
@@ -35,7 +35,7 @@ vi.mock(`./connect/useCapabilities`, () => ({
 vi.mock(`../extensions/useExtensions`, () => ({
     useExtensions: () => ({ contributionOf: () => undefined, enabled: ref([]), extensions: ref([]), settled: ref(true) }),
 }));
-// The Extension card's signpost reads two counts from here; empty renders the sentence without them, a first-visit
+// The Extension tile's signpost reads two counts from here; empty renders the sentence without them, a first-visit
 // state.
 vi.mock(`../extensions/useRegistry`, () => ({ useRegistry: () => ({ entries: ref([]) }) }));
 vi.mock(`../terminal/useBackgroundProcesses`, () => ({

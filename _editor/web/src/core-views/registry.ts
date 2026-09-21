@@ -2,7 +2,7 @@ import type { Activation, CapabilityFacts, Disposable, RepoFacts, ViewBadge, Vie
 import { computed, shallowRef } from "vue";
 import { type Audience, useAudience } from "../app/useAudience";
 import { useRole } from "../features/sandbox/secrets/useRole";
-import { deskAllowedPath } from "../shell/deskPaths";
+import { guestAllowedPath } from "../shell/guestPaths";
 import { coreViews } from "./coreViews";
 import { badgeSpeaks } from "./viewBadge";
 import { t } from "@intentic/ui/i18n";
@@ -133,22 +133,22 @@ const railGroupsByAudience = (): Record<Audience, readonly RailGroup[]> => ({
 
 export const railGroupsFor = (audience: Audience): readonly RailGroup[] => railGroupsByAudience()[audience];
 
-// A desk's rail: the chat it drives and the board of its own conversations, whichever audience it answered. Every
-// other seat opens on a read the daemon refuses a desk, and a tile that only ever shows a refusal is not a seat.
-export const deskRailGroups = (): readonly RailGroup[] => [{ id: `work`, label: t(`views.registry.work`), items: [always(`chat`), always(`agents`)] }];
+// A guest's rail: the chat it drives and the board of its own conversations, whichever audience it answered. Every
+// other seat opens on a read the daemon refuses a guest, and a tile that only ever shows a refusal is not a seat.
+export const makerRailGroups = (): readonly RailGroup[] => [{ id: `work`, label: t(`views.registry.work`), items: [always(`chat`), always(`agents`)] }];
 
-// Whether this reader can open a tile at all, asked of every list of areas the shell draws: the rail's seats, its
-// More menu, the phone's menu and tab bar. A desk is fenced to a handful of paths (shell/deskPaths.ts) and a tile
+// Whether this reader can open a tile at all, asked of every list of sections the shell draws: the rail's seats, its
+// More menu, the phone's menu and tab bar. A guest is fenced to a handful of paths (shell/guestPaths.ts) and a tile
 // outside them answers a press by bouncing to the chat, which reads as a broken tile rather than as a boundary —
-// so the offer is withdrawn instead. Keyed on the destination, not the id, so an area added later is covered by the
+// so the offer is withdrawn instead. Keyed on the destination, not the id, so an section added later is covered by the
 // fence it will actually meet.
-export const areaReachable = (to: string): boolean => !useRole().isDesk.value || deskAllowedPath(to);
+export const sectionReachable = (to: string): boolean => !useRole().isGuest.value || guestAllowedPath(to);
 
 // The developer's table, which is also what every surface read before there were two.
 export const railGroups = (): readonly RailGroup[] => railGroupsByAudience().developer;
 
 // The table for whoever is looking; reactive when read inside a computed, like everything below that reads it.
-const activeGroups = (): readonly RailGroup[] => (useRole().isDesk.value ? deskRailGroups() : railGroupsFor(useAudience().audience.value));
+const activeGroups = (): readonly RailGroup[] => (useRole().isGuest.value ? makerRailGroups() : railGroupsFor(useAudience().audience.value));
 
 const isRegistered = (id: string): boolean => views.value.some((entry) => entry.registration.id === id);
 
@@ -168,7 +168,7 @@ export const seatPolicy = (id: string): SeatPolicy => {
 export const homeViewId = (): string => (useAudience().maker.value && isRegistered(PROJECTS_VIEW_ID) ? PROJECTS_VIEW_ID : WORKSPACE_VIEW_ID);
 
 // Whether a tile is on the rail now, in one predicate: the rail and the More menu ask its positive and
-// negative of the same list. `pinned` overrules the table; `active` keeps the current area seated while you're in it.
+// negative of the same list. `pinned` overrules the table; `active` keeps the current section seated while you're in it.
 // A badge seats a tile whatever it says, an errand or only that something is running there. The rail has always
 // seated live work (an open browser, a subagent, a workflow run), so a running pipeline earning no seat would be
 // arbitrary — and a tile that stays away until the run fails hides the half hour when watching it is the point.

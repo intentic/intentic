@@ -2,7 +2,7 @@
 /* House metals stay shared with the app entry screens and Sanctum skin. */
 @import "../../../../_shared/house-css/house.css";
 /* The light skin. Ordered first because it cannot lose: its selector outscores the `:root` Tailwind emits. */
-@import "./desk.css";
+@import "./maker.css";
 /* Every face the site serves, self-hosted. Regenerate with `node _tools/scripts/fonts.mjs`. */
 @import "./faces.css";
 
@@ -88,7 +88,7 @@
 
    Both selectors carry `html` deliberately: Tailwind emits its own defaults into `:root`, which scores the same as
    a bare attribute selector, and `html[...]` outscores it whichever order the bundler picks. */
-html:not([data-variant="desk"]) {
+html:not([data-variant="maker"]) {
     /* Scrollbars, form controls and the space past the scroll end are the browser's to paint, and it needs telling
        which skin is on — the attribute is ours, not something it reads. */
     color-scheme: dark;
@@ -96,7 +96,7 @@ html:not([data-variant="desk"]) {
     --font-weight-medium: 400;
     --font-weight-semibold: 500;
 }
-html[data-variant="desk"] {
+html[data-variant="maker"] {
     color-scheme: light;
     --font-weight-normal: 400;
     --font-weight-medium: 500;
@@ -104,7 +104,7 @@ html[data-variant="desk"] {
 }
 
 /* THE DARK SCHEME'S MATERIALS the colours that live inside a component rule rather than in the Tailwind namespace
-   above. They are named here for one reason: the desk skin (styles/desk.css) cannot relight a literal. Everything a
+   above. They are named here for one reason: the maker skin (styles/maker.css) cannot relight a literal. Everything a
    utility can already reach — canvas, content, line, the ember ramp — stays in `@theme` and is overridden there.
    Values are exactly what the rules below used to spell out. */
 :root {
@@ -220,7 +220,7 @@ html[data-variant="desk"] {
        the same type dark-on-light; greyscale antialiasing thins it back. Applied to BOTH skins — which is what this
        was doing — it thins the light one too, where there is no bloom to correct and the strokes were already the
        thing being complained about. */
-    html:not([data-variant="desk"]) body {
+    html:not([data-variant="maker"]) body {
         -webkit-font-smoothing: antialiased;
         -moz-osx-font-smoothing: grayscale;
     }
@@ -767,7 +767,7 @@ html[data-variant="desk"] {
         background: transparent !important;
     }
     /* A two-theme <Code> writes the DEFAULT theme's colour inline but moves its font style into a custom property, so
-       the italic a comment used to get has to be read back. desk.css reads the light half of the same pair. */
+       the italic a comment used to get has to be read back. maker.css reads the light half of the same pair. */
     :is(.astro-code, .astro-code span) {
         font-style: var(--shiki-dark-font-style, inherit);
     }
@@ -1073,13 +1073,13 @@ html[data-variant="desk"] {
     .variant-exit {
         display: none;
     }
-    html[data-variant="desk"] .variant-exit {
+    html[data-variant="maker"] .variant-exit {
         display: inline-flex;
     }
     .variant-enter {
         display: inline-flex;
     }
-    html[data-variant="desk"] .variant-enter {
+    html[data-variant="maker"] .variant-enter {
         display: none;
     }
 
@@ -1284,9 +1284,9 @@ html[data-variant="desk"] {
    `.home .stage-shot { display: block }` beats anything in `@layer components` however specific — which is exactly
    what happened: four dark screenshots went on painting on the light pages because this pair lived in a layer.
    Out here the fight is decided on specificity, and `html[data-variant] .shot-*` (0,2,1) outscores it (0,2,0). */
-html:not([data-variant="desk"]) .shot-light {
+html:not([data-variant="maker"]) .shot-light {
     display: none;
 }
-html[data-variant="desk"] .shot-dark {
+html[data-variant="maker"] .shot-dark {
     display: none;
 }

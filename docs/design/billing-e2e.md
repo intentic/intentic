@@ -5,7 +5,7 @@ Billing page. The question asked: as the hosted plan goes on sale, will payments
 person on the plan" fail in ways nothing catches, and should there be end-to-end tests? The answer, stated
 once here and argued below: **yes, in three tiers, because the money path was tested only module by module
 against shapes we wrote ourselves. Writing them found four defects: the webhook's ordering guard dropped
-events for good, the free lane's refusal went out as HTTP 500, both `.env.example` files still documented the
+events for good, the free plan's refusal went out as HTTP 500, both `.env.example` files still documented the
 variable names of the plan's predecessor (under which the plan silently does not exist), and a plan on sale
 without a webhook secret said nothing.**
 
@@ -67,7 +67,7 @@ event's `created` is no longer read at all. The unit tests were rewritten to say
 carrying a state Stripe has left does not roll the row back; a read older than the row is dropped; an event
 whose object is not a subscription asks Stripe nothing).
 
-The second run found the other one. **The free lane's refusal went out as HTTP 500.** `PAYMENT_REQUIRED` is
+The second run found the other one. **The free plan's refusal went out as HTTP 500.** `PAYMENT_REQUIRED` is
 the platform's own code, not one of oRPC's fourteen, and `fallbackORPCErrorStatus` maps a code it does not
 know to 500. So every user who reached their monthly hour ceiling — at a wake, a restart, a provision or an
 overlay build, the four sites — was answered "internal server error". Nothing on screen was wrong, which is

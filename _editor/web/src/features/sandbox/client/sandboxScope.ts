@@ -12,7 +12,7 @@ import { resetTerminalOpen } from "../../../shell/window/useLayout";
 import { resetWorkspaceLive } from "../../workspace/changes/live/useWorkspaceLive";
 import { resetWorkspaceTabs } from "../../workspace/tabs/useWorkspaceTabs";
 import { resetWorkspaceTreeState } from "../../workspace/explorer/useWorkspaceTree";
-import { resetDesk } from "../../workspace/desk/useDesk";
+import { resetHome } from "../../workspace/home/useHome";
 
 // Re-scopes client-side singleton state to the active sandbox; vue-query is already scoped by key, but these
 // live outside the component tree. Liveness, sandboxSession's credentials and the extension host re-scope
@@ -29,8 +29,8 @@ export const resetWorkspaceScopedState = (): void => {
     resetWorkspaceTreeState();
     // The editor strip goes with the tree it browses: both are paths into one sandbox's /work.
     resetWorkspaceTabs();
-    // The desk's open folder is a path into that same tree.
-    resetDesk();
+    // The home's open folder is a path into that same tree.
+    resetHome();
     resetTerminalOpen();
     // Path-keyed, and two sandboxes of the same project share every path, so this is stale, not just surplus,
     // without a reset.

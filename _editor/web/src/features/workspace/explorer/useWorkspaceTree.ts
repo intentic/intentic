@@ -15,7 +15,7 @@ import { resetUploadQueue } from "../files/upload/useUploadQueue";
 import { dropProvisional, markSettled, noteArriving, noteLeaving, reconcileProvisional, resetProvisional } from "../files/provisionalEntries";
 import { renameOpenPaths } from "../tabs/useWorkspaceTabs";
 import { changedDirs } from "../changes/live/useWorkspaceLive";
-import { useDesk } from "../desk/useDesk";
+import { useHome } from "../home/useHome";
 import { readExpandedDirs, writeExpandedDirs } from "../tabs/workspaceSnapshot";
 import { scopeQuery, workspaceAgent } from "../health/workspaceScope";
 import { basename, parentDir } from "@intentic/ui/path";
@@ -49,10 +49,10 @@ const clearLoadNotice = (): void => {
 
 // Expanded directory paths (also folded nest-parents); ignored while filtering, persisted per sandbox.
 const expanded = ref<ReadonlySet<string>>(new Set());
-// Whether a folder's listing is one someone is actually looking at: open in the tree, or the folder the desk is showing.
+// Whether a folder's listing is one someone is actually looking at: open in the tree, or the folder the home is showing.
 // A lazy listing outlives the gesture that loaded it, so without this a folder opened once is re-read forever.
-const { deskDir } = useDesk();
-const onScreen = (path: string): boolean => expanded.value.has(path) || deskDir.value === path;
+const { homeDir } = useHome();
+const onScreen = (path: string): boolean => expanded.value.has(path) || homeDir.value === path;
 // Sandbox the open folders belong to, captured at restore rather than read live, to avoid a rescope race.
 let scopedSandboxId: string | undefined;
 const { activeSandboxId } = useSandbox();

@@ -15,7 +15,7 @@ import type { ExtensionHost } from "../../extensions/installed-extensions.js";
 import { echoConfig, secretField } from "../summary.js";
 import { browserHandler } from "./browser.handler.js";
 
-// Real first-party `social` extension: every platform's card, login URL and skill come from here.
+// Real first-party `social` extension: every platform's entry, login URL and skill come from here.
 const EXTENSIONS_DIR = join(repoRoot(import.meta.url), "_extensions");
 
 // Ctx exposing only what browserHandler touches, over a fresh temp workspace; `capabilities` is a mutable array tests
@@ -135,7 +135,7 @@ test("an identity-born account's roster line names its identity, and its removal
     await expect(drain(browserHandler.apply(harness.ctx, "x", dangling.config))).rejects.toThrow(/no identity "ghost"/);
 });
 
-test("every contributed browser card can resolve a page to open, and has a skill that leaves room for the core notes", async () => {
+test("every contributed browser entry can resolve a page to open, and has a skill that leaves room for the core notes", async () => {
     const registry = await contributionRegistry(host);
     const browsers = [...registry.values()].filter((entry) => entry.spec.kind === "browser");
     expect(browsers.length).toBeGreaterThan(0);
@@ -170,7 +170,7 @@ test("apply substitutes the core tools note and the roster into the contributed 
     expect(skill).toContain("Accounts on this skill");
 });
 
-// npmjs is declared by `connectors`, not `social`: the one browser card outside the social pack.
+// npmjs is declared by `connectors`, not `social`: the one browser entry outside the social pack.
 test("a browser platform contributed by another extension applies the same way", async () => {
     const harness = tempCtx();
     const npmjs: Capability = { id: "npmjs", kind: "browser", config: { platform: "npmjs" } };
@@ -200,7 +200,7 @@ test("echoConfig masks the stored password; it is the browser entry's one secret
     expect(secretField(credentialed, new Map())).toBe("password");
 });
 
-test("a generic browser session connects a site that has no card of its own, grouped by its host", async () => {
+test("a generic browser session connects a site that has no entry of its own, grouped by its host", async () => {
     const harness = tempCtx();
     const acme = session("acme", "https://admin.acme.com/dashboard");
 
@@ -218,12 +218,12 @@ test("a generic browser session connects a site that has no card of its own, gro
 });
 
 test("a session's sign-in page falls back to the page it opens on", () => {
-    const card = { kind: "browser", id: "website", fields: [], skill: "s" } as unknown as CapabilityContribution;
-    expect(browserUrls(card, { platform: "website", homeUrl: "https://admin.acme.com/dashboard" })).toEqual({
+    const entry = { kind: "browser", id: "website", fields: [], skill: "s" } as unknown as CapabilityContribution;
+    expect(browserUrls(entry, { platform: "website", homeUrl: "https://admin.acme.com/dashboard" })).toEqual({
         homeUrl: "https://admin.acme.com/dashboard",
         loginUrl: "https://admin.acme.com/dashboard",
     });
-    expect(browserUrls(card, { platform: "website", homeUrl: "https://admin.acme.com/", loginUrl: "https://id.acme.com/signin" })).toEqual({
+    expect(browserUrls(entry, { platform: "website", homeUrl: "https://admin.acme.com/", loginUrl: "https://id.acme.com/signin" })).toEqual({
         homeUrl: "https://admin.acme.com/",
         loginUrl: "https://id.acme.com/signin",
     });
@@ -238,7 +238,7 @@ test("a session's sign-in page falls back to the page it opens on", () => {
     } as unknown as CapabilityContribution;
     expect(browserUrls(pinned, { platform: "npmjs" })).toEqual({ loginUrl: "https://a/login", homeUrl: "https://a/" });
     expect(browserUrls(pinned, { platform: "npmjs", homeUrl: "https://mine/" })?.homeUrl).toBe("https://mine/");
-    expect(browserUrls(card, { platform: "website" })).toBeUndefined();
+    expect(browserUrls(entry, { platform: "website" })).toBeUndefined();
 });
 
 test("a session with no page to open, or a page that is not a web address, fails the add", async () => {

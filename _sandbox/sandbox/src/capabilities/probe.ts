@@ -4,8 +4,8 @@ import { errorMessage } from "@intentic/base/errors";
 import type { Capability, CapabilityProbe } from "@intentic/sandbox-contract";
 import { contributionFor, type ResolvedContribution } from "./contributions.js";
 
-// Checks whether a card's settings actually reach the service, turning a generic failure into a specific reason. A cli
-// card declares its probe in the manifest; endpoint and mcp are handled directly since their check is the protocol
+// Checks whether a entry's settings actually reach the service, turning a generic failure into a specific reason. A cli
+// entry declares its probe in the manifest; endpoint and mcp are handled directly since their check is the protocol
 // itself. Read-only, and uses node:https since a self-signed certificate must not fail the request.
 
 // A probe is about reachability, not a job: no answer within this long is itself the finding.
@@ -19,7 +19,7 @@ const template = (source: string, config: Record<string, unknown>): string =>
         return uri === undefined ? value : encodeURIComponent(value);
     });
 
-// Digs the caller's name out of the JSON body via the card's declared dotted path; missing is ordinary.
+// Digs the caller's name out of the JSON body via the entry's declared dotted path; missing is ordinary.
 const identityIn = (body: unknown, path: string): string | undefined => {
     let node: unknown = body;
     for (const key of path.split(".")) {
@@ -53,7 +53,7 @@ const transportReason = (error: unknown): string => {
     return errorMessage(error);
 };
 
-// What each HTTP status means for a credential, said once so every card refuses in the same words.
+// What each HTTP status means for a credential, said once so every entry refuses in the same words.
 const httpReason = (status: number): string => {
     if (status === 401 || status === 403) {
         return "the credential was refused";
@@ -154,10 +154,10 @@ const runHttpProbe = async (probe: HttpProbe): Promise<CapabilityProbe> => {
 const NO_TEST: CapabilityProbe = {
     checked: false,
     ok: false,
-    message: "This one can't be tested from here: add it, and its card will tell you where it stands.",
+    message: "This one can't be tested from here: add it, and its entry will tell you where it stands.",
 };
 
-// Builds an HTTP probe from the card's declared template, using the submitted config values.
+// Builds an HTTP probe from the entry's declared template, using the submitted config values.
 const contributionProbe = (contribution: ResolvedContribution | undefined, config: Record<string, unknown>): CapabilityProbe | HttpProbe => {
     const spec = contribution?.spec;
     if (spec === undefined || spec.kind !== "cli" || spec.probe === undefined) {

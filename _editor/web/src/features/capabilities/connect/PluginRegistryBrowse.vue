@@ -12,7 +12,7 @@ import { useT } from "@intentic/ui/i18n";
 
 const t = useT();
 
-/** What this card installs: the rows of any other kind are not its to offer. */
+/** What this tile installs: the rows of any other kind are not its to offer. */
 const props = defineProps<{ kind: CapabilityKind }>();
 
 const emit = defineEmits<{
@@ -43,7 +43,7 @@ const browse = async (): Promise<void> => {
     }
 };
 
-// Only rows this card can install: a registry serves plugins and extensions from one file, and the daemon refuses a
+// Only rows this tile can install: a registry serves plugins and extensions from one file, and the daemon refuses a
 // mismatched kind.
 const entries = computed<RegistryEntry[]>(() => market.value?.plugins.filter((entry) => entry.kind === props.kind) ?? []);
 

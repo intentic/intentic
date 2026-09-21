@@ -19,7 +19,7 @@ import {
 import { computed, reactive, ref } from "vue";
 import AutomationComposer from "./AutomationComposer.vue";
 import AutomationRow from "./AutomationRow.vue";
-import FrontDeskInstallDialog from "./FrontDeskInstallDialog.vue";
+import VisitorChatInstallDialog from "./VisitorChatInstallDialog.vue";
 import { host } from "./host";
 import { availableTemplates, glyph, useCatalog, withAvailability } from "./catalog";
 import { useAutomations } from "./useAutomations";
@@ -104,8 +104,8 @@ const availableChores = computed(() =>
     offered.value.filter((template) => template.offer === `create` && !automations.value.some((automation) => automation.id === template.id)),
 );
 
-// Templates marked `configure` (today just Front Desk): picking one opens the composer prefilled, not a silent save,
-// since an unconfigured Front Desk would admit nobody.
+// Templates marked `configure` (today just Visitor chat): picking one opens the composer prefilled, not a silent save,
+// since an unconfigured Visitor chat would admit nobody.
 const availableSuggestions = computed(() =>
     offered.value.filter((template) => template.offer === `configure` && !automations.value.some((automation) => automation.id === template.id)),
 );
@@ -320,8 +320,8 @@ const toggleDetail = (id: string): void => {
             </section>
         </div>
 
-        <!-- Keyed on the row, so opening a different Front Desk remounts instead of showing the previous one's probes mid-flight. -->
-        <FrontDeskInstallDialog
+        <!-- Keyed on the row, so opening a different Visitor chat remounts instead of showing the previous one's probes mid-flight. -->
+        <VisitorChatInstallDialog
             v-if="installing"
             :key="installing.id"
             :automation="installing"

@@ -90,10 +90,10 @@ const ROLE_OPTIONS = computed((): readonly PickerOption<GrantedRole>[] => [
     // Below viewer: talks to the assistants that work in the areas it holds, and is shown nothing else. Listed last,
     // since it is the narrowest.
     {
-        label: t(`sandbox.sandboxAccess.desk`),
-        value: `desk`,
+        label: t(`sandbox.sandboxAccess.guest`),
+        value: `guest`,
         icon: `comments`,
-        hint: t(`sandbox.sandboxAccess.deskTalksToAssistants`),
+        hint: t(`sandbox.sandboxAccess.guestTalksToAssistants`),
     },
 ]);
 const inviteRole = ref<GrantedRole>(`collaborator`);
@@ -104,7 +104,7 @@ const grants = ref<readonly AccessGrant[]>([]);
 // Undefined, not an empty list: a row with no areas reaches the whole workspace, which is what every grant means
 // until somebody narrows it.
 const areasOf = (address: string): readonly string[] | undefined => grants.value.find((grant) => grant.email === address.toLowerCase())?.areas;
-// A row on its way to a tier the daemon refuses half-made: a writer with no area, a desk whose areas reach no
+// A row on its way to a tier the daemon refuses half-made: a writer with no area, a guest whose areas reach no
 // assistant. The pick is held here, the picker under the row names the areas, and that write is what makes the tier
 // real — so picking the tier is never itself the grant.
 const draft = ref<{ email: string; role: GrantedRole; areas: readonly string[] | undefined }>();
@@ -122,16 +122,16 @@ const rowAreas = (address: string): readonly string[] | undefined => {
 const { namesOf } = usePersonaReach();
 // An area is named on the row the way it is on its own page; an id with no area behind it reads as itself, since
 // the person still holds it.
-// Held for a desk with no fence, the one tier the daemon refuses this read to; every other tier may list the names.
-const { labelOf: areaLabel } = useAreas(() => sandbox.active.value?.role !== `desk`);
-// What a desk row reaches, since for that tier the fence IS the answer: the badges say which folders, this says who.
-// Only on a desk — every other tier does work of its own, and which assistants it may wear is a secondary fact.
-const deskLine = (member: InviteRecord): string | undefined => {
-    if (rowRole(member) !== `desk`) {
+// Held for a guest with no fence, the one tier the daemon refuses this read to; every other tier may list the names.
+const { labelOf: areaLabel } = useAreas(() => sandbox.active.value?.role !== `guest`);
+// What a guest row reaches, since for that tier the fence IS the answer: the badges say which folders, this says who.
+// Only on a guest — every other tier does work of its own, and which assistants it may wear is a secondary fact.
+const guestLine = (member: InviteRecord): string | undefined => {
+    if (rowRole(member) !== `guest`) {
         return undefined;
     }
     const names = namesOf(rowAreas(member.email));
-    return names.length === 0 ? t(`sandbox.sandboxAccess.deskReachesNobody`) : t(`sandbox.sandboxAccess.deskReaches`, { names: names.join(`, `) });
+    return names.length === 0 ? t(`sandbox.sandboxAccess.guestReachesNobody`) : t(`sandbox.sandboxAccess.guestReaches`, { names: names.join(`, `) });
 };
 // Whether a grant at this tier, fenced this way, is one the daemon will take.
 const sendable = (role: GrantedRole, areas: readonly string[] | undefined): boolean => grantSendable(role, areas, namesOf(areas).length);
@@ -194,7 +194,7 @@ const load = async (): Promise<void> => {
     }
     clearNotice();
     try {
-        // Both rosters, since only the daemon's says which cards a desk holds; a daemon that isn't answering leaves the
+        // Both rosters, since only the daemon's says which cards a guest holds; a daemon that isn't answering leaves the
         // chips blank rather than the list.
         const [invited, granted] = await Promise.all([
             apiClient.invite.list({ sandboxId: id }),
@@ -329,7 +329,7 @@ const revokeSessions = async (): Promise<void> => {
 };
 
 // Re-grades with the same two-write, daemon-first order as a grant; applies on the member's next request. Reports
-// whether both writes landed, since a staged desk clears only once its cards are really granted.
+// whether both writes landed, since a staged guest clears only once its cards are really granted.
 const setRole = async (target: string, role: GrantedRole, areas: readonly string[] | undefined = areasOf(target)): Promise<boolean> => {
     const id = sandbox.activeSandboxId.value;
     if (id === undefined || busy.value || !sendable(role, areas)) {
@@ -357,7 +357,7 @@ const setRole = async (target: string, role: GrantedRole, areas: readonly string
 };
 
 // Picking a tier the daemon would refuse at this row's current fence stages it instead of writing it — a writer
-// holding no area, a desk whose areas reach no assistant — and the picker beneath names what it still needs. Every
+// holding no area, a guest whose areas reach no assistant — and the picker beneath names what it still needs. Every
 // other pick is a decision complete in itself and is written on the spot.
 const pickRole = (member: InviteRecord, role: GrantedRole): void => {
     const areas = areasOf(member.email);
@@ -436,8 +436,8 @@ const revoke = async (target: string): Promise<void> => {
                     </template>
                 </div>
                 <template v-for="member in members" :key="member.email">
-                <!-- A desk's description is the assistants its fence reaches, the whole of what that tier can do. -->
-                <Row icon="user" :title="member.email" :description="deskLine(member)">
+                <!-- A guest's description is the assistants its fence reaches, the whole of what that tier can do. -->
+                <Row icon="user" :title="member.email" :description="guestLine(member)">
                     <!-- Status belongs in metadata, not the action slot. -->
                     <template #meta>
                         <StatusBadge

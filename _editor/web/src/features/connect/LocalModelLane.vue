@@ -6,7 +6,7 @@ import { Button, Icon, type IconName, ui } from "@intentic/ui";
 import { computed, ref, watch } from "vue";
 import { RouterLink } from "vue-router";
 import { useCapabilities } from "../capabilities/connect/useCapabilities";
-import { suggestName } from "../capabilities/model/cards";
+import { suggestName } from "../capabilities/model/tiles";
 import { useT } from "@intentic/ui/i18n";
 
 // The machine the reader already owns, offered as a peer of the two account lanes. Two rungs and no arithmetic: one

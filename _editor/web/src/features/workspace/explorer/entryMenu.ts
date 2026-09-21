@@ -3,7 +3,7 @@ import { archiveFormat } from "@intentic/sandbox-contract";
 import type { MenuItem } from "primevue/menuitem";
 import { t } from "@intentic/ui/i18n";
 
-// The right-click menu both file surfaces (the tree, the desk) build: one list, so a verb never exists in one and not
+// The right-click menu both file surfaces (the tree, the home) build: one list, so a verb never exists in one and not
 // the other, and the wording of a bulk verb ("Delete 3 items") is decided once. Each surface supplies its own rows in
 // the slots (`head`, `lead`, `tail`) and the closures behind the verbs. Pure, no framework code.
 
@@ -38,7 +38,7 @@ export interface EntryMenuInput {
     // The target is a folder holding only empty folders.
     readonly barren: boolean;
     readonly clipboardFull: boolean;
-    // The surface's own rows: first of all (the desk's Open), after New Folder (a folder's documents, personas,
+    // The surface's own rows: first of all (the home's Open), after New Folder (a folder's documents, personas,
     // checks, management), and last (the tree's Collapse Folders). The read-only menu keeps the readable ones.
     readonly head?: readonly MenuItem[];
     readonly lead?: readonly MenuItem[];

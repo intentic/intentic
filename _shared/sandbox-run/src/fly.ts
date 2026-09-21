@@ -37,7 +37,7 @@ export interface FlyMachineRun {
 export interface FlyMachineService {
     readonly protocol: "tcp";
     readonly internal_port: number;
-    // The platform starts a stopped machine, never the proxy, to respect the free lane's hour cap.
+    // The platform starts a stopped machine, never the proxy, to respect the free plan's hour cap.
     readonly autostart: boolean;
     readonly autostop: "off" | "stop" | "suspend";
     readonly concurrency: { readonly type: "connections" | "requests"; readonly soft_limit: number; readonly hard_limit: number };

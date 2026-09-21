@@ -458,7 +458,7 @@ const originSources = (): Record<string, { icon: IconName; label: string }> => (
     discord: { icon: `comments`, label: `Discord` },
     slack: { icon: `comments`, label: `Slack` },
     imap: { icon: `envelope`, label: t(`agents.agentStatus.email`) },
-    webchat: { icon: `globe`, label: t(`agents.agentStatus.frontDesk`) },
+    webchat: { icon: `globe`, label: t(`agents.agentStatus.visitorChat`) },
     webhook: { icon: `bolt`, label: t(`agents.agentStatus.webhook`) },
 });
 

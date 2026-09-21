@@ -29,7 +29,7 @@ const { default: HostConnectDialog } = await import("./HostConnectDialog.vue");
 const { scriptSource } = await import("../../../app/environments/scriptCommand");
 
 // Dialog content isn't under the mount point (PrimeVue teleports to body). `visible` starts false and flips, since
-// minting hangs off that transition, as on the card.
+// minting hangs off that transition, as on the tile.
 const mount = (id = `my-desktop`, unnamed = false): { open: () => void } => {
     const el = document.createElement(`div`);
     document.body.append(el);

@@ -31,7 +31,7 @@ const { default: ChatMentionPopover } = await import("./ChatMentionPopover.vue")
 
 const entry = (provider: AgentProvider, value: string, label: string): PickerEntry => ({ key: `${provider}:${value}`, provider, value, label });
 const SOURCES: QuickPickSources = {
-    persona: { cards: [{ id: `intentic`, label: `Intentic`, capabilities: [] }], picked: undefined },
+    persona: { personas: [{ id: `intentic`, label: `Intentic`, capabilities: [] }], picked: undefined },
     sandbox: { runners: [{ id: `omen` }], boxes: [], box: undefined, runner: undefined },
     model: { entries: [entry(`claude`, `claude-opus-5`, `Claude Opus 5`), entry(`claude`, `claude-sonnet-4-5`, `Claude Sonnet 4.5`)], provider: `claude`, model: `claude-opus-5`, isReady: () => true },
     effort: { options: [{ label: `High`, value: `high` }], picked: `high` },

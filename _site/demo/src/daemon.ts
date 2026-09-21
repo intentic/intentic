@@ -39,7 +39,7 @@ import { demoLoops } from "./fixture/loops";
 import { demoRuns, demoWorkflows } from "./fixture/workflows";
 import { choresReport, writeLedger } from "./fixture/chores";
 import { ciJobs, ciRunsResponse } from "./fixture/ci";
-import { DESK_AWAITING_ID, DESK_FEATURED_ID, DESK_SANDBOX_NAME, deskRoster, SUPPLIER_LETTER_DOCX, SUPPLIER_LETTER_PATH } from "./fixture/desk";
+import { MAKER_AWAITING_ID, MAKER_FEATURED_ID, MAKER_SANDBOX_NAME, makerRoster, SUPPLIER_LETTER_DOCX, SUPPLIER_LETTER_PATH } from "./fixture/maker";
 import { AWAITING_AGENT_ID, FEATURED_AGENT_ID, fleetRoster } from "./fixture/fleet";
 import {
     deleteKnowledgeNote,
@@ -83,7 +83,7 @@ import {
     workspaceTree,
     writeFile,
 } from "./fixture/workspace";
-import { demoMode, deskEdition } from "./mode";
+import { demoMode, makerEdition } from "./mode";
 import { eventStream } from "./sse";
 import { featuredRun, type Run, visitorRun } from "./turn";
 import { json, refuse } from "./transport";
@@ -95,17 +95,17 @@ import { json, refuse } from "./transport";
 const STARTED_AT = Date.now();
 
 // Which recording's two special cards this page serves: the run with a script behind it, and the one parked on a question.
-const FEATURED_ID = deskEdition ? DESK_FEATURED_ID : FEATURED_AGENT_ID;
-const AWAITING_ID = deskEdition ? DESK_AWAITING_ID : AWAITING_AGENT_ID;
+const FEATURED_ID = makerEdition ? MAKER_FEATURED_ID : FEATURED_AGENT_ID;
+const AWAITING_ID = makerEdition ? MAKER_AWAITING_ID : AWAITING_AGENT_ID;
 
 // Live state; every write bumps `rev` and re-broadcasts (snapshot-not-diff, newest rev wins).
 const roster = {
-    agents: deskEdition ? deskRoster(STARTED_AT) : fleetRoster(STARTED_AT).filter((agent) => demoMode.agents?.includes(agent.id) ?? true),
+    agents: makerEdition ? makerRoster(STARTED_AT) : fleetRoster(STARTED_AT).filter((agent) => demoMode.agents?.includes(agent.id) ?? true),
     rev: 1,
 };
 
-// Held automation approvals project onto the board's attention lane; a desk runs no automations.
-const heldApprovals = () => (deskEdition ? [] : automationApprovals(Date.now()));
+// Held automation approvals project onto the board's attention lane; a maker runs no automations.
+const heldApprovals = () => (makerEdition ? [] : automationApprovals(Date.now()));
 const listeners = new Set<(event: SystemEvent) => void>();
 const runs = new Map<string, Run>();
 
@@ -291,7 +291,7 @@ const land = (id: string): Response => {
     return json(result);
 };
 
-const info: Info = { name: deskEdition ? DESK_SANDBOX_NAME : `acme-shop`, version: `demo`, latest: `demo`, updateAvailable: false };
+const info: Info = { name: makerEdition ? MAKER_SANDBOX_NAME : `acme-shop`, version: `demo`, latest: `demo`, updateAvailable: false };
 
 // The handshake `state` a routed sign-in issues; ConnectFlow only accepts a pasted address carrying this one.
 const DEMO_CONNECT_STATE = `demo-connect-state`;
@@ -605,7 +605,7 @@ const ROUTES: readonly (readonly [string, string, Handler])[] = [
     [`GET`, `/extensions/{id}/settings`, () => json({ settings: {}, secretsSet: [] })],
     [`POST`, `/extensions/{id}/settings`, () => json({ ok: true })],
     [`GET`, `/approvals`, () => json({ approvals: [], invalid: [] })],
-    // The enforced roster, mutable: the Access tab pushes its grant here first, and a desk's chips come back from it.
+    // The enforced roster, mutable: the Access tab pushes its grant here first, and a maker's chips come back from it.
     [`GET`, `/members`, () => json({ members: grants() })],
     [`POST`, `/members`, grantMemberRoute],
     [`DELETE`, `/members`, revokeMemberRoute],
@@ -1011,13 +1011,13 @@ function saveAutomationRoute({ request }: RouteContext): Promise<Response> {
     return request.json().then((body) => okAfter(() => saveAutomation(Date.now(), body as Automation)));
 }
 
-// The refusals the real daemon makes on the spot (auth/members/members.routes.ts): a writer and a desk each need a
+// The refusals the real daemon makes on the spot (auth/members/members.routes.ts): a writer and a maker each need a
 // fence, since for both the areas are the tier rather than a narrowing of it, and a maintainer cannot carry one at
 // all, since it holds the owner's operating authority and a folder fence over it would enforce nothing.
 function grantMemberRoute({ request }: RouteContext): Promise<Response> {
     return request.json().then((body) => {
         const grant = body as DemoGrant;
-        if ((grant.areas?.length ?? 0) === 0 && (grant.role === `writer` || grant.role === `desk`)) {
+        if ((grant.areas?.length ?? 0) === 0 && (grant.role === `writer` || grant.role === `guest`)) {
             return json({ error: `a ${grant.role} needs at least one area` }, 400);
         }
         if (grant.role === `maintainer` && grant.areas !== undefined) {
@@ -1060,7 +1060,7 @@ function savePersonaRoute({ request }: RouteContext): Promise<Response> {
 // The named parts of the workspace, upserted like the personas above: two, so a picker shows both the fence and
 // what it leaves out.
 const demoAreas: Area[] = [
-    { id: `support`, label: `Support desk`, brief: `Tickets, replies and the help centre.`, folders: [`web/support`] },
+    { id: `support`, label: `Support maker`, brief: `Tickets, replies and the help centre.`, folders: [`web/support`] },
     { id: `site`, label: `Marketing site`, folders: [`web/site`] },
 ];
 function saveAreaRoute({ request }: RouteContext): Promise<Response> {

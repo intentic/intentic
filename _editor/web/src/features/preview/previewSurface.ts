@@ -25,7 +25,7 @@ const restore = (): void => {
 restore();
 
 // Re-scopes to the incoming sandbox: its own last target comes back, and the parked panel closes rather than keep the
-// outgoing sandbox's app loaded. A floating window re-marks itself opened on arrival (pages/FloatingArea.vue).
+// outgoing sandbox's app loaded. A floating window re-marks itself opened on arrival (pages/FloatingSection.vue).
 export const resetPreviewSurface = (): void => {
     opened.value = false;
     restore();

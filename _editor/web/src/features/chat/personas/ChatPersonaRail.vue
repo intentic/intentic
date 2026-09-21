@@ -71,7 +71,7 @@ const statusOf = (entry: PersonaChat): { name: IconName; spin?: boolean; class: 
 // on a question says so here too, rather than leaving the reader a glyph to interpret.
 const chipOf = (entry: PersonaChat): StandingChip | undefined => (entry.agent === undefined ? undefined : standingChip(entry.agent));
 
-// Which of a persona's chats the card speaks for: a turn in flight first, else the most recent, else none — undefined
+// Which of a persona's chats the row speaks for: a turn in flight first, else the most recent, else none — undefined
 // is a distinct state, not a gap, for a persona with no chats here yet.
 const leadOf = (mine: readonly PersonaChat[]): PersonaChat | undefined =>
     mine.find((entry) => entry.agent !== undefined && turnInFlight(entry.agent)) ??
@@ -79,7 +79,7 @@ const leadOf = (mine: readonly PersonaChat[]): PersonaChat | undefined =>
     mine[0];
 
 // What it runs on: the agent's recorded model, else the last turn's, else what the composer would send next, else the
-// bare provider. Must agree with ChatTabList.modelOf and AgentCard.model.
+// bare provider. Must agree with ChatTabList.modelOf and AgentRow.model.
 const modelOf = (entry: PersonaChat | undefined): string | undefined => {
     if (entry === undefined) {
         return undefined;
@@ -111,7 +111,7 @@ interface PersonaRow {
     readonly id: string;
     readonly label: string;
     readonly bounds: string | undefined;
-    // What the lead chat runs on, and what it's doing: the card's one line of facts.
+    // What the lead chat runs on, and what it's doing: the row's one line of facts.
     readonly model: string | undefined;
     readonly live: { icon: IconName; text: string; since: number | undefined } | undefined;
     // The persona's standing glyph, off the same lead chat; spins while a turn is in flight.
@@ -122,7 +122,7 @@ interface PersonaRow {
     readonly open: boolean;
 }
 
-// One row per persona card, nothing else: no "Anyone" row here, since an unpinned chat already has a home in the Agents
+// One row per persona, nothing else: no "Anyone" row here, since an unpinned chat already has a home in the Agents
 // cut, and grouping them here would outweigh the personas the list exists to show.
 const rows = computed<PersonaRow[]>(() =>
     personas.value.map((persona) => {
@@ -138,7 +138,7 @@ const rows = computed<PersonaRow[]>(() =>
             status: lead === undefined ? undefined : statusOf(lead),
             chats: mine.length,
             lastAt: mine[0]?.agent?.updatedAt,
-            // Same attention channel a session card uses: one of this persona's chats is waiting on you.
+            // Same attention channel a session row uses: one of this persona's chats is waiting on you.
             needsYou: mine.some((entry) => entry.agent !== undefined && blocked(entry.agent)),
             // Ringed only for a chat opened from here; see `picked`.
             open: mine.some((entry) => entry.conversation.conversationId === picked.value),
@@ -148,7 +148,7 @@ const rows = computed<PersonaRow[]>(() =>
 
 const empty = computed(() => personas.value.length === 0);
 
-// One shared clock for the whole column, so every card's elapsed readout ticks together instead of drifting apart.
+// One shared clock for the whole column, so every row's elapsed readout ticks together instead of drifting apart.
 const now = useNow();
 
 // Switching chats or starting a fresh one both land here; the ring follows whichever this rail put on screen.
@@ -198,7 +198,7 @@ const sessionsOf = (row: PersonaRow) =>
 </script>
 
 <template>
-    <!-- No slab: the other half of this rail (the lanes) has none either, and the cards take their step up from `--card-rest`. -->
+    <!-- No slab: the other half of this rail (the lanes) has none either, and the rows take their step up from `--card-rest`. -->
     <div class="flex min-h-0 min-w-0 flex-col p-2">
         <div class="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto">
             <template v-if="empty">
@@ -211,7 +211,7 @@ const sessionsOf = (row: PersonaRow) =>
 
             <template v-else>
                 <template v-for="row in rows" :key="row.key">
-                    <!-- Running personas expose status and live activity in the card. -->
+                    <!-- Running personas expose status and live activity in the row. -->
                     <RailCard
                         :title="row.label"
                         :status="row.status"
@@ -224,7 +224,7 @@ const sessionsOf = (row: PersonaRow) =>
                         :aria-label="t(`chat.chatPersonaRail.showSChats`, { label: row.label })"
                         @click="toggleExpanded(row)"
                     >
-                        <!-- The persona face leads the card at its standard size. -->
+                        <!-- The persona face leads the row at its standard size. -->
                         <template #aside>
                             <!-- The face's default size sets the row height. -->
                             <PersonaFace :persona="row" />
@@ -252,7 +252,7 @@ const sessionsOf = (row: PersonaRow) =>
                     </RailCard>
 
                     <!-- Persona chats are grouped beneath the persona row. -->
-                    <!-- Group indentation keeps full-width chat cards inside the rail. -->
+                    <!-- Group indentation keeps full-width chat rows inside the rail. -->
                     <!-- Chat rows reuse the persona's live activity source. -->
                     <div v-if="isExpanded(row)" class="ml-5 flex min-w-0 flex-col gap-2">
                         <RailCard
@@ -285,7 +285,7 @@ const sessionsOf = (row: PersonaRow) =>
                     </div>
                 </template>
 
-                <!-- Link to the page that owns these cards, in the same place the composer's picker puts it. -->
+                <!-- Link to the page that owns these rows, in the same place the composer's picker puts it. -->
                 <RouterLink to="/sandbox/personas" :class="ui.addTile(`gap-1 rounded-lg py-1.5 text-2xs`)">
                     <Icon name="cog" class="text-2xs" />
                     {{ t(`chat.chatPersonaRail.managePersonas`) }}

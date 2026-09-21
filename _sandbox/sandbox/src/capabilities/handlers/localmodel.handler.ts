@@ -36,14 +36,14 @@ const gpuAsked = (config: unknown): boolean => (config as LocalModelConfig | und
 const weightsPath = (ctx: CapabilityCtx, source: LocalModelSource): string => localModelWeightsPath(ctx.workspace.root, source);
 
 // This handler's own ledgers, keyed by ENTRY, unlike the weights cache's, which are keyed by destination path: one
-// download can be what several entries are waiting on, while a job, a failure and the GPU's one owner belong to a card.
+// download can be what several entries are waiting on, while a job, a failure and the GPU's one owner belong to a entry.
 const jobs = new Map<string, { readonly promise: Promise<void>; readonly abort: AbortController }>();
 const failures = new Map<string, string>();
 let selectedModelId: string | undefined;
 let serverSwitch = Promise.resolve();
 
 // serverCommand's flags, each pinned against a bug:
-//   --ctx-size the card's chosen window, never native (dwarfs the weights) or a flat number (may not fit a turn)
+//   --ctx-size the entry's chosen window, never native (dwarfs the weights) or a flat number (may not fit a turn)
 //   --parallel 1 llama.cpp defaults to 4 slots, each reserving the full window again
 //   --cache-type q8_0 halves the reservation at negligible quality cost
 //   --jinja curated models carry their own chat/tool template in the GGUF
@@ -53,7 +53,7 @@ export const serverCommand = (path: string, port: number, window: number): strin
 };
 
 // The same budget the connect view sizes its recommendation against (local-model-fit.ts): a view reading one number and
-// this check refusing on another is how a card recommends a model it then will not start.
+// this check refusing on another is how a entry recommends a model it then will not start.
 const admitModel = async (path: string, window: number): Promise<void> => {
     const [weightsBytes, budget] = await Promise.all([fileSize(path), localModelBudget()]);
     const estimated = estimatedModelMemory(weightsBytes, window);
@@ -91,7 +91,7 @@ const stopOtherServers = async (ctx: CapabilityCtx, id: string): Promise<void> =
 };
 
 // llama-server's own readiness: /health answers 503 while loading, 200 once serving. Short timeout, since status runs
-// on the card's poll clock.
+// on the entry's poll clock.
 const serverHealthy = async (port: number): Promise<boolean> =>
     fetch(`http://127.0.0.1:${port}/health`, { signal: AbortSignal.timeout(1500) }).then(
         (response) => response.ok,
@@ -184,7 +184,7 @@ const startInBackground = (ctx: CapabilityCtx, id: string, source: LocalModelSou
         });
     })()
         .catch((error: unknown) => {
-            // An aborted job isn't a failure: the card that would show it is the one being removed.
+            // An aborted job isn't a failure: the entry that would show it is the one being removed.
             if (abort.signal.aborted) {
                 return;
             }
@@ -205,9 +205,9 @@ const windowNote = (window: number): string => (fitsAgentTurn(window) ? "" : ", 
 const windowAdvice = (window: number): string =>
     fitsAgentTurn(window)
         ? ""
-        : " — enough for the one-shot helper jobs (titles, commit messages), not for a full agent turn, whose tools and instructions fill a window this size on their own. Raise it on the card to chat with this model.";
+        : " — enough for the one-shot helper jobs (titles, commit messages), not for a full agent turn, whose tools and instructions fill a window this size on their own. Raise it on the entry to chat with this model.";
 
-// Same GPU sentences as the docker card, minus the toolkit clause (no nested runtime here): pending, error, or silent
+// Same GPU sentences as the docker entry, minus the toolkit clause (no nested runtime here): pending, error, or silent
 // once the flag rode.
 const gpuStatus = (config: unknown): CapabilityStatus | undefined => {
     if (!gpuAsked(config)) {
@@ -262,7 +262,7 @@ export const localModelHandler: CapabilityHandler = {
         if (source === undefined) {
             throw new Error(
                 model.model === "custom"
-                    ? "A custom model needs its GGUF URL, fill in the link field on the card."
+                    ? "A custom model needs its GGUF URL, fill in the link field on the entry."
                     : `"${model.model}" doesn't name a Hugging Face file (owner/repo/file.gguf), pick a model from the list or use a custom URL.`,
             );
         }
@@ -270,13 +270,13 @@ export const localModelHandler: CapabilityHandler = {
             yield existsSync("/opt/sandbox")
                 ? {
                       kind: "log" as const,
-                      message: `Stored ${id}, this image doesn't carry llama-server yet. Rebuild the sandbox from the Environment card; the model downloads and starts with the rebuild.`,
+                      message: `Stored ${id}, this image doesn't carry llama-server yet. Rebuild the sandbox from the Environment entry; the model downloads and starts with the rebuild.`,
                   }
                 : { kind: "log" as const, message: `Stored ${id}, no llama-server in this dev run; the model serves in a real sandbox container.` };
             return;
         }
         if (gpuAsked(model) && localModelGpu() === "absent") {
-            yield { kind: "log", message: "GPU access needs a one-time rebuild (Environment card), serving on CPU until then." };
+            yield { kind: "log", message: "GPU access needs a one-time rebuild (Environment entry), serving on CPU until then." };
         }
         const path = weightsPath(ctx, source);
         const held = await weightsReady(path);
@@ -296,10 +296,10 @@ export const localModelHandler: CapabilityHandler = {
         const model = config as LocalModelConfig;
         const source = localModelSource(model);
         if (source === undefined) {
-            return { state: "error", detail: "no model named, edit the card" };
+            return { state: "error", detail: "no model named, edit the entry" };
         }
         const path = weightsPath(ctx, source);
-        // Progress first, by path: the download is the long pole, and the reason this card polls at all.
+        // Progress first, by path: the download is the long pole, and the reason this entry polls at all.
         const inFlight = weightsProgress(path);
         if (inFlight !== undefined) {
             return { state: "pending", detail: inFlight.total > 0 ? `downloading ${gb(inFlight.received)} / ${gb(inFlight.total)}` : "downloading" };
@@ -369,7 +369,7 @@ export const localModelHandler: CapabilityHandler = {
 };
 
 // Boot restore: the server dies with the container while manifest and weights survive on /work; every entry restarts,
-// resuming an unfinished download from its last byte. Best-effort: failures surface on the card, never the boot path.
+// resuming an unfinished download from its last byte. Best-effort: failures surface on the entry, never the boot path.
 export const startLocalModelsIfEnabled = async (ctx: CapabilityCtx): Promise<void> => {
     const entries = (await ctx.capabilities.list()).flatMap((capability) => (capability.kind === "localmodel" ? [capability] : []));
     if (entries.length === 0 || (await llamaServerMissing())) {

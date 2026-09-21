@@ -22,7 +22,7 @@ const props = defineProps<{
     state: ConnectionState;
     /** What this connection says about itself: a tunnel's address, a machine's OS, a database's host. */
     facts: string;
-    /** The card's form is open over this row; it wears the selected tint so the fields below have a subject. */
+    /** The tile's form is open over this row; it wears the selected tint so the fields below have a subject. */
     editing?: boolean;
 }>();
 
@@ -42,7 +42,7 @@ const connected = computed(() => props.instance.status.state === `active`);
 // An ACP agent with a loginCommand signs in interactively: the daemon starts it and the terminal panel opens on it.
 const agentSignIn = computed(() => props.entry.kind === `agent` && props.instance.config[`loginCommand`] !== undefined);
 
-// DevOps is the ground other cards stand on; removing it isn't a row-level action.
+// DevOps is the ground other tiles stand on; removing it isn't a row-level action.
 const removable = computed(() => props.entry.kind !== `devops`);
 
 // The one step a row can't offer itself: a rebuild, done on the Sandbox screen.
@@ -98,7 +98,7 @@ const items = computed<MenuItem[]>(() => {
 <template>
     <!-- One divided cell: the row, and, while something's outstanding, the step it's waiting on beneath it. -->
     <div>
-        <!-- Tinted while the form below is over this connection, so a pre-filled live gateway isn't mistaken for the card's defaults. -->
+        <!-- Tinted while the form below is over this connection, so a pre-filled live gateway isn't mistaken for the tile's defaults. -->
         <Row :selected="editing">
             <template #title>
                 <span class="flex flex-wrap items-center gap-2">

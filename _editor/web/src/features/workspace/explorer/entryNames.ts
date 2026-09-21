@@ -1,6 +1,6 @@
 import { basename } from "@intentic/ui/path";
 
-// Wording and checks every file surface (the tree, the desk) shares for naming, creating and deleting entries, so a
+// Wording and checks every file surface (the tree, the home) shares for naming, creating and deleting entries, so a
 // name refused in one place is refused in the other with the same words. Pure, no framework code.
 
 export const joinPath = (dir: string, name: string): string => (dir === `` ? name : `${dir}/${name}`);

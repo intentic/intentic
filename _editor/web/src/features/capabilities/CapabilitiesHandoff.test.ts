@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 // An add that ends pending has not finished; the remaining step (a one-liner, a login, a rebuild) is named on the
-// card just filled in. These pin what stays on screen for each of the three.
+// entry just filled in. These pin what stays on screen for each of the three.
 import { expect, it, vi } from "vitest";
 import { createApp, defineComponent, h, nextTick, ref } from "vue";
 import type { AddCapabilityInput } from "@intentic/capability-catalog";
@@ -9,16 +9,16 @@ import { IconStub } from "@intentic/ui/testing";
 
 // Import-time globals a mounted view needs: ui's useDevice reads matchMedia, environment.ts reads window.env.
 
-// Which card the page is on, read once at setup since the page is URL-driven and nothing here navigates.
-let card = `linux`;
+// Which entry the page is on, read once at setup since the page is URL-driven and nothing here navigates.
+let entry = `linux`;
 const push = vi.fn();
 vi.mock(import(`vue-router`), async (importOriginal) => ({
     ...(await importOriginal()),
-    useRoute: () => ({ params: { card }, query: {} }) as never,
+    useRoute: () => ({ params: { entry }, query: {} }) as never,
     useRouter: () => ({ push, replace: vi.fn() }) as never,
 }));
 
-// Both cards are contributed, not static; a device's permission switches come from the catalog, not the manifest.
+// Both entrys are contributed, not static; a device's permission switches come from the catalog, not the manifest.
 vi.mock(`../extensions/useExtensions`, () => ({
     useExtensions: () => ({
         contributionOf: () => undefined,
@@ -66,7 +66,7 @@ let applied: CapabilityStatus = { state: `pending` };
 const add = vi.fn<(input: AddCapabilityInput) => Promise<void>>(async (input) => {
     capabilities.value = [
         ...capabilities.value,
-        { id: input.id, kind: card === `linux` ? `host` : `browser`, status: applied, config: input.config, secrets: [] },
+        { id: input.id, kind: entry === `linux` ? `host` : `browser`, status: applied, config: input.config, secrets: [] },
     ];
 });
 vi.mock(`./connect/useCapabilities`, () => ({
@@ -82,7 +82,7 @@ vi.mock(`./connect/useCapabilities`, () => ({
     }),
     browseMarketplace: vi.fn(),
 }));
-// Extension card's signpost reads the registry cache; nothing here has browsed it.
+// Extension entry's signpost reads the registry cache; nothing here has browsed it.
 vi.mock(`../extensions/useRegistry`, () => ({ useRegistry: () => ({ entries: ref([]) }) }));
 vi.mock(`../terminal/useBackgroundProcesses`, () => ({
     useBackgroundProcesses: () => ({ rows: ref([]), busy: ref(undefined), start: vi.fn(), stop: vi.fn() }),
@@ -150,8 +150,8 @@ const submitForm = async (el: HTMLElement): Promise<void> => {
     await nextTick();
 };
 
-const start = (onCard: string, status: CapabilityStatus): HTMLElement => {
-    card = onCard;
+const start = (onEntry: string, status: CapabilityStatus): HTMLElement => {
+    entry = onEntry;
     applied = status;
     capabilities.value = [];
     add.mockClear();
@@ -164,7 +164,7 @@ it(`hands over the machine's command when a device is added, instead of returnin
 
     await submitForm(el);
 
-    // Opened on the just-created machine: the suggested name and the card's platform.
+    // Opened on the just-created machine: the suggested name and the entry's platform.
     const dialog = el.querySelector(`[data-connect]`);
     expect(dialog?.getAttribute(`data-connect`)).toBe(`linux`);
     expect(dialog?.getAttribute(`data-platform`)).toBe(`linux`);
@@ -184,14 +184,14 @@ it(`opens the sign-in window when a browser account is added and the login is wh
     expect(push).not.toHaveBeenCalled();
 });
 
-// Same card, pending on the other thing: no browser is installed yet, so the remedy is a rebuild elsewhere.
+// Same entry, pending on the other thing: no browser is installed yet, so the remedy is a rebuild elsewhere.
 it(`does not open the sign-in window when the browser is still waiting on a rebuild`, async () => {
-    const el = start(`reddit`, { state: `pending`, detail: `rebuild the sandbox to install the browser (Environment card)` });
+    const el = start(`reddit`, { state: `pending`, detail: `rebuild the sandbox to install the browser (Environment entry)` });
 
     await submitForm(el);
 
     expect(el.querySelector(`[data-browser]`)).toBeNull();
-    // Still no navigation: the row naming the rebuild lives on the card.
+    // Still no navigation: the row naming the rebuild lives on the entry.
     expect(push).not.toHaveBeenCalled();
     // Names it and leads to it in two halves: the status badge is the daemon's words, the link beside it goes to the
     // remedy.
@@ -228,7 +228,7 @@ it(`offers the connected browser to be used, not only signed into again`, async 
 // One site, two accounts: every row's button must act on that row's own signed-in browser, not whichever account
 // is first.
 it(`opens the account a row belongs to when one site is connected twice`, async () => {
-    card = `reddit`;
+    entry = `reddit`;
     applied = { state: `active` };
     capabilities.value = [{ id: `reddit`, kind: `browser`, status: { state: `active` }, config: { platform: `reddit` }, secrets: [] }];
     add.mockClear();
@@ -247,7 +247,7 @@ it(`opens the account a row belongs to when one site is connected twice`, async 
 
     const window = el.querySelector(`[data-browser]`);
     expect(window?.getAttribute(`data-browser`)).toBe(`reddit-2`);
-    // Names the account, not the card: two windows on one site must be tellable apart.
+    // Names the account, not the entry: two windows on one site must be tellable apart.
     expect(window?.textContent).toBe(`reddit-2`);
 });
 

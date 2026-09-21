@@ -7,11 +7,11 @@ export interface CapabilityScope {
     readonly key: string;
     readonly label: string;
     readonly icon: IconName;
-    /** Cards in this slice. */
+    /** Tiles in this slice. */
     readonly total: number;
     /** How many of them already have a connection. */
     readonly connected: number;
-    /** Spells the number out for a slice whose total isn't a card count (e.g. Connected counts connections). */
+    /** Spells the number out for a slice whose total isn't a tile count (e.g. Connected counts connections). */
     readonly meta?: string;
 }
 </script>

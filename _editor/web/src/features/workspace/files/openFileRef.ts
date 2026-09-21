@@ -28,7 +28,7 @@ export const openWorkspaceRef = async (path: string, line?: number, asked?: { re
     }
     const target = (await resolveWorkspaceRef(path)) ?? path;
     // A reference outside the open project (another project's file, or the state dir, which is outside every project)
-    // names a file no scoped tree or desk can show. Widening to the whole workspace is the same move the agent scope
+    // names a file no scoped tree or home can show. Widening to the whole workspace is the same move the agent scope
     // above makes: what is being opened is what has to be on screen, so the folder it lives in has to be reachable.
     if (!withinScope(target)) {
         setProjectScope(undefined);

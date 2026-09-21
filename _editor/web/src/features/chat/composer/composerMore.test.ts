@@ -61,7 +61,7 @@ it(`keeps a running loop in the row`, () => {
     expect(keys(chat({ runThrough: `running` }))).not.toContain(`runThrough`);
 });
 
-// A control this chat can't have is in neither place: personas are one daemon's cards, voice needs a
+// A control this chat can't have is in neither place: personas are one daemon's personas, voice needs a
 // transcript.
 it(`drops the controls this chat is not offered`, () => {
     const away = chat({ personaOffered: false, voiceOffered: false });

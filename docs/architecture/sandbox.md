@@ -73,7 +73,7 @@ survive reconnects. Its subsystems:
   automation fires too: trying a prompt before switching it on is the main reason to press it. Every run records
   the session it ran in, so the row's run history opens the transcript: the answer to "it failed overnight and
   I can't see why".
-- **Front Desk**: a chat bubble a customer embeds on their own website, talking to a `webchat` listener
+- **Visitor chat**: a chat bubble a customer embeds on their own website, talking to a `webchat` listener
   automation ([webchat/](../../_sandbox/sandbox/src/webchat/), widget in
   [\_sandbox/webchat-widget](../../_sandbox/webchat-widget)). It is the inbound-HTTP mirror of the gateway-process pattern:
   no extension holds a connection, because the connection is a `<script>` tag on someone else's page. Five
@@ -91,14 +91,14 @@ survive reconnects. Its subsystems:
   stream on a `pending` notice, and a human answering hours later with `place` ("write as agent") never had one:
   both write into a per-thread **outbox**
   ([webchat-outbox.ts](../../_sandbox/sandbox/src/webchat/webchat-outbox.ts)) that the widget collects against a
-  cursor. That is also why `place` reaches a Front Desk visitor at all: `deliverToListenerChannel` walks
+  cursor. That is also why `place` reaches a Visitor chat visitor at all: `deliverToListenerChannel` walks
   *extensions*, and webchat is core, so the outbox is checked first rather than the walk reporting that nothing
   is listening. And because an
-  automation turn runs `bypassPermissions` by default, a Front Desk's real boundary is `Automation.allowedTools`,
+  automation turn runs `bypassPermissions` by default, a Visitor chat's real boundary is `Automation.allowedTools`,
   carried into the SDK's own allowlist: prompt wording is advice, an empty toolbox is not. The config fetch
   doubles as the **install probe** ([store/installs.ts](../../_sandbox/sandbox/src/store/installs.ts)):
   every widget load records its origin and whether it was admitted, which is the only thing that can tell a
-  working Front Desk nobody has written to from a snippet that was never pasted: and turns the commonest
+  working Visitor chat nobody has written to from a snippet that was never pasted: and turns the commonest
   mistake of all (`example.com` listed, `www.example.com` not) into a named origin with an Allow button.
 - **CI pipelines**: the workspace repos' GitHub Actions / GitLab pipelines, as both an automation source and a
   UI surface ([ci/](../../_sandbox/sandbox/src/ci/)). A repo participates when its remote's hostname matches a connected

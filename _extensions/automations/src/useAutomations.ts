@@ -36,7 +36,7 @@ export const webhookUrl = (automation: AutomationSummary): string | undefined =>
     return `${base}/automations/${encodeURIComponent(automation.id)}/fire?token=${encodeURIComponent(automation.webhookToken)}`;
 };
 
-// Snippet a customer pastes to put a Front Desk on their site. The daemon's own origin serves both the bundle and its
+// Snippet a customer pastes to put a Visitor chat on their site. The daemon's own origin serves both the bundle and its
 // routes, so only the automation id is needed; the origin allowlist decides who may use it.
 export const embedSnippet = (automation: AutomationSummary): string | undefined => {
     const base = host().sandbox.origin();
@@ -46,9 +46,9 @@ export const embedSnippet = (automation: AutomationSummary): string | undefined 
     return `<script src="${base}/webchat/widget.js" data-automation="${automation.id}" defer></script>`;
 };
 
-// Which sites have actually loaded a Front Desk's widget; a working widget nobody has used and one never pasted both
+// Which sites have actually loaded a Visitor chat's widget; a working widget nobody has used and one never pasted both
 // show empty history. Polled only while the install panel is open.
-export interface FrontDeskInstall {
+export interface VisitorChatInstall {
     readonly origin: string;
     readonly allowed: boolean;
     readonly lastSeenAt: number;
@@ -57,23 +57,23 @@ export interface FrontDeskInstall {
 
 const INSTALL_POLL_MS = 4_000;
 
-export function useFrontDeskInstalls(automationId: Ref<string | undefined>, enabled: Ref<boolean>) {
+export function useVisitorChatInstalls(automationId: Ref<string | undefined>, enabled: Ref<boolean>) {
     const api = host();
     const query = useQuery({
         queryKey: computed(() => api.sandbox.key(`webchat-installs`, automationId.value ?? ``)),
-        queryFn: async (): Promise<FrontDeskInstall[]> => {
+        queryFn: async (): Promise<VisitorChatInstall[]> => {
             const id = automationId.value;
             if (id === undefined) {
                 return [];
             }
-            const body = (await api.sandbox.json(`/webchat/${encodeURIComponent(id)}/installs`)) as { origins?: FrontDeskInstall[] };
+            const body = (await api.sandbox.json(`/webchat/${encodeURIComponent(id)}/installs`)) as { origins?: VisitorChatInstall[] };
             return body.origins ?? [];
         },
         enabled: computed(() => enabled.value && automationId.value !== undefined && api.sandbox.reachable()),
         refetchInterval: INSTALL_POLL_MS,
     });
     return {
-        installs: computed<FrontDeskInstall[]>(() => query.data.value ?? []),
+        installs: computed<VisitorChatInstall[]>(() => query.data.value ?? []),
         isLoading: query.isLoading,
         error: computed(() => query.error.value?.message),
     };

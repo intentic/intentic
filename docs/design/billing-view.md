@@ -110,7 +110,7 @@ one off. A feature tier is ruled out by the model itself (money changes whose ma
 
 The policy, in full:
 
-- **Free lane:** one hosted sandbox per account, 40 awake hours a month, removed after 21 days unopened.
+- **Free plan:** one hosted sandbox per account, 40 awake hours a month, removed after 21 days unopened.
   Unchanged.
 - **Hosted plan:** $20 a month **per hosted sandbox**. The subscription item's `quantity` is the number of
   slots; the first slot is the free machine made always on. Effective allowance
@@ -120,7 +120,7 @@ The policy, in full:
   refused while machines ≥ quantity ("remove a sandbox first", the provision gate's own rule in reverse). The
   portal's subscription-update feature stays **off** so the app's rule is the only one; the portal keeps payment
   method, invoices and cancel.
-- **Cancel** (in the portal): at period end every machine falls to the free lane. `HostedUsage` is already per
+- **Cancel** (in the portal): at period end every machine falls to the free plan. `HostedUsage` is already per
   owner, so N machines share the 40 hours with no new logic; idle collection applies; nothing new can be
   created while machines ≥ `perUser`. A coherent fallback that needs no code.
 - **Fair use on the plan:** stays unmetered, as pricing-model.md decided, but awake hours are recorded (they
@@ -145,16 +145,16 @@ the app. The tab appears on the same condition as today: the platform sells a pl
 ### The page, top to bottom
 
 1. **Plan.** One line for the state, one action:
-   - Free lane: "Free lane · 12 h of 40 h left this month · resets October 1" → **Subscribe for $20/month**
+   - Free plan: "Free plan · 12 h of 40 h left this month · resets October 1" → **Subscribe for $20/month**
      (the existing offer below it).
    - On the plan: "Hosted plan · $20/month · renews October 1" → **Manage on Stripe**.
    - Cancelling: "Hosted plan · ends October 1" and the consequence in one sentence: "After that your hosted
-     sandbox is on the free lane: 40 awake hours a month, removed after three weeks unopened. Files stay until
+     sandbox is on the free plan: 40 awake hours a month, removed after three weeks unopened. Files stay until
      then." → **Resume on Stripe**.
    - Past due: as today, **Update payment**.
    - Trial: "ends", never "renews", as today.
    - Complimentary: "Hosted · complimentary" with no button and no offer.
-2. **This month.** The free lane's meter (used / allowance, resets on the 1st, UTC), live including the open
+2. **This month.** The free plan's meter (used / allowance, resets on the 1st, UTC), live including the open
    stretch. On the plan, the awake-hours figure with "no ceiling".
 3. **Hosted sandboxes.** The owner's machines: name, region, "awake since 14:02" or "asleep" (from `wokeAt`, no
    provider call), awake hours this month; "1 of 1 slots" and, on the plan, **Add a hosted sandbox · +$20/month**.
@@ -254,7 +254,7 @@ raises an alarm the reader has to act on from there. The row that went was an *a
 
 | State | Chip | Tone |
 | --- | --- | --- |
-| Free lane | `free` | neutral |
+| Free plan | `free` | neutral |
 | On the plan | `hosted` | primary |
 | Trialing | `trial` | info |
 | Cancelling | `ending` | warning |
@@ -266,7 +266,7 @@ Two deliberate differences from the row. The chip **shows on a platform with no 
 fell silent: with no hours there was no sentence to write, but "not on the plan" is a fact a chip states
 happily. And a **failing card keeps its alarm here** rather than earning a strip of its own: it is what the
 account *is* (on a plan nobody is paying for), not news about usage, it ends with the machine dropped to the
-free lane, and Settings ▸ Billing is the row immediately beneath it.
+free plan, and Settings ▸ Billing is the row immediately beneath it.
 
-Hours, renewal dates, machines and slots are Billing's alone. `hoursSpent` went with the row — the free lane's
+Hours, renewal dates, machines and slots are Billing's alone. `hoursSpent` went with the row — the free plan's
 tone was its only caller.

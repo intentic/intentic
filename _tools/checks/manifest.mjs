@@ -34,6 +34,7 @@ export const CHECKS = [
     { id: "build-cache", file: "build-cache-mounts.mjs", needs: "checkout", gate: "code", about: "sandbox image fragments keep the build-cache contract" },
     { id: "mirror-roots", file: "mirror-roots.mjs", needs: "checkout", gate: "code", about: "build output an agent turn overlays is emptied, never removed" },
     { id: "paths", file: "path-literals.mjs", needs: "checkout", gate: "tidy", scoped: true, about: "no hand-spelled roots and no counted ones (ratcheted)" },
+    { id: "vocabulary", file: "vocabulary.mjs", needs: "checkout", gate: "tidy", scoped: true, about: "a word this repo retired is not spelled again (ratcheted)" },
     {
         id: "time-zones",
         file: "time-zones.mjs",

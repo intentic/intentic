@@ -7,8 +7,8 @@ import { PERSONAS } from "../../../lib/queryKeys";
 import { queryClient } from "../../../lib/queryPersistence";
 import { useSandboxQuery } from "../client/useSandboxQuery";
 
-// A persona's kit: prompt and skills at `.intentic/config/personas/<id>/`, fetched only for the open card (unlike
-// usePersonas, which lists cards). Keyed under the personas family so removing a card invalidates its kit too; the id
+// A persona's kit: prompt and skills at `.intentic/config/personas/<id>/`, fetched only for the open persona (unlike
+// usePersonas, which lists personas). Keyed under the personas family so removing a persona invalidates its kit too; the id
 // is reactive (accordion) and never absent (missing personas 404).
 
 const kitKey = (id: string): readonly unknown[] => PERSONAS.of(id, `kit`);

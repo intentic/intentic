@@ -16,7 +16,7 @@ import { createSseStream } from "./sse-stream.js";
 import { publicConfig, usableAntiBot } from "./webchat-config.js";
 import { resolveVisitor, SignInRequired, type VisitorIdentity } from "./webchat-identity.js";
 
-// The Front Desk's ingest: a public door (automations/public-door.ts) whose verb is `message`, where every arrival is
+// The Visitor chat's ingest: a public door (automations/public-door.ts) whose verb is `message`, where every arrival is
 // an agent turn. Somebody is waiting for an answer, so the reply streams back as SSE.
 
 export const WEBCHAT_DOOR: PublicDoorSpec<WebchatConfig> = {
@@ -73,7 +73,7 @@ interface Admitted {
 }
 
 // Who this is for, then who is asking: the door's gates, then the visitor's identity. A visitor who can't sign in to a
-// sign-in-only Front Desk is refused here, before any challenge is spent.
+// sign-in-only Visitor chat is refused here, before any challenge is spent.
 const admitted = async (
     door: PublicDoor<WebchatConfig>,
     services: Services,
@@ -149,7 +149,7 @@ export const createWebchatRoutes = (services: Services, wake: WakeFn = streamAge
     const polls = rateWindow(POLL_WINDOW_MS);
     return {
         ...door.routes,
-        // Replies queued since the visitor's `after` cursor: what an approval-gated desk answers with, and where a
+        // Replies queued since the visitor's `after` cursor: what an approval-gated guest answers with, and where a
         // human writing as the agent lands. Origin-gated like every other webchat route; no anti-bot check, since it
         // starts nothing and a thread nobody wrote to is empty.
         messages: async (c: Context<AppEnv, "/webchat/:id/messages">): Promise<Response> => {

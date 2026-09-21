@@ -107,10 +107,10 @@ export const createWorkspaceBytesRoutes = (services: WorkspaceBytesRoutesDeps) =
         return c.body(new Uint8Array(bytes), 200, { "Content-Type": contentTypeForPath(target), "Content-Length": String(bytes.byteLength) });
     },
 
-    // GET /workspace/thumb: a picture downscaled to tile size. The desk asks for one per visible tile, so answering with
+    // GET /workspace/thumb: a picture downscaled to tile size. The guest asks for one per visible tile, so answering with
     // the original (what /workspace/raw does) meant a folder of screenshots moved a gigabyte and decoded every file at
     // full resolution to paint boxes an inch across. Not an error route: a file with nothing to draw answers 404 and the
-    // desk keeps the glyph it was already showing.
+    // guest keeps the glyph it was already showing.
     thumb: async (c: Context<AppEnv>): Promise<Response> => {
         const path = c.req.query("path");
         if (path === undefined) {

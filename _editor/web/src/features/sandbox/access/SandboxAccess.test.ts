@@ -35,7 +35,7 @@ vi.mock(`../personas/usePersonas`, () => ({ usePersonas: () => ({ personas, conn
 // Two named parts of the workspace: one the assistant above works in, one nobody works in — the two answers a fence
 // can give.
 const areas = ref([
-    { id: `support`, label: `Support desk`, folders: [`support`] },
+    { id: `support`, label: `Support guest`, folders: [`support`] },
     { id: `finance`, label: `Finance`, folders: [`finance`] },
 ]);
 vi.mock(`../areas/useAreas`, () => ({
@@ -94,7 +94,7 @@ const pick = async (ariaLabel: string, option: string): Promise<void> => {
     await nextTick();
 };
 
-// The daemon roster's every read, and the grant a desk write answers with.
+// The daemon roster's every read, and the grant a guest write answers with.
 const daemonMembers = vi.fn((): unknown[] => []);
 
 afterEach(() => {
@@ -252,26 +252,26 @@ it(`mints an API token as the owner and shows it once with its snippet`, async (
     expect(body.expiresAt).toBeGreaterThan(Date.now());
 });
 
-// A desk reaches the assistants that work in the areas it holds and nothing else, so the daemon refuses one that is
+// A guest reaches the assistants that work in the areas it holds and nothing else, so the daemon refuses one that is
 // unfenced or fenced where nobody works — which means picking the tier can't itself be the write.
 const switches = (): HTMLInputElement[] => [...document.body.querySelectorAll<HTMLInputElement>(`input[role=switch]`)];
 
-it(`holds a member's move to desk until its fence reaches an assistant, then grants tier and fence together`, async () => {
+it(`holds a member's move to guest until its fence reaches an assistant, then grants tier and fence together`, async () => {
     const member = (tier: string): unknown => ({ email: `guest@example.com`, role: tier, status: `accepted`, invitedAt: `2026-08-18T00:00:00.000Z` });
     list.mockResolvedValue({ members: [member(`collaborator`)] });
-    setRole.mockResolvedValue({ members: [member(`desk`)] });
+    setRole.mockResolvedValue({ members: [member(`guest`)] });
     sandboxJson.mockImplementation(async (path: unknown) => (path === `/members` ? { members: daemonMembers() } : { members: [] }));
     mount();
     await settle();
 
-    await pick(`Role for guest@example.com`, `Desk`);
+    await pick(`Role for guest@example.com`, `Guest`);
     // Nothing granted yet: the row opens the fence it would need, and says why it is still a collaborator.
     expect(sandboxJson).not.toHaveBeenCalledWith(`/members`, expect.objectContaining({ method: `POST` }));
     expect(setRole).not.toHaveBeenCalled();
     expect(shown()).toContain(`Which areas of the workspace they see`);
-    expect(shown()).toContain(`A desk talks to the assistants that work there`);
+    expect(shown()).toContain(`A guest talks to the assistants that work there`);
 
-    daemonMembers.mockReturnValue([{ email: `guest@example.com`, role: `desk`, areas: [`support`] }]);
+    daemonMembers.mockReturnValue([{ email: `guest@example.com`, role: `guest`, areas: [`support`] }]);
     switches()[0]?.click();
     await settle();
 
@@ -279,23 +279,23 @@ it(`holds a member's move to desk until its fence reaches an assistant, then gra
         ([path, init]) => path === `/members` && (init as { method?: string } | undefined)?.method === `POST`,
     );
     if (grant === undefined) {
-        throw new Error(`no desk grant reached the sandbox`);
+        throw new Error(`no guest grant reached the sandbox`);
     }
-    expect(JSON.parse((grant[1] as { body: string }).body)).toEqual({ email: `guest@example.com`, role: `desk`, areas: [`support`] });
-    expect(setRole).toHaveBeenCalledWith({ sandboxId: `s1`, email: `guest@example.com`, role: `desk` });
+    expect(JSON.parse((grant[1] as { body: string }).body)).toEqual({ email: `guest@example.com`, role: `guest`, areas: [`support`] });
+    expect(setRole).toHaveBeenCalledWith({ sandboxId: `s1`, email: `guest@example.com`, role: `guest` });
     // The row now says who they talk to, which for this tier is the whole of what they can do.
     expect(shown()).toContain(`Talks to Support`);
 });
 
 // The refusal the owner cannot read off the fence itself: an area can name real folders and still hand over nobody.
-it(`will not grant a desk fenced where no assistant works, and says what would fix it`, async () => {
+it(`will not grant a guest fenced where no assistant works, and says what would fix it`, async () => {
     const member = (tier: string): unknown => ({ email: `guest@example.com`, role: tier, status: `accepted`, invitedAt: `2026-08-18T00:00:00.000Z` });
     list.mockResolvedValue({ members: [member(`collaborator`)] });
     sandboxJson.mockImplementation(async (path: unknown) => (path === `/members` ? { members: daemonMembers() } : { members: [] }));
     mount();
     await settle();
 
-    await pick(`Role for guest@example.com`, `Desk`);
+    await pick(`Role for guest@example.com`, `Guest`);
     // Finance names folders of its own, and no assistant starts in any of them.
     switches()[1]?.click();
     await settle();
@@ -336,7 +336,7 @@ it(`grants an area on an existing row, at the tier that row already holds`, asyn
     }
     expect(JSON.parse((grant[1] as { body: string }).body)).toEqual({ email: `guest@example.com`, role: `collaborator`, areas: [`support`] });
     // The row now names what it holds, so the fence is readable without opening the picker.
-    expect(shown()).toContain(`Support desk`);
+    expect(shown()).toContain(`Support guest`);
 });
 
 it(`keeps the token surfaces off a member's tab`, async () => {

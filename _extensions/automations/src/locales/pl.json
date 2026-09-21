@@ -11,13 +11,13 @@
         "create": "Utwórz",
         "done": "Gotowe",
         "filterTemplates": "Filtruj szablony…",
-        "frontDeskCreatedDrop": "Recepcja utworzona: wrzuć to na swoją stronę:",
         "integrations": "Integracje",
         "newAutomation": "Nowa automatyzacja",
         "noTemplateMatches": "Żaden szablon nie pasuje.",
         "onAnyPageListed": "na każdej stronie, którą wypisałeś powyżej. Uruchamiacz pojawia się w rogu; rozmowy odwiedzających trafiają na Twoją tablicę agentów, gdzie możesz je oglądać i przejmować.",
         "pasteBefore": "Wklej to przed",
-        "startTemplate": "Wyjdź od szablonu"
+        "startTemplate": "Wyjdź od szablonu",
+        "visitorChatCreatedDrop": "Recepcja utworzona: wrzuć to na swoją stronę:"
     },
     "automationFields": {
         "aboutSecondEachVisitors": "Około sekundy czasu przeglądarki każdego odwiedzającego. Żadnych kluczy.",
@@ -48,7 +48,6 @@
         "fires": "Fires",
         "firesIn": "Uruchamia się {when}.",
         "fri": "pt",
-        "frontDesk": "Recepcja",
         "fullToolboxNoAccounts": "pełna skrzynka narzędzi, żadnych kont",
         "googleClientId": "Identyfikator klienta Google",
         "googleSignIn": "Logowanie Google",
@@ -137,6 +136,7 @@
         "turnstileSiteKey": "Klucz witryny Turnstile",
         "unavailable": "niedostępne",
         "useStarter": "Użyj rozrusznika {label}",
+        "visitorChat": "Recepcja",
         "visitorsGetNoAnswer": "Odwiedzający nie dostają odpowiedzi w widżecie: zatwierdzone odpowiedzi lądują zamiast tego w Twoim czacie.",
         "wake": "Budź, gdy",
         "webhook": "Webhook",
@@ -164,7 +164,6 @@
         "embedCodeInstallStatus": "Kod osadzenia i stan instalacji",
         "enable": "Włącz {id}",
         "firesOnTriggerNot": "Odpala na swoim wyzwalaczu, nie na zegarze",
-        "frontDesk": "Recepcja",
         "getEmbedCode": "Weź kod osadzenia",
         "heldApprovalBeforeRuns": "Wstrzymana do Twojej zgody przed uruchomieniem",
         "hold": "Wstrzymaj",
@@ -187,6 +186,7 @@
         "save": "Zapisz",
         "sureEverySenderWired": "Na pewno? Każdemu nadawcy podpiętemu pod ten adres trzeba będzie podać nowy.",
         "urlShownToMaintainers": "Jej adres jest pokazywany opiekunom i właścicielowi.",
+        "visitorChat": "Recepcja",
         "wakesOnlyOwnCheck": "Budzi się tylko wtedy, gdy jej własne sprawdzenie coś znajdzie",
         "webhook": "Webhook"
     },
@@ -219,7 +219,10 @@
     "extension": {
         "automations": "Automatyzacje"
     },
-    "frontDeskInstallDialog": {
+    "useCiDelivery": {
+        "firesWithinSecondsProvider": "Odpala w kilka sekund: dostawca dostarcza każdy skończony pipeline prosto do tego sandboxa."
+    },
+    "visitorChatInstallDialog": {
         "allow": "Zezwól",
         "allowToLoadChat": "Zezwól {origin} na wczytanie tego czatu",
         "allowedSites": "Dozwolone witryny",
@@ -231,8 +234,5 @@
         "loaded": "Czy się wczytało?",
         "noBrowserLoadedWidget": "Żadna przeglądarka nie wczytała jeszcze tego widżetu. Wklej fragment, otwórz swoją stronę, a to zaktualizuje się samo w ciągu kilku sekund.",
         "pasteIntoSiteBefore": "Wklej to na swojej stronie, przed"
-    },
-    "useCiDelivery": {
-        "firesWithinSecondsProvider": "Odpala w kilka sekund: dostawca dostarcza każdy skończony pipeline prosto do tego sandboxa."
     }
 }

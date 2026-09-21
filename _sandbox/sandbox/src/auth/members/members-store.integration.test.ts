@@ -8,25 +8,25 @@ import { fileMembersStore } from "../auth.js";
 // hand-editable and tracked, so both tiers that carry a companion list are pinned here as well as at the route.
 const storePath = async (): Promise<string> => join(await mkdtemp(join(tmpdir(), "members-")), "members.json");
 
-describe("fileMembersStore: desks", () => {
-    test("a desk grant round-trips its fence, and a re-grade keeps it, since areas ride on every tier", async () => {
+describe("fileMembersStore: guests", () => {
+    test("a guest grant round-trips its fence, and a re-grade keeps it, since areas ride on every tier", async () => {
         const store = fileMembersStore(await storePath());
-        await store.add("d@x.com", { role: "desk", areas: ["support"] });
-        await expect(store.list()).resolves.toEqual([{ email: "d@x.com", role: "desk", areas: ["support"] }]);
+        await store.add("d@x.com", { role: "guest", areas: ["support"] });
+        await expect(store.list()).resolves.toEqual([{ email: "d@x.com", role: "guest", areas: ["support"] }]);
         await store.add("d@x.com", { role: "viewer", areas: ["support"] });
         await expect(store.list()).resolves.toEqual([{ email: "d@x.com", role: "viewer", areas: ["support"] }]);
     });
 
-    // An unfenced desk would reach every assistant in the workspace, since that absent list is what the whole of it
+    // An unfenced guest would reach every assistant in the workspace, since that absent list is what the whole of it
     // resolves to. Skipped, that person has no access at all, which is the safe direction.
-    test("a desk row naming no area is skipped on read, the rest of the roster kept", async () => {
+    test("a guest row naming no area is skipped on read, the rest of the roster kept", async () => {
         const path = await storePath();
         await writeFile(
             path,
             JSON.stringify({
                 members: [
-                    { email: "d@x.com", role: "desk" },
-                    { email: "e@x.com", role: "desk", areas: [] },
+                    { email: "d@x.com", role: "guest" },
+                    { email: "e@x.com", role: "guest", areas: [] },
                     { email: "v@x.com", role: "viewer" },
                 ],
             }),

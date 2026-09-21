@@ -1,4 +1,4 @@
-import { cancelledCards, holdsCard, type TodoItem, type TranscriptRow } from "@intentic/sandbox-contract";
+import { cancelledRequests, holdsRequest, type TodoItem, type TranscriptRow } from "@intentic/sandbox-contract";
 import { formatDate } from "@intentic/ui/format";
 import { errandOf } from "../run/errands";
 
@@ -31,7 +31,7 @@ export const repeatedChecklistIds = (messages: readonly ChatMessage[]): Set<numb
             !message.tools?.length &&
             !message.attachments?.length &&
             message.usage === undefined &&
-            !holdsCard(message) &&
+            !holdsRequest(message) &&
             items.every((item, index) => {
                 const before = previous![index]!;
                 return item.content === before.content && item.status === before.status && item.activeForm === before.activeForm;
@@ -151,7 +151,7 @@ export interface ChatAttachment {
 // Freezes any cards a stopped bubble is parked on as `cancelled`, since the aborted stream will never answer them.
 // Returns the same message when it holds none, so a Stop only re-renders bubbles that actually changed.
 export const withCancelledCards = (message: ChatMessage): ChatMessage => {
-    const cards = cancelledCards(message);
+    const cards = cancelledRequests(message);
     return cards === message ? message : { ...message, ...cards };
 };
 
@@ -179,7 +179,7 @@ export const recordedRows = (messages: readonly ChatMessage[]): number =>
             (message.thinking?.length ?? 0) > 0 ||
             (message.tools?.length ?? 0) > 0 ||
             (message.todos?.length ?? 0) > 0 ||
-            holdsCard(message)
+            holdsRequest(message)
         );
     }).length;
 

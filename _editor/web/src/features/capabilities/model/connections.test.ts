@@ -5,7 +5,7 @@ import { awaitingLogin, connectionFacts, connectionState, rebuildStep, vpnFacts 
 
 // Reader's question is whether they still have something to do, not the daemon's state word, and for two kinds
 // status alone isn't the truest answer. Both listing surfaces read through here, so an account can't be "needs
-// sign-in" in the inventory and "pending" on its card.
+// sign-in" in the inventory and "pending" on its tile.
 
 const instance = (status: CapabilityStatus, config: Record<string, string> = {}): CapabilitySummary =>
     ({ id: `reddit`, kind: `browser`, status, config }) as CapabilitySummary;
@@ -50,14 +50,14 @@ test(`sorts what is unfinished or broken above what merely works`, () => {
 });
 
 // Two facts at most, in the order somebody would say them; a third would push the state badge off the line.
-// `provider`/`platform` are deliberately excluded since they're already the card's own name.
+// `provider`/`platform` are deliberately excluded since they're already the tile's own name.
 test(`names a connection by what tells it apart, two facts at most`, () => {
     expect(connectionFacts(instance({ state: `active` }, { host: `ops.acme.dev`, user: `ada`, database: `shop`, platform: `reddit` }))).toBe(
         `ops.acme.dev · shop`,
     );
     expect(connectionFacts(instance({ state: `active` }, { platform: `reddit` }))).toBe(``);
     expect(connectionFacts(instance({ state: `active` }, { host: `  ` }))).toBe(``);
-    // An identity-filed account: the card names the site, so who it belongs to and its purpose fill the whole line.
+    // An identity-filed account: the tile names the site, so who it belongs to and its purpose fill the whole line.
     expect(
         connectionFacts(
             instance({ state: `active` }, { platform: `reddit`, identity: `radarsuspam2`, purpose: `community research`, openedAt: `2026-08-11` }),

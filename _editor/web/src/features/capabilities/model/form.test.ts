@@ -19,7 +19,7 @@ import {
 
 // What the form refuses, what it starts as, and what survives into the config.
 
-const card = (fields: CapabilityCatalogEntry["fields"], overrides: Partial<CapabilityCatalogEntry> = {}): CapabilityCatalogEntry => ({
+const tile = (fields: CapabilityCatalogEntry["fields"], overrides: Partial<CapabilityCatalogEntry> = {}): CapabilityCatalogEntry => ({
     id: `vpn`,
     name: `VPN`,
     kind: `vpn`,
@@ -105,7 +105,7 @@ test(`asks for what is required and lets an optional field stay empty`, () => {
 
 // A `when`-gated field is shown, and required, only while the mode it depends on selects it.
 test(`shows and requires only the fields the chosen mode keeps`, () => {
-    const ssh = card(
+    const ssh = tile(
         [
             {
                 key: `auth`,
@@ -131,7 +131,7 @@ test(`shows and requires only the fields the chosen mode keeps`, () => {
 });
 
 test(`drops empty answers rather than sending empty keys`, () => {
-    const entry = card([
+    const entry = tile([
         { key: `server`, label: `Server` },
         { key: `note`, label: `Note`, optional: true },
     ]);
@@ -139,10 +139,10 @@ test(`drops empty answers rather than sending empty keys`, () => {
     expect(buildConfig(entry, { server: ` vpn.acme.dev `, note: `  ` })).toEqual({ server: `vpn.acme.dev` });
 });
 
-// Seed order matters: live values override the card's defaults, so reopening a live config doesn't
+// Seed order matters: live values override the tile's defaults, so reopening a live config doesn't
 // reset its switches.
-test(`seeds from the card, then from what is live, then from what the scan read`, () => {
-    const entry = card([
+test(`seeds from the tile, then from what is live, then from what the scan read`, () => {
+    const entry = tile([
         { key: `gpu`, label: `GPU`, boolean: true },
         { key: `socket`, label: `Socket`, default: `/var/run/docker.sock` },
         { key: `url`, label: `Instance URL` },
@@ -157,7 +157,7 @@ test(`seeds from the card, then from what is live, then from what the scan read`
     expect(live[`gpu`]).toBe(`on`);
     expect(live[`socket`]).toBe(`/run/docker.sock`);
 
-    // Never seeds a secret, even from the scan; a prefill for a field the card does not declare is dropped.
+    // Never seeds a secret, even from the scan; a prefill for a field the tile does not declare is dropped.
     const scanned = seedValues(entry, undefined, { url: `https://gitlab.acme.dev`, token: `glpat-xxx`, nothing: `here` });
     expect(scanned[`url`]).toBe(`https://gitlab.acme.dev`);
     expect(scanned[`token`]).toBe(``);
@@ -167,7 +167,7 @@ test(`seeds from the card, then from what is live, then from what the scan read`
 // On edit, a blank secret box means "keep the stored value", not "unanswered"; `stored` names which
 // keys are held.
 test(`lets a stored credential be kept, and sends the marker rather than a hole`, () => {
-    const entry = card([
+    const entry = tile([
         { key: `server`, label: `Gateway` },
         { key: `password`, label: `Password`, secret: true },
     ]);

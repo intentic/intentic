@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { type CardDocument, planParts } from "@intentic/sandbox-contract";
+import { type RequestDocument, planParts } from "@intentic/sandbox-contract";
 import { browserOwnsClick, MarkdownFigure } from "@intentic/ui";
 import { copyCodeFromEvent, renderMarkdownParts } from "@intentic/ui/markdown";
 import { computed, ref } from "vue";
@@ -14,7 +14,7 @@ const t = useT();
 
 const props = withDefaults(
     defineProps<{
-        document: CardDocument;
+        document: RequestDocument;
         // How tall the prose may stand before it scrolls; a card asking about the document gets more room.
         maxHeight?: string;
         // Whether this copy folds; the card that wrote the document already folds over it and skips this.

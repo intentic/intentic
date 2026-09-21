@@ -1,6 +1,6 @@
 # @intentic/webchat-widget
 
-**Front Desk**: the embeddable chat bubble a website loads to talk to a sandbox agent. One IIFE bundle
+**Visitor chat**: the embeddable chat bubble a website loads to talk to a sandbox agent. One IIFE bundle
 (8.1 kB gzipped), no framework, served by the daemon at `/webchat/widget.js`.
 
 ```html
@@ -21,7 +21,7 @@ overrides it for a site that fronts the sandbox behind its own proxy.
 - **The reply is SSE over POST**, which `EventSource` cannot do: hence the hand-rolled reader in
   `transport.ts`. Hono splits a payload on newlines into one `data:` line each, so rejoining with `\n` is what
   restores an agent's multi-line text.
-- **A live reply is streamed; a later one is polled.** An approval-gated desk closes the stream on a `pending`
+- **A live reply is streamed; a later one is polled.** An approval-gated guest closes the stream on a `pending`
   notice, and a human writing as the agent has no stream at all, so both land in the daemon's outbox and the
   widget collects them from `/webchat/<id>/messages` against a cursor it keeps in `localStorage`. The two paths
   never both carry one reply: the live SSE does not write to the outbox, which is why a reload after a live

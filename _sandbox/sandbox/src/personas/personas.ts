@@ -7,10 +7,10 @@ import {
     type SystemPromptMode,
     type TurnNote,
     fenceIntersection,
-    FRONT_DESK_PERSONA,
+    VISITOR_CHAT_PERSONA,
     PersonaPowersSchema,
 } from "@intentic/sandbox-contract";
-import { FRONT_DESK_GUIDANCE } from "./front-desk.js";
+import { VISITOR_CHAT_GUIDANCE } from "./visitor-chat.js";
 
 // A persona answers four questions together: accounts, tool shelves, workspace, and prompt. Accounts default to
 // nothing for an unpinned unattended turn; powers default to everything regardless, since owners opt into bounds one
@@ -78,14 +78,14 @@ const ACCOUNTS_ONLY_DENIED = (capability: Capability): boolean => capability.kin
 
 // Which capability kinds a persona has an opinion about; a kind absent from this switch (an agent runtime, a devops entry)
 // passes through untouched, so a new kind is never silently denied.
-const allowsCapability = (capability: Capability, card: Persona, powers: PersonaPowers): boolean => {
+const allowsCapability = (capability: Capability, persona: Persona, powers: PersonaPowers): boolean => {
     switch (capability.kind) {
         // The signed-in browsers: the persona's own `capabilities` list, and the field that predates the shelves.
         case "browser":
-            return card.capabilities.includes(capability.id);
+            return persona.capabilities.includes(capability.id);
         // Granting an account (`reddit-work`) grants its hands; granting the identity itself grants the someone.
         case "identity":
-            return card.capabilities.includes(capability.id);
+            return persona.capabilities.includes(capability.id);
         // Connector credentials reach the shell; an ungranted id keeps its env vars out of the turn entirely.
         case "cli":
             return powers.connectors === undefined || powers.connectors.includes(capability.id);
@@ -104,20 +104,20 @@ export const turnPersona = ({ personas, actsAs, unattended, fence }: TurnPersona
             ? { persona: undefined, allows: ACCOUNTS_ONLY_DENIED, powers: FULL, workspace: undefined, fence, reason: "unattended-unpinned" }
             : { persona: undefined, allows: EVERYTHING, powers: FULL, workspace: undefined, fence, reason: "attended-open" };
     }
-    const card = personas.find((entry) => entry.id === actsAs);
-    if (card === undefined) {
+    const persona = personas.find((entry) => entry.id === actsAs);
+    if (persona === undefined) {
         return { persona: undefined, allows: NOTHING, powers: NONE_POWERS, workspace: undefined, fence, reason: "unknown-persona" };
     }
     // Parsed, not spread, so defaults come from the schema's one list instead of a second one that could go stale.
-    const powers = PersonaPowersSchema.parse(card.powers ?? {});
+    const powers = PersonaPowersSchema.parse(persona.powers ?? {});
     return {
-        persona: card,
-        allows: (capability) => allowsCapability(capability, card, powers),
+        persona,
+        allows: (capability) => allowsCapability(capability, persona, powers),
         powers,
-        ...(card.workspace !== undefined ? { workspace: card.workspace } : { workspace: undefined }),
+        ...(persona.workspace !== undefined ? { workspace: persona.workspace } : { workspace: undefined }),
         // The persona narrows the conversation's fence, never widens it: one naming a folder its starter cannot see
         // drops that folder here rather than opening it.
-        fence: fenceIntersection(fence, card.workspace?.folders),
+        fence: fenceIntersection(fence, persona.workspace?.folders),
         reason: "persona",
     };
 };
@@ -220,11 +220,11 @@ export const PERSONA_NOTE_TITLE = "Who this turn is acting as";
 // Falls back to the sandbox's prompt both when the field is absent and when "custom" has no PROMPT.md yet, a half-made
 // decision, not one to run blank. `intentic`/`claude` need no text; they name a base the composer already has.
 export const personaPrompt = (
-    card: Persona | undefined,
+    persona: Persona | undefined,
     prompt: string | undefined,
     settings: { readonly systemPromptMode: SystemPromptMode; readonly systemPrompt: string },
 ): { readonly mode: SystemPromptMode; readonly systemPrompt: string } => {
-    const mode = card?.systemPromptMode;
+    const mode = persona?.systemPromptMode;
     if (mode === undefined || (mode === "custom" && prompt === undefined)) {
         return { mode: settings.systemPromptMode, systemPrompt: settings.systemPrompt };
     }
@@ -234,22 +234,22 @@ export const personaPrompt = (
 
 // What to append when a persona is on: which accounts, and where it works, kept short since missing tools already teach
 // by absence. Folders are the exception, narrated since a mid-task path refusal reads as broken.
-export const personaNote = (persona: TurnPersona): string | undefined => {
-    const card = persona.persona;
-    if (card === undefined) {
+export const personaNote = (turn: TurnPersona): string | undefined => {
+    const persona = turn.persona;
+    if (persona === undefined) {
         return undefined;
     }
-    const name = card.label ?? card.id;
+    const name = persona.label ?? persona.id;
     // The resolved fence, not the persona's own folder list: the turn is told the folders it will actually be
     // refused outside of, which is the persona's folders already narrowed by whoever started the conversation.
-    const folders = persona.fence;
+    const folders = turn.fence;
     const scope =
         folders === undefined || folders.length === 0
             ? ``
             : ` You work inside ${folders.join(", ")}, file tools pointed anywhere else in the workspace are refused, so if the task needs a file outside that, say so rather than working around it.`;
-    const desk = card.id === FRONT_DESK_PERSONA ? `\n\n${FRONT_DESK_GUIDANCE}` : ``;
+    const guest = persona.id === VISITOR_CHAT_PERSONA ? `\n\n${VISITOR_CHAT_GUIDANCE}` : ``;
     return (
         `${PERSONA_NOTE_HEADER}\n\n` +
-        `You are acting as ${name}. Only that persona's accounts are available to you this turn; if a task needs a different one, stop and say so rather than using whatever is at hand.${scope}${desk}`
+        `You are acting as ${name}. Only that persona's accounts are available to you this turn; if a task needs a different one, stop and say so rather than using whatever is at hand.${scope}${guest}`
     );
 };

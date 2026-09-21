@@ -38,8 +38,8 @@ export function useWorkspaceRoute(): void {
     const activeFilePath = computed(() => (activeTab.value?.kind === `file` ? activeTab.value.path : ``));
 
     // The deep link wins over the stored project scope as well as over the singleton: a path outside the open project
-    // names a file no scoped tree or desk can show, so following one widens to the whole workspace, as a clicked
-    // reference does (openFileRef). Called before the tab opens, since the desk follows the tab.
+    // names a file no scoped tree or home can show, so following one widens to the whole workspace, as a clicked
+    // reference does (openFileRef). Called before the tab opens, since the home follows the tab.
     const reach = (path: string): void => {
         if (!withinScope(path)) {
             setProjectScope(undefined);

@@ -7,7 +7,7 @@ import { accountGroupOf, accountSkillNames, convergeAccountSkills } from "../acc
 import type { CapabilityHandler } from "../capability.js";
 import { browserUrls, contributionKey, contributionRegistry, hostOf } from "../contributions.js";
 
-// Browser-automation connector: platform data (card, login, skill) comes from an installed extension's manifest; this
+// Browser-automation connector: platform data (entry, login, skill) comes from an installed extension's manifest; this
 // is generic plumbing over it. One entry is one account, not one site: several entries may share a platform, and
 // profile/login/passkeys key off the entry's id. Login lands in a Chromium profile at .intentic/local/browser/<id>.
 
@@ -39,7 +39,7 @@ export const browserHandler: CapabilityHandler = {
     // The stored password: what the daemon types into the site for the agent, and what /secrets rotates. Unset if the
     // profile was signed in by hand.
     secret: (config) => ((config as BrowserConfig).password !== undefined ? "password" : undefined),
-    // The config minus the password (masked to `hasPassword`): a card's row shows the page and purpose, never the
+    // The config minus the password (masked to `hasPassword`): a entry's row shows the page and purpose, never the
     // credential.
     echo: (config) => {
         const { password, ...rest } = config as BrowserConfig;
@@ -89,7 +89,7 @@ export const browserHandler: CapabilityHandler = {
                     : `Filed "${id}" on ${site} under the identity "${born.id}", it shares that identity's browser. Ask the agent to sign in (or sign up) through it, or open "Log in" to do it yourself.`,
         };
     },
-    // Two pending states, told apart by the word "rebuild" in `detail`: the UI routes on it to the Environment card or
+    // Two pending states, told apart by the word "rebuild" in `detail`: the UI routes on it to the Environment entry or
     // the login window. Keep the word in one, out of the other.
     status: async (ctx, id, config) => {
         const group = accountGroupOf(config as BrowserConfig);
@@ -97,7 +97,7 @@ export const browserHandler: CapabilityHandler = {
             return { state: "inactive" };
         }
         if (!browserPackInstalled()) {
-            return { state: "pending", detail: "rebuild the sandbox to finish browser setup (Environment card)" };
+            return { state: "pending", detail: "rebuild the sandbox to finish browser setup (Environment entry)" };
         }
         if (!hasSession(ctx.workspace.root, id)) {
             return { state: "pending", detail: "log in to connect your account, or ask the agent to sign in for you" };

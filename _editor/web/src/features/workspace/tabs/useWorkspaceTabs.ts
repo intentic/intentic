@@ -269,7 +269,7 @@ const openDocument = (extension: string, provider: string, path: string, title: 
     place(paneOf(strip.value, id) ?? focused.value, { kind: `document`, id, extension, provider, path, title, icon }, `keep`);
 };
 
-// Shows what is under the tabs (the desk) without closing any: the pane's active tab is unset, and the next click on a
+// Shows what is under the tabs (the home) without closing any: the pane's active tab is unset, and the next click on a
 // tab brings it back. Main in practice: a side pane exists only while it holds tabs, and one of them is always active.
 const deselect = (which: EditorPane = `main`): void => {
     if (pane(which).active === null) {

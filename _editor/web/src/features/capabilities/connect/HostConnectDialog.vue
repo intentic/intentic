@@ -16,7 +16,7 @@ import { useT } from "@intentic/ui/i18n";
 // live confirmation once the machine connects, no refresh needed. A Linux device that is a WSL distro of a Windows
 // PC already connected can take its command from PowerShell, where a reader on that PC is sitting.
 //
-// A machine still wearing its card's name (`unnamed`) is offered its own hostname the moment it connects: the id is
+// A machine still wearing its tile's name (`unnamed`) is offered its own hostname the moment it connects: the id is
 // the agent's handle (tool prefix, skill file), a hostname is what the owner would have typed, and nothing has used
 // the name yet, so the rename is a migration with nothing to migrate.
 

@@ -45,7 +45,7 @@ describe(`the pre-paint profile script`, () => {
     });
 
     // The site writes this cookie (_site/site/src/lib/variant.ts) on the domain both origins share; a renamed cookie
-    // on either side is a reader who took the installer from /desk and opened the app as a developer.
+    // on either side is a reader who took the installer from /maker and opened the app as a developer.
     it(`reads the site's edition cookie by the name the site writes it under`, () => {
         expect(html).toContain(`(?:^|; )${PROFILE_COOKIE}=([^;]*)`);
     });
@@ -118,13 +118,13 @@ const boot = (href: string, browser: Browser = {}, os: Os = `light`): BootResult
 };
 
 describe(`arriving with a profile`, () => {
-    it(`paints a reader from /desk in the light they were already reading in`, () => {
-        const { stored, attributes, url } = boot(`https://app.intentic.dev/login?profile=desk`);
+    it(`paints a reader from /maker in the light they were already reading in`, () => {
+        const { stored, attributes, url } = boot(`https://app.intentic.dev/login?profile=maker`);
         expect(stored).toEqual({
             [PROFILE_KEYS.scheme]: `light`,
             [PROFILE_KEYS.skin]: `none`,
             [PROFILE_KEYS.audience]: `maker`,
-            [PROFILE_STORAGE_KEY]: `desk`,
+            [PROFILE_STORAGE_KEY]: `maker`,
         });
         // Light and no skin are both spelled by the attribute being gone, which is what useTheme/useSkin do too. The
         // light entry screens key off exactly this absence, so there is no third attribute to write.
@@ -134,7 +134,7 @@ describe(`arriving with a profile`, () => {
     });
 
     it(`keeps a query the app was given for itself`, () => {
-        expect(boot(`https://app.intentic.dev/setup?machine=hosted&profile=desk`).url).toBe(`/setup?machine=hosted`);
+        expect(boot(`https://app.intentic.dev/setup?machine=hosted&profile=maker`).url).toBe(`/setup?machine=hosted`);
     });
 
     it(`stores nothing without one, and leaves the URL alone`, () => {
@@ -149,12 +149,12 @@ describe(`arriving with a profile`, () => {
         expect(url).toBeUndefined();
     });
 
-    // The way back. Every key desk set is still desk's, so default may take them all — including releasing the one it
+    // The way back. Every key maker set is still maker's, so default may take them all — including releasing the one it
     // does not answer, which is what puts the audience question back on the table. What it hands them back TO is the
     // OS, not a look of its own, so the attributes here are the reader's system setting rather than the profile's.
     it(`hands an untouched browser back to the app's own look`, () => {
-        const desk = boot(`https://app.intentic.dev/login?profile=desk`).stored;
-        const { stored, attributes } = boot(`https://app.intentic.dev/login?profile=default`, { stored: desk }, `dark`);
+        const maker = boot(`https://app.intentic.dev/login?profile=maker`).stored;
+        const { stored, attributes } = boot(`https://app.intentic.dev/login?profile=default`, { stored: maker }, `dark`);
         expect(stored).toEqual({ [PROFILE_KEYS.scheme]: `system`, [PROFILE_KEYS.skin]: `system`, [PROFILE_STORAGE_KEY]: `default` });
         expect(attributes.get(`data-mode`)).toBe(`dark`);
         expect(attributes.get(`data-skin`)).toBe(`sanctum`);
@@ -162,48 +162,48 @@ describe(`arriving with a profile`, () => {
 
     // The rule that makes the link safe to click twice: what someone chose in Settings is theirs, not the link's.
     it(`leaves a look the reader chose for themselves, however they got here`, () => {
-        const chosen = { ...boot(`https://app.intentic.dev/login?profile=desk`).stored, [PROFILE_KEYS.skin]: `sanctum`, [PROFILE_KEYS.scheme]: `dark` };
-        const { stored, attributes } = boot(`https://app.intentic.dev/login?profile=desk`, { stored: chosen });
+        const chosen = { ...boot(`https://app.intentic.dev/login?profile=maker`).stored, [PROFILE_KEYS.skin]: `sanctum`, [PROFILE_KEYS.scheme]: `dark` };
+        const { stored, attributes } = boot(`https://app.intentic.dev/login?profile=maker`, { stored: chosen });
         expect(stored[PROFILE_KEYS.skin]).toBe(`sanctum`);
         expect(stored[PROFILE_KEYS.scheme]).toBe(`dark`);
         expect(attributes.get(`data-skin`)).toBe(`sanctum`);
     });
 });
 
-// THE INSTALLER LEG. A reader on intentic.dev/desk who takes the desktop app never clicks a link into this origin; the
+// THE INSTALLER LEG. A reader on intentic.dev/maker who takes the desktop app never clicks a link into this origin; the
 // first page of it they meet is the sign-in the app opens in their browser, with no ?profile= on it. The site's cookie
 // is on the domain both origins share, and the script reads it as the link that was never followed.
 describe(`arriving with the site's cookie and no link`, () => {
     const cookie = (value: string): string => `_ga=GA1.1.1; ${PROFILE_COOKIE}=${value}; other=1`;
 
-    it(`adopts the desk profile from the cookie, and leaves the URL alone since there is nothing to consume`, () => {
-        const { stored, attributes, url } = boot(`https://app.intentic.dev/desktop-auth?state=n&challenge=c`, { cookie: cookie(`desk`) });
+    it(`adopts the maker profile from the cookie, and leaves the URL alone since there is nothing to consume`, () => {
+        const { stored, attributes, url } = boot(`https://app.intentic.dev/desktop-auth?state=n&challenge=c`, { cookie: cookie(`maker`) });
         expect(stored).toEqual({
             [PROFILE_KEYS.scheme]: `light`,
             [PROFILE_KEYS.skin]: `none`,
             [PROFILE_KEYS.audience]: `maker`,
-            [PROFILE_STORAGE_KEY]: `desk`,
+            [PROFILE_STORAGE_KEY]: `maker`,
         });
         expect(attributes.has(`data-mode`)).toBe(false);
         expect(url).toBeUndefined();
     });
 
-    // The footer's way out writes any non-desk value; the site itself reads all of those as the default design.
+    // The footer's way out writes any non-maker value; the site itself reads all of those as the default design.
     it(`reads any other value as the site's way out, which is the default profile`, () => {
-        const desk = boot(`https://app.intentic.dev/login?profile=desk`).stored;
-        const { stored } = boot(`https://app.intentic.dev/login`, { stored: desk, cookie: cookie(`default`) });
+        const maker = boot(`https://app.intentic.dev/login?profile=maker`).stored;
+        const { stored } = boot(`https://app.intentic.dev/login`, { stored: maker, cookie: cookie(`default`) });
         expect(stored).toEqual({ [PROFILE_KEYS.scheme]: `system`, [PROFILE_KEYS.skin]: `system`, [PROFILE_STORAGE_KEY]: `default` });
     });
 
     it(`lets a link outrank the cookie, since the link is the newer opinion`, () => {
-        const { stored, url } = boot(`https://app.intentic.dev/login?profile=default`, { cookie: cookie(`desk`) });
+        const { stored, url } = boot(`https://app.intentic.dev/login?profile=default`, { cookie: cookie(`maker`) });
         expect(stored[PROFILE_STORAGE_KEY]).toBe(`default`);
         expect(url).toBe(`/login`);
     });
 
     it(`is the same non-overriding adoption a link gets: a choice made in Settings stays`, () => {
-        const chosen = { ...boot(`https://app.intentic.dev/login?profile=desk`).stored, [PROFILE_KEYS.audience]: `developer` };
-        const { stored } = boot(`https://app.intentic.dev/login`, { stored: chosen, cookie: cookie(`desk`) });
+        const chosen = { ...boot(`https://app.intentic.dev/login?profile=maker`).stored, [PROFILE_KEYS.audience]: `developer` };
+        const { stored } = boot(`https://app.intentic.dev/login`, { stored: chosen, cookie: cookie(`maker`) });
         expect(stored[PROFILE_KEYS.audience]).toBe(`developer`);
         expect(stored[PROFILE_KEYS.scheme]).toBe(`light`);
     });

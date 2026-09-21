@@ -3,7 +3,7 @@ import { developersHref, developersPages } from "./developers";
 import { compareHref, compareIndex, comparePages } from "./compare";
 import { docsHref, docsPages } from "./docs";
 import { guidePages, guidesHref, guidesIndex } from "./guides";
-import { deskLanding, landingContent } from "./landing";
+import { makerLanding, landingContent } from "./landing";
 import { productHref, productPages } from "./product";
 import { referenceHref, referencePages } from "./reference";
 
@@ -17,7 +17,7 @@ export interface PageMeta {
 // Every indexable route, keyed by canonical path; head, OpenGraph and JSON-LD all read from here.
 export const pageMeta: Record<string, PageMeta> = {
     "/": { ...landingContent.meta, datePublished: "2026-07-06" },
-    "/desk/": { ...deskLanding.meta, datePublished: "2026-09-19" },
+    "/maker/": { ...makerLanding.meta, datePublished: "2026-09-19" },
     "/privacy/": {
         title: "Privacy Policy · intentic",
         description: "What personal data the intentic platform processes, why, who it is shared with, and your rights under the GDPR.",

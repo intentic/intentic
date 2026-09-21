@@ -116,7 +116,7 @@ const describe = (effect: CapabilityEffect): EffectRow => {
                         : `Sends this sandbox's prompts, files and command output to ${effect.url}`,
             };
         case "spend":
-            // Warned like `machine`: the spend leaves the sandbox and can't be undone by removing the card; the row
+            // Warned like `machine`: the spend leaves the sandbox and can't be undone by removing the tile; the row
             // leads with
             // the ceiling and whether it asks each time.
             return {
@@ -139,7 +139,7 @@ const rows = computed<readonly EffectRow[]>(() => effects.map(describe));
             <Icon :name="row.icon" />
         </span>
     </div>
-    <!-- Full panel shares the same card and heading tier as <CredentialGuide>, since both live in the same reference column read beside the form. -->
+    <!-- Full panel shares the same tile and heading tier as <CredentialGuide>, since both live in the same reference column read beside the form. -->
     <div v-else-if="rows.length > 0" class="ui-card">
         <div class="mb-3 text-sm font-semibold text-content">{{ t(`capabilities.capabilityEffects.addToSandbox`) }}</div>
         <ul class="flex flex-col gap-2">

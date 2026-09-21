@@ -59,7 +59,7 @@ curl --proxy "$(geo proxy berlin)" https://example.com/
 
 For a browser, do NOT do it per command: an account can be BOUND to an exit by the user, and then every page
 that account opens comes out there, with its clock and language set to match. If the user wants an account to
-browse from a country, tell them to set the exit on that account's card rather than proxying by hand, a
+browse from a country, tell them to set the exit on that account's entry rather than proxying by hand, a
 browser whose address says Berlin and whose clock says New York is more conspicuous than one that never moved.
 
 ## What to expect
@@ -114,6 +114,6 @@ export const exitHandler = tunnelHandler<ExitConfig>({
         }
         return tunnelStatus(link, { active: "up", pending: "starting" });
     },
-    stored: (id) => `Stored ${id}. Start it from its row on the Geo exit card, or ask the agent to.`,
+    stored: (id) => `Stored ${id}. Start it from its row on the Geo exit entry, or ask the agent to.`,
     afterRebuild: "the exit comes up when it restarts",
 });

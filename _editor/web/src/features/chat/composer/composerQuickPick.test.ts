@@ -11,7 +11,7 @@ vi.mock("../../sandbox/client/sandboxClient", () => ({ sandboxRequest: vi.fn() }
 vi.mock("../models/useChat-catalog", () => ({ loadProviderModels: vi.fn(async () => {}) }));
 
 const entry = (provider: AgentProvider, value: string, label: string): PickerEntry => ({ key: `${provider}:${value}`, provider, value, label });
-const card = (id: string, extra: Partial<Persona> = {}): Persona => ({ id, capabilities: [], ...extra });
+const persona = (id: string, extra: Partial<Persona> = {}): Persona => ({ id, capabilities: [], ...extra });
 
 const MODELS: readonly PickerEntry[] = [
     entry(`claude`, `claude-opus-5`, `Claude Opus 5`),
@@ -21,7 +21,7 @@ const MODELS: readonly PickerEntry[] = [
 
 // Everything offered, a persona picked, running here on Opus at high effort.
 const ALL: QuickPickSources = {
-    persona: { cards: [card(`intentic`, { label: `Intentic`, brief: `Product work` }), card(`radarsu`)], picked: `intentic` },
+    persona: { personas: [persona(`intentic`, { label: `Intentic`, brief: `Product work` }), persona(`radarsu`)], picked: `intentic` },
     sandbox: { runners: [{ id: `omen` }], boxes: [{ id: `box-2`, name: `Paperwork` }], box: undefined, runner: undefined },
     model: { entries: MODELS, provider: `claude`, model: `claude-opus-5`, isReady: () => true },
     effort: {
@@ -47,7 +47,7 @@ it(`lists one summary row per offered kind, in kind order, each carrying the cur
 it(`names a raw id when the current pick is on no list, never an empty value`, () => {
     const gone: QuickPickSources = {
         ...ALL,
-        persona: { cards: [], picked: `deleted` },
+        persona: { personas: [], picked: `deleted` },
         sandbox: { runners: [], boxes: [], box: `unknown-box`, runner: undefined },
         model: { entries: [], provider: `claude`, model: `claude-opus-9`, isReady: () => true },
     };

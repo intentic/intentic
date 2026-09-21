@@ -10,9 +10,9 @@ import { IconStub } from "@intentic/ui/testing";
 
 const personas = ref<Persona[]>([]);
 const connected = ref<string[]>([]);
-// The reader's tier: a desk is offered its own cards and nothing wider.
-const isDesk = ref(false);
-vi.mock(`../../sandbox/secrets/useRole`, () => ({ useRole: () => ({ isDesk }) }));
+// The reader's tier: a guest is offered its own personas and nothing wider.
+const isGuest = ref(false);
+vi.mock(`../../sandbox/secrets/useRole`, () => ({ useRole: () => ({ isGuest }) }));
 
 vi.mock(`../../sandbox/personas/usePersonas`, () => ({
     usePersonas: () => ({
@@ -55,7 +55,7 @@ const linkLabelled = (element: HTMLElement, label: string): HTMLAnchorElement | 
 beforeEach(() => {
     personas.value = [];
     connected.value = [];
-    isDesk.value = false;
+    isGuest.value = false;
     events.length = 0;
 });
 
@@ -88,7 +88,7 @@ it(`marks a persona whose every account is still signed out`, () => {
 });
 
 // Account ids distinguish reddit-work from reddit-personal; a bound mark alone can't.
-it(`names the accounts a card holds, and picks it by id`, () => {
+it(`names the accounts a persona holds, and picks it by id`, () => {
     personas.value = [{ id: `work`, label: `Work`, capabilities: [`reddit-work`, `x-company`] }];
     connected.value = [`reddit-work`, `x-company`];
     const element = mount();
@@ -99,8 +99,8 @@ it(`names the accounts a card holds, and picks it by id`, () => {
     expect(events).toEqual([`work`]);
 });
 
-// Same phrase the personas page uses for a bounded card, so the two are recognizably the same card.
-it(`says how bounded a card is`, () => {
+// Same phrase the personas page uses for a bounded persona, so the two are recognizably the same persona.
+it(`says how bounded a persona is`, () => {
     personas.value = [
         {
             id: `visitor`,
@@ -119,9 +119,9 @@ it(`explains the empty workspace and offers the way in`, () => {
     expect(linkLabelled(element, `Set up a persona`)?.getAttribute(`href`)).toBe(`/sandbox/personas`);
 });
 
-// A desk holds cards, it does not manage them, and "Anyone" would reach every account: exactly what it is not handed.
-it(`offers a desk its cards alone: no Anyone, no way to the personas page`, () => {
-    isDesk.value = true;
+// A guest holds personas, it does not manage them, and "Anyone" would reach every account: exactly what it is not handed.
+it(`offers a guest its personas alone: no Anyone, no way to the personas page`, () => {
+    isGuest.value = true;
     personas.value = [{ id: `support`, label: `Support`, capabilities: [] }];
     const element = mount(`support`);
 
@@ -131,8 +131,8 @@ it(`offers a desk its cards alone: no Anyone, no way to the personas page`, () =
     expect(events).toEqual([`support`]);
 });
 
-it(`tells a desk with no card yet to ask the owner, rather than offering to set one up`, () => {
-    isDesk.value = true;
+it(`tells a guest with no persona yet to ask the owner, rather than offering to set one up`, () => {
+    isGuest.value = true;
     const element = mount();
 
     expect(text(element)).toContain(`No assistant has been assigned to you yet`);

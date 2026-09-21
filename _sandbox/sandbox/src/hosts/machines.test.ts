@@ -6,7 +6,7 @@ import {
     environmentKeyOf,
     environmentOf,
     HOST_NATIVE_ENVIRONMENT,
-    hostCardOf,
+    hostEntryOf,
     hostConnectionKey,
     hostEnvironmentOf,
     type HostFacts,
@@ -117,13 +117,13 @@ test("names a machine's environments without giving any of them a card of its ow
     expect(hostConnectionKey("rog", HOST_NATIVE_ENVIRONMENT)).toBe("rog");
     expect(hostConnectionKey("rog", "wsl:archlinux")).toBe("rog::wsl:archlinux");
     // Both directions, since the store and the hub only ever hold the key and the grant only ever hangs off the card.
-    expect(hostCardOf("rog")).toBe("rog");
-    expect(hostCardOf("rog::wsl:archlinux")).toBe("rog");
+    expect(hostEntryOf("rog")).toBe("rog");
+    expect(hostEntryOf("rog::wsl:archlinux")).toBe("rog");
     expect(hostEnvironmentOf("rog")).toBe(HOST_NATIVE_ENVIRONMENT);
     expect(hostEnvironmentOf("rog::wsl:archlinux")).toBe("wsl:archlinux");
     // The single colon inside an environment key is why the separator is doubled: a distro named with one cannot
     // split a card in two.
-    expect(hostCardOf(hostConnectionKey("rog", "wsl:my:distro"))).toBe("rog");
+    expect(hostEntryOf(hostConnectionKey("rog", "wsl:my:distro"))).toBe("rog");
     expect(hostEnvironmentOf(hostConnectionKey("rog", "wsl:my:distro"))).toBe("wsl:my:distro");
 });
 

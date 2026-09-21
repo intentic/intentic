@@ -24,7 +24,7 @@ are turned into the rows a chat displays by three separate pieces of code:
 | Daemon, for the fleet board: `_sandbox/sandbox/src/agents/agents-registry.ts`           | `AgentEvent`                       | status/activity   | 17                  | (part of 1,583) |
 
 `RestoredMessage` (`events.ts` L513–630) and `ChatMessage` (`transcript.ts` L241–365) are the same row spelled twice;
-the browser already concedes it with `CARD_KINDS = RESTORED_CARD_FIELDS`. Each `ChatMessage` field carries a
+the browser already concedes it with `CARD_KINDS = RESTORED_REQUEST_FIELDS`. Each `ChatMessage` field carries a
 live-path story and a reopen-path story in its comment (`sentAt`, `recorded`, `rewindIndex`, `run`, `checkpointId`),
 and the daemon's fold is annotated throughout with the browser rule it is imitating: "Mirrors the client's own row
 guard (recordedRows)", "the live client's own move (turnReducer: withBubble, then bubbleId null)", "the client's own
@@ -135,7 +135,7 @@ Estimated, non-test / test:
   `conversation.ts` restore/reattach/effect paths ~700–900 of 2,550; `transcriptCache` epoch logic; `turnStream`
   replay boundary. **≈ 2,000–2,500 lines, plus ≈ 3,000 lines of tests** that exist to drive frames through the
   browser fold.
-- Contract: the `RestoredMessage`/`ChatMessage` duality, `RESTORED_CARD_FIELDS`, `RestoredCards`, two `holdsCard`s;
+- Contract: the `RestoredMessage`/`ChatMessage` duality, `RESTORED_REQUEST_FIELDS`, `RestoredCards`, two `holdsRequest`s;
   ~40 frame shapes leave the public lock.
 - Daemon: `restoredTurn`/`recordTurnTranscript` as a separate fold; the registry's frame switch; the provider
   store backfill readers (~420 lines) under the repo's own no-migration rule.

@@ -136,7 +136,7 @@ Every surface this one process owns, and the reason each one lives here rather t
   step in a visible terminal panel and the activity feed (src/workspace/deps/reconcile-deps.ts → verify-deps.ts →
   src/automations).
 - Open exactly two doors to callers with no identity at all, and open them through one substrate
-  (src/automations/public-door.ts): the Front Desk (src/webchat) and the bug intake (src/issues) are the
+  (src/automations/public-door.ts): the Visitor chat (src/webchat) and the bug intake (src/issues) are the
   inbound-HTTP mirror of the gateway-process pattern, a `<script>` on somebody else's page instead of a process
   holding a connection, so their routes ARE the source. The door owns what both need: which automation a public
   id names and whether this origin (or this door's own key) may reach it, a fixed rate window per caller, the
@@ -161,7 +161,7 @@ Every surface this one process owns, and the reason each one lives here rather t
   and a failure: an unattended turn that names no persona is denied every account, so a browser-published draft
   without one is failed unsent rather than handed to a turn that cannot reach the login.
 - Gate what runs without the owner, in two layers that share one decision seam (src/guard). Before a session
-  starts: every outside-driven wake (automations, listeners, the Front Desk, the workflow release gate) is
+  starts: every outside-driven wake (automations, listeners, the Visitor chat, the workflow release gate) is
   allowed, held for approval, or refused. Inside a session already running: classified outbound provider calls
   are checked against the owner's action rules, and shell commands whose class the owner holds: destructive
   git, recursive deletes, disk and volume wipes, credential reads, publishes, outbound fetches: park on a
@@ -177,7 +177,7 @@ Every surface this one process owns, and the reason each one lives here rather t
   off until they turn it on. The sandbox can afford to hold only what nothing undoes because the container is
   disposable; a laptop has no image to be recreated from, and the two defaults differ for exactly that reason.
 - Tell the agent which words are not the owner's, and act on it (@intentic/base's outside-text). Everything that
-  arrives from outside the workspace: a stranger's listener or Front Desk message, a fetched page, a foreign MCP
+  arrives from outside the workspace: a stranger's listener or Visitor chat message, a fetched page, a foreign MCP
   server's answer, the output of a shell command that reached the internet: is wrapped in an
   `<untrusted-content>` envelope whose id is minted per wrap, so content can never close its own envelope and
   speak in the owner's voice after it. Marker lookalikes (including fullwidth, CJK and zero-width spellings),
@@ -285,7 +285,7 @@ Every surface this one process owns, and the reason each one lives here rather t
   back as a pass over work it never saw.
 - Let an agent ask the owner, in chat, to connect a capability the task is missing: the same consent shape
   as the wallet's payment gate, pointed at setup instead of money (src/capabilities/capability-offer.ts). The
-  plumbing itself is src/agent/run/offer-card.ts, shared by every card a gate raises from outside the turn
+  plumbing itself is src/agent/run/offer-request.ts, shared by every card a gate raises from outside the turn
   generator (a capability ask, a payment, a gated credential, a command headed for somebody's machine): find the
   live run the caller may draw in, push the raised and resolved frames into its log and the registry by hand,
   hold the call under a deadline, and tell an answer from the abort stand-in. The agent's

@@ -11,7 +11,7 @@
         "create": "Create",
         "done": "Done",
         "filterTemplates": "Filter templates…",
-        "frontDeskCreatedDrop": "Front Desk created: drop this into your site:",
+        "visitorChatCreatedDrop": "Visitor chat created: drop this into your site:",
         "integrations": "Integrations",
         "newAutomation": "New automation",
         "noTemplateMatches": "No template matches.",
@@ -48,7 +48,7 @@
         "fires": "Fires",
         "firesIn": "Fires {when}.",
         "fri": "Fri",
-        "frontDesk": "Front desk",
+        "visitorChat": "Visitor chat",
         "fullToolboxNoAccounts": "full toolbox, no accounts",
         "googleClientId": "Google client ID",
         "googleSignIn": "Google sign-in",
@@ -123,7 +123,7 @@
         "standard5FieldCron": "Standard 5-field cron: minute hour day month weekday.",
         "starter": "Starter from {recipeNote}.",
         "staysInSandboxOnly": "Stays in your sandbox: only the site key is ever sent to a visitor's browser.",
-        "strangersWritePromptsSaving": "Strangers write these prompts, so saving adds a read-only front desk to your personas.",
+        "strangersWritePromptsSaving": "Strangers write these prompts, so saving adds a read-only visitor chat to your personas.",
         "sun": "Sun",
         "then": "Then",
         "theyTalkTo": "They talk to",
@@ -164,7 +164,7 @@
         "embedCodeInstallStatus": "Embed code & install status",
         "enable": "Enable {id}",
         "firesOnTriggerNot": "Fires on its trigger, not a clock",
-        "frontDesk": "Front desk",
+        "visitorChat": "Visitor chat",
         "getEmbedCode": "Get the embed code",
         "heldApprovalBeforeRuns": "Held for your approval before it runs",
         "hold": "Hold",
@@ -219,7 +219,7 @@
     "extension": {
         "automations": "Automations"
     },
-    "frontDeskInstallDialog": {
+    "visitorChatInstallDialog": {
         "allow": "Allow",
         "allowToLoadChat": "Allow {origin} to load this chat",
         "allowedSites": "Allowed sites",

@@ -1,6 +1,6 @@
 // What one of the user's own machines is running.
 import { z } from "zod";
-import { hostCardOf, hostEnvironmentOf, type HostFacts, HostFactsSchema, WslEnvironmentSchema } from "./hosts.js";
+import { hostEntryOf, hostEnvironmentOf, type HostFacts, HostFactsSchema, WslEnvironmentSchema } from "./hosts.js";
 import { DEV_VERSION } from "../state/versions.js";
 // Desktop-sync report shape shared by the agent, daemon and browser, produced only by `intentic-machine status --json`.
 // The agent never reports `sandboxes`; the docker half is filled in by whoever reads the report, scoped to the reader's
@@ -483,7 +483,7 @@ const hostnameKey = (device: Device): string | undefined => deviceHostname(devic
 
 // The card a device's door hangs off: one card is one computer, so two doors naming the same card are one machine
 // whatever either has said about itself — which is the whole of what an environment that has never connected says.
-const cardKey = (device: Device): string | undefined => (device.hostId === undefined ? undefined : hostCardOf(device.hostId));
+const cardKey = (device: Device): string | undefined => (device.hostId === undefined ? undefined : hostEntryOf(device.hostId));
 
 // What makes two devices one computer: a shared card, or a shared hostname where a distro answers to it, since WSL
 // hands a distro the Windows machine's name. Two native installs that merely share a name stay two machines.

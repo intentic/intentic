@@ -180,7 +180,7 @@ it(`keeps to the one-liner for a device it cannot run on`, async () => {
 // Told once, where the old "Syncing from" line used to be, rather than left for the reader to hunt for.
 it(`points at the list for devices that are already paired`, () => {
     mount();
-    expect(shown()).toContain(`Anything already paired is a card on the`);
+    expect(shown()).toContain(`Anything already paired is listed on the`);
     // And it holds none of the old singular claims itself.
     expect(shown()).not.toContain(`Syncing from`);
     expect(shown()).not.toContain(`Disable sync`);

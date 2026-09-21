@@ -48,7 +48,7 @@ const seed = (now: number): AutomationSummary[] => [
         ],
     },
     {
-        id: `aut_front_desk`,
+        id: `aut_visitor_chat`,
         trigger: { kind: `listener`, provider: `webchat`, allowedOrigins: [`https://acme.example`] },
         prompt: `A visitor is asking on the marketing site. Answer from the docs in this workspace only; if the answer isn't there, say so and offer to pass it on.`,
         models: [{ provider: `claude`, model: `claude-sonnet-5` }],
@@ -62,7 +62,7 @@ const seed = (now: number): AutomationSummary[] => [
         },
         requireApproval: true,
         enabled: true,
-        runs: [{ at: now - hours(4), outcome: `completed`, detail: `answered 2 messages`, conversationId: `cnv_front_desk_visitor` }],
+        runs: [{ at: now - hours(4), outcome: `completed`, detail: `answered 2 messages`, conversationId: `cnv_visitor_chat_visitor` }],
     },
     {
         id: `aut_docs_after_land`,
@@ -89,11 +89,11 @@ const seed = (now: number): AutomationSummary[] => [
 
 const seedApprovals = (now: number): AutomationApproval[] => [
     {
-        id: `apr_front_desk_1`,
-        automationId: `aut_front_desk`,
+        id: `apr_visitor_chat_1`,
+        automationId: `aut_visitor_chat`,
         payload: `visitor: "Does intentic work with a self-hosted GitLab?"`,
-        origin: { automationId: `aut_front_desk`, provider: `webchat`, author: `visitor · 84.12.9.x` },
-        title: `Front Desk: self-hosted GitLab?`,
+        origin: { automationId: `aut_visitor_chat`, provider: `webchat`, author: `visitor · 84.12.9.x` },
+        title: `Visitor chat: self-hosted GitLab?`,
         actsAs: `maya-support`,
         createdAt: now - minutes(6),
     },
@@ -104,7 +104,7 @@ const catalog: AutomationCatalog = {
     sources: [
         {
             provider: `webchat`,
-            label: `Front Desk`,
+            label: `Visitor chat`,
             icon: `globe`,
             requires: [],
             enabled: true,
@@ -164,8 +164,8 @@ const catalog: AutomationCatalog = {
     ],
     templates: [
         {
-            id: `front-desk`,
-            title: `Front Desk`,
+            id: `visitor-chat`,
+            title: `Visitor chat`,
             icon: `globe`,
             requires: [],
             trigger: { kind: `listener`, provider: `webchat`, eventType: `message` },

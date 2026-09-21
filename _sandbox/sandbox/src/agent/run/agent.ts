@@ -20,7 +20,7 @@ import {
     type AgentCapabilities,
     type AgentEvent,
     type AskQuestion,
-    type CardDocument,
+    type RequestDocument,
     type CommandJudgeMode,
     DEFAULT_SAFETY_POLICY,
     type DependencyFreshness,
@@ -139,7 +139,7 @@ export interface AgentRequest {
     readonly cursorApiKey?: string;
     // How tool calls are gated this turn; defaults to bypassPermissions, safe since the container is the boundary.
     readonly permissionMode?: PermissionMode;
-    // Narrows the turn to tool NAMES (SDK option), not `tools` below (MCP servers); the Front Desk allowlist.
+    // Narrows the turn to tool NAMES (SDK option), not `tools` below (MCP servers); the Visitor chat allowlist.
     readonly allowedTools?: readonly string[];
     // Reasoning controls forwarded to the SDK: effort level and extended thinking.
     readonly effort?: string;
@@ -568,7 +568,7 @@ const baseOptions = (
 // Most recent document the turn wrote, handed to every card it parks on. Filled as the turn runs rather than asking the
 // model to repeat its write-up into the question.
 export interface TurnDocuments {
-    latest: CardDocument | undefined;
+    latest: RequestDocument | undefined;
 }
 
 // Latest completed assistant prose block, since ExitPlanMode's input carries no plan (the model writes prose first). A
@@ -734,7 +734,7 @@ const unanswerable = (toolName: string): PermissionResult => ({
 
 /* What an approval card would show: the turn's latest prose, else a plan file it wrote, with that file attached when it
  * says more than the prose does. Consumes the prose either way, so a retry reads the next one, not this one again. */
-const planCard = (documents: TurnDocuments, prose: TurnProse): { text: string; document?: CardDocument } | undefined => {
+const planRequest = (documents: TurnDocuments, prose: TurnProse): { text: string; document?: RequestDocument } | undefined => {
     const adjacent = prose.latest?.trim() ?? "";
     prose.latest = undefined;
     const file = documents.latest;
@@ -761,7 +761,7 @@ const permissionGate = (
         if (nobodyToAsk(request)) {
             return unanswerable("ExitPlanMode");
         }
-        const card = planCard(documents, prose);
+        const card = planRequest(documents, prose);
         // A blank card approves nothing; keep plan mode and let the next prose, or a written plan file, retry.
         if (card === undefined) {
             return {
@@ -897,7 +897,7 @@ export async function* runAgent(
     // Adjacent assistant prose ExitPlanMode reads, filled from main-thread stream frames below.
     const prose: TurnProse = { current: "", latest: undefined };
     // Writes seen but not yet settled, keyed by call id; a Write's content is known at call time but can still fail.
-    const writing = new Map<string, CardDocument>();
+    const writing = new Map<string, RequestDocument>();
     let stderr = "";
     const options: Options = {
         ...baseOptions(request, abortController, permissionMode, tmuxEnabled, subagents, push),

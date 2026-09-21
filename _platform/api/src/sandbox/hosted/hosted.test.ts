@@ -875,10 +875,10 @@ describe(`sandbox routes: the hosted lane's gates`, () => {
         expect(on).toEqual({ enabled: true, remaining: 1, hours: { allowance: 40, remaining: 40 } });
     });
 
-    /* THE CARD OFFERS A FREE MACHINE, so it states the free lane's hours even to somebody on the plan: a plan buys
+    /* THE CARD OFFERS A FREE MACHINE, so it states the free plan's hours even to somebody on the plan: a plan buys
      * slots at a bigger rung, and the machine this card would hand over is still a free one. (`plan` is absent here
      * because this platform sells nothing; the case below sets a price and gets it.) */
-    it(`tells a subscriber the free lane's hours too, since the machine on offer is still a free one`, async () => {
+    it(`tells a subscriber the free plan's hours too, since the machine on offer is still a free one`, async () => {
         const member = fakePrisma({
             hostedMachine: { count: vi.fn().mockResolvedValue(0) },
             // Plan row: status and the slots it holds at each rung.
@@ -903,7 +903,7 @@ describe(`sandbox routes: the hosted lane's gates`, () => {
         expect(await call(sandboxRoutes.hostedOffer, undefined, { context: selling })).toEqual({
             enabled: true,
             remaining: 1,
-            // The hours are the free lane's, which is what the machine on offer would be; the plan buys a rung beside it.
+            // The hours are the free plan's, which is what the machine on offer would be; the plan buys a rung beside it.
             hours: { allowance: config().hosted.monthlyHours, remaining: config().hosted.monthlyHours },
             plan: true,
         });

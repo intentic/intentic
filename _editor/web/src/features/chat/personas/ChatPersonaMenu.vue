@@ -8,7 +8,7 @@ import { useRole } from "../../sandbox/secrets/useRole";
 import { useT } from "@intentic/ui/i18n";
 
 // The composer's persona picker: who this chat speaks as to the outside world. "Anyone" is a real row, not the absence
-// of one, since an empty persona means opposite things attended vs. unattended. A card whose accounts are all signed
+// of one, since an empty persona means opposite things attended vs. unattended. A persona whose accounts are all signed
 // out is still offered, marked rather than hidden: it's still meaningful, just unable to post yet.
 
 const t = useT();
@@ -17,11 +17,11 @@ const { picked } = defineProps<{ picked?: string }>();
 const emit = defineEmits<{ picked: [persona: string | undefined] }>();
 
 const { personas, isConnected } = usePersonas();
-// A desk picks among the cards it holds and nothing wider: "Anyone" would reach every account, which is exactly what a
-// desk is not handed, and the cards are the owner's to manage.
-const { isDesk } = useRole();
+// A guest picks among the personas it holds and nothing wider: "Anyone" would reach every account, which is exactly what a
+// guest is not handed, and the personas are the owner's to manage.
+const { isGuest } = useRole();
 
-// True once any one of a persona's accounts is connected; only a card that reaches nothing is marked.
+// True once any one of a persona's accounts is connected; only a persona that reaches nothing is marked.
 const ready = (persona: Persona): boolean => persona.capabilities.some((id) => isConnected(id));
 
 // Shown because a mark can't tell reddit-work from reddit-personal, and that's the reason a persona exists.
@@ -44,10 +44,10 @@ const closeMenu = (event: MouseEvent): void => {
         <!-- Not an error: the copy explains what an empty list means and where to fix it. -->
         <template v-if="empty">
             <p class="px-2.5 py-3 text-2xs text-subtle">
-                {{ isDesk ? t(`chat.chatPersonaMenu.noDeskYet`) : t(`chat.chatPersonaMenu.noPersonasYetChat`) }}
+                {{ isGuest ? t(`chat.chatPersonaMenu.noGuestYet`) : t(`chat.chatPersonaMenu.noPersonasYetChat`) }}
             </p>
             <RouterLink
-                v-if="!isDesk"
+                v-if="!isGuest"
                 to="/sandbox/personas"
                 class="ui-row-select flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-left max-md:py-3"
                 @click="closeMenu"
@@ -60,7 +60,7 @@ const closeMenu = (event: MouseEvent): void => {
         <template v-else>
             <!-- The tick marks the current pick, including Anyone: with none ticked, an unset persona would read as a broken menu. -->
             <button
-                v-if="!isDesk"
+                v-if="!isGuest"
                 type="button"
                 class="ui-row-select flex items-start gap-2 rounded-lg px-2.5 py-1.5 text-left max-md:py-3"
                 :class="{ 'ui-row-select-on': picked === undefined }"
@@ -92,7 +92,7 @@ const closeMenu = (event: MouseEvent): void => {
                         <StatusBadge v-if="persona.powers !== undefined" variant="neutral" size="xs">{{ personaBounds(persona) }}</StatusBadge>
                     </span>
                     <!-- An account-less persona still bounds the turn and still names the speaker. -->
-                    <!-- The card's own blurb, when set: what a chat is matched on, and what tells "Work" from "Studio" fastest. -->
+                    <!-- The persona's own blurb, when set: what a chat is matched on, and what tells "Work" from "Studio" fastest. -->
                     <span v-if="persona.brief !== undefined" class="truncate text-2xs text-subtle">{{ persona.brief }}</span>
                     <span v-if="persona.capabilities.length > 0" class="truncate text-2xs" :class="ready(persona) ? `text-subtle` : `text-muted`">
                         {{ accountsOf(persona) }}<template v-if="!ready(persona)">{{ t(`chat.chatPersonaMenu.notSignedInYet`) }}</template>
@@ -101,9 +101,9 @@ const closeMenu = (event: MouseEvent): void => {
                 <Icon v-if="persona.id === picked" name="check" class="ml-auto mt-1 shrink-0 text-2xs text-primary-500" aria-hidden="true" />
             </button>
 
-            <!-- Link to the page that owns these cards, placed where a list's "manage" row always is. -->
+            <!-- Link to the page that owns these personas, placed where a list's "manage" row always is. -->
             <RouterLink
-                v-if="!isDesk"
+                v-if="!isGuest"
                 to="/sandbox/personas"
                 class="ui-row-select flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-left max-md:py-3"
                 @click="closeMenu"

@@ -6,7 +6,7 @@ import {
     type SafetyVerdict,
 } from "@intentic/sandbox-contract";
 import { judgeCommand } from "../agent/tools/command-judge.js";
-import { raiseCard } from "../agent/run/offer-card.js";
+import { raiseRequest } from "../agent/run/offer-request.js";
 import { RoleModelUnsetError } from "../agent/models/role-model-unset.js";
 import { turnRunOf } from "../agent/run/turn/turn-runs.js";
 import type { Services } from "../composition.js";
@@ -164,7 +164,7 @@ export const judgeHostCommand = async (
         );
     }
     record("asked");
-    const { reply } = await raiseCard(
+    const { reply } = await raiseRequest(
         { observe: services.agents.observe },
         { conversationId, push: (event) => run.push(event) },
         {

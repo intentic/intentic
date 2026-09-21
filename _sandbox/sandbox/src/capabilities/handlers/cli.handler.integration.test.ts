@@ -92,7 +92,7 @@ test("whatsapp pends until a phone links: silence, waiting, the live code, a ref
         state: "pending",
         detail: "waiting for WhatsApp to issue a pairing code…",
     });
-    // The code has its own field so the card can show it big and copyable, not buried in a sentence.
+    // The code has its own field so the entry can show it big and copyable, not buried in a sentence.
     setListenerStatus("whatsapp", { connections: [], pairing: { whatsapp: { state: "code", code: "ABCDEFGH" } } }, Date.now());
     expect(await cliHandler.status(ctx, "whatsapp", whatsapp.config)).toEqual({
         state: "pending",

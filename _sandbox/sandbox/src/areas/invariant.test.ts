@@ -17,7 +17,7 @@ const run = async (index: number, areas: Area[], members: Member[], personas: Pe
 };
 
 const heldAreas = (areas: Area[], members: Member[]): Promise<void> => run(0, areas, members);
-const strandedDesks = (areas: Area[], members: Member[], personas: Persona[]): Promise<void> => run(1, areas, members, personas);
+const strandedGuests = (areas: Area[], members: Member[], personas: Persona[]): Promise<void> => run(1, areas, members, personas);
 const fencedMaintainers = (members: Member[]): Promise<void> => run(2, [], members);
 
 test("a grant naming an area the manifest holds reports nothing", async () => {
@@ -38,24 +38,24 @@ test("a grant naming an area that has been deleted is named, with whose grant it
     );
 });
 
-// A desk reaches its assistants and nothing else. The grant route refuses a fence holding none; this catches the
+// A guest reaches its assistants and nothing else. The grant route refuses a fence holding none; this catches the
 // card's starting folder being edited, or the card deleted, long after the grant was made.
-test("a desk whose areas hold an assistant reports nothing", async () => {
+test("a guest whose areas hold an assistant reports nothing", async () => {
     await expect(
-        strandedDesks(
+        strandedGuests(
             [{ id: "support", folders: ["support"] }],
-            [{ email: "dee@example.com", role: "desk", areas: ["support"] }],
+            [{ email: "dee@example.com", role: "guest", areas: ["support"] }],
             [{ id: "helper", capabilities: [], workspace: { startIn: "support" } }],
         ),
     ).resolves.toBeUndefined();
 });
 
-test("a desk whose areas hold no assistant is named, since it can sign in and then talk to nobody", async () => {
+test("a guest whose areas hold no assistant is named, since it can sign in and then talk to nobody", async () => {
     await expect(
-        strandedDesks(
+        strandedGuests(
             [{ id: "support", folders: ["support"] }],
-            [{ email: "dee@example.com", role: "desk", areas: ["support"] }],
-            // Homed at the root, which no fence covers: the card exists and this desk still reaches none.
+            [{ email: "dee@example.com", role: "guest", areas: ["support"] }],
+            // Homed at the root, which no fence covers: the card exists and this guest still reaches none.
             [{ id: "helper", capabilities: [] }],
         ),
     ).rejects.toThrow(/dee@example.com.*no assistant works in/s);

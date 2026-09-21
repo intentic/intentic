@@ -275,12 +275,12 @@ The decisions this daemon is built on and the traps that cost somebody a day —
   transcript is its parent run's rows tagged with its tool call, and the demo folds its recording through the same
   class. The browser never folds a frame: it applies patches. What the daemon does to a turn is therefore what
   every reader sees, live and a week later alike: a card is raised `pending` and the reply that releases it
-  settles its `status` on the row (`settledCards`, src/policy/card-status.ts in the contract); a stop cancels whatever
+  settles its `status` on the row (`settledRequests`, src/policy/request-status.ts in the contract); a stop cancels whatever
   was pending and writes `Stopped.`; a refusal, a landing, a compaction and a repo sync each write
   their notice row. The daemon's own lines about a turn (`Plan approved.`, a rejection's feedback, a dismissed
   question) go in through `TurnRun.note`, so they reach every follower and the record alike. A card takes the open
   bubble and closes it, which keeps the row counts a fork copies a prefix of in agreement (`recordedRows` counts
-  the rows the daemon holds; both sides ask the contract's `CARD_FIELDS`). The one provider-shaped recovery, a
+  the rows the daemon holds; both sides ask the contract's `REQUEST_FIELDS`). The one provider-shaped recovery, a
   turn killed mid-flight read back from the SDK's session store (`recordInterruptedTurn`), rebuilds the question
   card from the ask tool's own call and result (`parseAnswers` is `formatAnswers` read backwards,
   src/agent/tools/question-answers.ts); a plan's text and a permission gate have no stored shape there and stay the

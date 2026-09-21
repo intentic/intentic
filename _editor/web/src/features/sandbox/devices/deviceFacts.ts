@@ -1,4 +1,4 @@
-import { agentBuildSkew, agentStalled, type Device, type DeviceAgent, deviceDistro, hostCardOf, isBehind, reportQuiet } from "@intentic/sandbox-contract";
+import { agentBuildSkew, agentStalled, type Device, type DeviceAgent, deviceDistro, hostEntryOf, isBehind, reportQuiet } from "@intentic/sandbox-contract";
 import { timeAgo } from "@intentic/ui/format";
 
 // What a Devices row says about the machine itself, as distinct from what it's doing for this sandbox
@@ -163,7 +163,7 @@ export const lastSeenNote = (device: Device): string | undefined =>
 // Cards that connect a device, keyed by platform slug; a platform with no card still gets the sentence, no button.
 const HOST_CARD: Record<string, string> = { windows: `windows`, linux: `linux` };
 
-export const hostCard = (platform: string | undefined): string | undefined => (platform === undefined ? undefined : HOST_CARD[platform]);
+export const hostEntry = (platform: string | undefined): string | undefined => (platform === undefined ? undefined : HOST_CARD[platform]);
 
 // What stands between a row and its buttons. `card` is optional throughout: a Mac has no card, and an
 // unrecognised platform still has a switch to describe with no link to build.
@@ -184,7 +184,7 @@ export type DeviceScopes = Readonly<Record<string, string | number | boolean>>;
 // row's own platform.
 const cardOf = (device: Device, scopes: DeviceScopes | undefined): string | undefined => {
     const pinned = scopes?.[`platform`];
-    return typeof pinned === `string` && pinned !== `` ? pinned : hostCard(device.platform);
+    return typeof pinned === `string` && pinned !== `` ? pinned : hostEntry(device.platform);
 };
 
 // Whether this row has anything whose buttons are worth explaining: a description of the machine, a container list,
@@ -197,7 +197,7 @@ const connectBlock = (device: Device): ManageBlock | undefined => {
     if (!described(device)) {
         return undefined;
     }
-    const card = hostCard(device.platform);
+    const card = hostEntry(device.platform);
     return { kind: `connect`, ...(card === undefined ? {} : { card }) };
 };
 
@@ -207,7 +207,7 @@ export const manageBlock = (device: Device, scopes: DeviceScopes | undefined): M
     }
     const card = cardOf(device, scopes);
     // The card's own form, which is the machine's: an environment of it has no settings page of its own to open.
-    const link = { connection: hostCardOf(device.hostId), ...(card === undefined ? {} : { card }) };
+    const link = { connection: hostEntryOf(device.hostId), ...(card === undefined ? {} : { card }) };
     // The device door can be shut while the sync door stays open. Suppressed when the row's own `gap` already
     // explains the silence.
     if (device.online !== true) {

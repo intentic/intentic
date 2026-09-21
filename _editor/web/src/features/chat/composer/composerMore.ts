@@ -21,7 +21,7 @@ export interface ComposerControlSituation {
     readonly persona: string | undefined;
     readonly runThrough: RunThroughState;
     readonly voiceAgent: boolean;
-    /** Personas are one daemon's cards, so a chat living in another sandbox is offered none. */
+    /** Personas belong to one daemon, so a chat living in another sandbox is offered none. */
     readonly personaOffered: boolean;
     /** Writing as the agent needs a transcript to place into: offered from this chat's first turn on. */
     readonly voiceOffered: boolean;

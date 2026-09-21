@@ -3,7 +3,7 @@ import { streamOf } from "../protocol/routes.js";
 import { IntenticLineSchema } from "../events/system-events.js";
 import {
     CapabilitiesListSchema,
-    CapabilityCardParamSchema,
+    CapabilityEntryParamSchema,
     CapabilityConnectionSchema,
     CapabilityIdParamSchema,
     CapabilityLoginSchema,
@@ -124,12 +124,12 @@ export const capabilitiesContract = {
     dismiss: oc
         .route({
             method: "DELETE",
-            path: "/capabilities/recommendations/{card}",
+            path: "/capabilities/recommendations/{entry}",
             summary: "Stop suggesting this connection",
             description:
                 "Not needed, for now. Nothing is torn down. The suggestion comes back if what prompted it in the workspace changes, because what is remembered is the evidence, not the refusal.",
         })
-        .input(CapabilityCardParamSchema)
+        .input(CapabilityEntryParamSchema)
         .output(OkSchema),
     // Runs the capability's declared `loginCommand` in the terminal session the panel attaches to.
     login: oc

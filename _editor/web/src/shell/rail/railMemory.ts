@@ -8,7 +8,7 @@ import { useSandbox } from "../../features/sandbox/client/useSandbox";
 // is remembered per sandbox in localStorage (readable before anything connects) and drawn as dim placeholders next
 // load, replaced as each tile wakes. Ghosts are inert, dropped once the live rail is complete, never treated as truth.
 
-// One seat in the rail's run; the identity AreaTile builds on. A badge is never kept: it's live state, and a
+// One seat in the rail's run; the identity SectionTile builds on. A badge is never kept: it's live state, and a
 // remembered count would already be stale.
 export interface RailSeat {
     readonly id: string;

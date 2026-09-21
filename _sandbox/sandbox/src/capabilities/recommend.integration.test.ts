@@ -6,7 +6,7 @@ import type { GitRunner } from "@intentic/scaffold";
 import { expect, test } from "vitest";
 import { capabilityRecommendations } from "./recommend.js";
 
-// Pins that evidence is found where repos actually sit, the right card is picked, a connected capability suppresses it,
+// Pins that evidence is found where repos actually sit, the right entry is picked, a connected capability suppresses it,
 // and a decline holds only while the same evidence stands.
 
 const workspace = async (files: Readonly<Record<string, string>>): Promise<string> => {
@@ -35,7 +35,7 @@ const github: Capability = { id: "github", kind: "cli", config: { provider: "git
 test("a compose file at a repo's root recommends docker, carrying the path as evidence", async () => {
     const root = await workspace({ "intentic/docker-compose.yml": "", "intentic/package.json": "" });
     expect(await capabilityRecommendations(root, [], [], noRemotes)).toEqual([
-        { card: "docker", evidence: "intentic/docker-compose.yml", reason: "your workspace has a compose stack to run", prefill: {} },
+        { entry: "docker", evidence: "intentic/docker-compose.yml", reason: "your workspace has a compose stack to run", prefill: {} },
     ]);
 });
 
@@ -62,7 +62,7 @@ test("a dependency's compose file is not the user's stack, node_modules and dot-
 test("the reference shelf is skipped while a repository-local refs directory remains ordinary", async () => {
     const root = await workspace({ "refs/upstream/docker-compose.yml": "", "app/refs/docker-compose.yml": "" });
     expect(await capabilityRecommendations(root, [], [], noRemotes)).toEqual([
-        { card: "docker", evidence: "app/refs/docker-compose.yml", reason: "your workspace has a compose stack to run", prefill: {} },
+        { entry: "docker", evidence: "app/refs/docker-compose.yml", reason: "your workspace has a compose stack to run", prefill: {} },
     ]);
 });
 
@@ -72,20 +72,20 @@ test("a compose file deeper than a repo's root is left alone", async () => {
     expect(await capabilityRecommendations(root, [], [], noRemotes)).toEqual([]);
 });
 
-test("a repo whose remote is on github.com recommends the github card, naming the repo and the project", async () => {
+test("a repo whose remote is on github.com recommends the github entry, naming the repo and the project", async () => {
     const root = await workspace({ "api/.git": "gitdir: elsewhere" });
     const git = gitWithRemotes({ api: ["git@github.com:acme/api.git"] });
     expect(await capabilityRecommendations(root, [], [], git)).toEqual([
-        { card: "github", evidence: "api → github.com/acme/api", reason: "your repositories are hosted on GitHub", prefill: {} },
+        { entry: "github", evidence: "api → github.com/acme/api", reason: "your repositories are hosted on GitHub", prefill: {} },
     ]);
 });
 
-test("a gitlab.com remote recommends gitlab, pre-filling the instance the card would otherwise ask for", async () => {
+test("a gitlab.com remote recommends gitlab, pre-filling the instance the entry would otherwise ask for", async () => {
     const root = await workspace({ "api/.git": "gitdir: elsewhere" });
     const git = gitWithRemotes({ api: ["https://gitlab.com/team/api.git"] });
     expect(await capabilityRecommendations(root, [], [], git)).toEqual([
         {
-            card: "gitlab",
+            entry: "gitlab",
             evidence: "api → gitlab.com/team/api",
             reason: "your repositories are hosted on GitLab",
             prefill: { url: "https://gitlab.com" },
@@ -99,7 +99,7 @@ test("a pipeline file identifies a self-hosted GitLab whose hostname says nothin
     const git = gitWithRemotes({ api: ["git@git.acme.dev:team/api.git"] });
     expect(await capabilityRecommendations(root, [], [], git)).toEqual([
         {
-            card: "gitlab",
+            entry: "gitlab",
             evidence: "api/.gitlab-ci.yml → git.acme.dev",
             reason: "your repositories are hosted on your own GitLab",
             prefill: { url: "https://git.acme.dev" },
@@ -110,36 +110,36 @@ test("a pipeline file identifies a self-hosted GitLab whose hostname says nothin
 test("a connected github account stops the github recommendation without touching the others", async () => {
     const root = await workspace({ "api/.git": "gitdir: elsewhere", "api/docker-compose.yml": "" });
     const git = gitWithRemotes({ api: ["git@github.com:acme/api.git"] });
-    expect((await capabilityRecommendations(root, [github], [], git)).map((entry) => entry.card)).toEqual(["docker"]);
+    expect((await capabilityRecommendations(root, [github], [], git)).map((entry) => entry.entry)).toEqual(["docker"]);
 });
 
 test("a komodo resource file recommends komodo", async () => {
     const root = await workspace({ "deploy/komodo.toml": "[[stack]]\n" });
     expect(await capabilityRecommendations(root, [], [], noRemotes)).toEqual([
-        { card: "komodo", evidence: "deploy/komodo.toml", reason: "your workspace drives a Komodo core", prefill: {} },
+        { entry: "komodo", evidence: "deploy/komodo.toml", reason: "your workspace drives a Komodo core", prefill: {} },
     ]);
 });
 
 test("a compose stack that runs Komodo recommends both komodo and docker, connectors before the rebuild", async () => {
     const root = await workspace({ "ops/compose.yml": "services:\n  core:\n    image: ghcr.io/moghtech/komodo-core:latest\n" });
-    expect((await capabilityRecommendations(root, [], [], noRemotes)).map((entry) => entry.card)).toEqual(["komodo", "docker"]);
+    expect((await capabilityRecommendations(root, [], [], noRemotes)).map((entry) => entry.entry)).toEqual(["komodo", "docker"]);
 });
 
 test("a compose stack of something else says nothing about komodo", async () => {
     const root = await workspace({ "ops/compose.yml": "services:\n  db:\n    image: postgres:16\n" });
-    expect((await capabilityRecommendations(root, [], [], noRemotes)).map((entry) => entry.card)).toEqual(["docker"]);
+    expect((await capabilityRecommendations(root, [], [], noRemotes)).map((entry) => entry.entry)).toEqual(["docker"]);
 });
 
 test("a declined recommendation stays quiet", async () => {
     const root = await workspace({ "intentic/docker-compose.yml": "" });
-    const dismissed = [{ card: "docker", evidence: "intentic/docker-compose.yml" }];
+    const dismissed = [{ entry: "docker", evidence: "intentic/docker-compose.yml" }];
     expect(await capabilityRecommendations(root, [], dismissed, noRemotes)).toEqual([]);
 });
 
 test("a declined recommendation comes back when the evidence behind it changes", async () => {
     const root = await workspace({ "intentic/docker-compose.yml": "" });
-    const dismissed = [{ card: "docker", evidence: "old/compose.yml" }];
-    expect((await capabilityRecommendations(root, [], dismissed, noRemotes)).map((entry) => entry.card)).toEqual(["docker"]);
+    const dismissed = [{ entry: "docker", evidence: "old/compose.yml" }];
+    expect((await capabilityRecommendations(root, [], dismissed, noRemotes)).map((entry) => entry.entry)).toEqual(["docker"]);
 });
 
 // The memo bounds the workspace scan to a TTL; the owner's own connect/decline actions bypass the clock entirely, since
@@ -161,24 +161,24 @@ test("a repeat read with the same inputs does not walk the workspace again", asy
     const root = await workspace({ "api/.git": "gitdir: elsewhere" });
     const { git, scans } = countingRemotes(["git@github.com:acme/api.git"]);
     const first = await capabilityRecommendations(root, [], [], git);
-    expect(first.map((entry) => entry.card)).toEqual(["github"]);
+    expect(first.map((entry) => entry.entry)).toEqual(["github"]);
     expect(await capabilityRecommendations(root, [], [], git)).toEqual(first);
     expect(await capabilityRecommendations(root, [], [], git)).toEqual(first);
     expect(scans()).toBe(1);
 });
 
-// `active` reaches the memo key through `wanted`, so connecting a card changes the key immediately.
-test("connecting a card is never served from the memo", async () => {
+// `active` reaches the memo key through `wanted`, so connecting a entry changes the key immediately.
+test("connecting a entry is never served from the memo", async () => {
     const root = await workspace({ "api/.git": "gitdir: elsewhere" });
     const { git } = countingRemotes(["git@github.com:acme/api.git"]);
-    expect((await capabilityRecommendations(root, [], [], git)).map((entry) => entry.card)).toEqual(["github"]);
+    expect((await capabilityRecommendations(root, [], [], git)).map((entry) => entry.entry)).toEqual(["github"]);
     expect(await capabilityRecommendations(root, [github], [], git)).toEqual([]);
 });
 
 test("declining a recommendation is never served from the memo", async () => {
     const root = await workspace({ "intentic/docker-compose.yml": "" });
-    expect((await capabilityRecommendations(root, [], [], noRemotes)).map((entry) => entry.card)).toEqual(["docker"]);
-    const dismissed = [{ card: "docker", evidence: "intentic/docker-compose.yml" }];
+    expect((await capabilityRecommendations(root, [], [], noRemotes)).map((entry) => entry.entry)).toEqual(["docker"]);
+    const dismissed = [{ entry: "docker", evidence: "intentic/docker-compose.yml" }];
     expect(await capabilityRecommendations(root, [], dismissed, noRemotes)).toEqual([]);
 });
 
@@ -186,6 +186,6 @@ test("declining a recommendation is never served from the memo", async () => {
 test("a different workspace root is a different answer", async () => {
     const withCompose = await workspace({ "intentic/docker-compose.yml": "" });
     const without = await workspace({ "intentic/README.md": "" });
-    expect((await capabilityRecommendations(withCompose, [], [], noRemotes)).map((entry) => entry.card)).toEqual(["docker"]);
+    expect((await capabilityRecommendations(withCompose, [], [], noRemotes)).map((entry) => entry.entry)).toEqual(["docker"]);
     expect(await capabilityRecommendations(without, [], [], noRemotes)).toEqual([]);
 });

@@ -90,7 +90,7 @@ const wholeFile = (): Response =>
         200,
     );
 
-// Runs apply to the end of its stream. `rung`/`typed` are parameters because the window is a parameter of the card;
+// Runs apply to the end of its stream. `rung`/`typed` are parameters because the window is a parameter of the entry;
 // download tests omit them for the default.
 const drain = async (id: string, ctx: CapabilityCtx, rung: LocalModelConfig["context"] = LOCAL_MODEL_WINDOW_DEFAULT, typed?: number): Promise<void> => {
     const config: LocalModelConfig = {
@@ -108,7 +108,7 @@ const drain = async (id: string, ctx: CapabilityCtx, rung: LocalModelConfig["con
 const statusOf = (ctx: CapabilityCtx, id: string) =>
     localModelHandler.status(ctx, id, { model: "custom", gpu: "off", url: MODEL_URL, context: LOCAL_MODEL_WINDOW_DEFAULT });
 
-test("apply returns while the weights are still arriving, and the card reports the progress", async () => {
+test("apply returns while the weights are still arriving, and the entry reports the progress", async () => {
     const root = await workspace();
     const { ctx, panels } = context(root);
     let release = (): void => undefined;
@@ -210,9 +210,9 @@ test("a server that never serves leaves the routing table alone", async () => {
     await rm(root, { recursive: true, force: true });
 });
 
-// Native context sizes the KV cache off the model's max window (128K-256K), bigger than the weights; the card's own
+// Native context sizes the KV cache off the model's max window (128K-256K), bigger than the weights; the entry's own
 // window avoids that.
-test("the server is started with the window the card chose, and a quantized cache to fit it", async () => {
+test("the server is started with the window the entry chose, and a quantized cache to fit it", async () => {
     const root = await workspace();
     const { ctx, panels } = context(root);
     stubFetch(wholeFile);
@@ -226,7 +226,7 @@ test("the server is started with the window the card chose, and a quantized cach
     expect(command).toContain("--cache-type-v q8_0");
     // --parallel 1 pins slot count: auto defaults to four on this image, each reserving the full --ctx-size again.
     expect(command).toContain("--parallel 1");
-    // `--ctx-size 0` means "read it from the model": the one value every card figure can't survive.
+    // `--ctx-size 0` means "read it from the model": the one value every entry figure can't survive.
     expect(command).not.toContain("--ctx-size 0");
 
     vi.unstubAllGlobals();
@@ -280,7 +280,7 @@ test("a window under the agent floor is served, and says what it is still good f
     const said = lines.join("\n");
     expect(said).toMatch(/16k tokens/);
     expect(said).toMatch(/full agent turn/i);
-    expect(said).toMatch(/card/i);
+    expect(said).toMatch(/entry/i);
 
     vi.unstubAllGlobals();
     await rm(root, { recursive: true, force: true });

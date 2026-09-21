@@ -44,9 +44,9 @@ const props = defineProps<{
     // runs.
     action: Action;
     // Whether the needed image is already on that machine, so the wait is just the restart; supplied by the update
-    // card.
+    // tile.
     ready?: boolean;
-    // Text button without the cost line beneath; the update card lays out download beside update.
+    // Text button without the cost line beneath; the update tile lays out download beside update.
     text?: boolean;
     bare?: boolean;
 }>();
@@ -71,7 +71,7 @@ const cost = computed(() => {
         return t(`capabilities.hostRecreate.costDownload`);
     }
     // A rebuild downloads nothing — it builds the approved recipe on the image already there. Saying which image is
-    // also what tells it apart from the checkout rebuild that shares the Environment card.
+    // also what tells it apart from the checkout rebuild that shares the Environment tile.
     if (props.action === `Rebuild`) {
         return t(`capabilities.hostRecreate.costRebuild`);
     }
@@ -82,7 +82,7 @@ const cost = computed(() => {
 });
 
 // What the hub row this is rendered on says while the machine works: the same button sits on Environment and on
-// Overview's update card, and each reports where it was pressed.
+// Overview's update tile, and each reports where it was pressed.
 const workingWords = (): Record<Action, string> => ({
     Download: t(`capabilities.hostRecreate.workingDownload`),
     Update: t(`capabilities.hostRecreate.workingUpdate`),
@@ -129,7 +129,7 @@ const confirmBody = computed(() => {
     return t(`capabilities.hostRecreate.confirmBuildThenRestart`, { work });
 });
 
-// What the sandbox going quiet means while this runs, for every surface that isn't this card. `Download` is absent
+// What the sandbox going quiet means while this runs, for every surface that isn't this tile. `Download` is absent
 // on purpose: it never touches the container, so a silence during one is not this button's doing.
 const QUIET = computed((): Partial<Record<Action, RestartQuiet>> => ({
     Update: {
@@ -292,7 +292,7 @@ const command = computed(() => {
                 ]"
             />
             <Code :code="command" :lang="commandLang(cmdOs)" :label="t(`capabilities.hostRecreate.command`, { action: verb })" :wrap="true" />
-            <!-- The cheaper way out where it exists: the machine is already talking to this sandbox, and one card turns that into the button above. -->
+            <!-- The cheaper way out where it exists: the machine is already talking to this sandbox, and one tile turns that into the button above. -->
             <ConnectDeviceHint :slug="slug" :gains="t(`capabilities.hostRecreate.becomesButtonHere`, { action: verb })" />
             <!-- Offered here, not just at setup, since this is the moment reaching for the app repeatedly starts to pay off. -->
             <p class="flex flex-wrap items-center gap-x-2 gap-y-1 text-2xs text-subtle">

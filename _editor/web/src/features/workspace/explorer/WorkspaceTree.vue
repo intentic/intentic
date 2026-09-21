@@ -97,7 +97,7 @@ const {
     rowActions?: (dir: string) => readonly RowAction[];
 }>();
 // `openFile` carries the gesture via `mode`: a click previews into one slot, a double-click keeps the tab. `pick` is
-// the plain click or Enter itself, whatever it opens: the desk follows it (useDesk), so both views mark one entry.
+// the plain click or Enter itself, whatever it opens: the home follows it (useHome), so both views mark one entry.
 const emit = defineEmits<{ openFile: [path: string, mode: OpenMode]; openDirectory: [path: string]; pick: [entry: WorkspaceTreeEntry]; clear: [] }>();
 
 const {
@@ -516,7 +516,7 @@ const focusRow = (path: string): void => rowEls.get(path)?.focus();
 // A click below the rows parks focus on the container, so cut/copy/paste work right after clicking in.
 const claimFocus = (): void => treeEl.value?.focus();
 // That same click drops the selection, like clicking a desktop's wallpaper; the lead stays, so the keyboard picks up
-// where it was. `clear` lets the desk drop its own mark too, since both views mark one current entry.
+// where it was. `clear` lets the home drop its own mark too, since both views mark one current entry.
 const onBackgroundClick = (): void => {
     selection.value = new Set();
     anchor.value = null;
@@ -1525,7 +1525,7 @@ const openMenu = (event: MouseEvent, entry: WorkspaceTreeEntry | undefined): voi
 
 <style scoped>
 /* States `.ui-row-select` doesn't cover: a changed-on-disk row, and one the sweep line points at. The drop tint sits in
-   utilities.css beside `.ui-row-select-on`, since the desk's tiles and crumbs wear it too. */
+   utilities.css beside `.ui-row-select-on`, since the home's tiles and crumbs wear it too. */
 
 /* The chevron glyph is ~10px inside a 22px row, small enough that a trackpad press misses it and the row toggles
    instead. The press target is the row's full height and a quarter rem either side of the glyph, taken from the row's

@@ -3,7 +3,7 @@ import type { SandboxSummary } from "@intentic/api-contract";
 import { t } from "@intentic/ui/i18n";
 
 // WHERE THE CONTAINER ACTUALLY STANDS. Nothing else on a sandbox says it: the name, the logo and the status dot read
-// identically for a laptop under the desk and a machine in someone else's datacentre, and the answer is what decides
+// identically for a laptop under the guest and a machine in someone else's datacentre, and the answer is what decides
 // whether this repository's code ever leaves the owner's hardware. One mark carries the coarse answer everywhere a
 // sandbox is drawn; the sentence carries whatever refinement the evidence supports.
 

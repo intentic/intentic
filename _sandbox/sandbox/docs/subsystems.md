@@ -443,8 +443,8 @@ A reader's tour of `src/`: which directory answers which question, and the file 
   everything. Identities count as accounts there: an unattended wake that names no persona loses them first. [src/personas/persona-scope.ts](../src/personas/persona-scope.ts) is the folder limit and the
   "change the sandbox" switch as a PreToolUse hook: a refusal, honestly weaker than the container, and the
   card's own UI says so where it is set. Nothing is seeded: a fresh workspace has no personas, and
-  [src/personas/front-desk.ts](../src/personas/front-desk.ts) is the one card the daemon writes by itself: the
-  read-only front desk a public web chat answers through, created when a Front Desk is saved rather than at boot.
+  [src/personas/visitor-chat.ts](../src/personas/visitor-chat.ts) is the one card the daemon writes by itself: the
+  read-only visitor chat a public web chat answers through, created when a Visitor chat is saved rather than at boot.
   [src/personas/persona-kit.ts](../src/personas/persona-kit.ts) is the folder beside each card, shaped as a plugin
   so the runtime's own loader reads that persona's prompt, skills and tools and this daemon parses none of it.
 - [src/agent/context/conversation-context.ts](../src/agent/context/conversation-context.ts): which part of the workspace a

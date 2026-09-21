@@ -1,5 +1,5 @@
 import type { CapabilitySummary } from "@intentic/api-contract";
-import { contributedCardOf } from "@intentic/extension-manifest";
+import { contributedEntryOf } from "@intentic/extension-manifest";
 import type { ExtensionSummary } from "@intentic/sandbox-contract";
 import { useQueryClient } from "@tanstack/vue-query";
 import { computed } from "vue";
@@ -90,7 +90,7 @@ export function useExtensionList() {
                     detail: registryDetail ?? (escalated ? extension.backend?.detail : undefined) ?? status?.detail ?? extension.backend?.detail,
                     // Every contributed kind, not just cli: a browser account or an enrolled machine added from one of
                     // this extension's cards depends on it exactly as much, and loses more when it goes.
-                    dependents: capabilities.value.filter((capability) => contributedCardOf(contributions, capability) !== undefined),
+                    dependents: capabilities.value.filter((capability) => contributedEntryOf(contributions, capability) !== undefined),
                     search: searchTextOf(extension.manifest, facets),
                 };
             })

@@ -1,4 +1,4 @@
-import { type Capability, type Persona, type PersonaPowers, FRONT_DESK_PERSONA, PersonaPowersSchema } from "@intentic/sandbox-contract";
+import { type Capability, type Persona, type PersonaPowers, VISITOR_CHAT_PERSONA, PersonaPowersSchema } from "@intentic/sandbox-contract";
 import { expect, test } from "vitest";
 import {
     personaCapabilities,
@@ -12,7 +12,7 @@ import {
     unattendedAccountsNote,
 } from "./personas.js";
 
-const card = (id: string, capabilities: readonly string[], extra: Partial<Persona> = {}): Persona => ({
+const personaOf = (id: string, capabilities: readonly string[], extra: Partial<Persona> = {}): Persona => ({
     id,
     capabilities: [...capabilities],
     ...extra,
@@ -38,7 +38,7 @@ const device = (id: string): Capability => ({
 });
 const mcp = (id: string): Capability => ({ id, kind: "mcp", config: { url: "https://a/mcp" } });
 
-const CAST = [card("work", ["reddit-work", "x-work"]), card("personal", ["reddit-personal"])];
+const CAST = [personaOf("work", ["reddit-work", "x-work"]), personaOf("personal", ["reddit-personal"])];
 
 // Suffix scheme cli-env.ts uses, restated rather than imported so a drift there fails here too.
 const suffix = (id: string): string => id.toUpperCase().replaceAll("-", "_");
@@ -72,8 +72,8 @@ test("a named persona is narrowed to exactly its own accounts, attended or not",
     }
 });
 
-test("a persona with an empty card allows nothing, which is not the same as naming none", () => {
-    const persona = turnPersona({ personas: [card("mute", [])], actsAs: "mute", unattended: false });
+test("a persona with an empty persona allows nothing, which is not the same as naming none", () => {
+    const persona = turnPersona({ personas: [personaOf("mute", [])], actsAs: "mute", unattended: false });
     expect(persona.reason).toBe("persona");
     expect(persona.allows(browser("reddit-work"))).toBe(false);
 });
@@ -82,10 +82,10 @@ test("a persona with an empty card allows nothing, which is not the same as nami
 // unpinned wake loses. A blanket pass-through would hand a nightly job the sandbox's strongest browser.
 test("identities count as accounts: card-named when pinned, gone entirely when an unpinned wake fires", () => {
     const identity: Capability = { id: "main", kind: "identity", config: { email: "me@gmail.com", openAccounts: "off" } };
-    const cast = [card("outward", ["main", "reddit-work"])];
+    const cast = [personaOf("outward", ["main", "reddit-work"])];
     expect(turnPersona({ personas: cast, actsAs: "outward", unattended: true }).allows(identity)).toBe(true);
-    // A card naming only accounts born from an identity does not get the identity itself.
-    expect(turnPersona({ personas: [card("narrow", ["reddit-work"])], actsAs: "narrow", unattended: false }).allows(identity)).toBe(false);
+    // A persona naming only accounts born from an identity does not get the identity itself.
+    expect(turnPersona({ personas: [personaOf("narrow", ["reddit-work"])], actsAs: "narrow", unattended: false }).allows(identity)).toBe(false);
     expect(turnPersona({ personas: cast, actsAs: undefined, unattended: true }).allows(identity)).toBe(false);
     expect(turnPersona({ personas: cast, actsAs: undefined, unattended: false }).allows(identity)).toBe(true);
 });
@@ -107,9 +107,9 @@ test("an unpinned wake keeps the full toolbox even though it has lost every acco
     expect(persona.allows(mcp("linear"))).toBe(true);
 });
 
-// A missing card fails closed on both accounts and tools, not just accounts: otherwise a Front Desk pinned to a deleted
-// card would regain a shell for anonymous visitors. A missing card is ordinary, not corruption.
-test("naming a persona no card carries denies everything: accounts and tools alike", () => {
+// A missing persona fails closed on both accounts and tools, not just accounts: otherwise a Visitor chat pinned to a deleted
+// persona would regain a shell for anonymous visitors. A missing persona is ordinary, not corruption.
+test("naming a persona no persona carries denies everything: accounts and tools alike", () => {
     const persona = turnPersona({ personas: CAST, actsAs: "studio", unattended: false });
     expect(persona.reason).toBe("unknown-persona");
     expect(persona.persona).toBeUndefined();
@@ -122,10 +122,10 @@ test("naming a persona no card carries denies everything: accounts and tools ali
     expect(personaDisallowedTools(persona, [])).toContain("Read");
 });
 
-test("a card's shelves become the tools taken out of the turn", () => {
+test("a persona's shelves become the tools taken out of the turn", () => {
     const persona = turnPersona({
         personas: [
-            card("reader", [], { powers: powers({ files: "read", shell: false, web: false, browser: false, delegate: false, sandbox: false }) }),
+            personaOf("reader", [], { powers: powers({ files: "read", shell: false, web: false, browser: false, delegate: false, sandbox: false }) }),
         ],
         actsAs: "reader",
         unattended: true,
@@ -136,7 +136,7 @@ test("a card's shelves become the tools taken out of the turn", () => {
 });
 
 test("files: none takes the reading tools away too", () => {
-    const persona = turnPersona({ personas: [card("blind", [], { powers: powers({ files: "none" }) })], actsAs: "blind", unattended: true });
+    const persona = turnPersona({ personas: [personaOf("blind", [], { powers: powers({ files: "none" }) })], actsAs: "blind", unattended: true });
     expect(personaDisallowedTools(persona, [])).toEqual(expect.arrayContaining(["Read", "Grep", "Glob", "Edit", "Write"]));
 });
 
@@ -152,17 +152,17 @@ test("an unattended wake loses the skills of the accounts it lost", () => {
     expect(denied).not.toContain("Skill(github)");
 });
 
-test("a card keeps its own accounts' skills and loses everyone else's", () => {
+test("a persona keeps its own accounts' skills and loses everyone else's", () => {
     const persona = turnPersona({ personas: CAST, actsAs: "work", unattended: true });
     const denied = personaDisallowedTools(persona, [browser("reddit-work"), browser("reddit-personal"), browser("npmjs")]);
     expect(denied).not.toContain("Skill(reddit-work)");
-    // Same answer either way: one belongs to another card, one to none, but this turn can act on neither.
+    // Same answer either way: one belongs to another persona, one to none, but this turn can act on neither.
     expect(denied).toEqual(expect.arrayContaining(["Skill(reddit-personal)", "Skill(npmjs)"]));
 });
 
 test("every denied kind loses its skill, not just accounts", () => {
     const persona = turnPersona({
-        personas: [card("narrow", ["github"], { powers: powers({ connectors: ["github"], devices: [], mcp: [] }) })],
+        personas: [personaOf("narrow", ["github"], { powers: powers({ connectors: ["github"], devices: [], mcp: [] }) })],
         actsAs: "narrow",
         unattended: true,
     });
@@ -173,8 +173,8 @@ test("every denied kind loses its skill, not just accounts", () => {
 
 // The manifest, narrowed once
 
-// Narrowing kinds the card has no opinion about would silently deny any capability kind added later.
-test("a card filters accounts, connectors, devices and MCP; other kinds pass through", () => {
+// Narrowing kinds the persona has no opinion about would silently deny any capability kind added later.
+test("a persona filters accounts, connectors, devices and MCP; other kinds pass through", () => {
     const installed: Capability[] = [
         browser("reddit-work"),
         browser("reddit-personal"),
@@ -185,7 +185,7 @@ test("a card filters accounts, connectors, devices and MCP; other kinds pass thr
         { id: "pi", kind: "agent", config: { command: "pi" } },
     ];
     const persona = turnPersona({
-        personas: [card("work", ["reddit-work"], { powers: powers({ connectors: ["github"], devices: [], mcp: [] }) })],
+        personas: [personaOf("work", ["reddit-work"], { powers: powers({ connectors: ["github"], devices: [], mcp: [] }) })],
         actsAs: "work",
         unattended: true,
     });
@@ -209,12 +209,12 @@ test("an ungranted connector's credentials are removed from the shell environmen
         KOMODO_SECRET_KOMODO: "komodo-secret-2",
         PATH: "/usr/bin",
     };
-    const persona = turnPersona({ personas: [card("ci", [], { powers: powers({ connectors: ["github"] }) })], actsAs: "ci", unattended: true });
+    const persona = turnPersona({ personas: [personaOf("ci", [], { powers: powers({ connectors: ["github"] }) })], actsAs: "ci", unattended: true });
     expect(personaCliEnv(cliEnv, installed, persona, suffix)).toEqual({ GITHUB_TOKEN_GITHUB: "gh-secret", PATH: "/usr/bin" });
 });
 
 // Environment holds more than credentials (PATH, extension settings); granting everything returns it untouched.
-test("a card that grants every connector leaves the environment exactly as it was", () => {
+test("a persona that grants every connector leaves the environment exactly as it was", () => {
     const cliEnv = { GITHUB_TOKEN_GITHUB: "gh-secret", PATH: "/usr/bin" };
     const persona = turnPersona({ personas: CAST, actsAs: "work", unattended: true });
     expect(personaCliEnv(cliEnv, [connector("github")], persona, suffix)).toBe(cliEnv);
@@ -226,7 +226,7 @@ test("the note names the persona and says its accounts are the only ones", () =>
     const label = "Work Reddit";
     const note = personaNote(
         turnPersona({
-            personas: [card("work", ["reddit-work"], { label })],
+            personas: [personaOf("work", ["reddit-work"], { label })],
             actsAs: "work",
             unattended: true,
         }),
@@ -235,12 +235,12 @@ test("the note names the persona and says its accounts are the only ones", () =>
     expect(note?.length).toBeGreaterThan(label.length);
 });
 
-// Front Desk's manner comes from the daemon, not a card field; this proves the guidance reaches the turn.
-test("the front desk's own manner rides its note, and no other card's", () => {
-    const desk = personaNote(turnPersona({ personas: [card(FRONT_DESK_PERSONA, [])], actsAs: FRONT_DESK_PERSONA, unattended: true }));
+// Visitor chat's manner comes from the daemon, not a persona field; this proves the guidance reaches the turn.
+test("the visitor chat's own manner rides its note, and no other persona's", () => {
+    const guest = personaNote(turnPersona({ personas: [personaOf(VISITOR_CHAT_PERSONA, [])], actsAs: VISITOR_CHAT_PERSONA, unattended: true }));
     const work = personaNote(turnPersona({ personas: CAST, actsAs: "work", unattended: true }));
-    expect(desk).not.toBe(work);
-    expect(desk).not.toEqual(work);
+    expect(guest).not.toBe(work);
+    expect(guest).not.toEqual(work);
 });
 
 // Folder limits are narrated, unlike tool shelves: an absent tool teaches by being absent, but a path refusal mid-task
@@ -248,7 +248,7 @@ test("the front desk's own manner rides its note, and no other card's", () => {
 test("the note names the folders the persona works in", () => {
     const note = personaNote(
         turnPersona({
-            personas: [card("app", [], { workspace: { folders: ["apps/web", "packages/ui"] } })],
+            personas: [personaOf("app", [], { workspace: { folders: ["apps/web", "packages/ui"] } })],
             actsAs: "app",
             unattended: true,
         }),
@@ -262,23 +262,23 @@ test("no note for an open attended turn, nor for an unpinned wake", () => {
     expect(personaNote(turnPersona({ personas: CAST, actsAs: undefined, unattended: true }))).toBeUndefined();
 });
 
-// The prompt: the fourth question the card answers
+// The prompt: the fourth question the persona answers
 
-// Sandbox's answer is the default; absent rather than spelling "inherit", so an old card changes nothing.
+// Sandbox's answer is the default; absent rather than spelling "inherit", so an old persona changes nothing.
 const SETTINGS = { systemPromptMode: "intentic", systemPrompt: "" } as const;
 
-test("a card that says nothing about the prompt runs on the sandbox's", () => {
-    expect(personaPrompt(card("work", []), undefined, SETTINGS)).toEqual({ mode: "intentic", systemPrompt: "" });
-    // Same for a turn wearing no card at all.
+test("a persona that says nothing about the prompt runs on the sandbox's", () => {
+    expect(personaPrompt(personaOf("work", []), undefined, SETTINGS)).toEqual({ mode: "intentic", systemPrompt: "" });
+    // Same for a turn wearing no persona at all.
     expect(personaPrompt(undefined, undefined, { systemPromptMode: "custom", systemPrompt: "Sandbox text." })).toEqual({
         mode: "custom",
         systemPrompt: "Sandbox text.",
     });
 });
 
-test("a card with its own prompt replaces the sandbox's, text and all", () => {
-    const desk = card("desk", [], { systemPromptMode: "custom" });
-    expect(personaPrompt(desk, "You are a release-notes writer.", { systemPromptMode: "intentic", systemPrompt: "" })).toEqual({
+test("a persona with its own prompt replaces the sandbox's, text and all", () => {
+    const guest = personaOf("guest", [], { systemPromptMode: "custom" });
+    expect(personaPrompt(guest, "You are a release-notes writer.", { systemPromptMode: "intentic", systemPrompt: "" })).toEqual({
         mode: "custom",
         systemPrompt: "You are a release-notes writer.",
     });
@@ -286,22 +286,22 @@ test("a card with its own prompt replaces the sandbox's, text and all", () => {
 
 // A built-in base carries no text and must not inherit the sandbox's custom prompt, or a "claude" persona would run
 // Claude's preset while the composer's custom field still shows the sandbox's unrelated text.
-test("a card on a built-in base takes the base and none of the sandbox's text", () => {
+test("a persona on a built-in base takes the base and none of the sandbox's text", () => {
     expect(
-        personaPrompt(card("work", [], { systemPromptMode: "claude" }), undefined, { systemPromptMode: "custom", systemPrompt: "Sandbox." }),
+        personaPrompt(personaOf("work", [], { systemPromptMode: "claude" }), undefined, { systemPromptMode: "custom", systemPrompt: "Sandbox." }),
     ).toEqual({ mode: "claude", systemPrompt: "" });
 });
 
 // Custom with nothing written yet is mid-edit, not a decision to run on a blank prompt.
 test("custom with nothing written yet falls back to the sandbox", () => {
-    expect(personaPrompt(card("desk", [], { systemPromptMode: "custom" }), undefined, SETTINGS)).toEqual({ mode: "intentic", systemPrompt: "" });
+    expect(personaPrompt(personaOf("guest", [], { systemPromptMode: "custom" }), undefined, SETTINGS)).toEqual({ mode: "intentic", systemPrompt: "" });
 });
 
-// The card is a static context
+// The persona is a static context
 
-// A card's effects are a pure function of the card alone: two turns wearing the same card must produce the identical
+// A persona's effects are a pure function of the persona alone: two turns wearing the same persona must produce the identical
 // note, tool set and prompt placement, so a provider's prompt cache can serve one from the other.
-test("two turns wearing one card get identical persona-derived context, and a different card gets a different one", () => {
+test("two turns wearing one persona get identical persona-derived context, and a different persona gets a different one", () => {
     const backend: Persona = {
         id: "backend",
         label: "Backend",
@@ -345,13 +345,13 @@ test("an unattended wake is told which accounts it lost, and that they are not b
     expect(note?.text).toContain("connector credential");
 });
 
-test("no note when nothing was withheld, and none for a turn wearing a card", () => {
+test("no note when nothing was withheld, and none for a turn wearing a persona", () => {
     const attended = turnPersona({ personas: CAST, actsAs: undefined, unattended: false });
     expect(unattendedAccountsNote(attended, personaWithheldAccounts([browser("npmjs")], attended))).toBeUndefined();
     // A wake in a sandbox with no accounts connected has lost nothing, and a note about nothing is noise.
     const bare = turnPersona({ personas: CAST, actsAs: undefined, unattended: true });
     expect(unattendedAccountsNote(bare, personaWithheldAccounts([connector("github")], bare))).toBeUndefined();
-    // A card says the same thing from the other end (personaNote), so this one would be the second voice saying it.
+    // A persona says the same thing from the other end (personaNote), so this one would be the second voice saying it.
     const wearing = turnPersona({ personas: CAST, actsAs: "work", unattended: true });
     expect(unattendedAccountsNote(wearing, personaWithheldAccounts([browser("npmjs")], wearing))).toBeUndefined();
 });

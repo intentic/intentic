@@ -1,4 +1,4 @@
-<!-- Shown in the viewer pane when the workspace holds no files at all; with files, that pane is the desk. -->
+<!-- Shown in the viewer pane when the workspace holds no files at all; with files, that pane is the home. -->
 <script setup lang="ts">
 import { computed, nextTick, ref } from "vue";
 import { Button, Notice, type NoticeModel, vAction } from "@intentic/ui";

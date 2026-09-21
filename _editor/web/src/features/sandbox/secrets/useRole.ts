@@ -9,15 +9,15 @@ import { useSandbox } from "../client/useSandbox";
 // reading here changes what renders, never what is allowed. Defaults to `owner` until the summary loads, corrected on
 // the first call.
 //
-//   isDesk   , the tier below viewer: talks to the persona cards it holds, and is shown nothing else of the box.
-//   canDrive , a desk (its own chats) or collaborator and up: start/steer agents. A viewer watches.
-//   canReview, collaborator and up: review work and ask for a landing. A desk drives but never reviews.
+//   isGuest   , the tier below viewer: talks to the persona cards it holds, and is shown nothing else of the box.
+//   canDrive , a guest (its own chats) or collaborator and up: start/steer agents. A viewer watches.
+//   canReview, collaborator and up: review work and ask for a landing. A guest drives but never reviews.
 //   canWrite , writer and up: change files in the tree. WHERE is the fence's answer, which only the daemon holds, so
 //              a writer is offered the verbs and meets a refusal outside its areas.
 //   canShip  , maintainer and up: full operating authority. Only ownership and its access roster stay separate.
 export function useRole(): {
     role: ComputedRef<MemberRole>;
-    isDesk: ComputedRef<boolean>;
+    isGuest: ComputedRef<boolean>;
     canDrive: ComputedRef<boolean>;
     canReview: ComputedRef<boolean>;
     canWrite: ComputedRef<boolean>;
@@ -26,12 +26,12 @@ export function useRole(): {
 } {
     const { active } = useSandbox();
     const role = computed<MemberRole>(() => active.value?.role ?? `owner`);
-    const isDesk = computed(() => role.value === `desk`);
+    const isGuest = computed(() => role.value === `guest`);
     const canReview = computed(() => roleAtLeast(role.value, `collaborator`));
     return {
         role,
-        isDesk,
-        canDrive: computed(() => isDesk.value || canReview.value),
+        isGuest,
+        canDrive: computed(() => isGuest.value || canReview.value),
         canReview,
         canWrite: computed(() => roleAtLeast(role.value, `writer`)),
         canShip: computed(() => roleAtLeast(role.value, `maintainer`)),

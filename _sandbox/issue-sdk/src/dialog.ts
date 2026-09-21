@@ -2,7 +2,7 @@ import type { IssueClient } from "./client.js";
 import { dialogStyles } from "./styles.js";
 
 // The only part of this SDK that renders anything, and optional: crash capture never touches it, and a host can call
-// `report()` directly from its own UI instead. No launcher button, unlike the Front Desk widget: the host opens it from
+// `report()` directly from its own UI instead. No launcher button, unlike the Visitor chat widget: the host opens it from
 // its own link. Shadow DOM keeps the host page's styles out and this widget's styles from leaking in.
 
 const TAG = "intentic-issue-dialog";

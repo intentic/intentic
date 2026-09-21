@@ -39,7 +39,7 @@ const props = defineProps<{
 const {
     form,
     schedule,
-    isFrontDesk,
+    isVisitorChat,
     listenerSource,
     branchField,
     liveSources,
@@ -80,11 +80,11 @@ const personas = computed<readonly PickerOption[]>(() =>
         .toSorted((a, b) => a.label.localeCompare(b.label)),
 );
 
-// Blank means different things: a Front Desk fills it in as read-only at save, elsewhere it's nobody. A pinned persona
+// Blank means different things: a Visitor chat fills it in as read-only at save, elsewhere it's nobody. A pinned persona
 // whose card is gone still gets a face, greyed, not a glyph, so it reads as gone, not unpinned.
 const personaOptions = computed<readonly PickerOption[]>(() => [
-    isFrontDesk.value
-        ? { value: ``, label: t(`automationFields.frontDesk`), description: `read-only`, icon: `globe` as const }
+    isVisitorChat.value
+        ? { value: ``, label: t(`automationFields.visitorChat`), description: `read-only`, icon: `globe` as const }
         : { value: ``, label: t(`automationFields.nobody`), description: t(`automationFields.noAccounts`), icon: `circle` as const },
     ...personas.value,
     ...(form.actsAs !== `` && !personas.value.some((persona) => persona.value === form.actsAs)
@@ -187,13 +187,13 @@ const KIND_CAPTION: Record<TriggerKind, string> = {
     listener: `The moment a connected service sends something. Nothing is polled: a gateway holds the connection open.`,
     workspace: `On a moment in this workspace's own work. No token and no URL: nothing outside the sandbox can fire it.`,
 };
-// Names the source directly, not "a connected service", since the reader just picked it; a Front Desk isn't a service,
+// Names the source directly, not "a connected service", since the reader just picked it; a Visitor chat isn't a service,
 // so it says what actually happens.
 const whenCaption = computed<string>(() => {
     if (form.kind !== `listener`) {
         return KIND_CAPTION[form.kind];
     }
-    return isFrontDesk.value
+    return isVisitorChat.value
         ? `When a visitor writes in the chat widget on your site: one conversation each, live for you to take over.`
         : `The moment ${listenerSource.value.label} sends one of these. Nothing is polled: a gateway holds the connection open.`;
 });
@@ -485,8 +485,8 @@ const setProvider = (provider: string): void => {
                         </div>
                     </div>
 
-                    <!-- Front Desk settings describe its embed location and audience. -->
-                    <div v-if="isFrontDesk" class="grid gap-3 @2xl:grid-cols-2">
+                    <!-- Visitor chat settings describe its embed location and audience. -->
+                    <div v-if="isVisitorChat" class="grid gap-3 @2xl:grid-cols-2">
                         <label class="ui-field @2xl:col-span-2">
                             <span class="ui-field-label">{{ t(`automationFields.allowedSites`) }}</span>
                             <textarea
@@ -870,12 +870,12 @@ const setProvider = (provider: string): void => {
                         />
                     </div>
                 </div>
-                <!-- A blank Front Desk uses the saved read-only persona's boundary. -->
-                <p v-if="isFrontDesk && form.actsAs === ``" class="-mt-1 text-2xs text-subtle">
+                <!-- A blank Visitor chat uses the saved read-only persona's boundary. -->
+                <p v-if="isVisitorChat && form.actsAs === ``" class="-mt-1 text-2xs text-subtle">
                     {{ t(`automationFields.strangersWritePromptsSaving`) }}
                 </p>
 
-                <!-- WHO IT ANSWERS: drawn only where the source vouches for who is writing; the Front Desk keeps its own access above. -->
+                <!-- WHO IT ANSWERS: drawn only where the source vouches for who is writing; the Visitor chat keeps its own access above. -->
                 <div v-if="sendersOffered" class="flex flex-col gap-3 border-t border-line-subtle pt-3">
                     <label class="flex items-center gap-2 text-xs text-content">
                         <ToggleSwitch v-model="form.senders" :aria-label="t(`automationFields.decidePerPersonWho`)" />
@@ -999,7 +999,7 @@ const setProvider = (provider: string): void => {
                     </label>
                 </div>
                 <!-- Said here, not just in the docs, since "require my approval" doesn't sound like a chat that never answers. -->
-                <p v-if="form.requireApproval && isFrontDesk" class="-mt-1 text-2xs text-warning">
+                <p v-if="form.requireApproval && isVisitorChat" class="-mt-1 text-2xs text-warning">
                     {{ t(`automationFields.visitorsGetNoAnswer`) }}
                 </p>
 

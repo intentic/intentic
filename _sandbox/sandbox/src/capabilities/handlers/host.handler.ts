@@ -10,7 +10,7 @@ export const hostHandler = peerHandler<HostConfig>({
     note: HOST_TOOLS_NOTE,
     pairHint: "click Connect and run the one-liner on that device",
     awayHint: "the device is offline",
-    added: (id) => `Added "${id}". Run the one-time command its card is offering on that device, the agent can work on it from the next turn.`,
+    added: (id) => `Added "${id}". Run the one-time command its entry is offering on that device, the agent can work on it from the next turn.`,
     store: (ctx) => ctx.hosts,
     hub: (ctx) => ctx.hostHub,
     echo: (host) => ({

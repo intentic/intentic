@@ -1,14 +1,14 @@
 import { DEFAULT_PROFILE, PROFILE_COOKIE, PROFILE_PARAM, type Profile, sharedCookieDomain } from "@intentic/constants";
-import { APP_URL, DESK_PATH as DESK_PAGE, SITE_URL } from "@intentic/site-content/site";
+import { APP_URL, MAKER_PATH as MAKER_PAGE, SITE_URL } from "@intentic/site-content/site";
 
-// Two products share one site. The developer's pages are the dark carved-stone design; intentic desk, the product
-// for readers who do not write code, has its own page at /desk/ (DeskLanding.astro) and wears the light skin. What
+// Two products share one site. The developer's pages are the dark carved-stone design; intentic maker, the product
+// for readers who do not write code, has its own page at /maker/ (MakerLanding.astro) and wears the light skin. What
 // the skin decides is the LOOK of the shared pages (docs, pricing, features) for a reader who came in through the
-// desk; the words of the two product pages are each page's own, by URL, never switched here. Which skin a visitor
+// maker; the words of the two product pages are each page's own, by URL, never switched here. Which skin a visitor
 // gets is decided in the browser before first paint (BaseLayout's inline script), never at the edge — one HTML
 // document per URL stays cacheable, and only the `data-variant` attribute on <html> differs.
 //
-// A reader who has chosen neither gets the one their system asks for: `prefers-color-scheme: light` paints the desk
+// A reader who has chosen neither gets the one their system asks for: `prefers-color-scheme: light` paints the maker
 // skin. That is a preference, not a choice — it is never written to the cookie, so it is re-read on every page and
 // follows the system when the system changes, and it hands the app nothing.
 //
@@ -29,13 +29,13 @@ export const VARIANT_COOKIE = PROFILE_COOKIE;
 const COOKIE_DOMAIN = sharedCookieDomain(SITE_URL, APP_URL) ?? "";
 
 /** The light skin's name, and the value of `<html data-variant>` when it is on. Any other value means the default. */
-export const DESK_VARIANT = "desk" satisfies Profile;
+export const MAKER_VARIANT = "maker" satisfies Profile;
 
-/** Consulted only when nothing was chosen; a match paints the desk skin. */
+/** Consulted only when nothing was chosen; a match paints the maker skin. */
 export const LIGHT_QUERY = "(prefers-color-scheme: light)";
 
-/** Landing on the desk product's page, or anywhere under it, turns the light skin on and remembers it. */
-export const DESK_PATH = DESK_PAGE.replace(/\/$/u, "");
+/** Landing on the maker product's page, or anywhere under it, turns the light skin on and remembers it. */
+export const MAKER_PATH = MAKER_PAGE.replace(/\/$/u, "");
 
 /** Overrides both the path and the cookie, so a link can put a reader into either skin. */
 export const VARIANT_PARAM = "variant";
@@ -50,7 +50,7 @@ export const DEFAULT_VARIANT_HREF = `/?${VARIANT_PARAM}=default`;
 // value is the canvas; the light one is the app's light canvas, `neutral-100 94% + brand-300` resolved to sRGB.
 // BaseLayout ships both as media-scoped meta tags, which is what a reader with no script and no choice gets; the
 // script below pins both to one colour once there IS a choice, since a choice outranks the system.
-export const THEME_COLOR = { default: "#0c0907", desk: "#f5ede7" } as const;
+export const THEME_COLOR = { default: "#0c0907", maker: "#f5ede7" } as const;
 
 const q = (value: string): string => JSON.stringify(value);
 
@@ -65,8 +65,8 @@ export const variantScript = (): string => `(function () {
     var chosen;
     if (asked !== null) {
         chosen = asked;
-    } else if (url.pathname === ${q(DESK_PATH)} || url.pathname.indexOf(${q(`${DESK_PATH}/`)}) === 0) {
-        chosen = ${q(DESK_VARIANT)};
+    } else if (url.pathname === ${q(MAKER_PATH)} || url.pathname.indexOf(${q(`${MAKER_PATH}/`)}) === 0) {
+        chosen = ${q(MAKER_VARIANT)};
     }
     if (chosen === undefined) {
         var jar = new RegExp("(?:^|; )" + ${q(VARIANT_COOKIE)} + "=([^;]*)").exec(document.cookie);
@@ -81,14 +81,14 @@ export const variantScript = (): string => `(function () {
     }
     // Nothing chosen means the system decides the paint, and keeps deciding it: no cookie is written here, so a
     // reader who flips their OS to dark is dark on the next page without ever having to find the footer link.
-    var light = chosen === ${q(DESK_VARIANT)} ||
+    var light = chosen === ${q(MAKER_VARIANT)} ||
         (chosen === "" && window.matchMedia(${q(LIGHT_QUERY)}).matches);
     if (light) {
-        document.documentElement.dataset.variant = ${q(DESK_VARIANT)};
+        document.documentElement.dataset.variant = ${q(MAKER_VARIANT)};
     }
     if (chosen !== "") {
         // Both media-scoped tags get the same colour, which is how a choice outranks the system for browser chrome.
-        var color = chosen === ${q(DESK_VARIANT)} ? ${q(THEME_COLOR.desk)} : ${q(THEME_COLOR.default)};
+        var color = chosen === ${q(MAKER_VARIANT)} ? ${q(THEME_COLOR.maker)} : ${q(THEME_COLOR.default)};
         var tags = document.querySelectorAll('meta[name="theme-color"]');
         for (var t = 0; t < tags.length; t++) {
             tags[t].setAttribute("content", color);
@@ -96,12 +96,12 @@ export const variantScript = (): string => `(function () {
     }
     // An unchosen reader hands the app nothing: no cookie, no path, no link means no opinion, and the app keeps
     // whatever it already had — including a reader painted light by their system, whose system the app can read
-    // for itself and whose profile is more than paint. Anything chosen that is not desk is the default, including
+    // for itself and whose profile is more than paint. Anything chosen that is not maker is the default, including
     // the footer's way out, which is what lets that link put the app back too.
     if (chosen === "") {
         return;
     }
-    var profile = chosen === ${q(DESK_VARIANT)} ? ${q(DESK_VARIANT)} : ${q(DEFAULT_PROFILE)};
+    var profile = chosen === ${q(MAKER_VARIANT)} ? ${q(MAKER_VARIANT)} : ${q(DEFAULT_PROFILE)};
     // The pages are static and shared by both designs, so the profile is attached here rather than baked into each
     // href — the same reason the design itself is. Runs on DOMContentLoaded because this script sits in <head>,
     // above every link it rewrites.
@@ -122,12 +122,12 @@ export const variantScript = (): string => `(function () {
             target.searchParams.set(${q(PROFILE_PARAM)}, profile);
             links[i].setAttribute("href", target.toString());
         }
-        // A desk reader's way home is the desk's page: the mark on a shared page leads there rather than to the
-        // developer's. The desk page's own mark already does (Nav.astro), so this is only ever a change on shared ones.
-        if (profile === ${q(DESK_VARIANT)}) {
+        // A maker reader's way home is the maker's page: the mark on a shared page leads there rather than to the
+        // developer's. The maker page's own mark already does (Nav.astro), so this is only ever a change on shared ones.
+        if (profile === ${q(MAKER_VARIANT)}) {
             var marks = document.querySelectorAll("a[data-brand]");
             for (var m = 0; m < marks.length; m++) {
-                marks[m].setAttribute("href", ${q(DESK_PAGE)});
+                marks[m].setAttribute("href", ${q(MAKER_PAGE)});
             }
         }
     };

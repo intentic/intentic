@@ -77,7 +77,7 @@ export interface Member {
     readonly role: GrantedRole;
     // Area ids fencing what of the workspace this person reaches, and with it which persona cards they may wear
     // (personas/persona-reach.ts). Absent means the whole workspace; empty means nothing at all. Never absent on a
-    // writer or a desk row.
+    // writer or a guest row.
     readonly areas?: readonly string[];
 }
 
@@ -95,10 +95,10 @@ export interface MembersStore {
 }
 
 // Areas ride on any row, since where a person may look is a question independent of what they may do there — except
-// on a writer and on a desk, where they ARE the question: a writer's fence is the folders it may change, and a desk's
+// on a writer and on a guest, where they ARE the question: a writer's fence is the folders it may change, and a guest's
 // is the only thing deciding which cards it may speak through.
 // Both refusals are enforced here rather than only at the route, because the roster file is hand-editable: a malformed
-// row is skipped by the store, so a fenceless writer or desk row costs that person their access instead of handing
+// row is skipped by the store, so a fenceless writer or guest row costs that person their access instead of handing
 // them the unfenced workspace — and every card in it — their absent area list would otherwise resolve to.
 const MemberSchema = z
     .object({
@@ -106,8 +106,8 @@ const MemberSchema = z
         role: GrantedRoleSchema,
         areas: z.array(z.string().min(1)).optional(),
     })
-    .refine((member) => (member.role !== "writer" && member.role !== "desk") || (member.areas?.length ?? 0) > 0, {
-        message: "a writer and a desk each name at least one area: what they reach there is what the tier is",
+    .refine((member) => (member.role !== "writer" && member.role !== "guest") || (member.areas?.length ?? 0) > 0, {
+        message: "a writer and a guest each name at least one area: what they reach there is what the tier is",
     });
 const MembersFileSchema = z.object({ members: z.array(z.unknown()) });
 

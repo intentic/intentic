@@ -4,7 +4,7 @@ import { join } from "node:path";
 import {
     type AgentEvent,
     type AgentTurn,
-    type ParkedCard,
+    type ParkedRequest,
     type Persona,
     RESUME_NOTES,
     RETRY_LADDER_MS,
@@ -897,8 +897,8 @@ const parkedServices = async (root: string): Promise<{ services: Services; obser
     return { services, observed, resuming };
 };
 
-const planCard = (requestId: string): ParkedCard => ({ kind: "plan", requestId, text: "1. Ship it" });
-const questionCard = (requestId: string): ParkedCard => ({
+const planRequest = (requestId: string): ParkedRequest => ({ kind: "plan", requestId, text: "1. Ship it" });
+const questionRequest = (requestId: string): ParkedRequest => ({
     kind: "question",
     requestId,
     questions: [
@@ -913,32 +913,32 @@ const questionCard = (requestId: string): ParkedCard => ({
         },
     ],
 });
-const permissionCard = (requestId: string): ParkedCard => ({
+const permissionRequest = (requestId: string): ParkedRequest => ({
     kind: "permission",
     requestId,
     toolName: "Bash",
     title: "Claude wants to run pnpm deploy",
 });
 
-const parkedEntry = (conversationId: string, cards: ParkedCard[], extra: Partial<JournalledTurn> = {}): JournalledTurn =>
+const parkedEntry = (conversationId: string, cards: ParkedRequest[], extra: Partial<JournalledTurn> = {}): JournalledTurn =>
     journalled(conversationId, { sessionId: "s-parked", parked: cards, ...extra });
 
 // True once the cards' frames have folded through registry observe, the same moment the fleet and any attached window
 // render them.
-const cardsUp = async (observed: AgentEvent[], kind: ParkedCard["kind"]): Promise<void> => {
+const cardsUp = async (observed: AgentEvent[], kind: ParkedRequest["kind"]): Promise<void> => {
     await vi.waitFor(() => expect(observed.map((event) => event.kind)).toContain(kind), SETTLES);
 };
 
 test("a parked turn is rehydrated at boot: the cards go back up as they stood, and nothing runs until the user answers", async () => {
     const { services, observed, resuming } = await parkedServices(mkdtempSync(join(tmpdir(), "parked-")));
-    await services.turnJournal.recordTurn(parkedEntry("pk-up", [planCard("r-up")]));
+    await services.turnJournal.recordTurn(parkedEntry("pk-up", [planRequest("r-up")]));
     const prompts: string[] = [];
     await resumeInterruptedTurns(services, fakeWake(prompts), BOOT_AT);
     await cardsUp(observed, "plan");
 
     // Session frame comes first, then the card verbatim: same id and text, so a saved answer draft still matches.
     expect(observed[0]).toEqual({ kind: "session", sessionId: "s-parked" });
-    expect(observed[1]).toEqual(planCard("r-up"));
+    expect(observed[1]).toEqual(planRequest("r-up"));
     expect(prompts).toEqual([]);
     // Re-journals through the ordinary frame loop, so a second restart rehydrates it again.
     await vi.waitFor(async () => {
@@ -958,7 +958,7 @@ test("a parked turn is rehydrated at boot: the cards go back up as they stood, a
 
 test("approving the restored plan resumes the session in the posture a live approval grants", async () => {
     const { services, observed, resuming } = await parkedServices(mkdtempSync(join(tmpdir(), "parked-")));
-    await services.turnJournal.recordTurn(parkedEntry("pk-plan", [planCard("r-plan")]));
+    await services.turnJournal.recordTurn(parkedEntry("pk-plan", [planRequest("r-plan")]));
     const prompts: string[] = [];
     const inputs: AgentTurn[] = [];
     const capture: WakeFn = async function* (_services, input) {
@@ -983,7 +983,7 @@ test("approving the restored plan resumes the session in the posture a live appr
 
 test("rejecting the restored plan with feedback goes back into plan mode carrying it", async () => {
     const { services, observed } = await parkedServices(mkdtempSync(join(tmpdir(), "parked-")));
-    await services.turnJournal.recordTurn(parkedEntry("pk-rej", [planCard("r-rej")]));
+    await services.turnJournal.recordTurn(parkedEntry("pk-rej", [planRequest("r-rej")]));
     const prompts: string[] = [];
     const inputs: AgentTurn[] = [];
     const capture: WakeFn = async function* (_services, input) {
@@ -1004,7 +1004,7 @@ test("rejecting the restored plan with feedback goes back into plan mode carryin
 
 test("answering the restored question resumes with the picks, worded as a live answer is", async () => {
     const { services, observed } = await parkedServices(mkdtempSync(join(tmpdir(), "parked-")));
-    await services.turnJournal.recordTurn(parkedEntry("pk-q", [questionCard("r-q")]));
+    await services.turnJournal.recordTurn(parkedEntry("pk-q", [questionRequest("r-q")]));
     const prompts: string[] = [];
     await resumeInterruptedTurns(services, fakeWake(prompts), BOOT_AT);
     await cardsUp(observed, "question");
@@ -1019,7 +1019,7 @@ test("answering the restored question resumes with the picks, worded as a live a
 
 test("dismissing the restored question ends the turn quietly, exactly as a live dismissal does", async () => {
     const { services, observed, resuming } = await parkedServices(mkdtempSync(join(tmpdir(), "parked-")));
-    await services.turnJournal.recordTurn(parkedEntry("pk-dis", [questionCard("r-dis")]));
+    await services.turnJournal.recordTurn(parkedEntry("pk-dis", [questionRequest("r-dis")]));
     const prompts: string[] = [];
     await resumeInterruptedTurns(services, fakeWake(prompts), BOOT_AT);
     await cardsUp(observed, "question");
@@ -1033,7 +1033,7 @@ test("dismissing the restored question ends the turn quietly, exactly as a live 
 
 test("allowing the restored permission resumes the turn told to run the tool", async () => {
     const { services, observed } = await parkedServices(mkdtempSync(join(tmpdir(), "parked-")));
-    await services.turnJournal.recordTurn(parkedEntry("pk-allow", [permissionCard("r-allow")]));
+    await services.turnJournal.recordTurn(parkedEntry("pk-allow", [permissionRequest("r-allow")]));
     const prompts: string[] = [];
     await resumeInterruptedTurns(services, fakeWake(prompts), BOOT_AT);
     await cardsUp(observed, "permission");
@@ -1047,7 +1047,7 @@ test("allowing the restored permission resumes the turn told to run the tool", a
 
 test("denying the restored permission with feedback resumes as a redirection; a bare deny ends the turn", async () => {
     const { services, observed } = await parkedServices(mkdtempSync(join(tmpdir(), "parked-")));
-    await services.turnJournal.recordTurn(parkedEntry("pk-redir", [permissionCard("r-redir")]));
+    await services.turnJournal.recordTurn(parkedEntry("pk-redir", [permissionRequest("r-redir")]));
     const prompts: string[] = [];
     await resumeInterruptedTurns(services, fakeWake(prompts), BOOT_AT);
     await cardsUp(observed, "permission");
@@ -1059,7 +1059,7 @@ test("denying the restored permission with feedback resumes as a redirection; a 
 
     // A bare deny is the user pulling the plug, as live: nothing resumes.
     const bare = await parkedServices(mkdtempSync(join(tmpdir(), "parked-")));
-    await bare.services.turnJournal.recordTurn(parkedEntry("pk-bare", [permissionCard("r-bare")]));
+    await bare.services.turnJournal.recordTurn(parkedEntry("pk-bare", [permissionRequest("r-bare")]));
     const barePrompts: string[] = [];
     await resumeInterruptedTurns(bare.services, fakeWake(barePrompts), BOOT_AT);
     await cardsUp(bare.observed, "permission");
@@ -1071,7 +1071,7 @@ test("denying the restored permission with feedback resumes as a redirection; a 
 
 test("one answer resumes a turn parked on several cards: the others freeze cancelled", async () => {
     const { services, observed } = await parkedServices(mkdtempSync(join(tmpdir(), "parked-")));
-    await services.turnJournal.recordTurn(parkedEntry("pk-multi", [questionCard("r-mq"), permissionCard("r-mp")]));
+    await services.turnJournal.recordTurn(parkedEntry("pk-multi", [questionRequest("r-mq"), permissionRequest("r-mp")]));
     const prompts: string[] = [];
     await resumeInterruptedTurns(services, fakeWake(prompts), BOOT_AT);
     await cardsUp(observed, "permission");
@@ -1087,7 +1087,7 @@ test("rehydration answers to none of the resume gates: spent, stale and toggle-o
     // Every gate that stops a re-run (stale, spent, toggle off) is set here; rehydrating a parked card answers to none
     // of them.
     const { services, observed } = await parkedServices(mkdtempSync(join(tmpdir(), "parked-")));
-    await services.turnJournal.recordTurn(parkedEntry("pk-gates", [questionCard("r-gates")], { attempts: 1, startedAt: 0 }));
+    await services.turnJournal.recordTurn(parkedEntry("pk-gates", [questionRequest("r-gates")], { attempts: 1, startedAt: 0 }));
     const prompts: string[] = [];
     await resumeInterruptedTurns(services, fakeWake(prompts), 10_000 + 7 * 60 * 60_000);
     await cardsUp(observed, "question");

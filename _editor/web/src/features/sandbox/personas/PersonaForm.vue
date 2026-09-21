@@ -13,39 +13,39 @@ import PersonaBriefingFields from "./PersonaBriefingFields.vue";
 import PersonaKitFields from "./PersonaKitFields.vue";
 import PersonaPowersFields from "./PersonaPowersFields.vue";
 import type { BrowserAccount } from "../../extensions/useBrowserAccounts";
-import type { PersonaGrantable, PersonaPowersDraft } from "./personaCard";
+import type { PersonaGrantable, PersonaPowersDraft } from "./personaRules";
 import { useRepos } from "../../workspace/explorer/useRepos";
 import { useT } from "@intentic/ui/i18n";
 
-// Card editor: one of five questions shown at a time via SegmentedControl, replacing a ~30-control scroll. The folder
+// Persona editor: one of five questions shown at a time via SegmentedControl, replacing a ~30-control scroll. The folder
 // fence lives inside "What it may do", not its own pill, since it's the same question as the toggles above it.
 // Permissions stay on one screen so a reader can audit what's off; the draft is the parent's, mutated in place.
 
-// The whole card as a form. Shelves and per-id grants come from PersonaPowersDraft, shared with the quick panel's
+// The whole persona as a form. Shelves and per-id grants come from PersonaPowersDraft, shared with the quick panel's
 // <PersonaPowersFields>.
 const t = useT();
 
 export interface PersonaDraft extends PersonaPowersDraft {
-    /** The saved card's id; always set, since a card is created before it's edited. */
+    /** The saved persona's id; always set, since a persona is created before it's edited. */
     original: string;
     label: string;
     capabilities: string[];
     // Both workspace-relative folder lists; `startIn` holds at most one, matching what <FolderPicker> models.
     startIn: string[];
     folders: string[];
-    // Which system prompt a session on this card runs; undefined (the default) follows the sandbox. The TEXT lives in
+    // Which system prompt a session on this persona runs; undefined (the default) follows the sandbox. The TEXT lives in
     // the kit folder (usePersonaKit), not here, so the autosave can't rewrite it every keystroke.
     systemPromptMode: SystemPromptMode | undefined;
-    // The one-line sentence a new chat is matched on (Persona.brief); "" is a card with none, stored as absent.
+    // The one-line sentence a new chat is matched on (Persona.brief); "" is a persona with none, stored as absent.
     brief: string;
     // Which nested repositories its conversations carry (Persona.context.repos). undefined means every repository (the
-    // default); a list, even empty, is the card deciding, empty means the workspace repository alone.
+    // default); a list, even empty, is the persona deciding, empty means the workspace repository alone.
     carries: string[] | undefined;
     // Which models its conversations run on, in order; empty is stored as absent, so the chat's or job's own pick
     // answers.
     models: ModelPin[];
-    // Which of the notes the sandbox prepends to each message this card does without (Persona.briefing.omit). Empty is
-    // stored as absent: a card that dropped nothing says nothing.
+    // Which of the notes the sandbox prepends to each message this persona does without (Persona.briefing.omit). Empty is
+    // stored as absent: a persona that dropped nothing says nothing.
     omitNotes: TurnBriefingNoteId[];
 }
 
@@ -73,7 +73,7 @@ const SECTIONS = computed(
 );
 type Section = (typeof SECTIONS.value)[number][`value`];
 
-// Local, reset on reopen rather than remembered, so a card always opens on the pill that says who it is.
+// Local, reset on reopen rather than remembered, so a persona always opens on the pill that says who it is.
 const section = ref<Section>(`identity`);
 
 // What a chip adds beyond the account's own id: the site only when the id doesn't already say it (avoids "reddit" over
@@ -86,8 +86,8 @@ const detailOf = (account: BrowserAccount): string | undefined => {
     return parts.length === 0 ? undefined : parts.join(` · `);
 };
 
-// Who can talk to this card, read off where it works: a person holds areas, and an area whose folders cover the
-// card's home is what hands it over (policy/persona-home.ts). Nobody picks cards per person, so this line is the only
+// Who can talk to this persona, read off where it works: a person holds areas, and an area whose folders cover the
+// persona's home is what hands it over (policy/persona-home.ts). Nobody picks personas per person, so this line is the only
 // place the consequence of a starting folder is visible while it is being chosen.
 const { areas } = useAreas();
 const reachedBy = computed<string[]>(() => {
@@ -108,11 +108,11 @@ const toggleAccount = (id: string): void => {
 };
 
 // Folded away until opened, so a sandbox with many signed-in accounts doesn't push the rest of the form down. What
-// stays visible is the answer (the accounts this card already speaks through), not the full list.
+// stays visible is the answer (the accounts this persona already speaks through), not the full list.
 const open = ref(false);
 const filter = ref(``);
 
-// Keeps every id the card names, even one with no matching account, so the summary can't quietly drop what the persona
+// Keeps every id the persona names, even one with no matching account, so the summary can't quietly drop what the persona
 // reaches.
 const pickedMarks = computed(() => draft.capabilities.map((id) => ({ id, account: accounts.find((entry) => entry.id === id) })));
 
@@ -135,7 +135,7 @@ const setCarried = (repo: string, on: boolean): void => {
     draft.carries = on ? [...new Set([...current, repo])] : current.filter((name) => name !== repo);
 };
 
-// Same editor Sandbox ▸ Agent ▸ Models uses, over the draft's own list, since the ladder rides the card's autosave like
+// Same editor Sandbox ▸ Agent ▸ Models uses, over the draft's own list, since the ladder rides the persona's autosave like
 // any other field. Knobs on: an entry here says how it runs, not just which model.
 const models = pinnedList<ModelPin>({
     read: () => draft.models,
@@ -147,7 +147,7 @@ const models = pinnedList<ModelPin>({
     detail: pinKnobSummary,
     knobs: true,
 });
-// One picker for the card, over whichever entry raised it; `index` absent means adding (see AgentModels.vue).
+// One picker for the persona, over whichever entry raised it; `index` absent means adding (see AgentModels.vue).
 const editing = shallowRef<{ index: number | undefined; anchor: HTMLElement } | undefined>(undefined);
 const openPicker = (index: number | undefined, anchor: HTMLElement): void => {
     editing.value = { index, anchor };
@@ -164,13 +164,13 @@ const configure = (pin: ModelPin): void => {
 </script>
 
 <template>
-    <!-- The form spans the card row; text fields keep their own reading width. -->
+    <!-- The form spans the persona row; text fields keep their own reading width. -->
     <div class="flex max-w-4xl flex-col gap-5">
         <!-- Section pills rely on the surrounding field frame. -->
         <SegmentedControl v-model="section" :options="SECTIONS" :aria-label="t(`sandbox.personaForm.whatToChangeAbout`)" />
 
         <template v-if="section === `identity`">
-            <!-- The card's own line, shown first since it's the card saying who it is; also the sentence a new chat is matched on. -->
+            <!-- The persona's own line, shown first since it's the persona saying who it is; also the sentence a new chat is matched on. -->
             <div class="ui-field">
                 <label class="ui-field-label" for="persona-brief">{{ t(`sandbox.personaForm.what`) }}</label>
                 <input
@@ -208,7 +208,7 @@ const configure = (pin: ModelPin): void => {
                             <span class="truncate font-medium text-content">{{ mark.id }}</span>
                             <Icon name="times" class="shrink-0 text-2xs text-subtle group-hover:text-danger" />
                         </button>
-                        <!-- A card that speaks nowhere is a fine card; the button is the whole state, nothing picked yet. -->
+                        <!-- A persona that speaks nowhere is a fine persona; the button is the whole state, nothing picked yet. -->
                         <button
                             type="button"
                             :class="ui.linkButton('gap-1 text-xs text-muted hover:text-content')"
@@ -303,7 +303,7 @@ const configure = (pin: ModelPin): void => {
                                 :placeholder="t(`sandbox.personaForm.wholeWorkspace`)"
                             />
                             <!-- The consequence of that folder that is not readable from the folder: who gains this
-                                 card by holding the area it sits in. -->
+                                 persona by holding the area it sits in. -->
                             <span class="text-2xs text-subtle">{{
                                 reachedBy.length === 0
                                     ? t(`sandbox.personaForm.reachedByNobody`)
@@ -334,7 +334,7 @@ const configure = (pin: ModelPin): void => {
 
         <template v-else-if="section === `runs`">
             <p class="text-xs text-subtle">
-                {{ t(`sandbox.personaForm.treeSessionWearingCard`) }}
+                {{ t(`sandbox.personaForm.treeSessionOnPersona`) }}
             </p>
 
             <div class="ui-field">

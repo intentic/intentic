@@ -1,11 +1,11 @@
 <script setup lang="ts">
 import Icon from "@intentic/ui/icon";
-import { areaIcon, type IconName } from "@intentic/ui/icons";
+import { sectionIcon, type IconName } from "@intentic/ui/icons";
 import { initialsOf } from "@intentic/ui";
 import { computed } from "vue";
 
-const { area, fallback, label, monogram } = defineProps<{ area: string; fallback?: IconName; label?: string; monogram?: string }>();
-const name = computed(() => areaIcon(area, fallback));
+const { section, fallback, label, monogram } = defineProps<{ section: string; fallback?: IconName; label?: string; monogram?: string }>();
+const name = computed(() => sectionIcon(section, fallback));
 // Cut to two: the tile is a square of glyph, and three letters read as a word rather than a mark.
 const letters = computed(() => (monogram === undefined || monogram === `` ? undefined : monogram.slice(0, 2).toUpperCase()));
 </script>
@@ -18,5 +18,5 @@ const letters = computed(() => (monogram === undefined || monogram === `` ? unde
          0.8em lands the cap height just under the icon's, which is where two letters stop shouting. -->
     <span v-if="letters !== undefined" class="text-[0.8em] font-semibold tracking-tight" aria-hidden="true">{{ letters }}</span>
     <Icon v-else-if="name !== undefined" :name="name" aria-hidden="true" />
-    <span v-else class="text-[0.8em] font-semibold tracking-tight" aria-hidden="true">{{ initialsOf(label ?? area) }}</span>
+    <span v-else class="text-[0.8em] font-semibold tracking-tight" aria-hidden="true">{{ initialsOf(label ?? section) }}</span>
 </template>

@@ -107,7 +107,7 @@ export const WorkflowGateSchema = z.object({
         ),
 });
 export type WorkflowGate = z.infer<typeof WorkflowGateSchema>;
-// Small next to the Front Desk's 200: a gate run is a whole graph of sessions, not one turn.
+// Small next to the Visitor chat's 200: a gate run is a whole graph of sessions, not one turn.
 export const GATE_DAILY_MAX_DEFAULT = 20;
 // blocked means the gate couldn't reach a judgment, not that the product is broken; conflating the two makes teams turn
 // the gate off. Maps to a neutral pipeline exit, never a failed build.

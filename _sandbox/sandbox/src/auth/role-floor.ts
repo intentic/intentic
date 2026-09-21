@@ -110,15 +110,15 @@ const passkeyRemoval = /^\/system\/passkeys\/[^/]+$/;
 
 const methodFloor = (method: string): MemberRole => (method === "GET" || method === "HEAD" ? "viewer" : "maintainer");
 
-// What a desk member may call at all, by contract route name: signing in and being present, the chat it drives,
+// What a guest member may call at all, by contract route name: signing in and being present, the chat it drives,
 // the conversations it can see (each handler narrows to its own), the cards its areas reach, the reads a composer
-// needs before it will send, and the workspace read-only. An allowlist rather than a floor, since a desk is below
-// every tier: what is not named here is refused, so a route added later is closed to a desk until somebody decides
+// needs before it will send, and the workspace read-only. An allowlist rather than a floor, since a guest is below
+// every tier: what is not named here is refused, so a route added later is closed to a guest until somebody decides
 // otherwise.
-// The workspace reads ride the same list as the rest because a desk is always fenced — the roster refuses a desk row
+// The workspace reads ride the same list as the rest because a guest is always fenced — the roster refuses a guest row
 // that names no area (auth.ts MemberSchema) — so every route below applies that fence itself
 // (workspace/layout/workspace-fence.ts) and none of them can answer with the whole tree.
-const DESK_NAMES: ReadonlySet<string> = new Set([
+const GUEST_NAMES: ReadonlySet<string> = new Set([
     "system.info",
     "system.session",
     "system.events",
@@ -159,9 +159,9 @@ const DESK_NAMES: ReadonlySet<string> = new Set([
     "areas.list",
 ]);
 
-// The hand-written routes a desk reaches: dictating a message, giving up its own access, its own passkeys, and the
+// The hand-written routes a guest reaches: dictating a message, giving up its own access, its own passkeys, and the
 // bytes behind the workspace reads above.
-const DESK_PATHS: ReadonlySet<string> = new Set([
+const GUEST_PATHS: ReadonlySet<string> = new Set([
     "/speech/transcribe",
     "/speech/status",
     "/members/self",
@@ -173,7 +173,7 @@ const DESK_PATHS: ReadonlySet<string> = new Set([
     "/workspace/media",
 ]);
 
-// The one refusal the bearer middleware hands a verified member: the tier a route wants, or a desk asking for a door
+// The one refusal the bearer middleware hands a verified member: the tier a route wants, or a guest asking for a door
 // not on its list. Undefined admits. `target` is the upload's `?path=`, the one route whose floor depends on where
 // the bytes land.
 export const memberRefusal = (
@@ -182,16 +182,16 @@ export const memberRefusal = (
     path: string,
     target?: string,
 ): { readonly error: string; readonly floor: MemberRole } | undefined => {
-    if (caller.role === "desk") {
-        return deskReach(method, path, target) ? undefined : { error: "not open to a desk member", floor: "viewer" };
+    if (caller.role === "guest") {
+        return guestReach(method, path, target) ? undefined : { error: "not open to a guest member", floor: "viewer" };
     }
     const floor = routeFloor(method, path, target);
     return roleAtLeast(caller.role, floor) ? undefined : { error: `${floor} access required`, floor };
 };
 
-// Whether a desk member may reach this request at all. `target` is the upload's `?path=`: an attachment rides with
-// the message it belongs to, and is the one byte-write a desk makes.
-export const deskReach = (method: string, path: string, target?: string): boolean => {
+// Whether a guest member may reach this request at all. `target` is the upload's `?path=`: an attachment rides with
+// the message it belongs to, and is the one byte-write a guest makes.
+export const guestReach = (method: string, path: string, target?: string): boolean => {
     if (path === "/workspace/upload") {
         return target !== undefined && isAttachmentPath(target);
     }
@@ -199,7 +199,7 @@ export const deskReach = (method: string, path: string, target?: string): boolea
         return true;
     }
     const name = routeNameForRequest(ROUTES, method, path);
-    return name === undefined ? DESK_PATHS.has(path) : DESK_NAMES.has(name);
+    return name === undefined ? GUEST_PATHS.has(path) : GUEST_NAMES.has(name);
 };
 
 // `target` is the workspace path a byte-write addresses (upload's `?path=`); absent for every other route.

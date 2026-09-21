@@ -57,10 +57,10 @@ const ENVIRONMENT_SEPARATOR = "::";
 export const environmentKeyOf = (facts: Pick<HostFacts, "wsl">): string =>
     facts.wsl === undefined ? HOST_NATIVE_ENVIRONMENT : `wsl:${facts.wsl.distro}`;
 
-export const hostConnectionKey = (card: string, environment: string): string =>
-    environment === HOST_NATIVE_ENVIRONMENT ? card : `${card}${ENVIRONMENT_SEPARATOR}${environment}`;
+export const hostConnectionKey = (entry: string, environment: string): string =>
+    environment === HOST_NATIVE_ENVIRONMENT ? entry : `${entry}${ENVIRONMENT_SEPARATOR}${environment}`;
 
-export const hostCardOf = (connection: string): string => connection.split(ENVIRONMENT_SEPARATOR)[0] ?? connection;
+export const hostEntryOf = (connection: string): string => connection.split(ENVIRONMENT_SEPARATOR)[0] ?? connection;
 
 export const hostEnvironmentOf = (connection: string): string => {
     const at = connection.indexOf(ENVIRONMENT_SEPARATOR);

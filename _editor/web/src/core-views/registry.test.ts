@@ -6,12 +6,12 @@ import { describe, expect, it, vi } from "vitest";
 import { ref } from "vue";
 import { useAudience } from "../app/useAudience";
 
-// The reader's tier, switched by the desk tests below; everyone else is read as the owner the app defaults to.
-const deskReader = vi.hoisted(() => ({ isDesk: false }));
-vi.mock(`../features/sandbox/secrets/useRole`, () => ({ useRole: () => ({ isDesk: ref(deskReader.isDesk) }) }));
+// The reader's tier, switched by the guest tests below; everyone else is read as the owner the app defaults to.
+const guestReader = vi.hoisted(() => ({ isGuest: false }));
+vi.mock(`../features/sandbox/secrets/useRole`, () => ({ useRole: () => ({ isGuest: ref(guestReader.isGuest) }) }));
 import {
     activationBadge,
-    areaReachable,
+    sectionReachable,
     railBands,
     railGroups,
     detectActivations,
@@ -323,7 +323,7 @@ describe(`rail order`, () => {
 describe(`rail seats`, () => {
     const resting = { pinned: false, active: false };
 
-    it(`seats a permanent area with nothing to report: it is where you GO`, () => {
+    it(`seats a permanent section with nothing to report: it is where you GO`, () => {
         expect(railSeated({ id: `agents` }, resting)).toBe(true);
         expect(railSeated({ id: `workspace` }, resting)).toBe(true);
         expect(railSeated({ id: `chat` }, resting)).toBe(true);
@@ -344,8 +344,8 @@ describe(`rail seats`, () => {
         }
     });
 
-    it(`never retires the area the reader is standing in`, () => {
-        // Opened from More, a silent area would otherwise have no tile lit while its own view is on screen.
+    it(`never retires the section the reader is standing in`, () => {
+        // Opened from More, a silent section would otherwise have no tile lit while its own view is on screen.
         expect(railSeated({ id: `automations` }, { pinned: false, active: true })).toBe(true);
     });
 
@@ -362,7 +362,7 @@ describe(`rail seats`, () => {
         expect(seatedOnlyByVisit({ id: `workspace` }, visiting)).toBe(false);
         expect(seatedOnlyByVisit({ id: `automations` }, { pinned: true, active: true })).toBe(false);
         expect(seatedOnlyByVisit({ id: `approvals`, badge: { count: 3 } }, visiting)).toBe(false);
-        // A claim about the tile you're ON: an area you aren't in is either seated for its own reason or not at all.
+        // A claim about the tile you're ON: an section you aren't in is either seated for its own reason or not at all.
         expect(seatedOnlyByVisit({ id: `automations` }, resting)).toBe(false);
     });
 
@@ -511,10 +511,10 @@ describe(`the maker's rail`, () => {
     });
 });
 
-// A desk's rail is two seats whichever audience it answered: every other tile opens on a read the daemon refuses it.
-describe(`a desk's rail`, () => {
+// A guest's rail is two seats whichever audience it answered: every other tile opens on a read the daemon refuses it.
+describe(`a guest's rail`, () => {
     it(`seats only the chat and the board, and ranks nothing else`, () => {
-        deskReader.isDesk = true;
+        guestReader.isGuest = true;
         try {
             expect(seatPolicy(`chat`)).toBe(`always`);
             expect(seatPolicy(`agents`)).toBe(`always`);
@@ -523,30 +523,30 @@ describe(`a desk's rail`, () => {
             expect(railRank(`workspace`)).toBe(2);
             expect(railBands([{ id: `chat` }, { id: `agents` }], (tile) => tile.id).map((band) => band.group.id)).toEqual([`work`]);
         } finally {
-            deskReader.isDesk = false;
+            guestReader.isGuest = false;
         }
     });
 
     // A `signal` seat is not a closed door: an extension that badges takes one, and every unseated tile is listed in
-    // the More menu besides. Both put areas in front of a desk that answer a press by bouncing it to the chat, which
+    // the More menu besides. Both put sections in front of a guest that answer a press by bouncing it to the chat, which
     // is what the reader reported as icons that do nothing.
-    it(`withdraws the areas the fence would bounce, rather than seating them and refusing the press`, () => {
-        deskReader.isDesk = true;
+    it(`withdraws the sections the fence would bounce, rather than seating them and refusing the press`, () => {
+        guestReader.isGuest = true;
         try {
-            expect(areaReachable(`/chat`)).toBe(true);
-            expect(areaReachable(`/agents`)).toBe(true);
-            expect(areaReachable(`/sandbox/access`)).toBe(true);
+            expect(sectionReachable(`/chat`)).toBe(true);
+            expect(sectionReachable(`/agents`)).toBe(true);
+            expect(sectionReachable(`/sandbox/access`)).toBe(true);
             for (const closed of [`/workspace`, `/preview`, `/browsers`, `/subagents`, `/sandbox`, `/ext/intentic.approvals`]) {
-                expect(areaReachable(closed), closed).toBe(false);
+                expect(sectionReachable(closed), closed).toBe(false);
             }
         } finally {
-            deskReader.isDesk = false;
+            guestReader.isGuest = false;
         }
     });
 
     it(`withdraws nothing from a tier that can open everything`, () => {
-        for (const area of [`/workspace`, `/preview`, `/browsers`, `/sandbox`, `/ext/intentic.approvals`]) {
-            expect(areaReachable(area), area).toBe(true);
+        for (const section of [`/workspace`, `/preview`, `/browsers`, `/sandbox`, `/ext/intentic.approvals`]) {
+            expect(sectionReachable(section), section).toBe(true);
         }
     });
 });

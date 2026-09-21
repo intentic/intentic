@@ -379,7 +379,7 @@ const HOSTED_SETUP = { name: `setup`, query: { machine: `hosted` } } as const;
                 <HostedPlanOffer :subscribe-label="buyLabel" :working="working" @checkout="open(`checkout`)" />
             </template>
 
-            <!-- This month: the free lane's meter, live, or a subscriber's awake hours with nothing beside them. -->
+            <!-- This month: the free plan's meter, live, or a subscriber's awake hours with nothing beside them. -->
             <RowGroup v-if="hosted" :label="t(`settings.settingsBilling.month`)">
                 <template v-if="resetsOn" #actions>
                     <span class="text-2xs text-subtle">{{ t(`settings.settingsBilling.resets`, { resetsOn }) }}</span>
@@ -547,7 +547,7 @@ const HOSTED_SETUP = { name: `setup`, query: { machine: `hosted` } } as const;
                     <dl class="grid grid-cols-1 gap-x-6 gap-y-2 text-xs @lg:grid-cols-[auto_1fr]">
                         <dt class="text-subtle">{{ t(`settings.settingsBilling.machine`) }}</dt>
                         <dd class="text-muted">{{ t(`settings.settingsBilling.sameOnFreeLane`, { shape: freeShape }) }}</dd>
-                        <dt class="text-subtle">{{ t(`settings.settingsBilling.freeLane`) }}</dt>
+                        <dt class="text-subtle">{{ t(`settings.settingsBilling.freePlan`) }}</dt>
                         <dd class="text-muted">{{ t(`settings.settingsBilling.oneHostedSandboxAwake`) }}</dd>
                         <dt class="text-subtle">{{ t(`settings.settingsBilling.onPlan`) }}</dt>
                         <dd class="text-muted">{{ t(`settings.settingsBilling.alwaysOnNeverRemoved`, { price }) }}</dd>

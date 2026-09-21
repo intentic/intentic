@@ -1,5 +1,5 @@
 import type { PaymentOffer, WalletConfig } from "@intentic/sandbox-contract";
-import { type CardDeps, cardRun, OFFER_DEADLINE_MS, raiseCard, type SettledCard, whyOf } from "../agent/run/offer-card.js";
+import { type CardDeps, cardRun, OFFER_DEADLINE_MS, raiseRequest, type SettledCard, whyOf } from "../agent/run/offer-request.js";
 import type { RelayedAnswer } from "../platform/platform-relay.js";
 import type { SignRequest } from "./wallet-signer.js";
 import { type OpenedPayment, spentTodayAtomic, type WalletLedgerStore } from "./wallet-ledger.js";
@@ -218,7 +218,7 @@ export const gatedPaidFetch = async (deps: PaymentGateDeps, request: PaidFetchRe
             dailyCapUsd: config.dailyCapUsd,
             ...whyOf(request.why),
         };
-        card = await raiseCard(deps, run, {
+        card = await raiseRequest(deps, run, {
             kind: "payment_offer",
             onAbort: { kind: "payment_offer", requestId: "", approve: false },
             raised: (requestId) => ({ kind: "payment_offer", requestId, offer }),

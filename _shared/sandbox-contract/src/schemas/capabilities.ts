@@ -365,7 +365,7 @@ export const CapabilitySummarySchema = z.object({
 // by catalog card, not kind, since several cards share one kind. Re-derived on every read, so it drops out once its
 // evidence moves; `prefill` is never a secret, even one sitting in a checked-in file.
 export const CapabilityRecommendationSchema = z.object({
-    card: z.string().describe("Which connection is being suggested."),
+    entry: z.string().describe("Which catalog entry is being suggested."),
     evidence: z
         .string()
         .describe("What was seen that prompted it: a file, a remote, printed verbatim so the claim can be checked rather than believed."),
@@ -398,9 +398,9 @@ export const CapabilityConnectionSchema = z.object({
         .describe("Its settings exactly as stored, credentials included. The field names are its own kind's, which the caller already knows."),
 });
 export type CapabilityConnection = z.infer<typeof CapabilityConnectionSchema>;
-// DELETE /capabilities/recommendations/{card}: the declined evidence is recorded daemon-side, so the suggestion returns
+// DELETE /capabilities/recommendations/{entry}: the declined evidence is recorded daemon-side, so the suggestion returns
 // once the workspace changes under it.
-export const CapabilityCardParamSchema = z.object({ card: z.string().describe("Which suggestion to stop making.") });
+export const CapabilityEntryParamSchema = z.object({ entry: z.string().describe("Which suggestion to stop making.") });
 // POST /capabilities/{id}/secret: replaces just the per-kind secret field and re-runs the capability's idempotent
 // apply.
 export const CapabilitySecretInputSchema = z.object({

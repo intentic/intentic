@@ -10,7 +10,7 @@ import { useCapabilities } from "../features/capabilities/connect/useCapabilitie
 import {
     type ActiveExtension,
     activationBadge,
-    areaReachable,
+    sectionReachable,
     detectActivations,
     extensionPath,
     railBands,
@@ -39,12 +39,12 @@ import RailIcon from "./rail/RailIcon.vue";
 import { useT } from "@intentic/ui/i18n";
 
 // The mobile Menu tab: everything the desktop rail and its popovers hold, as one page — sandbox
-// switching, the presence roster, the area list, account actions. Same state singletons, different
+// switching, the presence roster, the section list, account actions. Same state singletons, different
 // presentation.
 
 const t = useT();
 
-interface AreaRow {
+interface SectionRow {
     // Groups by railBands, so this page's sections match the desktop rail's runs.
     readonly id: string;
     readonly to: string;
@@ -55,7 +55,7 @@ interface AreaRow {
 }
 
 // Activation.icon is an open string in the extension API, trusted to name an app icon.
-const extensionRow = (active: ActiveExtension): AreaRow => {
+const extensionRow = (active: ActiveExtension): SectionRow => {
     const { extension, activation } = active;
     const badge = activationBadge(active);
     return {
@@ -90,26 +90,26 @@ const pushRow = computed(() => pushMenuRow(pushState.value));
 // Same detection and bands as ShellDesktop, but unfiltered by railSeated — no seat scarcity here. The file tree is
 // not an extension, so it is stated here: Chat holds the seat it has on the desktop rail's tab bar counterpart.
 const words = useVocabulary();
-const filesRow = computed<AreaRow>(() => ({ id: WORKSPACE_VIEW_ID, to: `/workspace`, label: words.value.workspace, icon: `folder` }));
-const areaBands = computed(() =>
+const filesRow = computed<SectionRow>(() => ({ id: WORKSPACE_VIEW_ID, to: `/workspace`, label: words.value.workspace, icon: `folder` }));
+const sectionBands = computed(() =>
     railBands(
         [
             filesRow.value,
             ...detectActivations(panels.value, capabilities.value)
                 .filter(({ extension }) => extension.surface === `rail` && !tabBarIds().includes(extension.id))
                 .map(extensionRow),
-        ].filter((area) => areaReachable(area.to)),
-        (area) => area.id,
+        ].filter((section) => sectionReachable(section.to)),
+        (section) => section.id,
     ),
 );
 // Matches the desktop rail's tail (terminal, +); terminal needs ship tier since a PTY is the whole sandbox.
-const { canShip, isDesk } = useRole();
+const { canShip, isGuest } = useRole();
 const { maker } = useAudience();
-// A desk connects nothing and runs no terminal; its Sandbox row opens on the one section it has.
-const sandboxRows = computed<readonly AreaRow[]>(() => [
-    ...(isDesk.value ? [] : [{ id: `capabilities`, to: `/capabilities`, label: t(`shell.mobileMenu.addCapability`), icon: `plus` } as const]),
+// A guest connects nothing and runs no terminal; its Sandbox row opens on the one section it has.
+const sandboxRows = computed<readonly SectionRow[]>(() => [
+    ...(isGuest.value ? [] : [{ id: `capabilities`, to: `/capabilities`, label: t(`shell.mobileMenu.addCapability`), icon: `plus` } as const]),
     ...(canShip.value && !maker.value ? [{ id: `terminal`, to: `/terminal`, label: t(`shell.mobileMenu.terminal`), icon: `code` } as const] : []),
-    { id: `sandbox`, to: sandboxHubPath(isDesk.value), label: t(`shell.mobileMenu.sandbox`), icon: `box` },
+    { id: `sandbox`, to: sandboxHubPath(isGuest.value), label: t(`shell.mobileMenu.sandbox`), icon: `box` },
     { id: `settings`, to: `/settings`, label: t(`shell.mobileMenu.settings`), icon: `cog` },
 ]);
 
@@ -269,36 +269,36 @@ const logout = async (): Promise<void> => {
             </div>
         </section>
 
-        <!-- Areas the desktop rail links to, minus the tab bar, grouped into the rail's own bands. -->
+        <!-- Sections the desktop rail links to, minus the tab bar, grouped into the rail's own bands. -->
         <!-- A badge's tooltip renders as a second line under the name, never a shrink-0 pill beside it — a sentence-length pill would push or truncate the name. -->
-        <section v-for="band in areaBands" :key="band.group.id" class="flex flex-col gap-1">
+        <section v-for="band in sectionBands" :key="band.group.id" class="flex flex-col gap-1">
             <h2 class="px-1 text-2xs font-semibold uppercase tracking-wide text-subtle">{{ band.group.label }}</h2>
             <RouterLink
-                v-for="area in band.items"
-                :key="area.to"
-                :to="area.to"
+                v-for="section in band.items"
+                :key="section.to"
+                :to="section.to"
                 class="flex min-h-12 items-center gap-3 rounded-lg px-2 py-1.5 text-sm text-content transition-colors active:bg-overlay"
             >
                 <span class="flex h-8 w-8 shrink-0 items-center justify-center">
-                    <RailIcon :area="area.id" :fallback="area.icon" :label="area.label" class="text-base text-muted" />
+                    <RailIcon :section="section.id" :fallback="section.icon" :label="section.label" class="text-base text-muted" />
                 </span>
                 <span class="min-w-0 flex-1">
                     <span class="flex items-center gap-2">
-                        <span class="min-w-0 truncate">{{ area.label }}</span>
+                        <span class="min-w-0 truncate">{{ section.label }}</span>
                         <!-- The count only, when there's no tooltip; min-w-0 shrinks a long number instead of pushing the name off. -->
                         <span
-                            v-if="area.badge && badgeChip(area.badge) && area.badge.tooltip === undefined"
+                            v-if="section.badge && badgeChip(section.badge) && section.badge.tooltip === undefined"
                             class="ui-status-pill min-w-0 shrink text-2xs font-semibold"
-                            :class="badgeClass(area.badge)"
-                            >{{ area.badge.count }}</span
+                            :class="badgeClass(section.badge)"
+                            >{{ section.badge.count }}</span
                         >
                     </span>
-                    <span v-if="area.badge?.tooltip !== undefined" class="mt-0.5 block text-xs" :class="badgeToneClass(area.badge)">{{
-                        area.badge.tooltip
+                    <span v-if="section.badge?.tooltip !== undefined" class="mt-0.5 block text-xs" :class="badgeToneClass(section.badge)">{{
+                        section.badge.tooltip
                     }}</span>
                     <!-- Running gets a line of its own rather than the rail's corner mark: a row this wide can afford the sentence. -->
-                    <span v-if="area.badge?.running !== undefined" class="mt-0.5 flex items-center gap-1 text-xs" :class="RUNNING_MARK_CLASS">
-                        <Icon name="spinner" spin />{{ area.badge.running }}
+                    <span v-if="section.badge?.running !== undefined" class="mt-0.5 flex items-center gap-1 text-xs" :class="RUNNING_MARK_CLASS">
+                        <Icon name="spinner" spin />{{ section.badge.running }}
                     </span>
                 </span>
                 <Icon name="chevron-right" class="shrink-0 text-xs text-subtle" />
@@ -315,7 +315,7 @@ const logout = async (): Promise<void> => {
                 class="flex h-12 items-center gap-3 rounded-lg px-2 text-sm text-content transition-colors active:bg-overlay"
             >
                 <span class="flex h-8 w-8 shrink-0 items-center justify-center">
-                    <RailIcon :area="row.id" :fallback="row.icon" :label="row.label" class="text-base text-muted" />
+                    <RailIcon :section="row.id" :fallback="row.icon" :label="row.label" class="text-base text-muted" />
                 </span>
                 <span class="min-w-0 flex-1 truncate">{{ row.label }}</span>
                 <Icon name="chevron-right" class="shrink-0 text-xs text-subtle" />

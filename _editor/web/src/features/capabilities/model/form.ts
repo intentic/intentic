@@ -8,7 +8,7 @@ import {
     VAULTED,
 } from "@intentic/sandbox-contract";
 
-// A card declares fields; this module decides which are shown, what an answer means, and what
+// A tile declares fields; this module decides which are shown, what an answer means, and what
 // reaches the daemon, as plain functions over the form's values. The only difference between add and
 // edit: on edit, a blank secret box for a `stored` key means keep it, not unanswered.
 
@@ -169,7 +169,7 @@ const SHA_RE = /^[0-9a-f]{40}$/u;
 
 export const isCommitSha = (value: string | undefined): boolean => SHA_RE.test(value ?? ``);
 
-// Seed order: card defaults, then live config (never a credential), then workspace prefill; dev
+// Seed order: tile defaults, then live config (never a credential), then workspace prefill; dev
 // autofill layers on in ./devSecrets. A switch seeds to "off", not empty, so it's always answered.
 export const seedValues = (
     entry: CapabilityCatalogEntry,
@@ -186,7 +186,7 @@ export const seedValues = (
     for (const [key, value] of Object.entries(live ?? {})) {
         values[key] = typeof value === `boolean` ? (value ? `on` : `off`) : String(value);
     }
-    // Never seeds a secret; a prefill for a field the card doesn't declare, or one the card fixes, is
+    // Never seeds a secret; a prefill for a field the tile doesn't declare, or one the tile fixes, is
     // dropped.
     for (const [key, value] of Object.entries(prefill)) {
         const field = entry.fields.find((candidate) => candidate.key === key);
@@ -245,7 +245,7 @@ export const buildConfig = (entry: CapabilityCatalogEntry, values: FormValues, s
     });
 
 // Config as capabilityEffects sees it: fixed fields baked in, the rest read from whatever source the
-// caller passes (form values, card defaults, or an instance's echoed config).
+// caller passes (form values, tile defaults, or an instance's echoed config).
 export const fieldConfig = (entry: CapabilityCatalogEntry, source: (field: CapabilityField) => string | undefined): Record<string, string> => {
     const config: Record<string, string> = {};
     for (const field of entry.fields) {

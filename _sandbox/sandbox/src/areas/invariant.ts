@@ -37,20 +37,20 @@ export const checks = ({ areas, members, personas }: AreaRosterDeps): readonly I
         },
     },
     {
-        name: "every-desk-reaches-an-assistant",
+        name: "every-guest-reaches-an-assistant",
         on: ["boot", "sweep"],
         run: async ({ fail }) => {
-            // A desk reaches nothing but the cards its areas hold, so a desk whose folders no card works in signs in
+            // A guest reaches nothing but the cards its areas hold, so a guest whose folders no card works in signs in
             // to a chat that answers nothing. The grant route refuses this; it comes back when a card's starting
             // folder is edited, or the card deleted, long after the grant was made — which is why it is swept for.
             const [cards, manifest, roster] = await Promise.all([personas.list(), areas.list(), members.list()]);
             const stranded = roster
-                .filter((member) => member.role === "desk")
+                .filter((member) => member.role === "guest")
                 .filter((member) => !cards.some((card) => fenceHoldsPersona(foldersOf(manifest, member.areas), card)))
                 .map((member) => member.email);
             if (stranded.length > 0) {
                 fail(
-                    `${stranded.join(", ")}: each holds a desk whose areas no assistant works in, so they can sign in and then talk to nobody; give an assistant a starting folder inside one of those areas, or move the desk onto an area that has one`,
+                    `${stranded.join(", ")}: each holds a guest whose areas no assistant works in, so they can sign in and then talk to nobody; give an assistant a starting folder inside one of those areas, or move the guest onto an area that has one`,
                 );
             }
         },

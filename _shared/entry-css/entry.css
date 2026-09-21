@@ -23,7 +23,7 @@
     --face-read: "Public Sans", ui-sans-serif, system-ui, sans-serif;
     --corner-size: 1.7rem;
 /* The canvas as a bare triple, which is what a gradient stop needs to fade toward it at an alpha. The plate's washes are
-   shapes, not colours, so the desk skin re-points this and keeps every stop where it is. */
+   shapes, not colours, so the guest skin re-points this and keeps every stop where it is. */
     --scrim: 12 9 7;
 
     /* The design system's roles, in the site's own values — see the header for why these are the `--color-*`. */
@@ -542,11 +542,11 @@ html[data-frameless] .entry {
 /* ────────────────────────────────────────────────────────────────────────────────────────────────────────────────
    THE SAME SCREENS IN DAYLIGHT.
 
-   A reader who came from intentic.dev/desk has been reading a light page, and an entry screen is the first thing
+   A reader who came from intentic.dev/guest has been reading a light page, and an entry screen is the first thing
    they meet on this side — so they wear the site's light skin exactly as they already wear its dark one.
 
    KEYED ON THE SCHEME, NOT ON THE PROFILE, and that distinction is the whole of it. A profile decides the scheme once,
-   on arrival; after that the scheme is what is true, and someone who came in on /desk and then picked Sanctum is a dark
+   on arrival; after that the scheme is what is true, and someone who came in on /guest and then picked Sanctum is a dark
    reader whatever brought them. Keying on `data-profile` dressed that person's sign-in screen in daylight metals on a
    near-black ground. It also means anyone who simply chose Light in Settings gets these screens too, which they should
    have all along: light is light, however it was asked for. `data-mode` is present only when dark (useTheme spells
@@ -556,7 +556,7 @@ html[data-frameless] .entry {
    under them (no `data-mode`, so semantic-colors.css's `:root` roles resolve light); the block above replaced those
    roles with the site's dark ones, and most of this block is simply handing them back. What is left over is the site's
    own vocabulary — the two metals, the plate's washes and the cast-bronze plaque — and every one of those values is
-   _site/site/src/styles/desk.css's, name for name. scripts/check-desk-palette.mjs fails the build if the two part. */
+   _site/site/src/styles/guest.css's, name for name. scripts/check-guest-palette.mjs fails the build if the two part. */
 html:not([data-mode="dark"]) .entry {
     /* GOLD DOES NOT SURVIVE DAYLIGHT — #c9a05c on paper is 2.2:1, unreadable as the label type it carries. Both metals
        become burnt orange and keep their order, and the ember lands a step off them. Fixed brand rather than the picked
@@ -574,7 +574,7 @@ html:not([data-mode="dark"]) .entry {
     --ink: var(--role-content);
     --ink-muted: var(--role-muted);
     --ink-subtle: var(--role-subtle);
-    /* The gold the dark lede carries is 2.4:1 on paper; daylight spends no metal on a paragraph, as on /desk. */
+    /* The gold the dark lede carries is 2.4:1 on paper; daylight spends no metal on a paragraph, as on /guest. */
     --ink-lede: var(--role-muted);
     --color-overlay: var(--role-overlay);
     --color-line-subtle: var(--role-line-subtle);
@@ -610,11 +610,11 @@ html:not([data-mode="dark"]) .entry {
 /* A PLATE OF ITS OWN, not the night photograph washed out: cream parchment, the same apsaras and spires, an empty
    middle for the headline. The app ships the two rungs its own breakpoints ask for. */
 html:not([data-mode="dark"]) .entry-plate-img {
-    background-image: url("/assets/angkor/temple-desk-900.avif");
+    background-image: url("/assets/angkor/temple-guest-900.avif");
 }
 @media (min-width: 60rem) {
     html:not([data-mode="dark"]) .entry-plate-img {
-        background-image: url("/assets/angkor/temple-desk-1600.avif");
+        background-image: url("/assets/angkor/temple-guest-1600.avif");
     }
 }
 

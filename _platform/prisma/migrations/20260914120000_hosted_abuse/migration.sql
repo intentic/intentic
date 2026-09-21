@@ -1,4 +1,4 @@
--- The hosted free lane's abuse defences (docs/design/hosted-abuse.md): an account's hosted standing, the
+-- The hosted free plan's abuse defences (docs/design/hosted-abuse.md): an account's hosted standing, the
 -- ledger of who was handed a machine from where (the same-source caps), and the abuse watch's verdicts.
 --
 -- Both new columns are nullable (check-migrations.sh, rule 2): an account with nothing written here is in good

@@ -7,8 +7,8 @@ export const APP_URL = PLATFORM_WEB_ORIGIN;
 export const API_URL = "https://api.intentic.dev";
 // Relative, same-origin: the demo seeds localStorage before the app boots; cross-origin storage is partitioned.
 export const DEMO_PATH = "/demo/";
-// The desk product's own page; landing under it is also what turns the site's light edition on (site lib/variant.ts).
-export const DESK_PATH = "/desk/";
+// The maker product's own page; landing under it is also what turns the site's light edition on (site lib/variant.ts).
+export const MAKER_PATH = "/maker/";
 export const ORG_NAME = "intentic";
 // Fixed nouns: "agent" for the actor, "sandbox" for the machine; the host machine is "laptop, desktop or VPS".
 export const ORG_TAGLINE = "More work. Less AI waste. Same subscriptions.";

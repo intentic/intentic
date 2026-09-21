@@ -2,14 +2,14 @@ import { z } from "zod";
 import { AgentHarnessSchema, AgentProviderSchema } from "../schemas/agent.js";
 import { ShareDetailSchema } from "../schemas/share.js";
 import { SubagentKindSchema, SubagentStatusSchema, SubagentVerificationSchema } from "../schemas/terminal.js";
-import type { ToolCallContent, ToolCallLocation, ToolCallStatus, ToolKind} from "./cards.js";
-import { browserHelpCard, capabilityOfferCard, CapabilityOutcomeSchema, credentialOfferCard, CredentialReceiptSchema, paymentOfferCard, PaymentReceiptSchema, PermissionAskSchema, permissionCard, planCard, questionCard, terminalHelpCard, TodoItemSchema, ToolCallContentSchema, ToolCallLocationSchema, ToolCallStatusSchema, ToolKindSchema } from "./cards.js";
+import type { ToolCallContent, ToolCallLocation, ToolCallStatus, ToolKind} from "./requests.js";
+import { browserHelpRequest, capabilityOfferRequest, CapabilityOutcomeSchema, credentialOfferRequest, CredentialReceiptSchema, paymentOfferRequest, PaymentReceiptSchema, PermissionAskSchema, permissionRequest, planRequest, questionRequest, terminalHelpRequest, TodoItemSchema, ToolCallContentSchema, ToolCallLocationSchema, ToolCallStatusSchema, ToolKindSchema } from "./requests.js";
 
 // A conversation as recorded and replayed: the rows, the cards they carry, and the patches that change them while a
 // turn runs. One shape for the live row and the recorded one, since they're the same row.
 
 // Transcript cards.
-// Status enums for a parked card, settled by the fold from the reply that released it (card-status.ts), riding the row
+// Status enums for a parked card, settled by the fold from the reply that released it (request-status.ts), riding the row
 // rather than the reply. `cancelled` means nobody answered, not a decision; `pending` is still parked.
 export const PlanStatusSchema = z.enum(["pending", "approved", "rejected", "cancelled"]);
 export type PlanStatus = z.infer<typeof PlanStatusSchema>;
@@ -25,10 +25,10 @@ export type OfferStatus = z.infer<typeof OfferStatusSchema>;
 export const CapabilityOfferStatusSchema = z.enum(["pending", "connecting", "skipped", "cancelled"]);
 export type CapabilityOfferStatus = z.infer<typeof CapabilityOfferStatusSchema>;
 
-export const TranscriptPlanSchema = z.object({ ...planCard, status: PlanStatusSchema.describe("Where the decision stands.") });
+export const TranscriptPlanSchema = z.object({ ...planRequest, status: PlanStatusSchema.describe("Where the decision stands.") });
 export type TranscriptPlan = z.infer<typeof TranscriptPlanSchema>;
 export const TranscriptQuestionSchema = z.object({
-    ...questionCard,
+    ...questionRequest,
     status: QuestionStatusSchema.describe("Where the answer stands."),
     answers: z
         .record(z.string(), z.array(z.string()))
@@ -37,26 +37,26 @@ export const TranscriptQuestionSchema = z.object({
 });
 export type TranscriptQuestion = z.infer<typeof TranscriptQuestionSchema>;
 // `explain`, the judge's sentence, arrives via PermissionAskSchema at raise time; nothing patches it in after.
-export const TranscriptPermissionSchema = PermissionAskSchema.extend({ ...permissionCard, status: PermissionStatusSchema.describe("Where the decision stands.") });
+export const TranscriptPermissionSchema = PermissionAskSchema.extend({ ...permissionRequest, status: PermissionStatusSchema.describe("Where the decision stands.") });
 export type TranscriptPermission = z.infer<typeof TranscriptPermissionSchema>;
-export const TranscriptBrowserHelpSchema = z.object({ ...browserHelpCard, status: HelpStatusSchema.describe("How the hand-over ended.") });
+export const TranscriptBrowserHelpSchema = z.object({ ...browserHelpRequest, status: HelpStatusSchema.describe("How the hand-over ended.") });
 export type TranscriptBrowserHelp = z.infer<typeof TranscriptBrowserHelpSchema>;
-export const TranscriptTerminalHelpSchema = z.object({ ...terminalHelpCard, status: HelpStatusSchema.describe("How the hand-over ended.") });
+export const TranscriptTerminalHelpSchema = z.object({ ...terminalHelpRequest, status: HelpStatusSchema.describe("How the hand-over ended.") });
 export type TranscriptTerminalHelp = z.infer<typeof TranscriptTerminalHelpSchema>;
 export const TranscriptCapabilityOfferSchema = z.object({
-    ...capabilityOfferCard,
+    ...capabilityOfferRequest,
     status: CapabilityOfferStatusSchema.describe("Where the decision stands."),
     outcome: CapabilityOutcomeSchema.optional().describe("How an accepted ask's setup ended (the capability_outcome frame)."),
 });
 export type TranscriptCapabilityOffer = z.infer<typeof TranscriptCapabilityOfferSchema>;
 export const TranscriptPaymentOfferSchema = z.object({
-    ...paymentOfferCard,
+    ...paymentOfferRequest,
     status: OfferStatusSchema.describe("Where the decision stands."),
     receipt: PaymentReceiptSchema.optional().describe("How the approved payment ended (the payment_receipt frame)."),
 });
 export type TranscriptPaymentOffer = z.infer<typeof TranscriptPaymentOfferSchema>;
 export const TranscriptCredentialOfferSchema = z.object({
-    ...credentialOfferCard,
+    ...credentialOfferRequest,
     status: OfferStatusSchema.describe("Where the decision stands."),
     receipt: CredentialReceiptSchema.optional().describe("Who released it, or that somebody refused (the credential_receipt frame)."),
 });
@@ -257,7 +257,7 @@ export const TranscriptRowSchema = z.object({
 export type TranscriptRow = z.infer<typeof TranscriptRowSchema>;
 
 // Every card field, as one list, for readers asking whether a row holds a card at all.
-export const CARD_FIELDS = [
+export const REQUEST_FIELDS = [
     "plan",
     "question",
     "permission",
@@ -267,12 +267,12 @@ export const CARD_FIELDS = [
     "paymentOffer",
     "credentialOffer",
 ] as const;
-export type CardField = (typeof CARD_FIELDS)[number];
-export type TranscriptCards = Pick<TranscriptRow, CardField>;
+export type RequestField = (typeof REQUEST_FIELDS)[number];
+export type TranscriptRequests = Pick<TranscriptRow, RequestField>;
 // Whether a row holds a card at all, answered or not.
-export const holdsCard = (row: TranscriptCards): boolean => CARD_FIELDS.some((field) => row[field] !== undefined);
+export const holdsRequest = (row: TranscriptRequests): boolean => REQUEST_FIELDS.some((field) => row[field] !== undefined);
 // Whether a row is holding the turn open on a card nobody has answered.
-export const isAwaitingDecision = (row: TranscriptCards): boolean => CARD_FIELDS.some((field) => row[field]?.status === "pending");
+export const isAwaitingDecision = (row: TranscriptRequests): boolean => REQUEST_FIELDS.some((field) => row[field]?.status === "pending");
 
 // One change to a run's rows, so a client keeps rows rather than frames. Prose/thinking append to a row; a `tool` card
 // replaces whole by id; everything else replaces its row; `drop` removes a row that opened and never wrote.

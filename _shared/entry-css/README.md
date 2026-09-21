@@ -31,8 +31,8 @@ resolved it. `.entry` restates the `--color-*` tokens the design system reads, w
 design-system component dropped inside an entry screen comes out in the site's metals without knowing it.
 
 **Two schemes, keyed on the scheme.** The light block at the foot is not an afterthought: a reader who came
-from `intentic.dev/desk` has been reading a light page, and anyone who chose Light in Settings is a light
-reader whatever brought them. `_site/site/scripts/check-desk-palette.mjs` fails the build if those values
+from `intentic.dev/guest` has been reading a light page, and anyone who chose Light in Settings is a light
+reader whatever brought them. `_site/site/scripts/check-guest-palette.mjs` fails the build if those values
 drift from the site's own.
 
 **No plate art in the launcher.** `.entry-plate` reaches for `/assets/angkor/*.avif`, which only the web app

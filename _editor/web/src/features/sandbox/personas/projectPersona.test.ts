@@ -17,7 +17,7 @@ const calls = vi.hoisted(() => ({
     },
 }));
 
-const { ensureProjectPersona, projectPersonaCard, projectPersonaId } = await import("./projectPersona");
+const { ensureProjectPersona, projectPersonaPersona, projectPersonaId } = await import("./projectPersona");
 
 afterEach(() => {
     calls.made = [];
@@ -28,18 +28,18 @@ describe(`the project's own persona`, () => {
     it(`has an id the daemon accepts whatever the folder is called, and is fenced to the project`, () => {
         expect(projectPersonaId(`web`)).toBe(`project-web`);
         expect(projectPersonaId(`tools/cli.v2`)).toBe(`project-tools-cli-v2`);
-        const card = projectPersonaCard(`tools/cli`);
-        expect(PersonaSchema.safeParse(card).success).toBe(true);
-        expect(card).toMatchObject({ label: `cli`, workspace: { startIn: `tools/cli`, folders: [`tools/cli`] }, context: { repos: [`tools/cli`] } });
+        const persona = projectPersonaPersona(`tools/cli`);
+        expect(PersonaSchema.safeParse(persona).success).toBe(true);
+        expect(persona).toMatchObject({ label: `cli`, workspace: { startIn: `tools/cli`, folders: [`tools/cli`] }, context: { repos: [`tools/cli`] } });
     });
 
     it(`is written once, the first time it is needed`, async () => {
         expect(await ensureProjectPersona(`web`)).toBe(`project-web`);
         expect(calls.made.map((call) => call.method)).toEqual([`GET`, `POST`]);
-        expect(calls.made[1]?.body).toEqual(projectPersonaCard(`web`));
+        expect(calls.made[1]?.body).toEqual(projectPersonaPersona(`web`));
     });
 
-    it(`leaves an existing card alone, so the owner's edits to it survive`, async () => {
+    it(`leaves an existing persona alone, so the owner's edits to it survive`, async () => {
         calls.listed = [{ id: `project-web`, capabilities: [] }];
         expect(await ensureProjectPersona(`web`)).toBe(`project-web`);
         expect(calls.made.map((call) => call.method)).toEqual([`GET`]);

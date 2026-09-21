@@ -1,6 +1,6 @@
 import { readdir, readFile, unlink } from "node:fs/promises";
 import { join } from "node:path";
-import { AgentOriginSchema, AgentTurnSchema, isConversationId, ParkedCardSchema } from "@intentic/sandbox-contract";
+import { AgentOriginSchema, AgentTurnSchema, isConversationId, ParkedRequestSchema } from "@intentic/sandbox-contract";
 import { z } from "zod";
 import { writeJsonFile } from "../../../store/json-file.js";
 
@@ -22,7 +22,7 @@ const JournalledTurnSchema = z.object({
     // The session last reported; resume continues from its partial work instead of starting the turn over.
     sessionId: z.string().optional(),
     // Parked cards, restored at boot so a turn waiting on the user isn't re-run; handover cards never appear here.
-    parked: z.array(ParkedCardSchema).optional(),
+    parked: z.array(ParkedRequestSchema).optional(),
 });
 export type JournalledTurn = z.infer<typeof JournalledTurnSchema>;
 

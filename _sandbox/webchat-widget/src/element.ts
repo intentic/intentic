@@ -15,7 +15,7 @@ import {
 import { styles } from "./styles.js";
 import { fetchChallenge, fetchPending, sendMessage } from "./transport.js";
 
-// <intentic-front-desk>: a launcher and a panel, rendered into a shadow root so host and widget CSS can't cross. The
+// <intentic-visitor-chat>: a launcher and a panel, rendered into a shadow root so host and widget CSS can't cross. The
 // gate area (Google sign-in, Turnstile) is the one exception, created in the light DOM and projected via <slot>.
 
 const LAUNCHER_ICON = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>`;
@@ -43,7 +43,7 @@ interface Turn {
     text: string;
 }
 
-export class FrontDeskElement extends HTMLElement {
+export class VisitorChatElement extends HTMLElement {
     // Set by connectedCallback, which the host calls immediately after open() sets these.
     private config!: WebchatPublicConfig;
     private endpoint!: EmbedEndpoint;

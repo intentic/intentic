@@ -24,7 +24,7 @@ describe("ofSandbox", () => {
     it("is found by the sweep that drops one sandbox's cached state", () => {
         const laptop = sandboxQueryPredicate(`sbx-laptop`);
         expect(laptop({ queryKey: GIT_CHANGES.ofSandbox(`sbx-laptop`) })).toBe(true);
-        expect(laptop({ queryKey: GIT_CHANGES.ofSandbox(`sbx-desk`) })).toBe(false);
+        expect(laptop({ queryKey: GIT_CHANGES.ofSandbox(`sbx-guest`) })).toBe(false);
         expect(laptop({ queryKey: GIT_CHANGES.of() })).toBe(false);
     });
 

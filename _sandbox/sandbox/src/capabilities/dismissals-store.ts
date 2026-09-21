@@ -1,15 +1,15 @@
 import { z } from "zod";
 import { jsonFile } from "../store/json-file.js";
 
-// Declined-recommendation store (<workspace>/.intentic/config/capability-dismissals.json). Keyed by the evidence a card
-// was declined against, not the card: a workspace change (new repo, moved remote) asks again. One row per card.
+// Declined-recommendation store (<workspace>/.intentic/config/capability-dismissals.json). Keyed by the evidence a entry
+// was declined against, not the entry: a workspace change (new repo, moved remote) asks again. One row per entry.
 
 export interface DismissedRecommendation {
-    readonly card: string;
+    readonly entry: string;
     readonly evidence: string;
 }
 
-const DismissedSchema = z.array(z.object({ card: z.string(), evidence: z.string() }));
+const DismissedSchema = z.array(z.object({ entry: z.string(), evidence: z.string() }));
 
 export interface DismissalsStore {
     readonly list: () => Promise<DismissedRecommendation[]>;
@@ -24,7 +24,7 @@ export const fileDismissalsStore = (path: string): DismissalsStore => {
     return {
         list: file.read,
         dismiss: async (entry) => {
-            await file.update((entries) => [...entries.filter((existing) => existing.card !== entry.card), entry]);
+            await file.update((entries) => [...entries.filter((existing) => existing.entry !== entry.entry), entry]);
         },
     };
 };

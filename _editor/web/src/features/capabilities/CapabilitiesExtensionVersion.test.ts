@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-// Mounts the Extension card and pins a version by typing only a repository URL. The commit sha is the one thing an
+// Mounts the Extension tile and pins a version by typing only a repository URL. The commit sha is the one thing an
 // install must have and the one thing nobody can recall, so this is the affordance worth holding still: the form asks
 // the remote, and a repository it cannot read still leaves a box to paste into.
 import type { AddCapabilityInput } from "@intentic/capability-catalog";
@@ -11,7 +11,7 @@ import { createApp, defineComponent, h, nextTick, ref } from "vue";
 let query: Record<string, string> = {};
 vi.mock(import(`vue-router`), async (importOriginal) => ({
     ...(await importOriginal()),
-    useRoute: () => ({ params: { card: `extension` }, query }) as never,
+    useRoute: () => ({ params: { entry: `extension` }, query }) as never,
     useRouter: () => ({ push: vi.fn(), replace: vi.fn(), resolve: (to: string) => ({ href: to }) }) as never,
 }));
 

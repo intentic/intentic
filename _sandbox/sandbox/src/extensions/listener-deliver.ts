@@ -5,7 +5,7 @@ import { extensionProcessKey } from "./extension-processes.js";
 import { enabledExtensions } from "./installed-extensions.js";
 
 // Daemon's outbound leg of "speak as the agent": delivers to the origin the conversation came from.
-// A Front Desk is answered in the daemon itself (the visitor's browser polls for it); every other provider goes over
+// A Visitor chat is answered in the daemon itself (the visitor's browser polls for it); every other provider goes over
 // loopback /deliver, since the gateway holds the provider connection and the daemon does not.
 // "no-gateway" is valid (no listener extension); a broken or stopped one throws instead of silently dropping it.
 
@@ -18,7 +18,7 @@ export const deliverToListenerChannel = async (services: Services, origin: Agent
     if (origin.channelId === undefined) {
         return "no-gateway";
     }
-    // Checked before the extension walk: a Front Desk has no gateway and never will, so falling through to one would
+    // Checked before the extension walk: a Visitor chat has no gateway and never will, so falling through to one would
     // report "nothing is listening" about the one provider the daemon answers itself.
     const outbox = outboxKeyOf(origin);
     if (outbox !== undefined) {

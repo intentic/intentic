@@ -11,7 +11,7 @@ cron expression, or a listener a connector provides) with the prompt to run when
 - Compose an automation: its trigger, its prompt, which agent runs it, and which persona it runs as.
 - Draw every trigger and every starting template from the daemon's catalogue, owning the name of no integration.
 - Translate a schedule into something a person can read back before they save it.
-- Install the front desk widget, the automation whose trigger is a visitor on your website.
+- Install the visitor chat widget, the automation whose trigger is a visitor on your website.
 
 ## Key files
 
@@ -50,11 +50,11 @@ disagreement waiting for whichever was edited second.
   why an automation stays useful when the thing it reacts to changes shape.
 - "Runs as" is one choice covering three things: whose accounts the wake may speak through, what it may do, and
   where in the workspace it works. It is a persona, edited on the Personas page, so the same bounds apply to the
-  chat, the workflow and the Front Desk that name the same card. Naming none keeps the full toolbox and reaches no
+  chat, the workflow and the Visitor chat that name the same card. Naming none keeps the full toolbox and reaches no
   account; naming one that has been deleted gets neither, which is why the picker keeps an orphaned pin visible
   rather than rendering blank. "Narrow this one job further" is raw tool names on top of the card, and only ever
   narrower: it cannot hand back a shelf the persona switched off.
-- A Front Desk that names no persona is saved onto the seeded read-only one. It is the single automation a
+- A Visitor chat that names no persona is saved onto the seeded read-only one. It is the single automation a
   stranger drives with nobody watching, so it is the one whose bounds cannot be left to the prompt's wording;
   an owner who deliberately points it at a card with more powers keeps that choice.
 - Two ways to keep a hand on the wheel, and they compose: `requireApproval` holds every fire for the owner's
@@ -63,7 +63,7 @@ disagreement waiting for whichever was edited second.
   When both are set, approval wins.
 - "Decide per person who it answers" (`senders`) is the third hand on the wheel, and the only one that knows
   who is writing. It is offered only on a source whose pack declared `automation.sender`, the promise that
-  `author.id` is an identity the service vouches for; the Front Desk keeps its own `access` and the daemon
+  `author.id` is an identity the service vouches for; the Visitor chat keeps its own `access` and the daemon
   refuses rules anywhere else. Rules match ids and groups (a Discord role), never display names, which anyone
   can change to. Each rule names the persona its people get, blank meaning no persona: the full toolbox
   reaching no account, the same agent the owner talks to themselves. Everyone else is ignored, held, or

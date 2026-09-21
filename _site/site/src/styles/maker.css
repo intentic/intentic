@@ -1,0 +1,251 @@
+/* THE MAKER SKIN the same pages, relit for a reader who was sent a link and is not here to look at a terminal.
+   Turned on by /maker (see lib/variant.ts); carried by `<html data-variant="maker">`, which BaseLayout's inline script
+   writes before the first paint.
+
+   Every colour below is the app's own light scheme, not a second light design: the ramp steps are copied from
+   _editor/ui/src/styles/primitive-colors.css and the roles are rebuilt with the recipes in semantic-colors.css, mix
+   for mix. scripts/check-maker-palette.mjs fails the build if either side moves.
+
+   The element qualifier on the selector is load-bearing. Tailwind emits `@theme` into `:root`, which scores the same
+   as a bare attribute selector; `html[...]` outscores it, so this file wins no matter what order the bundler picks. */
+
+html[data-variant="maker"] {
+    /* ── Tier 1 · the app's ramp steps this skin borrows ──────────────────────────────── */
+    --maker-neutral-0: oklch(99% 0.002 65);
+    --maker-neutral-50: oklch(98% 0.003 65);
+    --maker-neutral-100: oklch(96% 0.005 65);
+    --maker-neutral-200: oklch(92% 0.007 65);
+    --maker-neutral-300: oklch(87% 0.009 65);
+    --maker-neutral-500: oklch(58% 0.011 65);
+    --maker-neutral-600: oklch(48% 0.011 65);
+    --maker-neutral-900: oklch(23% 0.008 65);
+
+    --maker-brand-300: oklch(80% 0.11 55);
+    --maker-brand-500: oklch(70% 0.15 55);
+    --maker-brand-600: oklch(67% 0.175 55);
+    --maker-brand-700: oklch(58% 0.16 50);
+    --maker-brand-800: oklch(50% 0.135 48);
+    --maker-brand-900: oklch(44% 0.115 46);
+    --maker-brand-950: oklch(33% 0.085 45);
+
+    --maker-green-700: oklch(48% 0.12 150);
+    --maker-amber-800: oklch(46% 0.11 88);
+    --maker-red-700: oklch(50% 0.20 27);
+
+    /* A warm room throws no neutral shadow — the app's light shadow tint, and its three depths. */
+    --maker-shadow-tint: 61 40 22;
+    --maker-shadow-1: 0 1px 2px rgb(var(--maker-shadow-tint) / 0.1), 0 2px 6px -1px rgb(var(--maker-shadow-tint) / 0.12);
+    --maker-shadow-2: 0 2px 4px rgb(var(--maker-shadow-tint) / 0.07), 0 12px 28px -8px rgb(var(--maker-shadow-tint) / 0.2);
+    --maker-shadow-3: 0 4px 10px rgb(var(--maker-shadow-tint) / 0.08), 0 24px 56px -12px rgb(var(--maker-shadow-tint) / 0.26);
+
+    /* ── Tier 2 · surfaces and ink, recipe for recipe from the app's light scheme ─────── */
+    /* One warm source stirred into every surface step, so the paper is paper and not white. */
+    --color-canvas: color-mix(in oklab, var(--maker-neutral-100) 94%, var(--maker-brand-300));
+    --color-card: color-mix(in oklab, var(--maker-neutral-0) 97%, var(--maker-brand-300));
+    --color-overlay: color-mix(in oklab, var(--maker-neutral-50) 92%, var(--maker-brand-300));
+    /* The site has a ground the app has no counterpart for: the strip under the canvas that holds the footer. On the
+       dark skin it is three values below the canvas, so here it is the same hair's breadth the other way. */
+    --color-ground: color-mix(in oklab, var(--color-canvas) 88%, var(--color-line));
+
+    --color-line: color-mix(in oklab, var(--maker-neutral-200) 92%, var(--maker-brand-300));
+    --color-line-strong: color-mix(in oklab, var(--maker-neutral-300) 89%, var(--maker-brand-300));
+    /* The site's third rule weight, which the app does not have: what a frame wears under the pointer. */
+    --color-line-bright: color-mix(in oklab, var(--maker-brand-700) 38%, var(--color-line-strong));
+
+    /* The ink is warm too, or the picture falls in half: grey type on warm paper reads as a print fault. */
+    --color-content: color-mix(in oklab, var(--maker-neutral-900) 92%, var(--maker-brand-800));
+    --color-muted: color-mix(in oklab, var(--maker-neutral-600) 88%, var(--maker-brand-950));
+    --color-subtle: color-mix(in oklab, var(--maker-neutral-500) 78%, var(--maker-brand-950));
+
+    /* GOLD DOES NOT SURVIVE DAYLIGHT #c9a05c on paper is 2.2:1, unreadable as the label type it carries. Both metals
+       become burnt orange, and keep their order: `gold` is the quieter label, `gold-bright` the link. The bright one
+       is brand-800 exactly because that is the app's own `--role-link`. */
+    --color-gold: var(--maker-brand-900);
+    --color-gold-bright: var(--maker-brand-800);
+
+    /* THE EMBER RAMP INVERTS. On the dark skin a lower step is lighter and so more prominent; on paper prominence is
+       darkness, so the ramp runs the other way. 400 is the text accent and lands on the app's link step; 500 is the
+       mark colour (lotus, wordmark, the full stop) and lands on the app's filled-button step; 600 is only ever a
+       low-alpha border or tint, so it may stay bright. */
+    --color-primary-200: var(--maker-brand-950);
+    --color-primary-300: var(--maker-brand-900);
+    --color-primary-400: var(--maker-brand-800);
+    --color-primary-500: var(--maker-brand-700);
+    --color-primary-600: var(--maker-brand-600);
+    --color-primary-700: var(--maker-brand-500);
+
+    /* Status roles are text first, so they sit where the app's light scheme puts them: around 50% lightness. */
+    --color-success: var(--maker-green-700);
+    --color-warning: var(--maker-amber-800);
+    --color-danger: var(--maker-red-700);
+
+    /* Panel washes: a shallow warm gradient over the card rather than a dark diagonal. */
+    --wash-panel: linear-gradient(160deg, color-mix(in oklab, var(--color-card) 93%, var(--maker-brand-300)), var(--color-card));
+    --wash-ember: linear-gradient(160deg, color-mix(in oklab, var(--color-card) 86%, var(--maker-brand-300)), var(--color-card));
+
+    /* ── Tier 3 · the materials named in global.css's :root ───────────────────────────── */
+    /* No stone to echo here: on paper the headline is simply the page's ink. */
+    --role-display-ink: var(--color-content);
+
+    --role-selection: color-mix(in oklab, var(--maker-brand-500) 30%, transparent);
+    --role-mark-fill: color-mix(in oklab, var(--maker-brand-500) 32%, transparent);
+    --role-ember-line: color-mix(in oklab, var(--maker-brand-700) 45%, transparent);
+    --role-ember-line-strong: color-mix(in oklab, var(--maker-brand-700) 60%, transparent);
+    --role-ember-glow: 0 0 40px -18px color-mix(in oklab, var(--maker-brand-600) 55%, transparent);
+    --role-ember-glow-lit: 0 0 46px -14px color-mix(in oklab, var(--maker-brand-600) 70%, transparent);
+
+    --role-figure-panel: var(--color-overlay);
+    --role-figure-row-on: color-mix(in oklab, var(--maker-brand-600) 14%, transparent);
+    /* A terminal drawn inside a figure is paper here too, and the same paper as a real one. */
+    --role-figure-terminal: #f7f4ef;
+    --role-figure-doorway: color-mix(in oklab, var(--maker-brand-950) 82%, transparent);
+    --role-figure-halo: color-mix(in oklab, var(--maker-brand-600) 20%, transparent);
+    --role-playground-fill: var(--color-overlay);
+    --role-playground-tab: linear-gradient(
+        180deg,
+        color-mix(in oklab, var(--maker-brand-600) 20%, transparent),
+        color-mix(in oklab, var(--maker-brand-600) 8%, transparent)
+    );
+    --role-playground-tab-on: linear-gradient(
+        180deg,
+        color-mix(in oklab, var(--maker-brand-600) 32%, transparent),
+        color-mix(in oklab, var(--maker-brand-600) 14%, transparent)
+    );
+    --role-notice-ground: var(--color-card);
+
+    /* The cartouche button. Its face is the card, and the pointer brings the app's own hover wash. */
+    --role-btn-face: var(--color-card);
+    --role-btn-wash: color-mix(in oklab, var(--maker-brand-600) 8%, transparent);
+    /* On paper a label under the pointer goes deeper, not brighter. */
+    --role-btn-hover-content: var(--maker-brand-900);
+
+    --role-frame-fill: var(--color-card);
+    --role-window-fill: var(--color-card);
+    --role-window-shadow: var(--maker-shadow-2);
+    --role-rail-fill: linear-gradient(180deg, var(--color-overlay), var(--color-card));
+    --role-plinth-fill: color-mix(in oklab, var(--color-canvas) 91%, var(--maker-brand-300));
+    --role-wall-grid: color-mix(in oklab, var(--maker-brand-700) 8%, transparent);
+    /* The terminal is paper too — the app's own light terminal ground, to the byte. */
+    --role-code-fill: #f7f4ef;
+
+    --role-chat-fill: var(--color-card);
+    --role-chat-line: color-mix(in oklab, var(--maker-brand-600) 35%, transparent);
+    --role-chat-assistant-fill: var(--color-overlay);
+    --role-decision-fill: color-mix(in oklab, var(--maker-brand-600) 10%, transparent);
+    --role-decision-line: color-mix(in oklab, var(--maker-brand-600) 38%, transparent);
+    --role-decision-quiet-fill: var(--color-overlay);
+    --role-composer-fill: color-mix(in oklab, var(--maker-brand-600) 14%, transparent);
+
+    --role-nav-wash: linear-gradient(
+        90deg,
+        color-mix(in oklab, var(--maker-brand-600) 12%, transparent) 0%,
+        color-mix(in oklab, var(--maker-brand-600) 5%, transparent) 34%,
+        transparent 72%
+    );
+    --role-nav-sheet: var(--color-card);
+    --role-nav-sheet-wash: radial-gradient(130% 120% at 50% 8%, color-mix(in oklab, var(--maker-brand-300) 14%, transparent) 0%, transparent 70%);
+    /* On paper the dark skin's gold fibres read as lint lying across the words. One faint warm tooth instead. */
+    --role-nav-sheet-texture: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='m' x='0' y='0' width='100%25' height='100%25' color-interpolation-filters='sRGB'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.012' numOctaves='4' seed='5' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.35 0 0 0 0 0.27 0 0 0 0 0.18 0.09 0 0 0 -0.032'/%3E%3C/filter%3E%3Crect width='200' height='200' filter='url(%23m)'/%3E%3C/svg%3E");
+    --role-nav-sheet-frame: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='48' height='48' viewBox='0 0 48 48'%3E%3Cpath d='M8.4 0.6H39.6M47.4 8.4V39.6M39.6 47.4H8.4M0.6 39.6V8.4' fill='none' stroke='rgba(158,69,2,0.66)' stroke-width='1.2'/%3E%3Cpath d='M39.6 0.6L47.4 8.4M47.4 39.6L39.6 47.4M8.4 47.4L0.6 39.6M0.6 8.4L8.4 0.6' fill='none' stroke='rgba(158,69,2,0.66)' stroke-width='2.34'/%3E%3Cpath d='M10.22 5H37.78M43 10.22V37.78M37.78 43H10.22M5 37.78V10.22' fill='none' stroke='rgba(158,69,2,0.4)' stroke-width='1'/%3E%3Cpath d='M37.78 5L43 10.22M43 37.78L37.78 43M10.22 43L5 37.78M5 10.22L10.22 5' fill='none' stroke='rgba(158,69,2,0.4)' stroke-width='1.95'/%3E%3C/svg%3E");
+    --role-nav-sheet-shadow: drop-shadow(0 10px 14px rgb(var(--maker-shadow-tint) / 0.14)) drop-shadow(0 24px 34px rgb(var(--maker-shadow-tint) / 0.12));
+    /* Translucent, like the dark bar: the page scrolls under it. */
+    --role-bar-fill: color-mix(in oklab, var(--color-canvas) 88%, transparent);
+    /* A glow is a thing a dark page can have. */
+    --role-bar-glow: none;
+
+    /* ── The temple, in daylight ──────────────────────────────────────────────────────── */
+    /* Same gradients, same stops, same alphas — only what they are made of changes. Each triple is the paper these
+       stops wash toward; the first is `--color-canvas` resolved to sRGB, which is what the pinning check asserts. */
+    --role-scrim: 245 237 231;
+    --role-scrim-well: 250 245 240;
+    --role-scrim-crop: 247 240 234;
+    /* A PLATE OF ITS OWN, not the night photograph washed out. It is drawn for this skin: cream parchment, the
+       same apsaras and spires, a gold cartouche border, and a deliberately empty middle for the headline to sit in.
+       Because it arrives pale it needs none of the dimming the photograph needed — only enough veil to keep the
+       ornament from competing with the words over it. */
+    --role-plate-art: url("/assets/angkor/temple-maker-1600.avif");
+    --role-plate-dim: 1;
+    --role-plate-tint: 0.04;
+    --role-plate-veil: 0.3;
+
+    --role-stage-shadow: var(--maker-shadow-3);
+    /* The veil over the demo figure still DARKENS on hover, because what is under it is a screenshot either way.
+       The play cartouche is opaque paper, so its label deepens like every other button — white would vanish on it. */
+    --role-play-veil: color-mix(in oklab, var(--maker-brand-950) 5%, transparent);
+    --role-play-veil-on: color-mix(in oklab, var(--maker-brand-950) 34%, transparent);
+    --role-play-content-on: var(--role-btn-hover-content);
+    /* The hero's subtitle is quiet type, not an accent: on the dark skin a soft tan, here the muted ink. */
+    --role-hero-sub: var(--color-muted);
+    --role-ember-rule: linear-gradient(
+        90deg,
+        transparent,
+        color-mix(in oklab, var(--maker-brand-700) 90%, transparent) 18%,
+        color-mix(in oklab, var(--maker-brand-700) 90%, transparent) 82%,
+        transparent
+    );
+    --role-plate-foot: linear-gradient(180deg, var(--color-canvas) 0%, rgb(var(--role-scrim) / 0.6) 34%, rgb(var(--role-scrim) / 0.42) 68%, rgb(var(--role-scrim) / 0.78) 100%);
+
+    /* ── The house materials ──────────────────────────────────────────────────────────── */
+
+    /* Gold needs a deeper body against the light canvas. */
+    --house-bronze-fill: #c69444;
+    --house-bronze-body: linear-gradient(180deg, #d6aa5e 0%, #c69444 52%, #b58136 100%);
+
+    /* The frames keep their notched geometry and change metal — brand-800 rather than brand-700, and at a heavier
+       alpha. Both are forced: the lighter orange drew this control's edge at 1.8:1 on paper where the dark skin
+       draws its own at 2.9:1, and the deeper step is the calmer hue beside the gold plaque. */
+    --house-cartouche: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='40' viewBox='0 0 40 40'%3E%3Cpath d='M6.7 0.6H33.3M39.4 6.7V33.3M33.3 39.4H6.7M0.6 33.3V6.7' fill='none' stroke='rgba(158,69,2,0.7)' stroke-width='1.2'/%3E%3Cpath d='M33.3 0.6L39.4 6.7M39.4 33.3L33.3 39.4M6.7 39.4L0.6 33.3M0.6 6.7L6.7 0.6' fill='none' stroke='rgba(158,69,2,0.7)' stroke-width='2.34'/%3E%3Cpath d='M8.6 4.5H31.4M35.5 8.6V31.4M31.4 35.5H8.6M4.5 31.4V8.6' fill='none' stroke='rgba(158,69,2,0.34)' stroke-width='1.15'/%3E%3Cpath d='M31.4 4.5L35.5 8.6M35.5 31.4L31.4 35.5M8.6 35.5L4.5 31.4M4.5 8.6L8.6 4.5' fill='none' stroke='rgba(158,69,2,0.34)' stroke-width='2.24'/%3E%3C/svg%3E");
+    --house-cartouche-lit: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='40' viewBox='0 0 40 40'%3E%3Cpath d='M6.7 0.6H33.3M39.4 6.7V33.3M33.3 39.4H6.7M0.6 33.3V6.7' fill='none' stroke='rgba(158,69,2,0.95)' stroke-width='1.2'/%3E%3Cpath d='M33.3 0.6L39.4 6.7M39.4 33.3L33.3 39.4M6.7 39.4L0.6 33.3M0.6 6.7L6.7 0.6' fill='none' stroke='rgba(158,69,2,0.95)' stroke-width='2.34'/%3E%3Cpath d='M8.6 4.5H31.4M35.5 8.6V31.4M31.4 35.5H8.6M4.5 31.4V8.6' fill='none' stroke='rgba(158,69,2,0.5)' stroke-width='1.15'/%3E%3Cpath d='M31.4 4.5L35.5 8.6M35.5 31.4L31.4 35.5M8.6 35.5L4.5 31.4M4.5 8.6L8.6 4.5' fill='none' stroke='rgba(158,69,2,0.5)' stroke-width='2.24'/%3E%3C/svg%3E");
+    --house-cartouche-dim: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='40' viewBox='0 0 40 40'%3E%3Cpath d='M6.7 0.6H33.3M39.4 6.7V33.3M33.3 39.4H6.7M0.6 33.3V6.7' fill='none' stroke='rgba(158,69,2,0.48)' stroke-width='1.2'/%3E%3Cpath d='M33.3 0.6L39.4 6.7M39.4 33.3L33.3 39.4M6.7 39.4L0.6 33.3M0.6 6.7L6.7 0.6' fill='none' stroke='rgba(158,69,2,0.48)' stroke-width='2.34'/%3E%3Cpath d='M8.6 4.5H31.4M35.5 8.6V31.4M31.4 35.5H8.6M4.5 31.4V8.6' fill='none' stroke='rgba(158,69,2,0.22)' stroke-width='1.15'/%3E%3Cpath d='M31.4 4.5L35.5 8.6M35.5 31.4L31.4 35.5M8.6 35.5L4.5 31.4M4.5 8.6L8.6 4.5' fill='none' stroke='rgba(158,69,2,0.22)' stroke-width='2.24'/%3E%3C/svg%3E");
+
+    /* Ember glows read as smudges on white; the marks they sat behind are dark enough to carry themselves. */
+    --house-ember-stop-glow: none;
+    --house-ember-mark-glow: none;
+    --house-finial-glow: none;
+}
+
+/* WHAT MAKES THE INNER PAGES READABLE. Every page but the home page stands its heading, lede and controls directly
+   on the backdrop, with no card under them — so the art has to get out of the way where the words are. The dark skin
+   does this with `.page-backdrop-veil`, a hard darkening from just under the bar downward; at `--role-plate-veil: 0.3`
+   the same gradient on paper was doing almost nothing, and a reader met an apsara behind every paragraph.
+
+   This is the same idea with its own curve, not the dark one scaled: clear under the bar so the plate's carved top
+   border still shows, then most of the way to paper by the time the first heading starts (bar + 7rem), and held
+   there. The home page never sees this rule — its hero is composed against the art on purpose, and it renders its
+   own plate without a veil. */
+html[data-variant="maker"] .page-backdrop-veil {
+    background: linear-gradient(
+        180deg,
+        transparent 0,
+        transparent calc(var(--bar-height) * 0.85),
+        rgb(var(--role-scrim) / 0.72) calc(var(--bar-height) + 2.5rem),
+        rgb(var(--role-scrim) / 0.93) calc(var(--bar-height) + 7rem),
+        rgb(var(--role-scrim) / 0.93) 100%
+    );
+}
+
+/* The seam at the foot of the plated band has to reach the canvas on paper too, or the art stops on a visible edge. */
+html[data-variant="maker"] .plate-fade {
+    background: linear-gradient(180deg, transparent, rgb(var(--role-scrim) / 0.72) 55%, var(--color-canvas) 96%);
+}
+
+/* The plate's other two rungs. Same breakpoints as the dark skin's, and they have to come after the block above:
+   `html[data-variant]` and a `:root` inside a media query score the same, so order is what separates them. */
+@media (max-width: 48rem) {
+    html[data-variant="maker"] {
+        --role-plate-art: url("/assets/angkor/temple-maker-900.avif");
+    }
+}
+@media (min-width: 100rem) {
+    html[data-variant="maker"] {
+        --role-plate-art: url("/assets/angkor/temple-maker-2400.avif");
+    }
+}
+
+/* SHIKI'S OTHER HALF. `<Code themes={...} defaultColor="dark">` writes the dark colour inline on every span and the
+   light one beside it as `--shiki-light`. Inline styles cannot be overridden from a stylesheet without `!important`,
+   which is the whole reason this rule carries one. Same mechanism the app's code.css uses for its two schemes. */
+html[data-variant="maker"] :is(.astro-code, .astro-code span) {
+    color: var(--shiki-light) !important;
+    font-style: var(--shiki-light-font-style, inherit);
+}

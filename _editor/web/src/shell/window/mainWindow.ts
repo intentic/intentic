@@ -129,7 +129,7 @@ export const navigateInApp = (router: Router, to: RouteLocationRaw): void => {
 };
 
 // Delegated listener for every link inside a popped-out window, caught in the capture phase before the router
-// (pages/FloatingArea.vue). A modified click (new tab/window) is left to the browser.
+// (pages/FloatingSection.vue). A modified click (new tab/window) is left to the browser.
 export const sendLinkToMainWindow = (event: MouseEvent): void => {
     if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
         return;

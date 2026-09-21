@@ -3,7 +3,7 @@ import {
     type AgentTurn,
     type AttachFrame,
     isTurnFact,
-    type ParkedCard,
+    type ParkedRequest,
     type TranscriptPatch,
     type TranscriptRow,
     type TurnFact,
@@ -303,7 +303,7 @@ export function startTurnRun(
     };
     // Journal entry's live fields; snapshotted synchronously so a rewrite always carries all of them.
     let sessionId: string | undefined;
-    const parked: ParkedCard[] = [];
+    const parked: ParkedRequest[] = [];
     const journalEntry = (): void => {
         const entry = {
             kind: "turn" as const,

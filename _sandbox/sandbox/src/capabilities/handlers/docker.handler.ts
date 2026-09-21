@@ -214,7 +214,7 @@ export const dockerHandler: CapabilityHandler = {
             yield existsSync("/opt/sandbox")
                 ? {
                       kind: "log" as const,
-                      message: `Stored ${id}, this image doesn't carry the Docker Engine yet. Rebuild the sandbox from the Environment card; the engine installs and starts with the rebuild.`,
+                      message: `Stored ${id}, this image doesn't carry the Docker Engine yet. Rebuild the sandbox from the Environment entry; the engine installs and starts with the rebuild.`,
                   }
                 : { kind: "log" as const, message: `Stored ${id}, no docker CLI in this dev run; the engine starts in a real sandbox container.` };
             return;
@@ -234,7 +234,7 @@ export const dockerHandler: CapabilityHandler = {
             await applyEngineSettings(ctx, config);
             yield {
                 kind: "log",
-                message: `Stored ${id}, this sandbox isn't running privileged yet. Rebuild it from the Environment card; the Docker Engine starts automatically when it restarts.`,
+                message: `Stored ${id}, this sandbox isn't running privileged yet. Rebuild it from the Environment entry; the Docker Engine starts automatically when it restarts.`,
             };
             return;
         }
@@ -247,7 +247,7 @@ export const dockerHandler: CapabilityHandler = {
         }
         yield { kind: "log", message: "dockerd did not become ready within 30s, check the panel-docker terminal." };
     },
-    // Engine state first: an option caveat matters on a card that reads active, but is noise in front of one that reads
+    // Engine state first: an option caveat matters on a entry that reads active, but is noise in front of one that reads
     // dockerd not running.
     status: async (ctx, _id, config) => {
         if (await dockerUp()) {
@@ -273,7 +273,7 @@ export const startDockerdIfEnabled = async (ctx: CapabilityCtx): Promise<void> =
         return;
     }
     if (!(await privileged())) {
-        ctx.logger.warn("docker: capability enabled but the container is not privileged, rebuild from the Environment card");
+        ctx.logger.warn("docker: capability enabled but the container is not privileged, rebuild from the Environment entry");
         return;
     }
     await startDockerd(ctx);

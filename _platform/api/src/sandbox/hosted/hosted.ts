@@ -389,7 +389,7 @@ export const provisionHosted = async (
                 config: hostedMachineConfig(config, args, appName, volumeId, STOCK_OVERLAY, stockImage, shape),
             });
             // `wokeAt` opens the hour meter's first stretch: a machine is RUNNING from the moment it is created,
-            // so the free lane's clock starts here rather than at the first wake, which is the only version that
+            // so the free plan's clock starts here rather than at the first wake, which is the only version that
             // does not hand out an uncounted first session to everyone who ever provisions one.
             await withHostedSlot(prisma, config, args, appName, (tx) =>
                 tx.hostedMachine.create({

@@ -40,7 +40,7 @@ test("capabilities.list recommends docker when a repo in the workspace carries a
     writeFileSync(join(workspace.root, "app", "docker-compose.yml"), "");
     const client = clientFor(createApp(services({ workspace, capabilities: memoryCapabilitiesStore([]) })));
     expect((await client.capabilities.list()).recommendations).toEqual([
-        { card: "docker", evidence: "app/docker-compose.yml", reason: "your workspace has a compose stack to run", prefill: {} },
+        { entry: "docker", evidence: "app/docker-compose.yml", reason: "your workspace has a compose stack to run", prefill: {} },
     ]);
 });
 
@@ -50,11 +50,11 @@ test("capabilities.dismiss takes a recommendation off the catalog and records wh
     writeFileSync(join(workspace.root, "app", "docker-compose.yml"), "");
     const dismissals = memoryDismissalsStore();
     const client = clientFor(createApp(services({ workspace, capabilities: memoryCapabilitiesStore([]), capabilityDismissals: dismissals })));
-    expect(await client.capabilities.dismiss({ card: "docker" })).toEqual({ ok: true });
-    expect(await dismissals.list()).toEqual([{ card: "docker", evidence: "app/docker-compose.yml" }]);
+    expect(await client.capabilities.dismiss({ entry: "docker" })).toEqual({ ok: true });
+    expect(await dismissals.list()).toEqual([{ entry: "docker", evidence: "app/docker-compose.yml" }]);
     expect((await client.capabilities.list()).recommendations).toEqual([]);
-    // Nothing is being suggested for a card nobody was offered: there is no claim to record a "no" against.
-    expect(await errorCode(client.capabilities.dismiss({ card: "github" }))).toBe("NOT_FOUND");
+    // Nothing is being suggested for a entry nobody was offered: there is no claim to record a "no" against.
+    expect(await errorCode(client.capabilities.dismiss({ entry: "github" }))).toBe("NOT_FOUND");
 });
 
 // Preserve the browser profile and its accounts across capability renames.

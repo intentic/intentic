@@ -34,14 +34,14 @@ const fakeServices = (root: string, appends: ActivityEvent[]): Services => {
         activity: { append: async (e) => void appends.push(e as ActivityEvent), list: async () => [] },
         workspace: unstubbed<Services["workspace"]>("workspace", { root }),
         logger: unstubbed<Services["logger"]>("logger", { error: () => {}, warn: () => {} }),
-        // Identity reads authorized emails for the `member` tag; empty is the ordinary case for a public Front Desk.
+        // Identity reads authorized emails for the `member` tag; empty is the ordinary case for a public Visitor chat.
         members: { list: async () => [], add: async () => {}, remove: async () => {} },
         // Held automations notify fire-and-forget; a missing stub would surface only as an unhandled rejection later.
         pushSender: unstubbed<Services["pushSender"]>("pushSender", {
             notify: async () => ({ delivered: 0, failed: 0 }),
             notifyIfAway: async () => ({ delivered: 0, failed: 0 }),
         }),
-        // Real parsed defaults keep the admission gate and spin-loop guard out of these Front Desk tests.
+        // Real parsed defaults keep the admission gate and spin-loop guard out of these Visitor chat tests.
         sandboxSettings: unstubbed<Services["sandboxSettings"]>("sandboxSettings", { get: async () => SandboxSettingsSchema.parse({}) }),
         // The real queue over the outbox above, composed as composition.ts composes it: this suite's subject is what a
         // held wake leaves for the visitor's next poll, so a stub here would assert the stub.
@@ -130,7 +130,7 @@ test("a requireApproval automation holds the wake and streams a pending notice i
 
 // Without the conversation on the approval, the approve route would mint a fresh one, splitting one chat into a card
 // and worktree per message.
-test("a held Front Desk wake snapshots the conversation the visitor's thread already owns", async () => {
+test("a held Visitor chat wake snapshots the conversation the visitor's thread already owns", async () => {
     const { services } = await setup(webchat("wc-thread", { requireApproval: true }));
     const app = appFor(services, fakeWake([]));
     // Draining the SSE body is what waits for the fire; the response itself resolves as soon as the stream opens.
@@ -141,7 +141,7 @@ test("a held Front Desk wake snapshots the conversation the visitor's thread alr
     expect(held?.conversationId).toBe(thread?.conversationId);
 });
 
-// Collecting a reply written after the stream closed: the half that makes an approval-gated desk answerable at all.
+// Collecting a reply written after the stream closed: the half that makes an approval-gated guest answerable at all.
 
 test("an approved wake's reply reaches the visitor's next poll, not just the fleet", async () => {
     const { services } = await setup(webchat("wc-approved", { requireApproval: true }));
@@ -237,7 +237,7 @@ test("a conversation is rate limited after the window fills", async () => {
     expect(statuses.at(-1)).toBe(429);
 });
 
-// Threading: the property that makes a Front Desk a conversation rather than a series of strangers.
+// Threading: the property that makes a Visitor chat a conversation rather than a series of strangers.
 
 test("a visitor's follow-up reuses the same conversation and resumes its session", async () => {
     const { services } = await setup(webchat("wc-thread"));
@@ -251,7 +251,7 @@ test("a visitor's follow-up reuses the same conversation and resumes its session
     expect(turns[1]?.sessionId).toBe("sess-1");
 });
 
-test("two visitors of one Front Desk get two conversations", async () => {
+test("two visitors of one Visitor chat get two conversations", async () => {
     const { services } = await setup(webchat("wc-two"));
     const turns: AgentTurn[] = [];
     const app = appFor(services, fakeWake(turns));
@@ -313,7 +313,7 @@ test("the daily ceiling is per automation, not per conversation", async () => {
 
 // An owner who sets no ceiling is the common case (the create dialog leaves it blank); without a default, an unwatched
 // script could run unlimited turns billed to them.
-test("a Front Desk with no configured ceiling still stops at the default", async () => {
+test("a Visitor chat with no configured ceiling still stops at the default", async () => {
     const { services } = await setup(webchat("wc-unset", { webchat: {} }));
     const app = appFor(services, fakeWake([]));
     for (let sent = 0; sent < WEBCHAT_DAILY_MAX_DEFAULT; sent += 1) {
@@ -467,15 +467,15 @@ test("a widget load is recorded against the origin it came from, admitted or ref
     expect(installs.origins.find((probe: { origin: string }) => probe.origin === ORIGIN)).toMatchObject({ allowed: true, loads: 1 });
 });
 
-test("a Front Desk nobody has loaded reports no origins at all: the honest 'not installed' answer", async () => {
+test("a Visitor chat nobody has loaded reports no origins at all: the honest 'not installed' answer", async () => {
     const { services } = await setup(webchat("wc-silent"));
     const app = appFor(services, fakeWake([]));
     expect((await (await app.request(`/webchat/wc-silent/installs`)).json()).origins).toEqual([]);
 });
 
-test("a probe for an id that is not a Front Desk records nothing", async () => {
+test("a probe for an id that is not a Visitor chat records nothing", async () => {
     const { services } = await setup(webchat("wc-real"));
     const app = appFor(services, fakeWake([]));
-    await app.request(`/webchat/not-a-front-desk/config`, { headers: { origin: ORIGIN } });
-    expect((await (await app.request(`/webchat/not-a-front-desk/installs`)).json()).origins).toEqual([]);
+    await app.request(`/webchat/not-a-visitor-chat/config`, { headers: { origin: ORIGIN } });
+    expect((await (await app.request(`/webchat/not-a-visitor-chat/installs`)).json()).origins).toEqual([]);
 });

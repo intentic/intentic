@@ -9,8 +9,8 @@ import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-// Granting a desk over /members: the grant names areas, and the daemon refuses one it could never honour — an
-// unfenced desk, an area nobody wrote, and a fence no assistant works in.
+// Granting a guest over /members: the grant names areas, and the daemon refuses one it could never honour — an
+// unfenced guest, an area nobody wrote, and a fence no assistant works in.
 
 const ownerApp = async () => {
     const members = fileMembersStore(join(await mkdtemp(join(tmpdir(), "members-")), "members.json"));
@@ -25,31 +25,31 @@ const ownerApp = async () => {
             ]),
         }),
     );
-    // One card, homed in the support folder: what makes `support` an area a desk can be fenced to, and `finance` one
+    // One card, homed in the support folder: what makes `support` an area a guest can be fenced to, and `finance` one
     // it cannot.
     await clientFor(app, { bearer: `owner` }).personas.save({ id: `support`, capabilities: [], workspace: { startIn: `support` } });
     return { app, members };
 };
 
-test("a desk grant names at least one area, and the areas it names exist", async () => {
+test("a guest grant names at least one area, and the areas it names exist", async () => {
     const { app, members } = await ownerApp();
-    expect((await postJson(app, "/members", { email: "dee@example.com", role: "desk" })).status).toBe(400);
-    expect((await postJson(app, "/members", { email: "dee@example.com", role: "desk", areas: [] })).status).toBe(400);
-    const missing = await postJson(app, "/members", { email: "dee@example.com", role: "desk", areas: ["support", "sales"] });
+    expect((await postJson(app, "/members", { email: "dee@example.com", role: "guest" })).status).toBe(400);
+    expect((await postJson(app, "/members", { email: "dee@example.com", role: "guest", areas: [] })).status).toBe(400);
+    const missing = await postJson(app, "/members", { email: "dee@example.com", role: "guest", areas: ["support", "sales"] });
     expect(missing.status).toBe(400);
     expect(await missing.json()).toEqual({ error: "no such area: sales" });
     expect(await members.list()).toEqual([]);
 
-    const granted = await postJson(app, "/members", { email: "Dee@Example.com", role: "desk", areas: ["support"] });
+    const granted = await postJson(app, "/members", { email: "Dee@Example.com", role: "guest", areas: ["support"] });
     expect(granted.status).toBe(200);
-    expect(await granted.json()).toEqual({ members: [{ email: "dee@example.com", role: "desk", areas: ["support"] }] });
+    expect(await granted.json()).toEqual({ members: [{ email: "dee@example.com", role: "guest", areas: ["support"] }] });
 });
 
-// A desk reaches its assistants and nothing else, so a fence holding none is a sign-in to a chat that answers
+// A guest reaches its assistants and nothing else, so a fence holding none is a sign-in to a chat that answers
 // nothing. Every other tier has business in an area no card works in.
-test("a desk fenced to areas no assistant works in is refused; another tier there is not", async () => {
+test("a guest fenced to areas no assistant works in is refused; another tier there is not", async () => {
     const { app, members } = await ownerApp();
-    const stranded = await postJson(app, "/members", { email: "dee@example.com", role: "desk", areas: ["finance"] });
+    const stranded = await postJson(app, "/members", { email: "dee@example.com", role: "guest", areas: ["finance"] });
     expect(stranded.status).toBe(400);
     expect(await stranded.json()).toEqual({ error: expect.stringContaining("no assistant works in those areas") });
     expect(await members.list()).toEqual([]);

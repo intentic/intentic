@@ -93,9 +93,9 @@ describe("createAuthorizer (owner TOFU + shared access)", () => {
         const authz = createAuthorizer({
             verify: verifierFor({ "tok-d": "d@x.com", "tok-m": "m@x.com" }),
             owner: memOwner("a@x.com"),
-            members: memMembers([{ email: "d@x.com", role: "desk", areas: ["support", "sales"] }, ...granted("m@x.com")]),
+            members: memMembers([{ email: "d@x.com", role: "guest", areas: ["support", "sales"] }, ...granted("m@x.com")]),
         });
-        await expect(authz.authorize("tok-d", undefined)).resolves.toEqual({ email: "d@x.com", role: "desk", areas: ["support", "sales"], methods: ["google"] });
+        await expect(authz.authorize("tok-d", undefined)).resolves.toEqual({ email: "d@x.com", role: "guest", areas: ["support", "sales"], methods: ["google"] });
         await expect(authz.authorize("tok-m", undefined)).resolves.not.toHaveProperty("areas");
     });
 

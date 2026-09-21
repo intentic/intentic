@@ -2,7 +2,7 @@ import type { ImageMetadata } from "astro";
 
 // Shots from capture.mts, in src/assets/ not public/, so astro:assets emits a hashed, right-sized WebP ladder.
 // There are two sets, one per skin, paired by filename: the dark set is the app wearing the Sanctum skin (the
-// site's own carved design), the light set is the app unskinned in its light scheme — which is the theme the desk
+// site's own carved design), the light set is the app unskinned in its light scheme — which is the theme the maker
 // pages are built from. Sanctum cannot be light; its own README says turning it on forces the dark scheme.
 const files = import.meta.glob<{ default: ImageMetadata }>("../assets/product/*.png", { eager: true });
 const lightFiles = import.meta.glob<{ default: ImageMetadata }>("../assets/product-light/*.png", { eager: true });
@@ -21,15 +21,15 @@ export function shotPair(name: string): { dark: ImageMetadata; light: ImageMetad
 }
 
 /**
- * One picture from the light set alone: a default shot's light twin, or a shot of the desk recording (`desk-*`,
- * `capture.mts --desk`), which has no dark twin because the desk product's page is only ever light.
+ * One picture from the light set alone: a default shot's light twin, or a shot of the maker recording (`maker-*`,
+ * `capture.mts --maker`), which has no dark twin because the maker product's page is only ever light.
  */
 export function lightShot(name: string): ImageMetadata {
     const light = lightFiles[`../assets/product-light/${name}.png`];
     if (light === undefined) {
         throw new Error(
             `No light screenshot named "${name}". Write it with:\n` +
-                `  node --experimental-strip-types _tools/e2e/shots/capture.mts ${name.startsWith(`desk-`) ? `--desk` : `--light`} ${name}`,
+                `  node --experimental-strip-types _tools/e2e/shots/capture.mts ${name.startsWith(`maker-`) ? `--maker` : `--light`} ${name}`,
         );
     }
     return light.default;

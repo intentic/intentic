@@ -15,8 +15,8 @@ const QUERY_KEY = AREAS.of();
 const fetchAreas = async (): Promise<{ areas: Area[] }> => AreasListSchema.parse(await sandboxJson(`/areas`));
 
 /**
- * `enabled` false holds the read, for the one tier the daemon refuses it: a desk reaches `/areas` only while it
- * actually holds one, so a desk with no fence would otherwise open the Access tab onto a 403 it can do nothing about.
+ * `enabled` false holds the read, for the one tier the daemon refuses it: a guest reaches `/areas` only while it
+ * actually holds one, so a guest with no fence would otherwise open the Access tab onto a 403 it can do nothing about.
  */
 export function useAreas(enabled?: MaybeRefOrGetter<boolean>) {
     const queryClient = useQueryClient();

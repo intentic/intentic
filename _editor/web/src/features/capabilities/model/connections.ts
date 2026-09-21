@@ -4,7 +4,7 @@ import type { CapabilityKind, CapabilityState, NetdiskLink, VpnLink } from "@int
 import type { StatusVariant } from "@intentic/ui";
 import { t } from "@intentic/ui/i18n";
 
-// A live connection read the way its owner reads it: both the Connected slice and a card's own list read state
+// A live connection read the way its owner reads it: both the Connected slice and a tile's own list read state
 // through here, so a Reddit account can't be "needs sign-in" in one and "pending" in the other.
 
 // A browser goes pending on one of two things leading to opposite places: Chromium isn't installed (rebuild,
@@ -20,7 +20,7 @@ export const rebuildStep = (kind: CapabilityKind | undefined, instance: Capabili
     instance.status.state === `pending` && kind !== `host` && !awaitingLogin(instance);
 
 // What identifies a connection, in the order a person would say it. `provider`/`platform` are excluded since the
-// row already names the card; secrets never reach here (the daemon strips them). `purpose` sits last, the widest
+// row already names the tile; secrets never reach here (the daemon strips them). `purpose` sits last, the widest
 // and least identifying fact, though often the only one an identity-filed account has.
 const CONNECTION_FACTS = [`host`, `server`, `url`, `account`, `email`, `identity`, `org`, `guild`, `database`, `user`, `path`, `purpose`] as const;
 
@@ -75,12 +75,12 @@ const NEEDS_SIGN_IN: ConnectionState = { label: `needs sign-in`, tone: `warning`
 const ONLINE: ConnectionState = { label: `online`, tone: `success`, rank: 3 };
 const OFFLINE: ConnectionState = { label: `offline`, tone: `neutral`, rank: 2 };
 
-// What a connected machine's agent may do out there, in the words its own card uses. Read from the effects rather
-// than the config so the pairing dialog, wherever it is opened from — the capability card, an offline device's page
-// — promises exactly what the card's switches say. The floor, and the fallback for a config too old to describe
-// itself, is reading files: no card grants less.
+// What a connected machine's agent may do out there, in the words its own tile uses. Read from the effects rather
+// than the config so the pairing dialog, wherever it is opened from — the capability tile, an offline device's page
+// — promises exactly what the tile's switches say. The floor, and the fallback for a config too old to describe
+// itself, is reading files: no tile grants less.
 export const machineGrants = (instance: CapabilitySummary | undefined): string => {
-    // Asked of a card that hands on no machine — or of nothing at all, while the manifest is still arriving — the
+    // Asked of a tile that hands on no machine — or of nothing at all, while the manifest is still arriving — the
     // answer is the floor rather than a guess, and never the throw an unknown kind would cost (capabilityEffects
     // indexes its kinds).
     if (instance?.kind !== `host`) {

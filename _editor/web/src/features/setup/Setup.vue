@@ -235,7 +235,7 @@ const hostedFull = computed(
 const lanes = computed(() => lanesFor({ address: addressRead.value, hosted: hostedRead.value, hasMachine: hostedRow.value !== null }));
 // Whether there's a lane to take, worth drawing the ladder for; otherwise a card just explains itself.
 const laneTakeable = computed(() => lanes.value.kind === `takeable`);
-// Free lane's hour budget, or null where it doesn't apply; null means the cards say nothing about hours at all.
+// Free plan's hour budget, or null where it doesn't apply; null means the cards say nothing about hours at all.
 const hostedHours = computed(() => hostedOffer.value?.hours ?? null);
 // The daemon's announced host, once it exists: step 1's address line for a lane that never mints a code.
 const hostedHost = computed(() => {

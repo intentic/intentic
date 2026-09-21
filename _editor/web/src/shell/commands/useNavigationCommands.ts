@@ -34,20 +34,20 @@ export function useNavigationCommands(): void {
     const router = useRouter();
     const { panels } = usePanels();
     const { capabilities } = useCapabilities();
-    // Maintainer-and-up rows: the sandbox hub hides the rest, and the daemon refuses them anyway. A desk keeps the two
+    // Maintainer-and-up rows: the sandbox hub hides the rest, and the daemon refuses them anyway. A guest keeps the two
     // seats its rail has.
-    const { canShip, isDesk } = useRole();
+    const { canShip, isGuest } = useRole();
     const { offered: planOffered } = useHostedPlan();
     const words = useVocabulary();
 
     // The rail's own seats, which are shell routes rather than registered views, so no detect() reports them. Named as
     // the rail names them, including the two the maker's vocabulary renames.
-    const shellAreas = computed<readonly NavCommand[]>(() => [
+    const shellSections = computed<readonly NavCommand[]>(() => [
         { command: `view.chat`, title: t(`shell.useNavigationCommands.chat`), category: GO_TO, icon: `comments`, to: `/chat` },
         { command: `view.agents`, title: t(`shell.useNavigationCommands.agents`), category: GO_TO, icon: `robot`, to: `/agents` },
-        ...(isDesk.value ? [] : deskless.value),
+        ...(isGuest.value ? [] : guestless.value),
     ]);
-    const deskless = computed<readonly NavCommand[]>(() => [
+    const guestless = computed<readonly NavCommand[]>(() => [
         { command: `view.workspace`, title: words.value.workspace, category: GO_TO, icon: `file-tree`, to: `/workspace` },
         // Marks the preview as opened on the way, which a bare push would not.
         { command: `view.preview`, title: words.value.preview, category: GO_TO, icon: `eye`, to: `/preview`, run: () => openPreview(router) },
@@ -59,7 +59,7 @@ export function useNavigationCommands(): void {
 
     // One command per rail-surface activation (not per view); the id carries the activation key unless it is a
     // singleton (`view.<id>`), so an extension with several tiles gets several rows.
-    const extensionAreas = computed<readonly NavCommand[]>(() =>
+    const extensionSections = computed<readonly NavCommand[]>(() =>
         detectActivations(panels.value, capabilities.value)
             .filter(({ extension }) => extension.surface === `rail`)
             .map(({ extension, activation }) => ({
@@ -74,7 +74,7 @@ export function useNavigationCommands(): void {
     // The sandbox hub's sections, plus the ones extensions add to it — the same filter the hub applies, so a key that
     // collides with a built-in section is dropped here too rather than registering a row that opens something else.
     const sandboxDestinations = computed<readonly NavCommand[]>(() => [
-        ...sandboxSections(canShip.value, isDesk.value).map((section) => ({
+        ...sandboxSections(canShip.value, isGuest.value).map((section) => ({
             command: `view.sandbox.${section.slug}`,
             title: section.label,
             category: SANDBOX,
@@ -105,8 +105,8 @@ export function useNavigationCommands(): void {
     );
 
     const destinations = computed<readonly NavCommand[]>(() => [
-        ...shellAreas.value,
-        ...extensionAreas.value,
+        ...shellSections.value,
+        ...extensionSections.value,
         ...sandboxDestinations.value,
         ...settingsDestinations.value,
     ]);

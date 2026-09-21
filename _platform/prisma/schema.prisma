@@ -430,7 +430,7 @@ model HostedPoolMachine {
 //
 // The ACCOUNT's month is what the provision gate reads, and it has to survive the sandbox that spent it. A person
 // who burns a free machine's hours, releases it and asks for another would otherwise start a fresh month every
-// time, which is the whole free lane for the price of clicking twice. So `sandboxId` goes null when the sandbox
+// time, which is the whole free plan for the price of clicking twice. So `sandboxId` goes null when the sandbox
 // does, rather than taking the row with it, and `ownerId` keeps counting.
 //
 // Billed to the OWNER's machine, never to whoever woke it — a shared sandbox's guests spend the owner's month,
@@ -483,7 +483,7 @@ model HostedProvision {
 /* ONE VERDICT OF THE ABUSE WATCH (api hosted-abuse.ts) against a hosted machine, and what was done about it.
  * The platform cannot see inside a machine and does not try; what it reads is the provider's own metric for
  * the machine (CPU busy share, egress rate) over a window, and a machine that stays saturated for the whole
- * window on the free lane is stopped and its owner told. `measure` is the figure the rule fired on, in the
+ * window on the free plan is stopped and its owner told. `measure` is the figure the rule fired on, in the
  * rule's own unit (`cpu`: busy share 0..1 of the machine's CPUs; `egress`: GB per hour). `action` is what
  * followed: `stopped`, `suspended` (this strike crossed the account's line), or `reported` (a subscriber's
  * machine, never stopped by the watch). Kept the ledger window like HostedUsage, since a suspension is argued

@@ -75,7 +75,7 @@ describe("marking an agent in another box as read", () => {
 
     it("stamps this browser's copy and tells that box's own daemon", async () => {
         sandboxes.value = [
-            { id: `sbx-here`, name: `Desk`, lastSeenAt: `2026-01-01T00:00:00Z` },
+            { id: `sbx-here`, name: `Guest`, lastSeenAt: `2026-01-01T00:00:00Z` },
             { id: `sbx-other`, name: `Laptop`, lastSeenAt: `2026-01-01T00:00:00Z` },
         ];
         sandboxJsonQuietly.mockResolvedValue(roster());

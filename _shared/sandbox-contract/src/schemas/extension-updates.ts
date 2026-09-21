@@ -264,7 +264,7 @@ export const WorkspaceExtensionCreatedSchema = z.object({
 export const ExtensionRemovalConnectionSchema = z.object({
     id: z.string().describe("The name the owner gave it, which is also the agent's handle for it."),
     kind: z.string().describe("Which core kind it is underneath: cli, browser, host or webext."),
-    card: z.string().describe("The card it was added from, named as the grid names it."),
+    entry: z.string().describe("The catalog entry it was added from, named as the grid names it."),
     secrets: z
         .array(z.string())
         .describe("Credential fields stored for it, by name. The values are deleted with the entry and cannot be recovered from here."),

@@ -22,7 +22,7 @@ import { restartRunning } from "../features/sandbox/live/sandboxRestart";
 import { useT } from "@intentic/ui/i18n";
 
 const t = useT();
-const { isDesk } = useRole();
+const { isGuest } = useRole();
 
 // Four fixed tabs: Agents (fleet, "needs you" badge), Chat (the conversation you were last in), Review (drafts plus
 // uncommitted changes owed), Menu (what the sandbox needs, standing in for the desktop rail's chip); everything else,
@@ -38,7 +38,7 @@ interface Tab {
     readonly badge?: ViewBadge;
     // Which workspace panel this tab owns, for Review sharing the workspace path with the Menu's Files; absent otherwise.
     readonly panel?: "changes";
-    // A standing fact drawn as a corner glyph and spelled out in the label, like AreaTile.note.
+    // A standing fact drawn as a corner glyph and spelled out in the label, like SectionTile.note.
     readonly note?: { readonly icon: IconName; readonly text: string };
     // Which routes light this tab, where a path prefix would light two: Agents owns the board alone and Chat every
     // conversation screen under it.
@@ -116,9 +116,9 @@ const tabs = computed<readonly Tab[]>(() => [
         match: (route) => route.path === `/agents`,
     },
     chatTab.value,
-    // Review is a tier's tab, not everyone's: both destinations are reads the daemon refuses a desk, which never
+    // Review is a tier's tab, not everyone's: both destinations are reads the daemon refuses a guest, which never
     // reviews anything — it drives its own chats.
-    ...(isDesk.value
+    ...(isGuest.value
         ? []
         : [
               {
@@ -170,7 +170,7 @@ const isNavActive = (tab: Tab): boolean => {
             <!-- One type size for all three corner marks, the same one the desktop rail sets: each states its own size as a
                  multiple of it, so the badge, the turning mark and the note weigh the same instead of landing on three numbers. -->
             <span class="relative text-[0.625rem]">
-                <RailIcon :area="tab.id" class="text-xl" />
+                <RailIcon :section="tab.id" class="text-xl" />
                 <ViewBadgeChip :badge="tab.badge" class="absolute -right-2.5 -top-1" aria-hidden="true" />
                 <!-- Work in flight, in the corner the badge and note both leave free; same mark as the desktop rail. -->
                 <TileMark v-if="tab.badge?.running !== undefined" name="spinner" spin :class="[RUNNING_MARK_CLASS, `absolute -bottom-1 -right-2`]" />

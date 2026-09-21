@@ -4,14 +4,14 @@ import { extname, join } from "node:path";
 import sharp from "sharp";
 import { statePath } from "../layout/state-paths.js";
 
-// A picture small enough to draw a tile with. The desk draws a folder as thumbnails an inch across; reading the original
+// A picture small enough to draw a tile with. The guest draws a folder as thumbnails an inch across; reading the original
 // to do it moved the whole file per tile — a gigabyte for a folder of screenshots — and made the browser decode every
 // one of them at full resolution to paint a box of 56 pixels. Rendered once per version and kept on disk, so the second
 // look at a folder costs a read.
 
 // The longest edge a thumbnail may have. Twice the tile's own box, so a HiDPI screen still draws a sharp one.
 const MAX_EDGE = 256;
-// Past this a source is not worth decoding to draw a tile; the desk keeps the file's glyph instead.
+// Past this a source is not worth decoding to draw a tile; the guest keeps the file's glyph instead.
 const MAX_SOURCE_BYTES = 64 * 1024 * 1024;
 // Thumbnails kept before the cache is emptied; at a few KB each this is a ceiling of roughly a hundred megabytes.
 const MAX_CACHED = 20_000;
@@ -19,7 +19,7 @@ const MAX_CACHED = 20_000;
 export const THUMBNAIL_TYPE = "image/webp";
 
 // What sharp is asked to decode. SVG is deliberately absent: rasterising markup that can fetch and script is a
-// different question from decoding a bitmap, and the desk has a glyph to fall back on.
+// different question from decoding a bitmap, and the guest has a glyph to fall back on.
 const SOURCES: ReadonlySet<string> = new Set([".png", ".jpg", ".jpeg", ".webp", ".avif", ".gif", ".tiff", ".tif", ".bmp"]);
 
 export const thumbnailable = (path: string): boolean => SOURCES.has(extname(path).toLowerCase());

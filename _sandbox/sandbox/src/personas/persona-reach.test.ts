@@ -2,15 +2,15 @@ import type { Area, Persona } from "@intentic/sandbox-contract";
 import { describe, expect, test } from "vitest";
 import type { ProvenCaller } from "../auth/auth.js";
 import { memoryAreasStore, memoryPersonasStore } from "../harness/route-stores.testing.js";
-import { reachableCards, refuseUnlessReachable } from "./persona-reach.js";
+import { reachablePersonas, refuseUnlessReachable } from "./persona-reach.js";
 
-// Which cards a fence hands over, resolved through the manifest. The rule itself is the contract's persona-home
+// Which personas a fence hands over, resolved through the manifest. The rule itself is the contract's persona-home
 // test; what is pinned here is that area ids become folders through the LIVE manifest, and what each tier is refused.
 
-const CARDS: readonly Persona[] = [
+const PERSONAS: readonly Persona[] = [
     { id: "helper", capabilities: [], workspace: { startIn: "support" } },
     { id: "books", capabilities: [], workspace: { startIn: "finance" } },
-    // Homed nowhere: an everywhere card, which only an unfenced caller reaches.
+    // Homed nowhere: an everywhere persona, which only an unfenced caller reaches.
     { id: "anyone", capabilities: [] },
 ];
 
@@ -20,8 +20,8 @@ const AREAS: readonly Area[] = [
     { id: "empty", folders: ["marketing"] },
 ];
 
-const services = (cards: readonly Persona[] = CARDS) => ({
-    personas: memoryPersonasStore([...cards]),
+const services = (personas: readonly Persona[] = PERSONAS) => ({
+    personas: memoryPersonasStore([...personas]),
     areas: memoryAreasStore([...AREAS]),
 });
 
@@ -32,14 +32,14 @@ const caller = (role: ProvenCaller["role"], areas?: readonly string[]): ProvenCa
     ...(areas === undefined ? {} : { areas }),
 });
 
-const ids = async (areas?: readonly string[]): Promise<string[]> => (await reachableCards(services(), areas)).map((card) => card.id);
+const ids = async (areas?: readonly string[]): Promise<string[]> => (await reachablePersonas(services(), areas)).map((persona) => persona.id);
 
-describe("reachableCards", () => {
-    test("an unfenced holder reaches every card, the everywhere one included", async () => {
+describe("reachablePersonas", () => {
+    test("an unfenced holder reaches every persona, the everywhere one included", async () => {
         await expect(ids(undefined)).resolves.toEqual(["helper", "books", "anyone"]);
     });
 
-    test("a fenced holder reaches the cards homed in the folders its areas name", async () => {
+    test("a fenced holder reaches the personas homed in the folders its areas name", async () => {
         await expect(ids(["support"])).resolves.toEqual(["helper"]);
         await expect(ids(["support", "finance"])).resolves.toEqual(["helper", "books"]);
         await expect(ids(["empty"])).resolves.toEqual([]);
@@ -53,22 +53,22 @@ describe("reachableCards", () => {
 });
 
 describe("refuseUnlessReachable", () => {
-    test("a caller may wear a card their areas reach, and not one they do not", async () => {
+    test("a caller may wear a persona their areas reach, and not one they do not", async () => {
         await expect(refuseUnlessReachable(services(), caller("collaborator", ["support"]), "helper")).resolves.toBeUndefined();
         await expect(refuseUnlessReachable(services(), caller("collaborator", ["support"]), "books")).rejects.toThrow(
             /"books" does not work in the part of the workspace you hold; yours are: helper/,
         );
     });
 
-    test("a desk names a card or is refused, and the refusal offers what it does hold", async () => {
-        await expect(refuseUnlessReachable(services(), caller("desk", ["support"]), "helper")).resolves.toBeUndefined();
-        await expect(refuseUnlessReachable(services(), caller("desk", ["support"]), undefined)).rejects.toThrow(
-            /a desk speaks through one of its assistants: yours are: helper/,
+    test("a guest names a persona or is refused, and the refusal offers what it does hold", async () => {
+        await expect(refuseUnlessReachable(services(), caller("guest", ["support"]), "helper")).resolves.toBeUndefined();
+        await expect(refuseUnlessReachable(services(), caller("guest", ["support"]), undefined)).rejects.toThrow(
+            /a guest speaks through one of its assistants: yours are: helper/,
         );
-        await expect(refuseUnlessReachable(services(), caller("desk", ["empty"]), undefined)).rejects.toThrow(/no assistant lives in the part/);
+        await expect(refuseUnlessReachable(services(), caller("guest", ["empty"]), undefined)).rejects.toThrow(/no assistant lives in the part/);
     });
 
-    test("an unfenced caller, and one naming no card at all, are asked nothing", async () => {
+    test("an unfenced caller, and one naming no persona at all, are asked nothing", async () => {
         await expect(refuseUnlessReachable(services(), caller("owner"), "books")).resolves.toBeUndefined();
         await expect(refuseUnlessReachable(services(), caller("collaborator"), undefined)).resolves.toBeUndefined();
         await expect(refuseUnlessReachable(services(), caller("collaborator", ["support"]), undefined)).resolves.toBeUndefined();

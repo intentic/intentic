@@ -20,7 +20,7 @@ mismatch is a type error rather than a runtime surprise.
 - Define workflow designs and immutable run snapshots, including full model/account/harness pins, per-step spend
   ceilings, pinned repository bases, bounded report previews, and complete-report artifact paths.
 - Hold the embeds' half of the public doors (the daemon's `automations/public-door.ts`): `src/embed.ts`, its
-  own entry point and import-free on purpose, is what the Front Desk widget and the bug reporter both do before
+  own entry point and import-free on purpose, is what the Visitor chat widget and the bug reporter both do before
   they do anything of their own — the door's three calls, the proof-of-work solver, the localStorage id, the
   script-tag boot.
 - Hold the far end of the peer doors (the daemon's `peers/`): the hello each peer sends (`host-protocol.ts`,
@@ -39,7 +39,7 @@ mismatch is a type error rather than a runtime surprise.
   holds the id and ref primitives several modules are written in, which are vocabulary rather than shapes either
   side of the wire sends.
 - [src/events/](src/events): what the daemon pushes, and when, one file per family — the cards a turn raises
-  ([cards.ts](src/events/cards.ts)), the transcript wire ([transcript.ts](src/events/transcript.ts): a
+  ([cards.ts](src/events/requests.ts)), the transcript wire ([transcript.ts](src/events/transcript.ts): a
   `TranscriptRow` (a speaker's bubble, a notice, a card), a `TranscriptPatch` (append, replace, drop, more text or
   thinking, a tool's progress)), the turn's own frames ([agent-events.ts](src/events/agent-events.ts): the
   `AgentEvent` union, the `TurnFact` view of it, and the `AttachFrame` union a window follows a run through), the
@@ -52,7 +52,7 @@ mismatch is a type error rather than a runtime surprise.
   THE fold from a turn's frames to its rows, and the patches each frame is worth. The daemon runs it inside every
   run, the demo runs it over its recording, and the browser only applies the patches it emits, so there is one
   opinion about what a turn looks like. Its notices (a stop, a refusal, a landing, a routed tier) are written
-  here too. [src/card-status.ts](src/policy/card-status.ts) is how a card settles: raised `pending`, and given its
+  here too. [src/policy/request-status.ts](src/policy/request-status.ts) is how a request settles: raised `pending`, and given its
   status by the reply that released it or by the stop that cancelled it. One card is settled by a reply the
   daemon may REFUSE: a `credential_offer` is addressed to the named people the owner's gate lists rather than
   to whoever holds a session, so a reply that reaches this derivation at all is one the daemon already accepted

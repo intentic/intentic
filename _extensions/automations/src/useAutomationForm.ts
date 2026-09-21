@@ -8,7 +8,7 @@ import type {
     WebchatConfig,
     WorkspaceEventKind,
 } from "@intentic/sandbox-contract";
-import { AutomationSchema, FRONT_DESK_PERSONA, WEBCHAT_DAILY_MAX_DEFAULT } from "@intentic/sandbox-contract";
+import { AutomationSchema, VISITOR_CHAT_PERSONA, WEBCHAT_DAILY_MAX_DEFAULT } from "@intentic/sandbox-contract";
 import { asZone, cronOptions, type Zone } from "@intentic/sandbox-contract/time";
 import { Cron } from "croner";
 import { computed, type ComputedRef, reactive, watch } from "vue";
@@ -141,13 +141,13 @@ export function useAutomationForm(
 
     /* ---- derived ---- */
 
-    const isFrontDesk = computed(() => form.kind === `listener` && form.provider === `webchat`);
+    const isVisitorChat = computed(() => form.kind === `listener` && form.provider === `webchat`);
     const listenerSource = computed(() => listenerSourceOf(sources.value, form.provider, form.eventType));
 
     // Drives the branch input and whether `build` writes it; undefined when the source has no branch axis.
     const branchField = computed(() => (form.kind === `listener` ? listenerSource.value.branchField : undefined));
     // Whether this source vouches for who is writing (TriggerSource.sender); without it no sender rules are drawn or
-    // written, since the daemon would refuse them and the Front Desk has its own `access`.
+    // written, since the daemon would refuse them and the Visitor chat has its own `access`.
     const sendersOffered = computed(() => form.kind === `listener` && listenerSource.value.sender !== undefined);
     const addSenderRule = (): void => {
         form.senderRules.push(emptySenderRule());
@@ -299,11 +299,11 @@ export function useAutomationForm(
     // Must match exactly what a browser sends in the Origin header: scheme + host, no path, since that's what the
     // daemon compares.
     const originsError = computed<string | undefined>(() => {
-        if (!isFrontDesk.value) {
+        if (!isVisitorChat.value) {
             return undefined;
         }
         if (originList.value.length === 0) {
-            return `Add at least one site: a Front Desk with no allowed sites admits nobody.`;
+            return `Add at least one site: a Visitor chat with no allowed sites admits nobody.`;
         }
         const bad = originList.value.find((origin) => !/^https?:\/\/[^/]+$/.test(origin));
         return bad === undefined ? undefined : `"${bad}" isn't an origin, use scheme + host only, e.g. https://example.com`;
@@ -508,7 +508,7 @@ export function useAutomationForm(
         form.senderOthers = senders.others;
     };
 
-    // A listener trigger with only the filters actually typed; the Front Desk's admission list lives on the trigger,
+    // A listener trigger with only the filters actually typed; the Visitor chat's admission list lives on the trigger,
     // beside the provider it gates.
     const listenerTrigger = (): Automation["trigger"] => ({
         kind: `listener`,
@@ -517,7 +517,7 @@ export function useAutomationForm(
         ...(form.eventType === `message` && form.mentioned ? { mentioned: true } : {}),
         ...(form.channelId.trim() !== `` ? { channelId: form.channelId.trim() } : {}),
         ...(branchField.value !== undefined && form.branch.trim() !== `` ? { branch: form.branch.trim() } : {}),
-        ...(isFrontDesk.value ? { allowedOrigins: originList.value } : {}),
+        ...(isVisitorChat.value ? { allowedOrigins: originList.value } : {}),
     });
 
     // The trigger the form describes, one shape per kind; the inverse of what `load` read.
@@ -603,12 +603,12 @@ export function useAutomationForm(
         } else {
             delete automation.chore;
         }
-        if (isFrontDesk.value) {
+        if (isVisitorChat.value) {
             automation.webchat = webchatOf();
-            // A Front Desk with no persona gets FRONT_DESK_PERSONA, written by the daemon on save if the workspace
+            // A Visitor chat with no persona gets VISITOR_CHAT_PERSONA, written by the daemon on save if the workspace
             // lacks one yet. Only fills a blank: an owner's own choice of a stronger persona stands.
             if (automation.actsAs === undefined) {
-                automation.actsAs = FRONT_DESK_PERSONA;
+                automation.actsAs = VISITOR_CHAT_PERSONA;
             }
         } else {
             delete automation.webchat;
@@ -620,7 +620,7 @@ export function useAutomationForm(
         form,
         schedule,
         // derived
-        isFrontDesk,
+        isVisitorChat,
         listenerSource,
         branchField,
         sendersOffered,

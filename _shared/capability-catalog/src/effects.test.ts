@@ -216,7 +216,7 @@ describe("capabilityEffects", () => {
         });
     });
 
-    // For a generic `website` session, the profile is named by the host parsed from the typed address, not by the card.
+    // For a generic `website` session, the profile is named by the host parsed from the typed address, not by the tile.
     it("names the site a generic browser session points at", () => {
         const [, , profile] = capabilityEffects({
             kind: "browser",
@@ -228,7 +228,7 @@ describe("capabilityEffects", () => {
 
     // Falls back to "website" when the address can't be parsed at all (missing scheme, or empty); a host with no dot
     // isn't special-cased, since that would break `localhost:3000` and LAN hostnames.
-    it("falls back to the card when the address cannot be read at all", () => {
+    it("falls back to the tile when the address cannot be read at all", () => {
         const bare = capabilityEffects({ kind: "browser", id: "acme", config: { platform: "website", homeUrl: "admin.acme.com" } });
         expect(bare[2]).toEqual({ kind: "profile", platform: "website" });
         const empty = capabilityEffects({ kind: "browser", id: "acme", config: { platform: "website", homeUrl: "" } });

@@ -126,7 +126,7 @@ fn complete_path(handoff: &str, verifier: &str, profile: Option<&str>) -> String
 /// OS's, which the page reads for itself and announces a moment later, so there is nothing to apply early.
 fn mode_of_profile(profile: Option<&str>) -> Option<crate::state::Mode> {
     match profile? {
-        "desk" => Some(crate::state::Mode::Light),
+        "maker" => Some(crate::state::Mode::Light),
         _ => None,
     }
 }
@@ -199,11 +199,11 @@ mod tests {
             "/desktop-auth/complete?handoff=h&verifier=v"
         );
         assert_eq!(
-            complete_path("h", "v", Some("desk")),
-            "/desktop-auth/complete?handoff=h&verifier=v&profile=desk"
+            complete_path("h", "v", Some("maker")),
+            "/desktop-auth/complete?handoff=h&verifier=v&profile=maker"
         );
         assert_eq!(
-            mode_of_profile(Some("desk")),
+            mode_of_profile(Some("maker")),
             Some(crate::state::Mode::Light)
         );
         // `default` follows the OS, which only the page can read: nothing for the binary to paint early.

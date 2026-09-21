@@ -229,7 +229,7 @@ test("a disabled intake and an unknown one answer differently, because they are 
     const app = appFor(services, fakeWake([]), issues);
     expect((await post(app, "bugs", {})).status).toBe(409);
     expect((await post(app, "nope", {})).status).toBe(404);
-    // A Front Desk id is not an intake id: the two public surfaces do not answer for each other.
+    // A Visitor chat id is not an intake id: the two public surfaces do not answer for each other.
     await services.automations.upsert(automationConfig("chat", { trigger: { kind: "listener", provider: "webchat" }, prompt: "hi" }));
     expect((await post(app, "chat", {})).status).toBe(404);
 });

@@ -89,7 +89,7 @@ describe(`sandbox-scoped terminal open state`, () => {
     });
 });
 
-// What the desk profile's first boot lands on: the profile seeds the audience and nothing else, and the technical
+// What the guest profile's first boot lands on: the profile seeds the audience and nothing else, and the technical
 // filter follows it until a press records an override — so a maker who arrives by link, cookie or installer opens on a
 // tree with the tooling out of the way, and one who later says "I write code" gets it back without a second switch.
 describe(`technical files follow the audience until a press says otherwise`, () => {

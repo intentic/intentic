@@ -573,7 +573,7 @@ const readyToSend = computed(() => connected.value && staged.value && refusal.va
 const words = computed(() => ({ provider: providerName.value, onTrial: onTrial.value, editDropped: editDropped.value }));
 // A viewer's composer is present but inert (the daemon floors every route at collaborator); disabled-with-a-
 // reason, since a vanished input reads as broken.
-const { canDrive, isDesk } = useRole();
+const { canDrive, isGuest } = useRole();
 const composerPlaceholder = computed(() => {
     if (!canDrive.value) {
         return viewerPlaceholder();
@@ -644,8 +644,8 @@ const commandRun = computed<AgentCommand | undefined>(() => {
 // Who this chat is to the outside world: the pick lives on the conversation; the pane adds the card behind the id
 // (the pill's name, the one state worth interrupting for). Read here since the answer is workspace-wide and
 // cached.
-const { personas: personaCards, isConnected: personaSignedIn } = usePersonas();
-const pickedPersona = computed(() => personaCards.value.find((persona) => persona.id === props.conversation.actsAs.value));
+const { personas, isConnected: personaSignedIn } = usePersonas();
+const pickedPersona = computed(() => personas.value.find((persona) => persona.id === props.conversation.actsAs.value));
 const personaName = computed(() => pickedPersona.value?.label ?? pickedPersona.value?.id ?? props.conversation.actsAs.value);
 
 // The one persona state the composer interrupts for, and only ever one the pill can't show on its own: a missing
@@ -672,9 +672,9 @@ const pickPersona = (id: string | undefined): void => {
     props.conversation.actsAs.value = id;
     // A pick by hand, "Anyone" included, overrules whatever the router had read into this chat.
     personaRoute.byHand();
-    // The card's own model goes on with it, when it has one (Conversation.wearModel).
-    const card = personaCards.value.find((persona) => persona.id === id);
-    const head = card === undefined ? undefined : personaModels(card, roleSources.value)[0];
+    // The persona's own model goes on with it, when it has one (Conversation.wearModel).
+    const picked = personas.value.find((persona) => persona.id === id);
+    const head = picked === undefined ? undefined : personaModels(picked, roleSources.value)[0];
     if (head !== undefined) {
         props.conversation.wearModel(head);
     }
@@ -685,13 +685,13 @@ const pickPersona = (id: string | undefined): void => {
 // conversation's tree; the chat says in its own transcript that the reading is happening.
 const personaRoute = usePersonaRoute(() => props.conversation);
 
-// A desk's chat wears one of its cards from the first word, since the daemon refuses it a turn that names none; the
+// A guest's chat wears one of its cards from the first word, since the daemon refuses it a turn that names none; the
 // list it is shown is already only its own cards.
 watch(
-    [personaCards, isDesk],
+    [personas, isGuest],
     () => {
-        const first = personaCards.value[0];
-        if (isDesk.value && props.conversation.actsAs.value === undefined && first !== undefined) {
+        const first = personas.value[0];
+        if (isGuest.value && props.conversation.actsAs.value === undefined && first !== undefined) {
             pickPersona(first.id);
         }
     },
@@ -910,7 +910,7 @@ const quickSources = computed<QuickPickSources>(() => {
     const steered = pickedWorkflow.value !== undefined;
     const conversation = props.conversation;
     return {
-        persona: steered || remote.value ? undefined : { cards: personaCards.value, picked: conversation.actsAs.value },
+        persona: steered || remote.value ? undefined : { personas: personas.value, picked: conversation.actsAs.value },
         sandbox:
             !placementShown.value || conversation.registered.value
                 ? undefined
@@ -936,8 +936,8 @@ const quickSources = computed<QuickPickSources>(() => {
     };
 });
 const quickOffered = computed(() => filesOffered.value || Object.values(quickSources.value).some((source) => source !== undefined));
-// A desk is shown no tree, so nothing to mention: the popover would only list what the daemon refuses it.
-const mentionOpen = computed(() => activeMention.value !== undefined && !popoverDismissed.value && quickOffered.value && !isDesk.value);
+// A guest is shown no tree, so nothing to mention: the popover would only list what the daemon refuses it.
+const mentionOpen = computed(() => activeMention.value !== undefined && !popoverDismissed.value && quickOffered.value && !isGuest.value);
 const commandOpen = computed(() => !mentionOpen.value && commandMatches.value.length > 0 && !popoverDismissed.value);
 
 // Asks for the command list only when this composer has none (ensureProviderCommands is a no-op once known),

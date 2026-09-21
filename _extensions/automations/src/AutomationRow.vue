@@ -115,7 +115,7 @@ const openRun = (run: AutomationRun): void => {
 const nextLabel = computed<string | undefined>(() => (props.automation.nextRun !== undefined ? nextIn(props.automation.nextRun) : undefined));
 
 // Loaded fresh on Edit, discarded on Cancel, never half-typed against what the list shows as saved. No
-// save-as-you-type, unlike the acceptance rows this borrows from: a half-typed Front Desk would turn visitors away
+// save-as-you-type, unlike the acceptance rows this borrows from: a half-typed Visitor chat would turn visitors away
 // mid-keystroke.
 const editing = ref(false);
 const editError = ref<string | undefined>(undefined);
@@ -163,9 +163,9 @@ const saveEdit = async (): Promise<void> => {
     }
 };
 
-// The Front Desk summary the row shows: the snippet, and the two settings deciding whether it works. Undefined for any
+// The Visitor chat summary the row shows: the snippet, and the two settings deciding whether it works. Undefined for any
 // other automation, and until the sandbox's own origin is known, so Install never opens on nothing.
-const frontDesk = computed(() => {
+const visitorChat = computed(() => {
     const fires = props.automation.trigger;
     if (fires.kind !== `listener` || fires.provider !== `webchat` || embedSnippet(props.automation) === undefined) {
         return undefined;
@@ -314,7 +314,7 @@ const VERB = ui.iconButton(`md:opacity-0 md:group-hover/row:opacity-100 md:focus
             <!-- Keep the install snippet visible because it is the deliverable. -->
             <span class="flex w-6 shrink-0 items-center justify-center">
                 <button
-                    v-if="frontDesk"
+                    v-if="visitorChat"
                     type="button"
                     :class="ui.iconButton()"
                     :aria-label="t(`automationRow.installOnWebsite`, { id: automation.id })"
@@ -439,15 +439,15 @@ const VERB = ui.iconButton(`md:opacity-0 md:group-hover/row:opacity-100 md:focus
                     </div>
 
                     <!-- The two settings deciding whether the widget works at all. -->
-                    <div v-if="frontDesk" class="flex flex-col gap-1.5">
-                        <span :class="ui.sectionLabel(`text-2xs`)">{{ t(`automationRow.frontDesk`) }}</span>
+                    <div v-if="visitorChat" class="flex flex-col gap-1.5">
+                        <span :class="ui.sectionLabel(`text-2xs`)">{{ t(`automationRow.visitorChat`) }}</span>
                         <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-2xs text-subtle">
-                            <span v-if="frontDesk.origins.length > 0">{{
-                                t(`automationRow.onOrigins`, { origins: frontDesk.origins.join(`, `) })
+                            <span v-if="visitorChat.origins.length > 0">{{
+                                t(`automationRow.onOrigins`, { origins: visitorChat.origins.join(`, `) })
                             }}</span>
                             <span v-else class="text-danger">{{ t(`automationRow.noSitesAllowedNobody`) }}</span>
-                            <span>{{ frontDesk.access }}</span>
-                            <span>{{ frontDesk.botCheck }}</span>
+                            <span>{{ visitorChat.access }}</span>
+                            <span>{{ visitorChat.botCheck }}</span>
                         </div>
                         <!-- Use a glyph in the row and words after the reader opens it. -->
                         <Button

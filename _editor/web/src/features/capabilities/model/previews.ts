@@ -27,7 +27,7 @@ export const walletPolicySummary = (values: Readonly<Record<string, string>>): s
 
 // A connected computer's grant: presets over the switches, and the sentence.
 
-// Switch keys carried by a host card (mirrors HOST_SCOPE_FIELDS); order matches how the sentence
+// Switch keys carried by a host tile (mirrors HOST_SCOPE_FIELDS); order matches how the sentence
 // names them.
 const HOST_SWITCHES = [`shell`, `write`, `screen`, `control`, `sandboxes`, `destructive`] as const;
 type HostSwitch = (typeof HOST_SWITCHES)[number];

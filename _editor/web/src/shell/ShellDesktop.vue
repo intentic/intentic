@@ -18,7 +18,7 @@ import { commandShortcut, registerCommand } from "./commands/useCommands";
 import {
     type ActiveExtension,
     activationBadge,
-    areaReachable,
+    sectionReachable,
     detectActivations,
     extensionPath,
     railBands,
@@ -30,7 +30,7 @@ import {
 import ViewBadgeChip from "../core-views/ViewBadgeChip.vue";
 import { useVocabulary } from "../core-views/vocabulary";
 import { useAudience } from "../app/useAudience";
-import { chatOnRail, lastAreaPath, toggleChatFloating, toggleChatHome } from "../features/chat/panel/chatPanelLayout";
+import { chatOnRail, lastSectionPath, toggleChatFloating, toggleChatHome } from "../features/chat/panel/chatPanelLayout";
 import { useChatFloating } from "../features/chat/panel/chatFloating";
 import { useShellCommands } from "./commands/useShellCommands";
 import { useKeybindings } from "./commands/useKeybindings";
@@ -69,8 +69,8 @@ import { useT } from "@intentic/ui/i18n";
 // - icon: undefined for a repository tile, which renders initials instead.
 const t = useT();
 
-interface AreaTile extends RailSeat {
-    // Same shape core areas and extensions both fill, so the rail renders one badge element.
+interface SectionTile extends RailSeat {
+    // Same shape core sections and extensions both fill, so the rail renders one badge element.
     readonly badge?: ViewBadge;
     // A standing fact about the tile (not news); today only the Agents tile's cross-sandbox scope uses it.
     readonly note?: { readonly icon: IconName; readonly text: string };
@@ -81,7 +81,7 @@ interface AreaTile extends RailSeat {
 // One label per tile — name, badge tooltip, what's running, then note (what is owed, then what is moving,
 // then standing facts). A badge has no tooltip of its own: nesting one inside the tile's would open two
 // overlapping boxes on hover, and the turning mark can't carry one either, being 10px of glyph.
-const tileLabel = (tile: AreaTile): string =>
+const tileLabel = (tile: SectionTile): string =>
     [tile.label, tile.badge?.tooltip, tile.badge?.running, tile.note?.text].filter((part) => part !== undefined).join(` · `);
 
 // Desktop chrome of the post-login shell: a square-tile rail, the shared chat panel, and a workspace
@@ -95,7 +95,7 @@ const { sessions: browsers } = useBrowsersQuery();
 // Same loose always-on poll, for the same reason: the tile must appear the moment a turn delegates.
 const { sessions: subagents, running: runningSubagents } = useSubagentsQuery();
 const { reachable } = useSandbox();
-// Uncommitted changes badge the Workspace tile, so the count is visible from any area.
+// Uncommitted changes badge the Workspace tile, so the count is visible from any section.
 const changes = useChanges();
 // A push started and left behind also surfaces: the tile is its only presence outside the panel.
 const pushFlow = usePushFlow();
@@ -163,7 +163,7 @@ const chatTileSeated = computed(() => chatOnRail.value && (!chatFloats.value || 
 
 /* Preview closes the Work band by showing the running result. */
 const { files: publicFiles } = usePublicOutbox();
-const previewTile = computed<AreaTile | undefined>(() => {
+const previewTile = computed<SectionTile | undefined>(() => {
     if (!previewEvidence(panels.value, forwardedPorts.value, publicFiles.value)) {
         return undefined;
     }
@@ -192,7 +192,7 @@ watch(
 
 // The always-present tiles plus evidence-driven Preview; extension tiles are added separately below,
 // one per activation. Sandbox management lives behind the switcher chip, not a rail tile.
-const fixedTiles = computed<readonly AreaTile[]>(() => [
+const fixedTiles = computed<readonly SectionTile[]>(() => [
     // Below the Projects tile in the Work band; unbadged, since the Agents tile below carries the debt (see chatTileSeated).
     ...(chatTileSeated.value
         ? [
@@ -208,7 +208,7 @@ const fixedTiles = computed<readonly AreaTile[]>(() => [
         id: `agents`,
         to: `/agents`,
         label: t(`shell.shellDesktop.agents`),
-        // RailIcon draws by area identity; these generic names remain the fallback vocabulary.
+        // RailIcon draws by section identity; these generic names remain the fallback vocabulary.
         icon: `robot`,
         // Both come from agentsTile.ts, shared with the phone tab bar; the note names the scope when it's wide.
         ...(agentsBadge.value === undefined ? {} : { badge: agentsBadge.value }),
@@ -224,7 +224,7 @@ const fixedTiles = computed<readonly AreaTile[]>(() => [
     ...(previewTile.value === undefined ? [] : [previewTile.value]),
 ]);
 /* The Browsers tile stays visible while the daemon lists an open browser. */
-const browserTile = computed<AreaTile | undefined>(() => {
+const browserTile = computed<SectionTile | undefined>(() => {
     if (browsers.value.length === 0) {
         return undefined;
     }
@@ -245,7 +245,7 @@ const browserTile = computed<AreaTile | undefined>(() => {
 });
 // Same shape as browserTile: appears once a turn starts a subagent, badging only the ones still
 // working — the third of three things a turn can spawn (shell, browser, agent).
-const subagentTile = computed<AreaTile | undefined>(() => {
+const subagentTile = computed<SectionTile | undefined>(() => {
     if (subagents.value.length === 0) {
         return undefined;
     }
@@ -259,12 +259,12 @@ const subagentTile = computed<AreaTile | undefined>(() => {
         ...(live > 0 ? { badge: { count: live, tone: `neutral` as const, tooltip: t(`shell.shellDesktop.stillWorking`, { live }) } } : {}),
     };
 });
-// Same AreaTile shape as the nav tiles, so badges render through one path instead of per hand-rolled link.
-const runtimeTiles = computed<readonly AreaTile[]>(() =>
-    [browserTile.value, subagentTile.value].filter((tile) => tile !== undefined).filter((tile) => areaReachable(tile.to)),
+// Same SectionTile shape as the nav tiles, so badges render through one path instead of per hand-rolled link.
+const runtimeTiles = computed<readonly SectionTile[]>(() =>
+    [browserTile.value, subagentTile.value].filter((tile) => tile !== undefined).filter((tile) => sectionReachable(tile.to)),
 );
 // RailIcon selects bespoke glyphs by view id and validates extension fallbacks before drawing them.
-const extensionTile = (active: ActiveExtension): AreaTile => {
+const extensionTile = (active: ActiveExtension): SectionTile => {
     const { extension, activation } = active;
     const badge = activationBadge(active);
     return {
@@ -276,9 +276,9 @@ const extensionTile = (active: ActiveExtension): AreaTile => {
         ...(badge === undefined ? {} : { badge }),
     };
 };
-// Every nav tile, seated or not, in one run ranked by RAIL_GROUPS (core areas, then one tile per
-// extension activation); the seated and More lists both come from this run, so an area is never in both or neither.
-const tiles = computed<readonly AreaTile[]>(() =>
+// Every nav tile, seated or not, in one run ranked by RAIL_GROUPS (core sections, then one tile per
+// extension activation); the seated and More lists both come from this run, so an section is never in both or neither.
+const tiles = computed<readonly SectionTile[]>(() =>
     [
         ...fixedTiles.value,
         ...detectActivations(panels.value, capabilities.value)
@@ -286,8 +286,8 @@ const tiles = computed<readonly AreaTile[]>(() =>
             .filter(({ extension }) => extension.surface === `rail`)
             .map(extensionTile),
     ]
-        // Before seating and before More: an area this reader cannot open belongs in neither list.
-        .filter((tile) => areaReachable(tile.to))
+        // Before seating and before More: an section this reader cannot open belongs in neither list.
+        .filter((tile) => sectionReachable(tile.to))
         .toSorted((left, right) => railRank(left.id) - railRank(right.id)),
 );
 // True once extensions, panels, and capabilities have all loaded; before that a missing tile is only late.
@@ -295,28 +295,28 @@ const railSettled = computed(() => extensionsLoaded.value && panelsSettled.value
 
 // railSeated (registry.ts) holds the rule; this only supplies the live facts: pinned and active.
 const pins = useRailPins();
-const seatedTiles = computed<readonly AreaTile[]>(() =>
+const seatedTiles = computed<readonly SectionTile[]>(() =>
     tiles.value.filter((tile) => railSeated(tile, { pinned: pins.pinned.value.has(tile.to), active: isNavActive(tile.to) })),
 );
-const moreTiles = computed<readonly AreaTile[]>(() =>
+const moreTiles = computed<readonly SectionTile[]>(() =>
     tiles.value.filter((tile) => !seatedTiles.value.includes(tile)).toSorted((left, right) => left.label.localeCompare(right.label)),
 );
 
 // tileLabel, plus one clause when a tile is seated only by the visit: says so once, while it can still
 // be pinned. Not used by the runtime cluster below — those tiles can't be pinned at all.
-const railTileLabel = (tile: AreaTile): string => {
+const railTileLabel = (tile: SectionTile): string => {
     const visiting = seatedOnlyByVisit(tile, { pinned: pins.isPinned(tile.to), active: isNavActive(tile.to) });
     return visiting ? `${tileLabel(tile)} · here while you are · right-click to keep` : tileLabel(tile);
 };
 
 // Only the permanent tiles and this reader's pins — the seats that will still be there tomorrow.
-const stableSeats = computed<readonly AreaTile[]>(() =>
+const stableSeats = computed<readonly SectionTile[]>(() =>
     tiles.value.filter((tile) => seatPolicy(tile.id) === `always` || pins.pinned.value.has(tile.to)),
 );
 // Seats the rail had last time and hasn't refilled yet; empty once complete or on a first visit.
 const heldSeats = useRailMemory(stableSeats, railSettled);
 // Seated tiles plus held seats, sorted by the same table, so each lands in the seat its tile will take.
-const railSeats = computed<readonly AreaTile[]>(() =>
+const railSeats = computed<readonly SectionTile[]>(() =>
     [...seatedTiles.value, ...heldSeats.value].toSorted((left, right) => railRank(left.id) - railRank(right.id)),
 );
 // Held seats are included so band hairlines don't shift position as the run fills in.
@@ -324,8 +324,8 @@ const tileBands = computed(() => railBands(railSeats.value, (tile) => tile.id));
 
 // Alt+Up/Down walks the seated nav tiles only (the runtime cluster's length changes under a running
 // turn); wraps, and from a route no tile owns enters at the end the press is heading toward.
-const cycleArea = (delta: number): void => {
-    // The seated run only; an area behind More is reached by its own command instead.
+const cycleSection = (delta: number): void => {
+    // The seated run only; an section behind More is reached by its own command instead.
     const list = seatedTiles.value;
     if (list.length === 0) {
         return;
@@ -338,37 +338,37 @@ const cycleArea = (delta: number): void => {
     }
 };
 
-let areaCommands: readonly Disposable[] = [];
+let sectionCommands: readonly Disposable[] = [];
 
 onMounted(() => {
-    areaCommands = [
+    sectionCommands = [
         // Follows the tiles: cached views stay useful during a stall, even while live actions wait on reachability.
         registerCommand({
             owner: `builtin`,
-            command: `view.previousArea`,
-            title: t(`shell.shellDesktop.previousRailArea`),
+            command: `view.previousSection`,
+            title: t(`shell.shellDesktop.previousRailSection`),
             category: GO_TO,
             icon: `chevron-up`,
             keybinding: `Alt+ArrowUp`,
-            handler: () => cycleArea(-1),
+            handler: () => cycleSection(-1),
         }),
         registerCommand({
             owner: `builtin`,
-            command: `view.nextArea`,
-            title: t(`shell.shellDesktop.nextRailArea`),
+            command: `view.nextSection`,
+            title: t(`shell.shellDesktop.nextRailSection`),
             category: GO_TO,
             icon: `chevron-down`,
             keybinding: `Alt+ArrowDown`,
-            handler: () => cycleArea(1),
+            handler: () => cycleSection(1),
         }),
     ];
 });
 
 onUnmounted(() => {
-    for (const disposable of areaCommands) {
+    for (const disposable of sectionCommands) {
         disposable.dispose();
     }
-    areaCommands = [];
+    sectionCommands = [];
 });
 
 // Tracks the last non-chat path, not browser history, which may start on /chat itself (a reload, a link).
@@ -376,7 +376,7 @@ watch(
     () => route.path,
     (path) => {
         if (!path.startsWith(`/chat`)) {
-            lastAreaPath.value = path;
+            lastSectionPath.value = path;
         }
     },
     { immediate: true },
@@ -432,25 +432,25 @@ const onTileContextMenu = (tile: RailSeat, event: MouseEvent): void => {
     showBesideRail(tileMenu.value, event);
 };
 
-// Every unseated area, as real links (so click behaviors work), sorted alphabetically rather than by
-// rail rank; each row can pin the area (railPins.ts). Never badges — anything with something to say is already seated.
+// Every unseated section, as real links (so click behaviors work), sorted alphabetically rather than by
+// rail rank; each row can pin the section (railPins.ts). Never badges — anything with something to say is already seated.
 const moreTrigger = ref<HTMLButtonElement | null>(null);
 const moreOpen = ref(false);
 // The count is the whole point of hovering; phrased like every other tile's label. A `computed`, so it is rebuilt
 // when the language changes rather than holding the words it was born with.
 const moreLabel = computed(() =>
     moreTiles.value.length === 0
-        ? t(`shell.shellDesktop.moreAreas`)
-        : t(`shell.shellDesktop.moreAreasOffRail`, { count: moreTiles.value.length }, moreTiles.value.length),
+        ? t(`shell.shellDesktop.moreSections`)
+        : t(`shell.shellDesktop.moreSectionsOffRail`, { count: moreTiles.value.length }, moreTiles.value.length),
 );
 const dismissMore = (event: MouseEvent): void => {
     if (!browserOwnsClick(event)) {
         moreOpen.value = false;
     }
 };
-// Pins here, not from a right-click, since an unseated area has no tile to click; the row leaves as
+// Pins here, not from a right-click, since an unseated section has no tile to click; the row leaves as
 // it's pressed (that departure is the feedback). Refocuses the door trigger so a keyboard reader isn't stranded.
-const keepOnRail = (tile: AreaTile): void => {
+const keepOnRail = (tile: SectionTile): void => {
     pins.toggle(tile.to);
     moreTrigger.value?.focus();
 };
@@ -478,7 +478,7 @@ const gridStyle = computed(() => {
 // Toggled by the rail tile or Ctrl+`; the panel docks below the workspace since sessions are sandbox-global.
 const terminal = useTerminalPanel();
 // Ship-tier only: a PTY is the whole sandbox, and the daemon refuses the socket below maintainer anyway.
-const { canShip, isDesk } = useRole();
+const { canShip, isGuest } = useRole();
 // The only affordance for the panel now; the Workspace view's own toggle is gone, since terminals are
 // sandbox-global. Doubles as an indicator: the badge counts live sessions, the tooltip names them.
 const terminalActivity = useTerminalActivity();
@@ -494,7 +494,7 @@ const terminalBadge = computed<ViewBadge | undefined>(() =>
 );
 // Registers the shell's built-in palette commands on mount, each with its own keybinding.
 useShellCommands();
-// One destination per place the shell has: every rail area seated or not, every sandbox and settings section.
+// One destination per place the shell has: every rail section seated or not, every sandbox and settings section.
 useNavigationCommands();
 // The single global-shortcut dispatcher: matches any registered command's keybinding to the keystroke.
 useKeybindings();
@@ -510,7 +510,7 @@ useKeybindings();
             <!-- `my-1`, as on the other hairline: with `mb-1` alone this one sat off-centre in its own air. -->
             <span class="my-1 icon-rail-divider h-px bg-line"></span>
 
-            <!-- Bands (Work/Judge/Know) are separated by whitespace, not lines: hairlines mark only the two real boundaries — identity, work areas, live runtime. -->
+            <!-- Bands (Work/Judge/Know) are separated by whitespace, not lines: hairlines mark only the two real boundaries — identity, work sections, live runtime. -->
             <div class="icon-rail-nav scrollbar-none flex flex-col items-center overflow-y-auto overscroll-contain">
                 <template v-for="(band, at) in tileBands" :key="band.group.id">
                     <!-- Air where a hairline used to be; aria-hidden, since the tiles already carry their own labels. -->
@@ -522,7 +522,7 @@ useKeybindings();
                             class="icon-rail-tile flex items-center justify-center rounded-lg bg-overlay/50 text-muted opacity-40"
                             aria-hidden="true"
                         >
-                            <RailIcon :area="tile.id" :fallback="tile.icon" :label="tile.label" :monogram="tile.monogram" class="icon-rail-glyph" />
+                            <RailIcon :section="tile.id" :fallback="tile.icon" :label="tile.label" :monogram="tile.monogram" class="icon-rail-glyph" />
                         </span>
                         <RouterLink
                             v-else
@@ -533,10 +533,10 @@ useKeybindings();
                             v-tooltip.right="railTileLabel(tile)"
                             @contextmenu="onTileContextMenu(tile, $event)"
                         >
-                            <RailIcon :area="tile.id" :fallback="tile.icon" :label="tile.label" :monogram="tile.monogram" class="icon-rail-glyph" />
+                            <RailIcon :section="tile.id" :fallback="tile.icon" :label="tile.label" :monogram="tile.monogram" class="icon-rail-glyph" />
                             <!-- Three corners, one scale: `.icon-rail-mark` sets the type size all three are drawn from, so the only thing
      that separates them is the plate — which is the distinction worth seeing, and used to be three sizes. -->
-                            <!-- One badge for every tile, core or extension: see AreaTile.badge. -->
+                            <!-- One badge for every tile, core or extension: see SectionTile.badge. -->
                             <ViewBadgeChip :badge="tile.badge" class="icon-rail-mark absolute right-0.5 top-0.5" />
                             <!-- Work in flight behind this tile (ViewBadge.running): its own corner, never the chip. -->
                             <TileMark
@@ -552,13 +552,13 @@ useKeybindings();
                 </template>
             </div>
 
-            <!-- Every unseated area; kept outside the scrolling run so it's never scrolled out of sight. -->
-            <!-- A door to areas, not an "add one": the same tile as the nav run above it, so the dashed rim is left to the
+            <!-- Every unseated section; kept outside the scrolling run so it's never scrolled out of sight. -->
+            <!-- A door to sections, not an "add one": the same tile as the nav run above it, so the dashed rim is left to the
                  one control on this rail that really does add something. -->
-            <!-- Empty for an owner means "everything is seated", which is worth a tile and a sentence. Empty for a desk
+            <!-- Empty for an owner means "everything is seated", which is worth a tile and a sentence. Empty for a guest
                  means there is nothing to put there and never will be, so the door itself goes. -->
             <button
-                v-if="!isDesk"
+                v-if="!isGuest"
                 ref="moreTrigger"
                 type="button"
                 class="icon-rail-tile flex items-center justify-center rounded-lg text-muted transition-colors hover:bg-overlay hover:text-content"
@@ -569,13 +569,13 @@ useKeybindings();
                 v-tooltip.right="moreOpen ? undefined : moreLabel"
                 @click="moreOpen = !moreOpen"
             >
-                <RailIcon area="more" class="icon-rail-glyph" />
+                <RailIcon section="more" class="icon-rail-glyph" />
             </button>
 
             <!-- Same overlay as the switcher and account avatar: AnchoredOverlay rows, not PrimeVue's ContextMenu. -->
             <AnchoredOverlay v-model="moreOpen" :anchor="moreTrigger ?? undefined" side="right" cross="start">
                 <div class="flex w-48 flex-col gap-0.5 p-1">
-                    <p v-if="moreTiles.length === 0" class="px-2 py-1.5 text-xs text-subtle">{{ t(`shell.shellDesktop.everyAreaOnRail`) }}</p>
+                    <p v-if="moreTiles.length === 0" class="px-2 py-1.5 text-xs text-subtle">{{ t(`shell.shellDesktop.everySectionOnRail`) }}</p>
                     <!-- Two controls per row — go there, and pin it (keepOnRail) — as siblings, not nested. -->
                     <div
                         v-for="tile in moreTiles"
@@ -584,7 +584,7 @@ useKeybindings();
                     >
                         <RouterLink :to="tile.to" class="flex min-w-0 flex-1 items-center gap-2 px-2 py-1 text-left" @click="dismissMore">
                             <span class="flex h-5 w-5 shrink-0 items-center justify-center">
-                                <RailIcon :area="tile.id" :fallback="tile.icon" :label="tile.label" class="text-base text-muted" />
+                                <RailIcon :section="tile.id" :fallback="tile.icon" :label="tile.label" class="text-base text-muted" />
                             </span>
                             <span class="min-w-0 flex-1 truncate">{{ tile.label }}</span>
                         </RouterLink>
@@ -621,7 +621,7 @@ useKeybindings();
                 :aria-label="vpnLabel"
                 v-tooltip.right="vpnLabel"
             >
-                <RailIcon area="vpn" class="icon-rail-glyph" />
+                <RailIcon section="vpn" class="icon-rail-glyph" />
             </RouterLink>
 
             <!-- Present only while a port is forwarded, since the sandbox is then answering the public internet. -->
@@ -632,7 +632,7 @@ useKeybindings();
                 :aria-label="forwardedLabel"
                 v-tooltip.right="forwardedLabel"
             >
-                <RailIcon area="ports" class="icon-rail-glyph" />
+                <RailIcon section="ports" class="icon-rail-glyph" />
                 <ViewBadgeChip :badge="portsBadge" class="icon-rail-mark absolute right-0.5 top-0.5" />
             </RouterLink>
 
@@ -646,7 +646,7 @@ useKeybindings();
                 :aria-label="tileLabel(tile)"
                 v-tooltip.right="tileLabel(tile)"
             >
-                <RailIcon :area="tile.id" :fallback="tile.icon" :label="tile.label" :monogram="tile.monogram" class="icon-rail-glyph" />
+                <RailIcon :section="tile.id" :fallback="tile.icon" :label="tile.label" :monogram="tile.monogram" class="icon-rail-glyph" />
                 <!-- No tooltip on the badge, for the same reason as the navigation tiles above. -->
                 <ViewBadgeChip :badge="tile.badge" class="icon-rail-mark absolute right-0.5 top-0.5" />
                 <!-- Same running mark as a navigation tile, so live work reads identically in both clusters. -->
@@ -670,15 +670,15 @@ useKeybindings();
                 v-tooltip.right="terminalLabel"
                 @click="terminal.toggle()"
             >
-                <RailIcon area="terminal" class="icon-rail-glyph" />
+                <RailIcon section="terminal" class="icon-rail-glyph" />
                 <ViewBadgeChip :badge="terminalBadge" class="icon-rail-mark absolute right-0.5 top-0.5" />
             </button>
 
             <!-- Every "add" here writes to the sandbox's deploy.config.ts or clones into /work, never platform storage. -->
-            <!-- A desk connects nothing: what this box can reach is the operator's decision, and the page says so at
+            <!-- A guest connects nothing: what this box can reach is the operator's decision, and the page says so at
                  the maintainer tier. -->
             <RouterLink
-                v-if="!isDesk"
+                v-if="!isGuest"
                 to="/capabilities"
                 :class="[
                     ui.addTile(`icon-rail-tile rounded-lg hover:bg-overlay`),
@@ -687,7 +687,7 @@ useKeybindings();
                 :aria-label="t(`shell.shellDesktop.addCapability`)"
                 v-tooltip.right="t(`shell.shellDesktop.addCapability`)"
             >
-                <RailIcon area="capabilities" class="icon-rail-glyph" />
+                <RailIcon section="capabilities" class="icon-rail-glyph" />
             </RouterLink>
 
             <!-- The account control: avatar opening a popover with account identity and actions. -->
@@ -707,7 +707,7 @@ useKeybindings();
             </SandboxGate>
         </main>
 
-        <!-- The parked chat's composer, floating in the area's own cell: growing it must not reflow the page the reader
+        <!-- The parked chat's composer, floating in the section's own cell: growing it must not reflow the page the reader
              opened it to talk about. Outside the gate, like the chat column: a stalled sandbox is a thing to ask about. -->
         <ChatQuickBar />
 

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
-// A machine reached by desktop sync alone is a real, live device that no capability card accounts for. This page used
+// A machine reached by desktop sync alone is a real, live device that no capability tile accounts for. This page used
 // to show no trace of it while the Devices board listed it as live — one machine, two screens, two answers. These
-// mount the Linux PC card with exactly that machine in the daemon's device list.
+// mount the Linux PC tile with exactly that machine in the daemon's device list.
 import type { Device } from "@intentic/sandbox-contract";
 import { IconStub } from "@intentic/ui/testing";
 import PrimeVue from "primevue/config";
@@ -13,11 +13,11 @@ const NOW = 1_700_000_000_000;
 const push = vi.fn();
 vi.mock(import(`vue-router`), async (importOriginal) => ({
     ...(await importOriginal()),
-    useRoute: () => ({ params: { card: `linux` }, query: {} }) as never,
+    useRoute: () => ({ params: { entry: `linux` }, query: {} }) as never,
     useRouter: () => ({ push, replace: vi.fn() }) as never,
 }));
 
-// No capabilities at all: the card exists, and nothing is connected on it. The machine below is the only row it can
+// No capabilities at all: the tile exists, and nothing is connected on it. The machine below is the only row it can
 // possibly draw, so anything on screen came from the device list.
 vi.mock(`./connect/useCapabilities`, () => ({
     useCapabilities: () => ({
@@ -33,7 +33,7 @@ vi.mock(`./connect/useCapabilities`, () => ({
     browseMarketplace: vi.fn(),
 }));
 
-// The Linux PC card is contributed by the devices extension, not the static catalog, so the card under test only
+// The Linux PC tile is contributed by the devices extension, not the static catalog, so the tile under test only
 // exists while this is enabled.
 const devicesExtension = {
     id: `intentic.devices`,
@@ -76,7 +76,7 @@ vi.mock(`./connect/HostConnectDialog.vue`, () => ({ default: defineComponent({ r
 // The daemon's device registry, the list both screens now read. Only `useDevices` and the revoke are replaced;
 // everything else in that module keeps working for whatever else the page mounts.
 const fleet = ref<Device[]>([]);
-// Which machine the card asked the daemon to cut off; no device connection needed, unlike everything else here.
+// Which machine the tile asked the daemon to cut off; no device connection needed, unlike everything else here.
 const revoked: string[] = [];
 vi.mock(import(`../sandbox/devices/useDevices`), async (importOriginal) => ({
     ...(await importOriginal()),
@@ -135,7 +135,7 @@ const connectionsGroup = (el: HTMLElement): HTMLElement | undefined =>
         (node) => node.textContent?.includes(`Your connections`) === true && node.querySelector(`button`) !== null,
     );
 
-it(`lists a machine that only syncs, on the card that would give it commands`, async () => {
+it(`lists a machine that only syncs, on the tile that would give it commands`, async () => {
     fleet.value = [syncOnly()];
     const el = mount();
     await nextTick();
@@ -144,7 +144,7 @@ it(`lists a machine that only syncs, on the card that would give it commands`, a
     expect(group?.textContent).toContain(`radarsu-rog`);
     // The same word the Devices board gives it: the two screens are reading one list now.
     expect(group?.textContent).toContain(`live`);
-    // And what it still cannot do, which is the reason it is on this card rather than absent from it.
+    // And what it still cannot do, which is the reason it is on this tile rather than absent from it.
     expect(group?.textContent).toContain(`no command access`);
 });
 
@@ -160,13 +160,13 @@ it(`carries the machine's own name into the form that connects it`, async () => 
 
     // Named after the enrollment on purpose: both doors answering to one name is what folds them into a single row.
     expect(push).toHaveBeenCalledWith(
-        expect.objectContaining({ params: { card: `linux` }, query: expect.objectContaining({ device: `radarsu-rog` }) }),
+        expect.objectContaining({ params: { entry: `linux` }, query: expect.objectContaining({ device: `radarsu-rog` }) }),
     );
 });
 
 // The row's other half. A machine listed under "your connections" holds no capability to remove, so without this the
 // only way off this screen was the Devices board — which is where the reader is not.
-it(`ends the machine's access from the card that lists it, after naming what stops`, async () => {
+it(`ends the machine's access from the tile that lists it, after naming what stops`, async () => {
     fleet.value = [syncOnly()];
     revoked.length = 0;
     const el = mount();
@@ -193,8 +193,8 @@ it(`says nothing about a machine already connected as a device`, async () => {
     const el = mount();
     await nextTick();
 
-    // It is a capability instance now, and this card draws it the ordinary way — never twice. Asserted over the whole
-    // card, since with no instance mocked in there is no connections group at all for it to hide in.
+    // It is a capability instance now, and this tile draws it the ordinary way — never twice. Asserted over the whole
+    // tile, since with no instance mocked in there is no connections group at all for it to hide in.
     expect(el.textContent).not.toContain(`no command access`);
     expect(connectionsGroup(el)).toBeUndefined();
 });

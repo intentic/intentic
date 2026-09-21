@@ -3,7 +3,7 @@ import { implement, ORPCError } from "@orpc/server";
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../app-env.js";
 import { hasSession } from "../browser/sessions/session-store.js";
-import { reachableCards } from "./persona-reach.js";
+import { reachablePersonas } from "./persona-reach.js";
 import {
     listPersonaSkills,
     readPersonaPrompt,
@@ -15,9 +15,9 @@ import {
     writePersonaSkill,
 } from "./persona-kit.js";
 
-// Sandbox's named personas: saving or removing a card connects or disconnects nothing, since accounts are capabilities
-// with their own lifecycle. What a card owns is its kit folder, written by the routes below and removed with `remove`.
-// Which card a new chat belongs to; passed in rather than imported, since agent/ already reads this subsystem and
+// Sandbox's named personas: saving or removing a persona connects or disconnects nothing, since accounts are capabilities
+// with their own lifecycle. What a persona owns is its kit folder, written by the routes below and removed with `remove`.
+// Which persona a new chat belongs to; passed in rather than imported, since agent/ already reads this subsystem and
 // importing back would cycle.
 export type PersonaRouter = (ask: PersonaRouteAsk, held: readonly string[] | undefined, signal?: AbortSignal) => Promise<PersonaRoute>;
 
@@ -25,9 +25,9 @@ export const createPersonasRoutes = (services: Services, route: PersonaRouter) =
     const i = implement(personasContract).$context<OrpcContext>();
     const root = services.workspace.root;
 
-    // Every kit write goes through the card first: an orphaned kit is unreachable, and its manifest needs the card's
-    // label. A missing card 404s rather than being created, so this surface can't mint a persona by side effect.
-    const card = async (id: string) => {
+    // Every kit write goes through the persona first: an orphaned kit is unreachable, and its manifest needs the persona's
+    // label. A missing persona 404s rather than being created, so this surface can't mint a persona by side effect.
+    const requirePersona = async (id: string) => {
         const found = await services.personas.get(id);
         if (found === undefined) {
             throw new ORPCError("NOT_FOUND", { message: "no persona with that id, it may have been removed since this page was drawn" });
@@ -37,10 +37,10 @@ export const createPersonasRoutes = (services: Services, route: PersonaRouter) =
 
     return {
         list: i.list.handler(async ({ context }) => {
-            // A fenced member is shown the cards that work in the part of the workspace they hold, and nothing about
+            // A fenced member is shown the personas that work in the part of the workspace they hold, and nothing about
             // the others, down to the accounts they name.
             const [personas, capabilities] = await Promise.all([
-                reachableCards(services, context.identity?.areas),
+                reachablePersonas(services, context.identity?.areas),
                 services.capabilities.list(),
             ]);
             const fenced = context.identity?.areas !== undefined;
@@ -61,8 +61,8 @@ export const createPersonasRoutes = (services: Services, route: PersonaRouter) =
             await removePersonaKit(root, input.id);
             return { ok: true as const };
         }),
-        // Never throws: no cards, no model, a deadline are all "none" with a reason; the composer's chip is waiting.
-        // Routed within the asker's own fence, so the card it lands on is one they may actually send through.
+        // Never throws: no personas, no model, a deadline are all "none" with a reason; the composer's chip is waiting.
+        // Routed within the asker's own fence, so the persona it lands on is one they may actually send through.
         route: i.route.handler(({ input, context, signal }) => route(input, context.identity?.areas, signal)),
 
         kit: i.kit.handler(async ({ input }) => {
@@ -70,7 +70,7 @@ export const createPersonasRoutes = (services: Services, route: PersonaRouter) =
             return { prompt: prompt ?? "", skills: skills.map(({ name, description }) => ({ name, description })) };
         }),
         savePrompt: i.savePrompt.handler(async ({ input }) => {
-            const persona = await card(input.id);
+            const persona = await requirePersona(input.id);
             // Emptying deletes the file; storing "" would leave it on a blank custom prompt, not "not written yet".
             if (input.prompt.trim() === "") {
                 await removePersonaPrompt(root, input.id);
@@ -87,7 +87,7 @@ export const createPersonasRoutes = (services: Services, route: PersonaRouter) =
             return skill;
         }),
         saveSkill: i.saveSkill.handler(async ({ input }) => {
-            const persona = await card(input.id);
+            const persona = await requirePersona(input.id);
             await writePersonaSkill(root, input.id, persona.label, { name: input.name, description: input.description, body: input.body });
             return { ok: true as const };
         }),

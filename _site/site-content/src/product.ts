@@ -75,7 +75,7 @@ export const productPages: ProductPage[] = [
         sub: "A chat window works for one agent. The board shows the status, changes and cost of every agent at once.",
         hero: {
             name: "fleet-board",
-            alt: "The intentic fleet board: an Attention lane holding a visitor's question from the Front Desk and an agent asking one of its own, an Active lane with an agent adding Stripe checkout, and a Finished lane where a completed change offers Land now. Every card shows model, branch, cost and diff stats.",
+            alt: "The intentic fleet board: an Attention lane holding a visitor's question from the Visitor chat and an agent asking one of its own, an Active lane with an agent adding Stripe checkout, and a Finished lane where a completed change offers Land now. Every card shows model, branch, cost and diff stats.",
             frame: "browser",
             label: "acme-shop · /agents",
         },
@@ -172,8 +172,8 @@ export const productPages: ProductPage[] = [
                     "Each visitor thread runs in its own throwaway git worktree, behind a bot check.",
                 ],
                 shot: {
-                    name: "front-desk",
-                    alt: "A robotics company's website with the Front Desk widget open in the corner: the agent greets the visitor, the visitor asks whether the arms work outdoors, and the agent answers with the IP66 rating and a cold-weather caveat, then offers to open a ticket.",
+                    name: "visitor-chat",
+                    alt: "A robotics company's website with the Visitor chat widget open in the corner: the agent greets the visitor, the visitor asks whether the arms work outdoors, and the agent answers with the IP66 rating and a cold-weather caveat, then offers to open a ticket.",
                     frame: "browser",
                     label: "a customer's site",
                 },
@@ -216,7 +216,7 @@ export const productPages: ProductPage[] = [
                     "A nightly schedule: a dependency audit, filed as a chore",
                     "A weekly schedule: release notes drafted from what landed",
                     "A Discord message mentions the agent: it answers with the repository open",
-                    "A Front Desk visitor asks: an agent answers, and holds what it should not answer alone",
+                    "A Visitor chat visitor asks: an agent answers, and holds what it should not answer alone",
                 ],
             },
             {
@@ -232,7 +232,7 @@ export const productPages: ProductPage[] = [
                 body: "An automatically started agent appears like any other, with its own card, diff and review.",
                 shot: {
                     name: "fleet-board",
-                    alt: "The intentic fleet board: an Attention lane holding a visitor's question from the Front Desk and an agent asking one of its own, an Active lane with an agent adding Stripe checkout, and a Finished lane where a completed change offers Land now. Every card shows model, branch, cost and diff stats.",
+                    alt: "The intentic fleet board: an Attention lane holding a visitor's question from the Visitor chat and an agent asking one of its own, an Active lane with an agent adding Stripe checkout, and a Finished lane where a completed change offers Land now. Every card shows model, branch, cost and diff stats.",
                     frame: "browser",
                     label: "acme-shop · /agents",
                 },

@@ -59,7 +59,7 @@ test("serves the daemon's own sources with no extension installed at all", async
     const catalog = await automationCatalog(services(mkdtempSync(join(tmpdir(), "catalog-work-")), ""));
 
     expect(catalog.sources.map((source) => source.provider)).toEqual(CORE_TRIGGER_SOURCES.map((source) => source.provider));
-    expect(catalog.templates.some((template) => template.id === "front-desk")).toBe(true);
+    expect(catalog.templates.some((template) => template.id === "visitor-chat")).toBe(true);
     expect(catalog.templates.some((template) => template.id === "fix-failing-ci")).toBe(true);
 });
 
@@ -116,7 +116,7 @@ test("a branch filter and a mention filter are drawn only where the source decla
     expect(rooms?.senderGroup?.label).toBe("Team ID");
     const webchat = catalog.sources.find((source) => source.provider === "webchat");
     expect(webchat?.branchField).toBeUndefined();
-    // The daemon's own sources vouch for nobody's identity, which is what keeps sender rules off the Front Desk.
+    // The daemon's own sources vouch for nobody's identity, which is what keeps sender rules off the Visitor chat.
     expect(webchat?.sender).toBeUndefined();
 });
 

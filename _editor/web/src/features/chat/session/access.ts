@@ -46,7 +46,7 @@ export const providerReady = (provider: AgentProvider): boolean => {
     }
     // Everything else needs a stored account; an endpoint or installed ACP agent is ready just by existing.
     // `nativeReady` is the daemon's own answer to the same question, and the only one a reader gets who may drive a
-    // turn but not read /accounts: without it a desk is told to connect a provider the box is already signed into.
+    // turn but not read /accounts: without it a guest is told to connect a provider the box is already signed into.
     return accountsOf(provider).length > 0 || nativeReady.value.includes(provider) || isAcp(provider) || isEndpoint(provider);
 };
 

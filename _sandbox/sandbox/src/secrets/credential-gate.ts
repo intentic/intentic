@@ -1,5 +1,5 @@
 import type { CredentialGateKind, CredentialLane, CredentialOffer } from "@intentic/sandbox-contract";
-import { type CardDeps, cardRun, OFFER_DEADLINE_MS, raiseCard, whyOf } from "../agent/run/offer-card.js";
+import { type CardDeps, cardRun, OFFER_DEADLINE_MS, raiseRequest, whyOf } from "../agent/run/offer-request.js";
 import { credentialUse } from "../guard/actions.js";
 import { guard } from "../guard/guard.js";
 import type { CredentialGatesStore } from "./credential-gates.js";
@@ -114,7 +114,7 @@ export const createCredentialGate = (deps: CredentialGateDeps): CredentialGate =
             approvers: gate.approvers,
             scope: gate.scope,
         };
-        const raised = await raiseCard(deps, card, {
+        const raised = await raiseRequest(deps, card, {
             kind: "credential_offer",
             onAbort: { kind: "credential_offer", requestId: "", approve: false },
             raised: (requestId) => ({ kind: "credential_offer", requestId, offer }),

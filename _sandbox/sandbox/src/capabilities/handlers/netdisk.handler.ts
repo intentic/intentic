@@ -38,9 +38,9 @@ or commits.
 
 Notes:
 - **Read-only is the user's decision, not a fault.** A disk whose \`netdisk list\` line says \`read-only\` refuses
-  writes by design: the user chose that on the card. Copy what you need into the workspace instead, and never
+  writes by design: the user chose that on the entry. Copy what you need into the workspace instead, and never
   remount, bind-mount or otherwise work around it; the daemon patrols the mount flags and reports a disk that
-  stopped matching its card.
+  stopped matching its entry.
 - A mount that fails with "no route", "did not answer" or "not reachable" usually means the server is behind a VPN
   that is down: \`vpn list\` shows what is up, and \`vpn connect <name>\` brings it back.
 - A command that hangs on a mounted disk means the server went away (a dropped tunnel): \`netdisk unmount <name>\`
@@ -79,12 +79,12 @@ export const netdiskHandler = tunnelHandler<NetdiskConfig>({
     down: unmountNetdisk,
     status: async (entry) => {
         const link = await netdiskLink(entry);
-        // A live mount that disagrees with its card outranks raw state: it is the one thing the access switch promised.
+        // A live mount that disagrees with its entry outranks raw state: it is the one thing the access switch promised.
         if (link.state === "mounted" && link.writable === true && link.access === "read") {
-            return { state: "error", detail: "mounted read-write, but the card says read-only: unmount and mount again" };
+            return { state: "error", detail: "mounted read-write, but the entry says read-only: unmount and mount again" };
         }
         return tunnelStatus(link, { active: "mounted", pending: "mounting" });
     },
-    stored: (id) => `Stored ${id}. Mount it from its row on the Network disk card, or ask the agent to.`,
+    stored: (id) => `Stored ${id}. Mount it from its row on the Network disk entry, or ask the agent to.`,
     afterRebuild: "the disk mounts itself when it restarts",
 });

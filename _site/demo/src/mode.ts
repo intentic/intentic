@@ -4,7 +4,7 @@ import { AWAITING_AGENT_ID, FEATURED_AGENT_ID, REVIEW_AGENT_ID } from "./fixture
 // roster carries and which extensions are on, plus teammate presence and open chats. Applied where served (daemon.ts,
 // sandbox.ts), not by rewriting the fixtures.
 
-export type DemoModeId = `minimal` | `default` | `full` | `desk`;
+export type DemoModeId = `minimal` | `default` | `full` | `maker`;
 
 export interface DemoMode {
     readonly id: DemoModeId;
@@ -54,19 +54,19 @@ const FULL: DemoMode = {
 };
 
 // A different workspace rather than a fullness: documents instead of code, one assistant, the maker's own words. What
-// intentic.dev/desk's screenshots are taken of, and where its "open the live workspace" link lands. The roster is its
-// own (fixture/desk.ts), so `agents` is not a filter here; the two extensions are the maker's home and the viewers that
+// intentic.dev/maker's screenshots are taken of, and where its "open the live workspace" link lands. The roster is its
+// own (fixture/maker.ts), so `agents` is not a filter here; the two extensions are the maker's home and the viewers that
 // draw a document.
-const DESK: DemoMode = {
-    id: `desk`,
-    label: `Desk`,
+const MAKER: DemoMode = {
+    id: `maker`,
+    label: `Maker`,
     note: `Documents, not code: one assistant on your files.`,
     extensions: [`intentic.projects`, `intentic.viewers`],
     teammate: false,
     openChats: true,
 };
 
-export const DEMO_MODES: readonly DemoMode[] = [MINIMAL, DEFAULT, FULL, DESK];
+export const DEMO_MODES: readonly DemoMode[] = [MINIMAL, DEFAULT, FULL, MAKER];
 
 // Session storage: per tab, surviving the reload a switch causes but not a new visit.
 const STORAGE_KEY = `intentic.demo.mode`;
@@ -90,11 +90,11 @@ const resolve = (): DemoMode => {
 export const demoMode = resolve();
 
 // WHICH TIER IS READING, from `?as=`, sticky per tab like the mode above it. Not a fullness and not an audience: a
-// grant, which changes what the shell draws at all. A desk is a different app — two rail seats, no hub, no files —
+// grant, which changes what the shell draws at all. A maker is a different app — two rail seats, no hub, no files —
 // and without this the recording could only ever be looked at as the owner, which is the one tier none of that
 // narrowing applies to. `?as=owner` (or a fresh tab) is the way back.
 const TIER_KEY = `intentic.demo.tier`;
-const TIERS = [`owner`, `maintainer`, `collaborator`, `viewer`, `desk`] as const;
+const TIERS = [`owner`, `maintainer`, `collaborator`, `viewer`, `guest`] as const;
 export type DemoTier = (typeof TIERS)[number];
 
 const resolveTier = (): DemoTier => {
@@ -114,17 +114,17 @@ const resolveTier = (): DemoTier => {
 /** The grant this page load is read with; the platform's sandbox row carries it, as a real one would. */
 export const demoTier = resolveTier();
 
-/** Whether this page load is the desk recording: the one switch every fixture seam reads. */
-export const deskEdition = demoMode.id === `desk`;
+/** Whether this page load is the maker recording: the one switch every fixture seam reads. */
+export const makerEdition = demoMode.id === `maker`;
 
-// The look and the audience the desk recording is read in, the same three keys the desk PROFILE seeds (@intentic/constants
+// The look and the audience the maker recording is read in, the same three keys the maker PROFILE seeds (@intentic/constants
 // profile.ts): light, unskinned, a maker. index.html's pre-paint script writes them for the first frame; this writes
 // them on a switch, and takes them back on the way out so the code recording opens in the reader's own light again.
-const DESK_LOOK: Record<string, string> = { "ui-color-scheme": `light`, "ui-skin": `none`, "ui-audience": `maker` };
+const MAKER_LOOK: Record<string, string> = { "ui-color-scheme": `light`, "ui-skin": `none`, "ui-audience": `maker` };
 
-const applyLook = (desk: boolean): void => {
-    for (const [key, value] of Object.entries(DESK_LOOK)) {
-        if (desk) {
+const applyLook = (maker: boolean): void => {
+    for (const [key, value] of Object.entries(MAKER_LOOK)) {
+        if (maker) {
             window.localStorage.setItem(key, value);
         } else {
             window.localStorage.removeItem(key);
@@ -154,8 +154,8 @@ export const enabledExtensions = (): readonly string[] | undefined => {
 // fleet board, since the current route might belong to an extension about to switch off.
 export const setDemoMode = (id: DemoModeId): void => {
     window.sessionStorage.setItem(STORAGE_KEY, id);
-    if ((id === `desk`) !== deskEdition) {
-        applyLook(id === `desk`);
+    if ((id === `maker`) !== makerEdition) {
+        applyLook(id === `maker`);
     }
     window.location.assign(`${import.meta.env.BASE_URL}agents`);
 };

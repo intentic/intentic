@@ -49,7 +49,7 @@ one row.
 
 **Taking focus on Windows needs more than `SetForegroundWindow`.** Windows refuses that call from a process
 that is not already in the foreground, and refuses it *quietly*: it flashes the taskbar button and leaves the
-keyboard where it was, so the next `type` or `key` goes to whatever the person at that desk had open. A backend
+keyboard where it was, so the next `type` or `key` goes to whatever the person at that guest had open. A backend
 running from a fresh `powershell.exe` misses every qualifying condition at once, so `focusWindow` asks for
 three of them together:
 

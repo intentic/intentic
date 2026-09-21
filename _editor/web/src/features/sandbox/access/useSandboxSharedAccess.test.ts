@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createApp, defineComponent, h, ref } from "vue";
 import type { SandboxSummary } from "@intentic/api-contract";
 
-const active = ref<SandboxSummary | undefined>({ id: `sbx-1`, name: `Desk`, image: null, lastSeenAt: null, role: `owner` } as SandboxSummary);
+const active = ref<SandboxSummary | undefined>({ id: `sbx-1`, name: `Guest`, image: null, lastSeenAt: null, role: `owner` } as SandboxSummary);
 const reachable = ref(true);
 vi.mock("../client/useSandbox", () => ({ useSandbox: () => ({ active, reachable }) }));
 
@@ -38,7 +38,7 @@ beforeEach(() => {
     app?.unmount();
     app = undefined;
     queryClient.clear();
-    active.value = { id: `sbx-1`, name: `Desk`, image: null, lastSeenAt: null, role: `owner` } as SandboxSummary;
+    active.value = { id: `sbx-1`, name: `Guest`, image: null, lastSeenAt: null, role: `owner` } as SandboxSummary;
     sandboxJson.mockReset();
     sandboxJson.mockResolvedValue({ members: [], owner: `owner@example.com` });
 });
@@ -59,7 +59,7 @@ describe("useSandboxSharedAccess", () => {
     });
 
     it("is true for a member, since the roster already names someone besides them", () => {
-        active.value = { id: `sbx-1`, name: `Desk`, image: null, lastSeenAt: null, role: `collaborator` } as SandboxSummary;
+        active.value = { id: `sbx-1`, name: `Guest`, image: null, lastSeenAt: null, role: `collaborator` } as SandboxSummary;
         const { sharedAccess } = mounted();
         expect(sharedAccess.value).toBe(true);
     });

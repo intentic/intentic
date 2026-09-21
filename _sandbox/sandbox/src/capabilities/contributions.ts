@@ -5,13 +5,13 @@ import { enabledExtensions, type ExtensionHost, type InstalledExtension } from "
 import type { CapabilityCtx } from "./capability.js";
 import { extensionRead } from "./extension-dirs.js";
 
-// Capability cards are data: name, logo, form, skill, env and image fragment come from an installed extension's
+// Capability entries are data: name, logo, form, skill, env and image fragment come from an installed extension's
 // `contributes.capabilities`, not a hardcoded table. Handlers stay core; the manifest supplies only what varies between
-// two cards of one kind. Entries key by `<kind>:<id>` (unique only within a kind); first declaration wins.
+// two entries of one kind. Entries key by `<kind>:<id>` (unique only within a kind); first declaration wins.
 
 export interface ResolvedContribution {
     readonly spec: CapabilityContribution;
-    // Declaring extension: skill/fragment paths resolve against its dir; presence answers the card's status.
+    // Declaring extension: skill/fragment paths resolve against its dir; presence answers the entry's status.
     readonly extension: InstalledExtension;
 }
 
@@ -39,7 +39,7 @@ export const contributionRegistry = async (host: ExtensionHost): Promise<Map<str
     return registry;
 };
 
-// Looks up the card by the kind's discriminator field (a cli `provider`, a browser `platform`); undefined if the kind
+// Looks up the entry by the kind's discriminator field (a cli `provider`, a browser `platform`); undefined if the kind
 // has none, or the declaring extension is missing or disabled.
 export const contributionFor = (
     registry: Map<string, ResolvedContribution>,
@@ -69,12 +69,12 @@ export const contributionEnv = (spec: CapabilityContribution, config: Record<str
     return env;
 };
 
-// Fields a card marks `secret`; must never be echoed back to the browser. A card may declare more than one (Slack needs
+// Fields a entry marks `secret`; must never be echoed back to the browser. A entry may declare more than one (Slack needs
 // both an app-level and a bot token).
 export const contributionSecretFields = (spec: CapabilityContribution): Set<string> =>
     new Set(spec.fields.filter((field) => field.secret === true).map((field) => field.key));
 
-// The credential rotated via /secrets: the first field marked secret when a card declares several; undefined if none.
+// The credential rotated via /secrets: the first field marked secret when a entry declares several; undefined if none.
 // Rotating any other secret field means re-adding the capability.
 export const contributionSecretField = (spec: CapabilityContribution): string | undefined => spec.fields.find((field) => field.secret === true)?.key;
 
@@ -94,7 +94,7 @@ export const browserUrls = (spec: CapabilityContribution, config: Record<string,
     return login === undefined && home === undefined ? undefined : { loginUrl: login ?? home!, homeUrl: home ?? login! };
 };
 
-// The fragment path made absolute (checkout-relative in the manifest), cli cards only.
+// The fragment path made absolute (checkout-relative in the manifest), cli entries only.
 export const contributionFragmentPath = (contribution: ResolvedContribution): string | undefined =>
     contribution.spec.kind === "cli" && contribution.spec.fragment !== undefined
         ? join(contribution.extension.dir, contribution.spec.fragment)
@@ -105,7 +105,7 @@ export const contributionFragmentPath = (contribution: ResolvedContribution): st
 export const contributionPackName = (contribution: ResolvedContribution): string | undefined =>
     contribution.spec.kind === "cli" ? contribution.spec.pack : undefined;
 
-// Renders a card's skill.md for one instance. Substitutions, in order:
+// Renders a entry's skill.md for one instance. Substitutions, in order:
 //   `${tools}` → the kind's tool-surface note
 //   `${id}` → this instance's id
 //   `${<field>}` → the declared field's config value, "" if unanswered
@@ -134,7 +134,7 @@ export const contributedSkill = async (
     return rendered.replace(/^name: .*$/m, `name: ${id}`);
 };
 
-// Validates config against the card's declared fields (required present, unknown rejected, `options` values checked);
+// Validates config against the entry's declared fields (required present, unknown rejected, `options` values checked);
 // the kind's discriminator is allowed though undeclared. Returns an error message, or undefined when valid.
 export const validateContributionConfig = (spec: CapabilityContribution, config: Record<string, string>): string | undefined => {
     const discriminator = contributionDiscriminator(spec.kind);
@@ -142,7 +142,7 @@ export const validateContributionConfig = (spec: CapabilityContribution, config:
     if (discriminator !== undefined) {
         declared.add(discriminator);
     }
-    // These five are core to every browser card, not per-card, since a pinned-URL card declares no fields.
+    // These five are core to every browser entry, not per-card, since a pinned-URL entry declares no fields.
     if (spec.kind === "browser") {
         // `exit` belongs here too: which country the browser exits through is a sandbox fact, not a site fact.
         declared.add("username").add("password").add("identity").add("purpose").add("openedAt").add("exit");

@@ -6,7 +6,7 @@ import { useLayout } from "../../../shell/window/useLayout";
 
 // Which of the panel's three homes (side column, rail, own window) is in effect, derived from where it's drawn, never a
 // stored mode.
-// - chatWide: on a wide surface (own window, or the full-window area); turns onto its side.
+// - chatWide: on a wide surface (own window, or the full-window section); turns onto its side.
 // - chatOnRail: home is the rail, wherever the panel currently sits; the side column never opens.
 // - chatParked: this window draws the chat but no surface on it is showing the panel.
 
@@ -28,15 +28,15 @@ export const chatParked = computed(() => floating.shows.value && chatOnRail.valu
 export const chatBarPeek = ref(false);
 
 // Last in-shell route before the chat, to return to; not router.back(), since history can start on /chat.
-export const lastAreaPath = ref(`/agents`);
+export const lastSectionPath = ref(`/agents`);
 
 // Single source of truth for every dock/undock control. Docking to rail also navigates there; from floating it docks
-// first. Docking to the side only navigates away from the area the column replaces.
+// first. Docking to the side only navigates away from the section the column replaces.
 export const toggleChatHome = (router: Router): void => {
     if (chatOnRail.value) {
         layout.setChatHome(`side`);
         if (router.currentRoute.value.name === `chat`) {
-            void router.push(lastAreaPath.value);
+            void router.push(lastSectionPath.value);
         }
         return;
     }

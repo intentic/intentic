@@ -18,11 +18,11 @@ import { CORE_CONNECTOR_HOOKS } from "../cli/connector-hooks.js";
 import { gitAccessWired, gitHostOf } from "../cli/git-access.js";
 import { npmAuthWired } from "../cli/npm-access.js";
 
-// CLI-tool integration: provider data (card, fields, env, skill, fragment) lives in an installed extension's manifest;
+// CLI-tool integration: provider data (entry, fields, env, skill, fragment) lives in an installed extension's manifest;
 // this handler is generic plumbing over it. `apply` templates the connector's skill per instance ($VAR to $VAR_<ID>)
 // and runs its optional core hook. The credential is injected into the agent's env each turn, never written to a file.
 
-// The phone's own menu text, so the card and handset read as one instruction.
+// The phone's own menu text, so the entry and handset read as one instruction.
 const PHONE_STEPS = "on the phone: WhatsApp → Linked devices → Link a device → Link with phone number instead";
 
 // Whether a phone ever linked, read from the gateway's snapshot; the default is pending, not active. A silent gateway

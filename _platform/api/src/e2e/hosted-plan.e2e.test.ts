@@ -36,7 +36,7 @@ const BETTER_AUTH_SECRET = `hosted-plan-e2e-secret`;
 // An http api origin means Better Auth's plain cookie name, no __Secure- prefix (the browser tier has one).
 const SESSION_COOKIE = `better-auth.session_token`;
 const STRIPE = { secretKey: `sk_test_e2e_hosted_plan`, webhookSecret: `whsec_e2e_hosted_plan`, priceId: `price_e2e_hosted` };
-// The cheapest rung on sale, and the free lane's own ceiling: the boot check compares Stripe's amount against
+// The cheapest rung on sale, and the free plan's own ceiling: the boot check compares Stripe's amount against
 // what the rung advertises, so a figure typed here would fail the run rather than the code.
 const ENTRY = PAID_TIERS[0] as HostedTier;
 const MONTHLY_HOURS = FREE_TIER.monthlyHours;
@@ -248,7 +248,7 @@ describe.skipIf(!tier.runs)(tier.title, () => {
         await container?.stop();
     });
 
-    it(`sells the plan to everyone and describes the free lane to a signed-in account`, async () => {
+    it(`sells the plan to everyone and describes the free plan to a signed-in account`, async () => {
         const signedOut = await state();
         expect(signedOut.status).toBe(200);
         expect(signedOut.body).toEqual({ enabled: true, onPlan: false, priceUsd: ENTRY.priceUsd });
@@ -259,7 +259,7 @@ describe.skipIf(!tier.runs)(tier.title, () => {
         expect(signedIn.body.hosted).toMatchObject({ slots: 1, machines: [], usage: { allowanceMinutes: MONTHLY_HOURS * 60, usedMinutes: 0 } });
     });
 
-    it(`meters the free lane: a spent month refuses the wake and the offer says how many hours are left`, async () => {
+    it(`meters the free plan: a spent month refuses the wake and the offer says how many hours are left`, async () => {
         ({ id: sandboxId, token: connectToken } = await seedHostedSandbox(prisma, fly, alice, `alice-box`));
         const month = new Date().toISOString().slice(0, 7);
         await prisma.hostedUsage.create({ data: { ownerId: alice.id, sandboxId, month, minutes: MONTHLY_HOURS * 60 } });
@@ -411,7 +411,7 @@ describe.skipIf(!tier.runs)(tier.title, () => {
         expect(await onHostedPlan(prisma, config, alice.id)).toBe(true);
     });
 
-    it(`pauses the plan on a failed charge: the slot it bought stops counting and the free lane is metered again`, async () => {
+    it(`pauses the plan on a failed charge: the slot it bought stops counting and the free plan is metered again`, async () => {
         expect((await stripe.update(subscriptionId, { status: `past_due`, cancel_at_period_end: false })).status).toBe(200);
         const { body } = await state(alice);
         expect(body).toMatchObject({ onPlan: false, status: `past_due` });
@@ -424,7 +424,7 @@ describe.skipIf(!tier.runs)(tier.title, () => {
         // earlier, and the card offers a free machine.
         expect((await offer()).body).toEqual({ enabled: true, remaining: 1, hours: { allowance: MONTHLY_HOURS, remaining: 0 } });
         // The wake is judged against the machine's OWN rung, not the account's lane (docs/design/hosted-machines.md):
-        // the spent forty hours are the free lane's, and a Standard machine is nowhere near Standard's ceiling.
+        // the spent forty hours are the free plan's, and a Standard machine is nowhere near Standard's ceiling.
         expect((await wake()).status).toBe(200);
     });
 
@@ -513,7 +513,7 @@ describe.skipIf(!tier.runs)(tier.title, () => {
         expect(body.hosted?.usage.allowanceMinutes).toBe(MONTHLY_HOURS * 60);
         expect(await prisma.hostedPlan.findUnique({ where: { userId: bob.id } })).toBeNull();
 
-        // Off the list, the same account is on the free lane: nothing was ever written down.
+        // Off the list, the same account is on the free plan: nothing was ever written down.
         expect((await state(bob)).body).toMatchObject({ onPlan: false });
         expect(stripe.calls.some((call) => call.params[`client_reference_id`] === bob.id)).toBe(false);
     });

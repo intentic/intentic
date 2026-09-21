@@ -194,5 +194,5 @@ const AREA_ICONS: Readonly<Record<string, IconName>> = {
     devices: `desktop`,
 };
 
-export const areaIcon = (area: string, fallback?: IconName): IconName | undefined =>
-    Object.hasOwn(AREA_ICONS, area) ? AREA_ICONS[area] : fallback !== undefined && isIconName(fallback) ? fallback : undefined;
+export const sectionIcon = (section: string, fallback?: IconName): IconName | undefined =>
+    Object.hasOwn(AREA_ICONS, section) ? AREA_ICONS[section] : fallback !== undefined && isIconName(fallback) ? fallback : undefined;

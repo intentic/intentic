@@ -5,14 +5,14 @@ import ToggleSwitch from "primevue/toggleswitch";
 import { computed, ref } from "vue";
 import { useT } from "@intentic/ui/i18n";
 
-// What the sandbox says before the user does, as a card's own decision. Rows are named with the exact titles the
+// What the sandbox says before the user does, as a persona's own decision. Rows are named with the exact titles the
 // chat's "Sent with your message" fold shows, so switching one off means switching off the line you just read there.
 // The draft is the parent's, mutated in place, like <PersonaPowersFields>.
 
 const t = useT();
 
 const { omitted } = defineProps<{
-    /** Note ids this card drops; everything not listed is sent. Mutated in place. */
+    /** Note ids this persona drops; everything not listed is sent. Mutated in place. */
     omitted: TurnBriefingNoteId[];
 }>();
 
@@ -28,7 +28,7 @@ const setSends = (id: TurnBriefingNoteId, on: boolean): void => {
     }
 };
 
-// Counted, not listed: the heading says how far this card has been trimmed without repeating the rows under it.
+// Counted, not listed: the heading says how far this persona has been trimmed without repeating the rows under it.
 const dropped = computed(() => TURN_BRIEFING_NOTES.filter((note) => omitted.includes(note.id)).length);
 
 // Folded, since it is an answer to "is that the whole list?" rather than something to act on.

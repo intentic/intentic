@@ -2,7 +2,7 @@ import { join } from "node:path";
 import {
     HOST_HEARTBEAT_MS,
     HOST_NATIVE_ENVIRONMENT,
-    hostCardOf,
+    hostEntryOf,
     hostConnectionKey,
     type hostContract,
     hostEnvironmentOf,
@@ -57,7 +57,7 @@ export const HOST_PEER: PeerDoor<HostHello, HostAnnounced, Record<never, never>>
     scopesKind: "host",
     // A machine card is one computer; each OS install on it connects under its own key and is admitted on the card's
     // own switches (peer-routes.ts). The native environment's key is the card id, so a one-OS machine is unchanged.
-    cardOf: hostCardOf,
+    cardOf: hostEntryOf,
     mcp: { serverName: (id) => `intentic-machine:${id}` },
     expired: "pairing expired, click Connect again in your browser for a fresh command.",
 };
@@ -73,7 +73,7 @@ const byEnvironment = (a: HostEnvironment, b: HostEnvironment): number =>
 // computer rather than reading as asleep. A card is a computer, so a card with nothing connected is still a computer
 // with one environment nobody has reached.
 const environmentsOf = (services: Services, card: string, enrolled: readonly string[]): HostEnvironment[] => {
-    const keys = new Set([card, ...[...services.hostHub.known(), ...enrolled].filter((key) => hostCardOf(key) === card)]);
+    const keys = new Set([card, ...[...services.hostHub.known(), ...enrolled].filter((key) => hostEntryOf(key) === card)]);
     return [...keys]
         .map((key) => {
             const state = services.hostHub.state(key);

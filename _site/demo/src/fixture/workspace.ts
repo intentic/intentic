@@ -15,24 +15,24 @@ import type {
 } from "@intentic/sandbox-contract";
 import { WORKSPACE_ROOT } from "@intentic/constants";
 import { includeGlobs } from "@intentic/sandbox-contract";
-import { deskEdition } from "../mode";
+import { makerEdition } from "../mode";
 import { acceptanceFiles } from "./acceptance";
 import { SUPPORT_SWEEP_PATH, SUPPORT_SWEEP_SHOT } from "./browserShots";
 import { choreFiles } from "./chores";
-import { DESK_AGENT_DELTAS, DESK_CHANGES, DESK_DIFFS, DESK_ORIGIN_AGENTS, DESK_REPOS, DESK_SOURCES, deskSessions } from "./desk";
+import { MAKER_AGENT_DELTAS, MAKER_CHANGES, MAKER_DIFFS, MAKER_ORIGIN_AGENTS, MAKER_REPOS, MAKER_SOURCES, makerSessions } from "./maker";
 import { HANDOVER_CHANGE, HANDOVER_CHANGE_PATH, HANDOVER_DOCX, HANDOVER_PATH } from "./document";
 import { documentationFiles } from "./docs";
 import { CONFLICT_AGENT_ID, REVIEW_AGENT_ID } from "./fleet";
 
 // acme-shop: a two-repo sandbox (web front end, api) with a handful of dirty files for the Changes review, attributed
-// to three agents. Small on purpose: forty nodes prove what four thousand wouldn't. The desk recording (fixture/desk.ts)
+// to three agents. Small on purpose: forty nodes prove what four thousand wouldn't. The maker recording (fixture/maker.ts)
 // stands in for it at every seam below when the demo's mode says so.
 
-export const REPOS: readonly string[] = deskEdition ? DESK_REPOS : [`web`, `api`];
+export const REPOS: readonly string[] = makerEdition ? MAKER_REPOS : [`web`, `api`];
 
-// `web` matches the registry fixture's project; `api` deliberately doesn't, showing both claim outcomes. A desk has no
+// `web` matches the registry fixture's project; `api` deliberately doesn't, showing both claim outcomes. A maker has no
 // remote: nothing there was ever pushed anywhere.
-export const REMOTE_REPOS: readonly { repo: string; host: string; project: string }[] = deskEdition
+export const REMOTE_REPOS: readonly { repo: string; host: string; project: string }[] = makerEdition
     ? []
     : [
           { repo: `web`, host: `github.com`, project: `acme/shop-web` },
@@ -79,17 +79,17 @@ const CODE_CHANGES: RepoChanges[] = [
     },
 ];
 
-const BASE_CHANGES: RepoChanges[] = deskEdition ? DESK_CHANGES : CODE_CHANGES;
+const BASE_CHANGES: RepoChanges[] = makerEdition ? MAKER_CHANGES : CODE_CHANGES;
 
 // Both recordings' rows live in one table: their ids never meet, and a lookup by id needs no second switch.
 const ORIGIN_AGENTS: Record<string, { title: string; provider: string }> = {
     [REVIEW_AGENT_ID]: { title: `Migrate the users table to soft deletes`, provider: `claude` },
-    ...DESK_ORIGIN_AGENTS,
+    ...MAKER_ORIGIN_AGENTS,
 };
 
 // Cumulative delta per agent, read by both the review panel and, once landed, the Changes panel.
 const AGENT_DELTAS: Record<string, AgentRepoChanges[]> = {
-    ...DESK_AGENT_DELTAS,
+    ...MAKER_AGENT_DELTAS,
     [REVIEW_AGENT_ID]: [
         {
             repo: `api`,
@@ -358,7 +358,7 @@ const USERS_ROUTE_AFTER = `export const deleteUser = async (id: string) => {
 
 // Keyed `repo/path` so same paths across repos don't collide; no `before` renders as an addition.
 const DIFFS: Record<string, FileDiff> = {
-    ...DESK_DIFFS,
+    ...MAKER_DIFFS,
     "api/src/db/schema.ts": { before: SOFT_DELETE_BEFORE, after: SOFT_DELETE_AFTER },
     "api/src/routes/users.ts": { before: USERS_ROUTE_BEFORE, after: USERS_ROUTE_AFTER },
     "api/src/routes/checkout.ts": { after: CHECKOUT_ROUTE },
@@ -448,9 +448,9 @@ const ARCHIVES = new Map<string, [string, string | number][]>([
     ],
 ]);
 
-// The desk carries its own documents and none of the extension-owned files: those belong to the code repositories.
+// The maker carries its own documents and none of the extension-owned files: those belong to the code repositories.
 const FILES = new Map<string, string | number>(
-    deskEdition ? DESK_SOURCES : [...SOURCES, ...acceptanceFiles(RECORDED_AT), ...documentationFiles(RECORDED_AT), ...choreFiles(RECORDED_AT)],
+    makerEdition ? MAKER_SOURCES : [...SOURCES, ...acceptanceFiles(RECORDED_AT), ...documentationFiles(RECORDED_AT), ...choreFiles(RECORDED_AT)],
 );
 
 // Daemon's ignore scope; node_modules stays listed since a tree without it looks uninstalled.
@@ -599,8 +599,8 @@ export const deleteEntry = (path: string): void => {
 
 // Sessions window: the sandbox's whole history, more than the fleet board's today-only view.
 export const sessions = (now: number): SessionSummary[] => {
-    if (deskEdition) {
-        return deskSessions(now);
+    if (makerEdition) {
+        return makerSessions(now);
     }
     const hour = 3_600_000;
     return [

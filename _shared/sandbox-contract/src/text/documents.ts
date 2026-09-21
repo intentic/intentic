@@ -1,4 +1,4 @@
-import type { CardDocument, ToolCallContent } from "../events/cards.js";
+import type { RequestDocument, ToolCallContent } from "../events/requests.js";
 import { planParts } from "./title.js";
 import { PLAN_DOCUMENTS_DIR } from "../state/workspace-state.js";
 
@@ -24,7 +24,7 @@ export const documentTitle = (markdown: string, path: string): string => planPar
 
 // Reads the call's structured diff, not its result text: a Write's whole file already rides the frame as newText
 // (capped, truncated flags it). Works even for a published transcript with no workspace behind it.
-export const documentOf = (name: string, content: readonly ToolCallContent[] | undefined): CardDocument | undefined => {
+export const documentOf = (name: string, content: readonly ToolCallContent[] | undefined): RequestDocument | undefined => {
     if (name.toLowerCase() !== "write") {
         return undefined;
     }

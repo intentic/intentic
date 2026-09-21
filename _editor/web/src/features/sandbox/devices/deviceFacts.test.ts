@@ -7,7 +7,7 @@ import {
     deviceDoors,
     deviceQuiet,
     deviceReconnecting,
-    hostCard,
+    hostEntry,
     lastSeenNote,
     machineWarnings,
     manageBlock,
@@ -219,8 +219,8 @@ test(`stays quiet on a machine that has not reported anything yet`, () => {
 test(`offers no card for a device this build cannot connect`, () => {
     expect(manageBlock(reported({ platform: `macos` }), undefined)).toEqual({ kind: `connect` });
     expect(manageBlock(reported(), undefined)).toEqual({ kind: `connect` });
-    expect(hostCard(`macos`)).toBeUndefined();
-    expect(hostCard(undefined)).toBeUndefined();
+    expect(hostEntry(`macos`)).toBeUndefined();
+    expect(hostEntry(undefined)).toBeUndefined();
 });
 
 test(`names the sandbox switch when a connected device has not been granted it`, () => {

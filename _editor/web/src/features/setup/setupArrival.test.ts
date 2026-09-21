@@ -42,7 +42,7 @@ describe(`a second sandbox asked for in the app`, () => {
         expect(arrivalFor(arrival({ inApp: true, onlySandbox: true }))).toBe(`local`);
     });
 
-    // The Billing page's own door: a subscriber's slot is a machine on the platform, never one more on this desk.
+    // The Billing page's own door: a subscriber's slot is a machine on the platform, never one more on this guest.
     it(`still starts the machine a link asked for by name`, () => {
         expect(arrivalFor(arrival({ inApp: true, onlySandbox: false, requestedMachine: `hosted` }))).toBe(`hosted`);
     });

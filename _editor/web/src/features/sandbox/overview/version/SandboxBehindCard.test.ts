@@ -257,7 +257,7 @@ it(`offers the reload on a PC connected only on its Windows side`, () => {
 it(`prints the command rather than choosing between two connected devices`, () => {
     fleet.value = [
         { key: `ada-laptop`, label: `ada-laptop`, hostId: `ada-laptop`, online: true },
-        { key: `desk`, label: `desk`, hostId: `desk`, online: true },
+        { key: `guest`, label: `guest`, hostId: `guest`, online: true },
     ];
     setDaemonRoutes(LEVEL, reshaped(`settings.get`));
     const el = mount();

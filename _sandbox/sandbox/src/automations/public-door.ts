@@ -10,7 +10,7 @@ import { fileInstallsStore, type InstallsStore } from "../store/installs.js";
 import type { AutomationRecord } from "./automations-store.js";
 import { fireAutomation, type FireOptions, type FireOutcome, type WakeFn } from "./scheduler.js";
 
-// Public door: routes an anonymous browser reaches directly (Front Desk, bug intake), each a stranger's script tag
+// Public door: routes an anonymous browser reaches directly (Visitor chat, bug intake), each a stranger's script tag
 // rather than an extension, driving fireAutomation directly. No credential; app.ts's auth skip names exactly these
 // paths, gated cheapest-first: allowlist or key, rate window, proof-of-work, then the daily ceiling.
 

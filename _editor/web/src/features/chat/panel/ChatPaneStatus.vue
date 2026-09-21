@@ -27,7 +27,7 @@ const { block, hint } = defineProps<{
     hint: string;
 }>();
 
-const { isDesk } = useRole();
+const { isGuest } = useRole();
 const { contextUsage, provider, account, model } = usePaneView();
 const { mobile, keyboardInset } = useDevice();
 
@@ -91,7 +91,7 @@ const usageChip = computed(() => {
             </span>
             <!-- The chip answers "am I about to get rate-limited": hover opens the pool-by-pool card, a click goes to the cost. -->
             <RouterLink
-                v-if="usageChip && !isDesk"
+                v-if="usageChip && !isGuest"
                 to="/sandbox/usage"
                 class="touch-target inline-flex cursor-pointer items-center transition-colors hover:text-content"
             >
@@ -100,9 +100,9 @@ const usageChip = computed(() => {
                 >
             </RouterLink>
             <!-- Every chip here names a page, so each is a link: hover shows the address, Ctrl/Cmd-click opens it without leaving the chat. -->
-            <!-- Except for a desk, which may not open either page. Whether the box is answering is still its business —
+            <!-- Except for a guest, which may not open either page. Whether the box is answering is still its business —
                  it is why a message would not send — so the state stays and only the door goes. -->
-            <span v-if="isDesk" class="inline-flex items-center gap-1">
+            <span v-if="isGuest" class="inline-flex items-center gap-1">
                 <span class="inline-block h-1.5 w-1.5 rounded-full" :class="availabilityVisual.dotClass"></span>
                 {{ availabilityVisual.label }}
             </span>

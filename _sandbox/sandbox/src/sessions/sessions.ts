@@ -3,7 +3,7 @@ import { sdk } from "../runtimes/claude/claude-sdk.js";
 import {
     AskQuestionSchema,
     type MatchSnippet,
-    settledCards,
+    settledRequests,
     type TodoItem,
     type TranscriptQuestion,
     type TranscriptRow,
@@ -289,7 +289,7 @@ export const restoredSessionMessages = (
                 const question = asked.get(block.tool_use_id);
                 const reply = question === undefined ? undefined : parseAnswers(question.questions, block.tool_use_id, resultText(block.content));
                 if (question !== undefined && reply !== undefined) {
-                    Object.assign(question, settledCards({ question }, reply).question);
+                    Object.assign(question, settledRequests({ question }, reply).question);
                 }
             }
             // Tool-results-only and injected notes aren't user words; chips resolve against `dir`, always the root.

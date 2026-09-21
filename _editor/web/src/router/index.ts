@@ -142,7 +142,7 @@ const routes: RouteRecordRaw[] = [
         path: `/floating/:panel(chat|terminal|preview)`,
         name: `floating`,
         beforeEnter: [requireAuth, requireSetup],
-        component: () => import(`../features/chat/panel/FloatingArea.vue`),
+        component: () => import(`../features/chat/panel/FloatingSection.vue`),
     },
     {
         // Persistent workspace shell (rail + shared chat + area outlet). Guarded: signed in and sandbox connected;
@@ -153,11 +153,11 @@ const routes: RouteRecordRaw[] = [
         children: [
             // Where setup lets go of the user: mobile lands on the agent fleet, desktop on the home seat, where its
             // chat is already docked: the file tree, or a maker's Project page once that extension has registered.
-            // A desk has no home seat but the chat: the tree and the Project page are reads the daemon refuses it.
+            // A guest has no home seat but the chat: the tree and the Project page are reads the daemon refuses it.
             {
                 path: ``,
                 redirect: () =>
-                    useRole().isDesk.value
+                    useRole().isGuest.value
                         ? `/chat`
                         : useDevice().mobile.value
                           ? `/agents`
@@ -172,7 +172,7 @@ const routes: RouteRecordRaw[] = [
                 name: `chat`,
                 meta: { title: () => t(`router.index.chat`) },
                 beforeEnter: [chatEntry],
-                component: asyncView(() => import(`../features/chat/panel/ChatArea.vue`)),
+                component: asyncView(() => import(`../features/chat/panel/ChatSection.vue`)),
             },
             // The live app preview's full-window home, same arrangement as the chat route. Desktop only: the mobile
             // shell mounts no poppable panels, and a phone opens the preview URL directly.
@@ -221,7 +221,7 @@ const routes: RouteRecordRaw[] = [
                 component: asyncView(() => import(`../features/connect/Connect.vue`)),
             },
             {
-                path: `capabilities/:card?`,
+                path: `capabilities/:entry?`,
                 name: `capabilities`,
                 meta: { title: () => t(`router.index.capabilities`) },
                 // Title and description mirror the page's own copy, so the outline wears the real heading immediately.

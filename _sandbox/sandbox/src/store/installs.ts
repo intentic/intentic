@@ -2,7 +2,7 @@ import { z } from "zod";
 import { jsonFile } from "./json-file.js";
 
 // Tracks whether an embed snippet is actually loading, per origin, to tell an unconfigured automation apart from one
-// whose origin isn't allowlisted. Shared by the Front Desk widget and the bug-reporter SDK, one file per caller since
+// whose origin isn't allowlisted. Shared by the Visitor chat widget and the bug-reporter SDK, one file per caller since
 // automation ids aren't unique across the two.
 
 const ProbeSchema = z.object({

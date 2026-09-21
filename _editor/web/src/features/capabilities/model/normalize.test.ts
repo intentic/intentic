@@ -5,12 +5,12 @@ import { containerUrlFix, expandPaste, normalizeFieldValue, wireguardSummary } f
 // Repair before refusing: each case is something a person actually pastes or types, and what the
 // form does with it.
 
-const card = (kind: CapabilityCatalogEntry["kind"], fields: CapabilityCatalogEntry["fields"]): CapabilityCatalogEntry => ({
-    id: `card`,
-    name: `Card`,
+const tile = (kind: CapabilityCatalogEntry["kind"], fields: CapabilityCatalogEntry["fields"]): CapabilityCatalogEntry => ({
+    id: `tile`,
+    name: `Tile`,
     kind,
     category: `servers`,
-    description: `A card.`,
+    description: `A tile.`,
     fields,
 });
 
@@ -38,7 +38,7 @@ test(`offers the container-reachable rewrite of a localhost URL`, () => {
 });
 
 test(`unpacks an ssh target however it was carried`, () => {
-    const ssh = card(`ssh`, [
+    const ssh = tile(`ssh`, [
         { key: `host`, label: `Host` },
         { key: `port`, label: `Port` },
         { key: `user`, label: `User` },
@@ -53,7 +53,7 @@ test(`unpacks an ssh target however it was carried`, () => {
 });
 
 test(`takes a database connection string apart so nobody has to`, () => {
-    const postgres = card(`cli`, [
+    const postgres = tile(`cli`, [
         { key: `host`, label: `Host` },
         { key: `port`, label: `Port` },
         { key: `user`, label: `User` },
@@ -65,12 +65,12 @@ test(`takes a database connection string apart so nobody has to`, () => {
     // The password lands in its box and is never echoed in the account of what was read.
     expect(expansion?.summary).toContain(`password set`);
     expect(expansion?.summary).not.toContain(`s3cret`);
-    // A card without the fields to answer is not offered somebody else's parsing.
-    expect(expandPaste(card(`cli`, [{ key: `host`, label: `Host` }]), { key: `host`, label: `Host` }, {}, `postgres://a@b/c`)).toBeUndefined();
+    // A tile without the fields to answer is not offered somebody else's parsing.
+    expect(expandPaste(tile(`cli`, [{ key: `host`, label: `Host` }]), { key: `host`, label: `Host` }, {}, `postgres://a@b/c`)).toBeUndefined();
 });
 
 test(`splits a repository deep link into url, ref and subdirectory`, () => {
-    const extension = card(`extension`, [
+    const extension = tile(`extension`, [
         { key: `url`, label: `Git URL` },
         { key: `ref`, label: `Commit sha` },
         { key: `path`, label: `Subdirectory` },
@@ -104,7 +104,7 @@ test(`splits a repository deep link into url, ref and subdirectory`, () => {
 });
 
 test(`fills the mail settings an address already implies, without overwriting a typed host`, () => {
-    const imap = card(`cli`, [
+    const imap = tile(`cli`, [
         { key: `host`, label: `IMAP host` },
         { key: `port`, label: `Port` },
         { key: `username`, label: `Username` },

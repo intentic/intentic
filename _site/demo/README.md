@@ -72,16 +72,16 @@ by the reading setting that strips comments before the diff is computed.
 Anything the fixture does not serve answers 404 and logs one line naming the method and path. That console line
 is the tool: it is how the served routes were found, and how the next one will be.
 
-## The desk recording
+## The maker recording
 
-A fourth mode, `desk`, is a different workspace rather than a fullness: the same app on documents instead of code,
-for the reader who came from intentic.dev/desk. `src/fixture/desk.ts` holds it whole (a studio's newsletter, shop
+A fourth mode, `maker`, is a different workspace rather than a fullness: the same app on documents instead of code,
+for the reader who came from intentic.dev/maker. `src/fixture/maker.ts` holds it whole (a studio's newsletter, shop
 website, letters and receipts; four conversations with plain titles; one finished draft whose diff reads as tracked
 changes), and every seam that reads a fixture, the roster, the tree, the changes, the transcripts, the open tabs,
-the scripted run, picks the desk's when `deskEdition` (mode.ts) says so. The recording is read in the desk profile's
-look, light, unskinned, as a maker: `index.html` writes those three keys before first paint when the mode is `desk`,
-and `setDemoMode` takes them back on the way out. `capture.mts --desk` shoots it for the landing page's desk
-edition; `docs/design/desk-edition.md` has the rest.
+the scripted run, picks the maker's when `makerEdition` (mode.ts) says so. The recording is read in the maker profile's
+look, light, unskinned, as a maker: `index.html` writes those three keys before first paint when the mode is `maker`,
+and `setDemoMode` takes them back on the way out. `capture.mts --maker` shoots it for the landing page's maker
+edition; `docs/design/maker-edition.md` has the rest.
 
 ## How full it is: the three modes
 

@@ -2,8 +2,8 @@ import { describe, expect, it } from "vitest";
 import { grantBody, grantSendable } from "./accessGrant";
 
 describe(`grantBody`, () => {
-    it(`carries areas on a desk grant like any other tier below maintainer`, () => {
-        expect(grantBody(`dee@example.com`, `desk`, [`support`])).toEqual({ email: `dee@example.com`, role: `desk`, areas: [`support`] });
+    it(`carries areas on a guest grant like any other tier below maintainer`, () => {
+        expect(grantBody(`dee@example.com`, `guest`, [`support`])).toEqual({ email: `dee@example.com`, role: `guest`, areas: [`support`] });
     });
 
     // Absent and empty are different grants: no field is the whole workspace, an empty list is a fence admitting
@@ -22,13 +22,13 @@ describe(`grantBody`, () => {
 });
 
 describe(`grantSendable`, () => {
-    // A desk reaches its assistants and nothing else, so both halves have to hold: a fence, and a fence with somebody
+    // A guest reaches its assistants and nothing else, so both halves have to hold: a fence, and a fence with somebody
     // behind it. Unfenced it would speak through every card in the workspace.
-    it(`holds a desk grant until its areas reach an assistant`, () => {
-        expect(grantSendable(`desk`, undefined, 3)).toBe(false);
-        expect(grantSendable(`desk`, [], 3)).toBe(false);
-        expect(grantSendable(`desk`, [`support`], 0)).toBe(false);
-        expect(grantSendable(`desk`, [`support`], 1)).toBe(true);
+    it(`holds a guest grant until its areas reach an assistant`, () => {
+        expect(grantSendable(`guest`, undefined, 3)).toBe(false);
+        expect(grantSendable(`guest`, [], 3)).toBe(false);
+        expect(grantSendable(`guest`, [`support`], 0)).toBe(false);
+        expect(grantSendable(`guest`, [`support`], 1)).toBe(true);
     });
 
     // An unfenced writer would be a grant to change every file in the workspace; the absent area list is exactly what

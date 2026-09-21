@@ -60,7 +60,7 @@ export const createListenerRoutes = (services: Services, wake: WakeFn = streamAg
                             write({ automationId, delta: text });
                         }
                     },
-                    // Forwarded verbatim, unlike the Front Desk's: it lands in the owner's channel, sentence intact.
+                    // Forwarded verbatim, unlike the Visitor chat's: it lands in the owner's channel, sentence intact.
                     failed: (reason) => write({ automationId, failed: reason }),
                     end: () => {
                         write({ automationId, end: true });

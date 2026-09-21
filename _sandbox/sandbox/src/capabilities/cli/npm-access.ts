@@ -27,7 +27,7 @@ const writeNpmAuth = async (token: string): Promise<void> => {
     await writeFile(npmrcPath(), upsertNpmAuth(current, token), { mode: 0o600 });
 };
 
-// True only if the token line is actually on disk; a wiped HOME reports unwired rather than a stale active card.
+// True only if the token line is actually on disk; a wiped HOME reports unwired rather than a stale active entry.
 export const npmAuthWired = async (): Promise<boolean> => (await readFile(npmrcPath(), "utf8").catch(() => "")).includes(NPM_AUTH_KEY);
 
 export const npmAccessHook: ConnectorHook = {

@@ -2,7 +2,7 @@ import { expect, test } from "vitest";
 import { sharedCookieDomain } from "./profile.js";
 
 // The site writes its edition cookie on this domain so the app's origin reads it; a wrong answer here is a reader who
-// took the installer from /desk and opened the app as a developer.
+// took the installer from /maker and opened the app as a developer.
 
 test("the site and the app share the registrable domain, and that is what the cookie is set on", () => {
     expect(sharedCookieDomain("https://intentic.dev", "https://app.intentic.dev")).toBe("intentic.dev");

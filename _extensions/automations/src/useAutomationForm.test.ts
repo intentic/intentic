@@ -248,7 +248,7 @@ describe(`editing preserves fields outside the changed control`, () => {
         expect(build()).toEqual({ ...automation, prompt: `Handle the deploy carefully.` });
     });
 
-    it(`round-trips a secured Front Desk including settings the form does not render`, () => {
+    it(`round-trips a secured Visitor chat including settings the form does not render`, () => {
         const automation: Automation = {
             id: `support`,
             trigger: { kind: `listener`, provider: `webchat`, eventType: `message`, allowedOrigins: [`https://example.com`] },
@@ -275,7 +275,7 @@ describe(`editing preserves fields outside the changed control`, () => {
             },
             // Narrower than its persona; editing must not widen a security boundary.
             allowedTools: [`Read`],
-            actsAs: `front-desk`,
+            actsAs: `visitor-chat`,
             account: `reliable-account`,
             holdForSeconds: 20,
             enabled: false,
@@ -285,25 +285,25 @@ describe(`editing preserves fields outside the changed control`, () => {
         expect(build()).toEqual(automation);
     });
 
-    it(`gives a Front Desk that names no persona the front desk`, () => {
+    it(`gives a Visitor chat that names no persona the visitor chat`, () => {
         const { form, build } = formState();
         form.kind = `listener`;
         form.provider = `webchat`;
         form.id = `support`;
         form.prompt = `Answer support questions.`;
         form.origins = `https://example.com`;
-        expect(build().actsAs).toBe(`front-desk`);
+        expect(build().actsAs).toBe(`visitor-chat`);
     });
 
-    it(`leaves a Front Desk's chosen persona alone`, () => {
+    it(`leaves a Visitor chat's chosen persona alone`, () => {
         const { form, build } = formState();
         form.kind = `listener`;
         form.provider = `webchat`;
         form.id = `support`;
         form.prompt = `Answer support questions.`;
         form.origins = `https://example.com`;
-        form.actsAs = `support-desk`;
-        expect(build().actsAs).toBe(`support-desk`);
+        form.actsAs = `support-guest`;
+        expect(build().actsAs).toBe(`support-guest`);
     });
 });
 

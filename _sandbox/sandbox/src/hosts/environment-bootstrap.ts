@@ -1,5 +1,5 @@
 import { installScriptUrl } from "@intentic/constants";
-import { HOST_NATIVE_ENVIRONMENT, type HostFacts, hostCardOf, hostConnectionKey, hostEnvironmentOf } from "@intentic/sandbox-contract";
+import { HOST_NATIVE_ENVIRONMENT, type HostFacts, hostEntryOf, hostConnectionKey, hostEnvironmentOf } from "@intentic/sandbox-contract";
 import type { Services } from "../composition.js";
 import { callTool } from "./device-reports.js";
 
@@ -77,7 +77,7 @@ const bootstrapOne = async (services: Services, from: string, card: string, targ
 // Called when an environment of a machine comes up and says what it is. Fire-and-forget by design: a connect must not
 // wait on a download, and the agent it installs arrives as its own connection when it is ready.
 export const bootstrapEnvironments = (services: Services, from: string, facts: HostFacts): void => {
-    const card = hostCardOf(from);
+    const card = hostEntryOf(from);
     const now = Date.now();
     for (const target of bootstrapTargets(hostEnvironmentOf(from), facts)) {
         const connection = hostConnectionKey(card, target);

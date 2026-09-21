@@ -236,7 +236,7 @@ it *starts*, which folders its file tools may touch, and (see above) which repos
 copy it works in is not up for discussion. Both folder answers are picked from the workspace's own tree rather
 than typed, because a fence naming a folder that does not exist refuses everything, and it does so silently.
 
-The one exception is the desk a Front Desk answers through, whose manner is the product's rather than any
+The one exception is the maker a Visitor chat answers through, whose manner is the product's rather than any
 workspace's: that wording lives in the daemon beside the card the daemon writes, not on the card.
 
 **A persona is not a security boundary, and does not claim to be.** Its card holds no secret, which is exactly
@@ -278,5 +278,5 @@ accounts spelled out.
 | The screens | [SandboxPersonas.vue](../../_editor/web/src/features/sandbox/personas/SandboxPersonas.vue) (who this box is, the whole card) · [DirectoryPersonas.vue](../../_editor/web/src/features/workspace/directory-ui/DirectoryPersonas.vue) (the Workspace tree's per-folder panel: a name, and permissions under Advanced) · [Capabilities.vue](../../_editor/web/src/features/capabilities/Capabilities.vue) (what it is signed into) |
 | The card's own fields | [PersonaForm.vue](../../_editor/web/src/features/sandbox/personas/PersonaForm.vue) (the editor) · [PersonaPowersFields.vue](../../_editor/web/src/features/sandbox/personas/PersonaPowersFields.vue) (what it may do, grouped by blast radius: shared with the tree's quick panel) · [FolderPicker.vue](../../_editor/web/src/features/sandbox/devices/FolderPicker.vue) (both location answers, picked from the workspace tree) |
 | Seeing the workspace as one | [personaReach.ts](../../_editor/web/src/features/workspace/directory-ui/personaReach.ts) (the lens, and why it never blocks) · [WorkspaceDesktop.vue](../../_editor/web/src/features/workspace/page/WorkspaceDesktop.vue) (`lensLine`: who you are reading as, on the funnel that is already lit for it) |
-| What both of those must agree about | [personaCard.ts](../../_editor/web/src/features/sandbox/personas/personaCard.ts): the name→id slug, "everything is on" as a form, which answers are worth committing, and which cards start in a folder |
+| What both of those must agree about | [personaRules.ts](../../_editor/web/src/features/sandbox/personas/personaRules.ts): the name→id slug, "everything is on" as a form, which answers are worth committing, and which cards start in a folder |
 | Picking one for a chat | [ChatPersonaMenu.vue](../../_editor/web/src/features/chat/personas/ChatPersonaMenu.vue) (the composer's picker) · [ChatPane.vue](../../_editor/web/src/features/chat/panel/ChatPane.vue) (the pill and what it warns about) |

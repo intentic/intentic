@@ -12,7 +12,7 @@ import {
     personasStartingIn,
     powersDraftOf,
     storedPowers,
-} from "../../sandbox/personas/personaCard";
+} from "../../sandbox/personas/personaRules";
 import { usePersonas } from "../../sandbox/personas/usePersonas";
 import PersonaPowersFields from "../../sandbox/personas/PersonaPowersFields.vue";
 import { useT } from "@intentic/ui/i18n";

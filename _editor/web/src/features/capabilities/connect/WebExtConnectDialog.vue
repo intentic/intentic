@@ -10,7 +10,7 @@ import { useT } from "@intentic/ui/i18n";
 // run in. Site access stays a separate, per-site decision made later in the extension. The code also posts on this
 // window so an installed extension can pick it up without copying; either way still needs a click in its popup.
 
-// `install` is empty when the card named no store listing (unlisted build, hand-added family); the link is then
+// `install` is empty when the tile named no store listing (unlisted build, hand-added family); the link is then
 // omitted.
 const t = useT();
 

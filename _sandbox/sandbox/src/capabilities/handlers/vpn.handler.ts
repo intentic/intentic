@@ -112,6 +112,6 @@ export const vpnHandler = tunnelHandler<VpnConfig>({
     up: connectVpn,
     down: disconnectVpn,
     status: async (entry) => tunnelStatus(await vpnLink(entry), { active: "connected", pending: "connecting" }),
-    stored: (id) => `Stored ${id}. Connect it from its row on the VPN card, or ask the agent to.`,
+    stored: (id) => `Stored ${id}. Connect it from its row on the VPN entry, or ask the agent to.`,
     afterRebuild: "the tunnel dials itself when it restarts",
 });

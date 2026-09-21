@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { holdsCard, type TodoItem } from "@intentic/sandbox-contract";
+import { holdsRequest, type TodoItem } from "@intentic/sandbox-contract";
 import {
     changedNothing,
     type ChatMessage,
@@ -43,7 +43,7 @@ describe(`recordedRows`, () => {
             { id: 5, role: `notice`, text: `The provider refused the turn.` },
             { id: 6, role: `assistant`, text: ``, permission: { requestId: `perm1`, toolName: `Bash`, status: `cancelled` } },
         ];
-        expect(messages.map(holdsCard)).toEqual([false, true, false, false, false, true]);
+        expect(messages.map(holdsRequest)).toEqual([false, true, false, false, false, true]);
         expect(recordedRows(messages)).toBe(4);
     });
 });

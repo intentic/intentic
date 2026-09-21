@@ -1,4 +1,4 @@
-import type { TranscriptCards, TranscriptRow } from "@intentic/sandbox-contract";
+import type { TranscriptRequests, TranscriptRow } from "@intentic/sandbox-contract";
 import { computed, type ComputedRef, ref, shallowRef } from "vue";
 import { recordPerf } from "../../../app/perf";
 import type { ChatMessage } from "./transcript";
@@ -148,7 +148,7 @@ export class TranscriptClock {
 
     // Freezes a card the instant the daemon accepts it, closing the gap before the matching `resolved` patch arrives,
     // so its buttons aren't offered a second time.
-    attachCard(id: number, cards: TranscriptCards): void {
+    attachCard(id: number, cards: TranscriptRequests): void {
         this.write((state) => ({
             ...state,
             messages: state.messages.map((message) => (message.id === id ? { ...message, ...cards } : message)),

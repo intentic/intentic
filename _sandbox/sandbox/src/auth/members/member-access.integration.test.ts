@@ -150,10 +150,10 @@ test("every co-working act answers at its own tier, and at none below it", async
     }
 });
 
-// A desk sits under the tiers with a list of its own (role-floor.ts deskReach): the chat it drives, the cards its
+// A guest sits under the tiers with a list of its own (role-floor.ts guestReach): the chat it drives, the cards its
 // areas reach, and those folders read-only are open; the archive of past conversations, the box and every ship
-// control are shut. Every desk holds an area, so the workspace reads below are cut by that fence, never whole.
-test("a desk reaches its chat and its own folders, and nothing of the past or the box", async () => {
+// control are shut. Every guest holds an area, so the workspace reads below are cut by that fence, never whole.
+test("a guest reaches its chat and its own folders, and nothing of the past or the box", async () => {
     const open: readonly [string, string][] = [
         [`GET`, `/agents`],
         [`GET`, `/personas`],
@@ -168,7 +168,7 @@ test("a desk reaches its chat and its own folders, and nothing of the past or th
         [`GET`, `/areas`],
     ];
     for (const [method, url] of open) {
-        expect(await statusAs(`desk`, method, url, {}), `desk should reach ${method} ${url}`).not.toBe(403);
+        expect(await statusAs(`guest`, method, url, {}), `guest should reach ${method} ${url}`).not.toBe(403);
     }
     const shut: readonly [string, string][] = [
         [`POST`, `/workspace/upload?path=app/main.ts`],
@@ -185,7 +185,7 @@ test("a desk reaches its chat and its own folders, and nothing of the past or th
         [`GET`, `/no/such/route`],
     ];
     for (const [method, url] of shut) {
-        expect(await statusAs(`desk`, method, url, {}), `desk should not reach ${method} ${url}`).toBe(403);
+        expect(await statusAs(`guest`, method, url, {}), `guest should not reach ${method} ${url}`).toBe(403);
     }
 });
 

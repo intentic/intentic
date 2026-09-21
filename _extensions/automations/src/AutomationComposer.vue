@@ -11,7 +11,7 @@ import { t } from "./i18n.js";
 
 // Composes inline in the list, at page width, matching how editing already works (AutomationRow) rather than in a
 // modal. Mounted only while open, so fields, pick and error always start empty. Keeps the dialog's handoff: a webhook
-// or Front Desk isn't finished at save, so the panel swaps to what to paste instead of closing.
+// or Visitor chat isn't finished at save, so the panel swaps to what to paste instead of closing.
 
 const { prefill, listenerSources, templates } = defineProps<{
     prefill?: AutomationTemplate;
@@ -39,7 +39,7 @@ const template = computed(() =>
 const recipesOpen = ref(false);
 const recipeFilter = ref(``);
 const recipeFilterInput = ref<HTMLInputElement>();
-// After creating an event or Front Desk automation the panel stays on this id to show what to paste.
+// After creating an event or Visitor chat automation the panel stays on this id to show what to paste.
 const savedId = ref<string | undefined>(undefined);
 const submitError = ref<string | undefined>(undefined);
 const shaking = ref(false);
@@ -107,8 +107,8 @@ const submit = async (): Promise<void> => {
     try {
         const id = form.id.trim();
         await save.mutateAsync(build());
-        // Event and Front Desk aren't finished by saving; everything else closes the panel right away.
-        if (form.kind === `event` || state.isFrontDesk.value) {
+        // Event and Visitor chat aren't finished by saving; everything else closes the panel right away.
+        if (form.kind === `event` || state.isVisitorChat.value) {
             savedId.value = id;
             return;
         }
@@ -237,7 +237,7 @@ const finish = (id: string): void => {
         <!-- The handoff: what creating an automation doesn't finish by itself. -->
         <div v-else-if="savedAutomation && embedSnippet(savedAutomation)" class="flex flex-col gap-3">
             <p class="text-sm text-content">
-                <Icon name="check-circle" class="mr-1.5 text-success" />{{ t(`automationComposer.frontDeskCreatedDrop`) }}
+                <Icon name="check-circle" class="mr-1.5 text-success" />{{ t(`automationComposer.visitorChatCreatedDrop`) }}
             </p>
             <div class="flex items-center gap-2 rounded-md border border-line bg-canvas px-3 py-2">
                 <code class="min-w-0 flex-1 break-all font-mono text-2xs text-content">{{ embedSnippet(savedAutomation) }}</code>

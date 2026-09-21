@@ -420,7 +420,7 @@ export const HostedPlanUsageSchema = z.object({
     month: z.string(),
     // Awake minutes so far, live: a machine that is up right now counts the minutes since it woke.
     usedMinutes: z.number().int().nonnegative(),
-    // The free lane's ceiling in minutes; null when unmetered, so `usedMinutes` has nothing to compare against.
+    // The free plan's ceiling in minutes; null when unmetered, so `usedMinutes` has nothing to compare against.
     allowanceMinutes: z.number().int().nonnegative().nullable(),
     // When the month rolls over (the first of next month, UTC).
     resetsAt: z.iso.datetime(),
@@ -622,7 +622,7 @@ export const SandboxHostedSchema = z.object({
 export type SandboxHosted = z.infer<typeof SandboxHostedSchema>;
 
 // The hosted lane's offer, read before creation; `remaining` is this caller's own allowance left.
-// `hours` is the free lane's budget, absent for anyone it doesn't apply to (unmetered, a member, no ceiling).
+// `hours` is the free plan's budget, absent for anyone it doesn't apply to (unmetered, a member, no ceiling).
 export const HostedHoursSchema = z.object({
     // Monthly ceiling and what's left, in whole hours; `remaining` floors, so "1 hour left" isn't a few minutes.
     allowance: z.number().int().nonnegative(),

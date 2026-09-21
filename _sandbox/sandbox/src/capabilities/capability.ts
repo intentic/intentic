@@ -30,7 +30,7 @@ export interface CapabilityCtx {
     // Same pair for the user's browsers, same reason: hub is the live subject, store enrollment is the status.
     readonly webexts: WebExtStore;
     readonly webextHub: WebExtHub;
-    // What a configured model API serves; the same catalog the picker and translator read, so a card can't disagree
+    // What a configured model API serves; the same catalog the picker and translator read, so a entry can't disagree
     // with it.
     readonly endpointModels: EndpointCatalog;
     // Rebuilds the translator's table once a local model's server serves (add time writes an empty model list).
@@ -53,7 +53,7 @@ export interface CapabilityCtx {
 // migration.
 // carry moves state apply can't re-derive; apply re-runs under the new name, unless reapply:false moves it in carry.
 export interface CapabilityRename {
-    // Why this kind's name can't change (one-per-sandbox cards, a repo named after it): remove and add instead.
+    // Why this kind's name can't change (one-per-sandbox entries, a repo named after it): remove and add instead.
     readonly refuse?: string;
     /** Moves the state the old name keyed, before the re-apply so a moved profile is in place for it. */
     readonly carry?: (ctx: CapabilityCtx, from: string, to: string, config: unknown) => Promise<void>;

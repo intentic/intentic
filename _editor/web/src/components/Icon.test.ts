@@ -2,7 +2,7 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { type App, createApp, h, nextTick, ref } from "vue";
 import Icon from "@intentic/ui/icon";
-import { areaIcon, ICONS, isIconName, type IconName } from "../../../ui/src/icons/iconSets.js";
+import { sectionIcon, ICONS, isIconName, type IconName } from "../../../ui/src/icons/iconSets.js";
 
 let app: App | undefined;
 // Props are cast through `as never` since the accessibility tests below pass raw fallthrough attrs (`aria-label`,
@@ -144,11 +144,11 @@ it(`updates both its drawing and its accessible name after mount`, async () => {
 });
 
 it(`keeps section meanings consistent while accepting valid extension fallbacks`, () => {
-    expect(areaIcon(`terminal`, `code`)).toBe(`terminal`);
-    expect(areaIcon(`workspace`, `file-tree`)).toBe(`folder`);
-    expect(areaIcon(`agent`, `sparkles`)).toBe(`robot`);
-    expect(areaIcon(`third-party-view`, `camera`)).toBe(`camera`);
-    expect(areaIcon(`third-party-view`)).toBeUndefined();
+    expect(sectionIcon(`terminal`, `code`)).toBe(`terminal`);
+    expect(sectionIcon(`workspace`, `file-tree`)).toBe(`folder`);
+    expect(sectionIcon(`agent`, `sparkles`)).toBe(`robot`);
+    expect(sectionIcon(`third-party-view`, `camera`)).toBe(`camera`);
+    expect(sectionIcon(`third-party-view`)).toBeUndefined();
     expect(isIconName(`constructor`)).toBe(false);
     expect(isIconName(`toString`)).toBe(false);
 });

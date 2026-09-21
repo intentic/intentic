@@ -1,4 +1,4 @@
-import { clearableOnDevice, type DeviceConflict, HOST_NATIVE_ENVIRONMENT, hostCardOf, hostEnvironmentOf } from "@intentic/sandbox-contract";
+import { clearableOnDevice, type DeviceConflict, HOST_NATIVE_ENVIRONMENT, hostEntryOf, hostEnvironmentOf } from "@intentic/sandbox-contract";
 import { composeAsk } from "@intentic/sandbox-contract/chores";
 import { t } from "@intentic/ui/i18n";
 
@@ -67,7 +67,7 @@ export const conflictAsk = ({ machine, hostId, localDir, conflicts, conflictedPa
     const folder = localDir ?? `the folder it syncs`;
     // The tools are named after the card, never after the connection: a PC's distro is reached through the PC's own
     // tools, with the crossing as an argument.
-    const card = hostCardOf(hostId);
+    const card = hostEntryOf(hostId);
     const environment = hostEnvironmentOf(hostId);
     // Said because the folder is inside the distro's filesystem: without the crossing, every read lands in the shell on
     // the other side of it and the paths below do not exist there.

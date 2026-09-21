@@ -1,8 +1,8 @@
 import type { HostedPlanState, SandboxSummary, User } from "@intentic/api-contract";
 import { FREE_TIER, hostedTier } from "@intentic/constants";
 import { inviteRecords } from "./fixture/access";
-import { DESK_SANDBOX_NAME } from "./fixture/desk";
-import { deskEdition, demoTier } from "./mode";
+import { MAKER_SANDBOX_NAME } from "./fixture/maker";
+import { makerEdition, demoTier } from "./mode";
 import { DEMO_DAEMON_ORIGIN, json } from "./transport";
 
 // Fetch handler for the three router gates before the workspace renders:
@@ -15,7 +15,7 @@ export const DEMO_USER: User = { id: `demo-user`, email: `ada@acme.dev`, name: `
 
 export const DEMO_SANDBOX: SandboxSummary = {
     id: `demo`,
-    name: deskEdition ? DESK_SANDBOX_NAME : `acme-shop`,
+    name: makerEdition ? MAKER_SANDBOX_NAME : `acme-shop`,
     image: null,
     daemonUrl: DEMO_DAEMON_ORIGIN,
     lastSeenAt: new Date().toISOString(),
@@ -57,7 +57,7 @@ const DEMO_HOSTED_PLAN: HostedPlanState = {
                 region: `arn`,
                 wokeAt: new Date(Date.now() - 2 * 3_600_000).toISOString(),
                 // A paying account in the demo, so the machine is the rung this one is standing on, with that
-                // rung's own month rather than the free lane's.
+                // rung's own month rather than the free plan's.
                 tier: DEMO_MACHINE_TIER.id,
                 shape: DEMO_MACHINE_TIER,
                 usedMinutes: 12_720,

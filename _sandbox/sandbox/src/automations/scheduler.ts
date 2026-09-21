@@ -569,7 +569,7 @@ const heldWakeOptions = (held: AutomationApproval, sink: OutboxSink | undefined)
 // Runs a held wake with its snapshot (`cleared: "both"`, guard already ran), then settles its thread so the next
 // message resumes it. Shared by both releases, the approve route and the countdown scan.
 export const runHeldWake = async (services: Services, automation: AutomationRecord, held: AutomationApproval, wake: WakeFn): Promise<void> => {
-    // The visitor's own stream closed when the wake was held, so a Front Desk answer has nowhere live to go; queue it
+    // The visitor's own stream closed when the wake was held, so a Visitor chat answer has nowhere live to go; queue it
     // where their next page load will collect it. Undefined for every other origin, which answers through its gateway.
     const sink = services.outboxStreamFor(held.origin);
     const settled = await fireAutomation(services, automation, wake, heldWakeOptions(held, sink));

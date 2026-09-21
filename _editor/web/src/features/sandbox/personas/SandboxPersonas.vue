@@ -23,14 +23,14 @@ import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue";
 import PersonaForm, { type PersonaDraft } from "./PersonaForm.vue";
 import { useBrowserAccounts } from "../../extensions/useBrowserAccounts";
 import { useCapabilities } from "../../capabilities/connect/useCapabilities";
-import { grantablesFrom, omittedNotesOf, type PersonaGrantable, personaSlug, powersDraftOf, storedPowers } from "./personaCard";
+import { grantablesFrom, omittedNotesOf, type PersonaGrantable, personaSlug, powersDraftOf, storedPowers } from "./personaRules";
 import { usePersonas } from "./usePersonas";
 import { useSandboxOutline } from "../overview/useSandboxOutline";
 import { useSandboxSettings } from "../overview/useSandboxSettings";
 import { useT } from "@intentic/ui/i18n";
 
 // The personas this sandbox wears when it acts outside: which accounts it speaks through, what it may do, where it
-// works. Not per-site: one card spans every platform under that name. Lives here, not on /capabilities, since it's a
+// works. Not per-site: one persona spans every platform under that name. Lives here, not on /capabilities, since it's a
 // property of the box; under "Reach", not "Configuration", since it's who acts, not what pays.
 
 const t = useT();
@@ -45,19 +45,19 @@ const listNotice = computed<NoticeModel | undefined>(() =>
 // appears twice.
 const { accounts, accountOf } = useBrowserAccounts();
 
-// The other three things a card grants by id (see grantablesFrom), shared with the Workspace tree's quick panel.
+// The other three things a persona grants by id (see grantablesFrom), shared with the Workspace tree's quick panel.
 const { capabilities } = useCapabilities();
 const grantables = computed<PersonaGrantable[]>(() => grantablesFrom(capabilities.value));
 
-// Marks for the accounts a card names; an id with no matching capability still gets one, so the row doesn't understate
+// Marks for the accounts a persona names; an id with no matching capability still gets one, so the row doesn't understate
 // what the persona reaches.
 const marks = (persona: Persona) => persona.capabilities.map((id) => ({ id, account: accountOf(id), signedIn: isConnected(id) }));
 
-// Whether a card can act at all right now: one signed-in account among several is enough, so this only marks a persona
+// Whether a persona can act at all right now: one signed-in account among several is enough, so this only marks a persona
 // that can reach nothing.
 const ready = (persona: Persona): boolean => persona.capabilities.some((id) => isConnected(id));
 
-// Accordion over a settings object: an open card writes as you change it (no Save button), and the row itself is the
+// Accordion over a settings object: an open persona writes as you change it (no Save button), and the row itself is the
 // disclosure, there's no separate edit affordance. The name stays the row's own title, text until clicked
 // (inlineRename).
 const draft = ref<PersonaDraft | undefined>(undefined);
@@ -73,13 +73,13 @@ const draftOf = (persona: Persona): PersonaDraft => ({
     folders: [...(persona.workspace?.folders ?? [])],
     systemPromptMode: persona.systemPromptMode,
     brief: persona.brief ?? ``,
-    // Absent context means every repository; a list, even empty, is the card deciding.
+    // Absent context means every repository; a list, even empty, is the persona deciding.
     carries: persona.context === undefined ? undefined : [...persona.context.repos],
     models: [...(persona.models ?? [])],
     omitNotes: omittedNotesOf(persona),
 });
 
-// Marks a draft change as not-an-edit (opening a card, or writing back a committed rename), so the autosave watcher
+// Marks a draft change as not-an-edit (opening a persona, or writing back a committed rename), so the autosave watcher
 // doesn't fire a write nobody asked for.
 let settling = false;
 const quietly = (mutate: () => void): void => {
@@ -102,7 +102,7 @@ const toggleOpen = (persona: Persona): void => {
     });
 };
 
-// A name, and nothing else: the card is written with the schema's own defaults (stored as absent, so the file says
+// A name, and nothing else: the persona is written with the schema's own defaults (stored as absent, so the file says
 // nothing about questions nobody was asked), then opens for the rest. The name lives in its own ref rather than a
 // half-built draft, since a draft with no `original` would need every field to be optional-until-saved.
 const newName = ref<string | undefined>(undefined);
@@ -118,7 +118,7 @@ const cancelAdd = (): void => {
 };
 
 const newId = computed(() => personaSlug(newName.value ?? ``));
-// A new card can't land on a name already taken; saving would silently edit the other one.
+// A new persona can't land on a name already taken; saving would silently edit the other one.
 const taken = computed(() => personas.value.some((persona) => persona.id === newId.value));
 const newValid = computed(() => newId.value !== `` && !taken.value);
 const nameHint = computed(() => {
@@ -128,8 +128,8 @@ const nameHint = computed(() => {
     return taken.value ? `You already have a persona called ${newId.value}.` : `Use letters or digits.`;
 });
 
-// Stores only what was decided: no `powers` for a card that grants everything, no `workspace` for one that limits
-// nothing. Same rule the label follows, shared with personaCard.ts since the quick panel writes cards too.
+// Stores only what was decided: no `powers` for a persona that grants everything, no `workspace` for one that limits
+// nothing. Same rule the label follows, shared with personaRules.ts since the quick panel writes personas too.
 const cardFrom = (state: PersonaDraft): Persona => {
     const id = state.original;
     const workspace = {
@@ -143,13 +143,13 @@ const cardFrom = (state: PersonaDraft): Persona => {
         capabilities: [...state.capabilities],
         ...(storedPowers(state) !== undefined ? { powers: storedPowers(state) } : {}),
         ...(Object.keys(workspace).length > 0 ? { workspace } : {}),
-        // Same rule: a card following the sandbox stores nothing, not a restated default.
+        // Same rule: a persona following the sandbox stores nothing, not a restated default.
         ...(state.systemPromptMode !== undefined ? { systemPromptMode: state.systemPromptMode } : {}),
         ...runsOn(state),
     };
 };
 
-// The fifth question's half of the card, same rule: an unset brief, full-carry, empty ladder, or a card that drops no
+// The fifth question's half of the persona, same rule: an unset brief, full-carry, empty ladder, or a persona that drops no
 // preamble note each store nothing.
 const runsOn = (state: PersonaDraft): Pick<Persona, "brief" | "context" | "models" | "briefing"> => ({
     ...(state.brief.trim() !== `` ? { brief: state.brief.trim() } : {}),
@@ -158,8 +158,8 @@ const runsOn = (state: PersonaDraft): Pick<Persona, "brief" | "context" | "model
     ...(state.omitNotes.length > 0 ? { briefing: { omit: [...state.omitNotes] } } : {}),
 });
 
-// Writes the card with just its name and an empty account list; every other field is a default the schema already
-// means. Then opens the new card, since "made a persona" and "now set it up" are one errand.
+// Writes the persona with just its name and an empty account list; every other field is a default the schema already
+// means. Then opens the new persona, since "made a persona" and "now set it up" are one errand.
 const submitting = ref(false);
 const submit = async (): Promise<void> => {
     // `taken` only sees personas already fetched, so without this the id being written right now still reads as free.
@@ -173,7 +173,7 @@ const submit = async (): Promise<void> => {
     try {
         await save.mutateAsync({ id, capabilities: [], ...(label !== id ? { label } : {}) });
         newName.value = undefined;
-        // Quietly, like any other open, so the autosave watcher doesn't treat the card it just showed as an edit.
+        // Quietly, like any other open, so the autosave watcher doesn't treat the persona it just showed as an edit.
         quietly(() => {
             draft.value = draftOf({ id, capabilities: [], ...(label !== id ? { label } : {}) });
         });
@@ -212,7 +212,7 @@ watch(
 );
 onBeforeUnmount(() => clearTimeout(pending));
 
-// Writes the whole card (an upsert), reading from the open draft if there is one so a rename doesn't clobber a switch
+// Writes the whole persona (an upsert), reading from the open draft if there is one so a rename doesn't clobber a switch
 // flipped a moment ago. The edit state is the row's own, inside its <InlineRename>; this is only where the name goes.
 const renameOf =
     (persona: Persona) =>
@@ -227,7 +227,7 @@ const renameOf =
     };
 
 // Whether a new chat is matched to a persona from its first message (settings.personaRouting; daemon's
-// persona-router.ts reads it). Lives here, not with the model lists, since a decision about it needs the cards it would
+// persona-router.ts reads it). Lives here, not with the model lists, since a decision about it needs the personas it would
 // choose between.
 const { settings, patch } = useSandboxSettings();
 const personaRouting = computed(() => settings.value?.personaRouting ?? true);
@@ -284,7 +284,7 @@ const confirmRemove = async (): Promise<void> => {
                         {{ t(`sandbox.sandboxPersonas.untilOneAutomationSchedule`) }}
                     </span>
                 </div>
-                <!-- Never disabled for having no accounts: a card with none still bounds where an agent works. -->
+                <!-- Never disabled for having no accounts: a persona with none still bounds where an agent works. -->
                 <Button :label="t(`sandbox.sandboxPersonas.addPersona`)" size="small" @click="startAdd">
                     <template #icon><Icon name="plus" /></template>
                 </Button>
@@ -347,7 +347,7 @@ const confirmRemove = async (): Promise<void> => {
                                 :idle="!mark.signedIn"
                             />
                         </span>
-                        <!-- A bounded card says so on its row; which shelf is off is the form's business, this is just whether any are. -->
+                        <!-- A bounded persona says so on its row; which shelf is off is the form's business, this is just whether any are. -->
                         <StatusBadge v-if="persona.powers !== undefined" variant="neutral" size="xs">{{ personaBounds(persona) }}</StatusBadge>
                         <StatusBadge v-if="persona.capabilities.length > 0 && !ready(persona)" variant="neutral" size="xs" dot>
                             {{ t(`sandbox.sandboxPersonas.notSignedIn`) }}

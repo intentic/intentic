@@ -2,7 +2,7 @@
 import { ui, Notice, SegmentedControl } from "@intentic/ui";
 import ToggleSwitch from "primevue/toggleswitch";
 import { computed } from "vue";
-import type { PersonaGrantable, PersonaPowersDraft } from "./personaCard";
+import type { PersonaGrantable, PersonaPowersDraft } from "./personaRules";
 import { useT } from "@intentic/ui/i18n";
 
 // What a persona may do: shelves plus per-id grants, one component since two surfaces (the editor, the quick panel)
@@ -19,7 +19,7 @@ const {
     draft: PersonaPowersDraft;
     /** The connectors, devices and MCP connections this sandbox has, for the per-id grants. */
     grantables: readonly PersonaGrantable[];
-    /** Whether the parent's form has also fenced this card to a set of folders: the shell caveat's third case. */
+    /** Whether the parent's form has also fenced this persona to a set of folders: the shell caveat's third case. */
     folderBound?: boolean;
 }>();
 
@@ -47,7 +47,7 @@ const WORKSPACE_SHELVES = computed(() => [
 ]);
 
 // What it can reach past the workspace. Shell heads this group, not the one above, since a command can post, fetch,
-// install and read a credential, the only sentence on this card in a warning tone is the caveat about it.
+// install and read a credential, the only sentence on this persona in a warning tone is the caveat about it.
 const OUTWARD_SHELVES = computed(() => [
     {
         key: `shell` as const,
@@ -139,7 +139,7 @@ const shellCaveat = computed(
 
 <template>
     <div class="@container">
-        <!-- Persona powers fold at @2xl to keep opened cards readable. -->
+        <!-- Persona powers fold at @2xl to keep opened personas readable. -->
         <div class="grid items-start gap-x-10 gap-y-6 @2xl:grid-cols-2">
             <!-- This section controls carried resources and the persona's location. -->
             <div class="flex flex-col gap-6">

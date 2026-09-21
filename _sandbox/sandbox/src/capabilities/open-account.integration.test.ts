@@ -28,7 +28,7 @@ const harness = (entries: Capability[]) => {
 const configOf = async (store: ReturnType<typeof memoryCapabilitiesStore>, id: string): Promise<BrowserConfig> =>
     (await store.get(id))?.config as BrowserConfig;
 
-test("files a carded site on its own card, with the account's purpose and the date it was opened", async () => {
+test("files a carded site on its own entry, with the account's purpose and the date it was opened", async () => {
     const { store, written, services: deps } = harness([identity("scout", "on")]);
 
     await openBrowserAccount(deps, { id: "reddit-scout", platform: "reddit", identity: "scout", purpose: "community research" });
@@ -39,7 +39,7 @@ test("files a carded site on its own card, with the account's purpose and the da
     expect(config.purpose).toBe("community research");
     // Plain date, not a timestamp: "roughly when" is the precision this fact actually has.
     expect(config.openedAt).toMatch(/^\d{4}-\d{2}-\d{2}$/);
-    // Card pins its own URLs; the entry must not carry a second opinion about them.
+    // Entry pins its own URLs; the entry must not carry a second opinion about them.
     expect(config["homeUrl"]).toBeUndefined();
     // One skill per site, never per account: a roster line is what makes the account real to the agent.
     expect(written.get(loadedSkillFile(deps.workspace.root, "reddit"))).toContain("- `reddit-scout`");
@@ -60,11 +60,11 @@ test("files an uncarded site on the generic session rather than refusing it", as
     expect(config.platform).toBe("website");
     expect(config["homeUrl"]).toBe("https://www.producthunt.com/");
     expect(config.purpose).toBe("launch listings");
-    // Said out loud: the agent asked for a platform and got a card that knows nothing about the site.
-    expect(report).toContain('No site card for "producthunt"');
+    // Said out loud: the agent asked for a platform and got a entry that knows nothing about the site.
+    expect(report).toContain('No site entry for "producthunt"');
 });
 
-// Generic card pins no URL: an uncarded site with none has nowhere to open, caught here while the agent can still
+// Generic entry pins no URL: an uncarded site with none has nowhere to open, caught here while the agent can still
 // answer it.
 test("refuses an uncarded site with no address, and says which field would fix it", async () => {
     const { services: deps } = harness([identity("scout", "on")]);

@@ -17,12 +17,12 @@ export interface PeerHandlerSpec<Scopes extends { readonly platform: string }> {
     readonly note: string;
     // What the owner is told to do at the far end while the peer has never connected.
     readonly pairHint: string;
-    // What the card says of an enrolled peer not holding a socket right now.
+    // What the entry says of an enrolled peer not holding a socket right now.
     readonly awayHint: string;
     readonly added: (id: string) => string;
     readonly store: (ctx: CapabilityCtx) => Pick<PeerStore<unknown>, "enrolled" | "rename" | "revoke">;
     readonly hub: (ctx: CapabilityCtx) => Pick<PeerHub<never, unknown, unknown, Scopes>, "disconnect" | "online" | "pushScopes">;
-    // Every field is a permission, none secret: the card renders the grant back to the owner.
+    // Every field is a permission, none secret: the entry renders the grant back to the owner.
     readonly echo: (config: Scopes) => Record<string, string | number | boolean>;
 }
 

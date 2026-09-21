@@ -1,4 +1,4 @@
-// Platform UI/product catalogs: add-form descriptors and card data the web renders. Not wire contract; the contract
+// Platform UI/product catalogs: add-form descriptors and tile data the web renders. Not wire contract; the contract
 // holds only schemas, daemon enums are imported here.
 import { type CapabilityContribution, type CapabilityField, contributionDiscriminator } from "@intentic/extension-manifest";
 import {
@@ -68,7 +68,7 @@ export interface InventoryFieldDescriptor {
     readonly label: string;
     readonly kind: "text" | "number";
 }
-// Self-hosted service catalog for the infra operator panel's "Add service" dialog: one card per deployable service,
+// Self-hosted service catalog for the infra operator panel's "Add service" dialog: one tile per deployable service,
 // then its fields form.
 export interface InventoryServiceDescriptor {
     readonly service: ServiceKind;
@@ -133,18 +133,18 @@ export interface AddCapabilityInput {
     readonly config: Record<string, string>;
 }
 
-// CapabilityField (from @intentic/extension-api) is shared by static cards and extension manifests.
+// CapabilityField (from @intentic/extension-api) is shared by static tiles and extension manifests.
 // secret: withholds the value from every echo.
 // value: pins a field the user never sees (a discriminator).
 // when: gates a field on the answers already given.
 // multiline: keeps the newlines a pasted PEM needs.
 
-// Display grouping in the "+" grid, by what a card is for, not its technical `kind`. `platform` cards unlock a new
+// Display grouping in the "+" grid, by what a tile is for, not its technical `kind`. `platform` tiles unlock a new
 // workspace area; the rest connect existing tools.
 export type CapabilityCategory =
     "platform" | "code" | "observability" | "data" | "communication" | "business" | "devices" | "servers" | "deploy" | "extend";
 
-// The grid's sections, in render order, with their headers. Cards are grouped by `category` under these.
+// The grid's sections, in render order, with their headers. Tiles are grouped by `category` under these.
 export const CAPABILITY_CATEGORIES: readonly { readonly id: CapabilityCategory; readonly label: string; readonly hint: string }[] = [
     { id: "platform", label: "Platform", hint: "Scaffold managed repos that appear as their own operator panels." },
     { id: "code", label: "Code & issues", hint: "Repos, issues and pipelines as agent tools." },
@@ -159,7 +159,7 @@ export const CAPABILITY_CATEGORIES: readonly { readonly id: CapabilityCategory; 
     { id: "extend", label: "Extend", hint: "Add any MCP server or Claude Code plugin." },
 ];
 
-// How to get a card's credential, shown as an always-open panel (scopes, steps, a token link); hosted uses `url`,
+// How to get a tile's credential, shown as an always-open panel (scopes, steps, a token link); hosted uses `url`,
 // self-hostable builds the link from `urlFromField` + `path`. Backtick a literal in `scopes`/`steps` for a chip.
 export interface CapabilityGuide {
     readonly url?: string | undefined;
@@ -173,10 +173,10 @@ export interface CapabilityGuide {
     readonly steps?: readonly string[] | undefined;
 }
 
-// This package is a kind's whole story: cards declare the form, effects.ts declares the consequence.
+// This package is a kind's whole story: tiles declare the form, effects.ts declares the consequence.
 export * from "./effects.js";
 
-// The grid the rail's "+" renders; a card is a capability type; the user names each instance, so a provider can have N.
+// The grid the rail's "+" renders; a tile is a capability type; the user names each instance, so a provider can have N.
 export interface CapabilityCatalogEntry {
     readonly id: string;
     readonly name: string;
@@ -189,14 +189,14 @@ export interface CapabilityCatalogEntry {
     // One line, 60 characters or fewer; the grid clamps to two lines and a longer story belongs in `hint`.
     readonly description: string;
     readonly fields: readonly CapabilityField[];
-    // Paragraph under the add-form, also searched, so a card stays findable by words `description` had no room for.
+    // Paragraph under the add-form, also searched, so a tile stays findable by words `description` had no room for.
     readonly hint?: string | undefined;
     readonly guide?: CapabilityGuide | undefined;
     // True when there's nothing to name or duplicate (e.g. Docker Engine); opens pre-filled from the live instance.
     readonly singleton?: boolean | undefined;
 }
 
-// Permission switches every device card carries; shared so platforms can't drift into different defaults.
+// Permission switches every device tile carries; shared so platforms can't drift into different defaults.
 const HOST_SCOPE_FIELDS: readonly CapabilityField[] = [
     {
         key: "shell",
@@ -370,7 +370,7 @@ export const CAPABILITY_CATALOG: readonly CapabilityCatalogEntry[] = [
         icon: "shield",
         description: "WireGuard, FortiGate or IPsec.",
         fields: [
-            // The discriminator: every field below gates on it, so one card serves three protocols as one config union.
+            // The discriminator: every field below gates on it, so one tile serves three protocols as one config union.
             {
                 key: "provider",
                 label: "Type",
@@ -485,7 +485,7 @@ export const CAPABILITY_CATALOG: readonly CapabilityCatalogEntry[] = [
                 when: "provider == 'ipsec'",
             },
 
-            // The only persisted connection intent; connecting itself is a live action on this card.
+            // The only persisted connection intent; connecting itself is a live action on this tile.
             {
                 key: "autoConnect",
                 label: "Connect automatically",
@@ -534,7 +534,7 @@ export const CAPABILITY_CATALOG: readonly CapabilityCatalogEntry[] = [
             },
             { key: "password", label: "Password", secret: true, optional: true, placeholder: "empty for a guest share", when: "provider == 'smb'" },
             { key: "domain", label: "Domain / workgroup", optional: true, advanced: true, placeholder: "only if the server asks", when: "provider == 'smb'" },
-            // The decision this card exists for: read-only is the default, and it is the mount flag AND the advice above.
+            // The decision this tile exists for: read-only is the default, and it is the mount flag AND the advice above.
             {
                 key: "access",
                 label: "Access",
@@ -571,7 +571,7 @@ export const CAPABILITY_CATALOG: readonly CapabilityCatalogEntry[] = [
             steps: [
                 "Server and share are the two parts of `\\\\server\\share`.",
                 "Read-only: mounted `ro`, and give it a read-only account on the server too.",
-                "Behind a VPN: add the VPN card first; the disk mounts after the tunnel on every restart.",
+                "Behind a VPN: add the VPN tile first; the disk mounts after the tunnel on every restart.",
                 "Mount it on its row below; the agent finds the files under `/mnt/netdisk/<name>`.",
             ],
         },
@@ -654,7 +654,7 @@ export const CAPABILITY_CATALOG: readonly CapabilityCatalogEntry[] = [
                 "Proton VPN free: `account.protonvpn.com` → `Downloads` → `WireGuard configuration`, one config per country.",
                 "Mullvad: `mullvad.net/account` → `WireGuard configuration`.",
                 "Paste several files in the one box: they become one pool.",
-                "Switch later from this card or `geo use <name> DE`.",
+                "Switch later from this tile or `geo use <name> DE`.",
                 "These are datacenter addresses: sites that check will see a proxy.",
             ],
         },
@@ -839,7 +839,7 @@ export const CAPABILITY_CATALOG: readonly CapabilityCatalogEntry[] = [
             ],
         },
     },
-    // One card for every model API, local or remote: all are just a URL that serves models, the wire protocol is the
+    // One tile for every model API, local or remote: all are just a URL that serves models, the wire protocol is the
     // only real axis. The placeholder shows the local case, the one people don't expect already works.
     {
         id: "endpoint",
@@ -862,7 +862,7 @@ export const CAPABILITY_CATALOG: readonly CapabilityCatalogEntry[] = [
             { key: "apiKey", label: "API key", secret: true, optional: true, hint: "Empty is fine: most self-hosted servers have no auth." },
             { key: "headers", label: "Extra headers (Name: value per line)", optional: true, advanced: true, multiline: true },
         ],
-        hint: "No server yet? The Local model card runs one inside the sandbox for you.",
+        hint: "No server yet? The Local model tile runs one inside the sandbox for you.",
         guide: {
             steps: [
                 "Note the URL your server's API is on (Ollama: port `11434`).",
@@ -886,7 +886,7 @@ export const CAPABILITY_CATALOG: readonly CapabilityCatalogEntry[] = [
                 label: "Model",
                 default: "unsloth/Qwen3.5-9B-GGUF/Qwen3.5-9B-Q4_K_M.gguf",
                 // Weights alone; the cache is priced on the window field below. Add both for the real RAM ask. Rows and
-                // sizes come from the contract's curated list, so the card cannot quote a size the fit arithmetic and
+                // sizes come from the contract's curated list, so the tile cannot quote a size the fit arithmetic and
                 // the download estimate disagree with.
                 options: [
                     ...LOCAL_MODELS.map((choice) => ({
@@ -904,9 +904,9 @@ export const CAPABILITY_CATALOG: readonly CapabilityCatalogEntry[] = [
                 when: "model == 'custom'",
                 hint: "A direct link to a .gguf file.",
             },
-            // Used to serve a flat 32k window, under one turn's own cost; it's on the card now since it's the owner's
+            // Used to serve a flat 32k window, under one turn's own cost; it's on the tile now since it's the owner's
             // memory to spend. Each rung's price is its cache cost; options and default come from the contract so
-            // daemon and card can't drift.
+            // daemon and tile can't drift.
             {
                 key: "context",
                 label: "Conversation window",
@@ -933,7 +933,7 @@ export const CAPABILITY_CATALOG: readonly CapabilityCatalogEntry[] = [
                 hint: "Needs nvidia-container-toolkit on the host. Off = CPU, fine for the small ones.",
             },
         ],
-        hint: "Nothing leaves this machine, and it works offline. Already running Ollama or vLLM? The Model endpoint card points at it instead.",
+        hint: "Nothing leaves this machine, and it works offline. Already running Ollama or vLLM? The Model endpoint tile points at it instead.",
         guide: {
             steps: [
                 "Pick a model and window this machine has the free RAM for, the sum is computed under the form.",
@@ -946,7 +946,7 @@ export const CAPABILITY_CATALOG: readonly CapabilityCatalogEntry[] = [
 
 const isCapabilityCategory = (category: string): category is CapabilityCategory => CAPABILITY_CATEGORIES.some((entry) => entry.id === category);
 
-// Fields the core contributes instead of the card declaring them, so no card can weaken them: device switches (grant
+// Fields the core contributes instead of the tile declaring them, so no tile can weaken them: device switches (grant
 // doesn't vary by OS) and browser credentials (same login fact everywhere, needed for the agent to sign in).
 const BROWSER_CREDENTIAL_FIELDS: readonly CapabilityField[] = [
     // Folded behind "Let the agent sign in for you": the primary flow is adding, then signing in yourself.
@@ -972,9 +972,9 @@ const BROWSER_CREDENTIAL_FIELDS: readonly CapabilityField[] = [
 ];
 const CORE_FIELDS: Partial<Record<CapabilityKind, readonly CapabilityField[]>> = { host: HOST_SCOPE_FIELDS, browser: BROWSER_CREDENTIAL_FIELDS };
 
-// A contribution rendered as a catalog card; the manifest is the single source of name/logo/fields/guide. The
-// contribution's id becomes the card id and the pinned discriminator; an unknown category lands under "extend".
-export const contributionCard = (contribution: CapabilityContribution): CapabilityCatalogEntry => {
+// A contribution rendered as a catalog tile; the manifest is the single source of name/logo/fields/guide. The
+// contribution's id becomes the tile id and the pinned discriminator; an unknown category lands under "extend".
+export const contributionEntry = (contribution: CapabilityContribution): CapabilityCatalogEntry => {
     const discriminator = contributionDiscriminator(contribution.kind);
     return {
         id: contribution.id,
@@ -987,7 +987,7 @@ export const contributionCard = (contribution: CapabilityContribution): Capabili
         fields: [
             ...(discriminator === undefined ? [] : [{ key: discriminator, label: "", value: contribution.id }]),
             ...contribution.fields,
-            // A card declaring a core key keeps its own version; a duplicate key would render the input twice.
+            // A tile declaring a core key keeps its own version; a duplicate key would render the input twice.
             ...(CORE_FIELDS[contribution.kind] ?? []).filter((core) => !contribution.fields.some((field) => field.key === core.key)),
         ],
         hint: contribution.catalog.hint,
@@ -995,8 +995,8 @@ export const contributionCard = (contribution: CapabilityContribution): Capabili
     };
 };
 
-// The join between a card and its live connections, shared by the grid and the daemon's ask gate. A discriminator field
-// (`provider`, `platform`) tells same-`kind` cards apart; none means every instance matches.
+// The join between a tile and its live connections, shared by the grid and the daemon's ask gate. A discriminator field
+// (`provider`, `platform`) tells same-`kind` tiles apart; none means every instance matches.
 
 // The structural slice of a live connection the join reads; both the daemon's `Capability` and the wire's
 // `CapabilitySummary` satisfy it. `undefined` is admitted since per-kind config shapes carry optional fields.
@@ -1005,7 +1005,7 @@ export interface CapabilityInstanceLike {
     readonly config: Record<string, string | number | boolean | undefined>;
 }
 
-const cardDiscriminator = (entry: CapabilityCatalogEntry): { key: string; values: string[] } | undefined => {
+const entryDiscriminator = (entry: CapabilityCatalogEntry): { key: string; values: string[] } | undefined => {
     const field = entry.fields.find((candidate) => candidate.key === "provider" || candidate.key === "platform");
     if (field === undefined) {
         return undefined;
@@ -1013,9 +1013,9 @@ const cardDiscriminator = (entry: CapabilityCatalogEntry): { key: string; values
     return { key: field.key, values: field.value !== undefined ? [field.value] : (field.options ?? []).map((option) => option.value) };
 };
 
-// The live connections a card is answerable for.
+// The live connections a tile is answerable for.
 export const instancesOf = <T extends CapabilityInstanceLike>(entry: CapabilityCatalogEntry, capabilities: readonly T[]): T[] => {
-    const disc = cardDiscriminator(entry);
+    const disc = entryDiscriminator(entry);
     if (disc === undefined) {
         return capabilities.filter((capability) => capability.kind === entry.kind);
     }

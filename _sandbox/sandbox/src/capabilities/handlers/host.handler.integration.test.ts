@@ -72,7 +72,7 @@ test("apply installs the contributed OS pack with the core tools note and this i
     expect(skill).toContain("name: my-laptop");
     expect(skill).not.toContain("${tools}");
     expect(skill).not.toContain("${id}");
-    // Added but never connected: the user's next action is running the one-liner over there, and the card says so.
+    // Added but never connected: the user's next action is running the one-liner over there, and the entry says so.
     expect(await hostHandler.status(ctx, "my-laptop", laptop.config)).toEqual({
         state: "pending",
         detail: "click Connect and run the one-liner on that device",

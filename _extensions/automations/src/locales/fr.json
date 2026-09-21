@@ -11,13 +11,13 @@
         "create": "Créer",
         "done": "Terminé",
         "filterTemplates": "Filtrer les modèles…",
-        "frontDeskCreatedDrop": "Accueil créé : déposez ceci dans votre site :",
         "integrations": "Intégrations",
         "newAutomation": "Nouvelle automatisation",
         "noTemplateMatches": "Aucun modèle ne correspond.",
         "onAnyPageListed": "sur chaque page que vous avez listée ci-dessus. Le lanceur apparaît dans le coin ; les conversations de visiteurs arrivent sur votre tableau d'agents, où vous pouvez regarder et prendre le relais.",
         "pasteBefore": "Collez-le avant",
-        "startTemplate": "Partir d'un modèle"
+        "startTemplate": "Partir d'un modèle",
+        "visitorChatCreatedDrop": "Accueil créé : déposez ceci dans votre site :"
     },
     "automationFields": {
         "aboutSecondEachVisitors": "Environ une seconde du temps navigateur de chaque visiteur. Aucune clé.",
@@ -48,7 +48,6 @@
         "fires": "Fires",
         "firesIn": "Se déclenche {when}.",
         "fri": "Ven",
-        "frontDesk": "Accueil",
         "fullToolboxNoAccounts": "boîte à outils complète, aucun compte",
         "googleClientId": "Identifiant client Google",
         "googleSignIn": "Connexion Google",
@@ -137,6 +136,7 @@
         "turnstileSiteKey": "Clé de site Turnstile",
         "unavailable": "indisponible",
         "useStarter": "Utiliser le point de départ {label}",
+        "visitorChat": "Accueil",
         "visitorsGetNoAnswer": "Les visiteurs n'obtiennent pas de réponse dans le widget : les réponses approuvées arrivent dans votre chat à la place.",
         "wake": "Réveiller quand",
         "webhook": "Webhook",
@@ -164,7 +164,6 @@
         "embedCodeInstallStatus": "Code d'intégration et état d'installation",
         "enable": "Activer {id}",
         "firesOnTriggerNot": "Se déclenche sur son déclencheur, pas sur une horloge",
-        "frontDesk": "Accueil",
         "getEmbedCode": "Obtenir le code d'intégration",
         "heldApprovalBeforeRuns": "Retenue pour votre approbation avant de s'exécuter",
         "hold": "Retenir",
@@ -187,6 +186,7 @@
         "save": "Enregistrer",
         "sureEverySenderWired": "Sûr ? Chaque émetteur branché sur cette URL devra recevoir la nouvelle.",
         "urlShownToMaintainers": "Son URL est montrée aux mainteneurs et au propriétaire.",
+        "visitorChat": "Accueil",
         "wakesOnlyOwnCheck": "Ne se réveille que lorsque sa propre vérification trouve quelque chose",
         "webhook": "Webhook"
     },
@@ -219,7 +219,10 @@
     "extension": {
         "automations": "Automatisations"
     },
-    "frontDeskInstallDialog": {
+    "useCiDelivery": {
+        "firesWithinSecondsProvider": "Se déclenche en quelques secondes : le fournisseur livre chaque pipeline terminée directement à ce sandbox."
+    },
+    "visitorChatInstallDialog": {
         "allow": "Autoriser",
         "allowToLoadChat": "Autoriser {origin} à charger ce chat",
         "allowedSites": "Sites autorisés",
@@ -231,8 +234,5 @@
         "loaded": "Est-ce chargé ?",
         "noBrowserLoadedWidget": "Aucun navigateur n'a encore chargé ce widget. Collez l'extrait, ouvrez votre site, et ceci se met à jour tout seul en quelques secondes.",
         "pasteIntoSiteBefore": "Collez ceci dans votre site, avant"
-    },
-    "useCiDelivery": {
-        "firesWithinSecondsProvider": "Se déclenche en quelques secondes : le fournisseur livre chaque pipeline terminée directement à ce sandbox."
     }
 }

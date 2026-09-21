@@ -1,4 +1,4 @@
-import { type Automation, type AutomationCatalog, type AutomationSummary, automationsContract, cronOptions, FRONT_DESK_PERSONA, type Zone } from "@intentic/sandbox-contract";
+import { type Automation, type AutomationCatalog, type AutomationSummary, automationsContract, cronOptions, VISITOR_CHAT_PERSONA, type Zone } from "@intentic/sandbox-contract";
 import { implement, ORPCError } from "@orpc/server";
 import { Cron } from "croner";
 import { streamAgent } from "../agent/routes/agent.routes.js";
@@ -8,7 +8,7 @@ import type { Services } from "../composition.js";
 import type { OrpcContext } from "../app-env.js";
 import { reconcileListenerProcesses } from "../extensions/extension-processes.js";
 import { ISSUES_PROVIDER } from "../issues/provider.js";
-import { ensureFrontDeskPersona } from "../personas/front-desk.js";
+import { ensureVisitorChatPersona } from "../personas/visitor-chat.js";
 import type { AutomationRecord } from "./automations-store.js";
 import { automationCatalog, triggerSourceEvents } from "./catalog.js";
 import { sandboxZone, zoneOf } from "./schedule-zone.js";
@@ -49,7 +49,7 @@ const listed = async (services: Services, automation: AutomationRecord, operator
 };
 
 // Sender rules match `author.id`, so they are only accepted on a listener whose source promised that id is an identity
-// it vouches for (TriggerSource.sender); the Front Desk keeps its own `access` instead, and nothing else has a sender.
+// it vouches for (TriggerSource.sender); the Visitor chat keeps its own `access` instead, and nothing else has a sender.
 const refuseMisplacedSenders = (automation: Automation, catalog: AutomationCatalog): void => {
     if (automation.senders === undefined) {
         return;
@@ -63,9 +63,9 @@ const refuseMisplacedSenders = (automation: Automation, catalog: AutomationCatal
     }
 };
 
-// Whether any wake of this automation would wear the stock front-desk card: its own persona, or a sender rule's.
-const namesFrontDesk = (automation: Automation): boolean =>
-    automation.actsAs === FRONT_DESK_PERSONA || (automation.senders?.rules.some((rule) => rule.actsAs === FRONT_DESK_PERSONA) ?? false);
+// Whether any wake of this automation would wear the stock visitor-chat card: its own persona, or a sender rule's.
+const namesVisitorChat = (automation: Automation): boolean =>
+    automation.actsAs === VISITOR_CHAT_PERSONA || (automation.senders?.rules.some((rule) => rule.actsAs === VISITOR_CHAT_PERSONA) ?? false);
 
 // The automations manifest routes. `upsert` validates the cron with the scheduler's own parser, so what's accepted here
 // is exactly what will fire.
@@ -131,15 +131,15 @@ export const createAutomationsRoutes = (services: Services) => {
                     kind === door ? services.doorTokens.ensure(kind, automation.id) : services.doorTokens.remove(kind, automation.id),
                 ),
             );
-            // A Front Desk pinned to the Front Desk persona brings that card into being: turnPersona denies everything
+            // A Visitor chat pinned to the Visitor chat persona brings that card into being: turnPersona denies everything
             // to a named-but-missing card, which would leave a fresh public chat unable to read.
-            // Written here so a Front Desk arriving through any route lands with its persona already present; awaited
+            // Written here so a Visitor chat arriving through any route lands with its persona already present; awaited
             // since the wake it bounds can fire the moment this returns.
-            if (namesFrontDesk(automation)) {
-                await ensureFrontDeskPersona(services.personas).catch((error: unknown) =>
+            if (namesVisitorChat(automation)) {
+                await ensureVisitorChatPersona(services.personas).catch((error: unknown) =>
                     services.logger.warn(
                         { err: error, automation: automation.id },
-                        "front desk persona not created: the wake it names will be denied everything",
+                        "visitor chat persona not created: the wake it names will be denied everything",
                     ),
                 );
             }

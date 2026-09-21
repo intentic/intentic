@@ -1,7 +1,7 @@
 <!-- The line that turns a command block into a way out. -->
 <script setup lang="ts">
 import { computed } from "vue";
-import { hostCard } from "./deviceFacts";
+import { hostEntry } from "./deviceFacts";
 import { deviceSyncingSandbox } from "./deviceRows";
 import { useDevices } from "./useDevices";
 import { useT } from "@intentic/ui/i18n";
@@ -18,7 +18,7 @@ const props = defineProps<{
 // Shares the Devices query without polling it: this is a sentence, not a monitor.
 const { devices } = useDevices({ poll: false });
 const machine = computed(() => deviceSyncingSandbox(devices.value, props.slug));
-const card = computed(() => (machine.value === undefined ? undefined : hostCard(machine.value.platform)));
+const card = computed(() => (machine.value === undefined ? undefined : hostEntry(machine.value.platform)));
 </script>
 
 <template>

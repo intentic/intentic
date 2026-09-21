@@ -85,7 +85,7 @@ const flipHandoff = (): void => {
 // Prompt is optional now; only a name and a fault-free graph are required to save.
 const ready = computed(() => faults.value.length === 0 && draft.value.name.trim() !== ``);
 
-// Inspector width is remembered per browser, not per workflow; a property of the desk, not the graph.
+// Inspector width is remembered per browser, not per workflow; a property of the guest, not the graph.
 const WIDTH_KEY = `ext-workflows-inspector-width`;
 const DEFAULT_WIDTH = 360;
 const readWidth = (): number => {

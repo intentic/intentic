@@ -3,11 +3,11 @@ import { join } from "node:path";
 import { parseSkillFile, skillDocument } from "../settings/skill-file.js";
 import { statePath } from "../workspace/layout/state-paths.js";
 
-// A persona's own kit: prompt, skills and tools in one folder per card, read natively by the runtime's own Claude Code
+// A persona's own kit: prompt, skills and tools in one folder per persona, read natively by the runtime's own Claude Code
 // plugin loader, so nothing here is copied, projected, or swept back on a persona change. Separate from
 // `.intentic/config/skills/`: a kit skill activates only when its persona is worn.
 
-// The card's own directory, and the two paths inside it the daemon knows the meaning of.
+// The persona's own directory, and the two paths inside it the daemon knows the meaning of.
 export const personaKitDir = (root: string, id: string): string => statePath(root, ".intentic/config/personas/", id);
 const manifestPath = (root: string, id: string): string => join(personaKitDir(root, id), ".claude-plugin", "plugin.json");
 export const personaPromptPath = (root: string, id: string): string => join(personaKitDir(root, id), "PROMPT.md");
@@ -31,18 +31,18 @@ export const ensurePersonaKit = async (root: string, id: string, label: string |
     await writeFile(path, next);
 };
 
-// Removes the whole folder when its card is deleted; an orphaned kit is unreachable, so leaving it would hide the
+// Removes the whole folder when its persona is deleted; an orphaned kit is unreachable, so leaving it would hide the
 // owner's skills from every list.
 export const removePersonaKit = async (root: string, id: string): Promise<void> => {
     await rm(personaKitDir(root, id), { recursive: true, force: true });
 };
 
-// Plugin dir for the turn wearing this card, gated on the manifest, not the directory: an empty folder the loader would
+// Plugin dir for the turn wearing this persona, gated on the manifest, not the directory: an empty folder the loader would
 // refuse must read as "no kit yet", not "broken".
 export const personaKitPlugin = async (root: string, id: string): Promise<string | undefined> =>
     (await readFile(manifestPath(root, id), "utf8").catch(() => undefined)) === undefined ? undefined : personaKitDir(root, id);
 
-// Undefined until the card has one, the state the resolver reads as "follow the sandbox". Trims trailing whitespace,
+// Undefined until the persona has one, the state the resolver reads as "follow the sandbox". Trims trailing whitespace,
 // since a textarea-edited prompt otherwise reads as a permanently unsaved change.
 export const readPersonaPrompt = async (root: string, id: string): Promise<string | undefined> => {
     const text = await readFile(personaPromptPath(root, id), "utf8").catch(() => undefined);

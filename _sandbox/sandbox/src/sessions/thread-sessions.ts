@@ -12,7 +12,7 @@ const RecordSchema = z.object({
     sessionId: z.string().optional(),
     startedAt: z.number(),
     lastAt: z.number(),
-    // Messages this thread has sent, for the Front Desk's per-conversation ceiling.
+    // Messages this thread has sent, for the Visitor chat's per-conversation ceiling.
     messages: z.number(),
 });
 export type ThreadSession = z.infer<typeof RecordSchema>;
@@ -20,10 +20,10 @@ export type ThreadSession = z.infer<typeof RecordSchema>;
 const FileSchema = z.record(z.string(), RecordSchema);
 type SessionsFile = z.infer<typeof FileSchema>;
 
-// How long a quiet Front Desk thread keeps its conversation; overridable via WebchatConfig.sessionTtlMinutes.
+// How long a quiet Visitor chat thread keeps its conversation; overridable via WebchatConfig.sessionTtlMinutes.
 export const WEBCHAT_SESSION_TTL_MS = 24 * 60 * 60 * 1000;
 
-// Shorter than the Front Desk's TTL: a channel carries many unrelated topics, not one visitor's thread.
+// Shorter than the Visitor chat's TTL: a channel carries many unrelated topics, not one visitor's thread.
 export const CHANNEL_SESSION_TTL_MS = 2 * 60 * 60 * 1000;
 
 // Bound the file. Threads are evicted oldest-touched-first, so an active conversation is never the one dropped.

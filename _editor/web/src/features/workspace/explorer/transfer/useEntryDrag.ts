@@ -2,11 +2,11 @@ import { basename } from "@intentic/ui/path";
 import { computed, ref } from "vue";
 import { movableInto } from "./explorerPaste";
 
-// Pointer-driven moves of tree rows and desk tiles: Pointer Events, never the platform's own drag loop. A drag the page
+// Pointer-driven moves of tree rows and home tiles: Pointer Events, never the platform's own drag loop. A drag the page
 // starts itself (a `draggable` row, a selected span, a picture) freezes the tab in Brave until the browser is restarted
 // (brave/brave-browser#57753), so nothing in the app starts one; OS files still arrive by the platform's drag, which
 // begins outside the page. Module-level singleton: one drag at a time, shared by every surface, so a row dragged from
-// the tree can land on a desk tile. Surfaces offer targets with `data-drop-dir="<folder>"`, and read `over` to light
+// the tree can land on a home tile. Surfaces offer targets with `data-drop-dir="<folder>"`, and read `over` to light
 // the one the pointer is on.
 
 // Far enough that a click with a shaky hand still selects rather than drags.

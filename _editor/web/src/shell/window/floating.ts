@@ -4,7 +4,7 @@ import { reloadOnHotUpdate } from "../../app/hotReload";
 import { uuid } from "../../lib/uuid";
 
 // A floating panel (chat, terminal, preview) is a real window at /floating/<panel>, rendering full-bleed
-// (FloatingArea.vue). `floats`/`here`/`shows` derive from BroadcastChannel heartbeats, not ownership; a stale claim
+// (FloatingSection.vue). `floats`/`here`/`shows` derive from BroadcastChannel heartbeats, not ownership; a stale claim
 // (heartbeat and lock both gone past STALE_MS) is swept, and duplicates resolve oldest-claim-wins.
 
 export type FloatingPanel = `chat` | `terminal` | `preview`;

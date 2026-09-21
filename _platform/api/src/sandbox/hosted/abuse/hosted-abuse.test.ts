@@ -3,7 +3,7 @@ import type { PrismaClient } from "@intentic/prisma";
 import type { Config } from "../../../config.js";
 import { ABUSE_SUSPENSION_REASON, sweepHostedAbuse } from "./hosted-abuse.js";
 
-// The watch reads the provider's per-machine meter and acts on the free lane: a saturated machine is stopped and
+// The watch reads the provider's per-machine meter and acts on the free plan: a saturated machine is stopped and
 // struck, the strike after the line suspends, a subscriber's is only reported, a machine already struck this window
 // is left alone, and a builder in the same app never counts against the sandbox.
 

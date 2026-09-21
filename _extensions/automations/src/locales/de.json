@@ -11,13 +11,13 @@
         "create": "Erstellen",
         "done": "Fertig",
         "filterTemplates": "Vorlagen filtern…",
-        "frontDeskCreatedDrop": "Empfang angelegt: legen Sie das in Ihre Website:",
         "integrations": "Integrationen",
         "newAutomation": "Neue Automation",
         "noTemplateMatches": "Keine Vorlage passt.",
         "onAnyPageListed": "auf jeder Seite, die Sie oben aufgeführt haben. Der Launcher erscheint in der Ecke; Besucher-Unterhaltungen tauchen auf Ihrem Agenten-Board auf, wo Sie mitlesen und übernehmen können.",
         "pasteBefore": "Fügen Sie es ein vor",
-        "startTemplate": "Von einer Vorlage ausgehen"
+        "startTemplate": "Von einer Vorlage ausgehen",
+        "visitorChatCreatedDrop": "Empfang angelegt: legen Sie das in Ihre Website:"
     },
     "automationFields": {
         "aboutSecondEachVisitors": "Etwa eine Sekunde Browserzeit pro Besucher. Keine Schlüssel.",
@@ -48,7 +48,6 @@
         "fires": "Fires",
         "firesIn": "Löst {when} aus.",
         "fri": "Fr",
-        "frontDesk": "Empfang",
         "fullToolboxNoAccounts": "voller Werkzeugkasten, keine Konten",
         "googleClientId": "Google-Client-ID",
         "googleSignIn": "Google-Anmeldung",
@@ -137,6 +136,7 @@
         "turnstileSiteKey": "Turnstile-Site-Key",
         "unavailable": "nicht verfügbar",
         "useStarter": "Den {label}-Starter verwenden",
+        "visitorChat": "Empfang",
         "visitorsGetNoAnswer": "Besucher bekommen im Widget keine Antwort: genehmigte Antworten landen stattdessen in Ihrem Chat.",
         "wake": "Wecken, wenn",
         "webhook": "Webhook",
@@ -164,7 +164,6 @@
         "embedCodeInstallStatus": "Einbettungscode & Installationsstatus",
         "enable": "{id} aktivieren",
         "firesOnTriggerNot": "Löst auf ihren Auslöser aus, nicht auf eine Uhr",
-        "frontDesk": "Empfang",
         "getEmbedCode": "Den Einbettungscode holen",
         "heldApprovalBeforeRuns": "Vor dem Ausführen für Ihre Genehmigung zurückgehalten",
         "hold": "Zurückhalten",
@@ -187,6 +186,7 @@
         "save": "Speichern",
         "sureEverySenderWired": "Sicher? Jedem Sender, der an diese URL verdrahtet ist, muss die neue gegeben werden.",
         "urlShownToMaintainers": "Ihre URL wird Maintainern und dem Eigentümer gezeigt.",
+        "visitorChat": "Empfang",
         "wakesOnlyOwnCheck": "Weckt nur, wenn die eigene Prüfung etwas findet",
         "webhook": "Webhook"
     },
@@ -219,7 +219,10 @@
     "extension": {
         "automations": "Automationen"
     },
-    "frontDeskInstallDialog": {
+    "useCiDelivery": {
+        "firesWithinSecondsProvider": "Löst innerhalb von Sekunden aus: der Anbieter liefert jede fertige Pipeline direkt an diese Sandbox."
+    },
+    "visitorChatInstallDialog": {
         "allow": "Erlauben",
         "allowToLoadChat": "{origin} erlauben, diesen Chat zu laden",
         "allowedSites": "Erlaubte Websites",
@@ -231,8 +234,5 @@
         "loaded": "Ist es geladen?",
         "noBrowserLoadedWidget": "Noch hat kein Browser dieses Widget geladen. Fügen Sie den Schnipsel ein, öffnen Sie Ihre Website, dann aktualisiert sich das hier innerhalb weniger Sekunden von selbst.",
         "pasteIntoSiteBefore": "Fügen Sie das in Ihre Website ein, vor"
-    },
-    "useCiDelivery": {
-        "firesWithinSecondsProvider": "Löst innerhalb von Sekunden aus: der Anbieter liefert jede fertige Pipeline direkt an diese Sandbox."
     }
 }

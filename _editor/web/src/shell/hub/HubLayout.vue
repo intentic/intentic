@@ -1,7 +1,7 @@
 <!-- Shared shell for a hub page — title, section index, and the active section's body — used by the sandbox hub and settings hub. -->
 <script setup lang="ts">
 import { type IconName, type NavGroup, NavRail, Row, SegmentedControl, SplitView } from "@intentic/ui";
-import { areaIcon } from "@intentic/ui/icons";
+import { sectionIcon } from "@intentic/ui/icons";
 import { computed, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { badgeSpeaks, RUNNING_MARK_CLASS } from "../../core-views/viewBadge";
@@ -27,7 +27,7 @@ const {
     defaultSlug: string;
     /**
      * Whether every row must name its own slug, param-less form included. Set when the param-less URL is not one this
-     * reader may stand on — a desk's hub root is a path the shell fence sends it home from, so the one row it has
+     * reader may stand on — a guest's hub root is a path the shell fence sends it home from, so the one row it has
      * would otherwise link somewhere it is bounced off.
      */
     addressable?: boolean;
@@ -112,7 +112,7 @@ watch(
                         <Row
                             as="div"
                             density="dense"
-                            :icon="areaIcon(tab.slug, tab.icon)"
+                            :icon="sectionIcon(tab.slug, tab.icon)"
                             :title="tab.label"
                             :selected="tab.slug === activeSlug"
                             class="rounded-lg"

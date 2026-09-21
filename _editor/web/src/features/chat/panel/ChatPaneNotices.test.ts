@@ -32,7 +32,7 @@ vi.mock(`./useChat-view`, () => ({
 // The active sandbox, for the hosted-hours strip: a hosted row its reader owns, or nothing.
 const active = ref<{ hosted: { region: string; warm: boolean } | null; role: string } | undefined>(undefined);
 vi.mock(`../../sandbox/client/useSandbox`, () => ({ useSandbox: () => ({ reachable, active }) }));
-// The free lane's meter as the strip reads it: settable, so the threshold is hostedHours.ts's rule.
+// The free plan's meter as the strip reads it: settable, so the threshold is hostedHours.ts's rule.
 const hostedMeter = ref<{ usedMinutes: number; allowanceMinutes: number; remainingMinutes: number; fraction: number; resetsAt: string } | undefined>(undefined);
 const lowOnHours = ref(false);
 const planOffered = ref(true);
@@ -185,7 +185,7 @@ it(`hangs every action off one box, and gives the sentence a floor to wrap again
     expect(sentence?.className).not.toContain(`min-w-0`);
 });
 
-// The free lane's last hours, above the composer, to the one person spending them: only on a hosted sandbox, only
+// The free plan's last hours, above the composer, to the one person spending them: only on a hosted sandbox, only
 // its owner (a guest can't buy more), only while the meter says low, with a door to Billing.
 it(`warns a hosted sandbox's owner about the last free hours, and nobody else`, async () => {
     provider.value = `claude` as AgentProvider;

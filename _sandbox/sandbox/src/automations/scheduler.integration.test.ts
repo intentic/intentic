@@ -43,7 +43,7 @@ const fakeServices = (
         pushSender: unstubbed<Services["pushSender"]>("pushSender", { notifyIfAway: async () => ({ delivered: 0, failed: 0 }) }),
         workspace: unstubbed<Services["workspace"]>("workspace", { root }),
         logger: unstubbed<Services["logger"]>("logger", { error: () => {}, warn: () => {} }),
-        // The real resolver, which answers undefined for every origin that is not a Front Desk visitor's — what these
+        // The real resolver, which answers undefined for every origin that is not a Visitor chat visitor's — what these
         // fires are. Wired rather than stubbed so it stays the production answer if that rule changes.
         outboxStreamFor: (origin) => outboxStreamFor(services, origin),
     });
@@ -251,9 +251,9 @@ test("last time is the conversation the last fire opened, and the fleet's own wa
         ...Array.from({ length: 40 }, (_, index) => conversation(`old-session-${index}`, dreamedAt - DAY + index)),
         ...Array.from({ length: 5 }, (_, index) => conversation(`new-session-${index}`, after(index))),
         // Everything an automation opened (an `a-` mint or an origin), plus one abandoned before its first turn ran.
-        ...Array.from({ length: 40 }, (_, index) => conversation(`a-front-desk-${index}`, after(index))),
+        ...Array.from({ length: 40 }, (_, index) => conversation(`a-visitor-chat-${index}`, after(index))),
         ...Array.from({ length: 40 }, (_, index) =>
-            conversation(`visitor-${index}`, after(index), { origin: { automationId: "front-desk", provider: "webchat" } }),
+            conversation(`visitor-${index}`, after(index), { origin: { automationId: "visitor-chat", provider: "webchat" } }),
         ),
         ...Array.from({ length: 40 }, (_, index) => conversation(`abandoned-${index}`, after(index), { turns: 0 })),
     ];
@@ -680,7 +680,7 @@ test("a deny refuses even an approved replay: approve-then-tighten does not exec
     expect((await services.automations.get("revoked"))?.runs[0]?.outcome).toBe("skipped");
 });
 
-test("the webchat floor keys off its own source: a listener rule does not reach the Front Desk, nor vice versa", async () => {
+test("the webchat floor keys off its own source: a listener rule does not reach the Visitor chat, nor vice versa", async () => {
     const services = fakeServices(mkdtempSync(join(tmpdir(), "sched-")), { admission: { listener: "hold" } });
     await services.automations.upsert(
         automationConfig("door", { trigger: { kind: "listener", provider: "webchat", allowedOrigins: ["https://a.example"] } }),

@@ -10,7 +10,7 @@ import { useAudience } from "../../../app/useAudience";
 import { useVocabulary } from "../../../core-views/vocabulary";
 import { useCapabilities } from "../../capabilities/connect/useCapabilities";
 import { usePanels } from "../../extensions/usePanels";
-import { personaStartDirs } from "../../sandbox/personas/personaCard";
+import { personaStartDirs } from "../../sandbox/personas/personaRules";
 import { usePersonas } from "../../sandbox/personas/usePersonas";
 import { useRepoChecks } from "../../sandbox/environment/useRepoChecks";
 import { lensPersonaId, reachOf, reachSentence } from "../directory-ui/personaReach";
@@ -40,7 +40,7 @@ import { matchToggles } from "../search/useSearchOptions";
 import { useWorkspaceTabs } from "../tabs/useWorkspaceTabs";
 import { useWorkspaceTree } from "../explorer/useWorkspaceTree";
 import { opensAsFolder } from "../files/archiveEntries";
-import { DESK_DIR_ACTIONS, DESK_SEARCH, useDesk } from "../desk/useDesk";
+import { HOME_DIR_ACTIONS, HOME_SEARCH, useHome } from "../home/useHome";
 import { filesOffered, watchDragSource } from "../explorer/transfer/dragSource";
 import EntryDragGhost from "../explorer/transfer/EntryDragGhost.vue";
 import { filesToEntries } from "../explorer/transfer/dropEntries";
@@ -180,13 +180,13 @@ const {
 // Mirrors the active file into the URL so a reload or shared link reopens it.
 useWorkspaceRoute();
 
-// Nothing to draw: the pane shows every way to get code in, and the desk has no folder to show.
+// Nothing to draw: the pane shows every way to get code in, and the home has no folder to show.
 const emptyWorkspace = computed(() => !isLoading.value && tree.value.length === 0);
-// The desk (features/workspace/desk): what is under the tabs. Showing it unsets the main pane's active tab and closes
+// The home (features/workspace/home): what is under the tabs. Showing it unsets the main pane's active tab and closes
 // nothing, so the strip is a click away from where it was.
-const { selected, pick } = useDesk();
-const deskCovered = computed(() => !emptyWorkspace.value && strip.value.main.active !== null);
-const showDesk = (): void => deselect(`main`);
+const { selected, pick } = useHome();
+const homeCovered = computed(() => !emptyWorkspace.value && strip.value.main.active !== null);
+const showHome = (): void => deselect(`main`);
 
 // Below ~40rem the tree becomes a drawer over the viewer instead of a column. `drawerOpen` is separate from the
 // persisted `sidebarCollapsed`, so a chat-narrowed session can't leave the explorer hidden on a later wide one.
@@ -309,12 +309,12 @@ const rowActions = (dir: string): readonly RowAction[] =>
         openDocument,
     });
 
-// The desk's menu offers a folder the same rows; it is mounted by the pane, so they travel by injection.
-provide(DESK_DIR_ACTIONS, rowActions);
+// The home's menu offers a folder the same rows; it is mounted by the pane, so they travel by injection.
+provide(HOME_DIR_ACTIONS, rowActions);
 
 // The file the reader is in; with two panes, the focused one's. Feeds presence and, through `pick`, the current entry.
 const openPath = computed(() => (activeTab.value?.kind === `file` ? activeTab.value.path : undefined));
-// A file opening from anywhere (tree, desk, quick-open, chat) becomes the current entry: the desk moves to its folder.
+// A file opening from anywhere (tree, home, quick-open, chat) becomes the current entry: the home moves to its folder.
 watch(
     openPath,
     (path) => {
@@ -324,8 +324,8 @@ watch(
     },
     { immediate: true },
 );
-// The desk's search is the sidebar's: one query, each view answering it in its own scope (DeskView).
-provide(DESK_SEARCH, { filter, scope: searchScope, contentMode, groups: searchGroups, searching, clear: clearFilter });
+// The home's search is the sidebar's: one query, each view answering it in its own scope (HomeView).
+provide(HOME_SEARCH, { filter, scope: searchScope, contentMode, groups: searchGroups, searching, clear: clearFilter });
 // Presence: announces the open file; component-scoped since it stops existing when this view unmounts.
 watch(openPath, (path) => reportOpenPath(path), { immediate: true });
 onBeforeUnmount(() => reportOpenPath(undefined));
@@ -643,7 +643,7 @@ const WORKSPACE_COMMANDS = computed((): readonly Omit<CommandRegistration, `owne
         icon: `wave-pulse`,
         handler: () => openHealth(`root`),
     },
-    { command: `workspace.showDesk`, title: t(`workspace.workspaceDesktop.showDesk2`), icon: `th-large`, handler: showDesk },
+    { command: `workspace.showHome`, title: t(`workspace.workspaceDesktop.showHome2`), icon: `th-large`, handler: showHome },
     {
         command: `workspace.toggleSidebar`,
         title: t(`workspace.workspaceDesktop.toggleExplorer2`),
@@ -818,7 +818,7 @@ const explorerTooltip = computed(() =>
     ),
 );
 const rootHealthTooltip = computed(() => tooltipWithChord(`Codebase health of the workspace root`, `workspace.codebaseHealth`));
-const deskTooltip = computed(() => tooltipWithChord(`Show desk · your tabs stay open`, `workspace.showDesk`));
+const homeTooltip = computed(() => tooltipWithChord(`Show home · your tabs stay open`, `workspace.showHome`));
 </script>
 
 <template>
@@ -1088,14 +1088,14 @@ const deskTooltip = computed(() => tooltipWithChord(`Show desk · your tabs stay
                                 aria-hidden="true"
                             ></span>
                         </button>
-                        <!-- What is under the tabs, without closing any; only while a tab covers the desk. -->
+                        <!-- What is under the tabs, without closing any; only while a tab covers the home. -->
                         <button
-                            v-if="deskCovered"
+                            v-if="homeCovered"
                             type="button"
                             :class="ui.iconButton(`mr-1 h-7 w-7 self-center`)"
-                            @click="showDesk"
-                            v-tooltip.bottom="deskTooltip"
-                            :aria-label="t(`workspace.workspaceDesktop.showDesk`)"
+                            @click="showHome"
+                            v-tooltip.bottom="homeTooltip"
+                            :aria-label="t(`workspace.workspaceDesktop.showHome`)"
                         >
                             <Icon name="th-large" class="text-sm" />
                         </button>

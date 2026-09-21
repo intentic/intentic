@@ -110,7 +110,7 @@ describe(`the hour meter's stop`, () => {
 
     /* A PAID MACHINE IS NOT UNMETERED, it has a bigger month. Awake for 100 of this month's hours is past the free
      * rung's 40 and well inside Standard's, and the rung on the row is the only thing that decides which. */
-    it(`judges a paid machine against its own rung's hours, not the free lane's`, async () => {
+    it(`judges a paid machine against its own rung's hours, not the free plan's`, async () => {
         const awake = { wokeAt: new Date(NOW.getTime() - 100 * 60 * 60_000) };
         stubFly(`started`);
         expect(await stopOverBudgetHosted(prismaWith([machine(awake)]), config(), logger, NOW)).toEqual({ stopped: 1 });

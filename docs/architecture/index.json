@@ -3919,7 +3919,7 @@
       "hasTests": true,
       "loc": 1389,
       "name": "@intentic/webchat-widget",
-      "oneLiner": "Front Desk: the embeddable chat bubble a website loads to talk to a sandbox agent.",
+      "oneLiner": "Visitor chat: the embeddable chat bubble a website loads to talk to a sandbox agent.",
       "readmeRev": "732e72c2aa27c9b6cea7c0ffc7ecf4f918d16e7a",
       "reason": "1 commit has touched this package since its README was written",
       "stale": true,
@@ -4755,8 +4755,8 @@
           "what": ": the download button, which names the"
         },
         {
-          "path": "_site/site/src/components/FrontDesk.astro",
-          "what": ": our own Front Desk, the chat bubble in the"
+          "path": "_site/site/src/components/VisitorChat.astro",
+          "what": ": our own Visitor chat, the chat bubble in the"
         },
         {
           "path": "_site/site/astro.config.mjs",

@@ -60,7 +60,7 @@ const skippedUnchanged = ref(0);
 const joinPath = (dir: string, rel: string): string => (dir === `` ? rel : `${dir}/${rel}`);
 
 // Unpacks a just-landed zip or tar ahead of the first click on it. The listing request IS the unpack, so this is the
-// same call the desk would make, made early and thrown away; a failure here costs nothing, since the desk's own call
+// same call the home would make, made early and thrown away; a failure here costs nothing, since the home's own call
 // will report it when someone actually opens the archive.
 const warmArchive = (path: string): void => {
     if (!isBrowsableArchive(path.slice(path.lastIndexOf(`/`) + 1))) {

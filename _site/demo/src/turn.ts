@@ -1,7 +1,7 @@
 import type { AgentEvent, AgentReply, AttachFrame, TranscriptRow } from "@intentic/sandbox-contract";
 import { isTurnFact } from "@intentic/sandbox-contract";
 import { TranscriptFold, userRow } from "@intentic/sandbox-contract/transcript-fold";
-import { DESK_FEATURED_ID, OCTOBER_AFTER, OCTOBER_BEFORE } from "./fixture/desk";
+import { MAKER_FEATURED_ID, OCTOBER_AFTER, OCTOBER_BEFORE } from "./fixture/maker";
 import { CHECKOUT_LIB_AFTER, CHECKOUT_LIB_BEFORE, CHECKOUT_ROUTE } from "./fixture/workspace";
 import type { StreamSink } from "./sse";
 
@@ -184,18 +184,18 @@ Prices come from the existing \`STRIPE_PRICE_*\` env vars, so nothing new needs 
     { after: 200, event: { kind: `done` } },
 ];
 
-const DESK_TODOS = [`Read the October draft`, `Put the sale first and cut the opening`, `Keep the hours and the workshops`, `Check the length`];
+const MAKER_TODOS = [`Read the October draft`, `Put the sale first and cut the opening`, `Keep the hours and the workshops`, `Check the length`];
 
-const deskTodos = (done: number, running: number): AgentEvent => ({
+const homeTodos = (done: number, running: number): AgentEvent => ({
     kind: `todos`,
-    items: DESK_TODOS.map((content, index) =>
+    items: MAKER_TODOS.map((content, index) =>
         index === running ? { content, status: `in_progress`, activeForm: content } : { content, status: index < done ? `completed` : `pending` },
     ),
 });
 
-// The desk's featured run: the same shape as the code one (a plan card, work through the list, a question at the end),
+// The maker's featured run: the same shape as the code one (a plan card, work through the list, a question at the end),
 // on a newsletter rather than a checkout, in the words a maker reads. No terminal beat: nothing here is run.
-const DESK_FEATURED: Beat[] = [
+const MAKER_FEATURED: Beat[] = [
     { after: 300, event: { kind: `init`, model: `claude-sonnet-5` } },
     { after: 200, event: { kind: `mode`, mode: `plan` } },
     {
@@ -243,7 +243,7 @@ It comes out about half the length. Nothing you wanted said is dropped.`,
         park: `req_plan_october`,
     },
     { after: 200, event: { kind: `mode`, mode: `bypassPermissions` } },
-    { after: 300, event: deskTodos(1, 1) },
+    { after: 300, event: homeTodos(1, 1) },
     { after: 500, event: { kind: `delta`, text: `Rewriting it now, sale first.` } },
     { after: 400, event: { kind: `text_end` } },
     {
@@ -268,7 +268,7 @@ It comes out about half the length. Nothing you wanted said is dropped.`,
         },
     },
     { after: 300, event: { kind: `context_usage`, tokens: 9_800, contextWindow: 200_000 } },
-    { after: 400, event: deskTodos(3, 3) },
+    { after: 400, event: homeTodos(3, 3) },
     { after: 400, event: { kind: `delta`, text: `It is 11 lines now, down from 19. One thing to decide before I call it done.` } },
     { after: 300, event: { kind: `text_end` } },
     {
@@ -290,7 +290,7 @@ It comes out about half the length. Nothing you wanted said is dropped.`,
         },
         park: `req_question_subject`,
     },
-    { after: 400, event: deskTodos(4, -1) },
+    { after: 400, event: homeTodos(4, -1) },
     { after: 300, event: { kind: `delta`, text: `Done. The subject line carries the offer, and the draft is ready to send.` } },
     { after: 300, event: { kind: `text_end` } },
     { after: 300, event: { kind: `usage`, account: `ada@acme.dev`, costUsd: 0.09, inputTokens: 12_400, outputTokens: 1_640 } },
@@ -472,10 +472,10 @@ const createRun = (conversationId: string, prompt: string, beats: Beat[], now: n
     };
 };
 
-// Which script a featured conversation plays is the conversation's own: the desk's id names the desk's run.
+// Which script a featured conversation plays is the conversation's own: the maker's id names the maker's run.
 export const featuredRun = (conversationId: string, now: number): Run =>
-    conversationId === DESK_FEATURED_ID
-        ? createRun(conversationId, `Rewrite the October newsletter for the autumn sale. Shorter, and the 20% off has to be the first thing people read.`, DESK_FEATURED, now)
+    conversationId === MAKER_FEATURED_ID
+        ? createRun(conversationId, `Rewrite the October newsletter for the autumn sale. Shorter, and the 20% off has to be the first thing people read.`, MAKER_FEATURED, now)
         : createRun(conversationId, `Add Stripe checkout to the pricing page: the CTA is already there, it just throws.`, FEATURED, now);
 
 export const visitorRun = (conversationId: string, prompt: string, now: number): Run => createRun(conversationId, prompt, replyScript(prompt), now);

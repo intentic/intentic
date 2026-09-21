@@ -9,7 +9,7 @@ import ExtensionDocument from "../../../core-views/ExtensionDocument.vue";
 import CodebaseHealth from "../health/CodebaseHealth.vue";
 import DirectoryOperator from "../directory-ui/DirectoryOperator.vue";
 import DirectoryUiHost from "../directory-ui/DirectoryUiHost.vue";
-import DeskView from "../desk/DeskView.vue";
+import HomeView from "../home/HomeView.vue";
 import FileBreadcrumb from "../explorer/FileBreadcrumb.vue";
 import FileTabs from "../tabs/FileTabs.vue";
 import DiffSkeleton from "../viewers/DiffSkeleton.vue";
@@ -161,8 +161,8 @@ const diffOutline = useLoadingReveal(
         <div v-else-if="activeTab?.kind === 'document'" class="min-h-0 flex-1">
             <ExtensionDocument :extension="activeTab.extension" :provider="activeTab.provider" :path="activeTab.path" :title="activeTab.title" />
         </div>
-        <!-- The desk, whenever there are files to draw; an empty workspace still gets every way to get code in. -->
-        <DeskView v-else-if="!empty" />
+        <!-- The home, whenever there are files to draw; an empty workspace still gets every way to get code in. -->
+        <HomeView v-else-if="!empty" />
         <!-- Nothing in the workspace yet: every way to get code in. -->
         <WorkspaceEmptyState v-else @pick="emit('pick')" />
     </section>

@@ -157,7 +157,7 @@ export const dispatchListenerMessage = async (
                         context.stream?.end();
                         return;
                     }
-                    // Reuses the channel's live conversation, or starts fresh past the TTL, keyed like the Front Desk's
+                    // Reuses the channel's live conversation, or starts fresh past the TTL, keyed like the Visitor chat's
                     // chat.
                     const openedAt = Date.now();
                     const session = await services.threadSessions.open(

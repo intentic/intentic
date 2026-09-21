@@ -27,9 +27,9 @@ const synced = (overrides: Partial<Device> = {}): Device => ({
     ...overrides,
 });
 
-test(`lists a sync-only machine on the card it would be connected on`, () => {
+test(`lists a sync-only machine on the tile it would be connected on`, () => {
     const [row] = deviceConnections([synced()], NOW);
-    expect(row).toMatchObject({ cardId: `linux`, title: `radarsu-rog`, machine: `radarsu-rog`, note: `no command access` });
+    expect(row).toMatchObject({ entryId: `linux`, title: `radarsu-rog`, machine: `radarsu-rog`, note: `no command access` });
     expect(isDeviceConnection(row?.id ?? ``)).toBe(true);
 });
 
@@ -48,22 +48,22 @@ test(`says which OS it is, and its hostname only when that is not already the na
 });
 
 // WSL is the case that made this worth stating on the row: the distro and the Windows install hosting it arrive
-// under one hostname, on two different cards.
-test(`names the WSL distro, so two cards' rows are told apart`, () => {
+// under one hostname, on two different tiles.
+test(`names the WSL distro, so two tiles' rows are told apart`, () => {
     const distro = synced({ report: report({ wsl: { distro: `Arch` } }) });
     expect(deviceConnections([distro], NOW)[0]?.detail).toBe(`Arch on WSL`);
 });
 
-test(`leaves out machines a card already accounts for`, () => {
-    // Connected as a device: the card lists it the ordinary way, as an instance of itself.
+test(`leaves out machines a tile already accounts for`, () => {
+    // Connected as a device: the tile lists it the ordinary way, as an instance of itself.
     expect(deviceConnections([synced({ hostId: `radarsu-rog`, online: true })], NOW)).toEqual([]);
     // Reached only by a host capability, never enrolled for sync: likewise already a connection.
     expect(deviceConnections([{ key: `omen`, label: `omen`, hostId: `omen`, online: true, platform: `windows` }], NOW)).toEqual([]);
 });
 
-// No card exists for it, so there is nowhere for the row to lead; the Devices board stays the place every machine
+// No tile exists for it, so there is nowhere for the row to lead; the Devices board stays the place every machine
 // appears whatever it runs.
-test(`leaves out a machine whose platform has no card`, () => {
+test(`leaves out a machine whose platform has no tile`, () => {
     expect(deviceConnections([synced({ platform: `macos` })], NOW)).toEqual([]);
     expect(deviceConnections([synced({ platform: undefined })], NOW)).toEqual([]);
 });

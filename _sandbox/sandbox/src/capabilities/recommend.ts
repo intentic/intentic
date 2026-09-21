@@ -67,8 +67,8 @@ const scanFiles = async (dir: string, prefix: string, depth: number): Promise<Sc
 };
 
 // Docker is its own kind; every connector shares kind `cli` and is told apart by its `provider`.
-const isConnected = (active: readonly Capability[], card: string): boolean =>
-    active.some((capability) => capability.kind === card || (capability.kind === "cli" && capability.config.provider === card));
+const isConnected = (active: readonly Capability[], entry: string): boolean =>
+    active.some((capability) => capability.kind === entry || (capability.kind === "cli" && capability.config.provider === entry));
 
 const fileExists = (path: string): Promise<boolean> =>
     access(path).then(
@@ -120,12 +120,12 @@ export const capabilityRecommendations = async (
     dismissed: readonly DismissedRecommendation[],
     git: GitRunner = defaultGit,
 ): Promise<CapabilityRecommendation[]> => {
-    const wanted = ["github", "gitlab", "komodo", "docker"].filter((card) => !isConnected(active, card));
+    const wanted = ["github", "gitlab", "komodo", "docker"].filter((entry) => !isConnected(active, entry));
     if (wanted.length === 0) {
         return [];
     }
-    // Built after `wanted` so the key is exact; dismissals are sorted, and the NUL byte separates card from evidence.
-    const fingerprint = JSON.stringify([root, wanted, dismissed.map((entry) => `${entry.card}\u0000${entry.evidence}`).toSorted()]);
+    // Built after `wanted` so the key is exact; dismissals are sorted, and the NUL byte separates entry from evidence.
+    const fingerprint = JSON.stringify([root, wanted, dismissed.map((entry) => `${entry.entry}\u0000${entry.evidence}`).toSorted()]);
     const now = Date.now();
     if (memo !== undefined && memo.fingerprint === fingerprint && now - memo.at < RECOMMENDATIONS_TTL_MS) {
         return [...memo.result];
@@ -136,7 +136,7 @@ export const capabilityRecommendations = async (
     const github = remotes.find((remote) => remote.host === "github.com");
     if (wanted.includes("github") && github !== undefined) {
         recommendations.push({
-            card: "github",
+            entry: "github",
             evidence: `${github.repo} → ${github.host}/${github.project}`,
             reason: `your repositories are hosted on GitHub`,
             prefill: {},
@@ -146,7 +146,7 @@ export const capabilityRecommendations = async (
     const gitlab = remotes.find((remote) => remote.host === "gitlab.com" || remote.host.includes("gitlab") || remote.gitlabCi);
     if (wanted.includes("gitlab") && gitlab !== undefined) {
         recommendations.push({
-            card: "gitlab",
+            entry: "gitlab",
             evidence: gitlab.gitlabCi ? `${gitlab.repo}/.gitlab-ci.yml → ${gitlab.host}` : `${gitlab.repo} → ${gitlab.host}/${gitlab.project}`,
             reason: gitlab.host === "gitlab.com" ? `your repositories are hosted on GitLab` : `your repositories are hosted on your own GitLab`,
             prefill: { url: `https://${gitlab.host}` },
@@ -160,7 +160,7 @@ export const capabilityRecommendations = async (
         const evidence = sync ?? stacks.find((path) => path !== undefined);
         if (evidence !== undefined) {
             recommendations.push({
-                card: "komodo",
+                entry: "komodo",
                 evidence,
                 reason: sync === undefined ? `your workspace runs Komodo in a compose stack` : `your workspace drives a Komodo core`,
                 prefill: {},
@@ -169,11 +169,11 @@ export const capabilityRecommendations = async (
     }
     const compose = files.compose[0];
     if (wanted.includes("docker") && compose !== undefined) {
-        recommendations.push({ card: "docker", evidence: compose, reason: `your workspace has a compose stack to run`, prefill: {} });
+        recommendations.push({ entry: "docker", evidence: compose, reason: `your workspace has a compose stack to run`, prefill: {} });
     }
-    // Dismissals are checked against current evidence, so a card declined for evidence that moved is asked again.
+    // Dismissals are checked against current evidence, so a entry declined for evidence that moved is asked again.
     const result = recommendations.filter(
-        (recommendation) => !dismissed.some((entry) => entry.card === recommendation.card && entry.evidence === recommendation.evidence),
+        (recommendation) => !dismissed.some((entry) => entry.entry === recommendation.entry && entry.evidence === recommendation.evidence),
     );
     // Stamped with the scan's start time, not its finish, since that's when workspace staleness begins.
     memo = { at: now, fingerprint, result };

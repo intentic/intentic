@@ -1,11 +1,11 @@
-# The free lane's abuse defences
+# The free plan's abuse defences
 
 What somebody who wants free compute sees when they look at intentic, and what the platform does about it.
 Written 2026-09-14 from the source as it stands; every figure below is a `config.ts` default, named so it can
-be checked rather than trusted. Companion to [pricing-model.md](pricing-model.md) (what the free lane is) and
+be checked rather than trusted. Companion to [pricing-model.md](pricing-model.md) (what the free plan is) and
 the Acceptable Use Policy in `_site/site-content/src/legal.ts` (what it is for).
 
-## 1. What the free lane looks like from outside
+## 1. What the free plan looks like from outside
 
 One Google sign-in buys one Fly machine: 4 shared vCPUs, 4 GB, 10 GB of disk, root, on the public internet,
 awake 40 hours a month, asleep 20 minutes after the last sign of life, collected after three weeks unopened.
@@ -105,7 +105,7 @@ standing, since all three are about them.
 - **A stricter idle-stop.** Ignoring terminal output when nobody is connected would put a miner to sleep in
   twenty minutes, and a legitimate long build with it. The meter bounds what an awake machine can cost; the
   watch bounds what it can be used for.
-- **A card, a phone number, a CAPTCHA at sign-in.** The free lane's promise is no card; Google already gates
+- **A card, a phone number, a CAPTCHA at sign-in.** The free plan's promise is no card; Google already gates
   account creation harder than a CAPTCHA would; a phone number is a data-protection commitment for a
   marginal gain.
 - **A platform-wide provisions-per-day brake.** A launch day and a farm look the same from that number. The

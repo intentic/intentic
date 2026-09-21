@@ -3,8 +3,8 @@ import { isForticlientCiphertext } from "@intentic/sandbox-contract";
 import { devFillGet, devFillSet } from "../../setup/devFill";
 import { type FormValues, secretFields } from "./form";
 
-// Dev autofill for the capability form: remembers a card's secret fields after a successful add and
-// offers them back, keyed per card. Inert in production, where devFillGet/devFillSet are no-ops.
+// Dev autofill for the capability form: remembers a tile's secret fields after a successful add and
+// offers them back, keyed per tile. Inert in production, where devFillGet/devFillSet are no-ops.
 // Kept apart from ./form, which stays pure functions with no browser access.
 
 const keyOf = (entry: CapabilityCatalogEntry, fieldKey: string): string => `capability.${entry.id}.${fieldKey}`;
@@ -22,7 +22,7 @@ export const rememberedSecrets = (entry: CapabilityCatalogEntry): FormValues => 
     return values;
 };
 
-// Remember the secret fields that just worked, per card.
+// Remember the secret fields that just worked, per tile.
 export const rememberSecrets = (entry: CapabilityCatalogEntry, values: FormValues): void => {
     for (const field of secretFields(entry)) {
         devFillSet(keyOf(entry, field.key), (values[field.key] ?? ``).trim());

@@ -110,7 +110,7 @@ export const memoryDismissalsStore = (initial: DismissedRecommendation[] = []): 
     return {
         list: async () => dismissed,
         dismiss: async (entry) => {
-            dismissed = [...dismissed.filter((existing) => existing.card !== entry.card), entry];
+            dismissed = [...dismissed.filter((existing) => existing.entry !== entry.entry), entry];
         },
     };
 };

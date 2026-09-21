@@ -5,7 +5,7 @@ import { RateLimitInfoSchema } from "../schemas/providers/claude-gate.js";
 import { FastModeStateSchema } from "../schemas/providers/fast-mode.js";
 import { AgentReplySchema, UsageWindowSchema } from "../schemas/providers/plan-limits.js";
 import { SubagentKindSchema, SubagentStatusSchema, SubagentVerificationSchema } from "../schemas/terminal.js";
-import { AgentCommandSchema, browserHelpCard, capabilityOfferCard, CapabilityOutcomeSchema, ContextUsageSchema, credentialOfferCard, CredentialReceiptSchema, paymentOfferCard, PaymentReceiptSchema, PermissionCardSchema, PlanCardSchema, QuestionCardSchema, terminalHelpCard, TodoItemSchema, ToolCallContentSchema, ToolCallLocationSchema, ToolCallStatusSchema, ToolKindSchema } from "./cards.js";
+import { AgentCommandSchema, browserHelpRequest, capabilityOfferRequest, CapabilityOutcomeSchema, ContextUsageSchema, credentialOfferRequest, CredentialReceiptSchema, paymentOfferRequest, PaymentReceiptSchema, PermissionRequestSchema, PlanRequestSchema, QuestionRequestSchema, terminalHelpRequest, TodoItemSchema, ToolCallContentSchema, ToolCallLocationSchema, ToolCallStatusSchema, ToolKindSchema } from "./requests.js";
 import { TranscriptPatchSchema, TranscriptRowSchema, TurnNoteSchema } from "./transcript.js";
 
 // Every frame an agent turn streams, as one `kind`-discriminated union: turn facts (session, standing, cost) and the
@@ -155,29 +155,29 @@ export const AgentEventSchema = z.discriminatedUnion("kind", [
     ContextUsageSchema.extend({ kind: z.literal("context_usage") }),
     z.object({ kind: z.literal("compact"), trigger: z.string(), preTokens: z.number().optional(), postTokens: z.number().optional() }),
     // The four interactive cards; each parks the turn until `POST /agent/reply` resolves its `requestId`.
-    PlanCardSchema,
-    QuestionCardSchema,
-    PermissionCardSchema,
+    PlanRequestSchema,
+    QuestionRequestSchema,
+    PermissionRequestSchema,
     // The agent's browser needs a person. Not journalled for restore: the Chromium holding the page dies with the
     // container.
-    z.object({ kind: z.literal("browser_help"), ...browserHelpCard }),
+    z.object({ kind: z.literal("browser_help"), ...browserHelpRequest }),
     // The agent's terminal needs a person. Not journalled for restore: the pane belongs to a process the restart kills.
-    z.object({ kind: z.literal("terminal_help"), ...terminalHelpCard }),
+    z.object({ kind: z.literal("terminal_help"), ...terminalHelpRequest }),
     // A missing capability asking for the owner's setup. Raised outside the turn generator; not journalled for restore,
     // since its waiter (the CLI's held connection) dies with the daemon.
-    z.object({ kind: z.literal("capability_offer"), ...capabilityOfferCard }),
+    z.object({ kind: z.literal("capability_offer"), ...capabilityOfferRequest }),
     // How an accepted ask ended: `connected` (the capability came live, `id` is the agent's handle) or `unfinished`
     // (deadline passed, or the asking command died). A skip needs no outcome; `resolved` already says so.
     CapabilityOutcomeSchema.extend({ kind: z.literal("capability_outcome"), requestId: z.string() }),
     // A USDC payment awaiting the owner's click. Raised outside the turn generator; not journalled for restore, since
     // its waiter (the CLI's held connection) dies with the daemon.
-    z.object({ kind: z.literal("payment_offer"), ...paymentOfferCard }),
+    z.object({ kind: z.literal("payment_offer"), ...paymentOfferRequest }),
     // How an approved payment ended: `paid` (endpoint confirmed, `transaction` is the onchain hash if stated) or
     // `failed` (refused or unsettled, nothing left the wallet). A skip needs no receipt.
     PaymentReceiptSchema.extend({ kind: z.literal("payment_receipt"), requestId: z.string() }),
     // A gated credential awaiting a named approver's click, not the owner. The daemon holds the exit parked until
     // release; raised outside the turn generator, not journalled, since its waiter dies with the daemon.
-    z.object({ kind: z.literal("credential_offer"), ...credentialOfferCard }),
+    z.object({ kind: z.literal("credential_offer"), ...credentialOfferRequest }),
     // Who released it: `released` names the approver's verified address, `refused` means someone said no. Nothing is
     // pushed for a card nobody answered; `resolved` already says that.
     CredentialReceiptSchema.extend({ kind: z.literal("credential_receipt"), requestId: z.string() }),

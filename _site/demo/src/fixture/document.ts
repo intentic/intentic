@@ -1,6 +1,6 @@
 import { strToU8, zipSync } from "fflate";
 
-// The one file in the demo workspace served as real bytes rather than as text: a Word document, so the desk's quick
+// The one file in the demo workspace served as real bytes rather than as text: a Word document, so the maker's quick
 // look and the docx viewer have something true to draw. Built in code, not committed as a binary, so what it says is
 // reviewable in a diff — the same rule fileq's own fixtures follow.
 
@@ -70,7 +70,7 @@ const DOCUMENT_RELS = `<?xml version="1.0" encoding="UTF-8"?>
 </Relationships>`;
 
 // Copied into a plain ArrayBuffer, which is the only backing a Response body takes.
-/** A one-heading Word document, as the bytes a viewer parses; the desk recording builds its letters with this too. */
+/** A one-heading Word document, as the bytes a viewer parses; the maker recording builds its letters with this too. */
 export const buildDocx = (heading: string, paragraphs: readonly string[]): Uint8Array<ArrayBuffer> =>
     new Uint8Array(
         zipSync({

@@ -1,4 +1,4 @@
-<!-- Per-capability credential help (scopes, how-to-get-it steps, a link to the provider's token page), read from the card's `guide` metadata. -->
+<!-- Per-capability credential help (scopes, how-to-get-it steps, a link to the provider's token page), read from the tile's `guide` metadata. -->
 <script setup lang="ts">
 import type { CapabilityCatalogEntry } from "@intentic/capability-catalog";
 import { computed } from "vue";

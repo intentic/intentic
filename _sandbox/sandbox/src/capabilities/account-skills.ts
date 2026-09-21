@@ -16,7 +16,7 @@ import { extensionRead } from "./extension-dirs.js";
 const ACCOUNT_SKILL_MARKER = "<!-- managed by the sandbox: derived from the connected accounts; edits are overwritten -->";
 
 const IDENTITIES_SKILL = "identities";
-// Card with no site of its own (open-account.ts GENERIC); the only platform grouped by host instead of slug.
+// Entry with no site of its own (open-account.ts GENERIC); the only platform grouped by host instead of slug.
 const GENERIC_PLATFORM = "website";
 
 // Skill directory name from a host: www.producthunt.com to producthunt-com; names must be slug-shaped for loaders and
@@ -40,7 +40,7 @@ const siteHost = (config: BrowserConfig): string | undefined => {
     }
 };
 
-// Which skill an account belongs to: the platform slug for a carded site, or the home page's host for the generic card.
+// Which skill an account belongs to: the platform slug for a carded site, or the home page's host for the generic entry.
 // Pure over the config, since the status probe and skill inventory both need this without a registry in hand.
 export const accountGroupOf = (config: BrowserConfig): { readonly name: string; readonly site: string } => {
     if (config.platform !== GENERIC_PLATFORM) {
@@ -64,7 +64,7 @@ const effectiveEntries = async (ctx: CapabilityCtx, delta?: AccountSkillDelta): 
     return delta?.upsert === undefined ? entries : [...entries, delta.upsert];
 };
 
-// Frontmatter surgery on the rendered pack: sets the group's name (one skill per group, not per card instance), stamps
+// Frontmatter surgery on the rendered pack: sets the group's name (one skill per group, not per entry instance), stamps
 // the marker, and appends account ids to the description via rosterSummary (paid every call, unlike the roster block).
 const stampGroupSkill = (source: string, name: string, ids: readonly string[]): string =>
     source

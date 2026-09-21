@@ -27,7 +27,7 @@
         "pass": "pass",
         "removeGateUrlStops": "Remove the gate: its URL stops working, and a future gate gets a new one",
         "runsPerDay": "Runs per day",
-        "savingMintsWebhookUrl": "Saving mints the webhook URL: it appears here and under the gate badge on the workflow's card.",
+        "savingMintsWebhookUrl": "Saving mints the webhook URL: it appears here and under the gate badge on the workflow's tile.",
         "shipsSays": "Ships when it says",
         "spendCeilingEveryCall": "The spend ceiling. Every call runs the whole graph, and a push-triggered pipeline calls on every commit.",
         "stepGateReads": "Step the gate reads"
@@ -96,7 +96,7 @@
         "restatedEveryRound": "restated every round",
         "runsOn": "Runs on",
         "spendCeiling": "Spend ceiling",
-        "stepRunsNobodyAt": "A step runs with nobody at the keyboard, so it reaches no logged-in account unless it acts as a persona: the card also sets how far its tools go and where it works.",
+        "stepRunsNobodyAt": "A step runs with nobody at the keyboard, so it reaches no logged-in account unless it acts as a persona: the persona also sets how far its tools go and where it works.",
         "unpinModel": "Unpin the model",
         "unpinRunStepOn": "Unpin: run this step on whatever you normally use",
         "whatBelongsHereModel": "what belongs here: the model reads this",

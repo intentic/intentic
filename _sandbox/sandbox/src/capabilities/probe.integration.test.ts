@@ -6,7 +6,7 @@ import type { ResolvedContribution } from "./contributions.js";
 import { probeCapability } from "./probe.js";
 
 // Probes against a real server, not a stubbed fetch, since headers, status wording and unreachable hosts are
-// real-server facts. Uses a fixture card so the test pins shared probe machinery, not one vendor's API shape.
+// real-server facts. Uses a fixture entry so the test pins shared probe machinery, not one vendor's API shape.
 
 let server: Server | undefined;
 
@@ -34,7 +34,7 @@ const serve = async (handler: (request: { path: string; auth: string | undefined
 // Taken from the cli union in the manifest schema, not restated, so a schema change surfaces here.
 type DeclaredProbe = NonNullable<Extract<CapabilityContribution, { kind: "cli" }>["probe"]>;
 
-const card = (probe: DeclaredProbe): Map<string, ResolvedContribution> => {
+const entry = (probe: DeclaredProbe): Map<string, ResolvedContribution> => {
     const spec = {
         id: "example",
         kind: "cli",
@@ -50,11 +50,11 @@ const card = (probe: DeclaredProbe): Map<string, ResolvedContribution> => {
     return new Map([["cli:example", { spec, extension: { id: "example", dir: "/tmp" } as ResolvedContribution["extension"] }]]);
 };
 
-test(`reaches the service with the card's own credential, and says who answered`, async () => {
+test(`reaches the service with the entry's own credential, and says who answered`, async () => {
     const { url, seen } = await serve(({ auth }) =>
         auth === "Bearer tok_live" ? { status: 200, body: { login: "ada" } } : { status: 401, body: {} },
     );
-    const registry = card({ url: "${url}/user", headers: { authorization: "Bearer ${token}" }, identity: "login" });
+    const registry = entry({ url: "${url}/user", headers: { authorization: "Bearer ${token}" }, identity: "login" });
 
     const answer = await probeCapability(registry, { id: "example", kind: "cli", config: { provider: "example", url, token: "tok_live" } });
 
@@ -66,7 +66,7 @@ test(`reaches the service with the card's own credential, and says who answered`
 
 test(`says which answer was wrong rather than printing a status code`, async () => {
     const { url } = await serve(() => ({ status: 401, body: { message: "Bad credentials" } }));
-    const registry = card({ url: "${url}/user", headers: { authorization: "Bearer ${token}" }, identity: "login" });
+    const registry = entry({ url: "${url}/user", headers: { authorization: "Bearer ${token}" }, identity: "login" });
 
     const answer = await probeCapability(registry, { id: "example", kind: "cli", config: { provider: "example", url, token: "wrong" } });
 
@@ -77,7 +77,7 @@ test(`says which answer was wrong rather than printing a status code`, async () 
 });
 
 test(`names an address nothing answers at, without a stack trace`, async () => {
-    const registry = card({ url: "${url}/user", headers: {} });
+    const registry = entry({ url: "${url}/user", headers: {} });
 
     const answer = await probeCapability(registry, {
         id: "example",
@@ -90,7 +90,7 @@ test(`names an address nothing answers at, without a stack trace`, async () => {
     expect(answer.message).toContain(`127.0.0.1:1`);
 });
 
-test(`says plainly when a card has no test, and never calls it a failure`, async () => {
+test(`says plainly when a entry has no test, and never calls it a failure`, async () => {
     const answer = await probeCapability(new Map(), {
         id: "ops-box",
         kind: "ssh",

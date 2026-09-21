@@ -29,7 +29,7 @@ vi.mock(`../../features/capabilities/connect/useCapabilities`, async () => {
 });
 vi.mock(`../../features/sandbox/secrets/useRole`, async () => {
     const { ref } = await import(`vue`);
-    return { useRole: () => ({ canShip: ref(state.canShip), isDesk: ref(false) }) };
+    return { useRole: () => ({ canShip: ref(state.canShip), isGuest: ref(false) }) };
 });
 vi.mock(`../../features/settings/hosted-plan/useHostedPlan`, async () => {
     const { ref } = await import(`vue`);

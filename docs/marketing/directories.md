@@ -12,18 +12,18 @@ a link and making the name resolvable.
 
 ## The URL we submit
 
-**`https://intentic.dev/` for developer-tool listings; `https://intentic.dev/desk/` for anything aimed at people
-who do not write code.** Decided 2026-09-16 for `/`, revised 2026-09-19 when `/desk/` became a page of its own.
+**`https://intentic.dev/` for developer-tool listings; `https://intentic.dev/maker/` for anything aimed at people
+who do not write code.** Decided 2026-09-16 for `/`, revised 2026-09-19 when `/maker/` became a page of its own.
 
-Until then `/desk` was the light skin's front door: the home page word for word, `noindex`, the worst available
+Until then `/maker` was the light skin's front door: the home page word for word, `noindex`, the worst available
 target for an inbound link (it could not rank, and the equity did not reach `/` either). It is now the product
-page of **intentic desk** (`_site/site/src/pages/desk.astro`, `DeskLanding.astro`): its own title, description,
+page of **intentic maker** (`_site/site/src/pages/maker.astro`, `MakerLanding.astro`): its own title, description,
 copy, screenshots, FAQ and `SoftwareApplication`, indexed, in the sitemap, canonical to itself. The two pages
 share the shell and nothing search would read as a duplicate. Every directory in this file is a developer-tool
 directory, so the URL for all of them stays `/`; a general-software or productivity listing, if one is ever worth
-having, takes `/desk/` and the desk copy, not this file's.
+having, takes `/maker/` and the maker copy, not this file's.
 
-`https://intentic.dev/?variant=desk` still works (the pre-paint script honours `?variant=`), but it now only
+`https://intentic.dev/?variant=maker` still works (the pre-paint script honours `?variant=`), but it now only
 changes the skin: the words on `/` are the developer's whichever way it is lit. Do not hand it out.
 
 ## Canonical listing copy
@@ -285,8 +285,8 @@ First comment, posted immediately after submitting:
 
 Preparation only. Nothing was filed: see "What the owner has to do" for why.
 
-- **Decided the submission URL is `https://intentic.dev/`**, not `/desk`, and recorded the reasoning above so
-  the question does not get re-opened. `desk.astro` was not touched.
+- **Decided the submission URL is `https://intentic.dev/`**, not `/maker`, and recorded the reasoning above so
+  the question does not get re-opened. `maker.astro` was not touched.
 - **Re-verified every target** against the live sites, dropped the ones that have since gone paid or 404, and
   added Tier A's LinkedIn and SourceForge rows and Tier B's LibHunt, Indie Hackers, opensource.builders and
   TinyLaunch rows.
@@ -306,7 +306,7 @@ anyway, and showed nothing of the product. Owner's verdict: "very ugly", and not
 
 Rewrote `_site/site/scripts/og-template.mjs`:
 
-- **Light skin, not dark.** `#f5ede7`, the same value BaseLayout ships as the light `theme-color`. The desk
+- **Light skin, not dark.** `#f5ede7`, the same value BaseLayout ships as the light `theme-color`. The maker
   palette's oklch tokens resolved to sRGB, so the card cannot drift from the site.
 - **The landing card says the brand line**, `More work. Less AI waste. Same subscriptions.`, instead of the page
   title. Every other page still gets its own title, since for those the title is the useful thing.
@@ -317,5 +317,5 @@ Rewrote `_site/site/scripts/og-template.mjs`:
 
 Checked at 1200px, at 500px (feed size) and at 320px: the headline, the sub and the wordmark all hold, and the
 screenshot reads as a dense working app even where its text does not resolve. Route matching is covered by a
-throwaway check over `""`, `/`, `index.html`, `desk`, `desk/`, `/desk/` and `desk/index.html`, all of which
-have to land on the landing card; `oxlint`, `prettier` and `check-desk-palette.mjs` all pass.
+throwaway check over `""`, `/`, `index.html`, `maker`, `maker/`, `/maker/` and `maker/index.html`, all of which
+have to land on the landing card; `oxlint`, `prettier` and `check-maker-palette.mjs` all pass.

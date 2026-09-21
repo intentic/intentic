@@ -65,7 +65,7 @@ export const PersonaContextSchema = z.object({
         .array(z.string().min(1).max(200))
         .max(50)
         .describe(
-            "Which nested repositories a conversation wearing this card carries, by workspace-relative path. The workspace itself is always carried; empty means the workspace alone.",
+            "Which nested repositories a conversation on this persona carries, by workspace-relative path. The workspace itself is always carried; empty means the workspace alone.",
         ),
 });
 export type PersonaContext = z.infer<typeof PersonaContextSchema>;
@@ -177,7 +177,7 @@ export const PersonaBriefingSchema = z.object({
         .array(TurnBriefingNoteIdSchema)
         .max(20)
         .describe(
-            "Which of the notes the sandbox prepends to each message a conversation wearing this card does NOT get. Everything not named here is sent as usual; the notes that keep a turn inside its own branch or explain a missing account cannot be named at all.",
+            "Which of the notes the sandbox prepends to each message a conversation on this persona does NOT get. Everything not named here is sent as usual; the notes that keep a turn inside its own branch or explain a missing account cannot be named at all.",
         ),
 });
 export type PersonaBriefing = z.infer<typeof PersonaBriefingSchema>;
@@ -254,8 +254,8 @@ export const PersonaRouteSchema = z.object({
 });
 export type PersonaRoute = z.infer<typeof PersonaRouteSchema>;
 // The one stock persona id; lives here because the daemon and the automations form are separate packages that must
-// agree on it exactly, or a Front Desk pins to a card nobody creates.
-export const FRONT_DESK_PERSONA = "front-desk";
+// agree on it exactly, or a Visitor chat pins to a card nobody creates.
+export const VISITOR_CHAT_PERSONA = "visitor-chat";
 // One phrase describing how bounded a card is, shared so the Personas page and the automation picker can't grow
 // different vocabularies for the same card. "Read-only"/"no shell" are named; everything else collapses to a count.
 export const personaBounds = (persona: Persona): string => {

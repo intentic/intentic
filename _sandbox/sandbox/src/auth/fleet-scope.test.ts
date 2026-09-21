@@ -2,25 +2,25 @@ import { describe, expect, test } from "vitest";
 import type { ProvenCaller } from "./auth.js";
 import { framedEvent, refuseUnlessVisible, visibleTo } from "./fleet-scope.js";
 
-// The two fences over the fleet, as pure rules: whose conversation counts as a desk's, what a fenced member may see
+// The two fences over the fleet, as pure rules: whose conversation counts as a guest's, what a fenced member may see
 // of work that is not theirs, and which frames of the event stream reach either. The routes apply these; this pins
 // what they apply. Which persona cards that fence hands over is personas/persona-reach.test.ts, since answering it
 // costs a manifest read.
 
 // Unfenced on purpose, so the ownership narrowing is pinned on its own; the two are independent rules. The roster
-// refuses an unfenced desk (auth.ts MemberSchema), and `fencedDesk` below is the shape that actually exists.
-const desk: ProvenCaller = { email: "Dee@Example.com", role: "desk", methods: ["google"] };
+// refuses an unfenced guest (auth.ts MemberSchema), and `fencedGuest` below is the shape that actually exists.
+const guest: ProvenCaller = { email: "Dee@Example.com", role: "guest", methods: ["google"] };
 const viewer: ProvenCaller = { email: "vic@example.com", role: "viewer", methods: ["google"] };
 // Fenced to one area; the fence rides on the row whatever the tier, so a collaborator carries one too.
 const fenced: ProvenCaller = { email: "fay@example.com", role: "collaborator", areas: ["support"], methods: ["google"] };
 
 describe("visibleTo", () => {
-    test("a desk sees what it owns or started, compared folded; nothing else", () => {
-        expect(visibleTo(desk, { owner: { email: "dee@example.com" } })).toBe(true);
-        expect(visibleTo(desk, { startedBy: "dee@example.com" })).toBe(true);
-        expect(visibleTo(desk, { owner: { email: "ada@example.com" }, startedBy: "ada@example.com" })).toBe(false);
-        // A wake nobody owns is still not the desk's.
-        expect(visibleTo(desk, {})).toBe(false);
+    test("a guest sees what it owns or started, compared folded; nothing else", () => {
+        expect(visibleTo(guest, { owner: { email: "dee@example.com" } })).toBe(true);
+        expect(visibleTo(guest, { startedBy: "dee@example.com" })).toBe(true);
+        expect(visibleTo(guest, { owner: { email: "ada@example.com" }, startedBy: "ada@example.com" })).toBe(false);
+        // A wake nobody owns is still not the guest's.
+        expect(visibleTo(guest, {})).toBe(false);
     });
 
     test("every other tier, and the owner's own tools, see the fleet whole", () => {
@@ -39,18 +39,18 @@ describe("visibleTo", () => {
         expect(visibleTo(fenced, { owner: { email: "fay@example.com" } })).toBe(false);
     });
 
-    test("both narrowings apply at once to a fenced desk", () => {
-        const fencedDesk: ProvenCaller = { ...desk, areas: ["support"] };
-        expect(visibleTo(fencedDesk, { owner: { email: "dee@example.com" }, areas: ["support"] })).toBe(true);
+    test("both narrowings apply at once to a fenced guest", () => {
+        const fencedGuest: ProvenCaller = { ...guest, areas: ["support"] };
+        expect(visibleTo(fencedGuest, { owner: { email: "dee@example.com" }, areas: ["support"] })).toBe(true);
         // Theirs, but born wider than they hold.
-        expect(visibleTo(fencedDesk, { owner: { email: "dee@example.com" }, areas: ["support", "finance"] })).toBe(false);
+        expect(visibleTo(fencedGuest, { owner: { email: "dee@example.com" }, areas: ["support", "finance"] })).toBe(false);
         // Within their areas, but somebody else's.
-        expect(visibleTo(fencedDesk, { owner: { email: "ada@example.com" }, areas: ["support"] })).toBe(false);
+        expect(visibleTo(fencedGuest, { owner: { email: "ada@example.com" }, areas: ["support"] })).toBe(false);
     });
 
     test("the refusal is FORBIDDEN and names nobody", () => {
-        expect(() => refuseUnlessVisible(desk, { owner: { email: "ada@example.com" } })).toThrow(/not one of your conversations/);
-        expect(() => refuseUnlessVisible(desk, { owner: { email: "dee@example.com" } })).not.toThrow();
+        expect(() => refuseUnlessVisible(guest, { owner: { email: "ada@example.com" } })).toThrow(/not one of your conversations/);
+        expect(() => refuseUnlessVisible(guest, { owner: { email: "dee@example.com" } })).not.toThrow();
     });
 });
 
@@ -58,18 +58,18 @@ describe("framedEvent", () => {
     const mine = { id: "c1", owner: { email: "dee@example.com" } };
     const theirs = { id: "c2", owner: { email: "ada@example.com" } };
 
-    test("the roster frame keeps only the desk's own conversations", () => {
-        const framed = framedEvent(desk, undefined, { kind: "agents", agents: [mine, theirs] as never, rev: 3 });
+    test("the roster frame keeps only the guest's own conversations", () => {
+        const framed = framedEvent(guest, undefined, { kind: "agents", agents: [mine, theirs] as never, rev: 3 });
         expect(framed).toEqual({ kind: "agents", agents: [mine], rev: 3 });
     });
 
-    // A desk is fenced like anyone else and reads its own area, so its frames are cut to that fence rather than
+    // A guest is fenced like anyone else and reads its own area, so its frames are cut to that fence rather than
     // dropped: dropping them would leave the tree it can open stale behind it.
     test("frames naming paths or repositories are cut to the fence, and kept whole for an unfenced tier", () => {
         const changed = { kind: "workspaceChanged" as const, paths: ["docs/pricing.md"] };
-        expect(framedEvent(desk, ["support"], changed)).toBeUndefined();
-        expect(framedEvent(desk, ["support"], { kind: "reposChanged", repos: ["api"] })).toEqual({ kind: "reposChanged", repos: [] });
-        expect(framedEvent(desk, ["support"], { kind: "workspaceChanged", paths: ["support/a.md"] })).toEqual({
+        expect(framedEvent(guest, ["support"], changed)).toBeUndefined();
+        expect(framedEvent(guest, ["support"], { kind: "reposChanged", repos: ["api"] })).toEqual({ kind: "reposChanged", repos: [] });
+        expect(framedEvent(guest, ["support"], { kind: "workspaceChanged", paths: ["support/a.md"] })).toEqual({
             kind: "workspaceChanged",
             paths: ["support/a.md"],
         });
@@ -101,6 +101,6 @@ describe("framedEvent", () => {
 
     test("heartbeats and presence ride through untouched", () => {
         const beat = { kind: "heartbeat" as const, rev: 1 };
-        expect(framedEvent(desk, undefined, beat)).toBe(beat);
+        expect(framedEvent(guest, undefined, beat)).toBe(beat);
     });
 });

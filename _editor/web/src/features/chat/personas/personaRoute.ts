@@ -11,10 +11,10 @@ import { roleSources } from "../accounts/roleModel";
 // Which persona a new chat belongs to, asked of the daemon once, on the message the user actually sent. Never on a
 // draft: nothing about a half-typed message says it is finished, so reading one spends the owner's allowance on words
 // they are still writing.
-// The send waits for the answer, since the card decides the tree, accounts and model of the very turn being sent; the
+// The send waits for the answer, since the persona decides the tree, accounts and model of the very turn being sent; the
 // wait is drawn while it runs (a spinning transcript notice, rewritten in place with the verdict and the model that
 // gave it), because a model call the owner cannot see is a bill they cannot question.
-// Putting the card on also moves the model to its ladder's head (Conversation.wearModel). State lives per
+// Putting the persona on also moves the model to its ladder's head (Conversation.wearModel). State lives per
 // conversation, not persisted with the tab.
 
 // How long a send waits for the reading before going out unrouted. Longer than the daemon's own deadline
@@ -51,12 +51,12 @@ export const personaRouteWait = (chat: Conversation): { readonly since: number }
 export interface PersonaRouting {
     // A manual pick at the pill, including "Anyone": overrules routing for this chat.
     readonly byHand: () => void;
-    // What a send waits for, or undefined for send-now. Capped at SEND_WAIT_MS, resolving once the card is (or isn't)
+    // What a send waits for, or undefined for send-now. Capped at SEND_WAIT_MS, resolving once the persona is (or isn't)
     // put on.
     readonly beforeSend: (text: string) => Promise<void> | undefined;
 }
 
-// Paths the daemon can match a card against: uploads first, then @-mentions, deduped. No folder, since a
+// Paths the daemon can match a persona against: uploads first, then @-mentions, deduped. No folder, since a
 // composer-opened chat has none.
 const pathsOf = (chat: Conversation, text: string): string[] => {
     const uploaded = chat.attachments.value.map((file) => file.path);
@@ -69,16 +69,16 @@ const spent = (route: PersonaRoute | undefined): string => {
     return choice === undefined ? `` : ` Read by ${pinnedModelLabel(choice)}.`;
 };
 
-// The settled line: what came back, whether it was put on, and what the reading cost. Said whether or not a card was
+// The settled line: what came back, whether it was put on, and what the reading cost. Said whether or not a persona was
 // named, since the call was paid for either way.
-const verdictLine = (card: Persona | undefined, route: PersonaRoute | undefined, applied: boolean): string => {
+const verdictLine = (persona: Persona | undefined, route: PersonaRoute | undefined, applied: boolean): string => {
     if (route === undefined) {
         return `Couldn't read which persona this chat belongs to in time, so it stays open to everything.`;
     }
-    if (card === undefined) {
+    if (persona === undefined) {
         return `No persona matched, so this chat acts as everyone. ${route.reason}${spent(route)}`;
     }
-    const name = card.label ?? card.id;
+    const name = persona.label ?? persona.id;
     return applied
         ? `Acting as ${name}. ${route.reason}${spent(route)}`
         : `${name} matched, but this chat was pointed somewhere by hand first, so nothing moved.${spent(route)}`;
@@ -87,19 +87,19 @@ const verdictLine = (card: Persona | undefined, route: PersonaRoute | undefined,
 export const usePersonaRoute = (conversation: () => Conversation): PersonaRouting => {
     const { settings } = useSandboxSettings();
     const { personas } = usePersonas();
-    const { isDesk } = useRole();
+    const { isGuest } = useRole();
     // Off until settings load, so no call fires on a guess about a setting the owner may have turned off. With no
-    // cards there is nothing to route onto, and the round trip is skipped rather than answered `none`. A desk is never
-    // routed: its chat wears one of its own cards from the start, and the daemon refuses it the reading anyway.
-    const on = computed(() => settings.value?.personaRouting === true && personas.value.length > 0 && !isDesk.value);
+    // personas there is nothing to route onto, and the round trip is skipped rather than answered `none`. A guest is never
+    // routed: its chat wears one of its own personas from the start, and the daemon refuses it the reading anyway.
+    const on = computed(() => settings.value?.personaRouting === true && personas.value.length > 0 && !isGuest.value);
 
     const cardOf = (id: string | undefined): Persona | undefined => (id === undefined ? undefined : personas.value.find((persona) => persona.id === id));
 
-    // Puts the card on and its model with it, through the same `actsAs` ref the pill writes, so a routed card and a
+    // Puts the persona on and its model with it, through the same `actsAs` ref the pill writes, so a routed persona and a
     // picked one look identical everywhere that reads it.
-    const wear = (chat: Conversation, card: Persona): void => {
-        chat.actsAs.value = card.id;
-        const head = personaModels(card, roleSources.value)[0];
+    const wear = (chat: Conversation, persona: Persona): void => {
+        chat.actsAs.value = persona.id;
+        const head = personaModels(persona, roleSources.value)[0];
         if (head !== undefined) {
             chat.wearModel(head);
         }
@@ -137,13 +137,13 @@ export const usePersonaRoute = (conversation: () => Conversation): PersonaRoutin
         const wait = new Promise<undefined>((resolve) => setTimeout(() => resolve(undefined), SEND_WAIT_MS));
         return Promise.race([ask(chat, trimmed), wait]).then((route) => {
             state.since.value = undefined;
-            const card = cardOf(route?.persona);
+            const persona = cardOf(route?.persona);
             // Re-checked: the pill may have been pointed somewhere by hand while the reading ran.
-            const applied = card !== undefined && !state.held.value && chat.actsAs.value === undefined;
+            const applied = persona !== undefined && !state.held.value && chat.actsAs.value === undefined;
             if (applied) {
-                wear(chat, card);
+                wear(chat, persona);
             }
-            chat.reword(noticeId, verdictLine(card, route, applied), { noticeWait: undefined });
+            chat.reword(noticeId, verdictLine(persona, route, applied), { noticeWait: undefined });
         });
     };
 

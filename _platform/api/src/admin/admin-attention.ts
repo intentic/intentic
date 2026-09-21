@@ -134,7 +134,7 @@ export const adminAttention = async (prisma: PrismaClient, now: () => Date = () 
                 kind: `plan-past-due`,
                 severity: `warning`,
                 title: `${plan.user.email}'s hosted plan is past due`,
-                detail: `Stripe is retrying; the plan is paused and the free lane's ceiling applies. Period ran to ${utcDayWord(plan.currentPeriodEnd)}.`,
+                detail: `Stripe is retrying; the plan is paused and the free plan's ceiling applies. Period ran to ${utcDayWord(plan.currentPeriodEnd)}.`,
                 at: plan.updatedAt.toISOString(),
                 email: plan.user.email,
             }),

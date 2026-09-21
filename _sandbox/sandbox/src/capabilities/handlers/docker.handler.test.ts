@@ -29,7 +29,7 @@ test("gpu off leaves no trace in the fragment", async () => {
     }
 });
 
-test("the echo carries every option, so the card opens on what the user actually set", () => {
+test("the echo carries every option, so the entry opens on what the user actually set", () => {
     expect(registry.docker.echo({ gpu: "on", registryMirror: "https://mirror.example" }, new Map())).toEqual({
         gpu: true,
         registryMirror: "https://mirror.example",

@@ -16,8 +16,8 @@ import { useT } from "@intentic/ui/i18n";
 
 const t = useT();
 
-// The tier decides what this picker owes: a writer and a desk cannot be granted unfenced, and a desk's fence has to
-// reach an assistant, since that is the whole of what a desk reaches.
+// The tier decides what this picker owes: a writer and a guest cannot be granted unfenced, and a guest's fence has to
+// reach an assistant, since that is the whole of what a guest reaches.
 const { picked, role, disabled = false } = defineProps<{ picked: readonly string[] | undefined; role: GrantedRole; disabled?: boolean }>();
 // `undefined` is the whole workspace; a list, even empty, is the grant deciding.
 const emit = defineEmits<{ change: [areas: string[] | undefined] }>();
@@ -27,9 +27,9 @@ const { namesOf } = usePersonaReach();
 
 const held = computed<readonly string[]>(() => picked ?? []);
 const reached = computed<string[]>(() => namesOf(picked));
-const needsOne = computed(() => role === `writer` || role === `desk`);
-// A desk reaches its assistants and nothing else, so a fence that holds none is a grant with nothing behind it.
-const strandsDesk = computed(() => role === `desk` && held.value.length > 0 && reached.value.length === 0);
+const needsOne = computed(() => role === `writer` || role === `guest`);
+// A guest reaches its assistants and nothing else, so a fence that holds none is a grant with nothing behind it.
+const strandsDesk = computed(() => role === `guest` && held.value.length > 0 && reached.value.length === 0);
 
 const toggle = (id: string, on: boolean): void => {
     const next = on ? [...new Set([...held.value, id])] : held.value.filter((area) => area !== id);
@@ -61,7 +61,7 @@ const toggle = (id: string, on: boolean): void => {
              says so before it says what the pick would mean. -->
         <template v-if="areas.length > 0">
             <span v-if="needsOne && held.length === 0" class="ui-field-error">{{
-                role === `desk` ? t(`sandbox.sandboxAccess.deskNeedsArea`) : t(`sandbox.sandboxAccess.writerNeedsArea`)
+                role === `guest` ? t(`sandbox.sandboxAccess.guestNeedsArea`) : t(`sandbox.sandboxAccess.writerNeedsArea`)
             }}</span>
             <span v-else-if="strandsDesk" class="ui-field-error">{{ t(`sandbox.sandboxAccess.noAssistantWorksHere`) }}</span>
             <span v-else-if="picked === undefined" class="text-2xs text-subtle">{{ t(`sandbox.sandboxAccess.noAreaMeansWhole`) }}</span>

@@ -16,7 +16,7 @@ const probe =
     (prefix: string): boolean =>
         entryAt(prefix)?.type !== `dir`;
 
-/** The archive a folder is inside, or is; undefined for the workspace proper. What the desk asks about where it is. */
+/** The archive a folder is inside, or is; undefined for the workspace proper. What the home asks about where it is. */
 export const archiveAbove = (dir: string, entryAt: (path: string) => WorkspaceTreeEntry | undefined): string | undefined =>
     archiveRootOf(dir, probe(entryAt))?.archive;
 

@@ -21,7 +21,7 @@ test(`the thread id is minted once and reused: this is what threads a follow-up 
     expect(visitorConversationId(`support`)).toBe(first);
 });
 
-test(`two Front Desks on one site are two threads`, () => {
+test(`two Visitor chats on one site are two threads`, () => {
     expect(visitorConversationId(`support`)).not.toBe(visitorConversationId(`sales`));
 });
 
@@ -52,9 +52,9 @@ test(`"New chat" rewinds the cursor, so a fresh thread cannot inherit the last o
 });
 
 test(`a cursor that storage lost or a hand corrupted reads as the start of the thread, never as NaN`, () => {
-    window.localStorage.setItem(`intentic.front-desk.support.cursor`, `not a number`);
+    window.localStorage.setItem(`intentic.visitor-chat.support.cursor`, `not a number`);
     expect(storedCursor(`support`)).toBe(0);
-    window.localStorage.setItem(`intentic.front-desk.support.cursor`, `-5`);
+    window.localStorage.setItem(`intentic.visitor-chat.support.cursor`, `-5`);
     expect(storedCursor(`support`)).toBe(0);
 });
 

@@ -30,7 +30,7 @@ type Env = Record<string, string | undefined>;
 
 // The card's seven values, from whichever side they were read: `gw`'s environment, or the watcher's stored capability
 // config. Same card, same rules, written once against this shape.
-export interface CardFields {
+export interface RequestFields {
     readonly mode: string;
     readonly email: string;
     readonly access: string;
@@ -63,7 +63,7 @@ const domainCredential = (raw: string): { credential?: Credential; problem?: str
     return { credential: { mode: "domain", clientEmail, privateKey, tokenUri: typeof tokenUri === "string" ? tokenUri : DEFAULT_TOKEN_URI } };
 };
 
-const userCredential = (fields: CardFields): { credential?: Credential; problem?: string } => {
+const userCredential = (fields: RequestFields): { credential?: Credential; problem?: string } => {
     const missing = [
         ...(fields.clientId === "" ? ["client ID"] : []),
         ...(fields.clientSecret === "" ? ["client secret"] : []),
@@ -75,7 +75,7 @@ const userCredential = (fields: CardFields): { credential?: Credential; problem?
     return { credential: { mode: "user", clientId: fields.clientId, clientSecret: fields.clientSecret, refreshToken: fields.refreshToken } };
 };
 
-export const connectionOf = (name: string, fields: CardFields): Connection => {
+export const connectionOf = (name: string, fields: RequestFields): Connection => {
     const domain = fields.mode === "domain";
     const resolved = domain ? domainCredential(fields.serviceAccountKey) : userCredential(fields);
     return {
@@ -90,7 +90,7 @@ export const connectionOf = (name: string, fields: CardFields): Connection => {
 };
 
 // The stored capability config, as the watcher receives it over the listener state route, the same seven values as
-// `CardFields`, in one object.
+// `RequestFields`, in one object.
 export interface CardConfig {
     readonly mode?: string;
     readonly email?: string;
@@ -101,7 +101,7 @@ export interface CardConfig {
     readonly serviceAccountKey?: string;
 }
 
-export const fieldsOfConfig = (config: CardConfig): CardFields => ({
+export const fieldsOfConfig = (config: CardConfig): RequestFields => ({
     mode: (config.mode ?? "").trim(),
     email: (config.email ?? "").trim(),
     access: (config.access ?? "").trim(),

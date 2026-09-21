@@ -43,7 +43,7 @@ beforeEach(() => {
     silentBoxes.value = [];
     activeSandboxId.value = `sbx-here`;
     sandboxes.value = [
-        { id: `sbx-here`, name: `Desk`, image: null, lastSeenAt: `2026-01-01T00:00:00Z` },
+        { id: `sbx-here`, name: `Guest`, image: null, lastSeenAt: `2026-01-01T00:00:00Z` },
         { id: `sbx-laptop`, name: `Laptop`, image: null, lastSeenAt: `2026-01-01T00:00:00Z` },
     ];
     select.mockClear();
@@ -54,14 +54,14 @@ describe("whether the scope is offered at all", () => {
     // One connected sandbox is not a fleet: a switch whose two settings produce the same screen only teaches a reader
     // to stop reading controls.
     it("is not offered on an account with a single sandbox", () => {
-        sandboxes.value = [{ id: `sbx-here`, name: `Desk`, image: null, lastSeenAt: `2026-01-01T00:00:00Z` }];
+        sandboxes.value = [{ id: `sbx-here`, name: `Guest`, image: null, lastSeenAt: `2026-01-01T00:00:00Z` }];
         expect(scopeOffered.value).toBe(false);
     });
 
     // A sandbox that never checked in has no daemon to read, so it isn't somewhere else to look.
     it("does not count an unfinished setup as somewhere else to look", () => {
         sandboxes.value = [
-            { id: `sbx-here`, name: `Desk`, image: null, lastSeenAt: `2026-01-01T00:00:00Z` },
+            { id: `sbx-here`, name: `Guest`, image: null, lastSeenAt: `2026-01-01T00:00:00Z` },
             { id: `sbx-half`, name: `Half`, image: null, lastSeenAt: null },
         ];
         expect(scopeOffered.value).toBe(false);
@@ -76,7 +76,7 @@ describe("whether the scope is offered at all", () => {
     it("stops reading across when there is nowhere else, without forgetting the choice", () => {
         fleetScope.value = `all`;
         expect(readingAcross.value).toBe(true);
-        sandboxes.value = [{ id: `sbx-here`, name: `Desk`, image: null, lastSeenAt: `2026-01-01T00:00:00Z` }];
+        sandboxes.value = [{ id: `sbx-here`, name: `Guest`, image: null, lastSeenAt: `2026-01-01T00:00:00Z` }];
         expect(readingAcross.value).toBe(false);
         expect(fleetScope.value).toBe(`all`);
     });

@@ -2,7 +2,7 @@ import { type Fence, fenceAllows, fenceReaches, type SystemEvent } from "@intent
 import { ORPCError } from "@orpc/server";
 import type { Caller } from "./auth.js";
 
-// What a caller may see of the fleet, on two independent narrowings. A DESK sees the conversations they own or
+// What a caller may see of the fleet, on two independent narrowings. A GUEST sees the conversations they own or
 // started and nothing else. A FENCED member — anyone granted areas of the workspace — sees only conversations whose
 // own areas are among theirs. Everyone else sees the fleet whole, which is what the board's Everyone/Mine row is for.
 // Neither narrowing is a preference: the transcript of someone else's wider conversation is the brain in prose, and
@@ -48,13 +48,13 @@ export const visibleTo = (caller: Caller | undefined, agent: Provenance): boolea
     if (caller === undefined) {
         return true;
     }
-    if (caller.role === "desk" && !theirs(caller, agent)) {
+    if (caller.role === "guest" && !theirs(caller, agent)) {
         return false;
     }
     return withinFence(caller, agent);
 };
 
-// The refusal a desk meets on someone else's conversation. Unnamed on purpose: whose it is would say what the desk
+// The refusal a guest meets on someone else's conversation. Unnamed on purpose: whose it is would say what the guest
 // may not know.
 export const refuseUnlessVisible = (caller: Caller | undefined, agent: Provenance): void => {
     if (!visibleTo(caller, agent)) {
@@ -81,7 +81,7 @@ const framedRepos = <T extends { readonly repos: readonly string[] }>(fence: Fen
 // repository they may not. Undefined drops the frame.
 // `fence` is the caller's own, resolved once when the stream opens — an area edit revokes the connection, so a frame
 // is never filtered against a fence its reader no longer has.
-// One rule for every tier including a desk: a desk is always fenced (auth.ts MemberSchema) and reads its own area's
+// One rule for every tier including a guest: a guest is always fenced (auth.ts MemberSchema) and reads its own area's
 // files, so cutting its frames to that fence is what keeps its tree from going stale behind it.
 export const framedEvent = (caller: Caller | undefined, fence: Fence, event: SystemEvent): SystemEvent | undefined => {
     if (caller === undefined) {

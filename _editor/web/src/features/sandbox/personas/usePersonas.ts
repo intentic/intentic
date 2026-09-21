@@ -8,7 +8,7 @@ import { useSandboxQuery } from "../client/useSandboxQuery";
 
 // Named personas (`.intentic/config/personas.json`) via the daemon's `/personas` routes; saving or removing is a
 // plain mutation plus refetch, no apply or stream. `connected` lists which named accounts this sandbox is actually
-// signed into, separate from the cards.
+// signed into, separate from the personas.
 
 const QUERY_KEY = PERSONAS.of();
 
@@ -21,7 +21,7 @@ export function usePersonas() {
     // Invalidates only this list; capabilities, environment and panels are unaffected.
     const invalidate = (): Promise<void> => queryClient.invalidateQueries({ queryKey: QUERY_KEY });
 
-    // Upsert by id: saving an existing id edits that card.
+    // Upsert by id: saving an existing id edits that persona.
     const save = useMutation({
         mutationFn: (persona: Persona) => sandboxJson(`/personas`, jsonBody(`POST`, persona)),
         onSuccess: invalidate,
@@ -36,7 +36,7 @@ export function usePersonas() {
     return {
         personas,
         connected,
-        // Checked per account id, not per persona: a card naming three accounts needs only one connected.
+        // Checked per account id, not per persona: a persona naming three accounts needs only one connected.
         isConnected: (capabilityId: string): boolean => connected.value.includes(capabilityId),
         error,
         isLoading: query.isLoading,

@@ -124,7 +124,7 @@ const activeAccountReauth = computed(() => {
         </Button>
     </div>
     <ChatAccountPanel />
-    <!-- The free lane's last hours: the meter's own line, amber, with the door to Billing. -->
+    <!-- The free plan's last hours: the meter's own line, amber, with the door to Billing. -->
     <div
         v-if="hoursNotice"
         class="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-xl border border-warning/40 bg-warning/10 px-3 py-2 text-left text-2xs text-warning"

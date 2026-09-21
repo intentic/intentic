@@ -124,7 +124,7 @@ export const TriggerSchema = z.discriminatedUnion("kind", [
     }),
 ]);
 export type Trigger = z.infer<typeof TriggerSchema>;
-// The Front Desk widget's settings, present only on `webchat` listener automations. Split into what the widget itself
+// The Visitor chat widget's settings, present only on `webchat` listener automations. Split into what the widget itself
 // may read (public by construction) and what only the daemon may (turnstileSecret); GET /webchat/<id>/config serves the
 // first group by naming it, never by omitting the second.
 export const WebchatConfigSchema = z.object({
@@ -177,7 +177,7 @@ export const WebchatConfigSchema = z.object({
     sessionTtlMinutes: z.number().int().positive().optional(),
 });
 export type WebchatConfig = z.infer<typeof WebchatConfigSchema>;
-// Default daily agent-turn ceiling for an unconfigured Front Desk; high enough for real traffic, low enough to blunt a
+// Default daily agent-turn ceiling for an unconfigured Visitor chat; high enough for real traffic, low enough to blunt a
 // script.
 export const WEBCHAT_DAILY_MAX_DEFAULT = 200;
 // The widget wire: the shapes GET /webchat/<id>/config, GET .../challenge and POST .../message speak, living beside the
@@ -201,7 +201,7 @@ export const WebchatPublicConfigSchema = z.object({
 });
 export type WebchatPublicConfig = z.infer<typeof WebchatPublicConfigSchema>;
 // A proof-of-work challenge: find a nonce whose SHA-256 of `${salt}:${nonce}` starts with `difficulty` zero bits. One
-// shape for every public door (Front Desk, bug intake), and one matching solver, embed.ts.
+// shape for every public door (Visitor chat, bug intake), and one matching solver, embed.ts.
 export const PowChallengeSchema = z.object({ salt: z.string(), difficulty: z.number().int().positive() });
 export type PowChallenge = z.infer<typeof PowChallengeSchema>;
 // One visitor message; `conversationId` is the widget's own localStorage id, a thread key rather than a secret — the
@@ -224,7 +224,7 @@ export const WebchatMessageSchema = z.object({
 });
 export type WebchatMessage = z.infer<typeof WebchatMessageSchema>;
 // What GET /webchat/<id>/messages answers: replies queued after the visitor's stream closed, which is every reply an
-// approval-gated desk produces and every one a human writes as the agent. Public by construction, like the config:
+// approval-gated guest produces and every one a human writes as the agent. Public by construction, like the config:
 // reaching it needs nothing but an allowed origin and the conversation id already in that browser.
 export const WebchatPendingSchema = z.object({
     // Oldest first, so appending them to the log preserves the order they were written in.
@@ -272,7 +272,7 @@ export const AutomationSchema = z.object({
             "A command run before the wake that decides whether there is anything to do. Skipped by the guard is often the most useful thing an automation can report.",
         ),
     prompt: z.string().min(1).describe("What the woken agent is told."),
-    // The Front Desk widget's settings, `webchat` listener automations only, ignored on every other trigger.
+    // The Visitor chat widget's settings, `webchat` listener automations only, ignored on every other trigger.
     webchat: WebchatConfigSchema.optional().describe("Settings for the public chat widget, for an automation that answers visitors."),
     // Bug intake settings, `issues` triggers only; its own field rather than a shared bag, since a chat's and an
     // intake's fields mostly don't overlap.

@@ -18,7 +18,7 @@ const WEBCHAT_PROVIDER = "webchat";
 
 const WEBCHAT_SOURCE: TriggerSource = {
     provider: WEBCHAT_PROVIDER,
-    label: "Front Desk",
+    label: "Visitor chat",
     icon: "globe",
     // No capability requirement: the chat widget's own `<script>` tag is the connection.
     requires: [],
@@ -195,13 +195,13 @@ const FIELD_NOTES_PROMPT =
 
 export const CORE_AUTOMATION_TEMPLATES: readonly AutomationTemplate[] = [
     {
-        id: "front-desk",
-        title: "Front Desk",
+        id: "visitor-chat",
+        title: "Visitor chat",
         icon: "globe",
         requires: [],
         trigger: { kind: "listener", provider: WEBCHAT_PROVIDER, eventType: "message" },
         note: "instant",
-        // `configure`, not `create`: a Front Desk with no allowed sites admits nobody.
+        // `configure`, not `create`: a Visitor chat with no allowed sites admits nobody.
         offer: "configure",
         description: "Put a chat bubble on your own site and let visitors talk to this agent.",
         prompt:

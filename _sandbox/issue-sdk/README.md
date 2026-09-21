@@ -70,7 +70,7 @@ change. The other half of the wire is `_sandbox/sandbox/src/issues/`.
 - [src/main.ts](src/main.ts): the entry — auto-boots from a `<script>` tag, or `init()` from an import.
 - [src/client.ts](src/client.ts): everything between "an error happened" and "the daemon has it".
 - [src/transport.ts](src/transport.ts): the report, with `keepalive`; the config and challenge calls, the
-  proof-of-work solver and the per-browser id are the contract's `embed` entry, shared with the Front Desk.
+  proof-of-work solver and the per-browser id are the contract's `embed` entry, shared with the Visitor chat.
 - [src/capture.ts](src/capture.ts): the uncaught-error handlers, and what they decline to report.
 - [src/breadcrumbs.ts](src/breadcrumbs.ts): the ring buffer, and what it deliberately does not instrument.
 - [src/dialog.ts](src/dialog.ts) / [src/styles.ts](src/styles.ts): the optional report box.

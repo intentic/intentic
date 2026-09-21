@@ -93,7 +93,7 @@ export function useCapabilities() {
         refetchInterval: ({ state }) =>
             (state.data?.capabilities ?? []).some((capability) => capability.status.state === `pending`) ? PENDING_POLL_MS : false,
     });
-    // Adding/removing a capability can recompose the environment overlay, so refresh the Environment card too; a
+    // Adding/removing a capability can recompose the environment overlay, so refresh the Environment tile too; a
     // platform capability also scaffolds rail panels, so refresh those as well.
     const invalidate = async (): Promise<void> => {
         // Three disjoint caches, no ordering, refetch them concurrently.
@@ -134,10 +134,10 @@ export function useCapabilities() {
         onSuccess: invalidate,
     });
 
-    // "Not needed": stops suggesting this card until the workspace evidence changes; only the capability list
+    // "Not needed": stops suggesting this tile until the workspace evidence changes; only the capability list
     // refreshes.
     const dismissRecommendation = useMutation({
-        mutationFn: (card: string) => sandboxJson(`/capabilities/recommendations/${encodeURIComponent(card)}`, { method: `DELETE` }),
+        mutationFn: (entry: string) => sandboxJson(`/capabilities/recommendations/${encodeURIComponent(entry)}`, { method: `DELETE` }),
         onSuccess: () => queryClient.invalidateQueries({ queryKey: QUERY_KEY }),
     });
 
@@ -145,10 +145,10 @@ export function useCapabilities() {
     const recommendations = computed<CapabilityRecommendation[]>(() => query.data.value?.recommendations ?? []);
     return {
         capabilities,
-        // What the workspace asks for but isn't activated, by catalog card rather than kind (several connectors share
+        // What the workspace asks for but isn't activated, by catalog tile rather than kind (several connectors share
         // `cli`); the evidence renders verbatim beside the claim.
-        recommendationFor: (card: string): CapabilityRecommendation | undefined =>
-            recommendations.value.find((recommendation) => recommendation.card === card),
+        recommendationFor: (tile: string): CapabilityRecommendation | undefined =>
+            recommendations.value.find((recommendation) => recommendation.entry === tile),
         // Whether the manifest has arrived or definitively failed: the rail's half of "absent vs. merely late" (see
         // usePanels.settled).
         settled: computed(() => query.isFetched.value || query.isError.value),

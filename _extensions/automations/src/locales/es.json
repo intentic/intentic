@@ -11,13 +11,13 @@
         "create": "Crear",
         "done": "Hecho",
         "filterTemplates": "Filtrar plantillas…",
-        "frontDeskCreatedDrop": "Recepción creada: pon esto en tu sitio:",
         "integrations": "Integraciones",
         "newAutomation": "Automatización nueva",
         "noTemplateMatches": "Ninguna plantilla coincide.",
         "onAnyPageListed": "en cualquier página que hayas listado arriba. El lanzador aparece en la esquina; las conversaciones de visitantes salen en tu tablero de agentes, donde puedes mirar y tomar el relevo.",
         "pasteBefore": "Pégalo antes de",
-        "startTemplate": "Partir de una plantilla"
+        "startTemplate": "Partir de una plantilla",
+        "visitorChatCreatedDrop": "Recepción creada: pon esto en tu sitio:"
     },
     "automationFields": {
         "aboutSecondEachVisitors": "Alrededor de un segundo del tiempo de navegador de cada visitante. Sin claves.",
@@ -48,7 +48,6 @@
         "fires": "Fires",
         "firesIn": "Se dispara {when}.",
         "fri": "Vie",
-        "frontDesk": "Recepción",
         "fullToolboxNoAccounts": "caja de herramientas completa, sin cuentas",
         "googleClientId": "ID de cliente de Google",
         "googleSignIn": "Inicio de sesión con Google",
@@ -137,6 +136,7 @@
         "turnstileSiteKey": "Clave de sitio de Turnstile",
         "unavailable": "no disponible",
         "useStarter": "Usar el iniciador de {label}",
+        "visitorChat": "Recepción",
         "visitorsGetNoAnswer": "Los visitantes no reciben respuesta en el widget: las respuestas aprobadas aterrizan en tu chat.",
         "wake": "Despertar cuando",
         "webhook": "Webhook",
@@ -164,7 +164,6 @@
         "embedCodeInstallStatus": "Código de inserción y estado de instalación",
         "enable": "Activar {id}",
         "firesOnTriggerNot": "Dispara con su disparador, no con un reloj",
-        "frontDesk": "Recepción",
         "getEmbedCode": "Obtener el código de inserción",
         "heldApprovalBeforeRuns": "Retenida para tu aprobación antes de ejecutarse",
         "hold": "Retener",
@@ -187,6 +186,7 @@
         "save": "Guardar",
         "sureEverySenderWired": "¿Seguro? A cada emisor conectado a esta URL hay que darle la nueva.",
         "urlShownToMaintainers": "Su URL se muestra a los responsables y al propietario.",
+        "visitorChat": "Recepción",
         "wakesOnlyOwnCheck": "Solo despierta cuando su propia comprobación encuentra algo",
         "webhook": "Webhook"
     },
@@ -219,7 +219,10 @@
     "extension": {
         "automations": "Automatizaciones"
     },
-    "frontDeskInstallDialog": {
+    "useCiDelivery": {
+        "firesWithinSecondsProvider": "Dispara en segundos: el proveedor entrega cada pipeline terminada directamente a este sandbox."
+    },
+    "visitorChatInstallDialog": {
         "allow": "Permitir",
         "allowToLoadChat": "Permitir que {origin} cargue este chat",
         "allowedSites": "Sitios permitidos",
@@ -231,8 +234,5 @@
         "loaded": "¿Se ha cargado?",
         "noBrowserLoadedWidget": "Todavía ningún navegador ha cargado este widget. Pega el fragmento, abre tu sitio y esto se actualiza solo en unos segundos.",
         "pasteIntoSiteBefore": "Pega esto en tu sitio, antes de"
-    },
-    "useCiDelivery": {
-        "firesWithinSecondsProvider": "Dispara en segundos: el proveedor entrega cada pipeline terminada directamente a este sandbox."
     }
 }

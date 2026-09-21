@@ -7,7 +7,7 @@ import type { CapabilityHandler } from "../capability.js";
 export const endpointHandler: CapabilityHandler = {
     // The one rotatable credential; the header beside it is routing metadata the owner must read, not a secret.
     secret: (config) => ((config as EndpointConfig).apiKey !== undefined ? "apiKey" : undefined),
-    // URL and protocol travel as-is (what the card renders, what a user checks on failure); headers travel too; the key
+    // URL and protocol travel as-is (what the entry renders, what a user checks on failure); headers travel too; the key
     // becomes hasSecret.
     echo: (config) => {
         const endpoint = config as EndpointConfig;
@@ -26,7 +26,7 @@ export const endpointHandler: CapabilityHandler = {
         if (catalog.models.length === 0) {
             yield {
                 kind: "log",
-                message: `Stored ${id}, it published no models yet. Check the server is running at that URL and has a model loaded; the card re-probes on every visit.`,
+                message: `Stored ${id}, it published no models yet. Check the server is running at that URL and has a model loaded; the entry re-probes on every visit.`,
             };
             return;
         }

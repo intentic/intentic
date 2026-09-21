@@ -8,7 +8,7 @@ import { fileWebchatOutbox, outboxKeyOf, outboxStreamFor, outboxTurnStream } fro
 
 const store = () => fileWebchatOutbox(join(mkdtempSync(join(tmpdir(), "webchat-outbox-")), "outbox.json"));
 
-const KEY = "webchat:desk:visitor-1";
+const KEY = "webchat:guest:visitor-1";
 const DAY = 24 * 60 * 60 * 1000;
 
 test("a queued reply comes back once and then is behind the cursor", async () => {
@@ -31,7 +31,7 @@ test("seqs increase per thread, and threads do not see each other's replies", as
     const second = await outbox.append(KEY, "two", now + 1);
     expect(second).toBeGreaterThan(first);
 
-    await outbox.append("webchat:desk:visitor-2", "someone else's", now + 2);
+    await outbox.append("webchat:guest:visitor-2", "someone else's", now + 2);
     expect((await outbox.since(KEY, 0, now + 3)).replies.map((reply) => reply.text)).toEqual(["one", "two"]);
 });
 
@@ -67,12 +67,12 @@ test("a trimmed-away reply moves the cursor past it rather than leaving the visi
     expect((await outbox.since(KEY, cursor, now + 60)).replies).toEqual([]);
 });
 
-test("only a Front Desk origin names an outbox thread", () => {
-    expect(outboxKeyOf({ automationId: "desk", provider: "webchat", channelId: "visitor-1" })).toBe(KEY);
+test("only a Visitor chat origin names an outbox thread", () => {
+    expect(outboxKeyOf({ automationId: "guest", provider: "webchat", channelId: "visitor-1" })).toBe(KEY);
     // A Discord conversation answers through its gateway; claiming an outbox for it would swallow the reply.
-    expect(outboxKeyOf({ automationId: "desk", provider: "discord", channelId: "123" })).toBeUndefined();
+    expect(outboxKeyOf({ automationId: "guest", provider: "discord", channelId: "123" })).toBeUndefined();
     // A webhook wake has no thread to answer into.
-    expect(outboxKeyOf({ automationId: "desk", provider: "webchat" })).toBeUndefined();
+    expect(outboxKeyOf({ automationId: "guest", provider: "webchat" })).toBeUndefined();
     expect(outboxKeyOf(undefined)).toBeUndefined();
 });
 
@@ -102,15 +102,15 @@ test("a turn that failed queues nothing: the visitor is left to a human, not to 
     expect((await outbox.since(KEY, 0, Date.now())).replies).toEqual([]);
 });
 
-test("a wake with no Front Desk origin gets no sink, so every other provider's release is unchanged", () => {
+test("a wake with no Visitor chat origin gets no sink, so every other provider's release is unchanged", () => {
     const services = servicesWith(store());
-    expect(outboxStreamFor(services, { automationId: "desk", provider: "discord", channelId: "123" })).toBeUndefined();
+    expect(outboxStreamFor(services, { automationId: "guest", provider: "discord", channelId: "123" })).toBeUndefined();
     expect(outboxStreamFor(services, undefined)).toBeUndefined();
 });
 
-test("a Front Desk wake's sink writes into that visitor's own thread", async () => {
+test("a Visitor chat wake's sink writes into that visitor's own thread", async () => {
     const outbox = store();
-    const sink = outboxStreamFor(servicesWith(outbox), { automationId: "desk", provider: "webchat", channelId: "visitor-1" });
+    const sink = outboxStreamFor(servicesWith(outbox), { automationId: "guest", provider: "webchat", channelId: "visitor-1" });
     sink?.stream.delta("approved answer");
     sink?.stream.end();
     await sink?.settled();

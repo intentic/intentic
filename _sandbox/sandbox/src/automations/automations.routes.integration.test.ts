@@ -178,10 +178,10 @@ test("upsert refuses a cron that parses but can never come round", async () => {
     expect(await services.automations.get("past")).toBeUndefined();
 });
 
-test("upsert refuses sender rules on a source that does not identify who is writing: the Front Desk", async () => {
+test("upsert refuses sender rules on a source that does not identify who is writing: the Visitor chat", async () => {
     const services = catalogServices(mkdtempSync(join(tmpdir(), "routes-")));
     const routes = createAutomationsRoutes(services);
-    const desk = { ...automation("desk", { kind: "listener", provider: "webchat", allowedOrigins: ["https://example.com"] }), senders };
-    await expect(call(routes.upsert, desk, { context })).rejects.toThrow(/does not identify who is writing/);
-    expect(await services.automations.get("desk")).toBeUndefined();
+    const guest = { ...automation("guest", { kind: "listener", provider: "webchat", allowedOrigins: ["https://example.com"] }), senders };
+    await expect(call(routes.upsert, guest, { context })).rejects.toThrow(/does not identify who is writing/);
+    expect(await services.automations.get("guest")).toBeUndefined();
 });

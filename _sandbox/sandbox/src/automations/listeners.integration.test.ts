@@ -290,7 +290,7 @@ test("a fatal source failure lands as an error run on the provider's listener au
 const mark = { id: "u-mark", name: "Mark" };
 const martha = { id: "u-martha", name: "Martha" };
 
-// The owner's front line: Mark gets the unpinned agent, Martha the desk persona, nobody else gets anything.
+// The owner's front line: Mark gets the unpinned agent, Martha the guest persona, nobody else gets anything.
 const frontLine = (id: string, extra: Partial<Automation> = {}): Automation =>
     listenerAutomation(id, {
         senders: { rules: [{ ids: [mark.id] }, { ids: [martha.id], actsAs: "customer-service" }], others: "ignore" },
@@ -350,7 +350,7 @@ test("a rule that holds its people parks the wake with the lane's persona and th
     const services = fakeServices(mkdtempSync(join(tmpdir(), "listen-")));
     await services.automations.upsert(
         listenerAutomation("senders-hold", {
-            senders: { rules: [{ ids: ["u1"], actsAs: "desk", requireApproval: true }], others: "allow" },
+            senders: { rules: [{ ids: ["u1"], actsAs: "guest", requireApproval: true }], others: "allow" },
         }),
     );
     const prompts: string[] = [];
@@ -358,8 +358,8 @@ test("a rule that holds its people parks the wake with the lane's persona and th
     await eventually(async () => expect(await services.heldWakes.list()).toHaveLength(1));
     expect((await services.heldWakes.list())[0]).toMatchObject({
         automationId: "senders-hold",
-        actsAs: "desk",
-        thread: threadKey("discord", "senders-hold", "c1", "desk"),
+        actsAs: "guest",
+        thread: threadKey("discord", "senders-hold", "c1", "guest"),
         origin: { provider: "discord", channelId: "c1", author: "alice" },
     });
     expect(prompts).toEqual([]);
@@ -369,11 +369,11 @@ test("a rule that holds its people parks the wake with the lane's persona and th
 test("`others: hold` parks a stranger wearing the automation's own persona", async () => {
     const services = fakeServices(mkdtempSync(join(tmpdir(), "listen-")));
     await services.automations.upsert(
-        listenerAutomation("senders-others-hold", { actsAs: "desk", senders: { rules: [{ ids: [mark.id] }], others: "hold" } }),
+        listenerAutomation("senders-others-hold", { actsAs: "guest", senders: { rules: [{ ids: [mark.id] }], others: "hold" } }),
     );
     const prompts: string[] = [];
     await dispatchListenerMessage(services, message(), fakeWake(prompts), 5);
     await eventually(async () => expect(await services.heldWakes.list()).toHaveLength(1));
-    expect((await services.heldWakes.list())[0]).toMatchObject({ automationId: "senders-others-hold", actsAs: "desk" });
+    expect((await services.heldWakes.list())[0]).toMatchObject({ automationId: "senders-others-hold", actsAs: "guest" });
     expect(prompts).toEqual([]);
 });

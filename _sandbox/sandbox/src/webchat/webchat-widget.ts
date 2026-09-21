@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import type { Context } from "hono";
 import type { AppEnv } from "../app-env.js";
 
-// Serves the Front Desk bundle at /webchat/widget.js, the one <script> a customer's page loads. Served by the daemon,
+// Serves the Visitor chat bundle at /webchat/widget.js, the one <script> a customer's page loads. Served by the daemon,
 // not a CDN, so the widget and the routes it talks to always move together; while the sandbox is down, the script
 // simply does not load.
 
@@ -32,7 +32,7 @@ export const createWidgetRoute =
         } catch {
             // Absent or unbuilt; JS, not a 404, so the site's console says what's wrong.
             c.header("content-type", "application/javascript; charset=utf-8");
-            return c.body(`console.error("[intentic] the Front Desk widget bundle is missing from this sandbox image");`, 500);
+            return c.body(`console.error("[intentic] the Visitor chat widget bundle is missing from this sandbox image");`, 500);
         }
         // Revalidates every time: the URL is version-less, so long caching would pin visitors to a stale widget.
         c.header("cache-control", "no-cache");

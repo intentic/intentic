@@ -1581,7 +1581,7 @@ async function* runTurn(
 
 export const createAgentRoutes = (services: Services) => {
     const i = implement(agentContract).$context<OrpcContext>();
-    // A desk drives only its own conversations (auth/fleet-scope.ts); one the registry has never seen is nobody's
+    // A guest drives only its own conversations (auth/fleet-scope.ts); one the registry has never seen is nobody's
     // yet, and becomes the caller's on its first turn.
     const own = (context: OrpcContext, conversationId: string | undefined): void => {
         const entry = conversationId === undefined ? undefined : services.agents.entry(conversationId);
@@ -1600,7 +1600,7 @@ export const createAgentRoutes = (services: Services) => {
                 throw new ORPCError("BAD_REQUEST", { message: "conversationId required" });
             }
             const conversationId = input.conversationId;
-            // The card has to work in the part of the workspace this caller holds, and a desk has to name one at all;
+            // The card has to work in the part of the workspace this caller holds, and a guest has to name one at all;
             // checked before anything is started. An unfenced caller pays no read for this.
             await refuseUnlessReachable(services, context.identity, input.actsAs);
             own(context, conversationId);

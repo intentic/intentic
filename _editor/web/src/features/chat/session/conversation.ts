@@ -15,8 +15,8 @@ import {
     newConversationId,
     type PermissionMode,
     providerLabel,
-    settledCards,
-    type TranscriptCards,
+    settledRequests,
+    type TranscriptRequests,
     type ResumeRouting,
     type TranscriptPatch,
     type TranscriptRow,
@@ -1425,7 +1425,7 @@ export class Conversation {
 
     // The one path every card answer takes: un-park the turn on the daemon first, freeze the answer only once it lands.
     // One answer per card, claimed before the request goes out (see `deciding`), so a second press is dropped.
-    private async decide(message: ChatMessage, body: AgentReply, failure: string, cards: TranscriptCards): Promise<boolean> {
+    private async decide(message: ChatMessage, body: AgentReply, failure: string, cards: TranscriptRequests): Promise<boolean> {
         const { id } = message;
         if (this.deciding.value.has(id)) {
             return false;
@@ -1439,7 +1439,7 @@ export class Conversation {
                 return false;
             }
             // The same derivation the daemon uses for the `resolved` row, applied here so the card reads answered.
-            this.transcript.attachCard(id, settledCards(cards, body));
+            this.transcript.attachCard(id, settledRequests(cards, body));
             return true;
         } finally {
             // Released even on failure: the card goes back to `pending` on screen, so it must be answerable again.

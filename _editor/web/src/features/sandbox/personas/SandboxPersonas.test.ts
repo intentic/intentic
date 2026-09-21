@@ -15,7 +15,7 @@ vi.hoisted(() => {
 
 const personas = ref<Persona[]>([]);
 const connected = ref<string[]>([]);
-// Upserts like the real route; creating a persona opens it immediately, so a mock that didn't add the card would leave
+// Upserts like the real route; creating a persona opens it immediately, so a mock that didn't add the persona would leave
 // creation tests asserting against a page that never redrew.
 const save = vi.fn<(persona: Persona) => Promise<unknown>>().mockImplementation(async (persona) => {
     personas.value = [...personas.value.filter((entry) => entry.id !== persona.id), persona];
@@ -45,7 +45,7 @@ const capabilities = ref<{ id: string; kind: string }[]>([]);
 vi.mock(`../../capabilities/connect/useCapabilities`, () => ({ useCapabilities: () => ({ capabilities }) }));
 
 // Stubbed separately from the query mock below, which answers everything with a workspace tree; this suite is about the
-// card, so the kit answers empty.
+// persona, so the kit answers empty.
 vi.mock(`./usePersonaKit`, async () => {
     const { computed, ref: shallow } = await import(`vue`);
     const idle = { mutateAsync: vi.fn().mockResolvedValue({ ok: true }), isPending: shallow(false) };
@@ -66,8 +66,8 @@ vi.mock(`./usePersonaKit`, async () => {
 // to be filtered out.
 const tree = ref<WorkspaceTreeEntry[]>([]);
 vi.mock(`../client/sandboxClient`, () => ({ sandboxJson: vi.fn().mockResolvedValue({ entries: [], hidden: 0 }) }));
-// The named parts of the workspace: the card editor reads them to say which of them gain the card being written.
-// Holds the `docs` folder of the tree below, so a card starting there is one this area hands over.
+// The named parts of the workspace: the persona editor reads them to say which of them gain the persona being written.
+// Holds the `docs` folder of the tree below, so a persona starting there is one this area hands over.
 const areas = ref([{ id: `handbook`, label: `Handbook`, folders: [`docs`] }]);
 vi.mock(`../areas/useAreas`, () => ({ useAreas: () => ({ areas }) }));
 vi.mock(`../client/useSandboxQuery`, async () => {
@@ -117,7 +117,7 @@ const rowFor = (el: HTMLElement, id: string): HTMLElement => {
     return nameControl(el, persona.label ?? persona.id).closest(`.group`) as HTMLElement;
 };
 // Waits for a tab to render rather than a tick count, since opening settles over an unstable number of them.
-const openCard = async (el: HTMLElement, id: string): Promise<void> => {
+const openPersona = async (el: HTMLElement, id: string): Promise<void> => {
     rowFor(el, id).click();
     await vi.waitFor(() => expect(el.querySelector(`[role="tab"]`)).not.toBeNull());
 };
@@ -154,7 +154,7 @@ const chooseAccounts = async (el: HTMLElement): Promise<void> => {
     await nextTick();
 };
 
-// Used by every test that needs an open card: name, then Create, then wait for the save.
+// Used by every test that needs an open persona: name, then Create, then wait for the save.
 const addPersona = async (el: HTMLElement, name: string): Promise<void> => {
     buttonLabelled(el, `Add a persona`)!.click();
     await nextTick();
@@ -240,7 +240,7 @@ it(`saves one persona holding accounts on two different sites`, async () => {
     expect(save.mock.calls.at(-1)![0]).toMatchObject({ id: `work`, label: `Work`, capabilities: [`reddit-work`, `x-company`] });
 });
 
-it(`asks only for a name, then opens the card it made`, async () => {
+it(`asks only for a name, then opens the persona it made`, async () => {
     const el = mount();
     buttonLabelled(el, `Add a persona`)!.click();
     await nextTick();
@@ -259,7 +259,7 @@ it(`asks only for a name, then opens the card it made`, async () => {
     expect(text(el)).toContain(`Speaks through`);
 });
 
-it(`offers the powers and where-it-works sections when a card is open`, async () => {
+it(`offers the powers and where-it-works sections when a persona is open`, async () => {
     const el = mount();
     await addPersona(el, `Work`);
     await openTab(el, `What it may do`);
@@ -337,7 +337,7 @@ it(`states that every session works in its own copy, and offers no choice about 
     expect(rendered).not.toContain(`The shared workspace`);
 });
 
-it(`fences a card to a folder chosen from the workspace tree`, async () => {
+it(`fences a persona to a folder chosen from the workspace tree`, async () => {
     const el = mount();
     await addPersona(el, `Docs`);
     await openTab(el, `What it may do`);
@@ -358,9 +358,9 @@ it(`fences a card to a folder chosen from the workspace tree`, async () => {
     expect(save.mock.calls.at(-1)![0].workspace).toEqual({ folders: [`docs`] });
 });
 
-// Nobody picks assistants per person any more: a card is handed over by the area its starting folder sits in. That
+// Nobody picks assistants per person any more: a persona is handed over by the area its starting folder sits in. That
 // consequence is not readable off a folder name, so the editor says it where the folder is chosen.
-it(`says which areas gain the card, and that starting nowhere keeps it the owner's`, async () => {
+it(`says which areas gain the persona, and that starting nowhere keeps it the owner's`, async () => {
     const el = mount();
     await addPersona(el, `Docs`);
     await openTab(el, `What it may do`);
@@ -374,21 +374,21 @@ it(`says which areas gain the card, and that starting nowhere keeps it the owner
     expect(text(el)).toContain(`Anyone granted Handbook can talk to it.`);
 });
 
-it(`opens a card by clicking its row, and closes it by clicking again`, async () => {
+it(`opens a persona by clicking its row, and closes it by clicking again`, async () => {
     personas.value = [{ id: `work`, capabilities: [`reddit-work`] }];
     const el = mount();
     expect(text(el)).not.toContain(`Speaks through`);
-    await openCard(el, `work`);
+    await openPersona(el, `work`);
     expect(text(el)).toContain(`Speaks through`);
     rowFor(el, `work`).click();
     await nextTick();
     expect(text(el)).not.toContain(`Speaks through`);
 });
 
-it(`shows one of the card's three questions at a time`, async () => {
+it(`shows one of the persona's three questions at a time`, async () => {
     personas.value = [{ id: `work`, capabilities: [`reddit-work`] }];
     const el = mount();
-    await openCard(el, `work`);
+    await openPersona(el, `work`);
 
     expect(text(el)).toContain(`Speaks through`);
     expect(text(el)).not.toContain(`Run commands`);
@@ -406,7 +406,7 @@ it(`shows one of the card's three questions at a time`, async () => {
 it(`keeps every permission on one screen rather than splitting them across tabs`, async () => {
     personas.value = [{ id: `work`, capabilities: [] }];
     const el = mount();
-    await openCard(el, `work`);
+    await openPersona(el, `work`);
     await openTab(el, `What it may do`);
 
     const rendered = text(el);
@@ -424,8 +424,8 @@ it(`shows the name as text and turns it into a field only when clicked`, async (
     expect(el.querySelector(`input[aria-label="Persona name"]`)).not.toBeNull();
 });
 
-// Rename writes the whole card, not just the label; dropping the accounts would be a silent loss.
-it(`renames a persona on Enter, keeping the rest of its card`, async () => {
+// Rename writes the whole persona, not just the label; dropping the accounts would be a silent loss.
+it(`renames a persona on Enter, keeping the rest of its persona`, async () => {
     personas.value = [{ id: `work`, label: `Work`, capabilities: [`reddit-work`, `x-company`] }];
     const el = mount();
     nameControl(el, `Work`).click();
@@ -450,10 +450,10 @@ it(`abandons a rename on Escape without writing`, async () => {
     expect(text(el)).toContain(`Work`);
 });
 
-it(`saves an open card as soon as a switch is flipped, with no Save button`, async () => {
+it(`saves an open persona as soon as a switch is flipped, with no Save button`, async () => {
     personas.value = [{ id: `work`, capabilities: [`reddit-work`] }];
     const el = mount();
-    await openCard(el, `work`);
+    await openPersona(el, `work`);
     await openTab(el, `What it may do`);
     expect(buttonLabelled(el, `Save`)).toBeUndefined();
 
@@ -464,22 +464,22 @@ it(`saves an open card as soon as a switch is flipped, with no Save button`, asy
     expect(save.mock.calls[0]![0].powers).toMatchObject({ shell: false });
 });
 
-it(`writes nothing when a card is only opened`, async () => {
+it(`writes nothing when a persona is only opened`, async () => {
     personas.value = [{ id: `work`, capabilities: [`reddit-work`] }];
     const el = mount();
-    await openCard(el, `work`);
+    await openPersona(el, `work`);
     await new Promise((resolve) => setTimeout(resolve, 600));
     expect(save).not.toHaveBeenCalled();
 });
 
-it(`saves no powers block for a card nobody has bounded`, async () => {
+it(`saves no powers block for a persona nobody has bounded`, async () => {
     const el = mount();
     await addPersona(el, `Work`);
     expect(save.mock.calls[0]![0].powers).toBeUndefined();
     expect(save.mock.calls[0]![0].workspace).toBeUndefined();
 });
 
-it(`shows how bounded a card is on its row`, () => {
+it(`shows how bounded a persona is on its row`, () => {
     personas.value = [
         {
             id: `visitor`,
@@ -520,10 +520,10 @@ it(`keeps every account out of the form until the chooser is opened`, async () =
     expect(text(el)).toContain(`reddit-personal`);
 });
 
-it(`shows only the accounts a card speaks through when it is opened for editing`, async () => {
+it(`shows only the accounts a persona speaks through when it is opened for editing`, async () => {
     personas.value = [{ id: `work`, capabilities: [`reddit-work`] }];
     const el = mount();
-    await openCard(el, `work`);
+    await openPersona(el, `work`);
     expect(text(el)).toContain(`reddit-work`);
     expect(text(el)).not.toContain(`x-company`);
 });
@@ -531,7 +531,7 @@ it(`shows only the accounts a card speaks through when it is opened for editing`
 it(`drops an account when its chip is clicked`, async () => {
     personas.value = [{ id: `work`, capabilities: [`reddit-work`, `x-company`] }];
     const el = mount();
-    await openCard(el, `work`);
+    await openPersona(el, `work`);
     byAriaLabel(el, `Stop speaking through reddit-work`)!.click();
     await vi.waitFor(() => expect(save).toHaveBeenCalledTimes(1), { timeout: 2000 });
     expect(save.mock.calls[0]![0].capabilities).toEqual([`x-company`]);
@@ -548,12 +548,12 @@ it(`narrows the chooser by name or site`, async () => {
     expect(text(el)).not.toContain(`reddit-personal`);
 });
 
-// Two facts about the FILE, not the text (which lives in the kit, stubbed above): a card following the sandbox stores
-// nothing, and a card given its own base stores exactly that.
-it(`stores nothing about the prompt for a card that follows the sandbox`, async () => {
+// Two facts about the FILE, not the text (which lives in the kit, stubbed above): a persona following the sandbox stores
+// nothing, and a persona given its own base stores exactly that.
+it(`stores nothing about the prompt for a persona that follows the sandbox`, async () => {
     personas.value = [{ id: `work`, capabilities: [`reddit-work`] }];
     const el = mount();
-    await openCard(el, `work`);
+    await openPersona(el, `work`);
     await openTab(el, `What it may do`);
     toggleSwitch(el, `Run commands`);
 
@@ -561,10 +561,10 @@ it(`stores nothing about the prompt for a card that follows the sandbox`, async 
     expect(save.mock.calls[0]![0].systemPromptMode).toBeUndefined();
 });
 
-it(`stores the base a card was given one of its own`, async () => {
+it(`stores the base a persona was given one of its own`, async () => {
     personas.value = [{ id: `work`, capabilities: [`reddit-work`] }];
     const el = mount();
-    await openCard(el, `work`);
+    await openPersona(el, `work`);
     await openTab(el, `What it is told`);
 
     await openTab(el, `Claude`);
@@ -576,7 +576,7 @@ it(`stores the base a card was given one of its own`, async () => {
 it(`adds a persona's own skill through the same row and the same editor as the skills list`, async () => {
     personas.value = [{ id: `work`, capabilities: [] }];
     const el = mount();
-    await openCard(el, `work`);
+    await openPersona(el, `work`);
     await openTab(el, `What it is told`);
 
     const add = buttonLabelled(el, `Write a skill`)!;
@@ -590,13 +590,13 @@ it(`adds a persona's own skill through the same row and the same editor as the s
     expect(rendered).toContain(`Add skill`);
 });
 
-// The checklist that lets a card starve a small-context model of everything it does not need. Named with the exact
+// The checklist that lets a persona starve a small-context model of everything it does not need. Named with the exact
 // titles the chat's own "Sent with your message" fold shows, so the two surfaces stay one vocabulary.
 it(`drops a preamble note by the name the transcript gives it`, async () => {
     const dropped = TURN_BRIEFING_NOTES[0]!;
     personas.value = [{ id: `work`, capabilities: [] }];
     const el = mount();
-    await openCard(el, `work`);
+    await openPersona(el, `work`);
     await openTab(el, `What it is told`);
 
     expect(text(el)).toContain(dropped.when);
@@ -608,25 +608,25 @@ it(`drops a preamble note by the name the transcript gives it`, async () => {
     expect(text(el)).toContain(dropped.cost);
 });
 
-it(`opens a stored card on what it drops, and stores nothing once it drops none of it`, async () => {
+it(`opens a stored persona on what it drops, and stores nothing once it drops none of it`, async () => {
     const dropped = TURN_BRIEFING_NOTES[0]!;
     personas.value = [{ id: `work`, capabilities: [`reddit-work`], briefing: { omit: [dropped.id] } }];
     const el = mount();
-    await openCard(el, `work`);
+    await openPersona(el, `work`);
     await openTab(el, `What it is told`);
 
     expect(text(el)).toContain(dropped.cost);
-    // Switched back on, so the card ends up dropping nothing: the file must then say nothing rather than an empty list.
+    // Switched back on, so the persona ends up dropping nothing: the file must then say nothing rather than an empty list.
     toggleSwitch(el, dropped.label);
 
     await vi.waitFor(() => expect(save).toHaveBeenCalledTimes(1), { timeout: 2000 });
     expect(save.mock.calls[0]![0].briefing).toBeUndefined();
 });
 
-it(`names the notes no card may drop, so the checklist reads as complete`, async () => {
+it(`names the notes no persona may drop, so the checklist reads as complete`, async () => {
     personas.value = [{ id: `work`, capabilities: [] }];
     const el = mount();
-    await openCard(el, `work`);
+    await openPersona(el, `work`);
     await openTab(el, `What it is told`);
 
     const fixture = TURN_BRIEFING_FIXTURES[0]!;

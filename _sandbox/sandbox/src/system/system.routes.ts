@@ -76,7 +76,7 @@ async function* systemEvents(
     // Frames waiting to go out, stamped with production time; queue depth distinguishes a burst from a stalled
     // consumer.
     const queue: { readonly event: SystemEvent; readonly at: bigint }[] = [];
-    // A narrowed caller's stream is cut frame by frame (auth/fleet-scope.ts): a desk's own conversations and no
+    // A narrowed caller's stream is cut frame by frame (auth/fleet-scope.ts): a guest's own conversations and no
     // paths, a fenced member's own folders. Resolved once here rather than per frame, which a file read cannot be;
     // editing an area revokes the connection, so this can never outlive the grant it was read from.
     const fence = callerFence(await services.areas.list(), identity);

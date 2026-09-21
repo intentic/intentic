@@ -61,9 +61,9 @@ const { cmdOs } = useOsPreference();
 // that something is moving. What it will do is said when it does it, by the lane.
 const restarting = computed(() => restartRunning(sandbox.activeSandboxId.value));
 
-// A desk's door to the hub names the one section it may open; every other tier opens on the hub's own default.
-const { isDesk } = useRole();
-const hubPath = computed(() => sandboxHubPath(isDesk.value));
+// A guest's door to the hub names the one section it may open; every other tier opens on the hub's own default.
+const { isGuest } = useRole();
+const hubPath = computed(() => sandboxHubPath(isGuest.value));
 
 // WHERE THIS SANDBOX RUNS: Intentic's cloud, a machine of the owner's, or somebody else's. A standing fact, never an
 // errand, so it takes the tile's one free corner as a quiet mark rather than a plated badge — and its sentence rides

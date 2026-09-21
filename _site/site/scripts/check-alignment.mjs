@@ -7,7 +7,7 @@ import { resolve } from "node:path";
 const root = resolve(import.meta.dirname, "..");
 
 // Pages with marks (both product pages, pricing, about, a feature page); a route with none at any width fails outright.
-const ROUTES = ["/", "/desk/", "/pricing/", "/about/", "/features/review/"];
+const ROUTES = ["/", "/maker/", "/pricing/", "/about/", "/features/review/"];
 // Wide (two-column layouts) and phone; the bar redraws its wordmark at a second size below 30rem.
 const VIEWPORTS = [
     { label: "wide", width: 1280, height: 900 },

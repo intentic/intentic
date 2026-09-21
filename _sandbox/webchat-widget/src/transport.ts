@@ -46,7 +46,7 @@ export const fetchConfig = (endpoint: EmbedEndpoint): Promise<WebchatPublicConfi
 // another.
 export const fetchChallenge = (endpoint: EmbedEndpoint, conversationId: string): Promise<PowChallenge> => fetchEmbedChallenge(endpoint, SLUG, "conversation", conversationId);
 
-// Replies queued since `after`: what an approval-gated desk answers with, and where a human writing as the agent lands.
+// Replies queued since `after`: what an approval-gated guest answers with, and where a human writing as the agent lands.
 // Spends no challenge and starts no turn, so it is safe to call on a page the visitor is only reading.
 export const fetchPending = (endpoint: EmbedEndpoint, conversationId: string, after: number): Promise<WebchatPending> =>
     fetchEmbedJson<WebchatPending>(`${embedUrl(endpoint, SLUG, "messages")}?conversation=${encodeURIComponent(conversationId)}&after=${after}`);

@@ -75,23 +75,23 @@ export const sandboxBuiltInSlugs = (): ReadonlySet<string> =>
             .map((section) => section.slug),
     );
 
-/** The one section a desk member has business in: their own passkeys, and giving their grant back. */
-export const DESK_SECTION = `access`;
+/** The one section a guest member has business in: their own passkeys, and giving their grant back. */
+export const GUEST_SECTION = `access`;
 
 /**
- * The sections this reader can actually open; anything else would land on a row the hub redirects away from. A desk
+ * The sections this reader can actually open; anything else would land on a row the hub redirects away from. A guest
  * sees one row, since the daemon refuses it every other section's reads.
  */
-export const sandboxSections = (canShip: boolean, desk = false): readonly SandboxSection[] =>
+export const sandboxSections = (canShip: boolean, guest = false): readonly SandboxSection[] =>
     sandboxSectionGroups()
         .flatMap((group) => group.items)
-        .filter((section) => (desk ? section.slug === DESK_SECTION : canShip || section.maintainer !== true));
+        .filter((section) => (guest ? section.slug === GUEST_SECTION : canShip || section.maintainer !== true));
 
 export const sandboxSectionPath = (slug: string): string => (slug === SANDBOX_DEFAULT_SECTION ? `/sandbox` : `/sandbox/${slug}`);
 
 /**
- * Where a door marked "sandbox" leads for this reader. The hub's own default is a section a desk is refused, and the
- * shell fence (shell/deskPaths.ts) sends it home from the hub root before the hub can redirect — so a desk's door
+ * Where a door marked "sandbox" leads for this reader. The hub's own default is a section a guest is refused, and the
+ * shell fence (shell/guestPaths.ts) sends it home from the hub root before the hub can redirect — so a guest's door
  * names its one section outright rather than opening on a bounce.
  */
-export const sandboxHubPath = (desk: boolean): string => (desk ? sandboxSectionPath(DESK_SECTION) : `/sandbox`);
+export const sandboxHubPath = (guest: boolean): string => (guest ? sandboxSectionPath(GUEST_SECTION) : `/sandbox`);

@@ -3,9 +3,9 @@ import { readStored, storedId, writeStored } from "@intentic/sandbox-contract/em
 // Visitor identity is a thread key (ephemeral, minted here) or, after sign-in, a Google ID token the daemon verifies. A
 // typed display name is not identity; it rides as unverified `displayName`.
 
-// Keys are namespaced per automation, so two Front Desks on one site are two threads and clearing one leaves the other
+// Keys are namespaced per automation, so two Visitor chats on one site are two threads and clearing one leaves the other
 // signed in. Storage that refuses degrades to a fresh thread per load (embed helpers' rule).
-const key = (automationId: string, name: string): string => `intentic.front-desk.${automationId}.${name}`;
+const key = (automationId: string, name: string): string => `intentic.visitor-chat.${automationId}.${name}`;
 
 // The visitor's thread id, minted once and kept; a follow-up message lands in the same conversation only when this
 // does.
@@ -19,7 +19,7 @@ export const storeDisplayName = (automationId: string, name: string): void => wr
 export const storedCursor = (automationId: string): number => Math.max(0, Number(readStored(key(automationId, "cursor")) ?? 0) || 0);
 export const storeCursor = (automationId: string, cursor: number): void => writeStored(key(automationId, "cursor"), String(cursor));
 
-// Whether this browser has ever written to this desk. Nothing can be queued for a thread that never spoke, so this is
+// Whether this browser has ever written to this guest. Nothing can be queued for a thread that never spoke, so this is
 // what keeps a visitor who only ever reads the page from polling for replies that cannot exist.
 export const storedSpoke = (automationId: string): boolean => readStored(key(automationId, "spoke")) === "1";
 export const storeSpoke = (automationId: string): void => writeStored(key(automationId, "spoke"), "1");
@@ -48,7 +48,7 @@ interface GoogleIdentityServices {
 
 const GIS_SRC = "https://accounts.google.com/gsi/client";
 
-// One <script> tag per page and one load promise, however many Front Desks or sign-in opens.
+// One <script> tag per page and one load promise, however many Visitor chats or sign-in opens.
 let gisLoad: Promise<GoogleIdentityServices> | undefined;
 
 const loadGis = async (): Promise<GoogleIdentityServices> => {

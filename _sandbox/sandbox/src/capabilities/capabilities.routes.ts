@@ -42,7 +42,7 @@ const repointCapabilityReferences = async (services: Services, ctx: CapabilityCt
             // Best-effort: this entry isn't the one being renamed, so an unrelated apply failure must not fail the
             // rename.
             services.logger.warn(
-                `capabilities: renamed "${from}" but could not refresh "${next.id}" (${errorMessage(error)}), re-add it from its card`,
+                `capabilities: renamed "${from}" but could not refresh "${next.id}" (${errorMessage(error)}), re-add it from its entry`,
             );
         }
     };
@@ -172,7 +172,7 @@ export const createCapabilitiesRoutes = (services: Services) => {
                     yield {
                         kind: "log",
                         message:
-                            "This capability extends the sandbox image: a one-time rebuild is needed. Open the Sandbox page's Environment card to rebuild.",
+                            "This capability extends the sandbox image: a one-time rebuild is needed. Open the Sandbox page's Environment entry to rebuild.",
                     };
                 }
                 yield { kind: "result", ok: true };
@@ -333,11 +333,11 @@ export const createCapabilitiesRoutes = (services: Services) => {
                 await services.capabilities.list(),
                 await services.capabilityDismissals.list(),
             );
-            const recommendation = recommendations.find((candidate) => candidate.card === input.card);
+            const recommendation = recommendations.find((candidate) => candidate.entry === input.entry);
             if (recommendation === undefined) {
-                throw new ORPCError("NOT_FOUND", { message: "nothing is being recommended for that card" });
+                throw new ORPCError("NOT_FOUND", { message: "nothing is being recommended for that entry" });
             }
-            await services.capabilityDismissals.dismiss({ card: input.card, evidence: recommendation.evidence });
+            await services.capabilityDismissals.dismiss({ entry: input.entry, evidence: recommendation.evidence });
             return { ok: true } as const;
         }),
         // Runs loginCommand in the capability's job session via send-keys so the user finishes an interactive sign-in
@@ -367,7 +367,7 @@ export const createCapabilitiesRoutes = (services: Services) => {
         }),
         // Mints one TOTP code from the stored seed so the seed itself never crosses the wire; this is the only
         // capability read the per-boot agent token is admitted to. The seed field is whichever one the capability's
-        // card marks `totp`.
+        // entry marks `totp`.
         otp: i.otp.handler(async ({ input, context, signal }) => {
             const capability = await services.capabilities.get(input.id);
             if (capability === undefined) {
@@ -392,13 +392,13 @@ export const createCapabilitiesRoutes = (services: Services) => {
             const field = contribution?.spec.fields.find((candidate) => candidate.totp === true);
             const seed = field === undefined ? undefined : (capability.config as Record<string, unknown>)[field.key];
             if (typeof seed !== "string" || seed === "") {
-                throw new ORPCError("CONFLICT", { message: `"${input.id}" stores no TOTP secret, add one on its capability card` });
+                throw new ORPCError("CONFLICT", { message: `"${input.id}" stores no TOTP secret, add one on its capability entry` });
             }
             try {
                 return totpCode(seed, Date.now());
             } catch (error) {
                 const reason = errorMessage(error);
-                throw new ORPCError("CONFLICT", { message: `the stored TOTP secret is unusable (${reason}), re-add it on the capability card` });
+                throw new ORPCError("CONFLICT", { message: `the stored TOTP secret is unusable (${reason}), re-add it on the capability entry` });
             }
         }),
     };

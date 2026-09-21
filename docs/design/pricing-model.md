@@ -16,7 +16,7 @@ Every figure below is read from `_platform/api/src/config.ts` (`hosted` and `poo
 | Product | What the buyer gets | What it costs us | State of supply and demand |
 | --- | --- | --- | --- |
 | **Your machine** (free, MIT) | Unlimited sandboxes, every capability, extension, automation, shared workspace | Nothing: the platform is an identity store off the command path | The product. Every persona in positioning.md self-hosts |
-| **Hosted, free lane** | One sandbox on Fly (4 shared vCPU, 4 GB, 10 GB disk), 40 awake hours a month, sleeps after 20 idle minutes, machine deleted after 21 days unopened (warned at 14) | Compute while awake, disk while it exists | The zero-friction onboarding; the only rung that asks nothing of a device you own |
+| **Hosted, free plan** | One sandbox on Fly (4 shared vCPU, 4 GB, 10 GB disk), 40 awake hours a month, sleeps after 20 idle minutes, machine deleted after 21 days unopened (warned at 14) | Compute while awake, disk while it exists | The zero-friction onboarding; the only rung that asks nothing of a device you own |
 | **Membership, $20 a month** (Stripe) | (a) the hosted sandbox unmetered and never reclaimed; (b) 1,000 credits a day; (c) the right to install premium extensions (each install donates 200 credits to its author); (d) the right to run paid services (1 to 200 credits a run); (e) a creator pool: $5 taken off the top, 90% of the remaining $15 paid to creators in proportion to credits spent | The member's machine, plus whatever the pool pays out | Live registry: 7 extensions, **0 premium**. Services catalog: **one demo service, shipped off by default**. Members can spend credits on nothing |
 | **Wallet** (x402, USDC) | The owner's own on-chain wallet, custody-held, for paying any x402 endpoint on the internet | Nothing: it is their money and no fee is taken | Not gated by membership (`premiumOf` is never called under `wallet/`). Not a price of ours at all |
 | **Trial** | 12 messages a day on intentic's own Gemini free-tier key, before an AI account is connected | Effectively nothing (Google's free tier) | Onboarding, not a product |
@@ -36,8 +36,8 @@ cost their rootfs only.
 
 | Who | Awake hours a month | Our cost | Against the price |
 | --- | --- | --- | --- |
-| Free lane, tried once and abandoned | ~0 | $1.50 disk for up to 21 days, then $0 | An acquisition cost under $1.05 |
-| Free lane, used to the cap | 40 | $1.28 + $1.50 = **$2.78** | The ceiling on what a free user can cost |
+| Free plan, tried once and abandoned | ~0 | $1.50 disk for up to 21 days, then $0 | An acquisition cost under $1.05 |
+| Free plan, used to the cap | 40 | $1.28 + $1.50 = **$2.78** | The ceiling on what a free user can cost |
 | Member, three hours a day | 90 | $2.88 + $1.50 = **$4.38** | The $5 `infraUsd` assumption holds here |
 | Member, a working day | 240 | $7.68 + $1.50 = **$9.18** | Fine |
 | Member, always on | 730 | $23.36 + $1.50 = **$24.86** | Under water on a $20 plan before Stripe's $0.88 |
@@ -113,7 +113,7 @@ services plane, the Claude Code plugin and the example provider; the `services` 
 **What stays off the pricing page:** the wallet (the owner's own money, a capability), the trial (onboarding),
 teammates (free, and the comparison shelf's argument against per-seat competitors).
 
-**What does not change:** the free lane's numbers (40 hours, 20 idle minutes, 21 and 14 days), the shape, one
+**What does not change:** the free plan's numbers (40 hours, 20 idle minutes, 21 and 14 days), the shape, one
 hosted sandbox per account, enforcement at wake rather than mid-session, the Stripe checkout and portal.
 
 ### Price and fair use
@@ -131,7 +131,7 @@ lane's, published on the page as "up to N hours", and N is read from the panel, 
 
 ### One hosted sandbox per slot
 
-The free lane stays at one (`hosted.perUser`). "Ten agents in parallel" is ten agents in one sandbox, which
+The free plan stays at one (`hosted.perUser`). "Ten agents in parallel" is ten agents in one sandbox, which
 the shape carries; a second hosted sandbox is a second disk and a second box, and the honest price for it is
 another $20: the plan is **per hosted sandbox**, the subscription item's quantity is the slot count, and the
 Billing page adds or removes one ([billing-view.md](billing-view.md) §3 has the argument and the fallback on
@@ -174,7 +174,7 @@ model usage or a tier on features"; the economics band's three points stay as th
 
 In the app: Settings ▸ Membership becomes Settings ▸ Billing (plan state, awake hours this month, the hosted
 sandboxes and slots, the Stripe button and portal; [billing-view.md](billing-view.md)); the avatar menu's
-credit row becomes the free lane's hours row; the offer card says "Keep your hosted sandbox always on" instead
+credit row becomes the free plan's hours row; the offer card says "Keep your hosted sandbox always on" instead
 of "Unlock every premium extension"; the wake's refusal for spent hours is a gate state with the plan on it.
 
 ## 7. What changes in the source

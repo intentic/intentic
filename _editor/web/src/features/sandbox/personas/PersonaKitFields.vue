@@ -10,13 +10,13 @@ import { useDraft } from "../../../lib/useDraft";
 import { useT } from "@intentic/ui/i18n";
 
 // What this persona is told: the prompt and its own skills, one tab since they're one folder and one decision. Skills
-// reuse the Skills page's <SkillRow>/<SkillForm>, not a second hand-rolled editor. The mode rides the card's autosave;
+// reuse the Skills page's <SkillRow>/<SkillForm>, not a second hand-rolled editor. The mode rides the persona's autosave;
 // the prompt text commits on its own, so a keystroke never hits the personas file.
 
 const t = useT();
 
 const { personaId, mode } = defineProps<{
-    /** The saved card's id; always set, since a card is created before it's edited. */
+    /** The saved persona's id; always set, since a persona is created before it's edited. */
     personaId: string;
     mode: SystemPromptMode | undefined;
 }>();
@@ -121,7 +121,7 @@ const run = async (action: () => Promise<unknown>, whenItFails: string): Promise
 const save = (skill: SkillDraft): Promise<void> => run(() => saveSkill.mutateAsync(skill), `Couldn't save that skill.`);
 const remove = (name: string): Promise<void> => run(() => removeSkill.mutateAsync(name), `Couldn't remove that skill.`);
 
-// Switching cards closes whatever was open on the last one, since the accordion reuses this component.
+// Switching personas closes whatever was open on the last one, since the accordion reuses this component.
 watch(
     () => personaId,
     () => {
@@ -135,10 +135,10 @@ watch(
     <div class="flex flex-col gap-5">
         <div class="flex flex-col gap-3">
             <p class="text-xs text-subtle">
-                {{ t(`sandbox.personaKitFields.instructionsSessionWearingCard`) }}
+                {{ t(`sandbox.personaKitFields.instructionsSessionOnPersona`) }}
             </p>
 
-            <!-- Same three words the sandbox setting uses, plus the one answer only a card can give: follow the sandbox. -->
+            <!-- Same three words the sandbox setting uses, plus the one answer only a persona can give: follow the sandbox. -->
             <label class="flex flex-wrap items-center justify-between gap-3">
                 <span class="flex min-w-0 flex-col">
                     <span class="flex items-center gap-2 text-sm text-content">

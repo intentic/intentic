@@ -9,7 +9,7 @@ import { services } from "../harness/route-services.testing.js";
 import { memoryPersonasStore } from "../harness/route-stores.testing.js";
 
 // Persona kit routes over the real HTTP surface and a real temp workspace: files a loader we don't own reads, so what
-// matters is that a save lands where it looks, and no kit can be created for a card that doesn't exist.
+// matters is that a save lands where it looks, and no kit can be created for a persona that doesn't exist.
 
 const studio: Persona = { id: "studio", label: "Studio", capabilities: [] };
 
@@ -22,13 +22,13 @@ const withStore = (personas: Persona[] = [studio]) => {
 const kitFile = (root: string, ...tail: string[]): Promise<string | undefined> =>
     readFile(join(root, ".intentic", "config", "personas", ...tail), "utf8").catch(() => undefined);
 
-test("a card with no kit reads as an empty one rather than a failure", async () => {
+test("a persona with no kit reads as an empty one rather than a failure", async () => {
     const { client } = withStore();
 
     expect(await client.personas.kit({ id: "studio" })).toEqual({ prompt: "", skills: [] });
 });
 
-test("saving a prompt writes it where the card's turns will read it, and reads back what was typed", async () => {
+test("saving a prompt writes it where the persona's turns will read it, and reads back what was typed", async () => {
     const { client, root } = withStore();
 
     await client.personas.savePrompt({ id: "studio", prompt: "You write release notes." });
@@ -68,7 +68,7 @@ test("a skill that is gone reads as absent rather than as an empty one", async (
     expect(await errorCode(client.personas.readSkill({ id: "studio", name: "nope" }))).toBe("NOT_FOUND");
 });
 
-test("writing a kit for a card that does not exist is refused, and writes nothing", async () => {
+test("writing a kit for a persona that does not exist is refused, and writes nothing", async () => {
     const { client, root } = withStore([]);
 
     expect(await errorCode(client.personas.savePrompt({ id: "ghost", prompt: "Text." }))).toBe("NOT_FOUND");

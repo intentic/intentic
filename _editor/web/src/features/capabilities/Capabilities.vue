@@ -51,14 +51,14 @@ import { sandboxJson } from "../sandbox/client/sandboxClient";
 import { auditBrief, updateBrief } from "../sandbox/extensions/extensionBrief";
 import {
     CATEGORY_ICONS,
-    cardHaystack,
-    contributedCards,
+    entryHaystack,
+    contributedTiles,
     entryIcon,
     instancesOf,
     isDefaultName,
     suggestName,
     withIdentityPicker,
-} from "./model/cards";
+} from "./model/tiles";
 import {
     type ConnectionState,
     awaitingLogin,
@@ -104,34 +104,34 @@ import { revokeSyncDevice, useDevices } from "../sandbox/devices/useDevices";
 import { type DeviceConnection, deviceConnections, isDeviceConnection, machineNamed, sameMachineNote } from "./model/deviceConnections";
 import { useT } from "@intentic/ui/i18n";
 
-// Capabilities give the agent tools (GitHub, MCP servers, SSH hosts, Stripe) and scaffold managed repos. Core cards are
-// static catalog data; cli cards derive from enabled extensions' contributes.capabilities. Card facts live in
-// ./model/cards, form logic in ./model/form, connection facts in ./model/connections.
+// Capabilities give the agent tools (GitHub, MCP servers, SSH hosts, Stripe) and scaffold managed repos. Core tiles are
+// static catalog data; cli tiles derive from enabled extensions' contributes.capabilities. Tile facts live in
+// ./model/tiles, form logic in ./model/form, connection facts in ./model/connections.
 
 const t = useT();
 
 const { recommendationFor, capabilities, error: listError, add, remove, rename, refetch, dismissRecommendation } = useCapabilities();
 const { contributionOf, enabled: enabledExtensions, extensions, settled: extensionsSettled } = useExtensions();
-// A tunnel's live address for the Connected slice; the VPN card reads the same query, so the two can't disagree.
+// A tunnel's live address for the Connected slice; the VPN tile reads the same query, so the two can't disagree.
 const { links: vpnLinks } = useVpn();
-// Same for a disk's mount point and whether it takes writes; the disk card reads the same query.
+// Same for a disk's mount point and whether it takes writes; the disk tile reads the same query.
 const { links: netdiskLinks } = useNetdisk();
 
-// Identities a browser card can file under; instance state, which the manifest can't know.
+// Identities a browser tile can file under; instance state, which the manifest can't know.
 const identityIds = computed(() => capabilities.value.filter((instance) => instance.kind === `identity`).map((instance) => instance.id));
 
-// Full card list: extension-contributed cards, then the static core catalog.
-const allCards = computed<CapabilityCatalogEntry[]>(() =>
-    [...contributedCards(enabledExtensions.value), ...CAPABILITY_CATALOG].map((entry) => withIdentityPicker(entry, identityIds.value)),
+// Full tile list: extension-contributed tiles, then the static core catalog.
+const allEntries = computed<CapabilityCatalogEntry[]>(() =>
+    [...contributedTiles(enabledExtensions.value), ...CAPABILITY_CATALOG].map((entry) => withIdentityPicker(entry, identityIds.value)),
 );
 
 const route = useRoute();
 const router = useRouter();
 
-// Picked card is URL-driven (/capabilities/<id>); an unknown or absent slug resolves to undefined.
-const selected = computed<CapabilityCatalogEntry | undefined>(() => allCards.value.find((entry) => entry.id === route.params[`card`]));
+// Picked tile is URL-driven (/capabilities/<id>); an unknown or absent slug resolves to undefined.
+const selected = computed<CapabilityCatalogEntry | undefined>(() => allEntries.value.find((entry) => entry.id === route.params[`entry`]));
 const name = ref(``);
-// Whether the user (or a picked card) chose the name; until then the field tracks the live suggestion.
+// Whether the user (or a picked tile) chose the name; until then the field tracks the live suggestion.
 const nameEdited = ref(false);
 // Repaired save name (spaces/punctuation to hyphens); every consumer of the name reads this, not the raw input.
 const savedName = computed(() => cleanName(name.value));
@@ -140,14 +140,14 @@ const namePreview = computed(() => (savedName.value !== `` && savedName.value !=
 const instancesFor = (entry: CapabilityCatalogEntry): CapabilitySummary[] => instancesOf(entry, capabilities.value);
 const selectedInstances = computed<CapabilitySummary[]>(() => (selected.value === undefined ? [] : instancesFor(selected.value)));
 
-// Editing a connection from the card that made it: URL-driven (`edit=`), replaced not pushed, so reload and Back land
-// correctly. A singleton card is always editing; it has one connection and no query is needed.
+// Editing a connection from the tile that made it: URL-driven (`edit=`), replaced not pushed, so reload and Back land
+// correctly. A singleton tile is always editing; it has one connection and no query is needed.
 const editingId = computed<string>({
     get: () => (typeof route.query[`edit`] === `string` ? route.query[`edit`] : ``),
     set: (value) =>
         void router.replace({ name: `capabilities`, params: route.params, query: { ...route.query, edit: value === `` ? undefined : value } }),
 });
-// A singleton card has no list: its one connection IS the card, so its state goes on the heading.
+// A singleton tile has no list: its one connection IS the tile, so its state goes on the heading.
 const soleInstance = computed<CapabilitySummary | undefined>(() => (selected.value?.singleton === true ? selectedInstances.value[0] : undefined));
 // The connection the form is over; an unknown or stale `edit` id falls back to adding instead of a blank edit.
 const editing = computed<CapabilitySummary | undefined>(
@@ -157,10 +157,10 @@ const editing = computed<CapabilitySummary | undefined>(
 // Credentials this form is keeping; cleared when the form's subject changes (e.g. a FortiClient import).
 const keptSecrets = ref<StoredSecrets>(new Set<string>());
 
-// Background gateway liveness for relay connectors (Discord, IMAP), scoped to this card.
+// Background gateway liveness for relay connectors (Discord, IMAP), scoped to this tile.
 const { rows: processRows, busy: processBusy, start: startProcess, stop: stopProcess } = useBackgroundProcesses();
 
-// The extension serving an instance's processes, resolved per instance since one card's providers can differ.
+// The extension serving an instance's processes, resolved per instance since one tile's providers can differ.
 const ownerExtensionId = (instance: CapabilitySummary): string | undefined => {
     if (instance.kind === `extension`) {
         return instance.id;
@@ -173,7 +173,7 @@ const ownerExtensionId = (instance: CapabilitySummary): string | undefined => {
     )?.id;
 };
 
-// Empty until something is connected: an idle gateway on an unconfigured card is noise, not health.
+// Empty until something is connected: an idle gateway on an unconfigured tile is noise, not health.
 const cardProcesses = computed<BackgroundProcessRow[]>(() => {
     const owners = new Set(selectedInstances.value.map(ownerExtensionId).filter((id) => id !== undefined));
     return processRows.value.filter((row) => row.extensionId !== undefined && owners.has(row.extensionId));
@@ -182,35 +182,35 @@ const cardProcesses = computed<BackgroundProcessRow[]>(() => {
 // A typed name that matches an existing connection is now refused rather than silently overwritten.
 const nameCollision = computed(() => editing.value === undefined && selectedInstances.value.some((instance) => instance.id === savedName.value));
 
-// Every card with the facts all three panes read, computed once rather than per tile. Instances ride along so the
+// Every tile with the facts all three panes read, computed once rather than per tile. Instances ride along so the
 // Connected slice need not re-derive them.
-interface CatalogCard {
+interface CatalogTile {
     readonly entry: CapabilityCatalogEntry;
     readonly instances: readonly CapabilitySummary[];
     readonly connected: number;
     readonly recommendation: CapabilityRecommendation | undefined;
 }
 
-const cards = computed<CatalogCard[]>(() =>
-    allCards.value.map((entry) => {
+const tiles = computed<CatalogTile[]>(() =>
+    allEntries.value.map((entry) => {
         const instances = instancesFor(entry);
         return { entry, instances, connected: instances.length, recommendation: recommendationFor(entry.id) };
     }),
 );
 // The other door a machine can arrive through. Desktop sync is capability-free by design, so a laptop syncing files
-// holds no card — which used to mean this page showed no trace of a machine the Devices board called live. Both read
+// holds no tile — which used to mean this page showed no trace of a machine the Devices board called live. Both read
 // the daemon's one device registry now; shared without polling it, since the Devices tab owns that cadence.
 const { devices: fleet, readAt: fleetReadAt, refetch: refetchFleet } = useDevices({ poll: false });
 const syncOnlyDevices = computed<DeviceConnection[]>(() => deviceConnections(fleet.value, fleetReadAt.value));
-// This card's share of them, for the card pane's own list.
+// This tile's share of them, for the tile pane's own list.
 const selectedDevices = computed<DeviceConnection[]>(() =>
-    selected.value === undefined ? [] : syncOnlyDevices.value.filter((row) => row.cardId === selected.value?.id),
+    selected.value === undefined ? [] : syncOnlyDevices.value.filter((row) => row.entryId === selected.value?.id),
 );
 
-const connectedCards = computed<CatalogCard[]>(() => cards.value.filter((card) => card.connected > 0));
-const recommendedCards = computed<CatalogCard[]>(() => cards.value.filter((card) => card.recommendation !== undefined));
-// Counts connections, not cards: one card can hold several (two Reddit accounts, three SSH boxes).
-const connectionCount = computed(() => cards.value.reduce((total, card) => total + card.connected, 0));
+const connectedTiles = computed<CatalogTile[]>(() => tiles.value.filter((tile) => tile.connected > 0));
+const recommendedTiles = computed<CatalogTile[]>(() => tiles.value.filter((tile) => tile.recommendation !== undefined));
+// Counts connections, not tiles: one tile can hold several (two Reddit accounts, three SSH boxes).
+const connectionCount = computed(() => tiles.value.reduce((total, tile) => total + tile.connected, 0));
 
 // The slices the rail offers beyond categories, and the spelling of "no slice at all".
 const ALL = ``;
@@ -222,12 +222,12 @@ const scopeOf = (key: string, label: string, icon: IconName, subset: readonly { 
     label,
     icon,
     total: subset.length,
-    connected: subset.filter((card) => card.connected > 0).length,
+    connected: subset.filter((tile) => tile.connected > 0).length,
 });
 
 const countOf = (total: number, one: string, many: string): string => `${total} ${total === 1 ? one : many}`;
 
-const allScope = computed<CapabilityScope>(() => scopeOf(ALL, `All capabilities`, `bolt`, cards.value));
+const allScope = computed<CapabilityScope>(() => scopeOf(ALL, `All capabilities`, `bolt`, tiles.value));
 // Counts connections so its number matches the list it opens; `meta` spells that out for the tooltip.
 const connectedScope = computed<CapabilityScope>(() => ({
     key: CONNECTED,
@@ -235,32 +235,32 @@ const connectedScope = computed<CapabilityScope>(() => ({
     icon: `check-circle`,
     total: connectionCount.value,
     connected: connectionCount.value,
-    meta: `${countOf(connectionCount.value, `connection`, `connections`)} across ${countOf(connectedCards.value.length, `capability`, `capabilities`)}`,
+    meta: `${countOf(connectionCount.value, `connection`, `connections`)} across ${countOf(connectedTiles.value.length, `capability`, `capabilities`)}`,
 }));
 // A cross-cutting row appears only once it holds something, not as a promise of an empty page.
 const pinnedScopes = computed<CapabilityScope[]>(() => {
     const scopes = [allScope.value];
-    if (connectedCards.value.length > 0) {
+    if (connectedTiles.value.length > 0) {
         scopes.push(connectedScope.value);
     }
-    if (recommendedCards.value.length > 0) {
-        scopes.push(scopeOf(RECOMMENDED, `Recommended`, `sparkles`, recommendedCards.value));
+    if (recommendedTiles.value.length > 0) {
+        scopes.push(scopeOf(RECOMMENDED, `Recommended`, `sparkles`, recommendedTiles.value));
     }
     return scopes;
 });
-// A category with no cards is not a row; several stay empty until the extension that fills them is enabled.
+// A category with no tiles is not a row; several stay empty until the extension that fills them is enabled.
 const categoryScopes = computed<CapabilityScope[]>(() =>
     CAPABILITY_CATEGORIES.flatMap((category) => {
-        const subset = cards.value.filter((card) => card.entry.category === category.id);
+        const subset = tiles.value.filter((tile) => tile.entry.category === category.id);
         return subset.length === 0 ? [] : [scopeOf(category.id, category.label, CATEGORY_ICONS[category.id], subset)];
     }),
 );
 
-// What survives leaving this card: the slice and filter, not the connection being edited, which means nothing
+// What survives leaving this tile: the slice and filter, not the connection being edited, which means nothing
 // elsewhere.
 const elsewhere = () => ({ ...route.query, edit: undefined });
 
-// Slice and search live in the URL, replaced not pushed (Back undoes opening a card, not each keystroke). Derived
+// Slice and search live in the URL, replaced not pushed (Back undoes opening a tile, not each keystroke). Derived
 // from the query, not mirrored into refs.
 const queryParam = (key: string) =>
     computed<string>({
@@ -277,25 +277,25 @@ const activeScope = computed<CapabilityScope>(
 const railScope = computed<string>({ get: () => activeScope.value.key, set: (value) => (scope.value = value) });
 const inCategory = computed(() => categoryScopes.value.some((entry) => entry.key === activeScope.value.key));
 
-// Cards a slice covers; Connected renders them as connection rows instead of tiles (connectionGroups). Anything
+// Tiles a slice covers; Connected renders them as connection rows instead of tiles (connectionGroups). Anything
 // else here is a category.
-const SLICES: Readonly<Record<string, ComputedRef<CatalogCard[]>>> = { [ALL]: cards, [CONNECTED]: connectedCards, [RECOMMENDED]: recommendedCards };
-const inScope = computed<CatalogCard[]>(
-    () => SLICES[activeScope.value.key]?.value ?? cards.value.filter((card) => card.entry.category === activeScope.value.key),
+const SLICES: Readonly<Record<string, ComputedRef<CatalogTile[]>>> = { [ALL]: tiles, [CONNECTED]: connectedTiles, [RECOMMENDED]: recommendedTiles };
+const inScope = computed<CatalogTile[]>(
+    () => SLICES[activeScope.value.key]?.value ?? tiles.value.filter((tile) => tile.entry.category === activeScope.value.key),
 );
 
-const visibleCards = computed<CatalogCard[]>(() => {
+const visibleTiles = computed<CatalogTile[]>(() => {
     const needle = search.value.trim().toLowerCase();
     if (needle === ``) {
         return inScope.value;
     }
-    return inScope.value.filter((card) => cardHaystack(card.entry).includes(needle));
+    return inScope.value.filter((tile) => entryHaystack(tile.entry).includes(needle));
 });
 
-// Visible cards grouped into display sections in category order; empty sections dropped, derived cards ordered first.
+// Visible tiles grouped into display sections in category order; empty sections dropped, derived tiles ordered first.
 const groupedCatalog = computed(() =>
     CAPABILITY_CATEGORIES.flatMap((category) => {
-        const entries = visibleCards.value.filter((card) => card.entry.category === category.id);
+        const entries = visibleTiles.value.filter((tile) => tile.entry.category === category.id);
         return entries.length === 0 ? [] : [{ label: category.label, entries }];
     }),
 );
@@ -402,10 +402,10 @@ const fieldConfSummary = (field: CapabilityField): ConfSummary | undefined => {
 };
 // Whether a credential field may be left alone because one is already stored behind it.
 const keptField = (field: CapabilityField): boolean => keepsSecret(field, values[field.key], keptSecrets.value);
-// Empty credential box placeholder: the card's default on add, or "already set, leave blank to keep" on edit.
+// Empty credential box placeholder: the tile's default on add, or "already set, leave blank to keep" on edit.
 const fieldPlaceholder = (field: CapabilityField): string | undefined =>
     keptField(field) ? `•••••••••••• already set, leave blank to keep it` : field.placeholder;
-// Fields shown for a card: const-valued ones are baked in; `when`-gated ones appear as their toggle changes.
+// Fields shown for a tile: const-valued ones are baked in; `when`-gated ones appear as their toggle changes.
 const formFields = (entry: CapabilityCatalogEntry): readonly CapabilityField[] => shownFields(entry, values);
 // What the version read authorizes with: the token typed here, or the marker for one this edit is keeping, which the
 // daemon resolves against the connection. Without it, editing a private repo's install could never list its versions.
@@ -413,12 +413,12 @@ const versionToken = computed<string>(() => {
     const typed = (values[`token`] ?? ``).trim();
     return typed === `` && keptSecrets.value.has(`token`) ? VAULTED : typed;
 });
-// Main fields are the card's actual questions; advanced ones default correctly for nearly everyone and fold behind
+// Main fields are the tile's actual questions; advanced ones default correctly for nearly everyone and fold behind
 // one line. The fold opens by default only when an edit holds a non-default advanced value.
 const mainFields = (entry: CapabilityCatalogEntry): readonly CapabilityField[] => formFields(entry).filter((field) => field.advanced !== true);
 const advancedFields = (entry: CapabilityCatalogEntry): readonly CapabilityField[] => formFields(entry).filter((field) => field.advanced === true);
 const advancedOpen = ref(false);
-// A browser card's fold is a specific offer (stored sign-in credentials), not generic "Advanced".
+// A browser tile's fold is a specific offer (stored sign-in credentials), not generic "Advanced".
 const advancedLabel = (entry: CapabilityCatalogEntry): string => (entry.kind === `browser` ? `Let the agent sign in for you (optional)` : `Advanced`);
 const advancedDefault = (field: CapabilityField): string => field.default ?? (field.boolean === true ? `off` : ``);
 
@@ -444,7 +444,7 @@ const applyHostPreset = (key: string): void => {
 };
 
 // Live-browser window for a browser capability (an actual signed-in session, not a token), serving both sign-in and
-// later browsing. Opens one connection, never a site, since a card can hold several accounts.
+// later browsing. Opens one connection, never a site, since a tile can hold several accounts.
 const profileVisible = ref(false);
 const profileCapability = ref(``);
 const profileLabel = ref(``);
@@ -489,7 +489,7 @@ const contributionFor = (kind: CapabilityKind, config: Record<string, string | n
     }
     return contributionOf(kind, String(config[key] ?? ``));
 };
-// Live over form state so a plugin clone URL tracks typing; the selected card's extension is always enabled, so
+// Live over form state so a plugin clone URL tracks typing; the selected tile's extension is always enabled, so
 // contributionOf always resolves here.
 const liveEffects = computed<readonly CapabilityEffect[]>(() => {
     const entry = selected.value;
@@ -499,7 +499,7 @@ const liveEffects = computed<readonly CapabilityEffect[]>(() => {
     const config = fieldConfig(entry, (field) => (values[field.key] ?? ``).trim());
     return capabilityEffects({ kind: entry.kind, id: name.value.trim() || undefined, config, contribution: contributionFor(entry.kind, config) });
 });
-// Consequential effects a card statically implies, badged on its grid tile; defaults decide config-dependent ones
+// Consequential effects a tile statically implies, badged on its grid tile; defaults decide config-dependent ones
 // (e.g. SQL's default engine).
 const BADGED_EFFECTS = new Set([`image`, `runtime`, `trusted-code`]);
 const badgeEffects = (entry: CapabilityCatalogEntry): readonly CapabilityEffect[] => {
@@ -526,7 +526,7 @@ const connectVisible = ref(false);
 const connectId = ref(``);
 const connectPlatform = ref(``);
 const connectPermissions = ref(``);
-// Still wearing its card's name (`linux`, `linux-2`): the dialog may then offer the machine's own hostname instead.
+// Still wearing its tile's name (`linux`, `linux-2`): the dialog may then offer the machine's own hostname instead.
 const connectUnnamed = ref(false);
 const openConnect = (instance: CapabilitySummary): void => {
     connectId.value = instance.id;
@@ -539,7 +539,7 @@ const openConnect = (instance: CapabilitySummary): void => {
 };
 
 // Connecting a browser of the user's own (webext-kind): same shape one layer in, but the far end may be a different
-// browser, so the flow is a pasted code rather than a command. `install` comes off the card since that's what
+// browser, so the flow is a pasted code rather than a command. `install` comes off the tile since that's what
 // differs per browser family.
 const {
     peerFor: browserFor,
@@ -552,7 +552,7 @@ const browserConnectVisible = ref(false);
 const browserConnectId = ref(``);
 const browserInstall = ref(``);
 const browserPermissions = ref(``);
-// What the switches add up to, read off the same effects the card renders, so dialog and disclosure agree.
+// What the switches add up to, read off the same effects the tile renders, so dialog and disclosure agree.
 const browserGrants = (instance: CapabilitySummary): string => {
     const browser = instanceEffects(instance).find((effect) => effect.kind === `own-browser`);
     const grants = browser === undefined ? [] : browser.grants;
@@ -561,7 +561,7 @@ const browserGrants = (instance: CapabilitySummary): string => {
 const openBrowserConnect = (instance: CapabilitySummary): void => {
     const contribution = contributionFor(instance.kind, instance.config);
     browserConnectId.value = instance.id;
-    // Install link comes off the card that declared this browser family; empty while that family has no listing yet.
+    // Install link comes off the tile that declared this browser family; empty while that family has no listing yet.
     browserInstall.value = (contribution?.kind === `webext` ? contribution.install : undefined) ?? ``;
     browserPermissions.value = browserGrants(instance);
     browserConnectVisible.value = true;
@@ -577,7 +577,7 @@ const onBrowserExtConnected = (): void => {
     void refreshBrowsers();
     void refetch();
 };
-// A machine coming online flips the capability pending -> active; refetch so the card follows.
+// A machine coming online flips the capability pending -> active; refetch so the tile follows.
 const onHostConnected = (): void => {
     void refreshHosts();
     void refetch();
@@ -658,7 +658,7 @@ const rowState = (entry: CapabilityCatalogEntry, instance: CapabilitySummary): C
     connectionState(entry.kind, instance, (entry.kind === `webext` ? browserFor(instance.id) : hostFor(instance.id))?.online);
 
 // One row per live connection, carrying its category (for grouping) and a haystack of what a reader would actually
-// search for: the name they gave it and the address they typed, neither in any card's prose.
+// search for: the name they gave it and the address they typed, neither in any tile's prose.
 type ConnectionRow = CapabilityConnection & { readonly category: CapabilityCategory; readonly rank: number; readonly haystack: string };
 
 // A device's facts line: its OS, and the other doors onto the same PC when it has any, so two ids that are one
@@ -668,59 +668,59 @@ const hostFacts = (instance: CapabilitySummary): string =>
         .filter((fact): fact is string => fact !== undefined && fact !== ``)
         .join(` · `);
 
-const connectionRow = (card: CatalogCard, instance: CapabilitySummary): ConnectionRow => {
-    const state = rowState(card.entry, instance);
+const connectionRow = (tile: CatalogTile, instance: CapabilitySummary): ConnectionRow => {
+    const state = rowState(tile.entry, instance);
     const facts =
-        (card.entry.kind === `vpn` ? vpnAddress(instance.id) : undefined) ??
-        (card.entry.kind === `netdisk` ? netdiskMount(instance.id) : undefined) ??
-        (card.entry.kind === `host` ? hostFacts(instance) : connectionFacts(instance));
-    // An unnamed connection took the card's id; the card is then the name, and the line below is free for facts.
-    const named = instance.id !== card.entry.id;
+        (tile.entry.kind === `vpn` ? vpnAddress(instance.id) : undefined) ??
+        (tile.entry.kind === `netdisk` ? netdiskMount(instance.id) : undefined) ??
+        (tile.entry.kind === `host` ? hostFacts(instance) : connectionFacts(instance));
+    // An unnamed connection took the tile's id; the tile is then the name, and the line below is free for facts.
+    const named = instance.id !== tile.entry.id;
     return {
-        title: named ? instance.id : card.entry.name,
-        card: named ? card.entry.name : undefined,
-        cardId: card.entry.id,
+        title: named ? instance.id : tile.entry.name,
+        tile: named ? tile.entry.name : undefined,
+        entryId: tile.entry.id,
         id: instance.id,
-        logo: card.entry.logo,
-        icon: entryIcon(card.entry),
+        logo: tile.entry.logo,
+        icon: entryIcon(tile.entry),
         detail: facts,
         state: state.label,
         tone: state.tone,
         // Only shown where something is outstanding, so a working connection's row stays quiet.
         note: state.rank <= 1 ? instance.status.detail : undefined,
         code: state.rank <= 1 ? instance.status.code : undefined,
-        category: card.entry.category,
+        category: tile.entry.category,
         rank: state.rank,
-        haystack: `${instance.id} ${card.entry.name} ${card.entry.kind} ${facts}`.toLowerCase(),
+        haystack: `${instance.id} ${tile.entry.name} ${tile.entry.kind} ${facts}`.toLowerCase(),
     };
 };
 
-// A machine reached by desktop sync alone, stated on the card it would be connected on. Its word and colour come
+// A machine reached by desktop sync alone, stated on the tile it would be connected on. Its word and colour come
 // from the Devices board's own rules, so one machine cannot read as live on one screen and missing on the other; the
-// note is what this card can't do with it yet.
-const deviceConnectionRow = (card: CatalogCard, device: DeviceConnection): ConnectionRow => ({
+// note is what this tile can't do with it yet.
+const deviceConnectionRow = (tile: CatalogTile, device: DeviceConnection): ConnectionRow => ({
     title: device.title,
-    card: card.entry.name,
-    cardId: card.entry.id,
+    tile: tile.entry.name,
+    entryId: tile.entry.id,
     id: device.id,
-    logo: card.entry.logo,
-    icon: entryIcon(card.entry),
+    logo: tile.entry.logo,
+    icon: entryIcon(tile.entry),
     detail: device.detail,
     state: device.state,
     tone: device.tone,
     note: device.note,
-    category: card.entry.category,
+    category: tile.entry.category,
     rank: device.rank,
-    haystack: `${device.machine} ${card.entry.name} ${card.entry.kind} ${device.detail}`.toLowerCase(),
+    haystack: `${device.machine} ${tile.entry.name} ${tile.entry.kind} ${device.detail}`.toLowerCase(),
 });
 
 const connections = computed<ConnectionRow[]>(() => [
-    ...cards.value.flatMap((card) => card.instances.map((instance) => connectionRow(card, instance))),
-    // Joined to the catalog here rather than in the model, so a machine whose card this sandbox doesn't carry is
-    // dropped by the same rule that decides the card exists at all.
+    ...tiles.value.flatMap((tile) => tile.instances.map((instance) => connectionRow(tile, instance))),
+    // Joined to the catalog here rather than in the model, so a machine whose tile this sandbox doesn't carry is
+    // dropped by the same rule that decides the tile exists at all.
     ...syncOnlyDevices.value.flatMap((device) => {
-        const card = cards.value.find((candidate) => candidate.entry.id === device.cardId);
-        return card === undefined ? [] : [deviceConnectionRow(card, device)];
+        const tile = tiles.value.find((candidate) => candidate.entry.id === device.entryId);
+        return tile === undefined ? [] : [deviceConnectionRow(tile, device)];
     }),
 ]);
 
@@ -746,7 +746,7 @@ const connectionGroups = computed<CapabilityConnectionGroup[]>(() =>
 const showingConnections = computed(() => activeScope.value.key === CONNECTED);
 const nothingMatches = computed(() => (showingConnections.value ? connectionGroups.value.length === 0 : groupedCatalog.value.length === 0));
 
-// A card's own connection rows (vs. the Connected slice above) share the same state vocabulary (connectionState),
+// A tile's own connection rows (vs. the Connected slice above) share the same state vocabulary (connectionState),
 // plus live facts a stored config can't answer. VPN and network disks are drawn separately by <VpnConnections> and
 // <NetdiskMounts> since a link's facts change live.
 const cardRowFacts = (instance: CapabilitySummary): string => {
@@ -799,9 +799,9 @@ const pickForticlient = (connection: ForticlientConnection): void => {
 const probing = ref(false);
 const probeResult = ref<CapabilityProbe>();
 // Whose credential the last successful probe said it was; the name suggestion carries it until the form clears, so a
-// list refetch re-suggesting the name lands on the same `<card>-<who>` rather than falling back to `-2`.
+// list refetch re-suggesting the name lands on the same `<tile>-<who>` rather than falling back to `-2`.
 const probedWho = ref<string>();
-// Hidden once a card has answered that no test exists for it.
+// Hidden once a tile has answered that no test exists for it.
 const canProbe = computed(() => selected.value !== undefined && probeResult.value?.checked !== false);
 const runProbe = async (): Promise<void> => {
     const entry = selected.value;
@@ -861,11 +861,11 @@ const openingName = (entry: CapabilityCatalogEntry, instance: CapabilitySummary 
     return machine === `` ? { name: suggestName(entry, instancesFor(entry)), chosen: false } : { name: machine, chosen: true };
 };
 
-// Re-seeds the form whenever the URL's card or connection changes, so a deep link to an edit works. Keyed on ids
+// Re-seeds the form whenever the URL's tile or connection changes, so a deep link to an edit works. Keyed on ids
 // rather than objects: both come from the live capability list, and watching objects would empty the form on every
 // refetch.
 watch(
-    // `device` rides along: arriving at a card already open (a Connect on one of its own machine rows) changes
+    // `device` rides along: arriving at a tile already open (a Connect on one of its own machine rows) changes
     // nothing else, and the name it carries is the whole point of that navigation.
     [() => selected.value?.id, () => editing.value?.id, () => route.query[`device`]],
     () => {
@@ -887,12 +887,12 @@ watch(
     { immediate: true },
 );
 
-// An unknown card slug resolves to no card, so bounce to the grid. Gated on extensions having settled: a
-// deep-linked connector card is unknown until /extensions delivers its contribution.
+// An unknown tile slug resolves to no tile, so bounce to the grid. Gated on extensions having settled: a
+// deep-linked connector tile is unknown until /extensions delivers its contribution.
 watch(
-    [() => route.params[`card`], extensionsSettled],
-    ([card]) => {
-        if (typeof card === `string` && card.length > 0 && extensionsSettled.value && selected.value === undefined) {
+    [() => route.params[`entry`], extensionsSettled],
+    ([tile]) => {
+        if (typeof tile === `string` && tile.length > 0 && extensionsSettled.value && selected.value === undefined) {
             void router.replace({ name: `capabilities`, query: elsewhere() });
         }
     },
@@ -901,38 +901,38 @@ watch(
 
 // Picking or going back is a navigation: the URL is the source of truth. Query carries over (minus edit) so Back
 // lands on the same slice.
-const openCard = (card: string): void => {
-    void router.push({ name: `capabilities`, params: { card }, query: elsewhere() });
+const openTile = (entry: string): void => {
+    void router.push({ name: `capabilities`, params: { entry }, query: elsewhere() });
 };
 const pick = (entry: CapabilityCatalogEntry): void => {
-    openCard(entry.id);
+    openTile(entry.id);
 };
 
 const back = (): void => {
     void router.push({ name: `capabilities`, query: elsewhere() });
 };
 
-// Opens a connection of the card on screen; `replace` since stepping between connections isn't a history stop.
+// Opens a connection of the tile on screen; `replace` since stepping between connections isn't a history stop.
 const openEdit = (id: string): void => {
     editingId.value = id;
 };
-// Same landing from Connected, a click away from the card, so it pushes; Back returns to the list. A machine that is
-// only syncing has no connection to open, so it lands on the card's own add form with its name carried over, which
+// Same landing from Connected, a click away from the tile, so it pushes; Back returns to the list. A machine that is
+// only syncing has no connection to open, so it lands on the tile's own add form with its name carried over, which
 // is the step it is actually missing.
-const openConnection = (card: string, connection: string): void => {
+const openConnection = (entry: string, connection: string): void => {
     const query = isDeviceConnection(connection) ? { device: machineNamed(connection) } : { edit: connection };
-    void router.push({ name: `capabilities`, params: { card }, query: { ...elsewhere(), ...query } });
+    void router.push({ name: `capabilities`, params: { entry }, query: { ...elsewhere(), ...query } });
 };
 const stopEditing = (): void => {
     editingId.value = ``;
 };
-// Connect, from a machine's own row on the card that would grant it. Fills the add form with its name and nothing
+// Connect, from a machine's own row on the tile that would grant it. Fills the add form with its name and nothing
 // else: connecting a device hands over a shell, its files and its screen, so the switches stay a decision made here
 // rather than something a single click does quietly.
-const connectSyncedDevice = (device: DeviceConnection): void => openConnection(device.cardId, device.id);
+const connectSyncedDevice = (device: DeviceConnection): void => openConnection(device.entryId, device.id);
 
 // Disconnect, from the same row. The machine holds no capability to remove, so this ends the enrollment it is listed
-// for — the daemon takes every other door that machine holds with it, including one whose card is already gone.
+// for — the daemon takes every other door that machine holds with it, including one whose tile is already gone.
 const disconnecting = ref<DeviceConnection>();
 const disconnectingDevice = ref(false);
 const askDisconnectDevice = (device: DeviceConnection): void => {
@@ -957,29 +957,29 @@ const confirmDisconnectDevice = async (): Promise<void> => {
     }
 };
 
-// Walks the recommended cards one at a time, reusing each card's own ordinary form rather than a separate wizard.
-// The queue is derived from the query, never snapshotted, so connecting or dismissing a card removes it by itself.
+// Walks the recommended tiles one at a time, reusing each tile's own ordinary form rather than a separate wizard.
+// The queue is derived from the query, never snapshotted, so connecting or dismissing a tile removes it by itself.
 const SETUP = `recommended`;
 const walking = computed(() => route.query[`setup`] === SETUP);
-const walkQueue = computed<CapabilityCatalogEntry[]>(() => recommendedCards.value.filter((card) => card.connected === 0).map((card) => card.entry));
+const walkQueue = computed<CapabilityCatalogEntry[]>(() => recommendedTiles.value.filter((tile) => tile.connected === 0).map((tile) => tile.entry));
 
-// Next card after this one, read before the change that removes it from the queue, or "next" answers wrong.
+// Next tile after this one, read before the change that removes it from the queue, or "next" answers wrong.
 const nextAfter = (entry: CapabilityCatalogEntry): string | undefined => {
     const at = walkQueue.value.findIndex((candidate) => candidate.id === entry.id);
     return (at === -1 ? walkQueue.value[0] : walkQueue.value[at + 1])?.id;
 };
 // Nothing left means the walk is over, back to the catalog it just populated.
-const goNext = (card: string | undefined): void => {
+const goNext = (entry: string | undefined): void => {
     void router.push(
-        card === undefined
+        entry === undefined
             ? { name: `capabilities`, query: { ...elsewhere(), setup: undefined } }
-            : { name: `capabilities`, params: { card }, query: elsewhere() },
+            : { name: `capabilities`, params: { entry }, query: elsewhere() },
     );
 };
 const startSetup = (): void => {
     const first = walkQueue.value[0];
     if (first !== undefined) {
-        void router.push({ name: `capabilities`, params: { card: first.id }, query: { ...elsewhere(), setup: SETUP } });
+        void router.push({ name: `capabilities`, params: { entry: first.id }, query: { ...elsewhere(), setup: SETUP } });
     }
 };
 const skip = (): void => {
@@ -987,8 +987,8 @@ const skip = (): void => {
         goNext(nextAfter(selected.value));
     }
 };
-// Where a finished card goes: onward through the walk, or back to its slice.
-const leaveCard = (next: string | undefined): void => {
+// Where a finished tile goes: onward through the walk, or back to its slice.
+const leaveTile = (next: string | undefined): void => {
     if (walking.value) {
         goNext(next);
         return;
@@ -998,7 +998,7 @@ const leaveCard = (next: string | undefined): void => {
 
 const selectedRecommendation = computed(() => (selected.value === undefined ? undefined : recommendationFor(selected.value.id)));
 
-// "Not needed" quiets the suggestion until its evidence changes; the card itself is untouched, only the badge goes.
+// "Not needed" quiets the suggestion until its evidence changes; the tile itself is untouched, only the badge goes.
 const dismiss = async (entry: CapabilityCatalogEntry): Promise<void> => {
     const next = walking.value ? nextAfter(entry) : undefined;
     error.value = null;
@@ -1008,10 +1008,10 @@ const dismiss = async (entry: CapabilityCatalogEntry): Promise<void> => {
         error.value = noticeFrom(err, `Could not dismiss that suggestion.`);
         return;
     }
-    leaveCard(next);
+    leaveTile(next);
 };
 
-// A pending result means setup isn't finished, so stay on the card (whose row already names the missing step)
+// A pending result means setup isn't finished, so stay on the tile (whose row already names the missing step)
 // instead of returning to the grid. The dialog-based steps open immediately; a rebuild step only links to the
 // Sandbox screen.
 const handOff = (entry: CapabilityCatalogEntry, added: CapabilitySummary): void => {
@@ -1051,7 +1051,7 @@ const refuseSubmit = (entry: NonNullable<typeof selected.value>): void => {
     });
 };
 
-/* THE WALLET'S CAPS ARE THE PLATFORM'S TO ENFORCE, so its card is two writes (model/walletPolicy.ts):. */
+/* THE WALLET'S CAPS ARE THE PLATFORM'S TO ENFORCE, so its tile is two writes (model/walletPolicy.ts):. */
 const pushedWalletPolicy = async (entry: NonNullable<typeof selected.value>, config: Record<string, string>): Promise<boolean> => {
     if (entry.kind !== `wallet`) {
         return true;
@@ -1062,7 +1062,7 @@ const pushedWalletPolicy = async (entry: NonNullable<typeof selected.value>, con
     } catch (caught) {
         error.value = noticeFrom(
             caught,
-            `The card was saved, but the platform did not take its spending caps, so the signer still enforces the previous ones. Save the card again to retry.`,
+            `The tile was saved, but the platform did not take its spending caps, so the signer still enforces the previous ones. Save the tile again to retry.`,
         );
         return false;
     }
@@ -1084,10 +1084,10 @@ const submit = async (): Promise<void> => {
     /* One write for both, because the daemon's is one write: adding and editing are the same upsert over. */
     const config = buildConfig(entry, values, keptSecrets.value);
     const input: AddCapabilityInput = { id: savedName.value, kind: entry.kind, config };
-    // Read BEFORE the write, like `next` below: a one-per-sandbox card that is being connected for the first
+    // Read BEFORE the write, like `next` below: a one-per-sandbox tile that is being connected for the first
     // time becomes an edit the moment its entry lands, and asking afterwards would call every first add an edit.
     const wasEditing = editing.value !== undefined;
-    // Where the walk goes next, decided against the queue before this add removes the card from it.
+    // Where the walk goes next, decided against the queue before this add removes the tile from it.
     const next = walking.value ? nextAfter(entry) : undefined;
     try {
         await add(input, (line) => {
@@ -1114,13 +1114,13 @@ const submit = async (): Promise<void> => {
             }
             return;
         }
-        // An edit stays on the card so the reader can check the row now matches; an add returns to the catalog it just
+        // An edit stays on the tile so the reader can check the row now matches; an add returns to the catalog it just
         // populated.
         if (wasEditing) {
             stopEditing();
             return;
         }
-        leaveCard(next);
+        leaveTile(next);
     } catch (err) {
         error.value = noticeFrom(err, wasEditing ? `Could not save that connection.` : `Could not add the capability.`);
     } finally {
@@ -1183,7 +1183,7 @@ const topError = computed<NoticeModel | undefined>(() => {
     return { tone: `danger`, title: t(`capabilities.capabilities.couldntListCapabilities`), detail: listError.value };
 });
 
-// Submit's word in the card's own vocabulary: editing leads, since a pre-filled form must not offer to "Add" a live
+// Submit's word in the tile's own vocabulary: editing leads, since a pre-filled form must not offer to "Add" a live
 // connection; DevOps activates.
 const submitLabel = computed(() => {
     if (editing.value !== undefined) {
@@ -1208,17 +1208,17 @@ const submitLabel = computed(() => {
         </template>
 
         <template #detail>
-            <!-- Capability configuration and apply share the card layout. -->
+            <!-- Capability configuration and apply share the tile layout. -->
             <div v-if="selected" class="scrollbar-stable @container min-h-0 flex-1 overflow-y-auto pr-2">
                 <div class="mx-auto flex max-w-xl flex-col @3xl:max-w-none @3xl:flex-row @3xl:items-start @3xl:justify-center @3xl:gap-6">
                     <!-- Capped below the reading measure: this column holds single-line inputs, not prose. -->
                     <div class="flex min-w-0 flex-1 flex-col @3xl:max-w-lg">
-                        <!-- Back to the slice the card was picked from, named rather than a generic "All capabilities". -->
+                        <!-- Back to the slice the tile was picked from, named rather than a generic "All capabilities". -->
                         <button type="button" :class="ui.textAction(`mb-4 gap-1`)" @click="back">
                             <Icon name="arrow-left" class="text-2xs" /> {{ activeScope.label }}
                         </button>
 
-                        <!-- The walk's own strip: position in it, and a way past a card. -->
+                        <!-- The walk's own strip: position in it, and a way past a tile. -->
                         <div v-if="walking" class="mb-4 flex items-center gap-2 rounded-lg border border-line bg-card px-3 py-2">
                             <Icon name="sparkles" class="text-info" />
                             <span class="text-xs text-content">{{ t(`capabilities.capabilities.recommendedSetup`) }}</span>
@@ -1233,7 +1233,7 @@ const submitLabel = computed(() => {
                             />
                         </div>
 
-                        <!-- Card heading plus, for a singleton card, its state (which describes the whole screen, not one row) and its removal control. -->
+                        <!-- Tile heading plus, for a singleton tile, its state (which describes the whole screen, not one row) and its removal control. -->
                         <div class="mb-4 flex items-center gap-3">
                             <BrandMark :size="32" :name="selected.name" :logo="selected.logo" :icon="entryIcon(selected)" />
                             <div class="min-w-0 flex-1">
@@ -1261,7 +1261,7 @@ const submitLabel = computed(() => {
                             </Button>
                         </div>
 
-                        <!-- A singleton card with no finished setup has no row to carry its pending step, so it goes here instead. -->
+                        <!-- A singleton tile with no finished setup has no row to carry its pending step, so it goes here instead. -->
                         <RouterLink
                             v-if="soleInstance && soleRebuildStep(soleInstance)"
                             to="/sandbox/environment"
@@ -1273,7 +1273,7 @@ const submitLabel = computed(() => {
                         </RouterLink>
 
                         <form class="flex flex-col gap-3" @submit.prevent="submit">
-                            <!-- What you already have of this card, suppressed on a singleton card. -->
+                            <!-- What you already have of this tile, suppressed on a singleton tile. -->
                             <VpnConnections
                                 v-if="selected.kind === 'vpn' && selectedInstances.length > 0"
                                 :instances="selectedInstances"
@@ -1313,7 +1313,7 @@ const submitLabel = computed(() => {
                                     @rename="askRename(instance.id)"
                                     @remove="askRemove(instance.id)"
                                 />
-                                <!-- Last, after what is actually connected: machines already reachable through desktop sync, which this card would give commands, files and screen. -->
+                                <!-- Last, after what is actually connected: machines already reachable through desktop sync, which this tile would give commands, files and screen. -->
                                 <SyncOnlyDeviceRow
                                     v-for="device in selectedDevices"
                                     :key="device.id"
@@ -1376,10 +1376,10 @@ const submitLabel = computed(() => {
                                 </Row>
                             </RowGroup>
 
-                            <!-- Fills this form from FortiClient's own file; keyed on the card so switching cards clears the zone. -->
+                            <!-- Fills this form from FortiClient's own file; keyed on the tile so switching tiles clears the zone. -->
                             <ForticlientImport v-if="selected.kind === 'vpn'" :key="selected.id" @pick="pickForticlient" @notice="error = $event" />
 
-                            <!-- Where extensions are found, on the card people arrive at wanting one. -->
+                            <!-- Where extensions are found, on the tile people arrive at wanting one. -->
                             <RouterLink
                                 v-if="selected.kind === 'extension'"
                                 to="/sandbox/extensions?view=browse"
@@ -1418,7 +1418,7 @@ const submitLabel = computed(() => {
                                 class="mt-1 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1"
                             >
                                 <div :class="ui.sectionLabel()">
-                                    <!-- A singleton card always says "Settings": it never adds a second anything, and has no name to show. -->
+                                    <!-- A singleton tile always says "Settings": it never adds a second anything, and has no name to show. -->
                                     <template v-if="selected.singleton">{{ t(`capabilities.capabilities.settings`) }}</template>
                                     <template v-else-if="editing">
                                         {{ t(`capabilities.capabilities.editing`) }} <span class="font-mono normal-case">{{ editing.id }}</span>
@@ -1431,7 +1431,7 @@ const submitLabel = computed(() => {
                                 </button>
                             </div>
 
-                            <!-- No name box while editing or on a singleton card: renaming moves state a form can't (askRename), so a second box here would be a lossy shortcut for it. -->
+                            <!-- No name box while editing or on a singleton tile: renaming moves state a form can't (askRename), so a second box here would be a lossy shortcut for it. -->
                             <label v-if="!selected.singleton && !editing" class="ui-field">
                                 <span class="ui-field-label">{{ t(`capabilities.capabilities.name`) }}</span>
                                 <input
@@ -1441,7 +1441,7 @@ const submitLabel = computed(() => {
                                     @input="nameEdited = true"
                                     @blur="finishName"
                                 />
-                                <!-- A taken name is refused, not saved over: this form holds the card's defaults, which would overwrite a live connection's settings. -->
+                                <!-- A taken name is refused, not saved over: this form holds the tile's defaults, which would overwrite a live connection's settings. -->
                                 <span v-if="nameCollision" class="ui-field-error">
                                     <Icon name="exclamation-triangle" class="text-2xs" />
                                     "{{ savedName }}{{ t(`capabilities.capabilities.alreadyExistsOpenAbove`) }}
@@ -1556,7 +1556,7 @@ const submitLabel = computed(() => {
                                 </div>
                             </Notice>
 
-                            <!-- Submit stays stuck to the pane's foot: some cards (VPN, a device's permissions) are long. -->
+                            <!-- Submit stays stuck to the pane's foot: some tiles (VPN, a device's permissions) are long. -->
                             <!-- What the probe itself said, shown above the submit since "will this work" belongs before the commitment. -->
                             <p
                                 v-if="probeResult"
@@ -1593,7 +1593,7 @@ const submitLabel = computed(() => {
                                             : t(`capabilities.capabilities.agentReadFirstWhat`)
                                     }}
                                 </button>
-                                <!-- Testing is optional and stays secondary to Save; hidden once a card has answered that no test exists (canProbe). -->
+                                <!-- Testing is optional and stays secondary to Save; hidden once a tile has answered that no test exists (canProbe). -->
                                 <Button
                                     v-if="canProbe"
                                     class="ml-auto"
@@ -1660,48 +1660,48 @@ const submitLabel = computed(() => {
                             <div class="grid grid-cols-1 gap-2 @xl:grid-cols-2 @3xl:grid-cols-3 @5xl:grid-cols-4">
                                 <!-- Padding is the text's, not the tile's, so the mark can reach the tile's edges; `overflow-hidden` clips it to the radius. -->
                                 <button
-                                    v-for="card in group.entries"
-                                    :key="card.entry.id"
+                                    v-for="tile in group.entries"
+                                    :key="tile.entry.id"
                                     type="button"
                                     class="flex h-full w-full items-stretch overflow-hidden rounded-lg border border-line-subtle bg-card text-left transition-colors hover:border-line-strong hover:bg-overlay"
-                                    @click="pick(card.entry)"
+                                    @click="pick(tile.entry)"
                                 >
                                     <!-- Mark spans the tile's full height as a left-edge band, for scanning a grid of many by logo. -->
                                     <BrandMark
                                         flush
                                         class="border-r border-line"
                                         :size="44"
-                                        :name="card.entry.name"
-                                        :logo="card.entry.logo"
-                                        :icon="entryIcon(card.entry)"
+                                        :name="tile.entry.name"
+                                        :logo="tile.entry.logo"
+                                        :icon="entryIcon(tile.entry)"
                                     />
                                     <div class="min-w-0 flex-1 px-2.5 py-2">
                                         <!-- One line only: a grid row is as tall as its tallest tile, so any growing line costs every tile beside it. -->
                                         <div class="flex items-center gap-x-1.5">
-                                            <span class="truncate text-xs font-semibold text-content">{{ card.entry.name }}</span>
+                                            <span class="truncate text-xs font-semibold text-content">{{ tile.entry.name }}</span>
                                             <!-- Count shown only above one: a lone tick already means connected. -->
                                             <span
-                                                v-if="card.connected > 0"
-                                                v-tooltip.top="t(`capabilities.capabilities.connected`, { connected: card.connected })"
+                                                v-if="tile.connected > 0"
+                                                v-tooltip.top="t(`capabilities.capabilities.connected`, { connected: tile.connected })"
                                                 class="inline-flex shrink-0 items-center gap-0.5 text-2xs text-success"
-                                                :aria-label="t(`capabilities.capabilities.connected`, { connected: card.connected })"
+                                                :aria-label="t(`capabilities.capabilities.connected`, { connected: tile.connected })"
                                             >
                                                 <Icon name="check-circle" />
-                                                <template v-if="card.connected > 1">{{ card.connected }}</template>
+                                                <template v-if="tile.connected > 1">{{ tile.connected }}</template>
                                             </span>
                                             <!-- The scan's finding rides its own badge; the tooltip carries the claim and the evidence so it stays checkable. -->
                                             <span
-                                                v-if="card.recommendation"
-                                                v-tooltip.top="`${card.recommendation.reason}: ${card.recommendation.evidence}`"
+                                                v-if="tile.recommendation"
+                                                v-tooltip.top="`${tile.recommendation.reason}: ${tile.recommendation.evidence}`"
                                                 class="shrink-0 text-2xs text-info"
-                                                :aria-label="t(`capabilities.capabilities.recommended2`, { reason: card.recommendation.reason })"
+                                                :aria-label="t(`capabilities.capabilities.recommended2`, { reason: tile.recommendation.reason })"
                                             >
                                                 <Icon name="sparkles" />
                                             </span>
-                                            <CapabilityEffects :effects="badgeEffects(card.entry)" :compact="true" />
+                                            <CapabilityEffects :effects="badgeEffects(tile.entry)" :compact="true" />
                                         </div>
-                                        <!-- Truncated, not just short: a derived card's description comes from a manifest nobody here wrote and must not set row height. -->
-                                        <div class="truncate text-2xs text-muted">{{ card.entry.description }}</div>
+                                        <!-- Truncated, not just short: a derived tile's description comes from a manifest nobody here wrote and must not set row height. -->
+                                        <div class="truncate text-2xs text-muted">{{ tile.entry.description }}</div>
                                     </div>
                                 </button>
                             </div>
@@ -1738,7 +1738,7 @@ const submitLabel = computed(() => {
                 </p>
             </ConfirmDialog>
 
-            <!-- Names what stops as precisely as the Devices board does: this is the same revoke, pressed from the card. -->
+            <!-- Names what stops as precisely as the Devices board does: this is the same revoke, pressed from the tile. -->
             <ConfirmDialog
                 :open="disconnecting !== undefined"
                 :header="

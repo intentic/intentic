@@ -21,14 +21,14 @@ export const grantBody = (email: string, role: GrantedRole, areas: readonly stri
 });
 
 // Whether the grant can be sent at all: the refusals the form makes itself rather than reading off the daemon.
-// A writer's and a desk's areas are the tier rather than a narrowing of it — unfenced, a writer could change every
-// file in the workspace and a desk could speak through every assistant in it. A desk's fence has one more thing to
-// clear: it must reach an assistant, since a desk reaches nothing else and one that reaches none would sign in to a
+// A writer's and a guest's areas are the tier rather than a narrowing of it — unfenced, a writer could change every
+// file in the workspace and a guest could speak through every assistant in it. A guest's fence has one more thing to
+// clear: it must reach an assistant, since a guest reaches nothing else and one that reaches none would sign in to a
 // chat that answers nothing.
 export const grantSendable = (role: GrantedRole, areas: readonly string[] | undefined, reaches: number): boolean => {
     const fenced = (areas ?? []).length > 0;
     if (role === `writer`) {
         return fenced;
     }
-    return role !== `desk` || (fenced && reaches > 0);
+    return role !== `guest` || (fenced && reaches > 0);
 };

@@ -461,15 +461,15 @@ describe(`the doors to Stripe`, () => {
     });
 });
 
-// How many hosted sandboxes an account may have: the plan's quantity while live, the free lane's otherwise, never fewer
-// than the free lane gives.
+// How many hosted sandboxes an account may have: the plan's quantity while live, the free plan's otherwise, never fewer
+// than the free plan gives.
 /* SLOTS ARE PER RUNG, AND THE FREE ONE IS NEVER BOUGHT. A plan adds machines beside the free one rather than
  * replacing it, which is what stops paying for a Standard taking away the machine everybody is promised. */
 describe(`hosted slots`, () => {
     const config = { ...baseConfig, hosted: { ...baseConfig.hosted, perUser: 1 } };
     const item = (tier: string, quantity: number) => ({ tier, quantity, stripeItemId: `si_${tier}` });
 
-    it(`adds each rung's bought slots to the free lane's own`, async () => {
+    it(`adds each rung's bought slots to the free plan's own`, async () => {
         const slots = await hostedSlotsOf(fakePrisma({ plans: [row(`active`, { items: [item(ENTRY.id, 2), item(`max`, 1)] })] }).prisma, config, `user-1`);
         expect(slots.free).toBe(1);
         expect(slotsAtTier(slots, ENTRY.id)).toBe(2);
@@ -477,7 +477,7 @@ describe(`hosted slots`, () => {
         expect(slots.total).toBe(4);
     });
 
-    it(`counts no bought slot for a lapsed plan or no plan, and still gives the free lane's`, async () => {
+    it(`counts no bought slot for a lapsed plan or no plan, and still gives the free plan's`, async () => {
         const lapsed = await hostedSlotsOf(fakePrisma({ plans: [row(`past_due`, { items: [item(ENTRY.id, 3)] })] }).prisma, config, `user-1`);
         expect(lapsed).toMatchObject({ free: 1, total: 1 });
         expect(slotsAtTier(lapsed, ENTRY.id)).toBe(0);

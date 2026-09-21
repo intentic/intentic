@@ -23,7 +23,7 @@ export const OWN_STUCK_AFTER_MS = 60_000;
 export type ConnectionAction =
     | { readonly kind: "setup"; readonly label: string }
     | { readonly kind: "signin"; readonly label: string }
-    // The wake was refused because the free lane's month is spent; the plan lifts it.
+    // The wake was refused because the free plan's month is spent; the plan lifts it.
     | { readonly kind: "billing"; readonly label: string };
 
 export interface ConnectionNotice {

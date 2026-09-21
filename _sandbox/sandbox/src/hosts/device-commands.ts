@@ -6,7 +6,7 @@ import {
     DEV_REBUILD_QUIET_MARK,
     devRebuildLogPath,
     HOST_NATIVE_ENVIRONMENT,
-    hostCardOf,
+    hostEntryOf,
     hostConnectionKey,
     hostEnvironmentOf,
     pathReach,
@@ -277,7 +277,7 @@ const doorPlatform = (door: Device | undefined, card: Capability | undefined): s
 const commandFacts = async (services: Services, input: DeviceCommandInput): Promise<DeviceCommandFacts> => {
     const spec = DEVICE_COMMANDS[input.command];
     // By card, since an environment of a machine is a connection of that card rather than a card of its own.
-    const card = (await services.capabilities.list()).find((capability) => capability.id === hostCardOf(input.id));
+    const card = (await services.capabilities.list()).find((capability) => capability.id === hostEntryOf(input.id));
     // Held readings only, never a fresh pull: the facts arrive at connect and a command must not wait on a laptop to
     // describe itself again before it can be sent.
     const door = (await heldHostDevices(services)).find((device) => device.hostId === input.id);
@@ -292,7 +292,7 @@ const commandFacts = async (services: Services, input: DeviceCommandInput): Prom
         localDir: input.localDir,
         port: input.port,
         pairedDir: door?.report?.pairings.find((pairing) => pairing.sandboxId === input.sandboxId)?.localDir,
-        connections: services.hostHub.connected().filter((key) => hostCardOf(key) === hostCardOf(input.id)).map(hostEnvironmentOf),
+        connections: services.hostHub.connected().filter((key) => hostEntryOf(key) === hostEntryOf(input.id)).map(hostEnvironmentOf),
         pairToken: spec.mints === true ? services.syncPairings.mint(input.mode ?? "sync").token : undefined,
     };
 };
@@ -316,7 +316,7 @@ export const doorRoute = (spec: DeviceCommandSpec, facts: DeviceCommandFacts, in
         // Its own agent if it has one — a distro connected in its own right needs no interop hop, and its login shell
         // is the one the owner's tools are installed in. Crossing is the fallback for an environment with no agent.
         return facts.connections.includes(environment)
-            ? { environment, connection: hostConnectionKey(hostCardOf(input.id), environment) }
+            ? { environment, connection: hostConnectionKey(hostEntryOf(input.id), environment) }
             : { environment, in: environment };
     }
     const several =

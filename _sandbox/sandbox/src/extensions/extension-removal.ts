@@ -1,5 +1,5 @@
 import { relative } from "node:path";
-import { contributedCardOf, extensionIdOf } from "@intentic/extension-manifest";
+import { contributedEntryOf, extensionIdOf } from "@intentic/extension-manifest";
 import type { Capability, ExtensionRemovalConnection, ExtensionRemovalPlan } from "@intentic/sandbox-contract";
 import { type CapabilityCtx, capabilityCtx } from "../capabilities/capability.js";
 import { contributionKey, contributionRegistry, type ResolvedContribution } from "../capabilities/contributions.js";
@@ -57,7 +57,7 @@ const contributedCapabilities = async (services: Services, extension: InstalledE
     if (contributions.length === 0) {
         return [];
     }
-    return (await services.capabilities.list()).filter((capability) => contributedCardOf(contributions, capability) !== undefined);
+    return (await services.capabilities.list()).filter((capability) => contributedEntryOf(contributions, capability) !== undefined);
 };
 
 // The card registry `echo` consults, forced to carry THIS extension's own cards even while it is switched off: a
@@ -164,7 +164,7 @@ export const planExtensionRemoval = async (services: Services, extension: Instal
     const connections: ExtensionRemovalConnection[] = configured.map((capability) => ({
         id: capability.id,
         kind: capability.kind,
-        card: contributedCardOf(contributions, capability)?.catalog.name ?? capability.kind,
+        entry: contributedEntryOf(contributions, capability)?.catalog.name ?? capability.kind,
         secrets: [...secretFieldsOf(capability, connectors)],
         effect: effectOf(capability),
     }));

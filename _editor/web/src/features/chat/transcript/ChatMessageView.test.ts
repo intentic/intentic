@@ -533,7 +533,7 @@ describe(`ChatMessageView permission card`, () => {
         const element = mount(held({ program: { text: `cat .env`, language: `bash`, truncated: true, spans: [] } }));
         [...element.querySelectorAll<HTMLButtonElement>(`button`)].find((button) => button.textContent?.includes(`Show the command`))?.click();
         await nextTick();
-        expect(element.textContent).toContain(`Shortened for this card`);
+        expect(element.textContent).toContain(`Shortened for this block`);
     });
 
     it(`wraps its title rather than truncating it`, () => {

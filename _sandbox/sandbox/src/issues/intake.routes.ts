@@ -21,7 +21,7 @@ import { ISSUES_PROVIDER } from "./provider.js";
 import { wakeBrief } from "./issue-payload.js";
 import { fileIssuesStore, type IssuesStore } from "./issues-store.js";
 
-// The daemon's second public door (report), differing from the Front Desk after admission: every report is a file
+// The daemon's second public door (report), differing from the Visitor chat after admission: every report is a file
 // write, only sometimes a turn, since nobody waits on a crashing page. Grouping happens before anything can wake
 // anyone, which is what bounds the spend; everything else (allowlist, rate limit, ceiling) only bounds the writes.
 // `/intake/` is a separate id space, keyed by automation id, from the owner's `/issues/` inbox keyed by fingerprint.
@@ -33,7 +33,7 @@ const ISSUE_THREAD_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const DEFAULT_TITLE = "Report a problem";
 const DEFAULT_PROMPT = "What went wrong?";
 const DEFAULT_THANKS = "Thanks, we have it. We will look into it.";
-// Intentic's brand orange, same default as the Front Desk: unconfigured should still look like the product.
+// Intentic's brand orange, same default as the Visitor chat: unconfigured should still look like the product.
 const DEFAULT_ACCENT = "#e47100";
 
 export const publicIssuesConfig = (automation: AutomationRecord): IssuePublicConfig => {

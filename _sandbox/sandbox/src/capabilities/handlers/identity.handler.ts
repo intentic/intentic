@@ -7,7 +7,7 @@ import type { CapabilityHandler } from "../capability.js";
 import { browserPackInstalled } from "./browser.handler.js";
 
 // One email identity the sandbox acts as online, the browser its accounts are born into (browser handler's sibling). A
-// core card, not a contribution: an identity has no site, so the skill renders from core. The connected marker means
+// core entry, not a contribution: an identity has no site, so the skill renders from core. The connected marker means
 // signed into its own provider by the owner, since Google blocks automated sign-in.
 
 // Guided-login start pages; an unknown domain falls back to itself, and `loginUrl` overrides the guess.
@@ -53,7 +53,7 @@ export const identityHandler: CapabilityHandler = {
     async *apply(ctx, id, config) {
         const { email, mailbox } = config as IdentityConfig;
         if (!email.includes("@")) {
-            throw new Error(`"${email}" is not an email address: the identity IS an address, so this field is the card`);
+            throw new Error(`"${email}" is not an email address: the identity IS an address, so this field is the entry`);
         }
         // Checked here, on the form, so a dangling mailbox reference fails now, not later as a shrugging tool.
         if (mailbox !== undefined && mailbox !== "" && (await ctx.capabilities.get(mailbox)) === undefined) {
@@ -71,7 +71,7 @@ export const identityHandler: CapabilityHandler = {
             return { state: "inactive" };
         }
         if (!browserPackInstalled()) {
-            return { state: "pending", detail: "rebuild the sandbox to finish browser setup (Environment card)" };
+            return { state: "pending", detail: "rebuild the sandbox to finish browser setup (Environment entry)" };
         }
         if (!hasSession(ctx.workspace.root, id)) {
             return { state: "pending", detail: "log in to the email provider yourself, this one sign-in stays human" };

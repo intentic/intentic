@@ -67,7 +67,7 @@ export const resolveVisitor = async (
         if (gated) {
             throw new SignInRequired("sign-in required");
         }
-        // An open Front Desk that was handed an unusable token still serves the visitor, as an anonymous one.
+        // An open Visitor chat that was handed an unusable token still serves the visitor, as an anonymous one.
         return { author: displayName ?? "visitor", ...(displayName !== undefined ? { displayName } : {}) };
     }
 

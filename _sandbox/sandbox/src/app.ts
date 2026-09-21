@@ -76,7 +76,7 @@ const logUnexpectedError = (services: Services, error: unknown): void => {
 // Webhook fire for event automations; external callers, so exempt from bearer auth, gated by its own token.
 const eventFirePath = /^\/automations\/[^/]+\/fire$/;
 
-// The Front Desk's public surface for anonymous visitors; exempt from bearer auth, gated by the automation's origin
+// The Visitor chat's public surface for anonymous visitors; exempt from bearer auth, gated by the automation's origin
 // allowlist, rate limit and bot check instead.
 // One predicate for the whole set, not a constant per route, so the boundary can't be widened by touching just one
 // name.
@@ -306,7 +306,7 @@ export const createApp = (services: Services): Hono<AppEnv> => {
                 });
                 c.set("identity", caller);
                 // The role floor (auth/role-floor.ts) applies here, after authentication, in one place: a member below
-                // a route's tier gets a 403 naming the tier, and a desk gets one for any door off its own list.
+                // a route's tier gets a 403 naming the tier, and a guest gets one for any door off its own list.
                 // Owner-only routes still keep their own in-route gates besides; this floor only keeps a viewer
                 // read-only and a collaborator off ship controls.
                 const refused = memberRefusal(caller, c.req.method, c.req.path, c.req.query("path"));
@@ -364,7 +364,7 @@ export const createApp = (services: Services): Hono<AppEnv> => {
     // Off oRPC since their bodies are streamed bytes; registered before the catch-all, like /health.
     const workspaceBytes = createWorkspaceBytesRoutes(services);
     app.get("/workspace/raw", workspaceBytes.raw);
-    // Not bearer-exempt like /workspace/media: the desk fetches this one itself, so it can carry the header.
+    // Not bearer-exempt like /workspace/media: the guest fetches this one itself, so it can carry the header.
     app.get("/workspace/thumb", workspaceBytes.thumb);
     app.get("/workspace/media", workspaceBytes.media);
     app.post("/workspace/upload", workspaceBytes.upload);
@@ -396,7 +396,7 @@ export const createApp = (services: Services): Hono<AppEnv> => {
     // The only route in the daemon that holds a request open for the work it started.
     app.post("/workflows/:id/gate", createGateRoute(services));
 
-    // The Front Desk: widget bundle, per-automation config, bot challenge, the message ingest streaming its reply as
+    // The Visitor chat: widget bundle, per-automation config, bot challenge, the message ingest streaming its reply as
     // SSE, and the poll that collects a reply written after that stream closed.
     // All exempt from bearer auth, gated by origin allowlist, rate limit and bot check instead; `widget.js` is declared
     // first so the :id routes can't shadow it.

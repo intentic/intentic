@@ -25,7 +25,7 @@ markup.
   `WorksiteFigure.astro` draws it; the metaphor is licensed for `/docs/worksite/` and nowhere else
   (`docs/marketing/landing-blueprint.md`).
 - [src/pricing.ts](src/pricing.ts): the pricing page's copy; figures from [src/hosted.ts](src/hosted.ts), the
-  published hosted figures (the plan's price, the free lane's hours and removal window, the machine's shape)
+  published hosted figures (the plan's price, the free plan's hours and removal window, the machine's shape)
   every page that mentions money reads.
 - [src/nav.ts](src/nav.ts) / [src/page-meta.ts](src/page-meta.ts): navigation and per-page metadata.
 - [src/structured-data.ts](src/structured-data.ts): the JSON-LD the site emits.

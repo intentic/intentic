@@ -100,7 +100,7 @@ describe(`the hosted hour meter`, () => {
             });
         });
 
-        it(`meters a paid machine against its own rung's hours, not the free lane's and not nothing`, async () => {
+        it(`meters a paid machine against its own rung's hours, not the free plan's and not nothing`, async () => {
             const prisma = prismaWith({ hostedUsage: { findUnique: vi.fn().mockResolvedValue({ minutes: 90 }) } });
             const budget = await hostedBudgetOf(prisma, config(), onStandard);
             expect(budget.allowanceMinutes).toBe(STANDARD.monthlyHours * 60);
@@ -187,7 +187,7 @@ describe(`the hosted hour meter`, () => {
             expect(await hostedBudgetOf(prismaWith({ user: born(1) }), config(5, ramp), onFree, now)).toMatchObject({ allowanceMinutes: 300 });
         });
 
-        // A paid rung bought on day one keeps its hours: the ramp is a brake on the free lane, not on a purchase.
+        // A paid rung bought on day one keeps its hours: the ramp is a brake on the free plan, not on a purchase.
         it(`cannot pull a paid rung below what was bought`, async () => {
             const budget = await hostedBudgetOf(prismaWith({ user: born(1) }), config(40, ramp), onStandard, now);
             expect(budget.allowanceMinutes).toBe(600);

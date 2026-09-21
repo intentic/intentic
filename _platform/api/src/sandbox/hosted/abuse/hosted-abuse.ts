@@ -15,7 +15,7 @@ import { suspendHosted } from "./hosted-standing.js";
 /* THE ABUSE WATCH. The platform cannot see inside a hosted machine and does not try; what it can read is the
  * provider's own meter for the machine, from outside: how busy its CPUs were and how much it sent, averaged over
  * a window. A person's development work is bursty, a miner is flat out for as long as the machine is awake, and
- * the free lane pays for both. So a free machine that stays at or above `hosted.abuseCpuShare` of its CPUs (or
+ * the free plan pays for both. So a free machine that stays at or above `hosted.abuseCpuShare` of its CPUs (or
  * `hosted.abuseEgressGbPerHour`) for a whole `hosted.abuseWindowMinutes` is stopped, its owner told, and a
  * strike written; the strike after `hosted.abuseStrikesToSuspend - 1` more within `hosted.abuseStrikeDays`
  * suspends the account's hosted lane (hosted-standing.ts). A subscriber's machine is never stopped by this

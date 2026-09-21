@@ -32,7 +32,7 @@ export const formatDay = (instant: string): string => formatDateLong(instant);
 // Shorter, for the one-line surfaces (the avatar row) where a year is noise. Same contract: an instant, not a day.
 export const formatDayShort = (instant: string): string => formatDayMonth(new Date(instant).getTime());
 
-// Free lane usage meter; undefined for an owner it doesn't apply to (on the plan, or no ceiling). `fraction` is what's
+// Free plan usage meter; undefined for an owner it doesn't apply to (on the plan, or no ceiling). `fraction` is what's
 // left, 0..1, for a bar; the minute fields are for the sentence.
 export interface HoursMeter {
     readonly usedMinutes: number;
@@ -124,8 +124,8 @@ export const planBadge = (state: HostedPlanState | undefined): PlanBadge | undef
     if (state.status !== undefined && RECOVERABLE.has(state.status)) {
         return { label: t(`settings.hostedHours.paymentFailed`), variant: `danger`, detail: t(`settings.hostedHours.cardDeclinedHostedPlan`) };
     }
-    // Free lane gets a chip too, since a chip has no trouble stating "not on the plan" even with no hour ceiling.
-    return { label: t(`settings.hostedHours.free`), variant: `neutral`, detail: t(`settings.hostedHours.freeLaneAccountNot`) };
+    // Free plan gets a chip too, since a chip has no trouble stating "not on the plan" even with no hour ceiling.
+    return { label: t(`settings.hostedHours.free`), variant: `neutral`, detail: t(`settings.hostedHours.freePlanAccountNot`) };
 };
 
 // Statuses where Stripe is retrying a live subscription, not a sale: `past_due`, `unpaid`, `incomplete`.

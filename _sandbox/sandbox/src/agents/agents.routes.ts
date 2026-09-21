@@ -45,7 +45,7 @@ export const createAgentsRoutes = (services: Services) => {
         }
         return entry;
     };
-    // The same lookup for a route a desk may reach: theirs, or FORBIDDEN (auth/fleet-scope.ts).
+    // The same lookup for a route a guest may reach: theirs, or FORBIDDEN (auth/fleet-scope.ts).
     const entryFor = (id: string, context: OrpcContext): PersistedAgent => {
         const entry = entryOf(id);
         refuseUnlessVisible(context.identity, entry);
@@ -151,11 +151,11 @@ export const createAgentsRoutes = (services: Services) => {
         // (AgentsListSchema). Refreshes standings first, which is what makes a roster read self-healing.
         list: i.list.handler(async ({ context }) => {
             await services.agents.refreshStandings();
-            // Approvals ride along as `held`; approve/reject stay the automations routes' own verbs. A desk sees its
+            // Approvals ride along as `held`; approve/reject stay the automations routes' own verbs. A guest sees its
             // own conversations and no held wake: a wake is somebody else's automation.
             const caller = context.identity;
             const agents = services.agents.list().filter((agent) => visibleTo(caller, agent));
-            const held = caller?.role === "desk" ? [] : await services.heldWakes.list();
+            const held = caller?.role === "guest" ? [] : await services.heldWakes.list();
             return { agents, rev: services.agents.revision(), held };
         }),
         // Off `list` by construction, pulled on demand since /events never carries it; newest-archived first
@@ -236,7 +236,7 @@ export const createAgentsRoutes = (services: Services) => {
         // agent-facing).
         // - clears the session so the next turn reseeds from the record instead of stale runtime memory
         // - runs under the rewind lease, not notRunning, so a resuming turn cannot race the clear
-        // - a channel-origin conversation delivers outward before appending (a Front Desk into the visitor's outbox,
+        // - a channel-origin conversation delivers outward before appending (a Visitor chat into the visitor's outbox,
         //   every other provider to its gateway); a failed delivery refuses the whole place
         place: i.place.handler(async ({ input }) => {
             const agent = entryOf(input.id);
@@ -385,8 +385,8 @@ export const createAgentsRoutes = (services: Services) => {
         }),
         seenAll: i.seenAll.handler(async ({ context }) => {
             const caller = context.identity;
-            if (caller?.role === "desk") {
-                // Only its own: "all" for a desk is the roster it can see.
+            if (caller?.role === "guest") {
+                // Only its own: "all" for a guest is the roster it can see.
                 for (const agent of services.agents.list().filter((entry) => visibleTo(caller, entry))) {
                     await services.agents.markSeen(agent.id, Date.now());
                 }

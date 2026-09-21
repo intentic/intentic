@@ -1,11 +1,11 @@
 import type { CapabilitySummary } from "@intentic/api-contract";
 import type { ExtensionSummary, SecretInventoryEntry } from "@intentic/sandbox-contract";
-import { capabilityCard } from "../../capabilities/model/cards";
+import { capabilityTile } from "../../capabilities/model/tiles";
 import { type ConnectionState, connectionFacts, connectionState } from "../../capabilities/model/connections";
 
 // A secret row: an inventory entry plus what the daemon can't supply (a label, a distinguishing detail, whether
 // anything is owed). `group` splits owner-set values (editable here) from connection or subscription credentials
-// (managed elsewhere, named via `capabilityCard`). `attention` is only ever a secrets-tab fix, never a connection's own
+// (managed elsewhere, named via `capabilityTile`). `attention` is only ever a secrets-tab fix, never a connection's own
 // health.
 
 /** Where a row belongs; the first three cases are the owner's to set. */
@@ -57,7 +57,7 @@ const GROUPS: Readonly<Record<SecretInventoryEntry[`kind`], SecretGroup | undefi
 
 const groupOf = (entry: SecretInventoryEntry): SecretGroup => GROUPS[entry.kind] ?? (entry.requiredBy.length > 0 ? `required` : `yours`);
 
-// Fallback glyph when a card declares none, and the fixed glyph every AI subscription wears (no card to ask).
+// Fallback glyph when a tile declares none, and the fixed glyph every AI subscription wears (no tile to ask).
 const CREDENTIAL_GLYPH = `key`;
 const PROVIDER_GLYPH = `sparkles`;
 
@@ -85,18 +85,18 @@ const credentialRow = (entry: SecretInventoryEntry, sources: SecretSources): Sec
     if (instance === undefined) {
         return undefined;
     }
-    const card = capabilityCard(instance, sources.extensions);
-    // Unnamed connections took the card's id; the card's name is the better spelling of it.
-    const named = card === undefined || instance.id !== card.id;
+    const tile = capabilityTile(instance, sources.extensions);
+    // Unnamed connections took the tile's id; the tile's name is the better spelling of it.
+    const named = tile === undefined || instance.id !== tile.id;
     const facts = connectionFacts(instance);
     return {
         entry,
         group: `credential`,
-        title: named ? instance.id : (card?.name ?? instance.id),
+        title: named ? instance.id : (tile?.name ?? instance.id),
         mono: false,
-        detail: [named ? card?.name : undefined, facts].filter((part) => part !== undefined && part !== ``).join(` · `),
-        logo: card?.logo,
-        icon: card?.icon ?? CREDENTIAL_GLYPH,
+        detail: [named ? tile?.name : undefined, facts].filter((part) => part !== undefined && part !== ``).join(` · `),
+        logo: tile?.logo,
+        icon: tile?.icon ?? CREDENTIAL_GLYPH,
         attention: false,
         // A gated connection is not loaded into a turn; the note distinguishes that from a broken connection.
         ...(entry.gate === undefined ? {} : { note: `needs approval from ${entry.gate.approvers.join(` or `)}` }),
@@ -105,7 +105,7 @@ const credentialRow = (entry: SecretInventoryEntry, sources: SecretSources): Sec
         removable: false,
         gateSubject: instance.id,
         sessionShaped: instance.kind === `browser` || instance.kind === `identity` || instance.kind === `mcp`,
-        haystack: `${instance.id} ${card?.name ?? ``} ${instance.kind} ${facts}${gateHaystack(entry)}`.toLowerCase(),
+        haystack: `${instance.id} ${tile?.name ?? ``} ${instance.kind} ${facts}${gateHaystack(entry)}`.toLowerCase(),
     };
 };
 

@@ -193,7 +193,7 @@ export const IssueIntakeIdParamSchema = z.object({ automationId: entryId.describ
 
 // Constants both the editor and the route need, so a limit is visible to the owner before it is hit.
 
-// Default daily ceiling; higher than the Front Desk's 200 since a report is only sometimes a turn (dedup decides),
+// Default daily ceiling; higher than the Visitor chat's 200 since a report is only sometimes a turn (dedup decides),
 // unlike a visitor message.
 export const ISSUES_DAILY_MAX_DEFAULT = 2000;
 

@@ -1,6 +1,6 @@
-import { cancelledCards, settledCards } from "../policy/card-status.js";
+import { cancelledRequests, settledRequests } from "../policy/request-status.js";
 import type { AgentEvent } from "../events/agent-events.js";
-import { CARD_FIELDS, holdsCard, isAwaitingDecision, type TranscriptCards, type TranscriptPatch, type TranscriptRow, type TranscriptSubagent, type TranscriptTool } from "../events/transcript.js";
+import { REQUEST_FIELDS, holdsRequest, isAwaitingDecision, type TranscriptRequests, type TranscriptPatch, type TranscriptRow, type TranscriptSubagent, type TranscriptTool } from "../events/transcript.js";
 import { mentionedPathTokens } from "./mentions.js";
 import { watchWakeRow } from "../events/watch-wake.js";
 
@@ -37,7 +37,7 @@ const empty = (row: TranscriptRow): boolean =>
     (row.tools?.length ?? 0) === 0 &&
     (row.todos?.length ?? 0) === 0 &&
     row.usage === undefined &&
-    !holdsCard(row);
+    !holdsRequest(row);
 
 // Clause appended to the landed notice for a workspace dependency change, or empty when there is none. Reports the
 // install as already started, or queued when other agents are still running; never as a request.
@@ -261,7 +261,7 @@ export class TranscriptFold {
                 const consumes =
                     this.bubble === undefined &&
                     adjacent?.role === "assistant" &&
-                    !holdsCard(adjacent) &&
+                    !holdsRequest(adjacent) &&
                     adjacent.text.trim() !== "" &&
                     adjacent.text.trim() === event.text.trim();
                 if (consumes) {
@@ -309,7 +309,7 @@ export class TranscriptFold {
                 return this.park(event.requestId, { credentialOffer: { requestId: event.requestId, offer: event.offer, status: "pending" } });
             case "resolved":
                 // Releases the card; the answering window already froze it locally, so this is a no-op there.
-                return this.patchParked(event.requestId, (row) => Object.assign(row, settledCards(row, event.reply)));
+                return this.patchParked(event.requestId, (row) => Object.assign(row, settledRequests(row, event.reply)));
             case "capability_outcome":
                 return this.patchParked(event.requestId, (row) => {
                     if (row.capabilityOffer !== undefined) {
@@ -386,7 +386,7 @@ export class TranscriptFold {
         const patches = this.closeBubble();
         for (const [index, row] of this.rows.entries()) {
             if (row.role === "assistant" && isAwaitingDecision(row)) {
-                Object.assign(row, cancelledCards(row));
+                Object.assign(row, cancelledRequests(row));
                 patches.push(this.replace(index));
             }
         }
@@ -453,7 +453,7 @@ export class TranscriptFold {
 
     // A card takes the open bubble and closes it; `into` reuses an existing row (a plan's own prose) instead of opening
     // a new one.
-    private park(requestId: string, cards: TranscriptCards, into?: number): TranscriptPatch[] {
+    private park(requestId: string, cards: TranscriptRequests, into?: number): TranscriptPatch[] {
         const [index, opened] = into === undefined ? this.open() : [into, []];
         Object.assign(this.rows[index]!, cards);
         this.bubble = undefined;
@@ -561,4 +561,4 @@ export const mapTool = (tools: readonly TranscriptTool[], id: string, fn: (tool:
 };
 
 // Which row fields are cards, exported for readers that count rows by them.
-export const cardFieldsOf = (row: TranscriptRow): TranscriptCards => Object.fromEntries(CARD_FIELDS.flatMap((field) => (row[field] === undefined ? [] : [[field, row[field]]])));
+export const cardFieldsOf = (row: TranscriptRow): TranscriptRequests => Object.fromEntries(REQUEST_FIELDS.flatMap((field) => (row[field] === undefined ? [] : [[field, row[field]]])));

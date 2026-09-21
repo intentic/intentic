@@ -56,7 +56,7 @@ export function useHostedPlan() {
         onPlan: computed(() => state.value?.onPlan === true),
         priceUsd: computed(() => state.value?.priceUsd ?? 0),
         hosted: computed(() => state.value?.hosted),
-        // Free lane usage meter; undefined where it doesn't apply.
+        // Free plan usage meter; undefined where it doesn't apply.
         meter,
         lowOnHours: computed(() => lowOnHours(meter.value)),
         planBadge: computed(() => planBadge(state.value)),

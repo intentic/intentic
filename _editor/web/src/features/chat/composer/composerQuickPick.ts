@@ -16,7 +16,7 @@ export const kindMeta = (): Record<QuickKind, { readonly label: string; readonly
 });
 
 export interface QuickPickSources {
-    readonly persona: { readonly cards: readonly Persona[]; readonly picked: string | undefined } | undefined;
+    readonly persona: { readonly personas: readonly Persona[]; readonly picked: string | undefined } | undefined;
     readonly sandbox:
         | {
               // Online runners and answering boxes only: a keyboard list has no use for a row that refuses the pick.
@@ -78,13 +78,13 @@ const personaRows = (source: NonNullable<QuickPickSources[`persona`]>, query: st
             detail: t(`chat.composerQuickPick.everyConnectedAccount`),
             current: source.picked === undefined,
         },
-        ...source.cards.map((card): PersonaRow => ({
+        ...source.personas.map((persona): PersonaRow => ({
             kind: `persona`,
-            key: `persona:${card.id}`,
-            id: card.id,
-            label: card.label ?? card.id,
-            detail: card.brief ?? (card.capabilities.length > 0 ? card.capabilities.join(` · `) : undefined),
-            current: source.picked === card.id,
+            key: `persona:${persona.id}`,
+            id: persona.id,
+            label: persona.label ?? persona.id,
+            detail: persona.brief ?? (persona.capabilities.length > 0 ? persona.capabilities.join(` · `) : undefined),
+            current: source.picked === persona.id,
         })),
     ];
     return rows.filter((row) => matches(query, row.label, row.id));
@@ -172,8 +172,8 @@ const rowsOf = (sources: QuickPickSources, kind: QuickKind, query: string): Quic
 // What each kind is set to now, as the summary row's second word; a pick no list names (a deleted persona, a model
 // off the catalog) shows its raw id rather than nothing.
 const personaValue = (source: NonNullable<QuickPickSources[`persona`]>): string => {
-    const card = source.cards.find((candidate) => candidate.id === source.picked);
-    return card === undefined ? (source.picked ?? `Anyone`) : (card.label ?? card.id);
+    const persona = source.personas.find((candidate) => candidate.id === source.picked);
+    return persona === undefined ? (source.picked ?? `Anyone`) : (persona.label ?? persona.id);
 };
 const sandboxValue = (source: NonNullable<QuickPickSources[`sandbox`]>): string => {
     if (source.box !== undefined) {

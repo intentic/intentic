@@ -286,7 +286,7 @@ export const comparePages: ComparePage[] = [
         ],
         overlap: {
             title: "Where you agree",
-            body: "both use your existing subscription, with no resale or metering. You can switch harnesses mid-thread, read the MIT source, and answer from your phone a run you started at your desk.",
+            body: "both use your existing subscription, with no resale or metering. You can switch harnesses mid-thread, read the MIT source, and answer from your phone a run you started at your maker.",
         },
         differences: [
             {
@@ -885,7 +885,7 @@ export const comparePages: ComparePage[] = [
         ],
         overlap: {
             title: "Where you agree",
-            body: "both are MIT and self-hosted, both run on your own model accounts, both can put the work in a container, both start on a schedule, and both reach you away from the desk.",
+            body: "both are MIT and self-hosted, both run on your own model accounts, both can put the work in a container, both start on a schedule, and both reach you away from the maker.",
         },
         differences: [
             {

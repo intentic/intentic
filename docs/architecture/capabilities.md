@@ -81,7 +81,7 @@ Infrastructure panel declares what you run** — and `requires` went with them r
 second kind to misuse it.
 
 The web's grid ([Capabilities.vue](../../_editor/web/src/features/capabilities/Capabilities.vue)) merges the static cards with cards
-**derived** from the **enabled** extensions' `contributes.capabilities` (`contributionCard()`). Enabled, not
+**derived** from the **enabled** extensions' `contributes.capabilities` (`contributionEntry()`). Enabled, not
 merely installed: a switched-off extension stays listed so its switch stays reachable, but the daemon wires
 none of its contributions up, so a card from one would advertise an add that fails. So a derived card exists
 **iff** its capability is actually addable, third-party cards surface automatically, and the manifest is the

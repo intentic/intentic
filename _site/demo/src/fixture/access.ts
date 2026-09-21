@@ -22,11 +22,11 @@ interface DemoMember extends DemoGrant {
 
 const ago = (days: number): string => new Date(Date.now() - days * 86_400_000).toISOString();
 
-// Three states worth seeing at once: an accepted collaborator, a desk fenced to the one area Maya works in, and an
+// Three states worth seeing at once: an accepted collaborator, a maker fenced to the one area Maya works in, and an
 // invite still out.
 const roster: DemoMember[] = [
     { email: `jo@acme.dev`, role: `collaborator`, status: `accepted`, invitedAt: ago(26) },
-    { email: `sam@acme.dev`, role: `desk`, areas: [`support`], status: `accepted`, invitedAt: ago(9) },
+    { email: `sam@acme.dev`, role: `guest`, areas: [`support`], status: `accepted`, invitedAt: ago(9) },
     { email: `rin@acme.dev`, role: `viewer`, status: `pending`, invitedAt: ago(1) },
 ];
 

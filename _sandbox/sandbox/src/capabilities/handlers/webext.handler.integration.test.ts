@@ -63,7 +63,7 @@ test("apply installs the contributed browser pack with the core tools note and t
     expect(skill).toContain("name: my-chrome");
     expect(skill).not.toContain("${tools}");
     expect(skill).not.toContain("${id}");
-    // Added but never paired: the reader's next action is pasting the code into the extension, and the card says so.
+    // Added but never paired: the reader's next action is pasting the code into the extension, and the entry says so.
     expect(await webextHandler.status(ctx, "my-chrome", chrome.config)).toEqual({
         state: "pending",
         detail: "click Connect and paste the code into the extension",
@@ -76,13 +76,13 @@ test("a browser family with no installed pack is refused rather than writing an 
     expect(await readWorkspaceFile(skillPath(root))).toBeUndefined();
 });
 
-test("every contributed browser card names a family and where its extension is installed from", async () => {
+test("every contributed browser entry names a family and where its extension is installed from", async () => {
     const registry = await contributionRegistry(host);
-    const cards = [...registry.values()].filter((entry) => entry.spec.kind === "webext");
-    expect(cards.map((entry) => entry.spec.id).toSorted()).toEqual(["chrome", "edge"]);
-    for (const card of cards) {
+    const entries = [...registry.values()].filter((entry) => entry.spec.kind === "webext");
+    expect(entries.map((entry) => entry.spec.id).toSorted()).toEqual(["chrome", "edge"]);
+    for (const entry of entries) {
         // The one thing the families genuinely differ in, and what the connect dialog links to.
-        expect(card.spec.kind === "webext" && card.spec.install).toMatch(/^https:\/\//);
+        expect(entry.spec.kind === "webext" && entry.spec.install).toMatch(/^https:\/\//);
     }
 });
 

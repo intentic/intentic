@@ -137,7 +137,7 @@ const processesLine = computed(() => {
                             <div class="flex flex-wrap items-baseline gap-x-2">
                                 <span class="font-mono text-xs font-medium text-content">{{ connection.id }}</span>
                                 <StatusBadge variant="neutral" :label="connection.kind" size="xs" />
-                                <span class="text-2xs text-subtle">{{ t(`sandbox.extensionRemoveDialog.added`, { card: connection.card }) }}</span>
+                                <span class="text-2xs text-subtle">{{ t(`sandbox.extensionRemoveDialog.added`, { entry: connection.entry }) }}</span>
                             </div>
                             <p class="mt-0.5 text-2xs text-muted">{{ connection.effect }}.</p>
                             <p v-if="connection.secrets.length > 0" class="mt-0.5 text-2xs text-warning">

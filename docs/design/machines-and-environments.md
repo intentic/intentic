@@ -23,7 +23,7 @@ then called "not connected".
 
 So: the `host` capability is the machine, and each environment connects under a key of that card. The native
 environment's key IS the card id (`rog`), by definition rather than as a fallback, and a sibling hangs off it
-(`rog::wsl:archlinux`); `hostCardOf` takes a connection back to the card whose switches admit it
+(`rog::wsl:archlinux`); `hostEntryOf` takes a connection back to the card whose switches admit it
 ([schemas/hosts.ts](../../_shared/sandbox-contract/src/schemas/hosts.ts), `PeerDoor.cardOf`). A machine with one OS
 install is therefore addressed exactly as it always was, and `HostSummary.environments` — native first, each with its
 own liveness, version and facts — is what a page draws a row per and what a command picks from.
