@@ -186,7 +186,6 @@ fn connect(
         slug_from_token(&connect_token)
     };
     let container = format!("{CONTAINER_PREFIX}{slug}");
-    let network = format!("intentic-workspace-{slug}");
 
     // If OTHER sandboxes already exist, don't silently start one more beside them — surface them and let the
     // user continue, clean some up first, or quit. A same-slug re-run is a normal reset. Skipped with -y;
@@ -336,11 +335,9 @@ fn connect(
 
     step("starting-sandbox", "starting sandbox…");
     reporter.stage("starting-sandbox");
-    // The sandbox's own network, created first because the container joins it: a Windows self-host target
-    // (the dind container above) is reached by name on it, and nothing else on this machine is.
-    if !docker::ok(&["network", "inspect", &network]) {
-        docker::capture(&["network", "create", &network])?;
-    }
+    // Created first because the container joins it: a Windows self-host target (the dind container above) is
+    // reached by name on it, and nothing else on this machine is.
+    crate::sandbox::ensure_network(&slug)?;
     docker::quiet(&["rm", "-f", &container]);
 
     // Windows self-host: the Docker-in-Docker deploy target, ALONGSIDE the sandbox on Docker Desktop, not
@@ -348,7 +345,7 @@ fn connect(
     // reaches this one over SSH by name on the shared network. The key is generated INSIDE the target.
     #[cfg(windows)]
     if self_host {
-        let (key, user, address) = start_dind_target(&slug, &network, &log)?;
+        let (key, user, address) = start_dind_target(&slug, &log)?;
         host_ssh_key = key;
         self_host_user = user;
         self_host_address = address;
@@ -827,9 +824,10 @@ pub fn machine_label() -> String {
 /// The Windows deploy target: a privileged dind-host container on the shared network. Returns the private
 /// key, user and address the sandbox will deploy through.
 #[cfg(windows)]
-fn start_dind_target(slug: &str, network: &str, log: &Log) -> Result<(String, String, String)> {
+fn start_dind_target(slug: &str, log: &Log) -> Result<(String, String, String)> {
     use crate::sandbox::DIND_PREFIX;
     let dind_container = format!("{DIND_PREFIX}{slug}");
+    let network = crate::sandbox::trash::network(slug);
     let dind_image = env_or("DIND_IMAGE", "ghcr.io/intentic/dind-host:latest");
     let dind_volume = format!("intentic-dind-docker-{slug}");
     ui::note("starting the Docker-in-Docker deploy target…");
@@ -843,7 +841,7 @@ fn start_dind_target(slug: &str, network: &str, log: &Log) -> Result<(String, St
         "--name",
         &dind_container,
         "--network",
-        network,
+        &network,
         "-e",
         "DOCKER_TLS_CERTDIR=",
         "-v",

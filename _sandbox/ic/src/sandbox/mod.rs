@@ -43,6 +43,16 @@ pub fn resolve_slug(given: Option<String>, verb: &str) -> Result<String> {
     }
 }
 
+/// The sandbox's own network, before any container joins it: docker mints a missing named volume at run
+/// time but never a missing network, so `--network` naming one that is absent refuses the whole launch.
+pub fn ensure_network(slug: &str) -> Result<()> {
+    let network = trash::network(slug);
+    if !docker::ok(&["network", "inspect", &network]) {
+        docker::capture(&["network", "create", &network])?;
+    }
+    Ok(())
+}
+
 pub fn container_status(slug: &str) -> String {
     docker::inspect(&format!("{CONTAINER_PREFIX}{slug}"), "{{.State.Status}}")
         .unwrap_or_else(|| "?".to_string())

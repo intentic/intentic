@@ -544,6 +544,10 @@ fn recreate(mode: Mode, slug: Option<String>, reach: Reach, auto: bool) -> Resul
     };
     let argv = contract::run_command(&request, &env_nul, false, &unsupported, &seeds, &log)?;
 
+    // Before the cutover, where a failure still leaves the running container alone: a network pruned while
+    // this sandbox was stopped would otherwise refuse the replacement after the old one is parked.
+    crate::sandbox::ensure_network(&slug)?;
+
     println!("intentic: recreating the sandbox from {target_image}…");
     log.section(&format!("previous container logs ({container})"));
     docker::logs_into(&container, "5000", &log);

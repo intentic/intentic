@@ -199,6 +199,8 @@ pub fn up(args: Up) -> Result<()> {
     // no_local_publish unconditionally: the loopback shortcut exists for a browser on this machine, and
     // nobody browses to a runner — claiming a port here could only collide with the sandbox someone uses.
     let argv = contract::run_command(&request, &env_pairs, true, &unsupported, &[], &log)?;
+    // Nothing else creates it on this machine: a runner's slug never goes through the connect flow.
+    sandbox::ensure_network(&slug)?;
     log.section(&format!("docker run {run_image}"));
     if !docker::run_argv(&argv, &log) {
         docker::quiet(&["rm", "-f", &container]);
