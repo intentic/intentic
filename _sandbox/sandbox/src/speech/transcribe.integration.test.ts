@@ -119,7 +119,7 @@ test("a failed download does not poison later polls: the next status retries it"
     });
     expect((await speech.status()).model).toBe("downloading");
     await expect.poll(() => fetches).toBe(1);
-    await expect.poll(async () => (await speech.status()).model, { timeout: 5000 }).toBe("ready");
+    await expect.poll(async () => (await speech.status()).model).toBe("ready");
     expect(fetches).toBe(2);
 });
 

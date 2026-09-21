@@ -26,6 +26,10 @@ export const UNIT_SUITE = {
     hookTimeout: 30_000,
 } as const;
 
+// vi.waitFor and expect.poll both default to 1s regardless of the suite's timeout; 30s matches 120s so a wait isn't
+// read as a hang.
+export const SETTLES = { timeout: 30_000 } as const;
+
 // Real work on a shared machine: 120s bounds a hang well clear of latency, room for two 30s SETTLES waits.
 export const INTEGRATION_SUITE = {
     name: "integration",
@@ -34,6 +38,9 @@ export const INTEGRATION_SUITE = {
     environment: "node",
     testTimeout: 120_000,
     hookTimeout: 120_000,
+    // Carried by the suite rather than each call: expect.poll's 1s default is a latency bound no integration test
+    // means to assert, and a poll that has to be told the budget is a poll that gets forgotten.
+    expect: { poll: SETTLES },
 } as const;
 
 /* A SUITE, RUN IN A DOM. */
@@ -42,9 +49,6 @@ export const inJsdom = (suite: typeof UNIT_SUITE | typeof INTEGRATION_SUITE) => 
     exclude: [...suite.exclude],
     environment: "jsdom" as const,
 });
-
-// vi.waitFor defaults to 1s regardless of the suite's timeout; 30s matches 120s so a wait isn't read as a hang.
-export const SETTLES = { timeout: 30_000 } as const;
 
 /**
  * The two suites every in-repo extension runs, resolved against SOURCE rather than dist. Two separate reasons, both
@@ -56,7 +60,9 @@ export const SETTLES = { timeout: 30_000 } as const;
  * Stated ON EACH PROJECT, never above `projects`: a project is its own Vite config, and a `resolve` at the top level
  * is silently ignored. That failure is the quiet kind — a suite passing against a build several changes old.
  */
-export const extensionProjects = (): { projects: { resolve: { conditions: string[]; alias: Record<string, string> }; test: typeof UNIT_SUITE | typeof INTEGRATION_SUITE }[] } => {
+export const extensionProjects = (): {
+    projects: { resolve: { conditions: string[]; alias: Record<string, string> }; test: typeof UNIT_SUITE | typeof INTEGRATION_SUITE }[];
+} => {
     // Found by walking to the repo marker, not by counting `../..`, so this survives the file moving.
     const resolve = {
         conditions: [`@intentic/src`],

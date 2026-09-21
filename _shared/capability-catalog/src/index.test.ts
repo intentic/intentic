@@ -77,6 +77,9 @@ describe("contributionEntry", () => {
             // tables.
             "exit",
             "extension",
+            // Static for the wallet reason: the token spends the owner's account, and provisioning is core code an
+            // extension must never stand in for.
+            "fleet",
             // Static like endpoint: an identity has no site to vary, the email is the tile.
             "identity",
             // Static for the docker reason: the GPU switch is a privileged directive, and its handler is core code.

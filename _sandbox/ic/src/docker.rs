@@ -599,8 +599,7 @@ fn docker_last_words(said: &str) -> Option<String> {
     let line = said
         .split(['\n', '\r'])
         .map(str::trim)
-        .filter(|line| !line.is_empty() && !is_layer_chatter(line))
-        .next_back()?;
+        .rfind(|line| !line.is_empty() && !is_layer_chatter(line))?;
     let kept: String = line.chars().take(200).collect();
     Some(if kept.chars().count() < line.chars().count() {
         format!("{kept}…")
