@@ -28,7 +28,7 @@ const PROMPT: ConversationPrompt = {
 let asked: { enabled?: unknown } | undefined;
 const data = ref<ConversationPrompt | undefined>(undefined);
 
-vi.mock(`../../sandbox/client/useSandboxQuery`, () => ({
+vi.mock(`../../../sandbox/client/useSandboxQuery`, () => ({
     useSandboxQuery: (options: { enabled?: unknown }) => {
         asked = options;
         return {
@@ -37,7 +37,7 @@ vi.mock(`../../sandbox/client/useSandboxQuery`, () => ({
         };
     },
 }));
-vi.mock(`../../sandbox/client/sandboxClient`, () => ({ sandboxJson: vi.fn() }));
+vi.mock(`../../../sandbox/client/sandboxClient`, () => ({ sandboxJson: vi.fn() }));
 
 let app: App | undefined;
 

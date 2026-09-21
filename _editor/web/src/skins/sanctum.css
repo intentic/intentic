@@ -175,11 +175,6 @@
             auto;
     }
 
-/* THE PINNED PROMPT BAND — the scroller has no fill of its own; it shows the panel's `bg-card` through it. */
-    [data-skin="sanctum"] .chat-prompt-pinned {
-        background-image: var(--sanctum-tooth);
-    }
-
 /* THE SESSION CARD — the fleet board's cards, the workflow rows and every chat-rail row. */
     [data-skin="sanctum"] .session-card {
         background-image: var(--sanctum-tooth);

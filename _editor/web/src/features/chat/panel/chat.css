@@ -23,10 +23,17 @@
     padding-bottom: var(--chat-gap);
     content-visibility: visible;
 }
-/* The clip edge, named — and ONLY while the row is actually pinned. */
+/* WHAT A STUCK ROW HIDES THE TRANSCRIPT WITH — and the only thing it may paint. Opaque to the bubble's last pixel, gone
+   by the row's, so the answer dissolves as it passes under. A rule across the pane instead of this fade reads as a
+   header's bottom edge, which is the one thing a held message is not. `background-image` alone: a `background-color`
+   would fill the fade back in. */
 .chat-prompt-pinned {
-/* `background-color` only — not the `background` shorthand. */
-    background-color: var(--color-card);
+    background-image: linear-gradient(to bottom, var(--color-card) calc(100% - var(--chat-gap)), transparent);
+}
+/* The bubble, not the band, is what says the prompt is OVER the text rather than in it. The scale's own shadow, so the
+   tint follows the scheme — a shadow mixed from `--color-content` is a light halo in a dark one. */
+.chat-prompt-pinned .chat-surface {
+    box-shadow: var(--shadow-sm);
 }
 /* Doomed edits include the prompt and all following content. */
 .chat-doomed {
@@ -35,19 +42,37 @@
     text-decoration-color: currentColor;
     transition: opacity 120ms ease-out;
 }
-.chat-prompt-pinned::after {
-    content: "";
-    position: absolute;
-    top: 100%;
-    right: 0;
-    left: 0;
-    height: 1px;
-    background: var(--color-line);
-}
 /* A prompt is pinned for as long as its answer runs, so its height is charged against the room that answer has to be read in. */
 .chat-prompt-text {
     max-height: calc(6lh + 1rem);
     overflow: hidden;
+}
+/* STUCK, THE PROMPT IS THE TITLE OF WHAT IS RUNNING UNDER IT, not the text a second time: one line for as long as the
+   turn lasts, and the rest is a click away. This is where the answer's reading room comes from.
+   `nowrap` rather than a one-line clamp: `-webkit-line-clamp` paints the line it discards OUTSIDE the box `overflow`
+   clips, and folding the prompt's own newlines into spaces is what a one-line title wants anyway. */
+.chat-prompt-pinned:not(.chat-prompt-open) .chat-prompt-text {
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+/* A TITLE IS NOT A BANNER: on a wide pane, 85% of the row spent on one line reads as a bar across the top, which is the
+   shape this whole treatment is trying to get away from. Bites only where the pane is wider than the cap. */
+.chat-prompt-pinned:not(.chat-prompt-open) .chat-surface {
+    max-width: 34rem;
+}
+/* Room for the chevron, which centres on that line rather than sitting under it — on a row that HAS one, or a prompt
+   short enough to need no chevron pins as a lopsided bubble. */
+.chat-prompt-pinned:not(.chat-prompt-open) .chat-prompt-clamped .chat-prompt-text {
+    padding-right: 1.75rem;
+}
+.chat-prompt-pinned:not(.chat-prompt-open) .chat-prompt-toggle {
+    top: 50%;
+    bottom: auto;
+    translate: 0 -50%;
+}
+/* The ellipsis already says there is more; the fade below is for a row with a cut line to fade. */
+.chat-prompt-pinned:not(.chat-prompt-open) .chat-prompt-clamped::after {
+    content: none;
 }
 /* The open/close control overlays the bubble's overflow gradient. */
 .chat-prompt-toggle {
@@ -223,11 +248,7 @@
     .chat-pane .chat-mark-bar-open .chat-mark-lane {
         top: 0.55rem;
     }
-/* ...BUT ITS HAIRLINE MAY NOT FOLLOW IT OUT THERE. */
-    .chat-pane .chat-prompt-pinned::after {
-        right: var(--chat-lane-reserve);
-    }
-/* ...AND THE PINNED PROMPT HAS TO REACH THE MARGIN TOO, or the marks do not pass under it. */
+/* THE PINNED PROMPT HAS TO REACH THE MARGIN TOO, or the marks do not pass under it. */
     .chat-pane .chat-prompt {
         margin-right: calc(-1 * var(--chat-lane-reserve));
         padding-right: var(--chat-lane-reserve);

@@ -60,6 +60,14 @@ export const HISTORY_STATE_FILES: readonly StateFile[] = [
     },
     // Search phrase index, derived from transcripts/; rebuilt by the first boot's backfill instead of carried.
     { path: "said-index/", portability: "derived", note: "Rebuilt from the carried transcripts by the first boot's backfill." },
+    // What each conversation was last told (prompt-record.ts). Tens of kilobytes per conversation, rewritten by every
+    // turn — and a prompt composed on THIS sandbox names its paths, devices and accounts, so carrying it would describe
+    // the machine the bundle left rather than the one it landed on.
+    {
+        path: "system-prompts/",
+        portability: "derived",
+        note: "Each conversation records what it was told again on its next turn.",
+    },
     { path: "overlays/", portability: "derived" },
     { path: "logs/", portability: "derived" },
     { path: "trash/", portability: "derived" },

@@ -271,7 +271,9 @@ watch(
         const observer = new ResizeObserver(() => {
             // Skip measuring while expanded, since the box always fits and remeasuring would clear the collapse flag.
             if (!expanded.value) {
-                overflowing.value = element.scrollHeight > element.clientHeight + 1;
+                // Both axes, because the clamp changes axis with the row: six wrapped lines in flow, one nowrap line
+                // with an ellipsis while the row is stuck (.chat-prompt-pinned in chat.css).
+                overflowing.value = element.scrollHeight > element.clientHeight + 1 || element.scrollWidth > element.clientWidth + 1;
             }
         });
         observer.observe(element);
@@ -389,14 +391,15 @@ watch(
 );
 
 // A clamped box has no scrollbar, so any scroll event means find-in-page or a screen reader jumped inside it: expand
-// and reset scroll. An open box is left alone.
+// and reset scroll. Either axis, since a stuck prompt is clamped sideways. An open box is left alone.
 const onBubbleScroll = (): void => {
     if (expanded.value) {
         return;
     }
-    if (bubble.value !== null && bubble.value.scrollTop > 0) {
+    if (bubble.value !== null && (bubble.value.scrollTop > 0 || bubble.value.scrollLeft > 0)) {
         expanded.value = true;
         bubble.value.scrollTop = 0;
+        bubble.value.scrollLeft = 0;
     }
 };
 
@@ -417,6 +420,7 @@ const toggleExpanded = (): void => {
     // detection.
     if (!expanded.value && bubble.value !== null) {
         bubble.value.scrollTop = 0;
+        bubble.value.scrollLeft = 0;
     }
 };
 
@@ -482,11 +486,19 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
                 class="flex-wrap justify-end"
                 :class="attachmentsAside && '@lg:hidden'"
             />
-            <div class="flex items-center gap-1">
+            <!-- A stuck prompt is ONE NOWRAP LINE, whose min-content is the whole prompt — and min-content is the floor
+                 of `fit-content`, so this row would size itself to the entire message and paint across the pane.
+                 `max-w-full` is the definite clamp that beats that floor (percentages resolve against the 85% column
+                 above); `min-w-0` on the frame is what then lets it shrink to the clamp. Both inert while it wraps. -->
+            <div class="flex max-w-full items-center gap-1">
                 <!-- Beside-prompt thumbnail once the panel is wide enough (attachmentsAside gates it): costs only the taller element. -->
                 <ChatAttachmentStrip v-if="attachmentsAside" :attachments="attachmentThumbs" class="mr-1 hidden shrink-0 self-start @lg:flex" />
                 <!-- The frame owns positioning for the fade and toggle chip. -->
-                <div v-if="message.text" class="chat-surface relative rounded-lg" :class="{ 'chat-prompt-clamped': overflowing && !expanded }">
+                <div
+                    v-if="message.text"
+                    class="chat-surface relative min-w-0 rounded-lg"
+                    :class="{ 'chat-prompt-clamped': overflowing && !expanded }"
+                >
                     <div
                         ref="bubble"
                         class="chat-prompt-text whitespace-pre-wrap px-3 py-2 text-xs leading-relaxed text-content"
