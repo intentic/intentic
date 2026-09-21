@@ -2172,26 +2172,20 @@
         "devRebuild": {
             "approvedRecipeAppliedPart": "Your approved recipe is applied as part of this, so the pending rebuild clears once the sandbox is back.",
             "buildsImage": "Builds the image",
-            "cantReadLogAt": "Can't read the log at the moment — the build itself is unaffected. {hiccup}",
             "checkoutNotPublishedRelease": "from your checkout, not a published release. Rebuild to pick up code you've written since.",
-            "fullOutputIn": "The full output is in",
             "hostCommand": "Host command",
             "keepWorking": "You keep working",
             "makesButtonOn": "makes this a button from then on.",
-            "onDevice": "on that device.",
             "orRebuildFromCheckout": "Or rebuild from your checkout: that applies this same recipe, on a base rebuilt from your code — so it also picks up what you've written since. It rebuilds the whole image first, so it takes longer than the rebuild above.",
             "rebuildCheckout": "Rebuild from checkout",
             "rebuildCheckout2": "Rebuild from checkout?",
             "rebuildCommand": "Rebuild command",
             "rebuildNow": "Rebuild now",
-            "rebuildStoppedReportingNever": "That rebuild stopped reporting, and never said how it ended.",
-            "rebuilding": "Rebuilding…",
             "reconnectsOnOwn": "Reconnects on its own",
             "restartsSandbox": "Restarts the sandbox",
             "runOnDeviceHolds": "Run it on the device that holds that checkout:",
             "runs": "Runs",
-            "sandboxDoesntRecordCheckout": "This sandbox doesn't record which checkout its image came from, so it can't start the rebuild for you. Run it there, and recreating it once with",
-            "waitingFirstLineDevice": "Waiting for the first line from that device…"
+            "sandboxDoesntRecordCheckout": "This sandbox doesn't record which checkout its image came from, so it can't start the rebuild for you. Run it there, and recreating it once with"
         },
         "deviceAgent": {
             "fetchesNewestAgentOnto": "Fetches the newest agent onto this device, installs it, and restarts the one process this sandbox reaches the device through. Safe on an agent that is already current; its folders, pairings and mirrored ports are untouched either way.",
@@ -3318,6 +3312,14 @@
             "deleteHeader": "Delete {label}?",
             "deleteBody": "Only the name people are granted in goes; the folders stay. The sandbox refuses while somebody still holds it.",
             "onlyOwnerEdits": "Only the sandbox owner decides who sees which folders."
+        },
+        "devRebuildProgress": {
+            "cantReadLogAt": "Can't read the log at the moment — the build itself is unaffected. {hiccup}",
+            "fullOutputIn": "The full output is in",
+            "layerOf": "layer {done} of {total}",
+            "onDevice": "on that device.",
+            "rebuildStoppedReportingNever": "That rebuild stopped reporting, and never said how it ended.",
+            "waitingFirstLineDevice": "Waiting for the first line from that device…"
         }
     },
     "settings": {

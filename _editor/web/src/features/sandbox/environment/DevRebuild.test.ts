@@ -168,7 +168,7 @@ it(`promises no recipe when none is waiting`, async () => {
     expect(document.body.textContent).not.toContain(`Your approved recipe is applied`);
 });
 
-it(`confirms first, then starts the build and stops offering to start another`, async () => {
+it(`confirms first, then puts the run where the offer was`, async () => {
     const slug = nextSlug();
     const el = mount({ slug, base: `intentic-sandbox:dev`, root: `/home/ada/intentic` });
     runDeviceCommand.mockResolvedValueOnce(started).mockResolvedValue(log(`1`, `#1 [internal] load build definition`));
@@ -193,8 +193,11 @@ it(`confirms first, then starts the build and stops offering to start another`, 
     await settleUi();
 
     expect(runDeviceCommand).toHaveBeenCalledWith(`host-1`, `dev-rebuild`);
-    expect(el.textContent).toContain(`Rebuilding…`);
-    expect(buttonSaying(`Rebuilding…`)?.disabled).toBe(true);
+    expect(el.textContent).toContain(`Rebuilding from your checkout`);
+    // ONE WAIT, DRAWN ONCE. The offer leaves while its own run is on screen, so a disabled button can't sit there
+    // spinning beside the card that already says the same thing — the single spinner is the running step's.
+    expect(buttonSaying(`Rebuild from checkout`)).toBeUndefined();
+    expect(el.querySelectorAll(`[data-spin]`)).toHaveLength(1);
 });
 
 // THE COST NOBODY CAN SEE FROM HERE. The build interrupts nothing, so the only moment this is worth saying is the
@@ -232,8 +235,9 @@ it(`says nothing about interrupted work when there is none to interrupt`, async 
     expect(document.body.textContent).not.toContain(`mid-turn`);
 });
 
-// The complaint this card is answering: a message, and nothing else, for minutes.
-it(`shows the machine's own output, a running clock and what is happening to the sandbox`, async () => {
+// The complaint this card is answering: a message, and nothing else, for minutes. What it answers it with is the
+// build's own named steps and docker's own layer count — not the build output, which is the next test.
+it(`names the step it is on, with a running clock and the layer docker is on`, async () => {
     const slug = nextSlug();
     const el = mount({ slug, base: `intentic-sandbox:dev`, root: `/home/ada/intentic` });
     runDeviceCommand.mockResolvedValueOnce(started).mockResolvedValue(log(`2`, `#12 [builder 4/9] RUN pnpm install`));
@@ -241,15 +245,34 @@ it(`shows the machine's own output, a running clock and what is happening to the
     await useDevRebuild(slug).start(`host-1`);
     await settleUi();
 
-    expect(el.textContent).toContain(`Building the image from your checkout`);
-    expect(el.textContent).toContain(`#12 [builder 4/9] RUN pnpm install`);
-    // One spinner for one run: the line above the pane says a build is going, and the pane no longer repeats it
-    // underneath. That the build outlives this page is said by the hub row instead, where leaving can be seen.
+    expect(el.textContent).toContain(`Building the image`);
+    expect(el.textContent).toContain(`layer 4 of 9`);
+    expect(el.textContent).toContain(`Your sandbox keeps working`);
+    // That the build outlives this page is said by the hub row, where leaving it can be seen.
     expect(el.textContent).not.toContain(`it keeps going even if you leave this page`);
     expect(hubWorkRunning(hubWorkKey(`sandbox`, `environment`))).toBe(`Rebuilding from your checkout`);
 
     await settleUi(POLL_MS * 16);
     expect(el.textContent).toMatch(/1m \d\ds/);
+});
+
+// A DOCKER BUILD'S OUTPUT IS NOT PROGRESS, it is the material for the one minute in twenty where something is wrong.
+// So it is out of the way by default, and one click brings it back verbatim.
+it(`keeps the machine's output behind a toggle while the build is healthy`, async () => {
+    const slug = nextSlug();
+    const el = mount({ slug, base: `intentic-sandbox:dev`, root: `/home/ada/intentic` });
+    runDeviceCommand.mockResolvedValueOnce(started).mockResolvedValue(log(`2`, `#12 [builder 4/9] RUN pnpm install`));
+
+    await useDevRebuild(slug).start(`host-1`);
+    await settleUi();
+
+    expect(el.textContent).not.toContain(`#12 [builder 4/9] RUN pnpm install`);
+
+    buttonSaying(`Show the build log`)?.click();
+    await nextTick();
+
+    expect(el.textContent).toContain(`#12 [builder 4/9] RUN pnpm install`);
+    expect(el.textContent).toContain(devRebuildLogPath(slug));
 });
 
 // A build inside a slow docker layer prints nothing for minutes. A still pane is not a stuck build, and after a while
@@ -276,8 +299,11 @@ it(`says the sandbox is restarting when the daemon goes quiet mid-build`, async 
     runDeviceCommand.mockRejectedValue(new TypeError(`Failed to fetch`));
     await settleUi(POLL_MS);
 
-    expect(el.textContent).toContain(`Restarting your sandbox on the new image`);
-    // What it printed before the connection went is still on screen: the restart is not a reason to forget it.
+    expect(el.textContent).toContain(`Restarting onto it`);
+    expect(el.textContent).toContain(`Your sandbox is restarting on the new image`);
+    // What it printed before the connection went is still there: the restart is not a reason to forget it.
+    buttonSaying(`Show the build log`)?.click();
+    await nextTick();
     expect(el.textContent).toContain(`#18 exporting to image`);
 });
 
@@ -308,7 +334,8 @@ it(`keeps following a build that runs for hours while its log keeps growing`, as
 
     await settleUi(95 * 60_000);
 
-    expect(el.textContent).toContain(`Building the image from your checkout`);
+    expect(el.textContent).toContain(`Building the image`);
+    expect(el.textContent).toContain(`layer 6 of 9`);
     expect(el.textContent).not.toContain(`stopped reporting`);
     expect(el.textContent).toMatch(/95m \d\ds/);
 });
@@ -335,7 +362,7 @@ it(`picks a running build back up after the card has been thrown away and redraw
     runDeviceCommand.mockResolvedValueOnce(started).mockResolvedValue(log(`3`, `#7 [builder 3/9] COPY . .`));
     await useDevRebuild(slug).start(`host-1`);
     await settleUi();
-    expect(first.textContent).toContain(`#7 [builder 3/9] COPY . .`);
+    expect(first.textContent).toContain(`layer 3 of 9`);
 
     app?.unmount();
     app = undefined;
@@ -343,7 +370,11 @@ it(`picks a running build back up after the card has been thrown away and redraw
 
     const second = mount({ slug, base: `intentic-sandbox:dev`, root: `/home/ada/intentic` });
     await settleUi();
-    expect(second.textContent).toContain(`Building the image from your checkout`);
+    expect(second.textContent).toContain(`Building the image`);
+    expect(second.textContent).toContain(`layer 3 of 9`);
+    // The lines survive the remount too, one click away — the toggle is the card's, not the run's.
+    buttonSaying(`Show the build log`)?.click();
+    await nextTick();
     expect(second.textContent).toContain(`#7 [builder 3/9] COPY . .`);
     // One build, not two: remounting the card must never fire a second rebuild.
     expect(runDeviceCommand.mock.calls.filter(([, command]) => command === `dev-rebuild`)).toHaveLength(1);

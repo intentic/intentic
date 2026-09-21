@@ -2172,26 +2172,28 @@
         "devRebuild": {
             "approvedRecipeAppliedPart": "Tu receta aprobada se aplica como parte de esto, así que la reconstrucción pendiente se resuelve en cuanto el sandbox vuelva.",
             "buildsImage": "Compila la imagen",
-            "cantReadLogAt": "No se puede leer el registro ahora mismo; la compilación en sí no se ve afectada. {hiccup}",
             "checkoutNotPublishedRelease": "desde tu checkout, no desde una versión publicada. Reconstruye para recoger el código que hayas escrito desde entonces.",
-            "fullOutputIn": "La salida completa está en",
             "hostCommand": "Comando del host",
             "keepWorking": "Tú sigues trabajando",
             "makesButtonOn": "convierte esto en un botón a partir de entonces.",
-            "onDevice": "en ese dispositivo.",
             "orRebuildFromCheckout": "O reconstruye desde tu checkout: eso aplica esta misma receta sobre una base reconstruida a partir de tu código, así que también recoge lo que hayas escrito desde entonces. Reconstruye la imagen entera primero, así que tarda más que la reconstrucción de arriba.",
             "rebuildCheckout": "Reconstruir desde el checkout",
             "rebuildCheckout2": "¿Reconstruir desde el checkout?",
             "rebuildCommand": "Comando de reconstrucción",
             "rebuildNow": "Reconstruir ahora",
-            "rebuildStoppedReportingNever": "Esa reconstrucción dejó de informar y nunca dijo cómo terminó.",
-            "rebuilding": "Reconstruyendo…",
             "reconnectsOnOwn": "Se reconecta sola",
             "restartsSandbox": "Reinicia el sandbox",
             "runOnDeviceHolds": "Ejecútalo en el dispositivo que tiene ese checkout:",
             "runs": "Ejecuta",
-            "sandboxDoesntRecordCheckout": "Este sandbox no registra de qué checkout salió su imagen, así que no puede iniciar la reconstrucción por ti. Ejecútala allí, y recrearlo una vez con",
-            "waitingFirstLineDevice": "Esperando la primera línea de ese dispositivo…"
+            "sandboxDoesntRecordCheckout": "Este sandbox no registra de qué checkout salió su imagen, así que no puede iniciar la reconstrucción por ti. Ejecútala allí, y recrearlo una vez con"
+        },
+        "devRebuildProgress": {
+            "cantReadLogAt": "Can't read the log at the moment — the build itself is unaffected. {hiccup}",
+            "fullOutputIn": "The full output is in",
+            "layerOf": "layer {done} of {total}",
+            "onDevice": "on that device.",
+            "rebuildStoppedReportingNever": "That rebuild stopped reporting, and never said how it ended.",
+            "waitingFirstLineDevice": "Waiting for the first line from that device…"
         },
         "deviceAgent": {
             "fetchesNewestAgentOnto": "Descarga el agente más reciente en este dispositivo, lo instala y reinicia su bucle: el único proceso a través del cual este sandbox llega al dispositivo. Seguro en un agente que ya está al día; sus carpetas, emparejamientos y puertos replicados quedan intactos en cualquier caso.",

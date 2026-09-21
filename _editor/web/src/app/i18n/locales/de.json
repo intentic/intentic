@@ -2172,26 +2172,28 @@
         "devRebuild": {
             "approvedRecipeAppliedPart": "Ihr genehmigtes Rezept wird dabei mit angewendet, der ausstehende Neubau erledigt sich also, sobald die Sandbox zurück ist.",
             "buildsImage": "Baut das Image",
-            "cantReadLogAt": "Das Protokoll lässt sich gerade nicht lesen — der Build selbst ist davon unberührt. {hiccup}",
             "checkoutNotPublishedRelease": "aus Ihrem Checkout, nicht aus einem veröffentlichten Release. Bauen Sie neu, um Code zu übernehmen, den Sie seither geschrieben haben.",
-            "fullOutputIn": "Die vollständige Ausgabe steht in",
             "hostCommand": "Host-Befehl",
             "keepWorking": "Sie arbeiten weiter",
             "makesButtonOn": "macht das von da an zu einem Knopf.",
-            "onDevice": "auf diesem Gerät.",
             "orRebuildFromCheckout": "Oder bauen Sie aus Ihrem Checkout neu: das wendet dasselbe Rezept an, auf einer Basis, die aus Ihrem Code neu gebaut wurde — es übernimmt also auch, was Sie seither geschrieben haben. Es baut zuerst das ganze Image neu und dauert deshalb länger als der Neubau oben.",
             "rebuildCheckout": "Aus Checkout neu bauen",
             "rebuildCheckout2": "Aus Checkout neu bauen?",
             "rebuildCommand": "Neubau-Befehl",
             "rebuildNow": "Jetzt neu bauen",
-            "rebuildStoppedReportingNever": "Dieser Neubau hat aufgehört zu berichten und nie gesagt, wie er geendet ist.",
-            "rebuilding": "Wird neu gebaut…",
             "reconnectsOnOwn": "Verbindet sich von selbst wieder",
             "restartsSandbox": "Startet die Sandbox neu",
             "runOnDeviceHolds": "Führen Sie ihn auf dem Gerät aus, das diesen Checkout hält:",
             "runs": "Läuft",
-            "sandboxDoesntRecordCheckout": "Diese Sandbox zeichnet nicht auf, aus welchem Checkout ihr Image kam, sie kann den Neubau also nicht für Sie starten. Führen Sie ihn dort aus; sie einmal neu anzulegen mit",
-            "waitingFirstLineDevice": "Es wird auf die erste Zeile von diesem Gerät gewartet…"
+            "sandboxDoesntRecordCheckout": "Diese Sandbox zeichnet nicht auf, aus welchem Checkout ihr Image kam, sie kann den Neubau also nicht für Sie starten. Führen Sie ihn dort aus; sie einmal neu anzulegen mit"
+        },
+        "devRebuildProgress": {
+            "cantReadLogAt": "Can't read the log at the moment — the build itself is unaffected. {hiccup}",
+            "fullOutputIn": "The full output is in",
+            "layerOf": "layer {done} of {total}",
+            "onDevice": "on that device.",
+            "rebuildStoppedReportingNever": "That rebuild stopped reporting, and never said how it ended.",
+            "waitingFirstLineDevice": "Waiting for the first line from that device…"
         },
         "deviceAgent": {
             "fetchesNewestAgentOnto": "Holt den neuesten Agenten auf dieses Gerät, installiert ihn und startet seine Schleife neu — den einen Prozess, über den diese Sandbox das Gerät erreicht. Unbedenklich bei einem Agenten, der schon aktuell ist; seine Ordner, Kopplungen und gespiegelten Ports bleiben so oder so unangetastet.",

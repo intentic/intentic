@@ -1,5 +1,6 @@
 import { readDevRebuildLog } from "@intentic/sandbox-contract";
 import { computed, type ComputedRef, onScopeDispose, reactive, ref } from "vue";
+import { type DevRebuildLayers, type DevRebuildStage, rebuildFraction, readRebuildProgress, stageStart } from "./devRebuildStages";
 import { runDeviceCommand } from "../devices/useDevices";
 import { SandboxHttpError } from "../client/sandboxClient";
 import { useSandbox } from "../client/useSandbox";
@@ -45,6 +46,16 @@ export interface DevRebuildRun {
     // the last good read said. Set when a follow begins as well as on every read, so contact is dated from the moment
     // this browser started asking rather than from a marker that may be an hour old.
     heardAt: number | undefined;
+    /** Which of the three things a rebuild does it is on. Only ever advances: see devRebuildStages.ts. */
+    stage: DevRebuildStage;
+    /** When each stage was first seen, so the card can time a step it watched begin. */
+    stageAt: Partial<Record<DevRebuildStage, number>>;
+    /** The stage's own last word — the package turbo is on, the sentence ic printed. */
+    detail: string | undefined;
+    /** Docker's step counter, the one real fraction inside the longest stage. */
+    layers: DevRebuildLayers | undefined;
+    /** How far along, 0–1, never decreasing: a tail that scrolls must not walk the bar backwards. */
+    fraction: number;
 }
 
 const LIVE: ReadonlySet<DevRebuildPhase> = new Set(["starting", "building", "restarting"]);
@@ -93,6 +104,11 @@ const idle = (): DevRebuildRun => ({
     quietFor: undefined,
     trouble: undefined,
     heardAt: undefined,
+    stage: "compile",
+    stageAt: {},
+    detail: undefined,
+    layers: undefined,
+    fraction: 0,
 });
 
 const runs = new Map<string, DevRebuildRun>();
@@ -155,11 +171,48 @@ const stop = (slug: string): void => {
     }
 };
 
+const STAGE_ORDER: readonly DevRebuildStage[] = ["compile", "image", "swap"];
+
+// WHERE THE STAGE IS KEPT MONOTONIC, and the reason it is kept on the run rather than computed by the card: the read is
+// a bounded tail, so evidence of a stage scrolls away while that stage is still running.
+const reach = (run: DevRebuildRun, stage: DevRebuildStage): boolean => {
+    if (STAGE_ORDER.indexOf(stage) < STAGE_ORDER.indexOf(run.stage)) {
+        return false;
+    }
+    if (stage !== run.stage) {
+        run.stage = stage;
+        run.detail = undefined;
+        run.layers = undefined;
+    }
+    run.stageAt[stage] ??= Date.now();
+    return true;
+};
+
+// The bar only ever fills: a tail whose newest layer line belongs to an earlier docker stage would otherwise rewind it.
+const fill = (run: DevRebuildRun, to: number): void => {
+    run.fraction = Math.max(run.fraction, to);
+};
+
+// One read's worth of stage movement, applied only where it is forward.
+const noteProgress = (run: DevRebuildRun, lines: readonly string[]): void => {
+    const progress = readRebuildProgress(lines);
+    if (progress === undefined || !reach(run, progress.stage)) {
+        return;
+    }
+    run.detail = progress.detail ?? run.detail;
+    run.layers = progress.layers ?? run.layers;
+    fill(run, rebuildFraction(progress));
+};
+
 // A terminal phase ends the follow and drops the marker: what stays on screen from here is an outcome, not a wait.
 const settle = (run: DevRebuildRun, slug: string, phase: DevRebuildPhase, trouble?: string): void => {
     run.phase = phase;
     run.endedAt = Date.now();
     run.trouble = trouble;
+    if (phase === "done") {
+        reach(run, "swap");
+        fill(run, 1);
+    }
     removeStoredValue(markerKey(slug));
     stop(slug);
     unmark(slug);
@@ -183,6 +236,7 @@ const absorb = (run: DevRebuildRun, slug: string, text: string): void => {
         settle(run, slug, "lost");
         return;
     }
+    noteProgress(run, log.lines);
     run.phase = "building";
     run.trouble = undefined;
 };
@@ -205,6 +259,9 @@ const unread = (run: DevRebuildRun, slug: string, error: unknown): void => {
     }
     run.phase = "restarting";
     run.trouble = undefined;
+    // The daemon dying IS the swap, so it dates the last stage even when the log never got to say so.
+    reach(run, "swap");
+    fill(run, stageStart("swap"));
 };
 
 const poll = async (slug: string, hostId: string): Promise<void> => {
@@ -268,6 +325,7 @@ const probe = async (slug: string, hostId: string): Promise<void> => {
         // No `startedAt`: the log's age says when this build last printed, not when it began, and the card would rather
         // show no clock than one counting from the wrong moment.
         Object.assign(run, idle(), { phase: "building", lines: log.lines, quietFor: log.quietFor, heardAt: Date.now() });
+        noteProgress(run, log.lines);
         mark(slug);
         follow(slug, hostId);
     } catch {
@@ -302,7 +360,8 @@ export function useDevRebuild(slug: string): DevRebuildFollower {
 
     const start = async (hostId: string): Promise<void> => {
         stop(slug);
-        Object.assign(run, idle(), { phase: "starting", startedAt: Date.now(), heardAt: Date.now() });
+        // A build this browser started has a first stage it watched begin, which is the one thing an adopted run lacks.
+        Object.assign(run, idle(), { phase: "starting", startedAt: Date.now(), heardAt: Date.now(), stageAt: { compile: Date.now() } });
         mark(slug);
         storeValue(markerKey(slug), String(run.startedAt));
         now.value = Date.now();
@@ -327,7 +386,7 @@ export function useDevRebuild(slug: string): DevRebuildFollower {
         }
         const marker = Number(storedValue(markerKey(slug)) ?? Number.NaN);
         if (Number.isFinite(marker) && Date.now() - marker < MARKER_GOOD_FOR_MS) {
-            Object.assign(run, idle(), { phase: "building", startedAt: marker, heardAt: Date.now() });
+            Object.assign(run, idle(), { phase: "building", startedAt: marker, heardAt: Date.now(), stageAt: { compile: marker } });
             mark(slug);
             follow(slug, hostId);
             return;

@@ -1,13 +1,14 @@
 <script setup lang="ts">
 import { devRebuildLogPath } from "@intentic/sandbox-contract";
-import { AnchoredOverlay, Button, Code, commandLang, ConfirmDialog, DeviceRunLog, type IconName, Notice, type NoticeModel, ui } from "@intentic/ui";
+import { AnchoredOverlay, Button, Code, commandLang, ConfirmDialog, type IconName, Notice } from "@intentic/ui";
 import { computed, onBeforeUnmount, ref, watch } from "vue";
 import ConnectDeviceHint from "../devices/ConnectDeviceHint.vue";
+import DevRebuildProgress from "./DevRebuildProgress.vue";
 import { turnInFlight } from "../../agents/fleet/agentStatus";
 import { useAgents } from "../../agents/fleet/useAgents";
 import { useSandboxSettings } from "../overview/useSandboxSettings";
 import { useHostHolding } from "../devices/useDevices";
-import { type DevRebuildPhase, rebuildElapsedLabel, rebuildRunning, useDevRebuild } from "./useDevRebuild";
+import { rebuildRunning, useDevRebuild } from "./useDevRebuild";
 import { useT } from "@intentic/ui/i18n";
 
 // Rebuilding a sandbox whose base was compiled from a checkout, from that checkout. Not HostRecreate's flow: that one
@@ -24,6 +25,9 @@ import { useT } from "@intentic/ui/i18n";
 // Nothing streams back from the build itself, for the same reason: it is detached out there, and the swap at the end
 // replaces the daemon that would have carried a stream. So progress is READ rather than received — useDevRebuild polls
 // the machine's own log — and the run it draws lives outside this component, because the build outlives it.
+//
+// The offer and the run are never on screen at once: while one is going, the card below IS the state of this button,
+// and a disabled button spinning beside a progress card is the same wait drawn twice.
 
 const t = useT();
 
@@ -117,49 +121,9 @@ const execute = async (): Promise<void> => {
     }
 };
 
-const elapsedLabel = computed(() => rebuildElapsedLabel(elapsed.value));
-
-// Each phase says what is happening to the SANDBOX, since that is what the reader is waiting on — not what the device
-// is doing, and not what this page is doing about it.
-const PROGRESS: Partial<Record<DevRebuildPhase, string>> = {
-    starting: `Starting the build on that device…`,
-    building: `Building the image from your checkout. Your sandbox keeps working, and restarts on its own once it's built.`,
-    restarting: `Restarting your sandbox on the new image. This page reconnects on its own.`,
-};
-const progress = computed(() => PROGRESS[run.phase]);
-
-const done = computed(() =>
-    run.phase === `done` ? `Rebuilt from your checkout in ${elapsedLabel.value ?? `a few minutes`}. You're running the new image.` : undefined,
-);
-
-const failure = computed<NoticeModel | undefined>(() => {
-    if (run.phase === `failed`) {
-        const title =
-            run.exitCode === undefined ? `That device didn't run the rebuild.` : `The rebuild failed on that device (exit ${run.exitCode}).`;
-        return { tone: `warning`, title, ...(run.trouble === undefined ? {} : { detail: run.trouble }) };
-    }
-    if (run.phase === `lost`) {
-        return {
-            tone: `warning`,
-            title: t(`sandbox.devRebuild.rebuildStoppedReportingNever`),
-            detail: run.trouble ?? `Nothing has been written to its log for a while: the machine may have slept, or the build was stopped.`,
-        };
-    }
-    return undefined;
-});
-
-// A docker layer builds for minutes without printing anything, so a still pane is not evidence of a stuck build — but
-// after a while it is worth saying which of the two this is, rather than leaving the reader to guess.
-const QUIET_AFTER_S = 90;
-const quiet = computed(() => {
-    const seconds = run.quietFor ?? 0;
-    return run.phase === `building` && seconds > QUIET_AFTER_S
-        ? `Nothing new in the log for ${Math.round(seconds / 60)}m — a single docker layer can take that long.`
-        : undefined;
-});
-
-// A read that failed while the build carries on regardless: the machine's own words, not a verdict on the rebuild.
-const hiccup = computed(() => (live.value ? run.trouble : undefined));
+// Nothing to show until a rebuild exists: one started here, one found already running, or one whose outcome hasn't
+// been dismissed yet.
+const following = computed(() => run.phase !== `idle`);
 
 // WHAT THE RESTART WILL COST, COUNTED AT THE MOMENT OF ASKING. The build itself interrupts nothing, so the number
 // that matters is read now rather than when the swap lands — by then it is a surprise instead of a decision, and
@@ -202,15 +166,21 @@ const checkout = computed(() => {
 
         <!-- The machine holding the checkout is reachable from here, so this is a button wherever you're reading it. -->
         <template v-if="hostId && root">
-            <div ref="anchorRef" class="inline-flex self-start" @pointerenter="onEnter" @pointerleave="onLeave" @focusin="onFocus" @focusout="onBlur">
+            <div
+                v-if="!live"
+                ref="anchorRef"
+                class="inline-flex self-start"
+                @pointerenter="onEnter"
+                @pointerleave="onLeave"
+                @focusin="onFocus"
+                @focusout="onBlur"
+            >
                 <!-- A hammer, never the bolt the recipe's own rebuild wears: two identical glyphs on one card is what
                      made these read as one action offered twice. -->
                 <Button
-                    :label="live ? t(`sandbox.devRebuild.rebuilding`) : t(`sandbox.devRebuild.rebuildCheckout`)"
+                    :label="t(`sandbox.devRebuild.rebuildCheckout`)"
                     size="small"
                     :severity="recipePending ? `secondary` : undefined"
-                    :loading="live"
-                    :disabled="live"
                     @click="onButtonClick"
                 >
                     <template #icon><Icon name="hammer" /></template>
@@ -236,41 +206,9 @@ const checkout = computed(() => {
                 </div>
             </AnchoredOverlay>
 
-            <!-- Detached builds expose device progress and logs. -->
-            <div v-if="progress" class="flex items-center gap-2 text-2xs text-muted">
-                <Icon name="refresh" spin />
-                <span>{{ progress }}</span>
-                <span v-if="elapsedLabel" class="ml-auto shrink-0 font-mono tabular-nums text-subtle">{{ elapsedLabel }}</span>
-            </div>
-
-            <!-- The log appears before its first line so running is distinct from no activity. -->
-            <!-- No note under the pane: the progress line above it is this run's one spinner, and that the build
-                 outlives this page is said by the hub's Environment row, where leaving it can be seen. -->
-            <DeviceRunLog
-                v-if="live || run.lines.length > 0"
-                :lines="run.lines"
-                :running="live"
-                :empty="t(`sandbox.devRebuild.waitingFirstLineDevice`)"
-            />
-
-            <p v-if="quiet" class="text-2xs text-subtle">{{ quiet }}</p>
-            <p v-if="hiccup" class="text-2xs text-subtle">{{ t(`sandbox.devRebuild.cantReadLogAt`, { hiccup }) }}</p>
-
-            <Notice v-if="failure" :of="failure" />
-            <p v-else-if="done" class="flex items-center gap-2 text-2xs text-muted">
-                <Icon name="check" class="text-success" />
-                <span>{{ done }}</span>
-            </p>
-
-            <!-- Failure and completion retain the full log path. -->
-            <div v-if="failure || done" class="flex flex-wrap items-center gap-x-3 gap-y-1">
-                <p class="text-2xs text-subtle">
-                    {{ t(`sandbox.devRebuild.fullOutputIn`) }} <span class="font-mono">{{ logPath }}</span> {{ t(`sandbox.devRebuild.onDevice`) }}
-                </p>
-                <button type="button" :class="ui.linkButton(`gap-1 text-2xs text-subtle hover:text-content`)" @click="dismiss">
-                    <Icon name="times" />{{ t(`ui.action.dismiss`) }}
-                </button>
-            </div>
+            <!-- The whole state of a detached build, drawn as the three things it does; the log lives inside it,
+                 behind a toggle, because for most of a rebuild it is the one thing nobody needs. -->
+            <DevRebuildProgress v-if="following" :run="run" :elapsed="elapsed" :log-path="logPath" @dismiss="dismiss" />
 
             <ConfirmDialog
                 :open="confirming"

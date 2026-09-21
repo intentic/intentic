@@ -20,6 +20,11 @@ const run = (over: Partial<DevRebuildRun> = {}): DevRebuildRun => ({
     quietFor: 0,
     trouble: undefined,
     heardAt: 217_000,
+    stage: `swap`,
+    stageAt: { compile: 1_000, image: 40_000, swap: 200_000 },
+    detail: undefined,
+    layers: undefined,
+    fraction: 1,
     ...over,
 });
 

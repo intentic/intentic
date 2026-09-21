@@ -2172,26 +2172,28 @@
         "devRebuild": {
             "approvedRecipeAppliedPart": "Votre recette approuvée est appliquée au passage : la reconstruction en attente se résorbe donc dès que le sandbox revient.",
             "buildsImage": "Construit l'image",
-            "cantReadLogAt": "Impossible de lire le journal pour l'instant — la construction elle-même n'est pas affectée. {hiccup}",
             "checkoutNotPublishedRelease": "depuis votre checkout, pas depuis une version publiée. Reconstruisez pour reprendre le code que vous avez écrit depuis.",
-            "fullOutputIn": "La sortie complète est dans",
             "hostCommand": "Commande hôte",
             "keepWorking": "Vous continuez à travailler",
             "makesButtonOn": "en fait un bouton à partir de là.",
-            "onDevice": "sur cet appareil.",
             "orRebuildFromCheckout": "Ou reconstruisez depuis votre checkout : cela applique la même recette, sur une base reconstruite à partir de votre code — donc cela reprend aussi ce que vous avez écrit depuis. Cela reconstruit d'abord toute l'image, et prend donc plus de temps que la reconstruction ci-dessus.",
             "rebuildCheckout": "Reconstruire depuis le checkout",
             "rebuildCheckout2": "Reconstruire depuis le checkout ?",
             "rebuildCommand": "Commande de reconstruction",
             "rebuildNow": "Reconstruire maintenant",
-            "rebuildStoppedReportingNever": "Cette reconstruction a cessé de rendre compte, et n'a jamais dit comment elle s'est terminée.",
-            "rebuilding": "Reconstruction…",
             "reconnectsOnOwn": "Se reconnecte tout seul",
             "restartsSandbox": "Redémarre le sandbox",
             "runOnDeviceHolds": "Lancez-la sur l'appareil qui détient ce checkout :",
             "runs": "Exécute",
-            "sandboxDoesntRecordCheckout": "Ce sandbox n'enregistre pas de quel checkout vient son image : il ne peut donc pas lancer la reconstruction pour vous. Lancez-la là-bas, et le recréer une fois avec",
-            "waitingFirstLineDevice": "En attente de la première ligne de cet appareil…"
+            "sandboxDoesntRecordCheckout": "Ce sandbox n'enregistre pas de quel checkout vient son image : il ne peut donc pas lancer la reconstruction pour vous. Lancez-la là-bas, et le recréer une fois avec"
+        },
+        "devRebuildProgress": {
+            "cantReadLogAt": "Can't read the log at the moment — the build itself is unaffected. {hiccup}",
+            "fullOutputIn": "The full output is in",
+            "layerOf": "layer {done} of {total}",
+            "onDevice": "on that device.",
+            "rebuildStoppedReportingNever": "That rebuild stopped reporting, and never said how it ended.",
+            "waitingFirstLineDevice": "Waiting for the first line from that device…"
         },
         "deviceAgent": {
             "fetchesNewestAgentOnto": "Récupère le tout dernier agent sur cet appareil, l'installe, et redémarre sa boucle — le seul processus par lequel ce sandbox atteint l'appareil. Sans risque sur un agent déjà à jour ; ses dossiers, appairages et ports reflétés restent intacts dans tous les cas.",

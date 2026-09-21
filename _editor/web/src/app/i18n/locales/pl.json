@@ -2172,26 +2172,28 @@
         "devRebuild": {
             "approvedRecipeAppliedPart": "Twój zatwierdzony przepis jest stosowany przy okazji, więc oczekująca przebudowa zniknie, gdy sandbox wróci.",
             "buildsImage": "Buduje obraz",
-            "cantReadLogAt": "W tej chwili nie da się odczytać dziennika — sama budowa jest tym nietknięta. {hiccup}",
             "checkoutNotPublishedRelease": "z Twojego checkoutu, nie z opublikowanego wydania. Przebuduj, żeby wziąć kod, który napisałeś od tamtej pory.",
-            "fullOutputIn": "Pełne wyjście jest w",
             "hostCommand": "Polecenie na hoście",
             "keepWorking": "Ty pracujesz dalej",
             "makesButtonOn": "robi z tego od tej pory przycisk.",
-            "onDevice": "na tamtym urządzeniu.",
             "orRebuildFromCheckout": "Albo przebuduj z checkoutu: to stosuje ten sam przepis na bazie przebudowanej z Twojego kodu — więc bierze też to, co napisałeś od tamtej pory. Najpierw przebudowuje cały obraz, więc trwa dłużej niż przebudowa powyżej.",
             "rebuildCheckout": "Przebuduj z checkoutu",
             "rebuildCheckout2": "Przebudować z checkoutu?",
             "rebuildCommand": "Polecenie przebudowy",
             "rebuildNow": "Przebuduj teraz",
-            "rebuildStoppedReportingNever": "Tamta przebudowa przestała się meldować i nigdy nie powiedziała, jak się skończyła.",
-            "rebuilding": "Przebudowa…",
             "reconnectsOnOwn": "Łączy się sam z powrotem",
             "restartsSandbox": "Restartuje sandbox",
             "runOnDeviceHolds": "Uruchom to na urządzeniu, które trzyma ten checkout:",
             "runs": "Uruchamia",
-            "sandboxDoesntRecordCheckout": "Ten sandbox nie zapisuje, z jakiego checkoutu wziął się jego obraz, więc nie może uruchomić przebudowy za Ciebie. Uruchom ją tam, a jednorazowe odtworzenie go przez",
-            "waitingFirstLineDevice": "Czekamy na pierwszą linię z tamtego urządzenia…"
+            "sandboxDoesntRecordCheckout": "Ten sandbox nie zapisuje, z jakiego checkoutu wziął się jego obraz, więc nie może uruchomić przebudowy za Ciebie. Uruchom ją tam, a jednorazowe odtworzenie go przez"
+        },
+        "devRebuildProgress": {
+            "cantReadLogAt": "Can't read the log at the moment — the build itself is unaffected. {hiccup}",
+            "fullOutputIn": "The full output is in",
+            "layerOf": "layer {done} of {total}",
+            "onDevice": "on that device.",
+            "rebuildStoppedReportingNever": "That rebuild stopped reporting, and never said how it ended.",
+            "waitingFirstLineDevice": "Waiting for the first line from that device…"
         },
         "deviceAgent": {
             "fetchesNewestAgentOnto": "Pobiera najnowszego agenta na to urządzenie, instaluje go i restartuje jego pętlę — jedyny proces, przez który ten sandbox sięga do urządzenia. Bezpieczne dla agenta, który jest już aktualny; jego foldery, sparowania i odbite porty tak czy owak zostają nietknięte.",
