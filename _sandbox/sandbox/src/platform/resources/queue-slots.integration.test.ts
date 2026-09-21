@@ -2,13 +2,14 @@ import { type ChildProcess, spawn } from "node:child_process";
 import { mkdtemp, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { packageRoot } from "@intentic/constants/node";
 import { expect, test } from "vitest";
 import { heldSlots, queueSnapshot } from "./queue-slots.js";
 
 /* The half the unit tests cannot reach: a real flock taken by bin/queue-run, found through st_dev and the inode.
    A wrong base or a wrong device split parses perfectly and matches nothing, so only a live lock proves the chain. */
 
-const QUEUE_RUN = join(import.meta.dirname, "../../../bin/queue-run");
+const QUEUE_RUN = join(packageRoot(import.meta.url), "bin", "queue-run");
 const RENDEZVOUS_MS = 30_000;
 const POLL_MS = 50;
 

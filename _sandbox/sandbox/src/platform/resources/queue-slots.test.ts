@@ -1,3 +1,4 @@
+import { WORKSPACE_ROOT } from "@intentic/constants";
 import { expect, test } from "vitest";
 import { type HeldSlot, oldestPerSlot, slotFromFdTarget, summarisePools } from "./queue-slots.js";
 
@@ -12,7 +13,7 @@ test("a descriptor pointing at a slot names its pool and slot", () => {
 });
 
 test.each([
-    ["a descriptor on something else entirely", "/work/intentic/package.json"],
+    ["a descriptor on something else entirely", `${WORKSPACE_ROOT}/intentic/package.json`],
     ["a sibling directory sharing the root's characters", "/tmp/intentic-queue-scratch/heavy/slot.1"],
     ["the root itself", "/tmp/intentic-queue"],
     ["a file directly in the root, with no pool", "/tmp/intentic-queue/slot.1"],
