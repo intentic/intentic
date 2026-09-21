@@ -303,3 +303,40 @@ test("a missing or failing memory gate still runs the command", async () => {
     expect(broken.stdout.trim()).toBe("despite-failure");
     expect(broken.code).toBe(0);
 });
+
+// A rule may say that running beside a slot holder is worse than not running: repo-wide verification, where two at once
+// is the measured peak. Then the deadline ends in exit 75 and nothing started, which the caller records as not measured.
+test("--on-deadline skip exits 75 without running once the wait is up", async () => {
+    const queue = await dir();
+    const holder = await holdSlot(queue, ["--pool", "p", "--limit", "1"], 30);
+    try {
+        const skipped = await queueRun(queue, ["--pool", "p", "--limit", "1", "--wait", "2", "--on-deadline", "skip"], "echo ran");
+        expect(skipped.code).toBe(75);
+        expect(skipped.stdout).toBe("");
+        expect(skipped.stderr).toContain("not started");
+        expect(skipped.stderr).not.toContain("starting anyway");
+    } finally {
+        holder.kill("SIGKILL");
+    }
+});
+
+test("--on-deadline skip changes nothing for a command that gets its slot in time", async () => {
+    const queue = await dir();
+    const holder = await holdSlot(queue, ["--pool", "p", "--limit", "1"], 3);
+    const second = await queueRun(queue, ["--pool", "p", "--limit", "1", "--wait", "30", "--on-deadline", "skip"], "echo second; exit 4");
+    expect(second.stdout.trim()).toBe("second");
+    expect(second.code).toBe(4);
+    holder.kill("SIGKILL");
+});
+
+test("an unknown deadline mode reads as run, so the wrapper is never the reason a command did not run", async () => {
+    const queue = await dir();
+    const holder = await holdSlot(queue, ["--pool", "p", "--limit", "1"], 30);
+    try {
+        const ran = await queueRun(queue, ["--pool", "p", "--limit", "1", "--wait", "2", "--on-deadline", "later"], "echo ran");
+        expect(ran.stdout.trim()).toBe("ran");
+        expect(ran.stderr).toContain("starting anyway");
+    } finally {
+        holder.kill("SIGKILL");
+    }
+});

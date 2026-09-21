@@ -137,8 +137,8 @@ test("first match wins, so a narrow rule above a broad one decides", () => {
         { id: "narrow", pattern: "vitest run src/one", pool: "solo", limit: 1 },
         { id: "broad", pattern: "\\bvitest\\b" },
     ];
-    expect(matchHeavyCommand("vitest run src/one.test.ts", config({ rules }))).toEqual({ id: "narrow", pool: "solo", limit: 1, maxHold: HOLD });
-    expect(matchHeavyCommand("vitest run src/two.test.ts", config({ rules }))).toEqual({ id: "broad", pool: "heavy", limit: 2, maxHold: HOLD });
+    expect(matchHeavyCommand("vitest run src/one.test.ts", config({ rules }))).toEqual({ id: "narrow", pool: "solo", limit: 1, maxHold: HOLD, onDeadline: "run" });
+    expect(matchHeavyCommand("vitest run src/two.test.ts", config({ rules }))).toEqual({ id: "broad", pool: "heavy", limit: 2, maxHold: HOLD, onDeadline: "run" });
 });
 
 test("a rule's own pool and limit override the file's, and absent ones inherit", () => {
@@ -150,8 +150,8 @@ test("a rule's own pool and limit override the file's, and absent ones inherit",
             { id: "b", pattern: "bbb", pool: "own", limit: 1 },
         ],
     });
-    expect(matchHeavyCommand("aaa", parsed)).toEqual({ id: "a", pool: "big", limit: 3, maxHold: HOLD });
-    expect(matchHeavyCommand("bbb", parsed)).toEqual({ id: "b", pool: "own", limit: 1, maxHold: HOLD });
+    expect(matchHeavyCommand("aaa", parsed)).toEqual({ id: "a", pool: "big", limit: 3, maxHold: HOLD, onDeadline: "run" });
+    expect(matchHeavyCommand("bbb", parsed)).toEqual({ id: "b", pool: "own", limit: 1, maxHold: HOLD, onDeadline: "run" });
 });
 
 test("a rule's own hold ceiling overrides the file's, and zero means never killed", () => {
@@ -167,6 +167,22 @@ test("a rule's own hold ceiling overrides the file's, and zero means never kille
     expect(matchHeavyCommand("bbb", parsed)?.maxHold).toBe(7200);
     // Not `?? config.maxHoldSeconds`: an explicit 0 is the opt-out, and nullish coalescing is what keeps it one.
     expect(matchHeavyCommand("ccc", parsed)?.maxHold).toBe(0);
+});
+
+test("a rule's own deadline answer overrides the file's, and the shipped default runs anyway", () => {
+    const parsed = config({
+        onDeadline: "skip",
+        rules: [
+            { id: "skips", pattern: "aaa" },
+            { id: "runs", pattern: "bbb", onDeadline: "run" },
+        ],
+    });
+    expect(matchHeavyCommand("aaa", parsed)?.onDeadline).toBe("skip");
+    expect(matchHeavyCommand("bbb", parsed)?.onDeadline).toBe("run");
+    expect(DEFAULT_HEAVY_COMMANDS.onDeadline).toBe("run");
+    // The one shipped rule that skips: two repo-wide verifications overlapping is the measured peak.
+    expect(matchHeavyCommand("pnpm test", config())?.onDeadline).toBe("run");
+    expect(matchHeavyCommand("pnpm verify:turn", config())?.onDeadline).toBe("skip");
 });
 
 // A watch or a dev server is supposed to outlive its command. Queueing one means a slot held until the user stops
@@ -201,7 +217,7 @@ test.each([
 
 test("a repo-wide verification is limited to one, and stays in the pool with everything else", () => {
     const verify = matchHeavyCommand("pnpm verify:turn", config());
-    expect(verify).toEqual({ id: "repo-verify", pool: "heavy", limit: 1, maxHold: HOLD });
+    expect(verify).toEqual({ id: "repo-verify", pool: "heavy", limit: 1, maxHold: HOLD, onDeadline: "skip" });
     // Same pool as the rest, so serialising these does not raise how many heavy commands the box runs at once.
     expect(verify?.pool).toBe(config().defaultPool);
     expect(matched("pnpm run verify:turn")).toBe("repo-verify");
@@ -231,6 +247,7 @@ test("a rule whose pattern does not compile is reported and skipped, and the res
         pool: "heavy",
         limit: 2,
         maxHold: HOLD,
+        onDeadline: "run",
     });
     expect(problems).toHaveLength(1);
     expect(problems[0]).toContain("broken");

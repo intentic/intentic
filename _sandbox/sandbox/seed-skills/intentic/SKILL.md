@@ -130,7 +130,7 @@ over a window you choose. They cannot write, and nothing in this playbook restar
 - Work felt slow → `mcp__diagnostics__slow` (`op: "git."`, `"http."`…), with the machine's load at the time,
   which is what separates a regression from a busy machine.
 - Out of memory, a killed process, a stalling event loop → `mcp__diagnostics__resources` with a field:
-  `system.cgroup.event_oom_kill`, `processes.byRole.browser.rssBytes` (also agentRuntime, terminal,
+  `system.cgroup.event_oom_kill`, `processes.byRole.toolchain.rssBytes` (also browser, agentRuntime, localModel, container, terminal,
   languageServer, git, extension), `window.eventLoop.delayP99Ms`, `daemon.memory.rssBytes`,
   `system.pressure.memory.some`, `system.loadAverage`.
 - Output a command printed that the filter elided → its footer names the exact command:

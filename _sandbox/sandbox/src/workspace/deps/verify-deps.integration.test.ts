@@ -299,3 +299,23 @@ test("the verify store remembers red across restarts: its list is the closure re
     };
     expect(status.projects["app"]?.attempt).toBe(1);
 });
+
+// queue-run's own exit for a command it never started: the repo-verify rule skips rather than overlap a slot holder.
+test("a check the queue skipped is reported as not run, and changes no verdict", async () => {
+    const { queueVerify } = await freshQueue();
+    const root = await workspace();
+    await ready(root, { verify: "pnpm run verify" });
+    await fileVerifyStore(join(root, `${STATE_DIR}/records/verify.json`)).record("app", "red", 1);
+    const events: WorkspaceEvent[] = [];
+    const feed: string[] = [];
+    queueVerify(deps(root, fakeProcesses(root, 75, []), events, feed), context, ["app"]);
+    await settle(() => feed.length > 0);
+    expect(feed).toEqual(["deps.verify_deferred"]);
+    expect(events).toEqual([]);
+    // Still red, still attempt 1: a check that did not run measured nothing.
+    expect(await fileVerifyStore(join(root, `${STATE_DIR}/records/verify.json`)).red()).toEqual(["app"]);
+    const status = JSON.parse(await readFile(join(root, `${STATE_DIR}/records/verify.json`), "utf8")) as {
+        projects: Record<string, { attempt: number }>;
+    };
+    expect(status.projects["app"]?.attempt).toBe(1);
+});

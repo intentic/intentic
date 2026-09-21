@@ -63,7 +63,7 @@
         // and keeps the graph. That is the difference between a suite the fleet can run before landing and one
         // only CI ever sees: 67 of 100 main pipelines failed this job while the whole suite ran nowhere else.
         // VITEST_MAX_WORKERS is the ONLY thing bounding a repo-wide run's memory, and until this line it was
-        // being stripped before any suite could read it. The root script sets it (`VITEST_MAX_WORKERS=4 turbo
+        // being stripped before any suite could read it. The root script sets it (`VITEST_MAX_WORKERS=$(node _tools/scripts/verify/vitest-workers.mjs) turbo
         // run test --only`), vitest 4 honours it (`if (process.env.VITEST_MAX_WORKERS) resolved.maxWorkers =
         // ...`), and in between `envMode: strict` rebuilt the task environment without it: measured on turbo
         // 2.10.8 via `--dry=json`, the test task reported `passThroughEnv: None` and a global passthrough

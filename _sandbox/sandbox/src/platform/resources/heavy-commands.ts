@@ -9,6 +9,15 @@ import type { ManifestProblem } from "../../store/manifest-problems.js";
 // Characters of the command a rule's regex runs against; bounds backtracking since node has no regex timeout.
 export const MATCH_LIMIT = 4096;
 
+// What a queued command does once `waitSeconds` passes with every slot still held: `run` starts it anyway, `skip`
+// exits QUEUE_SKIPPED_EXIT_CODE having run nothing, for a command whose overlap with a holder is the incident itself.
+export const OnDeadlineSchema = z.enum(["run", "skip"]);
+
+export type OnDeadline = z.infer<typeof OnDeadlineSchema>;
+
+// queue-run's exit for a command it skipped: EX_TEMPFAIL, so a caller records "not measured", never "failed".
+export const QUEUE_SKIPPED_EXIT_CODE = 75;
+
 export const HeavyCommandRuleSchema = z.object({
     // Names the rule in logs and the pane's "waiting" line; free text, duplicates allowed.
     id: z.string().min(1),
@@ -22,6 +31,8 @@ export const HeavyCommandRuleSchema = z.object({
     maxHoldSeconds: z.number().int().nonnegative().optional(),
     // Matching this rule means the command is explicitly not queued: an exception written above the rule it escapes.
     exempt: z.boolean().optional(),
+    // This rule's answer at the deadline when it differs from the file's.
+    onDeadline: OnDeadlineSchema.optional(),
 });
 
 export type HeavyCommandRule = z.infer<typeof HeavyCommandRuleSchema>;
@@ -39,6 +50,8 @@ export const HeavyCommandsSchema = z.object({
     // bound. Generous on purpose: this exists to end a hang, not to cap honest work, and a batch command still
     // running after half an hour on this box is already the anomaly. 0 switches the ceiling off.
     maxHoldSeconds: z.number().int().nonnegative().default(1800),
+    // `run` for rules that say nothing: for a person's command the wrapper must never be the reason it did not run.
+    onDeadline: OnDeadlineSchema.default("run"),
     // Matched in file order, first match wins; an empty list switches the queue off entirely.
     rules: z.array(HeavyCommandRuleSchema).default([]),
 });
@@ -71,7 +84,9 @@ export const DEFAULT_HEAVY_COMMANDS: HeavyCommands = HeavyCommandsSchema.parse({
         // over the same tree. Serialised they are not merely politer — turbo's cache has been written by the time
         // the second starts, so in one worktree it costs almost nothing. Keeping the pool means this does not raise
         // the number of heavy commands the box runs; it only stops two of these being them.
-        { id: "repo-verify", pattern: "\\b(pnpm|npm|yarn|bun)\\s+(run\\s+)?verify(:\\S+)?\\b", limit: 1 },
+        // Never two at once, not even after the wait: overlapping is the measured peak (24.9 GiB against a 16 GiB cap),
+        // and a verification that did not run costs a check the next land repeats.
+        { id: "repo-verify", pattern: "\\b(pnpm|npm|yarn|bun)\\s+(run\\s+)?verify(:\\S+)?\\b", limit: 1, onDeadline: "skip" },
         { id: "vitest", pattern: "\\bvitest\\b" },
         { id: "typechecker", pattern: "\\b(tsc|tsgo|vue-tsc)\\b" },
         { id: "turbo-fanout", pattern: "\\bturbo\\b[^&|;]*\\brun\\b[^&|;]*\\b(build|test|typecheck|check)\\b" },
@@ -97,6 +112,7 @@ export interface HeavyMatch {
     readonly limit: number;
     // Seconds before the slot is taken back by force; 0 means this command is never killed for holding one.
     readonly maxHold: number;
+    readonly onDeadline: OnDeadline;
 }
 
 // Splits a compound line into the commands it runs. Still not a shell parser — it knows quotes and backslashes and
@@ -201,6 +217,7 @@ export const matchHeavyCommand = (command: string, config: HeavyCommands, report
                 pool: rule.pool ?? config.defaultPool,
                 limit: rule.limit ?? config.limit,
                 maxHold: rule.maxHoldSeconds ?? config.maxHoldSeconds,
+                onDeadline: rule.onDeadline ?? config.onDeadline,
             };
         }
     }

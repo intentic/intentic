@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# queue-run --pool NAME --limit N [--wait SECONDS] [--memory-gate SECONDS] [--max-hold SECONDS] [--label ID] -- <command> [args...]
+# queue-run --pool NAME --limit N [--wait SECONDS] [--memory-gate SECONDS] [--max-hold SECONDS] [--on-deadline run|skip] [--label ID] -- <command> [args...]
 #
 # Runs <command> once a slot in <pool> is free, so the expensive commands several agent sessions each decide to
 # run — a repo-wide test fan-out, a type check across 74 packages — take turns instead of landing on the box at
@@ -32,7 +32,8 @@
 #
 # EVERY FAILURE RUNS THE COMMAND. No flock, no slot directory, a bad argument, an unreadable cgroup: all of it
 # degrades to running the command plainly. This wrapper sits between an agent and its shell, and the one thing
-# it must never become is the reason a command did not run.
+# it must never become is the reason a command did not run. The wait running out is not a failure: it is the one
+# outcome a rule may answer with `--on-deadline skip`, for a command whose overlap with a holder IS the incident.
 set -u
 
 pool="heavy"
@@ -41,6 +42,7 @@ wait_seconds=900
 memory_gate=0
 max_hold=0
 label="command"
+on_deadline="run"
 poll_seconds="${INTENTIC_QUEUE_POLL:-2}"
 
 # Grace between the ceiling's TERM and the KILL behind it: long enough for a build to flush its output, short
@@ -78,6 +80,7 @@ while [ "$i" -lt "${#flags[@]}" ]; do
         --memory-gate) memory_gate="${flags[$((i + 1))]:-0}"; i=$((i + 2)) ;;
         --max-hold) max_hold="${flags[$((i + 1))]:-0}"; i=$((i + 2)) ;;
         --label) label="${flags[$((i + 1))]:-command}"; i=$((i + 2)) ;;
+        --on-deadline) on_deadline="${flags[$((i + 1))]:-run}"; i=$((i + 2)) ;;
         *) i=$((i + 1)) ;;
     esac
 done
@@ -115,6 +118,8 @@ max_hold=$(number "$max_hold" 0)
 poll_seconds=$(number "$poll_seconds" 2)
 [ "$limit" -lt 1 ] && limit=1
 [ "$poll_seconds" -lt 1 ] && poll_seconds=1
+# Two words only; anything else is "run", since an unknown mode must not become the reason a command did not run.
+case "$on_deadline" in run | skip) ;; *) on_deadline="run" ;; esac
 
 # The memory half of the gate, before the slot rather than after: a box with no room should not burn a slot
 # sitting in it. Skipped silently when the binary is absent (a dev daemon, a partial image) — see memory-gate.ts
@@ -171,8 +176,15 @@ while [ "$waited" -lt "$wait_seconds" ]; do
     fi
 done
 
-# Deadline reached. Run it anyway, for the reason memory-admission.ts gives for the same decision: this gate
-# exists to dodge a peak, not to hand whatever is holding the box a veto over the owner's work. A queue that
-# can block forever turns one stuck suite into a dead sandbox — a worse failure, and a much quieter one.
+# Deadline reached. `skip` exits 75 (EX_TEMPFAIL) having run nothing, so the caller records a check that was not
+# made rather than one that failed; it is for a command whose overlap with the holder is the incident and whose
+# absence costs only a check. Everything else runs anyway, for the reason memory-admission.ts gives for the same
+# decision: this gate exists to dodge a peak, not to hand whatever is holding the box a veto over the owner's
+# work. A queue that can block forever turns one stuck suite into a dead sandbox — a worse failure, and a much
+# quieter one.
+if [ "$on_deadline" = skip ]; then
+    printf '[queue-run] %s: no slot after %ss — not started, since this command must not run beside the one holding the slot.\n' "$label" "$wait_seconds" >&2
+    exit 75
+fi
 printf '[queue-run] %s: no slot after %ss — starting anyway.\n' "$label" "$wait_seconds" >&2
 run "$@"

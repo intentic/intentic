@@ -5,6 +5,7 @@ import type { WorkspaceEvent } from "@intentic/sandbox-contract";
 import type { Logger } from "pino";
 import type { ActivityStore } from "../../activity/activity-store.js";
 import type { ManagedProcesses } from "../../processes/managed-processes.js";
+import { QUEUE_SKIPPED_EXIT_CODE } from "../../platform/resources/heavy-commands.js";
 import { markCheckRunning } from "./checks-in-flight.js";
 import type { DependencyOrigin } from "./dependency-origin.js";
 import { statePath } from "../layout/state-paths.js";
@@ -95,6 +96,18 @@ export const checkCommandFor = async (root: string, dir: string, manager: string
 const queuedCommand = async (command: string, deps: VerifyDeps): Promise<string> =>
     deps.queue === undefined ? command : deps.queue(command).catch(() => command);
 
+// What the pane left behind. No status file is -1, the pane having died before the wrapper's echo, and unknown is not
+// green; no log is an empty tail.
+const paneOutcome = async (statusPath: string, logPath: string): Promise<{ readonly exitCode: number; readonly logTail: string }> => {
+    const status = await readFile(statusPath, "utf8")
+        .then((text) => Number.parseInt(text.trim(), 10))
+        .catch(() => Number.NaN);
+    const logTail = await readFile(logPath, "utf8")
+        .then((text) => text.slice(-LOG_TAIL))
+        .catch(() => "");
+    return { exitCode: Number.isNaN(status) ? -1 : status, logTail };
+};
+
 // Runs one project's check to a verdict: panel up, exit code read back, store updated, edge announced. The wrapped
 // command is one zsh line; `pipestatus[1]` is the check's exit, not tee's.
 const verifyProject = async (verify: PendingVerify, dir: string, command: string): Promise<void> => {
@@ -136,18 +149,18 @@ const verifyProject = async (verify: PendingVerify, dir: string, command: string
         );
         return;
     }
-    let exitCode = -1;
-    try {
-        const status = Number.parseInt((await readFile(statusPath, "utf8")).trim(), 10);
-        exitCode = Number.isNaN(status) ? -1 : status;
-    } catch {
-        // Absent status file: the pane died before the wrapper's echo; unknown is not green.
-    }
-    let logTail = "";
-    try {
-        logTail = (await readFile(logPath, "utf8")).slice(-LOG_TAIL);
-    } catch {
-        // No log is a fact the tail just reflects.
+    const { exitCode, logTail } = await paneOutcome(statusPath, logPath);
+    // The queue ran nothing: its slot stayed held past the wait, and this check may not run beside the holder. Not a
+    // verdict, so the store keeps what it had; the next land checks the whole tree again.
+    if (exitCode === QUEUE_SKIPPED_EXIT_CODE) {
+        activity(
+            deps,
+            "deps.verify_deferred",
+            `Checks for ${whereOf(dir)} (${command}) did not run: the heavy-command queue had no free slot within its wait, and this check must not run beside another. The next land checks again.`,
+            "ok",
+            origin,
+        );
+        return;
     }
     const verdict = await deps.verifyStore.record(dir, exitCode === 0 ? "green" : "red", Date.now());
     if (exitCode === 0) {

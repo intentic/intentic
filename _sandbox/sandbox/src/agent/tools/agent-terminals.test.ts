@@ -196,8 +196,13 @@ const heavy = (over: Partial<HeavyCommands> = {}) => {
 };
 
 // The demoted form, with the queue between demotion and shell: position is the assertion.
-const queued = (command: string, label: string, pool = "heavy", limit = 2): string =>
-    `nice -n 10 ionice -c 2 -n 7 /usr/local/bin/queue-run --pool ${shellQuote(pool)} --limit ${String(limit)} --wait 900 --memory-gate 120 --max-hold ${String(DEFAULT_HEAVY_COMMANDS.maxHoldSeconds)} --label ${shellQuote(label)} -- bash -c ${shellQuote(command)}`;
+const queued = (command: string, label: string, pool = "heavy", limit = 2, onDeadline = DEFAULT_HEAVY_COMMANDS.onDeadline): string =>
+    `nice -n 10 ionice -c 2 -n 7 /usr/local/bin/queue-run --pool ${shellQuote(pool)} --limit ${String(limit)} --wait 900 --memory-gate 120 --max-hold ${String(DEFAULT_HEAVY_COMMANDS.maxHoldSeconds)} --on-deadline ${onDeadline} --label ${shellQuote(label)} -- bash -c ${shellQuote(command)}`;
+
+test("a rule's deadline answer reaches the wrapper, so the one shipped rule that skips is the only one that does", async () => {
+    const command = await rewritten({ command: "pnpm verify:turn" }, bashTmuxHooks([], undefined, undefined, undefined, heavy()));
+    expect(command).toBe(wrap("pnpm verify:turn", born(queued("pnpm verify:turn", "repo-verify", "heavy", 1, "skip")), "run"));
+});
 
 test("a heavy command is queued, between the demotion and the shell it runs in", async () => {
     const command = await rewritten({ command: "pnpm test" }, bashTmuxHooks([], undefined, undefined, undefined, heavy()));

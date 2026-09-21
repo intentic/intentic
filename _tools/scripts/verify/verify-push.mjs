@@ -19,6 +19,7 @@ import { createSteps } from "../lib/steps.mjs";
 import { ago, commitTree, freshVerdicts, treeHash, writeVerdict } from "../lib/tree-verdict.mjs";
 import { checkVerdicts, reportsAt } from "./check-snapshot.mjs";
 import { judgeAgainstBase } from "./turn-findings.mjs";
+import { vitestMaxWorkers } from "./vitest-workers.mjs";
 
 const root = repoRoot(import.meta.url);
 const hook = process.argv.includes("--hook");
@@ -310,9 +311,9 @@ const noteUncommitted = () => {
 };
 
 const suite = (buildOnly) => {
-    // INDEXNOW_ENABLED=0, or the site build polls the live site. VITEST_MAX_WORKERS mirrors the root `test` script's
-    // default, since `turbo run build test` bypasses that script; the caller's own value still wins.
-    const env = { ...process.env, INDEXNOW_ENABLED: "0", VITEST_MAX_WORKERS: process.env.VITEST_MAX_WORKERS ?? "4" };
+    // INDEXNOW_ENABLED=0, or the site build polls the live site. VITEST_MAX_WORKERS is sized to the cgroup as the root
+    // `test` script's is, since `turbo run build test` bypasses that script; the caller's own value still wins.
+    const env = { ...process.env, INDEXNOW_ENABLED: "0", VITEST_MAX_WORKERS: vitestMaxWorkers() };
     const linked = isLinkedWorktree();
     if (linked) {
         say("a linked worktree: `build` cannot run here (EXDEV), so tests run off the prepass dist as the turn-ending check does");

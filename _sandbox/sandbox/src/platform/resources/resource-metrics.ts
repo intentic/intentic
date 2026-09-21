@@ -16,11 +16,30 @@ import { queueSnapshot } from "./queue-slots.js";
 const SAMPLE_INTERVAL_MS = 60_000;
 export const RESOURCE_METRICS_FILE = "resource-metrics.jsonl";
 
-export type ProcessRole = "languageServer" | "searchEngine" | "agentRuntime" | "browser" | "git" | "translator" | "extension" | "terminal" | "other";
+export type ProcessRole =
+    | "languageServer"
+    | "searchEngine"
+    | "agentRuntime"
+    | "browser"
+    | "git"
+    | "translator"
+    | "extension"
+    | "terminal"
+    // A build, test, typecheck or lint run and the package manager driving it: the fan-out shape, which is what every
+    // memory peak this log has recorded was made of.
+    | "toolchain"
+    // An inference server this sandbox runs for itself.
+    | "localModel"
+    // A process of a nested Docker container: charged to this cgroup, visible to nothing else here.
+    | "container"
+    | "other";
 
-interface ProcessRow {
+export interface ProcessRow {
     readonly pid: number;
     readonly ppid: number;
+    // The kernel's comm: an executable's basename, 15 characters, and "MainThread" for every node process.
+    readonly name: string;
+    readonly program: string | undefined;
     readonly role: ProcessRole;
     readonly rssBytes: number;
     readonly swapBytes: number;
@@ -56,49 +75,135 @@ export const parseProcStatus = (text: string): ParsedProcStatus => ({
     threads: statusNumber(text, "Threads"),
 });
 
-// Aggregate only, never argv, which can carry a provider prompt or a path. Order matters: Playwright's node MCP must
-// match before its browser, the git fork broker before git.
-export const classifyProcess = (command: string): ProcessRole => {
+// Program names a row may be labelled with, longer spellings first so `vue-tsc` is not read as `tsc`. A label is one of
+// these words or nothing, never argv, which can carry a provider prompt or a path.
+const PROGRAMS = [
+    "vue-tsc",
+    "vitest",
+    "tsc",
+    "tsgo",
+    "turbo",
+    "vite",
+    "esbuild",
+    "tsdown",
+    "oxlint",
+    "prettier",
+    "knip",
+    "pnpm",
+    "npm",
+    "npx",
+    "yarn",
+    "bun",
+    "claude",
+    "codex",
+    "opencode",
+    "gemini",
+    "kimi",
+    "chrome",
+    "chromium",
+    "firefox",
+    "webkit",
+    "playwright",
+    "llama-server",
+    "ollama",
+    "tsserver",
+    "iq-engine",
+    "iq",
+    "git",
+    "tmux",
+    "postgres",
+    "nginx",
+    "dockerd",
+    "containerd",
+    "node",
+] as const;
+
+// A program name as a whole word or path component; `-` counts as a boundary so `google-chrome` and `containerd-shim`
+// name their programs, and `.` and `@` close one so `vite.js` and pnpm's `vitest@4.0.0` do too.
+const programPattern = (name: string): RegExp => new RegExp(`(^|[ /-])${name}([ /.@-]|$)`, "u");
+
+const PROGRAM_PATTERNS = PROGRAMS.map((name) => [name, programPattern(name)] as const);
+
+export const programOf = (command: string): string | undefined => {
     const value = command.toLowerCase();
-    if (/chrom(e|ium)|firefox|webkit|playwright|browser-mcp|browser_server/u.test(value)) {
-        return "browser";
+    return PROGRAM_PATTERNS.find(([, pattern]) => pattern.test(value))?.[0];
+};
+
+// The toolchain: what a turn's build, test or typecheck runs, and the package manager that drives it. `tsgo` counts
+// only as a one-shot check; serving `--lsp` it is a language server below.
+const TOOLCHAIN = [
+    "vue-tsc",
+    "vitest",
+    "tsc",
+    "turbo",
+    "vite",
+    "esbuild",
+    "tsdown",
+    "oxlint",
+    "prettier",
+    "knip",
+    "pnpm",
+    "npm",
+    "npx",
+    "yarn",
+    "bun",
+].map(programPattern);
+const TSGO = /(^|[ /])tsgo([ .]|$)/u;
+const isToolchain = (value: string): boolean => TOOLCHAIN.some((pattern) => pattern.test(value)) || (TSGO.test(value) && !/--lsp\b/u.test(value));
+
+// A nested container's process, by the cgroup it sits in, or the engine that runs it, by name.
+const CONTAINER_CGROUP = /[/]docker[/]/u;
+const CONTAINER = /(^|[ /])(dockerd|containerd|docker-proxy|docker-init|runc)([ /-]|$)/u;
+
+const LOCAL_MODEL = /(^|[ /-])(llama-server|llama-cli|llamafile|ollama)([ /.-]|$)/u;
+
+const BROWSER = /chrom(e|ium)|firefox|webkit|playwright|browser-mcp|browser_server/u;
+const LANGUAGE_SERVER =
+    /typescript-language-server|tsserver|rust-analyzer|pyright|pylsp|gopls|clangd|jdtls|solargraph|intelephense|language-server|lsp-daemon/u;
+const OWN_LANGUAGE_SERVER = /@intentic[/]lsp|_search[/]lsp|[/]lsp[/]dist[/]cli|(^|[ /])lsp([ /]|$)|(^|[ /])tsgo([ .]|$)/u;
+// The search engine is its own role because it is neither an LSP nor noise: it is a long-lived index host with a heap
+// cap of its own, and folding it into `other` is what hid 1.64 GB of growth behind a bucket nobody reads.
+const SEARCH_ENGINE = /iq-engine|(^|[ /])iq([ /]|$)/u;
+const TRANSLATOR = /cli-proxy-api|endpoint-translator|translator-proxy/u;
+const EXTENSION = /extension-backend|extension-host|backend-host-main|backend-supervisor/u;
+const GIT = /git.*fork.*broker|(^|[ /])git([ /]|$)/u;
+const AGENT_RUNTIME = /(^|[ /])(claude|codex|opencode|gemini|kimi)([ /]|$)|agent-runtime/u;
+const TERMINAL = /(^|[ /])(tmux|bash|zsh|fish|sshd)([ :/]|$)|node-pty/u;
+
+// In match order: the engine before whatever it runs, Playwright's node MCP before its browser, a one-shot tsgo before
+// the language server the same binary can be, the shell that drives a fan-out with the fan-out, the git fork broker
+// before git.
+const ROLE_RULES: readonly (readonly [ProcessRole, (value: string) => boolean])[] = [
+    ["container", (value) => CONTAINER.test(value)],
+    ["browser", (value) => BROWSER.test(value)],
+    ["localModel", (value) => LOCAL_MODEL.test(value)],
+    ["toolchain", isToolchain],
+    ["languageServer", (value) => LANGUAGE_SERVER.test(value) || OWN_LANGUAGE_SERVER.test(value)],
+    ["searchEngine", (value) => SEARCH_ENGINE.test(value)],
+    ["translator", (value) => TRANSLATOR.test(value)],
+    ["extension", (value) => EXTENSION.test(value)],
+    ["git", (value) => GIT.test(value)],
+    ["agentRuntime", (value) => AGENT_RUNTIME.test(value)],
+    ["terminal", (value) => TERMINAL.test(value)],
+];
+
+// Roles are aggregates; the process rows beside them carry comm and a PROGRAMS word, never argv, which can carry a
+// provider prompt or a path. A nested container's process is the container's whatever it runs, by the cgroup it sits in.
+export const classifyProcess = (command: string, cgroup = ""): ProcessRole => {
+    if (CONTAINER_CGROUP.test(cgroup)) {
+        return "container";
     }
-    const languageServer =
-        /typescript-language-server|tsserver|rust-analyzer|pyright|pylsp|gopls|clangd|jdtls|solargraph|intelephense|language-server|lsp-daemon/u.test(
-            value,
-        ) || /@intentic[/]lsp|_search[/]lsp|[/]lsp[/]dist[/]cli|(^|[ /])lsp([ /]|$)|(^|[ /])tsgo([ .]|$)/u.test(value);
-    if (languageServer) {
-        return "languageServer";
-    }
-    // The search engine is its own role because it is neither an LSP nor noise: it is a long-lived index host with a
-    // heap cap of its own, and folding it into `other` is what hid 1.64 GB of growth behind a bucket nobody reads.
-    if (/iq-engine|(^|[ /])iq([ /]|$)/u.test(value)) {
-        return "searchEngine";
-    }
-    if (/cli-proxy-api|endpoint-translator|translator-proxy/u.test(value)) {
-        return "translator";
-    }
-    if (/extension-backend|extension-host|backend-host-main|backend-supervisor/u.test(value)) {
-        return "extension";
-    }
-    if (/git.*fork.*broker|(^|[ /])git([ /]|$)/u.test(value)) {
-        return "git";
-    }
-    if (/(^|[ /])(claude|codex|opencode|gemini|kimi)([ /]|$)|agent-runtime/u.test(value)) {
-        return "agentRuntime";
-    }
-    if (/(^|[ /])(tmux|bash|zsh|fish|sshd)([ :/]|$)|node-pty/u.test(value)) {
-        return "terminal";
-    }
-    return "other";
+    const value = command.toLowerCase();
+    return ROLE_RULES.find(([, matches]) => matches(value))?.[0] ?? "other";
 };
 
 const readProcess = async (pidText: string): Promise<ProcessRow | undefined> => {
     try {
-        const [statusRaw, commandRaw, stat] = await Promise.all([
+        const [statusRaw, commandRaw, stat, cgroup] = await Promise.all([
             readFile(`/proc/${pidText}/status`, "utf8"),
             readFile(`/proc/${pidText}/cmdline`, "utf8").catch(() => ""),
             readFile(`/proc/${pidText}/stat`, "utf8"),
+            readFile(`/proc/${pidText}/cgroup`, "utf8").catch(() => ""),
         ]);
         const status = parseProcStatus(statusRaw);
         const proc = parseProcStat(stat);
@@ -109,7 +214,9 @@ const readProcess = async (pidText: string): Promise<ProcessRow | undefined> => 
         return {
             pid: Number(pidText),
             ppid: proc.ppid,
-            role: classifyProcess(command),
+            name: status.name,
+            program: programOf(command),
+            role: classifyProcess(command, cgroup),
             rssBytes: status.rssBytes,
             swapBytes: status.swapBytes,
             threads: status.threads,
@@ -140,6 +247,26 @@ const addProcess = (summary: ProcessSummary, row: ProcessRow, previousCpu: Reado
     summary.cpuTicksSincePreviousSample += previous === undefined ? 0 : Math.max(0, row.cpuTicks - previous);
 };
 
+// One row per heavy process, so a peak can be attributed after the fact; the roles above only say which bucket it was in.
+export interface TopProcess {
+    readonly pid: number;
+    readonly name: string;
+    readonly program: string | undefined;
+    readonly role: ProcessRole;
+    readonly rssBytes: number;
+    readonly swapBytes: number;
+    readonly threads: number;
+}
+
+const TOP_PROCESSES = 8;
+
+// Heaviest first by resident plus swapped, since a paged-out process is still the one holding the memory.
+export const topProcesses = (rows: readonly ProcessRow[], limit: number = TOP_PROCESSES): TopProcess[] =>
+    rows
+        .toSorted((left, right) => right.rssBytes + right.swapBytes - (left.rssBytes + left.swapBytes))
+        .slice(0, limit)
+        .map(({ pid, name, program, role, rssBytes, swapBytes, threads }) => ({ pid, name, program, role, rssBytes, swapBytes, threads }));
+
 const descendantsOf = (rows: readonly ProcessRow[], parentPid: number): ReadonlySet<number> => {
     const byPid = new Map(rows.map((row) => [row.pid, row]));
     const descendants = new Set<number>();
@@ -164,6 +291,7 @@ const processSnapshot = async (
     readonly total: ProcessSummary;
     readonly descendants: ProcessSummary;
     readonly byRole: Record<ProcessRole, ProcessSummary>;
+    readonly top: TopProcess[];
     readonly cpuByPid: ReadonlyMap<number, number>;
 }> => {
     const entries = await readdir("/proc").catch(() => []);
@@ -182,6 +310,9 @@ const processSnapshot = async (
         translator: emptyProcessSummary(),
         extension: emptyProcessSummary(),
         terminal: emptyProcessSummary(),
+        toolchain: emptyProcessSummary(),
+        localModel: emptyProcessSummary(),
+        container: emptyProcessSummary(),
         other: emptyProcessSummary(),
     };
     for (const row of rows) {
@@ -191,7 +322,7 @@ const processSnapshot = async (
             addProcess(descendants, row, previousCpu);
         }
     }
-    return { total, descendants, byRole, cpuByPid: new Map(rows.map((row) => [row.pid, row.cpuTicks])) };
+    return { total, descendants, byRole, top: topProcesses(rows), cpuByPid: new Map(rows.map((row) => [row.pid, row.cpuTicks])) };
 };
 
 const activeResources = (): Record<string, number> => {
@@ -412,7 +543,7 @@ const createResourceSampler = (owners: () => Readonly<Record<string, unknown>> =
                 gitSpawn: gitSpawnStats(),
             },
             system,
-            processes: { total: processes.total, descendants: processes.descendants, byRole: processes.byRole },
+            processes: { total: processes.total, descendants: processes.descendants, byRole: processes.byRole, top: processes.top },
             queue,
             owners: owners(),
         };

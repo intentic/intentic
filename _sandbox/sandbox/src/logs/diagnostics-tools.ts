@@ -248,7 +248,10 @@ export const createDiagnosticsServer = (deps: DiagnosticsToolDeps): McpSdkServer
                 "One field of the sandbox's resource series over time, sampled once a minute. Answers what a log cannot: was the " +
                     "machine out of memory, was the event loop stalling, who was holding the RAM, did the kernel kill anything. " +
                     "Useful paths: `system.cgroup.event_oom_kill` (processes the kernel killed), " +
-                    "`processes.byRole.browser.rssBytes` (and agentRuntime, searchEngine, terminal, languageServer, git, extension), " +
+                    "`processes.byRole.toolchain.rssBytes` (a build, test or typecheck fan-out; also browser, agentRuntime, localModel, " +
+                    "container, searchEngine, terminal, languageServer, git, extension), " +
+                    "`processes.top` (the eight heaviest processes with name, program and role; an array, so read a whole sample with " +
+                    "`tail -n 1 /history/logs/resource-metrics.jsonl`), " +
                     "`window.eventLoop.delayP99Ms`, `window.cpu.utilizationPercent`, `daemon.memory.rssBytes`, " +
                     "`system.pressure.memory.some`, `system.loadAverage`, and `queue.heavy.longestHoldSeconds` " +
                     "(with .held and .slots) for a heavy command that took a queue slot and did not give it back.",

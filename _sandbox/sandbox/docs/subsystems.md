@@ -126,7 +126,9 @@ A reader's tour of `src/`: which directory answers which question, and the file 
   (`memory-admission.ts`, previously reachable only from the pre-push check) as a command, so the numbers that
   refuse a turn and the numbers that hold a suite are one set of numbers. Both are bounded and both fail open:
   past the deadline the command runs anyway, because a queue that can block forever turns one stuck suite into
-  a dead sandbox. Why it exists: nice/ionice ration CPU, and a monorepo fan-out exhausts MEMORY, which no
+  a dead sandbox — except under a rule that answers `onDeadline: "skip"`, which exits 75 having run nothing:
+  the repo-wide verification, where two at once is the measured peak (24.9 GiB against a 16 GiB cap) and a check
+  that did not run is reported by `deps.verify_deferred` and repeated by the next land. Why it exists: nice/ionice ration CPU, and a monorepo fan-out exhausts MEMORY, which no
   scheduler class rations — on 2026-08-25 09:07-09:29 four sessions' fan-outs pinned this cgroup at 16.00 GiB
   with memory PSI `full` at 88%, load1 at 312, and the daemon's event loop stalled for 615s; turbo's
   `concurrency: 4` and `VITEST_MAX_WORKERS=4` each bound ONE invocation and know nothing of the other three.
