@@ -29,7 +29,7 @@ import type { Services } from "../../composition.js";
 import type { OrpcContext } from "../../app-env.js";
 import type { DependencyLandOrigin } from "../../workspace/deps/dependency-origin.js";
 import { REPO_SYNC_NOTE_TITLE, syncAdvisory, syncWorkspaceRepos } from "../../workspace/layout/sync-repos.js";
-import { resolveWithin } from "../../workspace/files/workspace-files-paths.js";
+import { resolveExistingWithin, resolveWithin } from "../../workspace/files/workspace-files-paths.js";
 import { startAnchor, type TurnPlacement } from "../../agents/worktrees/isolation.js";
 import { holdAccount } from "../../runtimes/claude/claude-credentials.js";
 import { isIsolated } from "../../agents/registry/agents-store.js";
@@ -1094,7 +1094,8 @@ async function* runTurn(
     // Shared with the boot-time condition-watch restore, so a drifted second copy can't quietly stop working.
     const cliEnv = await turnCliEnv(services);
     mark("env");
-    // Attachments arrive workspace-relative; resolve to absolute paths for the provider and reject escapes.
+    // Attachments arrive workspace-relative; resolve to absolute paths for the provider and reject escapes. The run
+    // route refuses these at the door, so reaching this is a turn replayed from a record (resume, fork, a runner).
     const attachmentPaths: string[] = [];
     for (const rel of input.attachments ?? []) {
         const abs = resolveWithin(services.workspace.root, rel);
@@ -1105,6 +1106,10 @@ async function* runTurn(
         }
         attachmentPaths.push(abs);
     }
+    // Mentions are a tokenizer's reading of the message text, not files the user picked: one that escapes or names
+    // nothing is dropped, since a `@path` pasted inside terminal output must not be able to kill the turn.
+    const mentioned = await resolveExistingWithin(services.workspace.root, input.mentions);
+    attachmentPaths.push(...mentioned.filter((abs) => !attachmentPaths.includes(abs)));
     // The editor-context chip's file rides workspace-relative too, same escape guard as attachments.
     if (input.editorContext !== undefined && resolveWithin(services.workspace.root, input.editorContext.file) === undefined) {
         yield { kind: "error", message: `invalid editor context path: ${input.editorContext.file}` };
@@ -1645,6 +1650,12 @@ export const createAgentRoutes = (services: Services) => {
                 throw new ORPCError("BAD_REQUEST", { message: "conversationId required" });
             }
             const conversationId = input.conversationId;
+            // Refused before the turn exists, so the words stay in the composer: an error frame instead would strand
+            // them in a transcript whose turn never ran. Mentions get no such veto; they are guesses, not choices.
+            const escaping = (input.attachments ?? []).find((rel) => resolveWithin(services.workspace.root, rel) === undefined);
+            if (escaping !== undefined) {
+                throw new ORPCError("BAD_REQUEST", { message: `invalid attachment path: ${escaping}` });
+            }
             // The card has to work in the part of the workspace this caller holds, and a guest has to name one at all;
             // checked before anything is started. An unfenced caller pays no read for this.
             await refuseUnlessReachable(services, context.identity, input.actsAs);
@@ -1748,8 +1759,9 @@ export const createAgentRoutes = (services: Services) => {
                 const delivered = await client.steer({
                     conversationId: input.conversationId,
                     text: input.text,
-                    ...(input.attachments !== undefined ? { attachments: [...input.attachments] } : {}),
-                    ...(input.editorContext !== undefined ? { editorContext: input.editorContext } : {}),
+                    attachments: input.attachments?.slice(),
+                    mentions: input.mentions?.slice(),
+                    editorContext: input.editorContext,
                 });
                 if (delivered.invalid !== undefined) {
                     throw new ORPCError("BAD_REQUEST", { message: delivered.invalid });
@@ -1758,7 +1770,7 @@ export const createAgentRoutes = (services: Services) => {
                     throw new ORPCError("NOT_FOUND", { message: "no steerable turn running for that conversation" });
                 }
             } else {
-                const composed = composeSteerText(services, input);
+                const composed = await composeSteerText(services, input);
                 if (composed.invalid !== undefined) {
                     throw new ORPCError("BAD_REQUEST", { message: composed.invalid });
                 }

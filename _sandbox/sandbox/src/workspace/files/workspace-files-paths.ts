@@ -1,4 +1,4 @@
-import { realpath } from "node:fs/promises";
+import { realpath, stat } from "node:fs/promises";
 import { basename, dirname, join, relative, resolve, sep } from "node:path";
 import { isLockedWorkspacePath, isReviewableLockedPath } from "@intentic/sandbox-contract";
 
@@ -33,6 +33,27 @@ export const realPathOf = async (absPath: string): Promise<string> => {
         missing.push(basename(head));
         head = parent;
     }
+};
+
+// The subset of relPaths that resolve inside `dir` AND exist there, in the order given, deduped. For paths nobody
+// chose (a tokenizer's reading of message text): a miss is dropped, never raised.
+export const resolveExistingWithin = async (dir: string, relPaths: readonly string[] = []): Promise<string[]> => {
+    const found: string[] = [];
+    for (const rel of relPaths) {
+        const abs = resolveWithin(dir, rel);
+        if (abs === undefined || found.includes(abs)) {
+            continue;
+        }
+        if (
+            await stat(abs).then(
+                () => true,
+                () => false,
+            )
+        ) {
+            found.push(abs);
+        }
+    }
+    return found;
 };
 
 // Resolves absPath for real and checks whether it lands under root's real path, or undefined if not.

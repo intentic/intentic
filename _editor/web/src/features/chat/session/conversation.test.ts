@@ -1204,6 +1204,20 @@ describe(`Conversation`, () => {
         await turn;
     });
 
+    // A `@path` is the tokenizer's reading of the words, and pasted terminal output is full of the shape (curl's
+    // `@file`): merged into the chips, one of those refused the whole message. Absolute paths never ride at all, and
+    // the rest ride a field the daemon may drop from.
+    it(`sends @-mentioned paths apart from the staged chips, and never one from outside the workspace`, async () => {
+        const conversation = new Conversation(`c1`);
+        sandboxRequestMock.mockImplementation(sseResponse([{ kind: `delta`, text: `ok` }]));
+
+        const chip = `${STATE_DIR}/records/artifacts/attachments/u1/shot.png`;
+        await conversation.send(`check @src/app.ts against: curl --data-binary @/tmp/probe/req.json`, settings, [{ name: `shot.png`, path: chip }]);
+
+        const started = sandboxRequestMock.mock.calls.find(([path]) => path === `/agent`);
+        expect(JSON.parse(started![1]!.body as string)).toMatchObject({ attachments: [chip], mentions: [`src/app.ts`] });
+    });
+
     // The queue rides the tab snapshot, so what is still in it is what a reload brings back. A window can die between
     // the press and the daemon's ack (a dev-server reload, a closed tab); dropping the message at the POST would leave
     // the words nowhere and no turn anywhere.

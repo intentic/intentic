@@ -3,6 +3,7 @@ import { CONVERSATION_ID } from "../ids/conversation-ids.js";
 import { ModelRoleSchema } from "../models/model-roles.js";
 import { NATIVE_PROVIDERS } from "../models/provider-specs.js";
 import { AgentPlacementSchema } from "../protocol/runner-protocol.js";
+import { MENTION_LIMIT } from "../text/mentions.js";
 import { entryId } from "./internal.js";
 // Agent runtimes the daemon can serve: native providers have dedicated adapters, `endpoint/<id>` names an installed
 // endpoint capability, anything else is an ACP agent capability id. A bare string, not an enum, so an unknown id is a
@@ -136,6 +137,15 @@ export const AgentTurnSchema = z
             .max(20)
             .optional()
             .describe("Files to hand the agent along with the prompt, as workspace paths. Upload them first."),
+        // Read out of the prompt's own `@path` tokens rather than chosen: a tokenizer over pasted text guesses, so a
+        // miss here is dropped and only a chosen attachment can refuse the turn.
+        mentions: z
+            .array(z.string().min(1))
+            .max(MENTION_LIMIT)
+            .optional()
+            .describe(
+                "Workspace paths the prompt mentions with `@`. Unlike attachments, one that escapes the workspace or names no file is ignored rather than refused.",
+            ),
         // Which provider serves the turn, absent = claude; a sessionId resumes only on the provider that minted it.
         agent: AgentProviderSchema.optional().describe("Which model provider serves this turn. Leave it out for Claude."),
         // Which agentic loop runs the turn, absent = provider's own; "claude-code" forces the SDK loop for any

@@ -1,4 +1,4 @@
-import { mkdtempSync } from "node:fs";
+import { mkdtempSync, writeFileSync } from "node:fs";
 
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -12,6 +12,7 @@ import { sandboxIdFromToken, sha256Hex } from "@intentic/sandbox-contract/tunnel
 import { expect, test, vi } from "vitest";
 
 import { createApp } from "./app.js";
+import { workspacePaths } from "./workspace/workspace.js";
 import { PasskeyRequiredError } from "./auth/auth.js";
 import { createAuthConnections } from "./auth/connections.js";
 
@@ -1084,10 +1085,40 @@ test("agent.run folds attachments into the claude prompt as absolute paths, allo
     expect(seen?.prompt).toContain("/work/.intentic/records/artifacts/attachments/x/shot.png");
 });
 
-test("agent.run rejects an attachment path escaping the workspace with an error frame", async () => {
+// Refused at the door, not mid-stream: an error frame arrives after the message is already in the transcript, which
+// strands the words the user typed instead of leaving them in the composer to fix.
+test("agent.run refuses an attachment path escaping the workspace before the turn exists", async () => {
     const client = clientFor(createApp(services()));
-    const { facts } = await runAgentTurn(client, { prompt: "look", attachments: ["../escape.png"] });
-    expect(facts).toEqual([{ kind: "error", message: "invalid attachment path: ../escape.png" }]);
+    await expect(client.agent.run({ prompt: "look", conversationId: "conv-escape", attachments: ["../escape.png"] })).rejects.toMatchObject({
+        code: "BAD_REQUEST",
+        message: "invalid attachment path: ../escape.png",
+    });
+});
+
+// The composer reads `@path` out of the words, so pasted terminal output (curl's `@file`, a `ps` dump) proposes files
+// nobody chose. A mention is therefore dropped when it doesn't resolve, where a chosen attachment refuses the turn.
+test("agent.run drops a mention that escapes or names no file, and runs the turn with the rest", async () => {
+    const root = mkdtempSync(join(tmpdir(), "mentions-"));
+    writeFileSync(join(root, "notes.md"), "read me");
+    let seen: { prompt?: string } | undefined;
+    const client = clientFor(
+        createApp(
+            services({
+                workspace: workspacePaths(root),
+                async *agent(request) {
+                    seen = request;
+                    yield { kind: "done" };
+                },
+            }),
+        ),
+    );
+
+    const { facts } = await runAgentTurn(client, { prompt: "look", mentions: ["/tmp/probe/req.json", "gone.md", "notes.md"] });
+
+    expect(facts.filter((fact) => fact.kind === "error")).toEqual([]);
+    expect(seen?.prompt).toContain(`${root}/notes.md`);
+    expect(seen?.prompt).not.toContain("req.json");
+    expect(seen?.prompt).not.toContain("gone.md");
 });
 
 // Stopping a turn is not a failure: every adapter reports a hard-cancel's unwind as an error frame from the inside.

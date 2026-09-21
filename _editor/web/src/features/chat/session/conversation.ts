@@ -973,11 +973,9 @@ export class Conversation {
         const controller = new AbortController();
         this.beginTurn(controller, Date.now());
 
-        // Uploaded attachments plus @-mentioned paths, one wire field; mentions skip chips, already visible inline.
-        const attachmentPaths = [
-            ...attachments.map((file) => file.path),
-            ...mentionPaths(text).filter((path) => !attachments.some((file) => file.path === path)),
-        ];
+        // Chips and @-mentions ride apart, since only a chip was chosen; mentions skip chips, already visible inline.
+        const attachmentPaths = attachments.map((file) => file.path);
+        const mentionedPaths = mentionPaths(text).filter((path) => !attachmentPaths.includes(path));
         try {
             const response = await sandboxRequestVia(this.at, `/agent`, {
                 method: `POST`,
@@ -996,6 +994,7 @@ export class Conversation {
                         resume,
                         forkOf,
                         attachmentPaths,
+                        mentionedPaths,
                         editorContext,
                     }),
                 ),
@@ -1306,10 +1305,12 @@ export class Conversation {
     // The transcript write isn't done here: the daemon's `steer` frame draws the bubble everywhere.
     private async deliverSteer(message: QueuedMessage): Promise<boolean> {
         const paths = message.attachments.map((file) => file.path);
+        const mentioned = mentionPaths(message.text).filter((path) => !paths.includes(path));
         const delivered = await postTurnControl(this.at, `/agent/steer`, {
             conversationId: this.conversationId,
             text: message.text,
             ...(paths.length > 0 ? { attachments: paths } : {}),
+            ...(mentioned.length > 0 ? { mentions: mentioned } : {}),
             ...(message.editorContext !== undefined ? { editorContext: message.editorContext } : {}),
         });
         if (!delivered) {

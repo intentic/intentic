@@ -19,6 +19,15 @@ key that already opens a list. `@intentic` sets the persona, `@sonnet` the model
 runner. An empty `@` lists each setting with its current value; Enter on one drills in (`@model:`), and the drill is
 the token text itself, so Backspace walks out and nothing is remembered between keystrokes.
 
+## A mention is a guess, a chip is a choice
+
+Reading `@path` out of free text means reading it out of pasted text too, and terminal output is full of the shape:
+`curl --data-binary @/tmp/req.json`, a `ps` dump quoting that command, a `pnpm list` line. So the two travel in
+separate wire fields. `attachments` is what the user staged — an unresolvable one refuses the turn at the door
+(BAD_REQUEST), leaving the words in the composer to fix. `mentions` is what the tokenizer read — one that escapes the
+workspace or names no file is dropped, and the turn runs. The tokenizer refuses absolute, home, drive-letter and
+climbing tokens outright, since no mention can be one.
+
 ## A picked setting leaves the text
 
 A setting is a property of the turn. Its display is the pill row, which already shows it. Leaving `@intentic` inline

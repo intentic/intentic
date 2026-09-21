@@ -130,8 +130,8 @@ export const createRunnerService = (services: Services, identity: RunnerIdentity
         // closed.
         reply: os.reply.handler(async ({ input }) => ({ applied: (await applyReply(services, input)) === "settled" })),
         // Composed here deliberately: the attachment note names absolute paths meaningful only in this workspace.
-        steer: os.steer.handler(({ input }) => {
-            const composed = composeSteerText(services, input);
+        steer: os.steer.handler(async ({ input }) => {
+            const composed = await composeSteerText(services, input);
             if (composed.invalid !== undefined) {
                 return { applied: false, invalid: composed.invalid };
             }

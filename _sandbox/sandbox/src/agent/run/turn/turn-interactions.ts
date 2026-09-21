@@ -1,7 +1,7 @@
 import type { AgentReply, EditorContext } from "@intentic/sandbox-contract";
 import type { Caller } from "../../../auth/auth.js";
 import type { Services } from "../../../composition.js";
-import { resolveWithin } from "../../../workspace/files/workspace-files-paths.js";
+import { resolveExistingWithin, resolveWithin } from "../../../workspace/files/workspace-files-paths.js";
 import { conversationOf, resolveRequest } from "../../tools/agent-requests.js";
 import { steerTurn, stopTurn } from "../../checkpoints/agent-steering.js";
 import { withAttachmentNote } from "../../prompt/attachment-note.js";
@@ -50,14 +50,16 @@ export const applyReply = async (
 export interface SteerInput {
     readonly text: string;
     readonly attachments?: readonly string[] | undefined;
+    readonly mentions?: readonly string[] | undefined;
     readonly editorContext?: EditorContext | undefined;
 }
 
 // Composed where the steer is delivered, not pre-composed: attachments resolve against the delivering daemon's own
-// workspace, since a remote turn's paths differ. An escaping path is a refusal (BAD_REQUEST), not a sanitisation.
+// workspace, since a remote turn's paths differ. An escaping attachment is a refusal (BAD_REQUEST), not a
+// sanitisation; a mention read out of the words is dropped instead, since nobody chose it.
 export type SteerText = { readonly text: string; readonly invalid?: undefined } | { readonly invalid: string; readonly text?: undefined };
 
-export const composeSteerText = (services: Services, input: SteerInput): SteerText => {
+export const composeSteerText = async (services: Services, input: SteerInput): Promise<SteerText> => {
     const paths: string[] = [];
     for (const rel of input.attachments ?? []) {
         const abs = resolveWithin(services.workspace.root, rel);
@@ -66,6 +68,8 @@ export const composeSteerText = (services: Services, input: SteerInput): SteerTe
         }
         paths.push(abs);
     }
+    const mentioned = await resolveExistingWithin(services.workspace.root, input.mentions);
+    paths.push(...mentioned.filter((abs) => !paths.includes(abs)));
     if (input.editorContext !== undefined && resolveWithin(services.workspace.root, input.editorContext.file) === undefined) {
         return { invalid: `invalid editor context path: ${input.editorContext.file}` };
     }

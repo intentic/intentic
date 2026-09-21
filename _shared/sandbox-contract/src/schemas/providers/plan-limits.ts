@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { TRANSLATOR_PROVIDERS, type TranslatorProvider } from "../../models/provider-specs.js";
 import { AgentHarnessSchema, AgentProviderSchema, EditorContextSchema } from "../agent.js";
+import { MENTION_LIMIT } from "../../text/mentions.js";
 // Headroom is one shape shared by every provider, not a Claude idea others imitate: a native account and a routed
 // subscription differ in who holds the credential, never in what a reading is. Every surface that draws a percentage
 // reads this one type.
@@ -218,6 +219,14 @@ export const SteerSchema = z
             .max(20)
             .optional()
             .describe("Files to send with it, as workspace paths. A screenshot dropped in mid-turn with no words is a legitimate thing to send."),
+        // Same split as a turn's: a guessed path is dropped, only a chosen attachment can refuse the steer.
+        mentions: z
+            .array(z.string().min(1))
+            .max(MENTION_LIMIT)
+            .optional()
+            .describe(
+                "Workspace paths the message mentions with `@`. Unlike attachments, one that escapes the workspace or names no file is ignored rather than refused.",
+            ),
         editorContext: EditorContextSchema.optional().describe("What you have open, folded in so that pointing words resolve."),
     })
     // An attachment-only steer (a screenshot dropped in mid-turn) is legal; an entirely empty one is not.

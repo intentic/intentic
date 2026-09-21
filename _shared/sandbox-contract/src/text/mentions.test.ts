@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { mentionedPathTokens, mentionPaths } from "./mentions.js";
+import { AgentTurnSchema } from "../schemas/agent.js";
+import { MENTION_LIMIT, mentionedPathTokens, mentionPaths } from "./mentions.js";
 
 describe(`mentionPaths`, () => {
     it(`extracts path-looking tokens, deduped, with trailing punctuation stripped`, () => {
@@ -12,6 +13,23 @@ describe(`mentionPaths`, () => {
 
     it(`skips scoped package script prefixes in copied pnpm output`, () => {
         expect(mentionPaths(`@intentic/iq-engine:test: failed\nsee @src/app.ts`)).toEqual([`src/app.ts`]);
+    });
+
+    // A pasted `ps` dump attached a file nobody chose and the turn died on it: curl's `@file` argument is a mention's
+    // exact shape.
+    it(`skips curl's @file argument and anything else outside the workspace`, () => {
+        expect(mentionPaths(`curl --data-binary @/tmp/probe/req.json localhost`)).toEqual([]);
+        expect(mentionPaths(`@~/notes.md @C:\\tmp\\out.log @../outside.bin @.. done`)).toEqual([]);
+        expect(mentionPaths(`curl -d @/tmp/req.json x, then read @src/app.ts`)).toEqual([`src/app.ts`]);
+    });
+
+    // The wire takes MENTION_LIMIT paths: past it the schema would refuse the whole message, which is the failure a
+    // pasted log must not be able to cause.
+    it(`stops at the limit a turn can carry rather than overflowing it`, () => {
+        const pasted = Array.from({ length: MENTION_LIMIT + 5 }, (_, index) => `@src/file${index}.ts`).join(` `);
+
+        expect(mentionPaths(pasted)).toHaveLength(MENTION_LIMIT);
+        expect(AgentTurnSchema.safeParse({ prompt: pasted, mentions: mentionPaths(pasted) }).success).toBe(true);
     });
 });
 

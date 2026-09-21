@@ -18,4 +18,13 @@ export const mentionedPathTokens = (text: string): string[] => {
 // Excludes a copied pnpm script prefix (`@scope/package:test:`), which shares the opening shape but is not a file;
 // accepting it creates a phantom attachment.
 const PACKAGE_SCRIPT = /^[^/]+\/[^/]+:[^/]+$/u;
-export const mentionPaths = (text: string): string[] => mentionedPathTokens(text).filter((token) => !PACKAGE_SCRIPT.test(token));
+// A mention names a workspace-relative path and nothing else: the picker inserts one from the workspace index, an
+// upload mints one under the state dir. An absolute, home, drive-letter or climbing token is therefore never a
+// mention, and curl's `@file` argument (`--data-binary @/tmp/req.json`) wears exactly that shape in pasted output.
+const OUTSIDE_WORKSPACE = /^(?:[/~]|[A-Za-z]:[\\/]|\.\.(?:[/\\]|$))/u;
+// How many a turn may carry; the tokenizer stops here rather than letting a pasted log's 21st token refuse the turn.
+export const MENTION_LIMIT = 20;
+export const mentionPaths = (text: string): string[] =>
+    mentionedPathTokens(text)
+        .filter((token) => !PACKAGE_SCRIPT.test(token) && !OUTSIDE_WORKSPACE.test(token))
+        .slice(0, MENTION_LIMIT);

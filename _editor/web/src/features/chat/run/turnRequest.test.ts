@@ -27,6 +27,7 @@ describe(`turnRequestBody`, () => {
         resume: undefined,
         forkOf: undefined,
         attachmentPaths: [],
+        mentionedPaths: [],
         editorContext: undefined,
     } as const;
 
@@ -109,5 +110,14 @@ describe(`turnRequestBody`, () => {
 
         const full = wire(turnRequestBody({ ...base, title: `Do the thing`, attachmentPaths: [`a.png`], editorContext: { file: `src/app.ts` } }));
         expect(full).toMatchObject({ title: `Do the thing`, attachments: [`a.png`], editorContext: { file: `src/app.ts` } });
+    });
+
+    // Apart on the wire: the daemon refuses a turn over a chip it can't resolve and drops a mention it can't,
+    // so merging them would let a `@path` inside a paste kill the turn.
+    it(`carries mentioned paths in their own field, never among the chosen attachments`, () => {
+        expect(wire(turnRequestBody(base))).not.toHaveProperty(`mentions`);
+
+        const sent = wire(turnRequestBody({ ...base, attachmentPaths: [`a.png`], mentionedPaths: [`src/app.ts`] }));
+        expect(sent).toMatchObject({ attachments: [`a.png`], mentions: [`src/app.ts`] });
     });
 });

@@ -61,6 +61,16 @@ const setFlags = (settings: TurnSettings): { fast?: true; autoPicked?: true } =>
     ...(settings.autoPicked === true ? { autoPicked: true as const } : {}),
 });
 
+// Two fields, not one: a chip is a file the user chose, so an unresolvable one refuses the send, while a mention is
+// this tokenizer's reading of their words, so an unresolvable one is the daemon's to drop. Each omitted when empty.
+const filePaths = (
+    attachments: readonly string[],
+    mentions: readonly string[],
+): { attachments?: readonly string[]; mentions?: readonly string[] } => ({
+    ...(attachments.length > 0 ? { attachments } : {}),
+    ...(mentions.length > 0 ? { mentions } : {}),
+});
+
 // Builds the turn request body. An omitted `model`/`harness`/`sessionId` each resolve to the daemon's own
 // default; `isolated` picks the conversation's worktree over /work.
 export const turnRequestBody = (input: {
@@ -83,8 +93,11 @@ export const turnRequestBody = (input: {
     readonly resume: SessionRef | undefined;
     // Fork point: the daemon copies rows from the source's record before running; `files` picks then or now.
     readonly forkOf: { readonly conversationId: string; readonly keep: number; readonly files: "then" | "now" } | undefined;
-    // Uploaded attachments plus @-mentioned workspace paths; the daemon resolves both the same way.
+    // Files the user staged as chips. A path the daemon can't resolve refuses the send, since the user chose it.
     readonly attachmentPaths: readonly string[];
+    // Workspace paths read out of the text's own `@` tokens. Ride apart from the chips: nobody chose them, so the
+    // daemon drops one that doesn't resolve rather than refusing the turn over a word in a paste.
+    readonly mentionedPaths: readonly string[];
     readonly editorContext: EditorContext | undefined;
 }) => {
     // Whether this body targets this sandbox; fields scoped to another box's store are dropped otherwise.
@@ -93,7 +106,7 @@ export const turnRequestBody = (input: {
         prompt: input.text,
         // Seeds a fresh registry entry's title; an existing entry keeps its own.
         ...(input.title !== null ? { title: input.title } : {}),
-        ...(input.attachmentPaths.length > 0 ? { attachments: input.attachmentPaths } : {}),
+        ...filePaths(input.attachmentPaths, input.mentionedPaths),
         agent: input.settings.agent,
         // Isolated runs in this conversation's own worktree (branch agent/<conversationId>), not /work.
         conversationId: input.conversationId,

@@ -26,6 +26,7 @@ export const runnerContract = {
                 conversationId: z.string().min(1),
                 text: z.string(),
                 attachments: z.array(z.string()).optional(),
+                mentions: z.array(z.string()).optional(),
                 editorContext: EditorContextSchema.optional(),
             }),
         )

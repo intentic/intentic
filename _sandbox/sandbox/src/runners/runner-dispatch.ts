@@ -41,8 +41,11 @@ const syncRepos = async (services: Services, worktree: ConversationWorktree): Pr
     return repos;
 };
 
-const inlineAttachments = async (services: Services, paths: readonly string[] | undefined): Promise<RunnerTurn["attachments"]> => {
-    if (paths === undefined || paths.length === 0) {
+// Chips and mentions alike: the runner resolves no path of the parent's, so everything the prompt points at ships as
+// bytes.
+const inlineAttachments = async (services: Services, turn: AgentTurn): Promise<RunnerTurn["attachments"]> => {
+    const paths = [...(turn.attachments ?? []), ...(turn.mentions ?? [])];
+    if (paths.length === 0) {
         return undefined;
     }
     const files: { path: string; bytesBase64: string }[] = [];
@@ -127,7 +130,7 @@ export async function* dispatchRemoteTurn(
             ...(input.account !== undefined ? { account: input.account } : {}),
             ...(input.sessionId !== undefined ? { sessionId: input.sessionId } : {}),
         };
-        const attachments = await inlineAttachments(services, input.attachments);
+        const attachments = await inlineAttachments(services, input);
         for await (const event of await client.runTurn(
             { ...turn, ...(attachments !== undefined ? { attachments } : {}) },
             signal !== undefined ? { signal } : {},
