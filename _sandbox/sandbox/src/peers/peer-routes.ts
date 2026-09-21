@@ -1,6 +1,6 @@
 import { upgradeWebSocket } from "@hono/node-server";
 import { errorMessage } from "@intentic/base/errors";
-import { MCP_PROTOCOL_VERSION } from "@intentic/sandbox-contract/peer-mcp-server";
+import { converterReadable, MCP_PROTOCOL_VERSION } from "@intentic/sandbox-contract/peer-mcp-server";
 import { createORPCClient } from "@orpc/client";
 import { RPCLink } from "@orpc/client/websocket";
 import type { Context, Hono } from "hono";
@@ -142,8 +142,12 @@ const forwarded = async (
     try {
         const answer = await hub.mcp(id, payload);
         if (request.method === "tools/list") {
-            hub.rememberTools(id, (answer as { result?: unknown }).result);
-            return answer;
+            // The peer is software on someone else's machine, at whatever build they last installed; what it publishes
+            // still has to convert for a local model, where one unconvertible schema fails the whole turn's tool set.
+            const listed = (answer as { result?: unknown }).result;
+            const result = converterReadable(listed);
+            hub.rememberTools(id, result);
+            return listed === undefined ? answer : { ...(answer as Record<string, unknown>), result };
         }
         if (request.method === "tools/call" && sealAnswer !== undefined) {
             return sealAnswer(id, typeof request.params?.name === "string" ? request.params.name : "", answer);

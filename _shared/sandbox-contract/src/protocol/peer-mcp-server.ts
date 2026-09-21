@@ -22,6 +22,27 @@ export interface McpTool<Ctx> {
 
 export const textResult = (text: string, isError = false): Record<string, unknown> => ({ content: [{ type: "text", text }], isError });
 
+// Every tool schema has to survive llama.cpp's grammar converter, which is how a local model is held to a tool's shape:
+// it reads `items` before `prefixItems` and refuses a boolean schema, so zod's closed-tuple form (`items: false`) fails
+// the conversion of the WHOLE tool set, not just its own tool. Length is what closes a tuple, and `maxItems` still says
+// it, so no other reader sees a different shape. Applied again by the daemon's bridge, whose peers are separately
+// installed software that can be any age.
+export const converterReadable = (value: unknown): unknown => {
+    if (Array.isArray(value)) {
+        return value.map(converterReadable);
+    }
+    if (typeof value !== "object" || value === null) {
+        return value;
+    }
+    const node = value as Record<string, unknown>;
+    const prefix = node["prefixItems"];
+    const tupleLength = node["items"] === false && Array.isArray(prefix) ? prefix.length : undefined;
+    const walked = Object.fromEntries(
+        Object.entries(node).flatMap(([key, child]) => (tupleLength !== undefined && key === "items" ? [] : [[key, converterReadable(child)] as const])),
+    );
+    return tupleLength === undefined ? walked : { ...walked, maxItems: tupleLength };
+};
+
 // Builds one tool from a single zod schema; the generic carries its type to the handler, and `McpTool` erases it again
 // since the dispatch table holds every tool. `$schema` is dropped from the JSON Schema output as redundant.
 export const tool = <Schema extends z.ZodType, Ctx>(spec: {
@@ -34,7 +55,7 @@ export const tool = <Schema extends z.ZodType, Ctx>(spec: {
     return {
         name: spec.name,
         description: spec.description,
-        inputSchema,
+        inputSchema: converterReadable(inputSchema) as Record<string, unknown>,
         call: async (args, ctx) => {
             const parsed = spec.input.safeParse(args);
             // Readable enough for a model to fix its own call: which field, and what was expected.

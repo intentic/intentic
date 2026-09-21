@@ -58,6 +58,24 @@ test("tools/list publishes each tool's schema as JSON Schema, without the dialec
     expect(listed.result.tools[0]?.inputSchema).not.toHaveProperty("$schema");
 });
 
+test("a tuple is published without the boolean `items` llama.cpp's grammar converter refuses, and still checks its length", async () => {
+    const listed = tool({
+        name: "point",
+        description: "A point.",
+        input: z.object({ at: z.tuple([z.number(), z.number()]), path: z.array(z.tuple([z.number(), z.number()])) }),
+        run: async () => textResult("ok"),
+    });
+    expect(JSON.stringify(listed.inputSchema)).not.toContain("false");
+    expect(listed.inputSchema).toMatchObject({
+        properties: {
+            at: { type: "array", prefixItems: [{ type: "number" }, { type: "number" }], minItems: 2, maxItems: 2 },
+            path: { items: { type: "array", prefixItems: [{ type: "number" }, { type: "number" }], maxItems: 2 } },
+        },
+    });
+    const parsed = (await listed.call({ at: [1, 2, 3], path: [] }, undefined)) as { isError: boolean };
+    expect(parsed.isError).toBe(true);
+});
+
 test("a call is checked against the same schema, and a bad argument is a readable result, not a fault", async () => {
     expect(await call("echo", { text: "hi" })).toEqual({ jsonrpc: "2.0", id: 1, result: { content: [{ type: "text", text: "hi" }], isError: false } });
     const bad = (await call("echo", { text: "" })) as { result: { content: { text: string }[]; isError: boolean } };

@@ -140,6 +140,21 @@ test("a live tools/list is remembered, which is what makes the offline answer po
     expect(app.remembered).toEqual([{ tools: [{ name: "screenshot" }] }]);
 });
 
+test("a tuple a peer publishes as a boolean-closed array is repaired on the way to the model, and stays repaired offline", async () => {
+    const published = {
+        tools: [{ name: "device", inputSchema: { type: "object", properties: { at: { type: "array", prefixItems: [{ type: "number" }, { type: "number" }], items: false } } } }],
+    };
+    const app = routeFor({ mcp: async () => ({ jsonrpc: "2.0", id: 3, result: published }) });
+    const answered = (await (await post(app, { jsonrpc: "2.0", id: 3, method: "tools/list" })).json()) as { result: unknown };
+    const repaired = {
+        tools: [
+            { name: "device", inputSchema: { type: "object", properties: { at: { type: "array", prefixItems: [{ type: "number" }, { type: "number" }], maxItems: 2 } } } },
+        ],
+    };
+    expect(answered.result).toEqual(repaired);
+    expect(app.remembered).toEqual([repaired]);
+});
+
 test("a tool call on an asleep peer is not answered locally", async () => {
     const mcp = vi.fn(async () => {
         throw new Error("is not connected right now");

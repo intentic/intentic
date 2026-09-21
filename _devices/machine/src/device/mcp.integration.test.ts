@@ -70,6 +70,10 @@ test("tools/list is the machine's whole surface, and there is no delete", async 
     expect(names).not.toContain("remove_file");
 });
 
+// `items: false` at any depth: zod's closed-tuple form, the one schema llama.cpp's grammar converter refuses.
+const closedTuple = (value: unknown): boolean =>
+    typeof value === "object" && value !== null && Object.entries(value).some(([key, child]) => (key === "items" && child === false) || closedTuple(child));
+
 // Every tool publishes the schema its arguments are checked against. Asserted structurally so a tool added
 // without a schema fails here instead of being advertised as taking anything.
 test("tools/list publishes each tool's argument schema, which is the one an arriving call is held to", async () => {
@@ -80,6 +84,9 @@ test("tools/list publishes each tool's argument schema, which is the one an arri
         expect(entry.description.length, entry.name).toBeGreaterThan(0);
         expect(entry.inputSchema["type"], entry.name).toBe("object");
         expect(entry.inputSchema, entry.name).toHaveProperty("properties");
+        // One schema llama.cpp cannot convert fails the WHOLE tool set, so a tuple published this way kills every
+        // tool-carrying turn on a local model before its first token.
+        expect(closedTuple(entry.inputSchema), entry.name).toBe(false);
     }
     const logs = response.result.tools.find((entry) => entry.name === "sandbox_logs");
     const lines = (logs?.inputSchema["properties"] as { lines: { maximum: number; description: string } } | undefined)?.lines;
