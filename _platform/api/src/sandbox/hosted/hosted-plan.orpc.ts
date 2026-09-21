@@ -196,7 +196,7 @@ export const hostedPlanRoutes = (gateway?: StripeGateway) => {
             requirePlanEnabled(context);
             // Named rung, or the cheapest on sale. The `undefined` branch is guaranteed away by requirePlanEnabled,
             // which is the same question: a platform selling nothing has no checkout.
-            const asked = input.tier === undefined ? entryTier(config) : { tier: requirePaidTier(config, input.tier), priceId: `` };
+            const asked = input?.tier === undefined ? entryTier(config) : { tier: requirePaidTier(config, input.tier), priceId: `` };
             if (asked === undefined) {
                 throw new ORPCError(`NOT_FOUND`, { message: `the hosted plan is not enabled on this platform` });
             }

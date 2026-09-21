@@ -16,6 +16,7 @@ import { createApp } from "../app.js";
 import type { Auth } from "../auth.js";
 import { configSchema, type Config } from "../config.js";
 import { testIngressConfig } from "../testing.js";
+import { sandboxHostname } from "../sandbox/reachability.js";
 import { hostedSlotsOf, onHostedPlan, slotsAtTier } from "../sandbox/hosted/hosted-plan.js";
 import { hostedBudgetOf } from "../sandbox/hosted/hosted-usage.js";
 import { DAY_MS } from "../durations.js";
@@ -85,10 +86,15 @@ const seedPerson = async (prisma: PrismaClient, name: string): Promise<Person> =
 };
 
 // A sandbox with a hosted machine under it, asleep with no open stretch, using the same digest-derived ids the api
-// mints.
-const seedHostedSandbox = async (prisma: PrismaClient, owner: Person, name: string): Promise<{ id: string }> => {
+// mints. Fly is given the same app, volume and machine: a migration snapshots the disk the row names, and a provider
+// that never heard of it answers 404 rather than moving anything.
+const seedHostedSandbox = async (prisma: PrismaClient, fly: FakeFly, owner: Person, name: string): Promise<{ id: string; token: string }> => {
     const token = randomBytes(16).toString(`base64url`);
     const digest = createHash(`sha256`).update(token).digest(`hex`);
+    const appName = `e2e-${digest.slice(0, 10)}`;
+    const machineId = `m-${digest.slice(0, 8)}`;
+    const volumeId = `vol-${digest.slice(0, 8)}`;
+    const region = `iad`;
     const sandbox = await prisma.sandbox.create({
         data: { name, ownerId: owner.id, token, tokenDigest: digest, tunnelId: digest.slice(0, 12), lastSeenAt: new Date() },
         select: { id: true },
@@ -103,13 +109,25 @@ const seedHostedSandbox = async (prisma: PrismaClient, owner: Person, name: stri
             cpus: FREE_TIER.cpus,
             memoryMb: FREE_TIER.memoryMb,
             volumeGb: FREE_TIER.volumeGb,
-            appName: `e2e-${digest.slice(0, 10)}`,
-            machineId: `m-${digest.slice(0, 8)}`,
-            volumeId: `vol-${digest.slice(0, 8)}`,
-            region: `iad`,
+            appName,
+            machineId,
+            volumeId,
+            region,
         },
     });
-    return sandbox;
+    fly.apps.add(appName);
+    fly.volumes.set(volumeId, { id: volumeId, app: appName, region, sizeGb: FREE_TIER.volumeGb, state: `created`, usedBytes: 2 * 1024 ** 3 });
+    // Stopped, because the row it mirrors is asleep: nothing has woken this machine yet.
+    fly.machines.set(machineId, {
+        id: machineId,
+        app: appName,
+        region,
+        state: `stopped`,
+        config: {},
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+    });
+    return { id: sandbox.id, token };
 };
 
 /* The shared in-memory Fly (@intentic/testing/fly-fake), with everything else — Stripe's stand-in, the api's own
@@ -163,6 +181,7 @@ describe.skipIf(!tier.runs)(tier.title, () => {
     let fly: FakeFly;
     let alice: Person;
     let sandboxId: string;
+    let connectToken: string;
     let subscriptionId: string;
     let customerId: string;
 
@@ -170,6 +189,24 @@ describe.skipIf(!tier.runs)(tier.title, () => {
     const offer = () => rpc<HostedOffer>(app, `/sandbox/hosted-offer`, { as: alice });
     const wake = () => rpc<Refusal & { ok?: boolean }>(app, `/sandbox/wake`, { as: alice, method: `POST`, body: { sandboxId } });
     const planRow = () => prisma.hostedPlan.findUnique({ where: { userId: alice.id } });
+
+    /* THE DAEMON, PLAYED BY THE SUITE. A machine changed under a sandbox is finished only when the daemon says it came
+     * up on the disk it was meant to (hosted-migrate.ts awaitAnnounce), and nothing boots behind the in-memory Fly, so
+     * the phone-home has to come from here — through the real route with the real connect token, so a refused one
+     * fails this suite instead of leaving it to wait out the deadline.
+     *
+     * Sent once the machine has been asked to start, never before: the start is issued after the migration read the
+     * `lastSeenAt` mark it compares against, so an announce after it cannot be mistaken for the boot before it. The
+     * seeded machine is stopped, which is what makes that start happen at all. */
+    const announceOnBoot = async (): Promise<void> => {
+        await vi.waitFor(() => expect(fly.called(`POST`, `/start`).length).toBeGreaterThan(0), { timeout: 10_000, interval: 10 });
+        const said = await app.request(`${API_ORIGIN}/sandbox/announce`, {
+            method: `POST`,
+            headers: { "content-type": `application/json`, "x-intentic-connect": connectToken },
+            body: JSON.stringify({ daemonUrl: `https://${sandboxHostname(config.ingress.zone, connectToken)}` }),
+        });
+        expect(said.status).toBe(200);
+    };
 
     beforeAll(async () => {
         container = await new GenericContainer(POSTGRES_IMAGE)
@@ -223,7 +260,7 @@ describe.skipIf(!tier.runs)(tier.title, () => {
     });
 
     it(`meters the free lane: a spent month refuses the wake and the offer says how many hours are left`, async () => {
-        ({ id: sandboxId } = await seedHostedSandbox(prisma, alice, `alice-box`));
+        ({ id: sandboxId, token: connectToken } = await seedHostedSandbox(prisma, fly, alice, `alice-box`));
         const month = new Date().toISOString().slice(0, 7);
         await prisma.hostedUsage.create({ data: { ownerId: alice.id, sandboxId, month, minutes: MONTHLY_HOURS * 60 } });
 
@@ -295,7 +332,10 @@ describe.skipIf(!tier.runs)(tier.title, () => {
         // The wake refused a minute ago is still refused: the machine's own month is still spent.
         expect((await wake()).status).toBe(402);
         // Moved onto the slot, it is a Standard machine with Standard's hours, and the wake goes through.
-        const moved = await rpc<{ state: string }>(app, `/hosted-plan/tier`, { as: alice, method: `POST`, body: { sandboxId, tier: ENTRY.id } });
+        const [moved] = await Promise.all([
+            rpc<{ state: string }>(app, `/hosted-plan/tier`, { as: alice, method: `POST`, body: { sandboxId, tier: ENTRY.id } }),
+            announceOnBoot(),
+        ]);
         expect(moved.status).toBe(200);
         expect(moved.body.state).toBe(`done`);
         expect(await prisma.hostedMachine.findUnique({ where: { sandboxId }, select: { tier: true, cpus: true, memoryMb: true } })).toEqual({
@@ -371,15 +411,21 @@ describe.skipIf(!tier.runs)(tier.title, () => {
         expect(await onHostedPlan(prisma, config, alice.id)).toBe(true);
     });
 
-    it(`pauses the plan on a failed charge: the meter is back, and the wake is refused again`, async () => {
+    it(`pauses the plan on a failed charge: the slot it bought stops counting and the free lane is metered again`, async () => {
         expect((await stripe.update(subscriptionId, { status: `past_due`, cancel_at_period_end: false })).status).toBe(200);
         const { body } = await state(alice);
         expect(body).toMatchObject({ onPlan: false, status: `past_due` });
         expect(body.cancelAtPeriodEnd).toBeUndefined();
         expect(body.hosted?.usage.allowanceMinutes).toBe(MONTHLY_HOURS * 60);
+        // An unpaid charge takes the slot away; the machine standing on that rung stays where it is until it is moved.
+        expect(slotsAtTier(await hostedSlotsOf(prisma, config, alice.id), ENTRY.id)).toBe(0);
         expect(await hostedBudgetOf(prisma, config, { sandboxId, tier: ENTRY.id, ownerId: alice.id })).toMatchObject({ metered: true });
-        expect((await offer()).body).toEqual({ enabled: true, remaining: 0, hours: { allowance: MONTHLY_HOURS, remaining: 0 } });
-        expect((await wake()).status).toBe(402);
+        // The free slot is empty and offered again: this account's one machine stands on the Standard rung it moved to
+        // earlier, and the card offers a free machine.
+        expect((await offer()).body).toEqual({ enabled: true, remaining: 1, hours: { allowance: MONTHLY_HOURS, remaining: 0 } });
+        // The wake is judged against the machine's OWN rung, not the account's lane (docs/design/hosted-machines.md):
+        // the spent forty hours are the free lane's, and a Standard machine is nowhere near Standard's ceiling.
+        expect((await wake()).status).toBe(200);
     });
 
     it(`refuses a webhook without Stripe's signature, with another secret, or from outside the replay window`, async () => {
@@ -436,7 +482,12 @@ describe.skipIf(!tier.runs)(tier.title, () => {
 
         // One row per user through the churn: the unique customer and subscription columns held.
         expect(await prisma.hostedPlan.count({ where: { stripeCustomerId: customerId } })).toBe(1);
-        expect(await planRow()).toMatchObject({ stripeSubscriptionId: subscriptionId, status: `active`, quantity: 1 });
+        const row = await planRow();
+        expect(row).toMatchObject({ stripeSubscriptionId: subscriptionId, status: `active` });
+        // And one slot at the entry rung again, mirrored off the new subscription rather than left from the old one.
+        expect(await prisma.hostedPlanItem.findMany({ where: { planId: row?.id } })).toEqual([
+            expect.objectContaining({ tier: ENTRY.id, stripeItemId: subscription.items[0]?.id, quantity: 1 }),
+        ]);
         expect((await state(alice)).body).toMatchObject({ onPlan: true, status: `active` });
     });
 

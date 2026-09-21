@@ -240,6 +240,25 @@ describe(`hostedInstanceId`, () => {
     });
 });
 
+/* A shape is spread straight into machine rows (provisionHosted below, hosted-migrate.ts commitMigration), so it has
+ * to be the four columns and nothing else. Handing a rung back whole type-checks — a rung IS a shape — and then fails
+ * at the write on `name`, `priceUsd` and the rest, which no type can catch and every migration would hit. */
+describe(`hostedShapeFor`, () => {
+    it(`answers a paid rung with the four shape fields and none of the rung's own`, () => {
+        expect(hostedShapeFor(config(), PAID.id)).toEqual({
+            cpuKind: PAID.cpuKind,
+            cpus: PAID.cpus,
+            memoryMb: PAID.memoryMb,
+            volumeGb: PAID.volumeGb,
+        });
+    });
+
+    it(`answers the free rung with the operator's own numbers, since they run the hardware`, () => {
+        const deployment = config({ hosted: { ...config().hosted, cpus: 4, memoryMb: 8192, volumeGb: 30 } });
+        expect(hostedShapeFor(deployment, FREE_TIER.id)).toEqual({ cpuKind: FREE_TIER.cpuKind, cpus: 4, memoryMb: 8192, volumeGb: 30 });
+    });
+});
+
 describe(`provisionHosted`, () => {
     const args = {
         sandboxId: `s1`,

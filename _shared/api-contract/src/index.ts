@@ -161,8 +161,8 @@ export const hostedPlanContract = {
     state: oc.route({ method: "GET", path: "/hosted-plan" }).output(HostedPlanStateSchema),
     checkout: oc
         .route({ method: "POST", path: "/hosted-plan/checkout" })
-        // Which rung the first slot is bought at; omitted buys the cheapest one on sale.
-        .input(z.object({ tier: z.string().optional() }))
+        // Which rung the first slot is bought at; omitted — as a field or as the whole body — buys the cheapest on sale.
+        .input(z.object({ tier: z.string().optional() }).optional())
         .output(z.object({ url: z.url() })),
     portal: oc.route({ method: "POST", path: "/hosted-plan/portal" }).output(z.object({ url: z.url() })),
     setSlots: oc

@@ -10,10 +10,15 @@ import type { FlyVolumeOptions } from "./fly/fly.js";
  * The shape a machine on this rung gets. The free rung's is the operator's to override (`config.hosted`), since a
  * self-hosted platform runs its own hardware; every paid rung's is the ladder's and not a deployment's to change.
  */
-export const hostedShapeFor = (config: Config, tier: HostedTierId): HostedShape =>
-    tier === FREE_TIER.id
-        ? { cpuKind: FREE_TIER.cpuKind, cpus: config.hosted.cpus, memoryMb: config.hosted.memoryMb, volumeGb: config.hosted.volumeGb }
-        : hostedTier(tier);
+export const hostedShapeFor = (config: Config, tier: HostedTierId): HostedShape => {
+    if (tier === FREE_TIER.id) {
+        return { cpuKind: FREE_TIER.cpuKind, cpus: config.hosted.cpus, memoryMb: config.hosted.memoryMb, volumeGb: config.hosted.volumeGb };
+    }
+    // The four fields and no more: a shape is spread into machine rows, where a rung's name, price and hours are not
+    // columns. Handing the rung back whole type-checks and then fails at the write.
+    const rung = hostedTier(tier);
+    return { cpuKind: rung.cpuKind, cpus: rung.cpus, memoryMb: rung.memoryMb, volumeGb: rung.volumeGb };
+};
 
 /**
  * The rung a stored name means. A row written before a rung was retired, or by a deployment on a different ladder,
