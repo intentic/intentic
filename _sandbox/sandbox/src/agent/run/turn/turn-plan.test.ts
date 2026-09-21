@@ -750,7 +750,7 @@ test("with the flag on, the daemon looks the message up before the turn and hand
     expect(wire(plan)).toContain("Not the user's words");
     // Delivery on the ledger row, not just assignment: the first A/B could not tell a mechanism with no effect from
     // one that never arrived, and that is what killed the reading rather than the mechanism.
-    expect(plan).toMatchObject({ turnContext: "delivered", turnContextMs: expect.any(Number) });
+    expect(plan).toMatchObject({ experiments: { turnContext: "delivered", turnContextMs: expect.any(Number) } });
 });
 
 // The mechanism shipped once as `iqContext` and an A/B removed it, so the default has to be OFF: a workspace that
@@ -774,7 +774,7 @@ test("off by default: no flag, no lookup, no note", async () => {
     expect(asked).toBe(0);
     expect(wire(plan)).not.toContain(RETRIEVED);
     // Absent, not a skip reason: nothing was attempted, which a reader must be able to tell from a lookup that ran.
-    expect(plan).not.toHaveProperty("turnContext");
+    expect(plan).not.toHaveProperty("experiments.turnContext");
 });
 
 // A workspace that turned search off has no index worth asking, and pays nothing for the feature either.

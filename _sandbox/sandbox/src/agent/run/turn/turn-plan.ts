@@ -12,6 +12,7 @@ import {
     type SandboxSettings,
     type SystemPromptMode,
     type TurnNote,
+    type UsageTurn,
     SandboxSettingsSchema,
     capabilitiesOf,
     envSuffix,
@@ -124,26 +125,31 @@ export type TurnArmPlan =
           readonly request: AgentRequest;
       };
 
+// What planning measured about this turn, in the LEDGER's own field names so the route spreads it whole: a stamp added
+// below reaches usage.jsonl by existing, never by being listed a second time at the append.
+export type TurnExperimentStamps = Partial<
+    Pick<
+        UsageTurn,
+        | "turnIndex"
+        | "iqSearchArm"
+        | "iqSearchCohort"
+        | "mapArm"
+        | "mapChars"
+        | "notesArm"
+        | "notesChars"
+        | "notesCohort"
+        | "turnContext"
+        | "turnContextMs"
+    >
+>;
+
 // What planTurn answers: the arm's own plan plus the facts only planning holds.
 export type TurnPlan =
     | TurnRefusal
     | (Extract<TurnArmPlan, { readonly ok: true }> & {
-          // The iq-search experiment's conversation-level arm; fixed once a skill enters a provider session, since a
-          // later turn can't un-contaminate it.
-          readonly searchArm?: boolean;
-          readonly searchCohort?: string;
-          // Which turn of its conversation this is, from zero, so the ledger can recognise an opening turn.
-          readonly turnIndex?: number;
-          // The project map experiment's arm, conversation-level: the note rides the opening message and stays in the
-          // transcript.
-          readonly mapArm?: boolean;
-          // The map note's cost in characters, present only on the turn that actually sent one; read off the composed
-          // request, not predicted.
-          readonly mapChars?: number;
-          // What pre-turn retrieval came to, and what the attempt cost in wall time. Absent means the flag was off and
-          // nothing was tried: a reader has to be able to tell that from a lookup that ran and found nothing.
-          readonly turnContext?: TurnContextSkip | "delivered";
-          readonly turnContextMs?: number;
+          // Every per-turn experiment reading as one object: arms are conversation-level (fixed once a skill enters a
+          // provider session), costs are per-turn, and an absent field means unmeasured rather than zero.
+          readonly experiments: TurnExperimentStamps;
           // Which preamble notes this turn's card still wants. Carried out of planning because two of them (the repo
           // sync advisory, the hand-off state) only exist after it, in the route.
           readonly briefing: TurnBriefing;
@@ -309,18 +315,7 @@ const experimentStamps = (
     map: { readonly arm: boolean | undefined; readonly notes: readonly TurnNote[] | undefined },
     notes: TurnFieldNotes,
     retrieval: TurnContextOutcome | undefined,
-): {
-    turnIndex?: number;
-    searchArm?: boolean;
-    searchCohort?: string;
-    mapArm?: boolean;
-    mapChars?: number;
-    notesArm?: boolean;
-    notesChars?: number;
-    notesCohort?: string;
-    turnContext?: TurnContextSkip | "delivered";
-    turnContextMs?: number;
-} => {
+): TurnExperimentStamps => {
     const chars = map.notes?.find((note) => note.title === WORKSPACE_MAP_NOTE_TITLE)?.text.length;
     // Annotated, not inferred: a nested ternary over a literal and a union widens to `string`, which the stamp would
     // then carry into a field typed as neither.
@@ -328,9 +323,9 @@ const experimentStamps = (
         retrieval === undefined ? undefined : "note" in retrieval ? "delivered" : retrieval.skipped;
     return {
         ...stamp("turnIndex", turnIndex),
-        ...stamp("searchArm", search.arm),
+        ...stamp("iqSearchArm", search.arm),
         // Only with its arm: a cohort on an unmeasured turn names a revision nothing was compared against.
-        ...stamp("searchCohort", search.arm === undefined ? undefined : search.cohort),
+        ...stamp("iqSearchCohort", search.arm === undefined ? undefined : search.cohort),
         ...stamp("mapArm", map.arm),
         ...stamp("mapChars", chars),
         ...stamp("notesArm", notes.arm),
@@ -587,7 +582,7 @@ export const planTurn = async (services: Services, input: AgentTurn, context: Tu
         // Travels past the arms so the route can hold the two notes it adds after planning to the same card.
         briefing,
         ...(composed.contextTrim === undefined ? {} : { contextTrim: composed.contextTrim }),
-        ...experimentStamps(
+        experiments: experimentStamps(
             input.conversationId === undefined ? undefined : conversationTurns,
             { arm: searchArm, cohort: teaching?.cohort },
             { arm: mapArm, notes: planned.base.notes },

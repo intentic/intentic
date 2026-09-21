@@ -190,7 +190,7 @@ test("a persona that drops the map gets none of it, however the sandbox is set",
     expect(plan).toMatchObject({ ok: true });
     const request = (plan as { request: AgentRequest }).request;
     expect(composeWirePrompt(request.notes ?? [], request.prompt)).toBe("do the thing");
-    expect(plan).not.toHaveProperty("mapArm");
+    expect(plan).not.toHaveProperty("experiments.mapArm");
 });
 
 // Round-trips through the same registry dispatch uses (turn-preamble.ts INJECTED); this is what catches a note shipped

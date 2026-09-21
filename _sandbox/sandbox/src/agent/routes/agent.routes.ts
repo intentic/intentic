@@ -1576,14 +1576,10 @@ async function* runTurn(
                 // How it ended, past its cost: what changed, what proved it, what's left open.
                 ...ending,
                 ...(billed ? metrics.reading(verification.edited()) : {}),
-                // Which turn of its conversation, so a windowed reader can spot an opening turn.
-                ...(plan.turnIndex !== undefined ? { turnIndex: plan.turnIndex } : {}),
-                ...(plan.searchArm !== undefined ? { iqSearchArm: plan.searchArm } : {}),
-                ...(plan.searchCohort !== undefined ? { iqSearchCohort: plan.searchCohort } : {}),
-                // Which project-map arm this conversation drew; rides every turn once sent.
-                ...(plan.mapArm !== undefined ? { mapArm: plan.mapArm } : {}),
-                ...(plan.mapChars !== undefined ? { mapChars: plan.mapChars } : {}),
-                ...(plan.turnContext !== undefined ? { turnContext: plan.turnContext, turnContextMs: plan.turnContextMs } : {}),
+                // Every reading planning took (arms, cohorts, costs, which turn of its conversation this is), spread
+                // whole and already under the ledger's own field names: a stamp reaches the row by existing, never by
+                // being named a second time here.
+                ...plan.experiments,
                 // The Auto judge chose this turn's model; marked on that turn alone, so a later row of the same
                 // conversation naming a different model reads as the user overruling it. Undefined drops on the way
                 // out, so an ordinary turn carries no field rather than a false one.
