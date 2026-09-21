@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { appLink, Button, ui, DagGraph, Icon, Notice, noticeOf, timeAgo } from "@intentic/extension-ui";
+import { appLink, Button, ui, DagGraph, Icon, Notice, noticeOf, timeAgo, useNarrow } from "@intentic/extension-ui";
 import type { WorkflowRun } from "@intentic/sandbox-contract";
 import { computed, ref, watch } from "vue";
 import WorkflowNodeCard from "./WorkflowNodeCard.vue";
@@ -27,6 +27,13 @@ const shown = computed(() => {
     return picked ?? run.steps.find((step) => step.state === `running`) ?? run.steps.find((step) => step.state === `failed`) ?? run.steps[0];
 });
 const shownStep = computed(() => run.workflow.steps.find((step) => step.id === shown.value?.stepId));
+
+// The step panel is 24rem and does not shrink, so beside it a narrower pane leaves the diagram a few pixels wide.
+// Under 24rem of panel plus 16rem of readable diagram the two stack instead, the diagram keeping a fixed band on top.
+const SPLIT_AT_REM = 40;
+const body = ref<HTMLElement>();
+const narrow = useNarrow(body, SPLIT_AT_REM);
+const stacked = computed(() => narrow.value && shown.value !== undefined && shownStep.value !== undefined);
 
 watch(
     () => run.runId,
@@ -91,15 +98,19 @@ const chatLink = (conversationId: string) => {
         <Notice v-if="failure" :of="noticeOf(failure)" class="m-3" />
         <p v-if="run.detail" class="shrink-0 px-4 py-2 text-xs text-subtle">{{ run.detail }}</p>
 
-        <div class="flex min-h-0 flex-1">
-            <div class="min-w-0 flex-1">
+        <div ref="body" class="flex min-h-0 flex-1" :class="stacked ? `flex-col` : ``">
+            <div class="min-w-0" :class="stacked ? `h-56 shrink-0` : `flex-1`">
                 <!-- Never magnified, or a short run would fill the page as billboards, same as the designer's canvas. -->
                 <DagGraph v-model="selectedId" :nodes="dag.nodes" :edges="dag.edges" :node-width="216" :node-height="62" :magnify="false" touch-pan>
                     <template #node="{ node }"><WorkflowNodeCard :node="node.data" /></template>
                 </DagGraph>
             </div>
 
-            <aside v-if="shown && shownStep" class="flex w-96 shrink-0 flex-col gap-2 overflow-y-auto border-l border-line p-3">
+            <aside
+                v-if="shown && shownStep"
+                class="flex flex-col gap-2 overflow-y-auto border-line p-3"
+                :class="stacked ? `min-h-0 w-full flex-1 border-t` : `w-96 shrink-0 border-l`"
+            >
                 <div class="flex flex-wrap items-center gap-2">
                     <Icon :name="stepTone()[shown.state].icon" :spin="stepTone()[shown.state].spin" :class="stepTone()[shown.state].text" />
                     <span class="text-sm font-medium text-content">{{ shownStep.title }}</span>

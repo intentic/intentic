@@ -20,21 +20,31 @@ interface LongPressState {
 const states = new WeakMap<HTMLElement, LongPressState>();
 
 // The finger lifting after a long press is not a tap. By then the handler's sheet sits under it, so the release's
-// click would land on the sheet's mask and dismiss what the press just opened; the first click within the window
-// is dropped wherever it lands, not only on the pressed element.
+// compatibility mouse events land on the sheet's mask and dismiss what the press just opened. All three must be
+// dropped, not just the click: an overlay mask closes on `mousedown`, which precedes the click by milliseconds.
+// Each is dropped once, wherever it lands, so a deliberate tap after the release still reaches the sheet.
 const RELEASE_WINDOW_MS = 1000;
+const RELEASE_EVENTS = [`mousedown`, `mouseup`, `click`] as const;
 const swallowRelease = (): void => {
-    const swallow = (event: MouseEvent): void => {
+    const pending = new Set<string>(RELEASE_EVENTS);
+    const swallow = (event: Event): void => {
         event.stopImmediatePropagation();
         event.preventDefault();
-        stop();
+        pending.delete(event.type);
+        if (pending.size === 0) {
+            stop();
+        }
     };
     const timer = setTimeout(() => stop(), RELEASE_WINDOW_MS);
     const stop = (): void => {
         clearTimeout(timer);
-        document.removeEventListener(`click`, swallow, true);
+        for (const name of RELEASE_EVENTS) {
+            document.removeEventListener(name, swallow, true);
+        }
     };
-    document.addEventListener(`click`, swallow, true);
+    for (const name of RELEASE_EVENTS) {
+        document.addEventListener(name, swallow, true);
+    }
 };
 
 export const vLongpress: Directive<HTMLElement, (event: PointerEvent) => void> = {

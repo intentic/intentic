@@ -278,10 +278,22 @@ const renameTarget = ref<WorkspaceTreeEntry | undefined>(undefined);
 const renameValue = ref(``);
 const deleteTarget = ref<WorkspaceTreeEntry | undefined>(undefined);
 
+const renameField = ref<HTMLInputElement>();
+let selectWholeName = false;
 const startRename = (target: WorkspaceTreeEntry): void => {
     sheetEntry.value = undefined;
     renameValue.value = target.name;
     renameTarget.value = target;
+    selectWholeName = true;
+};
+// Selected whole only as the box opens, so the first keystroke replaces the name; a later tap in the field places a
+// caret instead. PrimeVue hands the box's focus to `[autofocus]`, which is why the field carries it.
+const onRenameFocus = (): void => {
+    if (!selectWholeName) {
+        return;
+    }
+    selectWholeName = false;
+    renameField.value?.select();
 };
 const confirmRename = (): void => {
     const target = renameTarget.value;
@@ -782,10 +794,18 @@ const onPick = (event: Event): void => {
         </BottomSheet>
 
         <Modal :open="renameTarget !== undefined" size="sm" :header="t(`ui.action.rename`)" @update:open="renameTarget = undefined">
-            <input v-model="renameValue" type="text" class="ui-field-box w-full" @keydown.enter="confirmRename" />
+            <input
+                ref="renameField"
+                v-model="renameValue"
+                type="text"
+                autofocus
+                class="ui-field-box w-full"
+                @focus="onRenameFocus"
+                @keydown.enter="confirmRename"
+            />
             <template #footer>
                 <Button :label="t(`ui.action.cancel`)" severity="secondary" :text="true" @click="renameTarget = undefined" />
-                <Button :label="t(`ui.action.rename`)" autofocus @click="confirmRename" />
+                <Button :label="t(`ui.action.rename`)" @click="confirmRename" />
             </template>
         </Modal>
 

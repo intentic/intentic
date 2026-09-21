@@ -22,6 +22,9 @@ const NODE_WIDTH = 216;
 const NODE_HEIGHT = 56;
 // dagre's `nodesep` (dagLayout.ts): the gap between two boxes sharing a rank.
 const NODE_GAP = 28;
+// The picture is inert, so this floor only bounds the fit; it has to stay under what the narrowest frame needs
+// (a four-deep graph fits a phone-width card at ~0.39), or fitView clamps and clips a node off each side.
+const MIN_ZOOM = 0.15;
 
 // Height comes from the widest parallel layer, not chain length; clamped to 6-20rem plus fit padding.
 const frameRem = computed(() => Math.min(20, Math.max(6, (widest.value * NODE_HEIGHT + (widest.value - 1) * NODE_GAP) / 16 + 2)));
@@ -54,7 +57,7 @@ const shape = computed(() => {
         <div class="relative w-full overflow-hidden rounded-lg bg-content/4" :style="{ height: `${frameRem}rem` }">
             <!-- Inert: the graph's own zoom/pan would otherwise hijack scrolling past it on a page of cards. -->
             <div class="pointer-events-none h-full w-full">
-                <DagGraph :nodes="dag.nodes" :edges="dag.edges" :node-width="NODE_WIDTH" :node-height="NODE_HEIGHT" :magnify="false">
+                <DagGraph :nodes="dag.nodes" :edges="dag.edges" :node-width="NODE_WIDTH" :node-height="NODE_HEIGHT" :magnify="false" :min-zoom="MIN_ZOOM">
                     <template #node="{ node }"><WorkflowNodeCard :node="node.data" /></template>
                 </DagGraph>
             </div>
