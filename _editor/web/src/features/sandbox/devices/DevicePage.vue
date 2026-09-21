@@ -263,7 +263,7 @@ const applyReshape = (ask: ResourcesAsk): void => ops.applyReshape(ask);
 
         <!-- One row per sandbox, the page's only disclosure: a row is a summary and its folder, ports, image and share are the evidence. -->
         <!-- Either answer draws rows: a card granting sandbox management alone lists containers and describes no folders. -->
-        <RowGroup v-if="described" :label="t(`sandbox.devicePage.sandboxes`)" :count="lists.sandboxes.length || undefined">
+        <RowGroup v-if="described" :label="t(`sandbox.devicePage.sandboxes`)">
             <!-- On a many-sided machine the door's block is about this list, so it is said here rather than under a row. -->
             <RowNote v-if="listBlock" variant="block">
                 <DeviceConcern
