@@ -19,9 +19,11 @@
 # binary is not installed in fell through to the registry, and then sat in epoll_wait for 35 minutes — no child
 # process, no output, not one file written into the npx staging directory it had just created. npm's own
 # `fetch-timeout` (5 min, 2 retries) should have ended it around 17 and did not, which is the point: a holder
-# that hangs is not a case anything below this line can reason about. At `--limit 2` that was half the pool,
-# gone until someone read `ps` by hand. `--max-hold` is the backstop — a ceiling on how long a command may HOLD
-# a slot, which is a different question from `--wait`'s ceiling on queueing for one.
+# that hangs is not a case anything below this line can reason about. At `--limit 2` that was half the pool for
+# the 26 minutes its conversation went on working. The reaper was not going to help: it reclaims what a STOPPED
+# conversation holds, and this one was live the whole time, so the slot was coming back when the conversation
+# ended and not before. `--max-hold` is the backstop — a ceiling on how long a command may HOLD a slot, which is
+# a different question from `--wait`'s ceiling on queueing for one.
 #
 # FD 9 SPECIFICALLY, not bash's `{var}>` form: bash marks automatically-allocated descriptors close-on-exec, so
 # the lock would be dropped at the `exec` below — the command would run holding nothing while queue-run's own

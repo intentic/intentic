@@ -47,6 +47,9 @@ import {
 } from "@intentic/scaffold";
 import type { ResidentEngine } from "@intentic/iq-engine";
 import { createEngineClient } from "@intentic/iq-engine/host";
+import { capabilityCtx } from "./capabilities/capability.js";
+import { wakeLocalModel as wakeLocalModelServer } from "./capabilities/handlers/localmodel.handler.js";
+import { LOCAL_MODEL_WAKE_MS } from "./endpoints/local-model-idle.js";
 import { createInvariantRegistry, type InvariantRegistry } from "./invariants/invariants.js";
 import { registerDaemonInvariants } from "./invariants/register.js";
 import type { Logger } from "pino";
@@ -495,6 +498,10 @@ export interface Services extends ClaudeSlice, CodexSlice, CursorSlice, GrokSlic
     readonly providerReadiness: () => Promise<Record<NativeProvider, boolean>>;
     // What each endpoint capability's server publishes, keyed by id; only the server says what it serves.
     readonly endpointModels: EndpointCatalog;
+    // Brings a local model back after the idle sweep unloaded it, and waits for it to serve. Lives here rather than
+    // being called directly, because importing the capability handler into agent/providers put that package into the
+    // capability import graph and broke type inference two files away. Resolves false when it will not come up.
+    readonly wakeLocalModel: (id: string) => Promise<boolean>;
     // Bundled translator: connects/disconnects subscription OAuth; codex/kimi/gemini have no other credential.
     readonly cliProxy: CliProxyClient;
     // Shared OpenCode runtime backing Grok; OpenCode owns the xAI credential, so there is no separate GrokStore.
@@ -1038,6 +1045,8 @@ export const createServices = (config: Config, logger: Logger): Services => {
     };
     // A full embeddings rebuild is slow; logged at a human cadence so the load has a name while it runs.
     const BACKLOG_LOG_MS = 30_000;
+    // 2.5 GiB: under the child's inherited 3 GiB heap cap, so a runaway is replaced before V8 makes it a fatal error.
+    const IQ_MEMORY_CEILING_BYTES = 2.5 * 1024 * 1024 * 1024;
     let backlogLoggedAt = 0;
     let backlogActive = false;
     // The engine runs in a child process, most of this daemon's RSS; a dead child only loses its own searches.
@@ -1064,6 +1073,13 @@ export const createServices = (config: Config, logger: Logger): Services => {
         },
         // The query worker owns the semantic scan and cross-encoder; losing it narrows a search to keyword matching.
         onQueryError: (error) => logger.warn({ err: error }, "iq query worker failed, search fell back to keyword matching"),
+        // Well clear of the working set: the child holds the index and the ML models, and was measured at 1.64 GB
+        // having grown from 691 MB in half an hour. The point is to bound memory that is not coming back, not to
+        // ration what the engine legitimately needs — a ceiling low enough to fire in normal use announces itself
+        // in the log below, which is the signal to raise it rather than to keep paying for re-sweeps.
+        memoryCeilingBytes: IQ_MEMORY_CEILING_BYTES,
+        onRecycle: ({ pid, rssBytes }) =>
+            logger.warn({ enginePid: pid, rssBytes, ceilingBytes: IQ_MEMORY_CEILING_BYTES }, "iq search engine passed its memory ceiling and was replaced"),
         ...(config.iqModelDir !== "" ? { modelDir: config.iqModelDir } : {}),
         ...(config.iqRgPath !== "" ? { rgPath: config.iqRgPath } : {}),
     });
@@ -1244,6 +1260,12 @@ export const createServices = (config: Config, logger: Logger): Services => {
             return providerReadiness(servicesHolder.current);
         },
         endpointModels: createEndpointCatalog(join(authRoot, "endpoints")),
+        // Same late binding as the thunks above: a wake needs the finished Services to build a capability context,
+        // and the only caller is a turn, long after composing.
+        wakeLocalModel: async (id: string) => {
+            const current = servicesHolder.current;
+            return current === undefined ? false : wakeLocalModelServer(capabilityCtx(current), id, LOCAL_MODEL_WAKE_MS);
+        },
         cliProxy,
         openCode,
         authRoot,

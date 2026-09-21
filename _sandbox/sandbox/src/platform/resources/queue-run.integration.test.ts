@@ -101,6 +101,24 @@ test("a limit of one serialises completely", async () => {
     expect(await peakConcurrency(log)).toBe(1);
 });
 
+// How the repo-verify rule serialises without leaving the pool: a lower limit sees fewer slots, so two of those
+// commands cannot overlap, while everything else still reaches the slots above.
+test("a command limited to one serialises with its own kind, and the rest of the pool stays usable", async () => {
+    const queue = await dir();
+    const holder = await holdSlot(queue, ["--pool", "p", "--limit", "1"], 30);
+    try {
+        const alsoOne = await queueRun(queue, ["--pool", "p", "--limit", "1", "--wait", "2"], "echo serialised");
+        // Only slot.1 is visible to it, and the holder has that, so it waits out the deadline.
+        expect(alsoOne.stderr).toContain("starting anyway");
+
+        const two = await queueRun(queue, ["--pool", "p", "--limit", "2", "--wait", "5"], "echo parallel");
+        expect(two.stdout.trim()).toBe("parallel");
+        expect(two.stderr).not.toContain("starting anyway");
+    } finally {
+        holder.kill("SIGKILL");
+    }
+});
+
 test("separate pools do not contend", async () => {
     const queue = await dir();
     const log = join(queue, "marks");

@@ -65,6 +65,13 @@ export const DEFAULT_HEAVY_COMMANDS: HeavyCommands = HeavyCommandsSchema.parse({
             pattern: "--watch|\\bnodemon\\b|\\b(pnpm|npm|yarn|bun)\\s+(run\\s+)?(dev|serve|start)\\b",
             exempt: true,
         },
+        // A repo-wide verification, given a limit of ONE while staying in the same pool: two of them are the most
+        // expensive thing that can happen to this box at once (measured: 4m17s and ~6000 tests apiece, racing for
+        // the same two slots and making an unrelated unit test wait 96s), and the second is usually the same work
+        // over the same tree. Serialised they are not merely politer — turbo's cache has been written by the time
+        // the second starts, so in one worktree it costs almost nothing. Keeping the pool means this does not raise
+        // the number of heavy commands the box runs; it only stops two of these being them.
+        { id: "repo-verify", pattern: "\\b(pnpm|npm|yarn|bun)\\s+(run\\s+)?verify(:\\S+)?\\b", limit: 1 },
         { id: "vitest", pattern: "\\bvitest\\b" },
         { id: "typechecker", pattern: "\\b(tsc|tsgo|vue-tsc)\\b" },
         { id: "turbo-fanout", pattern: "\\bturbo\\b[^&|;]*\\brun\\b[^&|;]*\\b(build|test|typecheck|check)\\b" },

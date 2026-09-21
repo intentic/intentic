@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { classifyProcess, parseProcStatus } from "./resource-metrics.js";
+import { classifyProcess, longHeldPools, parseProcStatus, type ResourceSnapshot } from "./resource-metrics.js";
 
 describe("resource metric process attribution", () => {
     test("parses the memory and ownership fields from proc status", () => {
@@ -38,8 +38,51 @@ Threads:\t7
         ["cli-proxy-api --port 8317", "translator"],
         ["node extension-backend-host.js", "extension"],
         ["tmux: server", "terminal"],
+        // The real line, which fell into `other` and hid 1.64 GB of growth: pnpm encodes the path with `+`, so
+        // nothing in it reads as a directory called iq-engine.
+        [
+            "MainThread /usr/local/bin/node /opt/sandbox/node_modules/.pnpm/@intentic+iq-engine@file++++work+_search+iq-engine/node_modules/@intentic/iq-engine/dist/host/child.js",
+            "searchEngine",
+        ],
+        ["node /opt/sandbox/node_modules/@intentic/iq-engine/dist/host/child.js", "searchEngine"],
         ["node dist/main.js", "other"],
     ] as const)("classifies %s as %s", (command, role) => {
         expect(classifyProcess(command)).toBe(role);
+    });
+});
+
+describe("queue slot alarm", () => {
+    const snapshot = (queue: Record<string, unknown>): ResourceSnapshot => ({
+        schema: 1,
+        at: "2026-09-21T19:00:00.000Z",
+        uptimeSeconds: 3_600,
+        window: {},
+        daemon: {},
+        system: {},
+        processes: {},
+        queue,
+        owners: {},
+    });
+
+    test("a pool is reported only once its oldest holder passes the threshold", () => {
+        const busy = snapshot({ heavy: { slots: 2, held: 2, longestHoldSeconds: 120 } });
+        const stuck = snapshot({ heavy: { slots: 2, held: 1, longestHoldSeconds: 1_800 } });
+        // A pool at its limit with commands that are getting on with it is not an alarm.
+        expect(longHeldPools(busy, 900)).toEqual([]);
+        expect(longHeldPools(stuck, 900)).toEqual([{ pool: "heavy", heldSeconds: 1_800 }]);
+    });
+
+    test("pools are judged one at a time, and a pool with nothing held never reports", () => {
+        const mixed = snapshot({
+            heavy: { slots: 2, held: 1, longestHoldSeconds: 2_400 },
+            quiet: { slots: 1, held: 0, longestHoldSeconds: 0 },
+        });
+        expect(longHeldPools(mixed, 900)).toEqual([{ pool: "heavy", heldSeconds: 2_400 }]);
+    });
+
+    test("a sample from a daemon that never measured the queue is not an alarm", () => {
+        expect(longHeldPools(snapshot({}), 900)).toEqual([]);
+        // A pool whose summary lost its field is unknown, not zero and not stuck.
+        expect(longHeldPools(snapshot({ heavy: { slots: 2, held: 1 } }), 900)).toEqual([]);
     });
 });

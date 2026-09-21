@@ -1,4 +1,5 @@
 import { existsSync } from "node:fs";
+import { readdir, readFile } from "node:fs/promises";
 import { setTimeout as delay } from "node:timers/promises";
 import { errorMessage } from "@intentic/base/errors";
 import type { Capability, CapabilityStatus, LocalModelConfig } from "@intentic/sandbox-contract";
@@ -15,6 +16,8 @@ import {
     localModelWindowLabel,
     type LocalModelSource,
 } from "../../endpoints/local-model.js";
+import { advanceIdle, type IdleSample } from "../../endpoints/local-model-idle.js";
+import { parseProcStat } from "../../platform/resources/proc-stat.js";
 import type { CapabilityCtx, CapabilityHandler } from "../capability.js";
 
 // A model the sandbox runs itself: the user picks weights, this downloads and serves them with the bundled
@@ -366,6 +369,95 @@ export const localModelHandler: CapabilityHandler = {
             await ctx.endpointModels.forget(from);
         },
     },
+};
+
+// The llama-server for one entry, found by the port it was told to bind. The panel manager knows a tmux session, not
+// a pid, and the port is the one thing the command line is guaranteed to carry.
+const PROC_PID = /^\d+$/u;
+
+const serverPidOf = async (port: number): Promise<number | undefined> => {
+    const entries = await readdir("/proc").catch(() => [] as string[]);
+    const found = await Promise.all(
+        entries
+            .filter((entry) => PROC_PID.test(entry))
+            .map(async (entry) => {
+                const argv = (await readFile(`/proc/${entry}/cmdline`, "utf8").catch(() => "")).split("\0");
+                // `--port` and its VALUE as separate argv words, never a substring of the line: port 4048 would
+                // otherwise match the server on 40481 and unload the wrong model.
+                const flag = argv.indexOf("--port");
+                const isServer = argv[0]?.includes("llama-server") === true;
+                return isServer && flag >= 0 && argv[flag + 1] === String(port) ? Number(entry) : undefined;
+            }),
+    );
+    return found.find((pid) => pid !== undefined);
+};
+
+const cpuTicksOf = async (pid: number): Promise<number | undefined> =>
+    readFile(`/proc/${pid}/stat`, "utf8")
+        .then((stat) => parseProcStat(stat)?.cpuTicks)
+        .catch(() => undefined);
+
+// Kept across sweeps: when each server's CPU time last moved. Cleared for a server that stops, by advanceIdle.
+let idleSamples: ReadonlyMap<string, IdleSample> = new Map();
+
+// Stops a served model that has done no work for `idleMs`. The weights and the KV cache are the largest resident
+// thing in an otherwise quiet sandbox, and the next turn that wants this model wakes it through wakeLocalModel.
+export const unloadIdleLocalModels = async (ctx: CapabilityCtx, idleMs: number): Promise<readonly string[]> => {
+    const entries = (await ctx.capabilities.list()).flatMap((capability) => (capability.kind === "localmodel" ? [capability] : []));
+    const observed = new Map<string, number>();
+    await Promise.all(
+        entries.map(async (entry) => {
+            if (!ctx.panels.running(localModelPanelKey(entry.id))) {
+                return;
+            }
+            const pid = await serverPidOf(localModelPort(entry.id));
+            const ticks = pid === undefined ? undefined : await cpuTicksOf(pid);
+            if (ticks !== undefined) {
+                observed.set(entry.id, ticks);
+            }
+        }),
+    );
+    const { next, idle } = advanceIdle(idleSamples, observed, Date.now(), idleMs);
+    idleSamples = next;
+    await Promise.all(
+        idle.map(async (id) => {
+            // The watcher first: it polls /health, and a stop it did not expect reads to it as a load that failed.
+            stopWatching(id);
+            await ctx.panels.stop(localModelPanelKey(id));
+            ctx.logger.info(`localmodel ${id}: unloaded after ${Math.round(idleMs / 60_000)} idle minutes, it reloads on the next turn that asks`);
+        }),
+    );
+    return idle;
+};
+
+// Brings back a model that idle-unload stopped, and waits, bounded, for it to serve. Returns whether it is serving.
+// Never throws and never starts a download: weights that are not on disk are a different problem with its own card,
+// and a turn must not sit behind gigabytes.
+export const wakeLocalModel = async (ctx: CapabilityCtx, id: string, timeoutMs: number): Promise<boolean> => {
+    try {
+        if (await serverHealthy(localModelPort(id))) {
+            return true;
+        }
+        const capability = await ctx.capabilities.get(id);
+        if (capability?.kind !== "localmodel") {
+            return false;
+        }
+        const source = localModelSource(capability.config as LocalModelConfig);
+        if (source === undefined) {
+            return false;
+        }
+        const path = weightsPath(ctx, source);
+        if (!(await weightsReady(path)) || (await llamaServerMissing())) {
+            return false;
+        }
+        if (!ctx.panels.running(localModelPanelKey(id))) {
+            await startServer(ctx, id, path, localModelWindow(capability.config as LocalModelConfig));
+        }
+        return await waitUntilServing(ctx, id, AbortSignal.timeout(timeoutMs));
+    } catch (error) {
+        ctx.logger.warn(`localmodel ${id}: wake failed, ${errorMessage(error)}`);
+        return false;
+    }
 };
 
 // Boot restore: the server dies with the container while manifest and weights survive on /work; every entry restarts,

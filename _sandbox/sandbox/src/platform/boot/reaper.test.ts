@@ -6,11 +6,13 @@ import { type AgentSessionState, parseAgentSessions, reapableAgentSessionNames, 
 const NOW = 1_780_000_000_000;
 const MINUTE = 60_000;
 const GRACE = 10 * MINUTE;
+const IDLE = 60 * MINUTE;
 
 const session = (overrides: Partial<AgentSessionState> & { name: string }): AgentSessionState => ({
     owner: "conv-1",
     attached: false,
-    activityAt: NOW - 60 * MINUTE,
+    // Just used, so the idle ceiling never decides a test that is not about it.
+    activityAt: NOW - MINUTE,
     ...overrides,
 });
 
@@ -19,6 +21,7 @@ const policy = (overrides: Partial<TerminalPolicy> = {}): TerminalPolicy => ({
     ownerStoppedSince: () => NOW - 60 * MINUTE,
     liveNames: new Set<string>(),
     graceMs: GRACE,
+    idleMs: IDLE,
     ...overrides,
 });
 
@@ -26,9 +29,25 @@ test("a stopped conversation's session goes once the grace has passed: live pane
     expect(reapableAgentSessionNames([session({ name: "agent-a" })], NOW, policy())).toEqual(["agent-a"]);
 });
 
-test("nothing goes while the owner runs, and nothing goes before the grace is up", () => {
+test("a session in use goes neither while its owner runs nor before the grace is up", () => {
     expect(reapableAgentSessionNames([session({ name: "agent-a" })], NOW, policy({ ownerStoppedSince: () => undefined }))).toEqual([]);
     expect(reapableAgentSessionNames([session({ name: "agent-a" })], NOW, policy({ ownerStoppedSince: () => NOW - GRACE + MINUTE }))).toEqual([]);
+});
+
+// The case the stop clock structurally cannot reach: a conversation that goes on working never stops, so every
+// session it has replaced is held, and so is whatever is stuck inside one.
+test("a working owner's stale session still goes, on the session's own clock", () => {
+    const stale = session({ name: "agent-stale", activityAt: NOW - IDLE });
+    const recent = session({ name: "agent-recent", activityAt: NOW - IDLE + MINUTE });
+    const live = policy({ ownerStoppedSince: () => undefined });
+    expect(reapableAgentSessionNames([stale, recent], NOW, live)).toEqual(["agent-stale"]);
+});
+
+test("the idle ceiling yields to the two absolutes: attached, and a turn in flight", () => {
+    const stale = { name: "agent-stale", owner: "conv-1", attached: false, activityAt: NOW - 10 * IDLE };
+    const live = policy({ ownerStoppedSince: () => undefined });
+    expect(reapableAgentSessionNames([{ ...stale, attached: true }], NOW, live)).toEqual([]);
+    expect(reapableAgentSessionNames([stale], NOW, policy({ ownerStoppedSince: () => undefined, liveNames: new Set(["agent-stale"]) }))).toEqual([]);
 });
 
 test("attached is absolute: someone is looking at it, whatever its owner's clock says", () => {

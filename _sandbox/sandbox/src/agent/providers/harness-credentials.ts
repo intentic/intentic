@@ -140,6 +140,20 @@ const resolveTrialCredentials = async (services: Services): Promise<HarnessCrede
     };
 };
 
+// Idle-unload may have stopped this server, and the model catalog asks the server itself — so it has to be up before
+// that question is worth asking. A wake that fails changes nothing: the empty catalog then reports it as not serving,
+// which is what a model that cannot start looks like either way.
+//
+// Through Services rather than by calling the handler: importing it here put agent/providers into the capability
+// graph and cost the whole package's type inference (a `TurnAllowance` that resolved to its error branch alone, two
+// files away). The daemon wires the closure in composition, where everything is already imported.
+const wakeIfLocalModel = async (services: Services, kind: string, id: string): Promise<void> => {
+    if (kind !== "localmodel") {
+        return;
+    }
+    await services.wakeLocalModel(id);
+};
+
 const resolveEndpointCredentials = async (services: Services, id: string, model: string | undefined): Promise<HarnessCredentialsResult> => {
     if (id === TRIAL_ENDPOINT_ID) {
         return resolveTrialCredentials(services);
@@ -150,6 +164,7 @@ const resolveEndpointCredentials = async (services: Services, id: string, model:
     if (capability === undefined || config === undefined) {
         return { ok: false, message: `Unknown model endpoint "${id}", add it as an Endpoint capability first.` };
     }
+    await wakeIfLocalModel(services, capability.kind, id);
     const catalog = await services.endpointModels.models(id, config);
     if (catalog.models.length === 0) {
         return {

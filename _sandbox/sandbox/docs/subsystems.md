@@ -139,7 +139,10 @@ A reader's tour of `src/`: which directory answers which question, and the file 
   levels down, nothing here holds a handle on them) carry the conversation's stamp
   ([src/platform/boot/leftovers.ts](../src/platform/boot/leftovers.ts)) and go a couple of minutes after the stop; the
   conversation's `agent-*` tmux sessions: live panes included, so a left-behind dev server no longer outlives
-  its turn by days: go minutes later unless somebody is attached; its browser records close; and the temp
+  its turn by days: go minutes later unless somebody is attached; a session whose owner has NOT stopped is on
+  its own idle clock instead, because a conversation that goes on working never trips the clock above and so
+  holds every session it ever opened (measured: a hung command held a queue slot for 26 minutes inside a session
+  its conversation had long since replaced); its browser records close; and the temp
   state turns mint (tmux-run capture dirs, land/classify patch dirs) is swept by prefix and
   age. Archive and discard are the hard stop: their press reaps the conversation on the spot. WHICH of those
   processes are this daemon's at all is the PROCESS GROUP for everything it forked itself: a container can
@@ -150,6 +153,21 @@ A reader's tour of `src/`: which directory answers which question, and the file 
   this daemon read the live one's processes as a dead life's leavings and killed four agent turns mid-answer,
   and no amount of care in this file would have helped, because the file doing the killing was a checkout from
   a branch that predated the care.
+- Memory nobody is using is given back, on four clocks that do not share a mechanism because the things they
+  watch do not. `memory.high` is set to 90% of `memory.max` in
+  [docker-entrypoint.sh](../docker-entrypoint.sh), from inside, where cgroup2 is delegated rw and docker has no flag
+  for it: the hard cap is a wall and something dies at it, the brake is reclaim and only time is spent. A local
+  model holds its weights and its whole KV cache whether or not anything is generating, so
+  [src/endpoints/local-model-idle.ts](../src/endpoints/local-model-idle.ts) judges it by CPU time — the one signal the
+  daemon has, since a turn reaches llama-server through the translator and no request is ever observed here — and a
+  server idle for half an hour is unloaded, woken again by the turn that asks for it
+  (harness-credentials, through `Services.wakeLocalModel`). The search engine's child is replaced when it passes a
+  ceiling well clear of its working set, which costs a re-sweep and is why the ceiling is not a budget
+  ([_search/iq-engine/src/host/client.ts](../../../_search/iq-engine/src/host/client.ts)). What each of them is
+  holding is in the resource sample: `searchEngine` is a role of its own precisely because folding it into `other`
+  hid 1.64 GB of growth, and `queue.<pool>.longestHoldSeconds`
+  ([src/platform/resources/queue-slots.ts](../src/platform/resources/queue-slots.ts)) reads the holder off fd 9, since
+  this container's `/proc/locks` lists other namespaces' locks and never its own.
 - [src/platform/boot/container-owner.ts](../src/platform/boot/container-owner.ts): which daemon this one is. This repository
   is the sandbox, so an agent working in it runs the daemon from source to watch a change work, and everything
   held once per container (HOME, the tmux server, the process sweep, the translator, the platform registration,

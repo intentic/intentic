@@ -27,7 +27,8 @@ import { linkSshHosts } from "./capabilities/ssh-hosts.js";
 import { startTranslator } from "./agent/providers/translator.js";
 import { onPath } from "./platform/boot/on-path.js";
 import { DOCKER_PANEL_KEY, startDockerdIfEnabled } from "./capabilities/handlers/docker.handler.js";
-import { localModelPanelKey, startLocalModelsIfEnabled } from "./capabilities/handlers/localmodel.handler.js";
+import { localModelPanelKey, startLocalModelsIfEnabled, unloadIdleLocalModels } from "./capabilities/handlers/localmodel.handler.js";
+import { LOCAL_MODEL_IDLE_MS, LOCAL_MODEL_IDLE_SWEEP_MS } from "./endpoints/local-model-idle.js";
 import { writeAgentToken } from "./auth/agent-token.js";
 import { createCiPoller } from "./ci/poller.js";
 import { restoreExits } from "./exit/exit-links.js";
@@ -871,6 +872,17 @@ const main = async (): Promise<void> => {
     // Model servers die with the container like dockerd; weights survive on /work, so every ready one comes back.
     if (role.container) {
         void startLocalModelsIfEnabled(bootCtx);
+        // A loaded model holds its weights and its whole KV cache whether or not anything is using it, which is the
+        // largest resident thing in a quiet sandbox. One nobody has generated a token with in half an hour gives it
+        // back; the turn that asks for it next waits out a reload, which harness-credentials does on its behalf.
+        const unloadIdle = setInterval(() => {
+            void unloadIdleLocalModels(bootCtx, LOCAL_MODEL_IDLE_MS).catch((error: unknown) => {
+                services.logger.warn({ err: error }, "localmodel idle sweep failed");
+            });
+        }, LOCAL_MODEL_IDLE_SWEEP_MS);
+        // Reclaiming memory must be neither what keeps the daemon alive nor what keeps it from stopping.
+        unloadIdle.unref();
+        shutdown.push(() => clearInterval(unloadIdle));
     }
     // Backs "Codex/Grok under the Claude Code harness" via CLIProxyAPI. Gated on the binary being in this image (a
     // feature pack, not core): TRANSLATOR_URL alone no longer implies it's present.

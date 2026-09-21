@@ -21,6 +21,7 @@ test("samples immediately into the durable logs tree as JSONL", async () => {
         daemon: { memory: { rssBytes: 100 } },
         system: {},
         processes: {},
+        queue: { heavy: { slots: 2, held: 1, longestHoldSeconds: 12 } },
         owners: { turnRuns: { frames: 3 } },
     };
     const sampler: ResourceSampler = { sample: vi.fn(async () => snapshot), stop: vi.fn() };
@@ -59,6 +60,8 @@ const withCgroup = (at: string, kills: number, roles: Record<string, number>): R
     daemon: {},
     system: { cgroup: { event_oom_kill: kills } },
     processes: { byRole: Object.fromEntries(Object.entries(roles).map(([role, count]) => [role, { count }])) },
+    // Nothing held, so the OOM assertions below cannot be reading a slot alarm by accident.
+    queue: {},
     owners: {},
 });
 

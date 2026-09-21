@@ -21,6 +21,12 @@ const TMUX_OWNER_OPTION = "@intentic_owner";
 // terminals wait long enough for a live scrollback and a delayed follow-up message to still find their job.
 const PROCESS_GRACE_MS = 2 * 60_000;
 const TERMINAL_GRACE_MS = 10 * 60_000;
+// How long a session whose owner is still LIVE may sit untouched before its own clock ends it. Everything below
+// keys off the owner having stopped, which a conversation that goes on working never does — so the session of a
+// turn it replaced an hour ago is held, and so is anything stuck inside it (measured: a hung `npx` held a queue
+// slot for 26 minutes in a session its conversation had moved on from). Six times the stopped grace, because
+// here the cost of being wrong is a live conversation losing scrollback it might still come back to.
+const TERMINAL_IDLE_MS = 60 * 60_000;
 // How long a browser nobody is driving stays open, on its own clock rather than its owner's. Matched to the terminal
 // grace: both are things a turn may come back to, and a Chromium is the more expensive of the two to leave standing
 // (a dozen processes and a few hundred MB against a tmux session's kilobytes).
@@ -75,10 +81,14 @@ export interface TerminalPolicy {
     // Sessions of turns in flight, by name; a live turn's session is never reaped even without owner attribution.
     readonly liveNames: ReadonlySet<string>;
     readonly graceMs: number;
+    // Ceiling for a session whose owner has NOT stopped; without it a working conversation holds every session it
+    // ever opened, which is the one case the stop clock structurally cannot reach.
+    readonly idleMs: number;
 }
 
 // Which agent sessions go this pass. Attached is absolute; an owned session goes once stopped past grace, an unowned
-// one is judged by its own idle clock against the same grace.
+// one is judged by its own idle clock against the same grace, and a live owner's stale session by that clock against
+// the longer ceiling.
 export const reapableAgentSessionNames = (sessions: readonly AgentSessionState[], now: number, policy: TerminalPolicy): string[] =>
     sessions
         .filter((session) => {
@@ -89,7 +99,12 @@ export const reapableAgentSessionNames = (sessions: readonly AgentSessionState[]
                 return session.activityAt <= now - policy.graceMs;
             }
             const stoppedSince = policy.ownerStoppedSince(session.owner);
-            return stoppedSince !== undefined && stoppedSince <= now - policy.graceMs;
+            if (stoppedSince !== undefined) {
+                return stoppedSince <= now - policy.graceMs;
+            }
+            // Owner still working. A turn in flight is already excluded by `liveNames` above, so what is left is a
+            // session the conversation has replaced and will not touch again.
+            return session.activityAt <= now - policy.idleMs;
         })
         .map((session) => session.name);
 
@@ -107,6 +122,7 @@ export interface ReaperDeps {
     readonly logger: Logger;
     readonly processGraceMs?: number;
     readonly terminalGraceMs?: number;
+    readonly terminalIdleMs?: number;
     readonly browserIdleMs?: number;
     readonly intervalMs?: number;
 }
@@ -140,6 +156,7 @@ export const createResourceReaper = (deps: ReaperDeps): ResourceReaper => {
     const { logger } = deps;
     const processGraceMs = deps.processGraceMs ?? PROCESS_GRACE_MS;
     const terminalGraceMs = deps.terminalGraceMs ?? TERMINAL_GRACE_MS;
+    const terminalIdleMs = deps.terminalIdleMs ?? TERMINAL_IDLE_MS;
     const browserIdleMs = deps.browserIdleMs ?? BROWSER_IDLE_MS;
     const intervalMs = deps.intervalMs ?? SWEEP_INTERVAL_MS;
     const group = ownProcessGroup();
@@ -215,6 +232,7 @@ export const createResourceReaper = (deps: ReaperDeps): ResourceReaper => {
             ownerStoppedSince: (owner) => ownerStoppedSince(owner, now),
             liveNames: deps.liveSessionNames(),
             graceMs: terminalGraceMs,
+            idleMs: terminalIdleMs,
         });
         if (names.length === 0) {
             return;

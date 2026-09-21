@@ -22,7 +22,8 @@ test.each([
     ["pnpm -w test", "package-script"],
     ["pnpm --filter @intentic/sandbox test", "package-script"],
     ["pnpm typecheck", "package-script"],
-    ["pnpm verify", "package-script"],
+    // Above package-script now, and limited to one: see the repo-verify rule for the measurement.
+    ["pnpm verify", "repo-verify"],
     ["npm run build", "package-script"],
     ["yarn test", "package-script"],
     ["npx vitest run", "vitest"],
@@ -196,6 +197,21 @@ test.each([
     ["vue-tsc --noEmit -p tsconfig.json", "typechecker"],
 ])("%s is still queued despite the long-lived exemption", (command, id) => {
     expect(matched(command)).toBe(id);
+});
+
+test("a repo-wide verification is limited to one, and stays in the pool with everything else", () => {
+    const verify = matchHeavyCommand("pnpm verify:turn", config());
+    expect(verify).toEqual({ id: "repo-verify", pool: "heavy", limit: 1, maxHold: HOLD });
+    // Same pool as the rest, so serialising these does not raise how many heavy commands the box runs at once.
+    expect(verify?.pool).toBe(config().defaultPool);
+    expect(matched("pnpm run verify:turn")).toBe("repo-verify");
+});
+
+test("the verify rule does not swallow the package scripts it sits above", () => {
+    expect(matched("pnpm test")).toBe("package-script");
+    expect(matched("pnpm typecheck")).toBe("package-script");
+    // Still the file's limit, so ordinary heavy commands keep both slots.
+    expect(matchHeavyCommand("pnpm test", config())?.limit).toBe(2);
 });
 
 test("an empty rule list switches the queue off", () => {

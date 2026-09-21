@@ -155,4 +155,21 @@ if [ "$cgroup_max" != "max" ] && [ -n "$cgroup_max" ]; then
     fi
 fi
 
+# memory.high, the kernel's own brake, set below the hard cap so reclaim starts BEFORE the cliff rather than at it.
+# `memory.max` is a wall: cross it and something is killed. `memory.high` is throttle-and-reclaim, which spends time
+# instead of a process, and it raises PSI early enough that the memory gate (src/platform/resources/memory-gate.ts)
+# can see a tight box while it is still only tight. Docker has no flag for this — `--memory-reservation` is
+# memory.low, protection rather than a brake — so it is set here, from inside, where cgroup2 is delegated rw.
+#
+# 90% because the measured peak on a 16 GiB box was 14.45 GiB: the brake engages at the top of normal, not inside it.
+# Never overrides a value an operator already set, and every failure is silent — a cgroup that refuses the write
+# leaves a sandbox running exactly as it did before, which is the only acceptable outcome for a tuning knob.
+memory_high_percent="${INTENTIC_MEMORY_HIGH_PERCENT:-90}"
+case "$memory_high_percent" in '' | *[!0-9]*) memory_high_percent=0 ;; esac
+if [ "$memory_high_percent" -gt 0 ] && [ "$cgroup_max" != "max" ] && [ -n "$cgroup_max" ]; then
+    if [ "$(cat /sys/fs/cgroup/memory.high 2>/dev/null || echo max)" = "max" ]; then
+        echo $((cgroup_max / 100 * memory_high_percent)) > /sys/fs/cgroup/memory.high 2>/dev/null || true
+    fi
+fi
+
 exec node --max-old-space-size="$heap_mb" --report-on-fatalerror --report-directory="$HISTORY_ROOT/logs" /opt/sandbox/dist/main.js

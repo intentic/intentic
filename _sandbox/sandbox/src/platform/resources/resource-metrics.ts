@@ -8,6 +8,7 @@ import type { Logger } from "pino";
 import { logsRoot } from "../../logs/log-files.js";
 import { parsePressure, type PressureSnapshot } from "./loop-watchdog.js";
 import { parseProcStat } from "./proc-stat.js";
+import { queueSnapshot } from "./queue-slots.js";
 
 // Durable, one-line-per-minute account of the sandbox's resources: what was growing before an event-loop stall,
 // including healthy periods with no warning. Stored under the logs tree's retention and /logs/file access policy.
@@ -15,7 +16,7 @@ import { parseProcStat } from "./proc-stat.js";
 const SAMPLE_INTERVAL_MS = 60_000;
 export const RESOURCE_METRICS_FILE = "resource-metrics.jsonl";
 
-export type ProcessRole = "languageServer" | "agentRuntime" | "browser" | "git" | "translator" | "extension" | "terminal" | "other";
+export type ProcessRole = "languageServer" | "searchEngine" | "agentRuntime" | "browser" | "git" | "translator" | "extension" | "terminal" | "other";
 
 interface ProcessRow {
     readonly pid: number;
@@ -68,6 +69,11 @@ export const classifyProcess = (command: string): ProcessRole => {
         ) || /@intentic[/]lsp|_search[/]lsp|[/]lsp[/]dist[/]cli|(^|[ /])lsp([ /]|$)|(^|[ /])tsgo([ .]|$)/u.test(value);
     if (languageServer) {
         return "languageServer";
+    }
+    // The search engine is its own role because it is neither an LSP nor noise: it is a long-lived index host with a
+    // heap cap of its own, and folding it into `other` is what hid 1.64 GB of growth behind a bucket nobody reads.
+    if (/iq-engine|(^|[ /])iq([ /]|$)/u.test(value)) {
+        return "searchEngine";
     }
     if (/cli-proxy-api|endpoint-translator|translator-proxy/u.test(value)) {
         return "translator";
@@ -169,6 +175,7 @@ const processSnapshot = async (
     const descendants = emptyProcessSummary();
     const byRole: Record<ProcessRole, ProcessSummary> = {
         languageServer: emptyProcessSummary(),
+        searchEngine: emptyProcessSummary(),
         agentRuntime: emptyProcessSummary(),
         browser: emptyProcessSummary(),
         git: emptyProcessSummary(),
@@ -266,6 +273,9 @@ export interface ResourceSnapshot {
     readonly daemon: unknown;
     readonly system: unknown;
     readonly processes: unknown;
+    // Per pool: slots, how many are taken, and the oldest holder's age. A pool at its limit is ordinary; one whose
+    // oldest holder keeps climbing between samples is a command that is not coming back.
+    readonly queue: Readonly<Record<string, unknown>>;
     readonly owners: Readonly<Record<string, unknown>>;
 }
 
@@ -337,7 +347,13 @@ const createResourceSampler = (owners: () => Readonly<Record<string, unknown>> =
             .then((entries) => entries.length)
             .catch(() => undefined);
         const processesPromise = processSnapshot(previousProcessCpu);
-        const [selfStatus, openFds, processes, system] = await Promise.all([selfStatusPromise, openFdsPromise, processesPromise, systemSnapshot()]);
+        const [selfStatus, openFds, processes, system, queue] = await Promise.all([
+            selfStatusPromise,
+            openFdsPromise,
+            processesPromise,
+            systemSnapshot(),
+            queueSnapshot(),
+        ]);
         previousProcessCpu = processes.cpuByPid;
         const heap = getHeapStatistics();
         const snapshot: ResourceSnapshot = {
@@ -397,6 +413,7 @@ const createResourceSampler = (owners: () => Readonly<Record<string, unknown>> =
             },
             system,
             processes: { total: processes.total, descendants: processes.descendants, byRole: processes.byRole },
+            queue,
             owners: owners(),
         };
         return snapshot;
@@ -427,6 +444,10 @@ export interface ResourceMetricsOptions {
 // OOM alarm: logged at error the moment a kill is observed. Reported as a delta since the raw counter is cumulative;
 // the first sample after a restart has nothing to diff and is skipped.
 const OOM_EVENTS = ["event_oom_kill", "event_oom_group_kill"] as const;
+
+// When a slot holder becomes worth a line in the log. Half of heavy-commands' shipped `maxHoldSeconds`, so a stuck
+// command is named while there is still as long again before the ceiling takes the slot back by force.
+const SLOT_HOLD_WARN_SECONDS = 15 * 60;
 
 const numberAt = (source: unknown, path: readonly string[]): number | undefined => {
     const value = path.reduce<unknown>(
@@ -472,6 +493,14 @@ export const oomSinceSample = (
     return { kills, lostByRole };
 };
 
+// Pools whose oldest holder has been in place too long. Reads the sample rather than the queue directly, so the line
+// in the log and the line on disk can never disagree about what was held.
+export const longHeldPools = (snapshot: ResourceSnapshot, thresholdSeconds: number): { readonly pool: string; readonly heldSeconds: number }[] =>
+    Object.entries(snapshot.queue).flatMap(([pool, summary]) => {
+        const longest = numberAt(summary, ["longestHoldSeconds"]);
+        return longest === undefined || longest < thresholdSeconds ? [] : [{ pool, heldSeconds: longest }];
+    });
+
 const resourceMetricsPath = (historyRoot: string): string => join(logsRoot(historyRoot), RESOURCE_METRICS_FILE);
 
 export const startResourceMetrics = ({
@@ -489,6 +518,8 @@ export const startResourceMetrics = ({
     let persistenceFailed = false;
     // Previous sample for the OOM diff, held in memory: a restart has nothing to compare against, on purpose.
     let previous: ResourceSnapshot | undefined;
+    // Pools already reported as stuck, so the warning fires on the edge and not every minute the slot stays held.
+    let warnedPools = new Set<string>();
     const path = resourceMetricsPath(historyRoot);
     const sample = (): Promise<void> => {
         if (inFlight !== undefined) {
@@ -508,6 +539,18 @@ export const startResourceMetrics = ({
                     "the kernel killed processes in this container for running out of memory",
                 );
             }
+            // Once per spell, per pool: a command that legitimately runs an hour is one line, not sixty. A pool
+            // drops out of the set when its oldest holder goes, so the next stuck one is reported again.
+            const longHeld = longHeldPools(snapshot, SLOT_HOLD_WARN_SECONDS);
+            for (const held of longHeld) {
+                if (!warnedPools.has(held.pool)) {
+                    logger.warn(
+                        { pool: held.pool, heldSeconds: held.heldSeconds, at: snapshot.at },
+                        "a heavy-command queue slot has been held without finishing; the pool is short by one until it ends",
+                    );
+                }
+            }
+            warnedPools = new Set(longHeld.map((held) => held.pool));
         })()
             .catch((error: unknown) => {
                 // One warning per failure spell, so a dead history volume doesn't spam the daemon log every minute.

@@ -109,3 +109,50 @@ test("a killed child is reported, and the next search brings up a new one", asyn
         await doomed.close();
     }
 });
+
+// A recycle takes the same path as a crash and must not read like one: same replacement, no degraded-search report.
+test("a recycled child is replaced without being reported as a crash", async () => {
+    const reported: Error[] = [];
+    const replaced = createEngineClient({ root, onQueryError: (error) => reported.push(error) });
+    try {
+        const first = replaced.pid();
+        expect(first).toBeGreaterThan(0);
+        expect(await replaced.recycleNow()).toBe(true);
+
+        const outcome = await replaced.run(request({ verb: "files", query: "widget" }));
+        expect(outcome.result.groups[0]?.path).toBe("alpha/src/widget.ts");
+        expect(replaced.pid()).not.toBe(first);
+        expect(reported).toEqual([]);
+    } finally {
+        await replaced.close();
+    }
+});
+
+test("the ceiling replaces a child on its own, and says which one it was", async () => {
+    const recycled: { pid: number; rssBytes: number }[] = [];
+    // One byte, so every child is over it: this measures the timer and the report, not where a threshold should be.
+    const watched = createEngineClient({ root, memoryCeilingBytes: 1, memoryCheckIntervalMs: 20, onRecycle: (info) => recycled.push(info) });
+    try {
+        const first = watched.pid();
+        await expect.poll(() => recycled.length, { timeout: 10_000 }).toBeGreaterThan(0);
+        expect(recycled[0]?.pid).toBe(first);
+        expect(recycled[0]?.rssBytes).toBeGreaterThan(0);
+        // Exactly once: nothing re-forks until a search asks for one, so a ceiling cannot spin on an idle engine.
+        expect(watched.pid()).toBeUndefined();
+        expect(recycled).toHaveLength(1);
+    } finally {
+        await watched.close();
+    }
+});
+
+test("a ceiling nothing reaches never fires", async () => {
+    const recycled: unknown[] = [];
+    const roomy = createEngineClient({ root, memoryCeilingBytes: 1024 ** 4, memoryCheckIntervalMs: 20, onRecycle: (info) => recycled.push(info) });
+    try {
+        await new Promise((resolve) => setTimeout(resolve, 300));
+        expect(recycled).toEqual([]);
+        expect(roomy.pid()).toBeGreaterThan(0);
+    } finally {
+        await roomy.close();
+    }
+});

@@ -1,4 +1,5 @@
 import { type ChildProcess, fork } from "node:child_process";
+import { readFile } from "node:fs/promises";
 import type { CodebaseHealth, HealthRequest } from "../engines/health.js";
 import type { ResidentEngine, ResidentEngineMetrics, ResidentEngineOptions } from "../index.js";
 import type { IndexStatus, QueryOutcome, QueryRequest } from "../types.js";
@@ -42,10 +43,38 @@ const rebuild = (message: string, stack?: string): Error => {
 // undefined between a child dying and the next call starting one.
 export interface EngineClient extends ResidentEngine {
     pid(): number | undefined;
+    // Replaces the child now, if there is one and nothing is in flight. Exposed for tests and for an operator who
+    // would rather pay a re-sweep than go on holding the memory.
+    recycleNow(): Promise<boolean>;
 }
 
-export const createEngineClient = (options: ResidentEngineOptions): EngineClient => {
-    const { onIndexError, onQueryError, onIndexProgress, ...init } = options;
+// How long a child asked to close gets before it is killed. Its handle is already gone by then, so a process that
+// will not go is unreachable memory, which is worse than a dead one.
+const RECYCLE_GRACE_MS = 10_000;
+const MEMORY_CHECK_INTERVAL_MS = 60_000;
+
+export interface EngineClientOptions extends ResidentEngineOptions {
+    // Resident size above which the child is replaced at the next moment nothing is in flight. Absent or 0 never
+    // recycles. The replacement re-sweeps and re-claims the index, so this is a ceiling for memory that is not
+    // coming back, not a budget: set it clear of the legitimate working set (index plus ML models), or the engine
+    // spends its life reloading. Every firing is reported, so a ceiling set too low says so in the log.
+    readonly memoryCeilingBytes?: number;
+    readonly memoryCheckIntervalMs?: number;
+    readonly onRecycle?: (info: { readonly pid: number; readonly rssBytes: number }) => void;
+}
+
+// VmRSS for one pid. Linux only, and undefined everywhere else, which reads as "no reason to recycle".
+const residentBytes = async (pid: number): Promise<number | undefined> => {
+    const status = await readFile(`/proc/${pid}/status`, "utf8").catch(() => undefined);
+    const kb = status === undefined ? undefined : /^VmRSS:\s+(\d+)\s+kB$/mu.exec(status)?.[1];
+    return kb === undefined ? undefined : Number(kb) * 1024;
+};
+
+export const createEngineClient = (options: EngineClientOptions): EngineClient => {
+    const { onIndexError, onQueryError, onIndexProgress, memoryCeilingBytes, memoryCheckIntervalMs, onRecycle, ...init } = options;
+    // Callbacks and policy are destructured out because `init` is structured-cloned to the child, which a function
+    // cannot survive.
+    const ceilingBytes = memoryCeilingBytes ?? 0;
     const pending = new Map<number, Pending>();
     let child: ChildProcess | undefined;
     let nextId = 0;
@@ -151,11 +180,54 @@ export const createEngineClient = (options: ResidentEngineOptions): EngineClient
         });
     };
 
+    // Replaces the child: drops the handle so the next call forks a fresh one, then asks the old process to go. Its
+    // `exit` listener is removed first, because this exit is a decision and must not be reported as a crash.
+    const replaceChild = (doomed: ChildProcess, rssBytes: number): void => {
+        if (doomed.pid !== undefined) {
+            onRecycle?.({ pid: doomed.pid, rssBytes });
+        }
+        child = undefined;
+        metrics = COLD;
+        doomed.removeAllListeners("exit");
+        doomed.removeAllListeners("message");
+        doomed.send({ type: "close", id: -1 } satisfies EngineRequest, () => undefined);
+        const hard = setTimeout(() => doomed.kill("SIGKILL"), RECYCLE_GRACE_MS);
+        hard.unref();
+        doomed.once("exit", () => clearTimeout(hard));
+    };
+
+    // A recycle mid-query would reject a search someone is waiting on, and the memory has waited this long already.
+    const spare = (candidate: ChildProcess | undefined): candidate is ChildProcess =>
+        candidate !== undefined && candidate === child && candidate.pid !== undefined && !closed && pending.size === 0;
+
+    // Asked twice, because reading the size awaits and a call can arrive inside that await.
+    const recycleIfOver = async (ceiling: number): Promise<boolean> => {
+        const running = child;
+        if (ceiling <= 0 || !spare(running)) {
+            return false;
+        }
+        const rss = await residentBytes(running.pid as number);
+        if (rss === undefined || rss < ceiling || !spare(running)) {
+            return false;
+        }
+        replaceChild(running, rss);
+        return true;
+    };
+
     // Started eagerly: an in-process engine begins indexing in its constructor, and boot relies on that.
     start();
 
+    const memoryTimer =
+        ceilingBytes > 0
+            ? setInterval(() => void recycleIfOver(ceilingBytes), memoryCheckIntervalMs ?? MEMORY_CHECK_INTERVAL_MS)
+            : undefined;
+    // Watching for a leak must never be the reason the daemon cannot exit.
+    memoryTimer?.unref();
+
     return {
         pid: () => child?.pid,
+        // Ignores the ceiling: an explicit ask is already the decision the ceiling exists to make automatically.
+        recycleNow: () => recycleIfOver(1),
         // Synchronous, from the last pushed snapshot; age is computed here so an idle sweep keeps getting older.
         metrics: (): ResidentEngineMetrics => ({
             files: metrics.files,
@@ -181,6 +253,7 @@ export const createEngineClient = (options: ResidentEngineOptions): EngineClient
             if (closed) {
                 return;
             }
+            clearInterval(memoryTimer);
             if (child === undefined) {
                 closed = true;
                 return;
