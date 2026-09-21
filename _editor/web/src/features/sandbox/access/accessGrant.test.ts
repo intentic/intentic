@@ -2,10 +2,15 @@ import { describe, expect, it } from "vitest";
 import { grantBody, grantSendable } from "./accessGrant";
 
 describe(`grantBody`, () => {
+    it(`carries areas on a desk grant like any other tier below maintainer`, () => {
+        expect(grantBody(`dee@example.com`, `desk`, [`support`])).toEqual({ email: `dee@example.com`, role: `desk`, areas: [`support`] });
+    });
+
     // Absent and empty are different grants: no field is the whole workspace, an empty list is a fence admitting
     // nothing. Sending one for the other is the difference between a colleague seeing everything and seeing nothing.
     it(`omits the fence entirely when no area is picked, and sends it when one is`, () => {
         expect(grantBody(`vic@example.com`, `viewer`, undefined)).toEqual({ email: `vic@example.com`, role: `viewer` });
+        expect(grantBody(`vic@example.com`, `viewer`, [])).toEqual({ email: `vic@example.com`, role: `viewer`, areas: [] });
         expect(grantBody(`vic@example.com`, `viewer`, [`support`])).toEqual({ email: `vic@example.com`, role: `viewer`, areas: [`support`] });
     });
 
