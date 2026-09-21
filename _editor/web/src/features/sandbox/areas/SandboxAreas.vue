@@ -7,10 +7,13 @@ import { computed, ref } from "vue";
 import FolderPicker from "../devices/FolderPicker.vue";
 import { useSandbox } from "../client/useSandbox";
 import { useSandboxOutline } from "../overview/useSandboxOutline";
+import { usePersonaReach } from "../access/usePersonaReach";
 import { useAreas } from "./useAreas";
 
 // The named parts of the workspace, and the folders behind each. This is where "who sees what" is decided: the
 // Access tab hands a person an area by name, and this page is the only thing that says what that name means.
+// It is also where "who talks to whom" is decided, since an assistant belongs to the area its starting folder is in
+// and anyone holding that area may speak through it — so each row names the assistants it hands over.
 // Owner-only to write, like the roster itself, since editing an area moves everyone holding it at once.
 
 const t = useT();
@@ -81,6 +84,11 @@ const drop = async (id: string): Promise<void> => {
 };
 
 const folderLine = (area: Area): string => area.folders.join(`, `);
+
+// The assistants this area hands over: those whose starting folder it covers. Derived, never configured — the same
+// answer the daemon gives a member asking which cards they may wear (personas/persona-reach.ts).
+const { namesOf } = usePersonaReach();
+const assistantsIn = (area: Area): string[] => namesOf([area.id]);
 </script>
 
 <template>
@@ -96,6 +104,9 @@ const folderLine = (area: Area): string => area.folders.join(`, `);
                 <Row icon="folder" :title="area.label ?? area.id" :description="folderLine(area)">
                     <template #meta>
                         <StatusBadge variant="neutral" :label="area.id" size="xs" />
+                        <!-- Who this area hands over. No badge at all means holding it grants no assistant, which is
+                             fine for a viewer or a writer and is the whole of what a desk would get. -->
+                        <StatusBadge v-for="name in assistantsIn(area)" :key="name" variant="info" :label="name" size="xs" />
                     </template>
                     <template v-if="isOwner" #control>
                         <Button

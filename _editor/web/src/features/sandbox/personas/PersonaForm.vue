@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { ModelPin, SystemPromptMode, TurnBriefingNoteId } from "@intentic/sandbox-contract";
+import { fenceCovers, type ModelPin, personaHome, type SystemPromptMode, type TurnBriefingNoteId } from "@intentic/sandbox-contract";
 import { BrandMark, ui, Notice, type NoticeModel, SearchBar, SegmentedControl } from "@intentic/ui";
 import ToggleSwitch from "primevue/toggleswitch";
 import { computed, ref, shallowRef } from "vue";
@@ -8,6 +8,7 @@ import { pinKnobSummary, pinnedList } from "../agent-settings/models/modelPinLis
 import ModelPinList from "../agent-settings/models/ModelPinList.vue";
 import ModelPinPicker from "../agent-settings/models/ModelPinPicker.vue";
 import FolderPicker from "../devices/FolderPicker.vue";
+import { useAreas } from "../areas/useAreas";
 import PersonaBriefingFields from "./PersonaBriefingFields.vue";
 import PersonaKitFields from "./PersonaKitFields.vue";
 import PersonaPowersFields from "./PersonaPowersFields.vue";
@@ -84,6 +85,17 @@ const detailOf = (account: BrowserAccount): string | undefined => {
     const parts = [...(saysSite ? [] : [account.site]), ...(connected.includes(account.id) ? [] : [`not signed in`])];
     return parts.length === 0 ? undefined : parts.join(` · `);
 };
+
+// Who can talk to this card, read off where it works: a person holds areas, and an area whose folders cover the
+// card's home is what hands it over (policy/persona-home.ts). Nobody picks cards per person, so this line is the only
+// place the consequence of a starting folder is visible while it is being chosen.
+const { areas } = useAreas();
+const reachedBy = computed<string[]>(() => {
+    const home = personaHome({
+        workspace: { ...(draft.startIn[0] !== undefined ? { startIn: draft.startIn[0] } : {}), folders: draft.folders },
+    });
+    return areas.value.filter((area) => fenceCovers(area.folders, home)).map((area) => area.label ?? area.id);
+});
 
 const picked = (id: string): boolean => draft.capabilities.includes(id);
 const toggleAccount = (id: string): void => {
@@ -290,6 +302,13 @@ const configure = (pin: ModelPin): void => {
                                 :label="t(`sandbox.personaForm.startsIn`)"
                                 :placeholder="t(`sandbox.personaForm.wholeWorkspace`)"
                             />
+                            <!-- The consequence of that folder that is not readable from the folder: who gains this
+                                 card by holding the area it sits in. -->
+                            <span class="text-2xs text-subtle">{{
+                                reachedBy.length === 0
+                                    ? t(`sandbox.personaForm.reachedByNobody`)
+                                    : t(`sandbox.personaForm.reachedBy`, { areas: reachedBy.join(`, `) })
+                            }}</span>
                         </div>
 
                         <div class="flex flex-col gap-1">

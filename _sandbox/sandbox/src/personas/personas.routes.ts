@@ -3,7 +3,7 @@ import { implement, ORPCError } from "@orpc/server";
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../app-env.js";
 import { hasSession } from "../browser/sessions/session-store.js";
-import { heldPersonas } from "../auth/fleet-scope.js";
+import { reachableCards } from "./persona-reach.js";
 import {
     listPersonaSkills,
     readPersonaPrompt,
@@ -19,7 +19,7 @@ import {
 // with their own lifecycle. What a card owns is its kit folder, written by the routes below and removed with `remove`.
 // Which card a new chat belongs to; passed in rather than imported, since agent/ already reads this subsystem and
 // importing back would cycle.
-export type PersonaRouter = (ask: PersonaRouteAsk, signal?: AbortSignal) => Promise<PersonaRoute>;
+export type PersonaRouter = (ask: PersonaRouteAsk, held: readonly string[] | undefined, signal?: AbortSignal) => Promise<PersonaRoute>;
 
 export const createPersonasRoutes = (services: Services, route: PersonaRouter) => {
     const i = implement(personasContract).$context<OrpcContext>();
@@ -37,11 +37,14 @@ export const createPersonasRoutes = (services: Services, route: PersonaRouter) =
 
     return {
         list: i.list.handler(async ({ context }) => {
-            const [cards, capabilities] = await Promise.all([services.personas.list(), services.capabilities.list()]);
-            // A desk is shown the cards it holds and nothing about the others, down to the accounts they name.
-            const held = heldPersonas(context.identity);
-            const personas = held === undefined ? cards : cards.filter((persona) => held.has(persona.id));
-            const reachable = held === undefined ? undefined : new Set(personas.flatMap((persona) => persona.capabilities));
+            // A fenced member is shown the cards that work in the part of the workspace they hold, and nothing about
+            // the others, down to the accounts they name.
+            const [personas, capabilities] = await Promise.all([
+                reachableCards(services, context.identity?.areas),
+                services.capabilities.list(),
+            ]);
+            const fenced = context.identity?.areas !== undefined;
+            const reachable = fenced ? new Set(personas.flatMap((persona) => persona.capabilities)) : undefined;
             // `hasSession`, not manifest presence: exists before login finishes, a cloned workspace's usual state.
             const connected = capabilities
                 .filter((capability) => capability.kind === "browser" && hasSession(services.workspace.root, capability.id))
@@ -59,7 +62,8 @@ export const createPersonasRoutes = (services: Services, route: PersonaRouter) =
             return { ok: true as const };
         }),
         // Never throws: no cards, no model, a deadline are all "none" with a reason; the composer's chip is waiting.
-        route: i.route.handler(({ input, signal }) => route(input, signal)),
+        // Routed within the asker's own fence, so the card it lands on is one they may actually send through.
+        route: i.route.handler(({ input, context, signal }) => route(input, context.identity?.areas, signal)),
 
         kit: i.kit.handler(async ({ input }) => {
             const [prompt, skills] = await Promise.all([readPersonaPrompt(root, input.id), listPersonaSkills(root, input.id)]);

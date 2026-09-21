@@ -110,24 +110,21 @@ describe("deskReach", () => {
         expect(deskReach("POST", "/workspace/upload", `${ATTACHMENTS_DIR}/u1/shot.png`)).toBe(true);
     });
 
-    // A desk reaches the workspace only while it actually holds an area of it; granting the whole tree to every desk
-    // would widen the narrowest tier, and naming an area is how somebody asks for the part they meant.
-    test("a fenced desk reads the workspace, and an unfenced one still cannot", () => {
-        expect(deskReach("GET", "/workspace/tree", undefined, true)).toBe(true);
-        expect(deskReach("GET", "/workspace/file", undefined, true)).toBe(true);
-        expect(deskReach("GET", "/workspace/search", undefined, true)).toBe(true);
-        expect(deskReach("GET", "/workspace/raw", undefined, true)).toBe(true);
-        expect(deskReach("GET", "/areas", undefined, true)).toBe(true);
+    // Every desk holds an area — the roster refuses one that names none (auth.ts MemberSchema) — and each route below
+    // applies that fence itself, so none of them can answer with the whole tree.
+    test("a desk reads the workspace, which its own fence then cuts", () => {
+        expect(deskReach("GET", "/workspace/tree")).toBe(true);
+        expect(deskReach("GET", "/workspace/file")).toBe(true);
+        expect(deskReach("GET", "/workspace/search")).toBe(true);
+        expect(deskReach("GET", "/workspace/raw")).toBe(true);
+        expect(deskReach("GET", "/areas")).toBe(true);
         // Reads only: the tier writes nothing but the attachment that rides with its own message.
-        expect(deskReach("POST", "/workspace/upload", "support/note.md", true)).toBe(false);
-        expect(deskReach("DELETE", "/workspace/file", undefined, true)).toBe(false);
-        expect(deskReach("POST", "/areas", undefined, true)).toBe(false);
+        expect(deskReach("POST", "/workspace/upload", "support/note.md")).toBe(false);
+        expect(deskReach("DELETE", "/workspace/file")).toBe(false);
+        expect(deskReach("POST", "/areas")).toBe(false);
     });
 
-    test("the tree, the past, the box, and every ship control stay shut, and so does anything unnamed", () => {
-        expect(deskReach("GET", "/workspace/tree")).toBe(false);
-        expect(deskReach("GET", "/workspace/file")).toBe(false);
-        expect(deskReach("GET", "/areas")).toBe(false);
+    test("the past, the box, and every ship control stay shut, and so does anything unnamed", () => {
         expect(deskReach("POST", "/workspace/upload", "app/main.ts")).toBe(false);
         expect(deskReach("POST", "/workspace/upload")).toBe(false);
         expect(deskReach("GET", "/sessions")).toBe(false);
@@ -146,10 +143,13 @@ describe("memberRefusal", () => {
     test("a tier below the floor is refused with the floor named; a desk off its list with its own sentence", () => {
         expect(memberRefusal({ role: "viewer" }, "POST", "/agent")).toEqual({ error: "collaborator access required", floor: "collaborator" });
         expect(memberRefusal({ role: "collaborator" }, "POST", "/agent")).toBeUndefined();
-        expect(memberRefusal({ role: "desk" }, "POST", "/agent")).toBeUndefined();
-        expect(memberRefusal({ role: "desk" }, "GET", "/workspace/tree")).toEqual({ error: "not open to a desk member", floor: "viewer" });
+        expect(memberRefusal({ role: "desk", areas: ["support"] }, "POST", "/agent")).toBeUndefined();
+        expect(memberRefusal({ role: "desk", areas: ["support"] }, "POST", "/workspace/move")).toEqual({
+            error: "not open to a desk member",
+            floor: "viewer",
+        });
         // A desk never clears a floor by rank: the list is the whole of its admission.
-        expect(memberRefusal({ role: "desk" }, "GET", "/no/such/route")).toEqual({ error: "not open to a desk member", floor: "viewer" });
+        expect(memberRefusal({ role: "desk", areas: ["support"] }, "GET", "/no/such/route")).toEqual({ error: "not open to a desk member", floor: "viewer" });
         expect(memberRefusal({ role: "viewer" }, "GET", "/no/such/route")).toBeUndefined();
     });
 

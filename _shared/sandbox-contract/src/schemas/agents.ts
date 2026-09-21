@@ -291,6 +291,14 @@ export const AgentSummarySchema = z.object({
         .describe(
             "Who asked for the first turn, as the sandbox verified it: a member's email, token:<label> for a program's control token, or agent:<conversation id> for a child another conversation spawned. Absent when nothing was verified (a wake, a loopback caller).",
         ),
+    // The fence it was born with. Rides the summary because it is what decides who may see the row at all
+    // (auth/fleet-scope.ts visibleTo); without it here a fenced reader's board would be empty of even their own work.
+    areas: z
+        .array(z.string())
+        .optional()
+        .describe(
+            "Which named areas of the workspace this conversation was started within, latched from whoever asked for the first turn. Absent means its starter held the whole workspace, which is why a fenced member is not shown it.",
+        ),
     // Responsibility, beside provenance: the starter says who asked, this says who answers for it now. Absent means
     // nobody has claimed it, which is what a program's or an automation's conversation is until somebody does.
     owner: SessionOwnerSchema.optional().describe(

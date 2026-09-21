@@ -3,6 +3,7 @@ import type { Context } from "hono";
 import { z } from "zod";
 import type { Services } from "../../composition.js";
 import type { AppEnv } from "../../app-env.js";
+import { type PersonaReachDeps, reachableCards } from "../../personas/persona-reach.js";
 import { ownershipDenied } from "../owner-gates.js";
 
 // The shared-access roster (/members): who besides the owner may reach this sandbox, and at what tier.
@@ -17,50 +18,43 @@ const memberEmail = async (c: Context): Promise<string | undefined> => {
     return typeof body?.email === "string" ? body.email.toLowerCase() : undefined;
 };
 
-// A grant request's email + role (+ the desks a desk holds, + the areas it is fenced to), or undefined if any is
-// missing or malformed.
+// A grant request's email + role + the areas it is fenced to, or undefined if any is missing or malformed.
 // Role is required: a grant is a role decision, and a default here would be a policy nobody chose. Areas are
-// optional, and their absence is the whole workspace — the same answer every grant written before areas existed has.
+// optional, and their absence is the whole workspace — which is also every assistant, since which cards a person may
+// wear is read off their fence (personas/persona-reach.ts) rather than listed per person.
 const GrantBodySchema = z.object({
     email: z.string(),
     role: GrantedRoleSchema,
-    desks: z.array(z.string().min(1)).max(50).optional(),
     areas: z.array(z.string().min(1)).max(20).optional(),
 });
 
-const memberGrant = async (c: Context): Promise<{ email: string; role: GrantedRole; desks?: readonly string[]; areas?: readonly string[] } | undefined> => {
+const memberGrant = async (c: Context): Promise<{ email: string; role: GrantedRole; areas?: readonly string[] } | undefined> => {
     const body = GrantBodySchema.safeParse(await c.req.json().catch(() => undefined));
     if (!body.success) {
         return undefined;
     }
-    const { email, role, desks, areas } = body.data;
-    return { email: email.toLowerCase(), role, ...(desks !== undefined ? { desks } : {}), ...(areas !== undefined ? { areas } : {}) };
+    const { email, role, areas } = body.data;
+    return { email: email.toLowerCase(), role, ...(areas !== undefined ? { areas } : {}) };
 };
 
-// Why a desk grant cannot be written, or undefined when it can. A desk names at least one card, and every card it
-// names exists: a desk holding a card nobody wrote would sign in to a chat that refuses every message.
-const deskRefusal = async (services: Pick<Services, "personas">, grant: { role: GrantedRole; desks?: readonly string[] }): Promise<string | undefined> => {
-    if (grant.role !== "desk") {
-        return grant.desks === undefined ? undefined : "only a desk names personas";
+// The two tiers whose fence IS the tier, refused unfenced: a writer's areas are the folders it may change, a desk's
+// are the assistants it speaks through. For each, an absent area list resolves to the whole workspace — every file,
+// every card — which is not a narrower grant of that tier but a different one nobody chose.
+const fenceRequired = (grant: { role: GrantedRole; areas?: readonly string[] }): string | undefined => {
+    if ((grant.areas?.length ?? 0) > 0) {
+        return undefined;
     }
-    if (grant.desks === undefined || grant.desks.length === 0) {
-        return "a desk needs at least one persona to act through";
+    if (grant.role === "writer") {
+        return "a writer needs at least one area to write in";
     }
-    const known = new Set((await services.personas.list()).map((card) => card.id));
-    const missing = grant.desks.filter((id) => !known.has(id));
-    return missing.length === 0 ? undefined : `no such persona: ${missing.join(", ")}`;
+    return grant.role === "desk" ? "a desk needs at least one area: the assistants that work there are the ones it speaks through" : undefined;
 };
 
 // Why a fence cannot be written, or undefined when it can. Every area named exists, since a row pointing at an area
 // nobody wrote resolves to a fence admitting nothing, and somebody would have to guess whether that was intended.
 // A maintainer is not fenceable: the tier carries the owner's operating authority, reads every credential and drives
 // every conversation, so a folder fence over it would be a line on a screen rather than a boundary.
-// A writer is the opposite case and is checked before the absent-areas exit: its fence is the only thing standing
-// between it and every file in the workspace, since that is what an absent area list resolves to.
 const areaRefusal = async (services: Pick<Services, "areas">, grant: { role: GrantedRole; areas?: readonly string[] }): Promise<string | undefined> => {
-    if (grant.role === "writer" && (grant.areas?.length ?? 0) === 0) {
-        return "a writer needs at least one area to write in";
-    }
     if (grant.areas === undefined) {
         return undefined;
     }
@@ -70,6 +64,19 @@ const areaRefusal = async (services: Pick<Services, "areas">, grant: { role: Gra
     const known = new Set((await services.areas.list()).map((area) => area.id));
     const missing = grant.areas.filter((id) => !known.has(id));
     return missing.length === 0 ? undefined : `no such area: ${missing.join(", ")}`;
+};
+
+// Why a desk's fence cannot be granted even though its areas exist: no card works in the folders it names. A desk
+// reaches nothing but its assistants, so such a grant would sign somebody in to a chat that answers nothing.
+// Checked only for a desk: every other tier has business in a workspace with no card homed in its folders.
+const deskReachRefusal = async (services: PersonaReachDeps, grant: { role: GrantedRole; areas?: readonly string[] }): Promise<string | undefined> => {
+    if (grant.role !== "desk") {
+        return undefined;
+    }
+    const reached = await reachableCards(services, grant.areas);
+    return reached.length > 0
+        ? undefined
+        : "no assistant works in those areas, so a desk fenced to them would have nobody to talk to; give an assistant a starting folder inside one, or fence the desk to an area that already has one";
 };
 
 export const createMembersRoutes = (services: MembersRoutesDeps) => ({
@@ -95,7 +102,8 @@ export const createMembersRoutes = (services: MembersRoutesDeps) => ({
         if (grant === undefined) {
             return c.json({ error: "email and role required" }, 400);
         }
-        const refusal = (await deskRefusal(services, grant)) ?? (await areaRefusal(services, grant));
+        // The free refusal first, then the two that read a manifest; reach last, since it needs both of them.
+        const refusal = fenceRequired(grant) ?? (await areaRefusal(services, grant)) ?? (await deskReachRefusal(services, grant));
         if (refusal !== undefined) {
             return c.json({ error: refusal }, 400);
         }

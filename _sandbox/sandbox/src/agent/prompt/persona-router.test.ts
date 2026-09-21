@@ -1,4 +1,4 @@
-import { modelPinKey, type Persona } from "@intentic/sandbox-contract";
+import { type Area, modelPinKey, type Persona } from "@intentic/sandbox-contract";
 import { unstubbed } from "@intentic/testing";
 import { beforeEach, expect, test, vi } from "vitest";
 import type { Services } from "../../composition.js";
@@ -28,9 +28,15 @@ const CARDS: readonly Persona[] = [
 ];
 
 const warn = vi.fn();
+// Named parts of the workspace, read only when the asker is fenced: the router picks from the cards their areas reach.
+const AREAS: readonly Area[] = [
+    { id: "docs", folders: ["docs"] },
+    { id: "finance", folders: ["finance"] },
+];
 const services = (cards: readonly Persona[] = CARDS): Services =>
     unstubbed<Services>("services", {
         personas: unstubbed<Services["personas"]>("personas", { list: async () => [...cards] }),
+        areas: unstubbed<Services["areas"]>("areas", { list: async () => [...AREAS] }),
         capabilities: unstubbed<Services["capabilities"]>("capabilities", {
             list: async () =>
                 [
@@ -72,7 +78,7 @@ test("the reply is an id from the list, case-insensitively and unwrapped, or non
 
 test("the rung is shown every card, the chat's facts, and the message; its id comes back with a reason", async () => {
     ask.mockResolvedValue("backend");
-    const route = await routePersona(services(), { prompt: "the invoice totals are off in billing", folder: undefined, paths: ["billing/src/totals.ts"] });
+    const route = await routePersona(services(), { prompt: "the invoice totals are off in billing", folder: undefined, paths: ["billing/src/totals.ts"] }, undefined);
     expect(route).toEqual({ persona: "backend", reason: "The message reads like Backend's work.", model: RUNG_KEY });
     expect(roles).toEqual(["persona-router"]);
     const prompt = ask.mock.calls[0]?.[0] ?? "";
@@ -85,19 +91,19 @@ test("the rung is shown every card, the chat's facts, and the message; its id co
 test("none is a real answer, and so is a chain that could not answer at all", async () => {
     ask.mockResolvedValue("none");
     // `none` still names the rung: the reading was paid for, and the chat that asked says so.
-    expect(await routePersona(services(), { prompt: "what is a closure?", paths: [] })).toEqual({ reason: "No persona fits this message.", model: RUNG_KEY });
+    expect(await routePersona(services(), { prompt: "what is a closure?", paths: [] }, undefined)).toEqual({ reason: "No persona fits this message.", model: RUNG_KEY });
     ask.mockRejectedValue(new Error("No AI account is connected to this sandbox"));
-    expect(await routePersona(services(), { prompt: "fix the login flow", paths: [] })).toEqual({ reason: "Could not route: No AI account is connected to this sandbox" });
+    expect(await routePersona(services(), { prompt: "fix the login flow", paths: [] }, undefined)).toEqual({ reason: "Could not route: No AI account is connected to this sandbox" });
     expect(warn).toHaveBeenCalledTimes(1);
 });
 
 test("a chat opened in a folder exactly one card works in is that card's, and no model is asked", async () => {
-    expect(await routePersona(services(), { prompt: "tidy the readme", folder: "docs", paths: [] })).toEqual({ persona: "docs", reason: "Opened in docs, which docs works in." });
-    expect(await routePersona(services(), { prompt: "tidy the readme", folder: "api", paths: [] })).toEqual({ persona: "backend", reason: "Opened in api, which Backend works in." });
+    expect(await routePersona(services(), { prompt: "tidy the readme", folder: "docs", paths: [] }, undefined)).toEqual({ persona: "docs", reason: "Opened in docs, which docs works in." });
+    expect(await routePersona(services(), { prompt: "tidy the readme", folder: "api", paths: [] }, undefined)).toEqual({ persona: "backend", reason: "Opened in api, which Backend works in." });
     expect(ask).not.toHaveBeenCalled();
     // A folder nobody works in falls through to the words.
     ask.mockResolvedValue("social");
-    expect(await routePersona(services(), { prompt: "reply to the thread", folder: "marketing", paths: [] })).toEqual({
+    expect(await routePersona(services(), { prompt: "reply to the thread", folder: "marketing", paths: [] }, undefined)).toEqual({
         persona: "social",
         reason: "The message reads like Social's work.",
         model: RUNG_KEY,
@@ -106,7 +112,18 @@ test("a chat opened in a folder exactly one card works in is that card's, and no
 });
 
 test("no cards means nothing to route onto, and no call", async () => {
-    expect(await routePersona(services([]), { prompt: "anything", paths: [] })).toEqual({ reason: "No personas to route onto." });
+    expect(await routePersona(services([]), { prompt: "anything", paths: [] }, undefined)).toEqual({ reason: "No personas to route onto." });
+    expect(ask).not.toHaveBeenCalled();
+});
+
+// Routing a fenced asker onto a card they cannot wear would open the chat on one that refuses every message, so the
+// candidates are cut to their own areas first — and a fence holding no card ends the routing before any model is asked.
+test("a fenced asker is routed only within their own areas, and none there means no call", async () => {
+    expect(await routePersona(services(), { prompt: "tidy the readme", folder: "docs", paths: [] }, ["docs"])).toEqual({
+        persona: "docs",
+        reason: "Opened in docs, which docs works in.",
+    });
+    expect(await routePersona(services(), { prompt: "anything", paths: [] }, ["finance"])).toEqual({ reason: "No personas to route onto." });
     expect(ask).not.toHaveBeenCalled();
 });
 

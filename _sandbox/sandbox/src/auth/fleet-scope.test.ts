@@ -1,12 +1,15 @@
 import { describe, expect, test } from "vitest";
 import type { ProvenCaller } from "./auth.js";
-import { framedEvent, heldPersonas, refuseUnlessHeld, refuseUnlessVisible, visibleTo } from "./fleet-scope.js";
+import { framedEvent, refuseUnlessVisible, visibleTo } from "./fleet-scope.js";
 
-// The two fences over the fleet, as pure rules: whose conversation counts as a desk's, which persona a desk may wear,
-// what a fenced member may see of work that is not theirs, and which frames of the event stream reach either. The
-// routes apply these; this pins what they apply.
+// The two fences over the fleet, as pure rules: whose conversation counts as a desk's, what a fenced member may see
+// of work that is not theirs, and which frames of the event stream reach either. The routes apply these; this pins
+// what they apply. Which persona cards that fence hands over is personas/persona-reach.test.ts, since answering it
+// costs a manifest read.
 
-const desk: ProvenCaller = { email: "Dee@Example.com", role: "desk", desks: ["support"], methods: ["google"] };
+// Unfenced on purpose, so the ownership narrowing is pinned on its own; the two are independent rules. The roster
+// refuses an unfenced desk (auth.ts MemberSchema), and `fencedDesk` below is the shape that actually exists.
+const desk: ProvenCaller = { email: "Dee@Example.com", role: "desk", methods: ["google"] };
 const viewer: ProvenCaller = { email: "vic@example.com", role: "viewer", methods: ["google"] };
 // Fenced to one area; the fence rides on the row whatever the tier, so a collaborator carries one too.
 const fenced: ProvenCaller = { email: "fay@example.com", role: "collaborator", areas: ["support"], methods: ["google"] };
@@ -51,25 +54,6 @@ describe("visibleTo", () => {
     });
 });
 
-describe("refuseUnlessHeld", () => {
-    test("a desk must name a persona it holds; naming none is refused like naming another's", () => {
-        expect(() => refuseUnlessHeld(desk, "support")).not.toThrow();
-        expect(() => refuseUnlessHeld(desk, "sales")).toThrow(/"sales" is not one of your personas: support/);
-        expect(() => refuseUnlessHeld(desk, undefined)).toThrow(/speaks through one of its personas: support/);
-    });
-
-    test("other tiers may name any persona or none", () => {
-        expect(() => refuseUnlessHeld(viewer, undefined)).not.toThrow();
-        expect(() => refuseUnlessHeld(undefined, "sales")).not.toThrow();
-    });
-
-    test("heldPersonas answers only for a desk", () => {
-        expect([...(heldPersonas(desk) ?? [])]).toEqual(["support"]);
-        expect(heldPersonas(viewer)).toBeUndefined();
-        expect(heldPersonas(undefined)).toBeUndefined();
-    });
-});
-
 describe("framedEvent", () => {
     const mine = { id: "c1", owner: { email: "dee@example.com" } };
     const theirs = { id: "c2", owner: { email: "ada@example.com" } };
@@ -79,11 +63,16 @@ describe("framedEvent", () => {
         expect(framed).toEqual({ kind: "agents", agents: [mine], rev: 3 });
     });
 
-    test("frames naming paths or repositories are dropped for a desk, kept whole for an unfenced tier", () => {
+    // A desk is fenced like anyone else and reads its own area, so its frames are cut to that fence rather than
+    // dropped: dropping them would leave the tree it can open stale behind it.
+    test("frames naming paths or repositories are cut to the fence, and kept whole for an unfenced tier", () => {
         const changed = { kind: "workspaceChanged" as const, paths: ["docs/pricing.md"] };
-        expect(framedEvent(desk, undefined, changed)).toBeUndefined();
-        expect(framedEvent(desk, undefined, { kind: "reposChanged", repos: ["api"] })).toBeUndefined();
-        expect(framedEvent(desk, undefined, { kind: "refsChanged", repos: ["api"] })).toBeUndefined();
+        expect(framedEvent(desk, ["support"], changed)).toBeUndefined();
+        expect(framedEvent(desk, ["support"], { kind: "reposChanged", repos: ["api"] })).toEqual({ kind: "reposChanged", repos: [] });
+        expect(framedEvent(desk, ["support"], { kind: "workspaceChanged", paths: ["support/a.md"] })).toEqual({
+            kind: "workspaceChanged",
+            paths: ["support/a.md"],
+        });
         expect(framedEvent(viewer, undefined, changed)).toBe(changed);
         expect(framedEvent(undefined, undefined, changed)).toBe(changed);
     });

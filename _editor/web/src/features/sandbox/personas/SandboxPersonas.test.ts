@@ -66,6 +66,10 @@ vi.mock(`./usePersonaKit`, async () => {
 // to be filtered out.
 const tree = ref<WorkspaceTreeEntry[]>([]);
 vi.mock(`../client/sandboxClient`, () => ({ sandboxJson: vi.fn().mockResolvedValue({ entries: [], hidden: 0 }) }));
+// The named parts of the workspace: the card editor reads them to say which of them gain the card being written.
+// Holds the `docs` folder of the tree below, so a card starting there is one this area hands over.
+const areas = ref([{ id: `handbook`, label: `Handbook`, folders: [`docs`] }]);
+vi.mock(`../areas/useAreas`, () => ({ useAreas: () => ({ areas }) }));
 vi.mock(`../client/useSandboxQuery`, async () => {
     const { computed, ref: shallow } = await import(`vue`);
     return {
@@ -352,6 +356,22 @@ it(`fences a card to a folder chosen from the workspace tree`, async () => {
 
     await vi.waitFor(() => expect(save.mock.calls.length).toBeGreaterThan(1), { timeout: 2000 });
     expect(save.mock.calls.at(-1)![0].workspace).toEqual({ folders: [`docs`] });
+});
+
+// Nobody picks assistants per person any more: a card is handed over by the area its starting folder sits in. That
+// consequence is not readable off a folder name, so the editor says it where the folder is chosen.
+it(`says which areas gain the card, and that starting nowhere keeps it the owner's`, async () => {
+    const el = mount();
+    await addPersona(el, `Docs`);
+    await openTab(el, `What it may do`);
+    expect(text(el)).toContain(`only someone who holds the whole workspace can talk to it`);
+
+    await openFolderPicker(el, `Starts in`);
+    folderRow(`docs`)!.click();
+    await vi.waitFor(() => expect(save.mock.calls.length).toBeGreaterThan(1), { timeout: 2000 });
+    await nextTick();
+    expect(save.mock.calls.at(-1)![0].workspace).toEqual({ startIn: `docs` });
+    expect(text(el)).toContain(`Anyone granted Handbook can talk to it.`);
 });
 
 it(`opens a card by clicking its row, and closes it by clicking again`, async () => {

@@ -68,60 +68,54 @@ export const fileOwnerStore = (path: string): OwnerStore => {
 };
 
 // The additional authorized identities beyond the owner and the role each was granted, stored as
-// {members:[{email,role,desks?}]}.
-// The owner is never listed here; the daemon enforces shared access, the platform only mirrors these grants. Desks
-// are the daemon's alone: which cards a desk member holds is a fact about this workspace's personas, never mirrored.
+// {members:[{email,role,areas?}]}.
+// The owner is never listed here; the daemon enforces shared access, the platform only mirrors these grants. Areas
+// are the daemon's alone: what of this workspace a person reaches is a fact about this workspace's folders, never
+// mirrored.
 export interface Member {
     readonly email: string;
     readonly role: GrantedRole;
-    // Persona ids a desk member may act through; present, and non-empty, only on a `desk` row.
-    readonly desks?: readonly string[];
-    // Area ids fencing what of the workspace this person reaches. Absent means the whole workspace, which is what
-    // every row written before areas existed keeps; empty means nothing at all. Never absent on a writer row.
+    // Area ids fencing what of the workspace this person reaches, and with it which persona cards they may wear
+    // (personas/persona-reach.ts). Absent means the whole workspace; empty means nothing at all. Never absent on a
+    // writer or a desk row.
     readonly areas?: readonly string[];
 }
 
 // What a grant decides, in the shape both the store and the route pass it around in.
 export interface MemberGrant {
     readonly role: GrantedRole;
-    readonly desks?: readonly string[] | undefined;
     readonly areas?: readonly string[] | undefined;
 }
 
 export interface MembersStore {
     list(): Promise<Member[]>;
-    // Upsert: granting an email that already holds access re-grades its role, and replaces its desks and areas.
+    // Upsert: granting an email that already holds access re-grades its role, and replaces its areas.
     add(email: string, grant: MemberGrant): Promise<void>;
     remove(email: string): Promise<void>;
 }
 
-// A desk row must name at least one card, and no other row may carry any: a desk with nothing to wear has nothing to
-// reach, and desks on a viewer would be a grant with no reader. Areas ride on any row, since where a person may look
-// is a question independent of what they may do there — except on a writer, where they are the question.
+// Areas ride on any row, since where a person may look is a question independent of what they may do there — except
+// on a writer and on a desk, where they ARE the question: a writer's fence is the folders it may change, and a desk's
+// is the only thing deciding which cards it may speak through.
 // Both refusals are enforced here rather than only at the route, because the roster file is hand-editable: a malformed
-// row is skipped by the store, so a writer row with no areas costs that person their access instead of handing them
-// the unfenced workspace their absent area list would otherwise resolve to.
+// row is skipped by the store, so a fenceless writer or desk row costs that person their access instead of handing
+// them the unfenced workspace — and every card in it — their absent area list would otherwise resolve to.
 const MemberSchema = z
     .object({
         email: z.string(),
         role: GrantedRoleSchema,
-        desks: z.array(z.string().min(1)).optional(),
         areas: z.array(z.string().min(1)).optional(),
     })
-    .refine((member) => (member.role === "desk" ? (member.desks?.length ?? 0) > 0 : member.desks === undefined), {
-        message: "a desk names at least one persona, and only a desk names any",
-    })
-    .refine((member) => member.role !== "writer" || (member.areas?.length ?? 0) > 0, {
-        message: "a writer names at least one area: the folders it may change are what the tier is",
+    .refine((member) => (member.role !== "writer" && member.role !== "desk") || (member.areas?.length ?? 0) > 0, {
+        message: "a writer and a desk each name at least one area: what they reach there is what the tier is",
     });
 const MembersFileSchema = z.object({ members: z.array(z.unknown()) });
 
-// The row a grant writes: desks ride only on a desk, so a re-grade away from desk drops them. An area list is kept
-// whatever the tier, and its absence is the whole workspace, so an omitted field can never read as an empty fence.
+// The row a grant writes: an area list is kept whatever the tier, and its absence is the whole workspace, so an
+// omitted field can never read as an empty fence.
 export const memberRow = (email: string, grant: MemberGrant): Member => ({
     email,
     role: grant.role,
-    ...(grant.role === "desk" && grant.desks !== undefined ? { desks: [...grant.desks] } : {}),
     ...(grant.areas !== undefined ? { areas: [...grant.areas] } : {}),
 });
 
@@ -183,11 +177,10 @@ export const tokenEquals = (a: string, b: string): boolean => {
 // Role is resolved fresh on each authorize (owner + members re-read), so a re-grade applies on the very next request.
 export interface Caller extends VerifiedIdentity {
     readonly role: MemberRole;
-    // The persona cards a desk member may act through; absent on every other tier.
-    readonly desks?: readonly string[];
-    // Area ids fencing what of the workspace this caller reaches; absent means the whole workspace, which is what the
-    // owner always holds. Carried as ids, not folders, so one read of the area manifest per request answers it
-    // freshly: editing an area narrows its holders on their very next call, like a re-grade does.
+    // Area ids fencing what of the workspace this caller reaches, and with it which persona cards they may wear;
+    // absent means the whole workspace, which is what the owner always holds. Carried as ids, not folders, so one read
+    // of the area manifest per request answers it freshly: editing an area narrows its holders on their very next
+    // call, like a re-grade does.
     readonly areas?: readonly string[];
 }
 
@@ -295,7 +288,6 @@ export const createAuthorizer = (deps: {
         return {
             ...proof,
             role: member.role,
-            ...(member.desks !== undefined ? { desks: member.desks } : {}),
             ...(member.areas !== undefined ? { areas: member.areas } : {}),
         };
     };

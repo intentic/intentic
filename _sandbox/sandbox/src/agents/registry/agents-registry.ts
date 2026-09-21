@@ -654,6 +654,9 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
             ...(entry.origin !== undefined ? { origin: entry.origin } : {}),
             ...opt("startedBy", entry.startedBy),
             ...opt("owner", entry.owner),
+            // The fence it was born with, on the summary because visibleTo() filters summaries: without it every
+            // fenced reader's board is empty, their own conversations included.
+            ...opt("areas", entry.areas),
             ...(entry.forkedFrom !== undefined ? { forkedFrom: entry.forkedFrom } : {}),
             ...(entry.title !== undefined ? { title: entry.title } : {}),
             ...opt("titleAction", entry.titleAction),

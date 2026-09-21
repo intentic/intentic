@@ -61,7 +61,7 @@ const desk = async (): Promise<{
     return {
         client: clientFor(app, { bearer: `member` }),
         app,
-        actAs: (role, areas) => (caller = proven(`fay@example.com`, role, [`google`], undefined, areas)),
+        actAs: (role, areas) => (caller = proven(`fay@example.com`, role, [`google`], areas)),
     };
 };
 
@@ -90,7 +90,7 @@ test("a read outside the fence is FORBIDDEN, and inside it is not", async () => 
 // The index covers the whole tree; without this the fence is decorative, since a query returns the lines themselves.
 test("a fenced search runs inside the fence, and inside a folder outside it runs over nothing", async () => {
     const scopes: (readonly string[] | undefined)[] = [];
-    let caller = proven(`fay@example.com`, `viewer`, [`google`], undefined, [`support`]);
+    let caller = proven(`fay@example.com`, `viewer`, [`google`], [`support`]);
     const client = clientFor(
         createApp(
             services({

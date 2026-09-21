@@ -1402,6 +1402,7 @@ export const createServices = (config: Config, logger: Logger): Services => {
         agents,
         areas,
         members,
+        personas,
         manifest: capabilityManifest,
         connectors: secretFieldConnectors,
         // The decorated store, since the exit checks read kind and a country code, never a credential.

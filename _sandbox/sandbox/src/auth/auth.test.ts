@@ -87,15 +87,16 @@ describe("createAuthorizer (owner TOFU + shared access)", () => {
         await expect(authz.authorize("tok-x", undefined)).rejects.toBeInstanceOf(ForbiddenError);
     });
 
-    // The cards ride on the caller, since every desk-scoped route reads them off the identity the middleware verified.
-    test("a desk member's cards reach the caller; every other tier carries none", async () => {
+    // The fence rides on the caller, since every narrowed route reads it off the identity the middleware verified —
+    // which folders they see, and with it which assistants they may speak through.
+    test("a fenced member's areas reach the caller; an unfenced tier carries none", async () => {
         const authz = createAuthorizer({
             verify: verifierFor({ "tok-d": "d@x.com", "tok-m": "m@x.com" }),
             owner: memOwner("a@x.com"),
-            members: memMembers([{ email: "d@x.com", role: "desk", desks: ["support", "sales"] }, ...granted("m@x.com")]),
+            members: memMembers([{ email: "d@x.com", role: "desk", areas: ["support", "sales"] }, ...granted("m@x.com")]),
         });
-        await expect(authz.authorize("tok-d", undefined)).resolves.toEqual({ email: "d@x.com", role: "desk", desks: ["support", "sales"], methods: ["google"] });
-        await expect(authz.authorize("tok-m", undefined)).resolves.not.toHaveProperty("desks");
+        await expect(authz.authorize("tok-d", undefined)).resolves.toEqual({ email: "d@x.com", role: "desk", areas: ["support", "sales"], methods: ["google"] });
+        await expect(authz.authorize("tok-m", undefined)).resolves.not.toHaveProperty("areas");
     });
 
     test("a granted member is recognised whatever case the claim carries", async () => {

@@ -968,20 +968,19 @@ function saveAutomationRoute({ request }: RouteContext): Promise<Response> {
     return request.json().then((body) => okAfter(() => saveAutomation(Date.now(), body as Automation)));
 }
 
-// The refusal the real daemon makes on the spot (auth/members/members.routes.ts): a desk with no card to wear would
-// sign in to a chat that answers nothing, so the grant never lands.
+// The refusals the real daemon makes on the spot (auth/members/members.routes.ts): a writer and a desk each need a
+// fence, since for both the areas are the tier rather than a narrowing of it, and a maintainer cannot carry one at
+// all, since it holds the owner's operating authority and a folder fence over it would enforce nothing.
 function grantMemberRoute({ request }: RouteContext): Promise<Response> {
     return request.json().then((body) => {
         const grant = body as DemoGrant;
-        if (grant.role === `desk` && (grant.desks?.length ?? 0) === 0) {
-            return json({ error: `a desk needs at least one persona to act through` }, 400);
+        if ((grant.areas?.length ?? 0) === 0 && (grant.role === `writer` || grant.role === `desk`)) {
+            return json({ error: `a ${grant.role} needs at least one area` }, 400);
         }
-        // The other refusal the real daemon makes: a maintainer carries the owner's operating authority, so a folder
-        // fence over it would enforce nothing.
         if (grant.role === `maintainer` && grant.areas !== undefined) {
             return json({ error: `a maintainer holds the owner's operating authority and cannot be fenced to part of the workspace` }, 400);
         }
-        grantAccess(grant.email, grant.role, grant.desks, grant.areas);
+        grantAccess(grant.email, grant.role, grant.areas);
         return json({ members: grants() });
     });
 }
@@ -994,9 +993,11 @@ function revokeMemberRoute({ request }: RouteContext): Promise<Response> {
 }
 
 // Upsert by id, as the daemon's `/personas` does; the list is the store, so a saved card is in the next read.
+// Where each starts is what decides who may talk to it (policy/persona-home.ts), so the three cards cover the three
+// answers: one homed in each area below, and one at the root that only an unfenced person reaches.
 const demoPersonas: Persona[] = [
-    { id: `maya-support`, label: `Maya · Customer Care`, capabilities: [`gmail-support`, `intercom`], workspace: { startIn: `web` } },
-    { id: `owen-growth`, label: `Owen · Growth`, capabilities: [`x-brand`, `linkedin`] },
+    { id: `maya-support`, label: `Maya · Customer Care`, capabilities: [`gmail-support`, `intercom`], workspace: { startIn: `web/support` } },
+    { id: `owen-growth`, label: `Owen · Growth`, capabilities: [`x-brand`, `linkedin`], workspace: { startIn: `web/site` } },
     { id: `priya-ops`, label: `Priya · Operations`, capabilities: [`github`, `stripe-ops`] },
 ];
 function savePersonaRoute({ request }: RouteContext): Promise<Response> {

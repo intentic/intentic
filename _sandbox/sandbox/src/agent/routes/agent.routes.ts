@@ -58,7 +58,8 @@ import { commandRuleFindings, touchedRepos, workspaceRelative } from "../../rule
 import { mentionsSpentAllowance } from "../providers/failure-sentences.js";
 import { conversationOf } from "../tools/agent-requests.js";
 import { actorOf, ownerOf, areasOf, type TurnInput } from "../run/turn/turn-actor.js";
-import { refuseUnlessHeld, refuseUnlessVisible } from "../../auth/fleet-scope.js";
+import { refuseUnlessVisible } from "../../auth/fleet-scope.js";
+import { refuseUnlessReachable } from "../../personas/persona-reach.js";
 import { opt } from "../run/opt.js";
 import { registerTurn, SteeringQueue, steerTurn, stopTurn } from "../anchors/agent-steering.js";
 import { OUTAGE_MAX_ATTEMPTS, recordProviderFailure, recordProviderSuccess } from "../providers/provider-health.js";
@@ -1580,8 +1581,9 @@ export const createAgentRoutes = (services: Services) => {
                 throw new ORPCError("BAD_REQUEST", { message: "conversationId required" });
             }
             const conversationId = input.conversationId;
-            // A desk wears one of its cards, on a conversation of its own; checked before anything is started.
-            refuseUnlessHeld(context.identity, input.actsAs);
+            // The card has to work in the part of the workspace this caller holds, and a desk has to name one at all;
+            // checked before anything is started. An unfenced caller pays no read for this.
+            await refuseUnlessReachable(services, context.identity, input.actsAs);
             own(context, conversationId);
             // Who is asking, from what the middleware verified on this request, never from the body.
             const actor = actorOf(context.identity, context.principal);

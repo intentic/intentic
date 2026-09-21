@@ -3,6 +3,7 @@ import type { Persona, PersonaRoute, PersonaRouteAsk } from "@intentic/sandbox-c
 import type { RoleAnswer } from "../models/role-answer.js";
 import { askRoleModel } from "../models/role-model.js";
 import type { Services } from "../../composition.js";
+import { reachableCards } from "../../personas/persona-reach.js";
 import { BULLET, FENCE, modelPinKey } from "@intentic/sandbox-contract";
 
 // Routes a new chat to one persona card by classification (pick one of N), not composition; `none` is a real, safe
@@ -117,8 +118,15 @@ const homedIn = (cards: readonly Persona[], folder: string): Persona[] =>
 
 const nameOf = (card: Persona): string => card.label ?? card.id;
 
-export const routePersona = async (services: Services, ask: PersonaRouteAsk, signal?: AbortSignal): Promise<PersonaRoute> => {
-    const cards = await services.personas.list();
+// `held` is the asker's areas, undefined for an unfenced one: the router picks only from cards that person may
+// actually wear, since routing onto one they cannot use would open the chat on a card every message is refused by.
+export const routePersona = async (
+    services: Services,
+    ask: PersonaRouteAsk,
+    held: readonly string[] | undefined,
+    signal?: AbortSignal,
+): Promise<PersonaRoute> => {
+    const cards = await reachableCards(services, held);
     if (cards.length === 0) {
         return { reason: `No personas to route onto.` };
     }

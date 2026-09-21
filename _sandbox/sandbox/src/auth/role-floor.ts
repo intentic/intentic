@@ -111,9 +111,13 @@ const passkeyRemoval = /^\/system\/passkeys\/[^/]+$/;
 const methodFloor = (method: string): MemberRole => (method === "GET" || method === "HEAD" ? "viewer" : "maintainer");
 
 // What a desk member may call at all, by contract route name: signing in and being present, the chat it drives,
-// the conversations it can see (each handler narrows to its own), the cards it holds, and the reads a composer
-// needs before it will send. An allowlist rather than a floor, since a desk is below every tier: what is not named
-// here is refused, so a route added later is closed to a desk until somebody decides otherwise.
+// the conversations it can see (each handler narrows to its own), the cards its areas reach, the reads a composer
+// needs before it will send, and the workspace read-only. An allowlist rather than a floor, since a desk is below
+// every tier: what is not named here is refused, so a route added later is closed to a desk until somebody decides
+// otherwise.
+// The workspace reads ride the same list as the rest because a desk is always fenced — the roster refuses a desk row
+// that names no area (auth.ts MemberSchema) — so every route below applies that fence itself
+// (workspace/layout/workspace-fence.ts) and none of them can answer with the whole tree.
 const DESK_NAMES: ReadonlySet<string> = new Set([
     "system.info",
     "system.session",
@@ -142,23 +146,6 @@ const DESK_NAMES: ReadonlySet<string> = new Set([
     "agents.archive",
     "agents.unarchive",
     "personas.list",
-]);
-
-// The hand-written routes a desk reaches: dictating a message, giving up its own access, its own passkeys.
-const DESK_PATHS: ReadonlySet<string> = new Set([
-    "/speech/transcribe",
-    "/speech/status",
-    "/members/self",
-    "/system/passkeys",
-    "/system/passkeys/register/options",
-    "/system/passkeys/register",
-]);
-
-// What a FENCED desk reaches on top of the list above: the workspace, read-only, and only the part its areas name
-// (every route below applies the fence itself, workspace/layout/workspace-fence.ts).
-// Conditional on holding a fence rather than granted to every desk, because a desk without one would then reach the
-// whole tree — a widening of the narrowest tier that nobody asked for. Naming an area is how somebody asks.
-const FENCED_DESK_NAMES: ReadonlySet<string> = new Set([
     "workspace.tree",
     "workspace.children",
     "workspace.file",
@@ -172,7 +159,19 @@ const FENCED_DESK_NAMES: ReadonlySet<string> = new Set([
     "areas.list",
 ]);
 
-const FENCED_DESK_PATHS: ReadonlySet<string> = new Set(["/workspace/raw", "/workspace/thumb", "/workspace/media"]);
+// The hand-written routes a desk reaches: dictating a message, giving up its own access, its own passkeys, and the
+// bytes behind the workspace reads above.
+const DESK_PATHS: ReadonlySet<string> = new Set([
+    "/speech/transcribe",
+    "/speech/status",
+    "/members/self",
+    "/system/passkeys",
+    "/system/passkeys/register/options",
+    "/system/passkeys/register",
+    "/workspace/raw",
+    "/workspace/thumb",
+    "/workspace/media",
+]);
 
 // The one refusal the bearer middleware hands a verified member: the tier a route wants, or a desk asking for a door
 // not on its list. Undefined admits. `target` is the upload's `?path=`, the one route whose floor depends on where
@@ -184,16 +183,15 @@ export const memberRefusal = (
     target?: string,
 ): { readonly error: string; readonly floor: MemberRole } | undefined => {
     if (caller.role === "desk") {
-        return deskReach(method, path, target, caller.areas !== undefined) ? undefined : { error: "not open to a desk member", floor: "viewer" };
+        return deskReach(method, path, target) ? undefined : { error: "not open to a desk member", floor: "viewer" };
     }
     const floor = routeFloor(method, path, target);
     return roleAtLeast(caller.role, floor) ? undefined : { error: `${floor} access required`, floor };
 };
 
 // Whether a desk member may reach this request at all. `target` is the upload's `?path=`: an attachment rides with
-// the message it belongs to, and is the one byte-write a desk makes. `fenced` is whether this desk holds areas,
-// which is what buys it the read-only workspace routes above.
-export const deskReach = (method: string, path: string, target?: string, fenced = false): boolean => {
+// the message it belongs to, and is the one byte-write a desk makes.
+export const deskReach = (method: string, path: string, target?: string): boolean => {
     if (path === "/workspace/upload") {
         return target !== undefined && isAttachmentPath(target);
     }
@@ -201,12 +199,8 @@ export const deskReach = (method: string, path: string, target?: string, fenced 
         return true;
     }
     const name = routeNameForRequest(ROUTES, method, path);
-    return name === undefined ? deskAllows(DESK_PATHS, FENCED_DESK_PATHS, path, fenced) : deskAllows(DESK_NAMES, FENCED_DESK_NAMES, name, fenced);
+    return name === undefined ? DESK_PATHS.has(path) : DESK_NAMES.has(name);
 };
-
-// Every desk's list, plus a fenced one's, which it only reaches while it actually holds areas.
-const deskAllows = (always: ReadonlySet<string>, whenFenced: ReadonlySet<string>, key: string, fenced: boolean): boolean =>
-    always.has(key) || (fenced && whenFenced.has(key));
 
 // `target` is the workspace path a byte-write addresses (upload's `?path=`); absent for every other route.
 export const routeFloor = (method: string, path: string, target?: string): MemberRole => {

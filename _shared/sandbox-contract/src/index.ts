@@ -158,6 +158,7 @@ export * from "./schemas/activity.js";
 export * from "./schemas/agent.js";
 export * from "./schemas/areas.js";
 export * from "./policy/fence-paths.js";
+export * from "./policy/persona-home.js";
 export * from "./schemas/agents.js";
 export * from "./schemas/approvals.js";
 export * from "./schemas/automations.js";

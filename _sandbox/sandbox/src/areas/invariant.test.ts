@@ -1,22 +1,24 @@
-import type { Area } from "@intentic/sandbox-contract";
+import type { Area, Persona } from "@intentic/sandbox-contract";
 import { expect, test } from "vitest";
 import type { Member } from "../auth/auth.js";
-import { memoryMembersStore, memoryAreasStore } from "../harness/route-stores.testing.js";
+import { memoryMembersStore, memoryAreasStore, memoryPersonasStore } from "../harness/route-stores.testing.js";
 import { checks } from "./invariant.js";
 
-/* The roster names area ids and the manifest says what each holds: two tracked, hand-editable files of one fact. */
+/* The roster names area ids, the manifest says what each holds, and the cards say where each works: three tracked,
+   hand-editable files of one fact. */
 
 const fail = (message: string): never => {
     throw new Error(message);
 };
 
-const run = async (index: number, areas: Area[], members: Member[]): Promise<void> => {
-    const check = checks({ areas: memoryAreasStore(areas), members: memoryMembersStore(members) })[index];
+const run = async (index: number, areas: Area[], members: Member[], personas: Persona[] = []): Promise<void> => {
+    const check = checks({ areas: memoryAreasStore(areas), members: memoryMembersStore(members), personas: memoryPersonasStore(personas) })[index];
     await check?.run({ moment: "sweep", fail });
 };
 
 const heldAreas = (areas: Area[], members: Member[]): Promise<void> => run(0, areas, members);
-const fencedMaintainers = (members: Member[]): Promise<void> => run(1, [], members);
+const strandedDesks = (areas: Area[], members: Member[], personas: Persona[]): Promise<void> => run(1, areas, members, personas);
+const fencedMaintainers = (members: Member[]): Promise<void> => run(2, [], members);
 
 test("a grant naming an area the manifest holds reports nothing", async () => {
     await expect(
@@ -34,6 +36,29 @@ test("a grant naming an area that has been deleted is named, with whose grant it
     await expect(heldAreas([], [{ email: "fay@example.com", role: "viewer", areas: ["support"] }])).rejects.toThrow(
         /fay@example.com → support.*reaches no folder at all/s,
     );
+});
+
+// A desk reaches its assistants and nothing else. The grant route refuses a fence holding none; this catches the
+// card's starting folder being edited, or the card deleted, long after the grant was made.
+test("a desk whose areas hold an assistant reports nothing", async () => {
+    await expect(
+        strandedDesks(
+            [{ id: "support", folders: ["support"] }],
+            [{ email: "dee@example.com", role: "desk", areas: ["support"] }],
+            [{ id: "helper", capabilities: [], workspace: { startIn: "support" } }],
+        ),
+    ).resolves.toBeUndefined();
+});
+
+test("a desk whose areas hold no assistant is named, since it can sign in and then talk to nobody", async () => {
+    await expect(
+        strandedDesks(
+            [{ id: "support", folders: ["support"] }],
+            [{ email: "dee@example.com", role: "desk", areas: ["support"] }],
+            // Homed at the root, which no fence covers: the card exists and this desk still reaches none.
+            [{ id: "helper", capabilities: [] }],
+        ),
+    ).rejects.toThrow(/dee@example.com.*no assistant works in/s);
 });
 
 test("an unfenced maintainer reports nothing", async () => {

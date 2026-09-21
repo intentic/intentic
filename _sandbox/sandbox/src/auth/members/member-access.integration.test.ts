@@ -150,9 +150,10 @@ test("every co-working act answers at its own tier, and at none below it", async
     }
 });
 
-// A desk sits under the tiers with a list of its own (role-floor.ts deskReach): the chat it drives and the cards it
-// holds are open, and the tree, the archive of past conversations, the box and every ship control are shut.
-test("a desk reaches its chat and nothing of the tree, the past, or the box", async () => {
+// A desk sits under the tiers with a list of its own (role-floor.ts deskReach): the chat it drives, the cards its
+// areas reach, and those folders read-only are open; the archive of past conversations, the box and every ship
+// control are shut. Every desk holds an area, so the workspace reads below are cut by that fence, never whole.
+test("a desk reaches its chat and its own folders, and nothing of the past or the box", async () => {
     const open: readonly [string, string][] = [
         [`GET`, `/agents`],
         [`GET`, `/personas`],
@@ -162,14 +163,17 @@ test("a desk reaches its chat and nothing of the tree, the past, or the box", as
         [`POST`, `/agent/attach`],
         [`DELETE`, `/members/self`],
         [`POST`, `/workspace/upload?path=${encodeURIComponent(`${ATTACHMENTS_DIR}/u1/note.txt`)}`],
+        [`GET`, `/workspace/tree`],
+        [`GET`, `/workspace/file?path=README.md`],
+        [`GET`, `/areas`],
     ];
     for (const [method, url] of open) {
         expect(await statusAs(`desk`, method, url, {}), `desk should reach ${method} ${url}`).not.toBe(403);
     }
     const shut: readonly [string, string][] = [
-        [`GET`, `/workspace/tree`],
-        [`GET`, `/workspace/file?path=README.md`],
         [`POST`, `/workspace/upload?path=app/main.ts`],
+        [`POST`, `/workspace/move`],
+        [`POST`, `/areas`],
         [`GET`, `/sessions`],
         [`GET`, `/agents/search?query=x`],
         [`GET`, `/secrets`],

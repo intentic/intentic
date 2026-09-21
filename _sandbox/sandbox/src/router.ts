@@ -57,7 +57,7 @@ export const createRouter = (services: Services) => ({
     diff: createDiffRoutes(services),
     approvals: createApprovalsRoutes(services),
     extensions: createExtensionsRoutes(services),
-    personas: createPersonasRoutes(services, (ask, signal) => routePersona(services, ask, signal)),
+    personas: createPersonasRoutes(services, (ask, held, signal) => routePersona(services, ask, held, signal)),
     safety: createSafetyRoutes(services),
     sessions: createSessionsRoutes(services),
     settings: createSettingsRoutes(services),

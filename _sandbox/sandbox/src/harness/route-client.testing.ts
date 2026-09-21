@@ -46,14 +46,13 @@ export const proven = (
     email: string,
     role: MemberRole,
     methods: readonly ProofMethod[] = ["google"],
-    desks?: readonly string[],
-    // The areas this caller is fenced to; absent is the whole workspace, which is what every unfenced tier holds.
+    // The areas this caller is fenced to; absent is the whole workspace, which is what every unfenced tier holds, and
+    // with it every assistant, since which cards a caller may wear is read off this fence.
     areas?: readonly string[],
 ): ProvenCaller => ({
     email,
     role,
     methods,
-    ...(desks === undefined ? {} : { desks }),
     ...(areas === undefined ? {} : { areas }),
 });
 

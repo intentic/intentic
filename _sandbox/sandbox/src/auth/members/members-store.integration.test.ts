@@ -9,18 +9,28 @@ import { fileMembersStore } from "../auth.js";
 const storePath = async (): Promise<string> => join(await mkdtemp(join(tmpdir(), "members-")), "members.json");
 
 describe("fileMembersStore: desks", () => {
-    test("a desk grant round-trips its cards; a re-grade away from desk drops them", async () => {
+    test("a desk grant round-trips its fence, and a re-grade keeps it, since areas ride on every tier", async () => {
         const store = fileMembersStore(await storePath());
-        await store.add("d@x.com", { role: "desk", desks: ["support"] });
-        await expect(store.list()).resolves.toEqual([{ email: "d@x.com", role: "desk", desks: ["support"] }]);
-        await store.add("d@x.com", { role: "viewer", desks: ["support"] });
-        await expect(store.list()).resolves.toEqual([{ email: "d@x.com", role: "viewer" }]);
+        await store.add("d@x.com", { role: "desk", areas: ["support"] });
+        await expect(store.list()).resolves.toEqual([{ email: "d@x.com", role: "desk", areas: ["support"] }]);
+        await store.add("d@x.com", { role: "viewer", areas: ["support"] });
+        await expect(store.list()).resolves.toEqual([{ email: "d@x.com", role: "viewer", areas: ["support"] }]);
     });
 
-    // A desk row with nothing to wear is a sign-in that refuses every message; better read as nobody than as a member.
-    test("a desk row naming no card is skipped on read, the rest of the roster kept", async () => {
+    // An unfenced desk would reach every assistant in the workspace, since that absent list is what the whole of it
+    // resolves to. Skipped, that person has no access at all, which is the safe direction.
+    test("a desk row naming no area is skipped on read, the rest of the roster kept", async () => {
         const path = await storePath();
-        await writeFile(path, JSON.stringify({ members: [{ email: "d@x.com", role: "desk", desks: [] }, { email: "v@x.com", role: "viewer" }] }));
+        await writeFile(
+            path,
+            JSON.stringify({
+                members: [
+                    { email: "d@x.com", role: "desk" },
+                    { email: "e@x.com", role: "desk", areas: [] },
+                    { email: "v@x.com", role: "viewer" },
+                ],
+            }),
+        );
         await expect(fileMembersStore(path).list()).resolves.toEqual([{ email: "v@x.com", role: "viewer" }]);
     });
 });

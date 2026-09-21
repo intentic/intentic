@@ -7,6 +7,8 @@ import type { Caller } from "./auth.js";
 // own areas are among theirs. Everyone else sees the fleet whole, which is what the board's Everyone/Mine row is for.
 // Neither narrowing is a preference: the transcript of someone else's wider conversation is the brain in prose, and
 // fencing the files while leaving the transcripts open would be a fence with a door in it.
+// Which persona cards that same fence hands over is the other half of it, and lives in personas/persona-reach.ts
+// because it has to resolve area ids to folders, which is a file read this file cannot afford.
 
 // The provenance fields every registry shape carries, which is all this needs to read.
 export interface Provenance {
@@ -60,27 +62,6 @@ export const refuseUnlessVisible = (caller: Caller | undefined, agent: Provenanc
     }
 };
 
-// A desk may act only through the personas it holds; naming none is refused too, since an unpinned attended chat reaches
-// every account, which is exactly what a desk is not handed.
-export const refuseUnlessHeld = (caller: Caller | undefined, actsAs: string | undefined): void => {
-    if (caller === undefined || caller.role !== "desk") {
-        return;
-    }
-    const held = caller.desks ?? [];
-    if (actsAs === undefined || !held.includes(actsAs)) {
-        throw new ORPCError("FORBIDDEN", {
-            message:
-                actsAs === undefined
-                    ? `a desk speaks through one of its personas: ${held.join(", ")}`
-                    : `"${actsAs}" is not one of your personas: ${held.join(", ")}`,
-        });
-    }
-};
-
-// Which persona ids a desk holds; undefined for every other tier, meaning no narrowing.
-export const heldPersonas = (caller: Caller | undefined): ReadonlySet<string> | undefined =>
-    caller !== undefined && caller.role === "desk" ? new Set(caller.desks ?? []) : undefined;
-
 // A path batch cut to the caller's own folders. An empty list already means "refetch the whole tree", and that
 // refetch is itself fenced, so it rides on unchanged rather than being mistaken for a batch with nothing left in it.
 const framedPaths = <T extends { readonly paths: readonly string[] }>(fence: Fence, event: T): T | undefined => {
@@ -100,23 +81,23 @@ const framedRepos = <T extends { readonly repos: readonly string[] }>(fence: Fen
 // repository they may not. Undefined drops the frame.
 // `fence` is the caller's own, resolved once when the stream opens — an area edit revokes the connection, so a frame
 // is never filtered against a fence its reader no longer has.
+// One rule for every tier including a desk: a desk is always fenced (auth.ts MemberSchema) and reads its own area's
+// files, so cutting its frames to that fence is what keeps its tree from going stale behind it.
 export const framedEvent = (caller: Caller | undefined, fence: Fence, event: SystemEvent): SystemEvent | undefined => {
     if (caller === undefined) {
         return event;
     }
-    // A desk has no file view at all, so a path or a repository says nothing it can act on.
-    const desk = caller.role === "desk";
     switch (event.kind) {
         case "agents": {
             return { ...event, agents: event.agents.filter((agent) => visibleTo(caller, agent)) };
         }
         case "workspaceChanged":
         case "derivedChanged": {
-            return desk ? undefined : framedPaths(fence, event);
+            return framedPaths(fence, event);
         }
         case "reposChanged":
         case "refsChanged": {
-            return desk ? undefined : framedRepos(fence, event);
+            return framedRepos(fence, event);
         }
         default: {
             return event;
