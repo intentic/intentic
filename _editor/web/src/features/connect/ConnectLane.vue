@@ -21,11 +21,13 @@ const emit = defineEmits<{ toggle: [] }>();
 </script>
 
 <template>
-    <section class="ui-card overflow-hidden" :class="open ? `border-primary-500/40` : ``">
+    <!-- No padding of its own: the header carries it, so its hover wash reaches every edge instead of drawing a
+         rectangle inset by the card's own gutter. -->
+    <section class="ui-card overflow-hidden p-0" :class="open ? `border-primary-500/40` : ``">
         <!-- The header is the control whether the lane is open or shut, so a reader never has to find a second target. -->
         <button
             type="button"
-            class="ui-row-select flex w-full items-center gap-3 p-4 text-left"
+            class="ui-row-select flex w-full items-center gap-3 p-5 text-left"
             :aria-expanded="open"
             @click="emit(`toggle`)"
         >
@@ -46,7 +48,7 @@ const emit = defineEmits<{ toggle: [] }>();
                 :aria-label="open ? t(`connect.connectLane.collapse`) : t(`connect.connectLane.expand`)"
             />
         </button>
-        <div v-if="open" class="border-t border-line px-4 pb-4 pt-4">
+        <div v-if="open" class="border-t border-line px-5 pb-5 pt-4">
             <slot />
         </div>
     </section>

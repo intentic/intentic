@@ -174,8 +174,11 @@ watch(
         }
     },
 );
-const onLocalAdded = (provider: string): void => {
+// Fires when the model is actually serving, not when its manifest entry was written: the picker reads endpoints from
+// the connection list fetched on arrival, which has never heard of this one.
+const onLocalReady = (provider: string): void => {
     landed.value = provider;
+    void refreshConnections();
 };
 
 // Points the next conversation at what was just connected and goes there: the whole errand ends in a chat, not on a
@@ -256,7 +259,7 @@ watch([accessKnown, () => route.query[`provider`]], settleLane);
                     >
                 </template>
 
-                <LocalModelLane v-if="lane.key === `local`" :fit="fit" @added="onLocalAdded" @stop-prefetch="stopFetching" />
+                <LocalModelLane v-if="lane.key === `local`" :fit="fit" @ready="onLocalReady" @stop-prefetch="stopFetching" />
 
                 <div v-else class="flex flex-col gap-3">
                     <!-- The sign-in takes the whole lane once running: while it is the reader's turn, nothing else here is. -->
