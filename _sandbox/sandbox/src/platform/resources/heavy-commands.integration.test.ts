@@ -31,7 +31,13 @@ test("a hand-edited file decides what is heavy, including making something new h
     const path = join(await dir(), "heavy-commands.json");
     await writeFile(path, JSON.stringify({ limit: 1, rules: [{ id: "gradle", pattern: "\\bgradlew?\\b" }] }));
     const loaded = await fileHeavyCommandsStore(path).read();
-    expect(matchHeavyCommand("./gradlew assembleRelease", loaded)).toEqual({ id: "gradle", pool: "heavy", limit: 1 });
+    // The file names no ceiling, so the schema's default is what a rule inherits.
+    expect(matchHeavyCommand("./gradlew assembleRelease", loaded)).toEqual({
+        id: "gradle",
+        pool: "heavy",
+        limit: 1,
+        maxHold: DEFAULT_HEAVY_COMMANDS.maxHoldSeconds,
+    });
     // The shipped rules are replaced, not merged, so an owner can shrink the list too.
     expect(matchHeavyCommand("pnpm test", loaded)).toBeUndefined();
 });

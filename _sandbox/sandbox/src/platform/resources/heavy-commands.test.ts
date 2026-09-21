@@ -12,6 +12,9 @@ const config = (over: Partial<HeavyCommands> = {}): HeavyCommands => HeavyComman
 
 const matched = (command: string, over: Partial<HeavyCommands> = {}): string | undefined => matchHeavyCommand(command, config(over))?.id;
 
+// Read, not written out: the shipped ceiling is tuned by measurement, and these assertions are about inheritance.
+const HOLD = DEFAULT_HEAVY_COMMANDS.maxHoldSeconds;
+
 // Commands the incident was made of: each fans out past what a 16 GiB cgroup holds when four sessions run one at once,
 // matched by verb since a different spelling reaches the same fan-out.
 test.each([
@@ -133,8 +136,8 @@ test("first match wins, so a narrow rule above a broad one decides", () => {
         { id: "narrow", pattern: "vitest run src/one", pool: "solo", limit: 1 },
         { id: "broad", pattern: "\\bvitest\\b" },
     ];
-    expect(matchHeavyCommand("vitest run src/one.test.ts", config({ rules }))).toEqual({ id: "narrow", pool: "solo", limit: 1 });
-    expect(matchHeavyCommand("vitest run src/two.test.ts", config({ rules }))).toEqual({ id: "broad", pool: "heavy", limit: 2 });
+    expect(matchHeavyCommand("vitest run src/one.test.ts", config({ rules }))).toEqual({ id: "narrow", pool: "solo", limit: 1, maxHold: HOLD });
+    expect(matchHeavyCommand("vitest run src/two.test.ts", config({ rules }))).toEqual({ id: "broad", pool: "heavy", limit: 2, maxHold: HOLD });
 });
 
 test("a rule's own pool and limit override the file's, and absent ones inherit", () => {
@@ -146,8 +149,53 @@ test("a rule's own pool and limit override the file's, and absent ones inherit",
             { id: "b", pattern: "bbb", pool: "own", limit: 1 },
         ],
     });
-    expect(matchHeavyCommand("aaa", parsed)).toEqual({ id: "a", pool: "big", limit: 3 });
-    expect(matchHeavyCommand("bbb", parsed)).toEqual({ id: "b", pool: "own", limit: 1 });
+    expect(matchHeavyCommand("aaa", parsed)).toEqual({ id: "a", pool: "big", limit: 3, maxHold: HOLD });
+    expect(matchHeavyCommand("bbb", parsed)).toEqual({ id: "b", pool: "own", limit: 1, maxHold: HOLD });
+});
+
+test("a rule's own hold ceiling overrides the file's, and zero means never killed", () => {
+    const parsed = config({
+        maxHoldSeconds: 60,
+        rules: [
+            { id: "capped", pattern: "aaa" },
+            { id: "looser", pattern: "bbb", maxHoldSeconds: 7200 },
+            { id: "forever", pattern: "ccc", maxHoldSeconds: 0 },
+        ],
+    });
+    expect(matchHeavyCommand("aaa", parsed)?.maxHold).toBe(60);
+    expect(matchHeavyCommand("bbb", parsed)?.maxHold).toBe(7200);
+    // Not `?? config.maxHoldSeconds`: an explicit 0 is the opt-out, and nullish coalescing is what keeps it one.
+    expect(matchHeavyCommand("ccc", parsed)?.maxHold).toBe(0);
+});
+
+// A watch or a dev server is supposed to outlive its command. Queueing one means a slot held until the user stops
+// it, and the ceiling would then kill work the user is watching — so neither applies: it is never queued at all.
+test.each([
+    "vitest --watch",
+    "vitest --watchAll",
+    "pnpm test --watch=true",
+    "vue-tsc --noEmit --watch",
+    "pnpm dev",
+    "pnpm run dev:web",
+    "pnpm run serve",
+    "npm start",
+    "nodemon src/index.ts",
+])("%s is exempt, not queued", (command) => {
+    expect(matched(command)).toBeUndefined();
+});
+
+// `-w` is pnpm's workspace-root flag, not a watch: exempting it would free the widest fan-out in the repo.
+test("pnpm -w test is still queued, because -w is not a watch flag", () => {
+    expect(matched("pnpm -w test")).toBe("package-script");
+});
+
+// The exemption must not swallow the batch commands it sits above.
+test.each([
+    ["vitest run", "vitest"],
+    ["pnpm test", "package-script"],
+    ["vue-tsc --noEmit -p tsconfig.json", "typechecker"],
+])("%s is still queued despite the long-lived exemption", (command, id) => {
+    expect(matched(command)).toBe(id);
 });
 
 test("an empty rule list switches the queue off", () => {
@@ -162,7 +210,12 @@ test("a rule whose pattern does not compile is reported and skipped, and the res
             { id: "fine", pattern: "\\bvitest\\b" },
         ],
     });
-    expect(matchHeavyCommand("npx vitest run", parsed, (problem) => problems.push(problem.detail))).toEqual({ id: "fine", pool: "heavy", limit: 2 });
+    expect(matchHeavyCommand("npx vitest run", parsed, (problem) => problems.push(problem.detail))).toEqual({
+        id: "fine",
+        pool: "heavy",
+        limit: 2,
+        maxHold: HOLD,
+    });
     expect(problems).toHaveLength(1);
     expect(problems[0]).toContain("broken");
 });

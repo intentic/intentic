@@ -18,6 +18,8 @@ export const HeavyCommandRuleSchema = z.object({
     pool: z.string().min(1).optional(),
     // Slots in this rule's pool when it differs from the file's `limit`; the first matching rule decides both.
     limit: z.number().int().positive().optional(),
+    // Seconds this rule's commands may hold a slot when that differs from the file's; 0 means never killed.
+    maxHoldSeconds: z.number().int().nonnegative().optional(),
     // Matching this rule means the command is explicitly not queued: an exception written above the rule it escapes.
     exempt: z.boolean().optional(),
 });
@@ -33,6 +35,10 @@ export const HeavyCommandsSchema = z.object({
     waitSeconds: z.number().int().nonnegative().default(900),
     // Whether a matching command also waits for memory headroom, and for how long.
     memoryGateSeconds: z.number().int().nonnegative().default(120),
+    // How long a command may HOLD a slot before it is killed, which `waitSeconds` (queueing for one) does not
+    // bound. Generous on purpose: this exists to end a hang, not to cap honest work, and a batch command still
+    // running after half an hour on this box is already the anomaly. 0 switches the ceiling off.
+    maxHoldSeconds: z.number().int().nonnegative().default(1800),
     // Matched in file order, first match wins; an empty list switches the queue off entirely.
     rules: z.array(HeavyCommandRuleSchema).default([]),
 });
@@ -47,6 +53,16 @@ export const DEFAULT_HEAVY_COMMANDS: HeavyCommands = HeavyCommandsSchema.parse({
         {
             id: "read-only",
             pattern: "^\\s*(grep|rg|iq|ag|cat|bat|head|tail|less|ls|find|fd|wc|which|echo|git\\s+(log|status|diff|show|blame))\\b",
+            exempt: true,
+        },
+        // A watch or a server is meant to outlive its command, so it can neither take turns nor be killed for
+        // holding a slot: queueing one means holding a slot until the user stops it, which is the leak the
+        // ceiling below exists to stop, arriving as intended behaviour. Above the rules it escapes.
+        {
+            id: "long-lived",
+            // `--watch` without a trailing boundary so `--watchAll` and `--watch=true` come too; `-w` is NOT here,
+            // because `pnpm -w test` is a workspace-root fan-out and exempting it would free the heaviest command.
+            pattern: "--watch|\\bnodemon\\b|\\b(pnpm|npm|yarn|bun)\\s+(run\\s+)?(dev|serve|start)\\b",
             exempt: true,
         },
         { id: "vitest", pattern: "\\bvitest\\b" },
@@ -72,6 +88,8 @@ export interface HeavyMatch {
     readonly id: string;
     readonly pool: string;
     readonly limit: number;
+    // Seconds before the slot is taken back by force; 0 means this command is never killed for holding one.
+    readonly maxHold: number;
 }
 
 // Splits a compound line into the commands it runs. Still not a shell parser — it knows quotes and backslashes and
@@ -171,7 +189,12 @@ export const matchHeavyCommand = (command: string, config: HeavyCommands, report
             if (rule.exempt === true) {
                 break;
             }
-            return { id: rule.id, pool: rule.pool ?? config.defaultPool, limit: rule.limit ?? config.limit };
+            return {
+                id: rule.id,
+                pool: rule.pool ?? config.defaultPool,
+                limit: rule.limit ?? config.limit,
+                maxHold: rule.maxHoldSeconds ?? config.maxHoldSeconds,
+            };
         }
     }
     return undefined;

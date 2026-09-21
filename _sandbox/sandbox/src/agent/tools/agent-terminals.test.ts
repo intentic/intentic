@@ -197,11 +197,19 @@ const heavy = (over: Partial<HeavyCommands> = {}) => {
 
 // The demoted form, with the queue between demotion and shell: position is the assertion.
 const queued = (command: string, label: string, pool = "heavy", limit = 2): string =>
-    `nice -n 10 ionice -c 2 -n 7 /usr/local/bin/queue-run --pool ${shellQuote(pool)} --limit ${String(limit)} --wait 900 --memory-gate 120 --label ${shellQuote(label)} -- bash -c ${shellQuote(command)}`;
+    `nice -n 10 ionice -c 2 -n 7 /usr/local/bin/queue-run --pool ${shellQuote(pool)} --limit ${String(limit)} --wait 900 --memory-gate 120 --max-hold ${String(DEFAULT_HEAVY_COMMANDS.maxHoldSeconds)} --label ${shellQuote(label)} -- bash -c ${shellQuote(command)}`;
 
 test("a heavy command is queued, between the demotion and the shell it runs in", async () => {
     const command = await rewritten({ command: "pnpm test" }, bashTmuxHooks([], undefined, undefined, undefined, heavy()));
     expect(command).toBe(wrap("pnpm test", born(queued("pnpm test", "package-script")), "run"));
+});
+
+test("a rule's own hold ceiling reaches the wrapper, so one command can be loosened without loosening all", async () => {
+    const command = await rewritten(
+        { command: "pnpm test" },
+        bashTmuxHooks([], undefined, undefined, undefined, heavy({ rules: [{ id: "slow", pattern: "pnpm test", maxHoldSeconds: 7200 }] })),
+    );
+    expect(command).toContain("--max-hold 7200");
 });
 
 test("an ordinary command is not queued at all", async () => {

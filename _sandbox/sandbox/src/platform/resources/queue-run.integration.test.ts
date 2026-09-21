@@ -136,6 +136,46 @@ test("a KILLED command frees its slot, which is the case a lease would get wrong
     expect(after.stderr).not.toContain("starting anyway");
 });
 
+test("a HUNG command is killed at the ceiling, and the slot it was holding goes back to the pool", async () => {
+    const queue = await dir();
+    // The shape that leaked one: a pipeline whose writer never returns, so its reader never sees EOF either, and
+    // both of them go on holding the slot's descriptor. Killing only the direct child would leave the lock held.
+    const hung = await queueRun(queue, ["--pool", "p", "--limit", "1", "--max-hold", "2"], "sleep 600 | tail -1");
+    expect(hung.code).toBe(124);
+
+    const after = await queueRun(queue, ["--pool", "p", "--limit", "1", "--wait", "5"], "echo free");
+    expect(after.stdout.trim()).toBe("free");
+    // Took the slot rather than timing out into it, which is the difference between released and merely expired.
+    expect(after.stderr).not.toContain("starting anyway");
+});
+
+test("a command that finishes inside the ceiling keeps its own exit code", async () => {
+    const run = await queueRun(await dir(), ["--pool", "p", "--limit", "1", "--max-hold", "60"], "echo done; exit 5");
+    expect(run.stdout.trim()).toBe("done");
+    expect(run.code).toBe(5);
+});
+
+test("no ceiling asked for is no ceiling applied", async () => {
+    const run = await queueRun(await dir(), ["--pool", "p", "--limit", "1"], "sleep 2; echo survived");
+    expect(run.stdout.trim()).toBe("survived");
+    expect(run.code).toBe(0);
+});
+
+test("the deadline path holds no slot, so the ceiling must not reach it", async () => {
+    const queue = await dir();
+    const holder = await holdSlot(queue, ["--pool", "p", "--limit", "1"], 30);
+    try {
+        // Starts unqueued once the deadline passes, then outlives the ceiling: killing it would free no slot,
+        // because it never got one.
+        const ran = await queueRun(queue, ["--pool", "p", "--limit", "1", "--wait", "2", "--max-hold", "3"], "sleep 6; echo unbounded");
+        expect(ran.stderr).toContain("starting anyway");
+        expect(ran.stdout.trim()).toBe("unbounded");
+        expect(ran.code).toBe(0);
+    } finally {
+        holder.kill("SIGKILL");
+    }
+});
+
 test("runs anyway once the deadline passes, rather than blocking forever", async () => {
     const queue = await dir();
     const holder = await holdSlot(queue, ["--pool", "p", "--limit", "1"], 10);
@@ -167,6 +207,7 @@ test("says in the pane that it is waiting, then that it started", async () => {
 test.each([
     ["a bad limit", ["--pool", "p", "--limit", "not-a-number"]],
     ["a bad deadline", ["--pool", "p", "--limit", "1", "--wait", "abc"]],
+    ["a bad hold ceiling", ["--pool", "p", "--limit", "1", "--max-hold", "abc"]],
     ["an unknown flag from a newer daemon", ["--pool", "p", "--limit", "1", "--future-flag", "x"]],
     ["no flags at all", []],
 ])("runs the command despite %s", async (_name, args) => {

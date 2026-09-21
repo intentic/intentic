@@ -498,8 +498,9 @@ COPY --chmod=755 _sandbox/sandbox/bin/tmux-run /usr/local/bin/tmux-run
 # The heavy-command queue the same hook splices in front of a command matching a rule in
 # .intentic/config/heavy-commands.json, so several sessions' test/typecheck fan-outs take turns instead of
 # pinning the cgroup together (src/platform/resources/heavy-commands.ts carries the measurement). It holds an flock, so
-# `flock` (util-linux, already in the base) is its one dependency; a missing one degrades to running the
-# command plainly. Not on PATH ⇒ the daemon never inserts it at all (terminal-run.ts queueRunEnabled).
+# `flock` (util-linux) and, for the ceiling that takes a slot back from a command that hangs, `timeout`
+# (coreutils) are its dependencies; both are already in the base, and a missing one degrades to running the
+# command plainly — unqueued, or unbounded. Not on PATH ⇒ the daemon never inserts it at all (terminal-run.ts queueRunEnabled).
 COPY --chmod=755 _sandbox/sandbox/bin/queue-run /usr/local/bin/queue-run
 COPY --chmod=755 _sandbox/sandbox/bin/agent-output-filter.mjs /usr/local/bin/agent-output-filter
 # The cleaner registry the filter imports (./cleaners.mjs resolves next to the renamed binary at /usr/local/bin).

@@ -116,7 +116,12 @@ A reader's tour of `src/`: which directory answers which question, and the file 
   first match wins, `exempt` for the narrow escape above a broad rule) and the agent's Bash hook splices
   [bin/queue-run](../bin/queue-run) in front of any command that matches, which holds one of N `flock` slots for
   the life of the command's process tree. The slot is a kernel lock rather than a counter in the daemon
-  precisely so a killed, backgrounded or orphaned command releases it with no lease to expire. Ahead of the
+  precisely so a killed, backgrounded or orphaned command releases it with no lease to expire — every case except
+  a command that never exits at all, which the kernel cannot help with. `maxHoldSeconds` is the backstop for that
+  one: a ceiling on holding a slot, which is a different question from `waitSeconds`' ceiling on queueing for one,
+  enforced by killing the command's process group (measured: a stalled `npx` held half the pool for 35 minutes
+  with no child process and no output). A watch or a dev server is exempt from the queue instead of bounded by it,
+  since outliving its command is what it is for. Ahead of the
   slot, [bin/memory-gate](../src/platform/resources/memory-gate.ts) runs the daemon's OWN admission policy
   (`memory-admission.ts`, previously reachable only from the pre-push check) as a command, so the numbers that
   refuse a turn and the numbers that hold a suite are one set of numbers. Both are bounded and both fail open:

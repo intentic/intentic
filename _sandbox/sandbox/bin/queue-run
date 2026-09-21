@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# queue-run --pool NAME --limit N [--wait SECONDS] [--memory-gate SECONDS] [--label ID] -- <command> [args...]
+# queue-run --pool NAME --limit N [--wait SECONDS] [--memory-gate SECONDS] [--max-hold SECONDS] [--label ID] -- <command> [args...]
 #
 # Runs <command> once a slot in <pool> is free, so the expensive commands several agent sessions each decide to
 # run — a repo-wide test fan-out, a type check across 74 packages — take turns instead of landing on the box at
@@ -13,6 +13,15 @@
 # lock is held by the process TREE: a command that forks something long-lived and returns keeps the slot until
 # that child exits too. That is the honest accounting — the work really is still running — but it does mean a
 # `run_in_background` build holds its slot for as long as it builds.
+#
+# THE ONE CASE THAT RULE DOES NOT COVER is a command that never exits at all. The kernel releases the lock when
+# the last holder exits; it does not promise one ever will. Measured: `npx vue-tsc` run from a directory the
+# binary is not installed in fell through to the registry, and then sat in epoll_wait for 35 minutes — no child
+# process, no output, not one file written into the npx staging directory it had just created. npm's own
+# `fetch-timeout` (5 min, 2 retries) should have ended it around 17 and did not, which is the point: a holder
+# that hangs is not a case anything below this line can reason about. At `--limit 2` that was half the pool,
+# gone until someone read `ps` by hand. `--max-hold` is the backstop — a ceiling on how long a command may HOLD
+# a slot, which is a different question from `--wait`'s ceiling on queueing for one.
 #
 # FD 9 SPECIFICALLY, not bash's `{var}>` form: bash marks automatically-allocated descriptors close-on-exec, so
 # the lock would be dropped at the `exec` below — the command would run holding nothing while queue-run's own
@@ -28,8 +37,13 @@ pool="heavy"
 limit=2
 wait_seconds=900
 memory_gate=0
+max_hold=0
 label="command"
 poll_seconds="${INTENTIC_QUEUE_POLL:-2}"
+
+# Grace between the ceiling's TERM and the KILL behind it: long enough for a build to flush its output, short
+# enough that a process ignoring TERM cannot go on holding the slot.
+kill_grace=30
 
 # THE COMMAND IS WHATEVER FOLLOWS `--`, and the line is cut there BEFORE any flag is read. Parsing left to
 # right instead means an unrecognised flag — a newer daemon calling an older image's wrapper, which a rollback
@@ -60,6 +74,7 @@ while [ "$i" -lt "${#flags[@]}" ]; do
         --limit) limit="${flags[$((i + 1))]:-2}"; i=$((i + 2)) ;;
         --wait) wait_seconds="${flags[$((i + 1))]:-900}"; i=$((i + 2)) ;;
         --memory-gate) memory_gate="${flags[$((i + 1))]:-0}"; i=$((i + 2)) ;;
+        --max-hold) max_hold="${flags[$((i + 1))]:-0}"; i=$((i + 2)) ;;
         --label) label="${flags[$((i + 1))]:-command}"; i=$((i + 2)) ;;
         *) i=$((i + 1)) ;;
     esac
@@ -71,12 +86,30 @@ done
 
 run() { exec "$@"; }
 
+# Bounded: what a command may not do is hold a slot forever. Only the paths that actually TOOK one call this —
+# the deadline path below holds nothing, and a ceiling there would kill the owner's work to free no slot at all.
+#
+# NEVER `--foreground`. Measured against the pipeline that prompted this: that mode leaves the command's siblings
+# alive holding the slot's descriptor, so the lock outlives the kill and the leak still happens. Default mode puts
+# the command in a process group of its own and signals the group, which is the entire mechanism here.
+#
+# STILL `exec`, so a bounded command is one process and not two: `queue-run` killed from outside has to take the
+# command with it, and that is what frees the slot in the kill case. A supervising parent would survive the signal
+# and orphan the very thing it was supervising.
+held_run() {
+    if [ "$max_hold" -gt 0 ] && command -v timeout >/dev/null 2>&1; then
+        exec timeout --kill-after="$kill_grace" "$max_hold" "$@"
+    fi
+    exec "$@"
+}
+
 # Digits only. A non-numeric limit or deadline arriving from a config file must not turn into shell arithmetic
 # that errors under `set -u`, or into a negative loop bound that never terminates.
 number() { case "$1" in '' | *[!0-9]*) echo "$2" ;; *) echo "$1" ;; esac; }
 limit=$(number "$limit" 2)
 wait_seconds=$(number "$wait_seconds" 900)
 memory_gate=$(number "$memory_gate" 0)
+max_hold=$(number "$max_hold" 0)
 poll_seconds=$(number "$poll_seconds" 2)
 [ "$limit" -lt 1 ] && limit=1
 [ "$poll_seconds" -lt 1 ] && poll_seconds=1
@@ -121,7 +154,7 @@ acquire() {
     return 1
 }
 
-acquire && run "$@"
+acquire && held_run "$@"
 
 # Every slot was busy. Say so once — the pane is where the person wondering why nothing is happening is
 # looking — then poll until the deadline.
@@ -132,7 +165,7 @@ while [ "$waited" -lt "$wait_seconds" ]; do
     waited=$((waited + poll_seconds))
     if acquire; then
         printf '[queue-run] %s: slot free after %ss — starting.\n' "$label" "$waited" >&2
-        run "$@"
+        held_run "$@"
     fi
 done
 

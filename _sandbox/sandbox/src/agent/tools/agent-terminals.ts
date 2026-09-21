@@ -76,6 +76,7 @@ const queuePrefix = (command: string, config: HeavyCommands | undefined): string
         `--limit ${String(match.limit)}`,
         `--wait ${String(config.waitSeconds)}`,
         `--memory-gate ${String(config.memoryGateSeconds)}`,
+        `--max-hold ${String(match.maxHold)}`,
         `--label ${shellQuote(match.id)}`,
     ].join(" ");
     return `${QUEUE_RUN_BIN} ${flags} -- `;
