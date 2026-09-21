@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { ContainerSpec, ContainerState, DockerEngine } from "./docker.js";
 import { CONTAINER, CONTAINER_LABELS, DocumentServer, IMAGE, RESTART_POLICY, SETUP_DONE_MARKER } from "./document-server.js";
 
@@ -31,6 +31,10 @@ const scripted = (initial: Partial<Scripted[`state`]> = {}): Scripted => {
         start: async (name) => {
             calls.push(`start ${name}`);
             state.container = state.container === undefined ? undefined : { ...state.container, running: true };
+        },
+        stop: async (name) => {
+            calls.push(`stop ${name}`);
+            state.container = state.container === undefined ? undefined : { ...state.container, running: false };
         },
         remove: async (name) => {
             calls.push(`remove ${name}`);
@@ -223,5 +227,72 @@ describe(`an open after that`, () => {
         script.state.healthy = true;
         await docs.settled();
         expect(docs.running()).toEqual({ port: 5000 });
+    });
+});
+
+// The container carries `restart: unless-stopped`, so once started it outlives every document anyone opened.
+// Measured four hours after last use: 27 processes, 122 MB resident and 2.6 GB of swap.
+describe(`the idle stop`, () => {
+    const MINUTE = 60_000;
+    const WINDOW = 30 * MINUTE;
+
+    it(`holds a server that is still being asked for, and stops one nobody has asked for`, async () => {
+        vi.useFakeTimers();
+        try {
+            const script = scripted();
+            const log: string[] = [];
+            const docs = server(script, log);
+            await docs.start();
+            await docs.settled();
+
+            // A server just brought up counts as used; the clock starts at the healthcheck, not at zero.
+            expect(await docs.stopIfIdle(WINDOW)).toBe(false);
+            vi.advanceTimersByTime(WINDOW - MINUTE);
+            expect(await docs.stopIfIdle(WINDOW)).toBe(false);
+
+            // `running()` is the listener asking where to proxy, which is the only thing that refreshes the clock.
+            expect(docs.running()).toEqual({ port: 4321 });
+            vi.advanceTimersByTime(WINDOW - MINUTE);
+            expect(await docs.stopIfIdle(WINDOW)).toBe(false);
+            expect(script.calls).not.toContain(`stop ${CONTAINER}`);
+
+            vi.advanceTimersByTime(2 * MINUTE);
+            expect(await docs.stopIfIdle(WINDOW)).toBe(true);
+            expect(script.calls).toContain(`stop ${CONTAINER}`);
+            expect(docs.running()).toBeUndefined();
+            expect(log.join(`\n`)).toContain(`stopped the document server`);
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
+    // Stopped, not removed: the next open must find the SAME container on the port the editor was handed, or an idle
+    // stop would cost an address as well as a restart.
+    it(`comes back on the same container and port, without recreating it`, async () => {
+        const script = scripted();
+        const docs = server(script);
+        await docs.start();
+        await docs.settled();
+        expect(await docs.stopIfIdle(0)).toBe(true);
+        expect(script.state.container?.running).toBe(false);
+
+        expect(await docs.ensureRunning()).toEqual({ state: `starting` });
+        await docs.settled();
+        expect(docs.running()).toEqual({ port: 4321 });
+        expect(script.calls.filter((call) => call.startsWith(`create `))).toHaveLength(1);
+    });
+
+    it(`does not stop a server that was never up, nor one mid-start`, async () => {
+        const never = scripted();
+        expect(await server(never).stopIfIdle(0)).toBe(false);
+        expect(never.calls).toEqual([]);
+
+        // Mid-start: `start` leaves the work in flight, and stopping under it would race the healthcheck.
+        const starting = scripted();
+        const docs = server(starting);
+        void docs.start();
+        expect(await docs.stopIfIdle(0)).toBe(false);
+        expect(starting.calls).not.toContain(`stop ${CONTAINER}`);
+        await docs.settled();
     });
 });

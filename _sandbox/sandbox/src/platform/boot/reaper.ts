@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { promisify } from "node:util";
 import { AGENT_SESSION_PREFIX } from "@intentic/sandbox-contract/session-names";
 import type { Logger } from "pino";
-import { closeBrowserSessionsFor, runningBrowserOwners } from "../../browser/sessions/browser-sessions.js";
+import { closeBrowserSession, closeBrowserSessionsFor, idleBrowserSessionNames, runningBrowserOwners } from "../../browser/sessions/browser-sessions.js";
 import { type Leftover, leftoverProcesses, ownProcessGroup, scanProcesses, signalFor } from "./leftovers.js";
 
 // Reclaims everything a conversation holds (processes, tmux terminals, browser records, scratch /tmp state) once the
@@ -21,6 +21,10 @@ const TMUX_OWNER_OPTION = "@intentic_owner";
 // terminals wait long enough for a live scrollback and a delayed follow-up message to still find their job.
 const PROCESS_GRACE_MS = 2 * 60_000;
 const TERMINAL_GRACE_MS = 10 * 60_000;
+// How long a browser nobody is driving stays open, on its own clock rather than its owner's. Matched to the terminal
+// grace: both are things a turn may come back to, and a Chromium is the more expensive of the two to leave standing
+// (a dozen processes and a few hundred MB against a tmux session's kilobytes).
+const BROWSER_IDLE_MS = 10 * 60_000;
 
 const SWEEP_INTERVAL_MS = 60_000;
 const DISK_SWEEP_INTERVAL_MS = 3_600_000;
@@ -103,6 +107,7 @@ export interface ReaperDeps {
     readonly logger: Logger;
     readonly processGraceMs?: number;
     readonly terminalGraceMs?: number;
+    readonly browserIdleMs?: number;
     readonly intervalMs?: number;
 }
 
@@ -135,6 +140,7 @@ export const createResourceReaper = (deps: ReaperDeps): ResourceReaper => {
     const { logger } = deps;
     const processGraceMs = deps.processGraceMs ?? PROCESS_GRACE_MS;
     const terminalGraceMs = deps.terminalGraceMs ?? TERMINAL_GRACE_MS;
+    const browserIdleMs = deps.browserIdleMs ?? BROWSER_IDLE_MS;
     const intervalMs = deps.intervalMs ?? SWEEP_INTERVAL_MS;
     const group = ownProcessGroup();
 
@@ -219,6 +225,11 @@ export const createResourceReaper = (deps: ReaperDeps): ResourceReaper => {
 
     // Closes browser records of owners that have stopped; Chromium itself is reaped by the process sweep. Puts every
     // running record's owner on the stop clock, so browsing alone still closes on schedule.
+    //
+    // Then the same question asked of the SESSION rather than the owner: the pass above can only fire once a
+    // conversation has no run in flight, so a conversation that keeps working holds every browser it ever opened —
+    // measured at 25 Chromium processes for 2 browsers, one of them untouched for 21 minutes. Re-opening is what the
+    // PreToolUse hook already does on the next browser call, so a closed idle session costs a relaunch, not an error.
     const sweepBrowsers = async (now: number): Promise<void> => {
         const owners = new Set<string>();
         for (const owner of runningBrowserOwners()) {
@@ -228,6 +239,11 @@ export const createResourceReaper = (deps: ReaperDeps): ResourceReaper => {
             }
         }
         await Promise.all([...owners].map((owner) => closeBrowserSessionsFor(owner)));
+        const idle = idleBrowserSessionNames(now, browserIdleMs);
+        if (idle.length > 0) {
+            await Promise.all(idle.map(closeBrowserSession));
+            logger.info({ count: idle.length, sessions: idle.slice(0, 10) }, "reaper: closed idle browsers");
+        }
     };
 
     // A directory's own mtime freezes at creation, so age is judged by the newest file inside it.

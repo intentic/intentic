@@ -6,8 +6,8 @@ import type {
     AgentOrigin,
     Capability,
     DerivedSide,
-    HostFacts,
-    HostScopes,
+    DeviceFacts,
+    DeviceScopes,
     RunnerFacts,
     WebExtFacts,
     WebExtScopes,
@@ -91,6 +91,7 @@ import { type DismissalsStore, fileDismissalsStore } from "./capabilities/dismis
 import { filePersonasStore, type PersonasStore } from "./personas/personas-store.js";
 import { fileAreasStore, type AreasStore } from "./areas/areas-store.js";
 import { fileHeavyCommandsStore, type HeavyCommandsStore } from "./platform/resources/heavy-commands.js";
+import { type MemoryHeadroom, readMemoryHeadroom } from "./platform/resources/memory-admission.js";
 import { type BlobSource, deriveBytes } from "./derived/derived-blob.js";
 import { deriveText, readDerivedText } from "./derived/derived-text.js";
 import { sidecarStatus } from "./derived/sidecar-service.js";
@@ -138,7 +139,7 @@ import { enrolledFleet, type SyncFleet, syncPairBurnPath, type SyncMode } from "
 import { pairings, type Pairings } from "./store/enrollment.js";
 import { fileTurnJournal, type TurnJournal } from "./agent/run/turn/turn-journal.js";
 import { fileWatchJournal, type WatchJournal } from "./agent/verification/watch-journal.js";
-import { fileTurnAnchors, type TurnAnchors } from "./agent/anchors/turn-anchors.js";
+import { fileTurnCheckpoints, type TurnCheckpoints } from "./agent/checkpoints/turn-checkpoints.js";
 import { filePromptRecord, type PromptRecord } from "./agent/prompt/prompt-record.js";
 import type { Config } from "./env.config.js";
 import { createAgentsRegistry, type AgentsRegistry } from "./agents/registry/agents-registry.js";
@@ -233,7 +234,7 @@ import { type RuntimeInstallsStore, fileRuntimeInstallsStore } from "./environme
 import { agentSessionName } from "@intentic/sandbox-contract/session-names";
 import { liveRequestRun } from "./agent/run/offer-request.js";
 import { onTurnSettled, turnRunOf } from "./agent/run/turn/turn-runs.js";
-import { turnActive } from "./agent/anchors/agent-steering.js";
+import { turnActive } from "./agent/checkpoints/agent-steering.js";
 import { clearTurnTaint } from "./guard/turn-taint.js";
 import { type Announcer, createAnnouncer } from "./platform/boot/announce.js";
 import { type ReachReporter, createReachReporter } from "./platform/listeners/reach-report.js";
@@ -399,6 +400,10 @@ export interface Services extends ClaudeSlice, CodexSlice, CursorSlice, GrokSlic
     readonly areas: AreasStore;
     // Which agent commands are heavy enough to queue; the Bash hook reads it per command, binding on the next one.
     readonly heavyCommands: HeavyCommandsStore;
+    // What the cgroup says about memory right now, for the admission gate above every turn. A service rather than a
+    // direct call so a test can say what the box has: the reading is of live cgroup files at absolute paths, and once
+    // it counts swap (memory-admission.ts) a suite running on a genuinely full machine refuses its own fixtures.
+    readonly memoryHeadroom: () => Promise<MemoryHeadroom>;
     // Scheduled agent wake-ups; run history is a separate ledger joined on read, so callers see one store.
     readonly automations: AutomationsStore;
     // Ralph loops: the pump drives them, /loops starts/stops them; `running` at boot is what the daemon died under.
@@ -446,7 +451,7 @@ export interface Services extends ClaudeSlice, CodexSlice, CursorSlice, GrokSlic
     // Armed condition watches; a watch's life is between turns, so only a boot-time read survives a recreate.
     readonly watchJournal: WatchJournal;
     // What each message can be restored to: a workspace checkpoint, or an isolated turn's own per-repo commits.
-    readonly turnAnchors: TurnAnchors;
+    readonly turnCheckpoints: TurnCheckpoints;
     // The system prompt each conversation's newest turn ran on, which the transcript never shows.
     readonly promptRecord: PromptRecord;
     // Activity audit log, outside the agent's reach: inbound wakes, sniffed calls, voice sessions, failures.
@@ -964,10 +969,10 @@ export const createServices = (config: Config, logger: Logger): Services => {
     // Hoisted: the background probe runner writes the same cache the /chores route reads.
     const chores = fileChoresStore(join(workspace.root, PROBES_FILE), join(workspace.root, LEDGER_FILE));
     // Bound once against the same registry, whose sessionIdOf reads live turn state as well as the persisted entry.
-    const turnAnchors = fileTurnAnchors(join(config.historyRoot, "turn-anchors.json"));
+    const turnCheckpoints = fileTurnCheckpoints(join(config.historyRoot, "turn-checkpoints.json"));
     const transcriptDeps: AgentTranscriptDeps = {
         record: fileTranscriptRecord(join(config.historyRoot, "transcripts")),
-        turnAnchors,
+        turnCheckpoints,
     };
     // Phrase index on the history volume, daemon-private; a pure cache, deleted and rebuilt on a schema bump.
     const saidIndex = openSearchIndex(join(config.historyRoot, "said-index"));
@@ -1123,7 +1128,7 @@ export const createServices = (config: Config, logger: Logger): Services => {
         // Reads only readings already held (hosts/self-host.ts), so composing a turn never waits on a laptop.
         hostReach: (granted) => hostDeviceReach(services, granted),
         syncFleet: () => enrolledFleet(config.historyRoot),
-        hostHub: createPeerHub<HostClient, HostAnnounced, HostFacts, HostScopes>(HOST_PEER.hub, logger),
+        hostHub: createPeerHub<HostClient, HostAnnounced, DeviceFacts, DeviceScopes>(HOST_PEER.hub, logger),
         browserBridgeToken: randomBytes(32).toString("hex"),
         webextBridgeToken: randomBytes(32).toString("hex"),
         webexts: filePeerStore(config.historyRoot, WEBEXT_PEER.store),
@@ -1159,6 +1164,7 @@ export const createServices = (config: Config, logger: Logger): Services => {
         personas,
         areas,
         heavyCommands,
+        memoryHeadroom: readMemoryHeadroom,
         ciStore,
         verifyStore,
         ciRuns: createRunsCache(),
@@ -1196,7 +1202,7 @@ export const createServices = (config: Config, logger: Logger): Services => {
         watchJournal: fileWatchJournal(join(config.historyRoot, "watches")),
         invariants,
         // The same instance the transcript reader holds; a second would answer from a file the first already passed.
-        turnAnchors,
+        turnCheckpoints,
         // Beside the transcripts, on the history volume: what a conversation is told outlives a container recreate the
         // same way what it said does.
         promptRecord: filePromptRecord(join(config.historyRoot, "system-prompts")),

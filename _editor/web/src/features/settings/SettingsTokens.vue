@@ -78,7 +78,7 @@ const pasteSnippet = `Capabilities → Sandbox fleet → Provisioning token`;
                             <code class="min-w-0 flex-1 truncate font-mono text-xs text-content">{{ minted.token }}</code>
                             <CopyButton :text="minted.token" :label="t(`ui.action.copy`)" />
                         </div>
-                        <Code :code="pasteSnippet" lang="text" :label="t(`settings.settingsTokens.whereItGoes`)" :wrap="true" />
+                        <Code :code="pasteSnippet" :label="t(`settings.settingsTokens.whereItGoes`)" :wrap="true" />
                     </div>
                 </div>
             </RowNote>

@@ -35,7 +35,10 @@ export interface PrepushCheck {
 }
 
 // Named explicitly rather than taking all of Services, so a test stands up only the seams it needs.
-export type PrepushDeps = Pick<Services, "logger" | "sandboxSettings" | "workspace" | "terminalRun" | "pushSender" | "ruleFirings" | "activity">;
+export type PrepushDeps = Pick<
+    Services,
+    "logger" | "sandboxSettings" | "workspace" | "terminalRun" | "pushSender" | "ruleFirings" | "activity" | "memoryHeadroom"
+>;
 
 // A module singleton: routes and the shutdown hook must reach the same live run, and there is one working tree for them
 // to share. Tests build their own via createPrepushCheck.
@@ -101,7 +104,7 @@ export const createPrepushCheck = (services: PrepushDeps): PrepushCheck => {
                 current = { status: "running", command, startedAt, output: "" };
                 // The memory gate runs after `current` publishes, so the dialog shows the check as queued, not idle.
                 // The wait is bounded; the suite then runs regardless.
-                const headroom = await waitForMemoryHeadroom({ signal: abort.signal });
+                const headroom = await waitForMemoryHeadroom({ signal: abort.signal, read: services.memoryHeadroom });
                 if (headroom.waitedMs > 0) {
                     logger.info({ rule: rule.id, waitedMs: headroom.waitedMs, admitted: headroom.admitted }, "prepush: waited for memory headroom");
                 }

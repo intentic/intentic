@@ -76,6 +76,9 @@ export class DocumentServer {
     private phase: Phase = { kind: "idle" };
     // Known once the container answered its healthcheck; unset again when it stops answering.
     private port: number | undefined;
+    // When the server was last asked for, for the idle stop. Set by `bringUp` as well as `running()`: a server just
+    // brought up has been used by definition, and starting the clock at 0 would stop it on the very next tick.
+    private lastUsedAt = 0;
     private inFlight: Promise<void> | undefined;
     private readonly healthy: (port: number) => Promise<boolean>;
     private readonly freePort: () => Promise<number>;
@@ -88,8 +91,42 @@ export class DocumentServer {
     }
 
     // The loopback port to proxy to, only while the server is known to answer.
+    //
+    // Doubles as the idle clock's only writer, because every caller of this is about to USE the server: the listener
+    // asks for the port on each proxied request, and a save asks before fetching the document back. Nothing polls it —
+    // `status()` reads `this.port` directly — so a stamp here means real traffic, not a page watching a spinner.
     running(): { readonly port: number } | undefined {
-        return this.port === undefined ? undefined : { port: this.port };
+        if (this.port === undefined) {
+            return undefined;
+        }
+        this.lastUsedAt = Date.now();
+        return { port: this.port };
+    }
+
+    // Stops the container once nothing has proxied through it for `idleMs`, and reports whether it did.
+    //
+    // WHY THIS EXISTS: the container carries `restart: unless-stopped`, so once started it outlives every document
+    // anyone opened. Measured on a sandbox four hours after its last use: 27 processes, 122 MB resident and 2.6 GB of
+    // swap — the single largest swapped-out thing on the box, and since the admission gate counts swap against the
+    // cap (platform/resources/memory-admission.ts), 2.6 GB of headroom no turn could spend.
+    //
+    // Stopped, not removed: `ensureRunning` finds the stopped container and `bringUp` starts it again on the same
+    // published port, so the cost of being wrong is one entrypoint wait, not a lost address.
+    async stopIfIdle(idleMs: number): Promise<boolean> {
+        if (this.port === undefined || this.busy() || Date.now() - this.lastUsedAt < idleMs) {
+            return false;
+        }
+        try {
+            await this.deps.engine.stop(CONTAINER);
+        } catch (error) {
+            // Left running and retried on the next tick: a stop that failed is not worth a phase of its own, and
+            // reporting `error` here would make the next `ensureRunning` swallow it as a failed start.
+            this.deps.log(`could not stop the idle document server: ${errorMessage(error)}`);
+            return false;
+        }
+        this.port = undefined;
+        this.deps.log(`stopped the document server after ${Math.round(idleMs / 60_000)} minutes idle; the next open starts it again`);
+        return true;
     }
 
     // A start or a pull under way; an error is not, so the next attempt tries again.
@@ -235,6 +272,7 @@ export class DocumentServer {
         await this.deps.engine.start(CONTAINER);
         await this.waitReady(port, since);
         this.port = port;
+        this.lastUsedAt = Date.now();
         this.deps.log(`document server answering on 127.0.0.1:${port}`);
     }
 

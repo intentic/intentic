@@ -9,11 +9,21 @@ import { parsePressure } from "./loop-watchdog.js";
 const MEMORY_CURRENT = "/sys/fs/cgroup/memory.current";
 const MEMORY_MAX = "/sys/fs/cgroup/memory.max";
 const MEMORY_PRESSURE = "/sys/fs/cgroup/memory.pressure";
+// Anon this cgroup has pushed to swap. Charged HERE and not to memory.current, which is the whole reason this file
+// reads it: see the `usedBytes` note below.
+const MEMORY_SWAP_CURRENT = "/sys/fs/cgroup/memory.swap.current";
 
 export interface MemoryHeadroom {
     // Undefined when uncapped or cgroup v2 is unavailable; the gate treats both as no opinion.
     readonly limitBytes: number | undefined;
+    // Resident + swapped, not memory.current alone, so paging cannot read as relief. A sandbox runs with
+    // `--memory-swap -1` (sandbox-run/src/index.ts), so a page pushed to swap leaves memory.current and lands in
+    // memory.swap.current: measuring only the first makes freeBytes RISE as the box begins to thrash, which is the
+    // one moment this gate exists to catch. Measured on a 16 GiB cap: 12.4 resident + 6.8 swapped reported 3.6 GiB
+    // free and admitted every turn while the machine had 350 MB and was paging at 230 MB/s.
     readonly usedBytes: number | undefined;
+    // The swapped half of `usedBytes`, kept apart only so a refusal can name it; 0 when swap is off or unaccounted.
+    readonly swapBytes: number;
     readonly freeBytes: number | undefined;
     // Memory PSI `full avg10`: percent of the last 10s every task was stalled on memory; 0 when healthy.
     readonly stalledPercent: number;
@@ -29,18 +39,39 @@ const numericFile = async (path: string): Promise<number | undefined> => {
     return Number.isFinite(parsed) ? parsed : undefined;
 };
 
-export const readMemoryHeadroom = async (): Promise<MemoryHeadroom> => {
-    const [usedBytes, limitBytes, pressureText] = await Promise.all([
-        numericFile(MEMORY_CURRENT),
-        numericFile(MEMORY_MAX),
-        readFile(MEMORY_PRESSURE, "utf8").catch(() => ""),
-    ]);
+export interface MemoryReading {
+    // memory.current: the cgroup's RESIDENT charge, which excludes everything it has paged out.
+    readonly residentBytes: number | undefined;
+    readonly limitBytes: number | undefined;
+    // memory.swap.current; `undefined` is an unaccounted swap, read as none.
+    readonly swapBytes: number | undefined;
+    readonly pressureText: string;
+}
+
+// Pure function of a reading, for the same reason `admitTurn` below is one: the arithmetic swap broke is the part
+// worth testing, and a cgroup is not something a unit test can stage.
+export const headroomFrom = ({ residentBytes, limitBytes, swapBytes, pressureText }: MemoryReading): MemoryHeadroom => {
+    // An unreadable swap file is 0, never `undefined`: swap being unaccounted (cgroup v1, swapaccount off) must not
+    // turn a box with a measurable ceiling into one with no opinion — that would widen the hole instead of closing it.
+    const swapped = swapBytes ?? 0;
+    const usedBytes = residentBytes === undefined ? undefined : residentBytes + swapped;
     return {
         limitBytes,
         usedBytes,
+        swapBytes: swapped,
         freeBytes: limitBytes === undefined || usedBytes === undefined ? undefined : Math.max(0, limitBytes - usedBytes),
         stalledPercent: parsePressure(pressureText)?.full ?? 0,
     };
+};
+
+export const readMemoryHeadroom = async (): Promise<MemoryHeadroom> => {
+    const [residentBytes, limitBytes, swapBytes, pressureText] = await Promise.all([
+        numericFile(MEMORY_CURRENT),
+        numericFile(MEMORY_MAX),
+        numericFile(MEMORY_SWAP_CURRENT),
+        readFile(MEMORY_PRESSURE, "utf8").catch(() => ""),
+    ]);
+    return headroomFrom({ residentBytes, limitBytes, swapBytes, pressureText });
 };
 
 const GIB = 1024 ** 3;
@@ -74,7 +105,13 @@ export const admitTurn = (headroom: MemoryHeadroom, unattended: boolean = false)
     if (freeBytes >= reserve) {
         return { admit: true };
     }
-    const used = `${gib(usedBytes)} of ${gib(limitBytes)} used`;
+    // Named apart once paging has started, because the sum alone can exceed the cap — the cgroup's ceiling bounds
+    // resident pages, not the anon it has pushed to swap — and "19.2 GiB of 16.0 GiB used" reads as a bug rather than
+    // as the diagnosis it is.
+    const used =
+        headroom.swapBytes > 0
+            ? `${gib(usedBytes - headroom.swapBytes)} resident + ${gib(headroom.swapBytes)} swapped, against ${gib(limitBytes)}`
+            : `${gib(usedBytes)} of ${gib(limitBytes)} used`;
     return {
         admit: false,
         message: unattended

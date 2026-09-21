@@ -134,4 +134,25 @@ fi
 # stderr lives in `docker logs`, which the next recreate erases. The diagnostic report lands on /history
 # instead, where the next boot's death check (src/platform/boot-marker.ts) finds and names it — without this,
 # a daemon that dies on a fatal error dies without a trace.
-exec node --report-on-fatalerror --report-directory="$HISTORY_ROOT/logs" /opt/sandbox/dist/main.js
+# --max-old-space-size: V8 sizes its default heap from /proc/meminfo, which inside a container is the HOST's memory,
+# not this cgroup's — so on a 20 GB machine the daemon is handed roughly a 4 GB ceiling whatever `--memory` said, and
+# a leak has that much room to grow into before anything says a word. Measured on a 16 GiB sandbox: the daemon drifted
+# from 731 MB to 1.50 GB in an hour and nothing objected, because the ceiling it was climbing toward belonged to the
+# machine. An explicit value is the only way the heap is sized to the sandbox.
+#
+# A quarter of the cap, held between 768 MiB and 3 GiB: the daemon is one process among the turns, browsers and
+# toolchains it supervises, so it may not have the box; and a sandbox at the 4 GiB floor must still get a workable
+# heap. An unreadable or unlimited cgroup falls back to the middle of that range rather than to V8's host-derived
+# guess. Crossing it is a fatal error, which is the point: --report-on-fatalerror above writes the report the next
+# boot's death check reads, so a leak ends as a named diagnosis instead of the kernel picking a victim.
+heap_mb=1536
+cgroup_max="$(cat /sys/fs/cgroup/memory.max 2>/dev/null || echo max)"
+if [ "$cgroup_max" != "max" ] && [ -n "$cgroup_max" ]; then
+    quarter=$((cgroup_max / 1048576 / 4))
+    if [ "$quarter" -lt 768 ]; then heap_mb=768
+    elif [ "$quarter" -gt 3072 ]; then heap_mb=3072
+    else heap_mb="$quarter"
+    fi
+fi
+
+exec node --max-old-space-size="$heap_mb" --report-on-fatalerror --report-directory="$HISTORY_ROOT/logs" /opt/sandbox/dist/main.js

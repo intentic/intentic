@@ -1,17 +1,26 @@
 import { expect, test } from "vitest";
-import { admitTurn, type MemoryHeadroom, readMemoryHeadroom, type TurnAdmission, waitForMemoryHeadroom } from "./memory-admission.js";
+import { admitTurn, headroomFrom, type MemoryHeadroom, readMemoryHeadroom, type TurnAdmission, waitForMemoryHeadroom } from "./memory-admission.js";
 
 const GIB = 1024 ** 3;
 
 // Refusal text, or "" when admitted.
 const refusal = (admission: TurnAdmission): string => (admission.admit ? "" : admission.message);
 
-// MemoryHeadroom for a box with no stall unless given one.
+// MemoryHeadroom for a box with no stall and nothing paged out unless given them.
 const box = (limitGib: number, usedGib: number, stalledPercent = 0): MemoryHeadroom => ({
     limitBytes: limitGib * GIB,
     usedBytes: usedGib * GIB,
+    swapBytes: 0,
     freeBytes: (limitGib - usedGib) * GIB,
     stalledPercent,
+});
+
+// A cgroup reading in GiB, as the four files would answer it.
+const reading = (limitGib: number | undefined, residentGib: number | undefined, swapGib: number | undefined) => ({
+    residentBytes: residentGib === undefined ? undefined : residentGib * GIB,
+    limitBytes: limitGib === undefined ? undefined : limitGib * GIB,
+    swapBytes: swapGib === undefined ? undefined : swapGib * GIB,
+    pressureText: "",
 });
 
 test("a box with room admits, a box without it refuses and says what is used", () => {
@@ -43,9 +52,35 @@ test("a stalled box is refused even when the byte count looks survivable", () =>
     expect(admitTurn(box(10, 3, 5)).admit).toBe(true);
 });
 
+// THE INVERSION THIS READING EXISTS TO CLOSE. A sandbox runs with `--memory-swap -1`, so anon pushed to swap leaves
+// memory.current and lands in memory.swap.current. Reading only the first made freeBytes RISE as the box began to
+// thrash — measured on a 16 GiB cap holding 12.4 resident + 6.8 swapped: 3.6 GiB reported free, every turn admitted,
+// while the machine had 350 MB and was paging at 230 MB/s. Whole GiB here so the sum is exact.
+test("paging out is counted as used, not as relief", () => {
+    const thrashing = headroomFrom(reading(16, 12, 7));
+    expect(thrashing.usedBytes).toBe(19 * GIB);
+    expect(thrashing.freeBytes).toBe(0);
+    expect(admitTurn(thrashing).admit).toBe(false);
+    // The same box read as resident-only: what the gate saw before, and it admitted.
+    expect(admitTurn(headroomFrom(reading(16, 12, 0))).admit).toBe(true);
+});
+
+test("a refusal on a paging box names the swap, since the sum can exceed the cap", () => {
+    expect(refusal(admitTurn(headroomFrom(reading(16, 12, 7))))).toContain("12.0 GiB resident + 7.0 GiB swapped, against 16.0 GiB");
+});
+
+// Swap being unaccounted (cgroup v1, swapaccount off) must narrow nothing: it is the pre-existing reading, not a
+// reason to stop measuring the ceiling that IS readable.
+test("an unaccounted swap file reads as none rather than blanking the ceiling", () => {
+    const unaccounted = headroomFrom(reading(10, 4, undefined));
+    expect(unaccounted.swapBytes).toBe(0);
+    expect(unaccounted.freeBytes).toBe(6 * GIB);
+    expect(admitTurn(unaccounted).admit).toBe(true);
+});
+
 // Unknown ceiling (no cgroup, cgroup v1, hosted) admits rather than refuses on ignorance.
 test("a sandbox with no measurable ceiling admits rather than refusing on ignorance", () => {
-    const unknown: MemoryHeadroom = { limitBytes: undefined, usedBytes: undefined, freeBytes: undefined, stalledPercent: 0 };
+    const unknown: MemoryHeadroom = { limitBytes: undefined, usedBytes: undefined, swapBytes: 0, freeBytes: undefined, stalledPercent: 0 };
     expect(admitTurn(unknown)).toEqual({ admit: true });
     expect(admitTurn(unknown, true)).toEqual({ admit: true });
     // Stalling still admits: without a ceiling, pressure reads the whole machine's, not this sandbox's.

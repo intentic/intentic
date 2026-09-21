@@ -56,7 +56,7 @@ export const DEFAULT_HEAVY_COMMANDS: HeavyCommands = HeavyCommandsSchema.parse({
     ],
 });
 
-// A rule with its pattern compiled, or nothing if it doesn't. Case-insensitive and unanchored, since a rule describes a
+// A rule with its pattern compiled, or nothing if it doesn't. Case-insensitive and uncheckpointed, since a rule describes a
 // command that appears in the line, not the whole line.
 const compile = (rule: HeavyCommandRule, report?: (problem: ManifestProblem) => void): { rule: HeavyCommandRule; regex: RegExp } | undefined => {
     try {
@@ -128,13 +128,31 @@ const SHELLS = /^\s*(?:\S*\/)?(?:ba|z|da|k)?sh\b/u;
 // Quoted runs, single or double, including an unterminated one at the end of the line.
 const QUOTED = /'[^']*'?|"(?:\\.|[^"\\])*"?/gu;
 
-// What a segment's rules are actually matched against: the command, with its quoted ARGUMENTS blanked out.
+// A word carrying a glob metacharacter, blanked whole. `[` and `]` are in the class so a bracket expression goes too.
+const GLOB_WORD = /\S*[*?[\]]\S*/gu;
+
+// `#` to the end of the segment, once the quotes are already gone so a `#` inside one cannot start a comment.
+const COMMENT = /(^|\s)#.*$/u;
+
+// A `NAME=value` word: shell-identifier name, so `--filter=x` is not one. Anchored at a word start, and the leading
+// space is put back by the replacement.
+const ASSIGNMENT_WORD = /(?:^|\s)[A-Za-z_][A-Za-z0-9_]*=\S*/gu;
+
+// What a segment's rules are actually matched against: the command, with everything that cannot BE a command blanked.
 //
-// A quoted run is data — an awk program, a grep pattern, a commit message — and matching rules against it is how a
-// `ps … | awk '… /vitest/ …' | sort` came to wait for a repo-wide test run's slot, and how `git commit -m "add a test"`
-// queues a commit. The exception is a shell: `bash -c "pnpm test"` really does run what it quotes, so for those the
-// text stays and over-matches the safe way.
-const matchableText = (segment: string): string => (SHELLS.test(segment) ? segment : segment.replace(QUOTED, " "));
+// Three kinds of text name a heavy tool without running one, and each was measured queueing something read-only:
+//   - a quoted run is data — `ps … | awk '… /vitest/ …' | sort` waited behind two repo-wide test runs, and
+//     `git commit -m "add a test"` queued a commit;
+//   - a glob is a pattern, not a program — a `case` label `*vue-tsc*` in a shell loop that only read /proc held the
+//     `typechecker` slot for 18 seconds, which is what put this line here;
+//   - a comment is a note to a person;
+//   - a `NAME=value` word is a variable, and `k=vitest` in the same loop matched on the `\b` that `=` provides.
+// Blanking them can cost no detection, because no rule matches a pattern, a comment or an assignment: every rule names
+// a program and a verb, and the one assignment that precedes real work — `VITEST_MAX_WORKERS=4 turbo run test` — is
+// still judged on the `turbo run test` it leaves behind. The exception is a shell: `bash -c "pnpm test"` really does
+// run what it quotes, so for those the text stays whole and over-matches the safe way.
+const matchableText = (segment: string): string =>
+    SHELLS.test(segment) ? segment : segment.replace(QUOTED, " ").replace(COMMENT, " ").replace(GLOB_WORD, " ").replace(ASSIGNMENT_WORD, " ");
 
 // Whether this command is one of the big ones, as a pure function of the line and config, matched against the agent's
 // own command before the daemon's wrapping and before secret resolution.

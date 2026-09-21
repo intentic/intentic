@@ -43,6 +43,12 @@ const loadSecret = async (file: string): Promise<string> => {
     return secret;
 };
 
+// How long the document server may sit unused before it is stopped, and how often that is asked. Generous next to the
+// browser reaper's ten minutes, because coming back costs an entrypoint restart rather than a page load, and somebody
+// reading a long document sends no traffic between saves.
+const IDLE_STOP_MS = 30 * 60_000;
+const IDLE_CHECK_MS = 5 * 60_000;
+
 // A workspace-relative path with nothing that escapes the workspace; undefined otherwise.
 export const workspacePath = (raw: unknown): string | undefined => {
     if (typeof raw !== "string" || raw === "" || raw.includes("\0")) {
@@ -172,6 +178,12 @@ export const activateServer = async (api: ExtensionServerApi, context: Extension
     });
     listenerPort = await listener.listen();
     api.log(`listening on 0.0.0.0:${listenerPort}`);
+
+    // The idle stop. Unref'd so it never holds the sandbox open by itself, and deliberately not cancelled when
+    // auto-start is on: auto-start says the server should be there when a document is opened, which `ensureRunning`
+    // already guarantees, not that an unused container should hold its memory all day.
+    const idleTimer = setInterval(() => void docs.stopIfIdle(IDLE_STOP_MS), IDLE_CHECK_MS);
+    idleTimer.unref();
 
     const open = async (request: OpenRequest): Promise<Response> => {
         if (documentTypeOf(extensionOf(request.path)) === undefined) {

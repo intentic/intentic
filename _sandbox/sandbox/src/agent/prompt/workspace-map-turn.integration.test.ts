@@ -11,6 +11,7 @@ import { testConfig } from "../../testing.js";
 import { workspaceSetup } from "../../workspace/layout/workspace-setup.js";
 import type { AgentRequest } from "../run/agent.js";
 import { planTurn, type TurnContext } from "../run/turn/turn-plan.js";
+import { ROOMY_MEMORY } from "../run/turn/turn-plan.testing.js";
 import { composeWirePrompt, preambleNotes, stripTurnPreamble } from "./turn-preamble.js";
 import { WORKSPACE_MAP_NOTE_HEADER } from "./workspace-map.js";
 
@@ -53,6 +54,7 @@ const contextIn = (root: string, localCwd = root, prompt = "do the thing"): Turn
 const servicesIn = (root: string, settings: Partial<Record<string, unknown>>, overrides: Partial<Services> = {}): Services =>
     unstubbed<Services>("services", {
         tools: [],
+        memoryHeadroom: ROOMY_MEMORY,
         workspace: unstubbed<Services["workspace"]>("workspace", { root }),
         processes: unstubbed<Services["processes"]>("processes", { running: () => false }),
         dependencies: unstubbed<Services["dependencies"]>("dependencies", {

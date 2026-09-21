@@ -39,6 +39,9 @@ export interface DockerEngine {
     readonly inspect: (name: string) => Promise<ContainerState | undefined>;
     readonly create: (name: string, spec: ContainerSpec) => Promise<void>;
     readonly start: (name: string) => Promise<void>;
+    // Stops and KEEPS; a container already stopped or gone is not an error. The idle stop uses this rather than
+    // `remove` so the next open restarts the same container on the port it already holds.
+    readonly stop: (name: string) => Promise<void>;
     // Stops and deletes; a container that is already gone is not an error.
     readonly remove: (name: string) => Promise<void>;
     // The container's output since a unix time, as text. The engine's frame headers are left in between the lines,
@@ -224,7 +227,7 @@ export const createBody = (spec: ContainerSpec): Record<string, unknown> => ({
     Env: spec.env,
     Labels: spec.labels,
     ExposedPorts: { "80/tcp": {} },
-    HostConfig: {
+    DeviceConfig: {
         PortBindings: { "80/tcp": [{ HostIp: "127.0.0.1", HostPort: String(spec.hostPort) }] },
         ExtraHosts: ["host.docker.internal:host-gateway"],
         RestartPolicy: { Name: "unless-stopped" },
@@ -236,9 +239,9 @@ type PortBindings = Record<string, { readonly HostPort?: string }[] | null>;
 interface InspectBody {
     readonly State?: { readonly Running?: boolean; readonly StartedAt?: string };
     readonly Config?: { readonly Image?: string; readonly Env?: string[]; readonly Labels?: Record<string, string> | null };
-    // Live bindings, populated only while running; the created-with bindings live under HostConfig either way.
+    // Live bindings, populated only while running; the created-with bindings live under DeviceConfig either way.
     readonly NetworkSettings?: { readonly Ports?: PortBindings };
-    readonly HostConfig?: { readonly PortBindings?: PortBindings; readonly RestartPolicy?: { readonly Name?: string } };
+    readonly DeviceConfig?: { readonly PortBindings?: PortBindings; readonly RestartPolicy?: { readonly Name?: string } };
 }
 
 const portOf = (bindings: PortBindings | undefined): number | undefined => {
@@ -248,7 +251,7 @@ const portOf = (bindings: PortBindings | undefined): number | undefined => {
 };
 
 // The loopback port the container's port 80 is published on, running or stopped.
-const publishedPort = (parsed: InspectBody): number | undefined => portOf(parsed.NetworkSettings?.Ports) ?? portOf(parsed.HostConfig?.PortBindings);
+const publishedPort = (parsed: InspectBody): number | undefined => portOf(parsed.NetworkSettings?.Ports) ?? portOf(parsed.DeviceConfig?.PortBindings);
 
 // Unix seconds of an ISO time; 0 for the engine's zero time or nothing.
 const secondsOf = (iso: string | undefined): number => {
@@ -256,7 +259,7 @@ const secondsOf = (iso: string | undefined): number => {
     return Number.isNaN(millis) || millis <= 0 ? 0 : Math.floor(millis / 1000);
 };
 
-const restartPolicyOf = (parsed: InspectBody): string => parsed.HostConfig?.RestartPolicy?.Name ?? "no";
+const restartPolicyOf = (parsed: InspectBody): string => parsed.DeviceConfig?.RestartPolicy?.Name ?? "no";
 
 // The state an inspect answer describes.
 export const parseInspect = (body: string): ContainerState => {
@@ -319,6 +322,16 @@ const containerLogs = async (socketPath: string, name: string, sinceSeconds: num
     return response.body;
 };
 
+// Stops without deleting, so the next open restarts THIS container on the port it already holds rather than creating
+// one; `bringUp` reuses `hostPort` when it finds a container, and a recreate would hand the editor a new address.
+const stopContainer = async (socketPath: string, name: string): Promise<void> => {
+    const response = await request(socketPath, "POST", `/containers/${encodeURIComponent(name)}/stop`);
+    // 304: already stopped, 404: already gone. Both are the state this asked for.
+    if (response.status !== 204 && response.status !== 304 && response.status !== 404) {
+        throw failure(`stopping ${name}`, response);
+    }
+};
+
 const removeContainer = async (socketPath: string, name: string): Promise<void> => {
     const response = await request(socketPath, "DELETE", `/containers/${encodeURIComponent(name)}?force=true`);
     if (response.status !== 204 && response.status !== 404) {
@@ -333,6 +346,7 @@ export const createDockerEngine = (socketPath: string = DOCKER_SOCKET): DockerEn
     inspect: (name) => inspectContainer(socketPath, name),
     create: (name, spec) => createContainer(socketPath, name, spec),
     start: (name) => startContainer(socketPath, name),
+    stop: (name) => stopContainer(socketPath, name),
     remove: (name) => removeContainer(socketPath, name),
     logs: (name, sinceSeconds) => containerLogs(socketPath, name, sinceSeconds),
 });

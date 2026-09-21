@@ -3,6 +3,7 @@ import { unstubbed } from "@intentic/testing";
 import { createCredentialGrants } from "../../../secrets/credential-grants.js";
 import { claudeStoreOf } from "../../../sessions/session-store.js";
 import type { Services } from "../../../composition.js";
+import type { MemoryHeadroom } from "../../../platform/resources/memory-admission.js";
 import { testConfig } from "../../../testing.js";
 import type { AgentRequest } from "../agent.js";
 import { composeWirePrompt } from "../../prompt/turn-preamble.js";
@@ -14,6 +15,19 @@ import type { TurnContext } from "./turn-plan.js";
 
 // Doesn't exist on disk, so the dependency probe finds nothing and no assertion depends on the host's checkout.
 export const ROOT = "/nowhere/turn-plan";
+
+// A box with room, stated rather than measured, for the admission gate `planTurn` runs above everything else.
+// The real reading is of live cgroup files at absolute paths, and once it counts swap (memory-admission.ts) a suite
+// running on a machine that is genuinely full refuses every fixture in these suites — a failure about the host rather
+// than about the plan. Shared so the roomy box is one fact, not one per suite; a test that wants the refusal passes
+// the reading that produces it instead.
+export const ROOMY_MEMORY = async (): Promise<MemoryHeadroom> => ({
+    limitBytes: 16 * 1024 ** 3,
+    usedBytes: 4 * 1024 ** 3,
+    swapBytes: 0,
+    freeBytes: 12 * 1024 ** 3,
+    stalledPercent: 0,
+});
 
 export const base: AgentRequest = { prompt: "do the thing", cwd: ROOT, signal: new AbortController().signal };
 export const context: TurnContext = {
@@ -30,6 +44,7 @@ export const context: TurnContext = {
 export const servicesWith = (overrides: Partial<Services> = {}): Services =>
     unstubbed<Services>("services", {
         tools: [],
+        memoryHeadroom: ROOMY_MEMORY,
         workspace: unstubbed<Services["workspace"]>("workspace", { root: ROOT }),
         processes: unstubbed<Services["processes"]>("processes", { running: () => false }),
         dependencies: unstubbed<Services["dependencies"]>("dependencies", { status: async () => [], issueAt: async () => undefined }),

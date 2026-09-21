@@ -18,7 +18,7 @@ import {
 } from "@intentic/sandbox-contract";
 import { shellQuote } from "@intentic/sandbox-run/quote";
 import { type IsolationAnchor, fromWorktree, inWorktree, nsenterPrefix } from "../../../agents/worktrees/isolation.js";
-import { admitTurn, readMemoryHeadroom } from "../../../platform/resources/memory-admission.js";
+import { admitTurn } from "../../../platform/resources/memory-admission.js";
 import { createFreshnessResolver } from "../../../dependencies/registry-freshness.js";
 import { createWorkspacePins } from "../../../dependencies/workspace-pins.js";
 import { statePath } from "../../../workspace/layout/state-paths.js";
@@ -74,7 +74,7 @@ import { armSupervisor, type ChildSupervisor } from "../../subagents/children.js
 import { SPAWN_NOTE_TITLE, spawnNote } from "../../subagents/spawn-note.js";
 import { adapterFor } from "../../providers/adapter-registry.js";
 import { isUnknownSlashCommand } from "../../providers/agent-commands.js";
-import type { SteeringQueue } from "../../anchors/agent-steering.js";
+import type { SteeringQueue } from "../../checkpoints/agent-steering.js";
 import { withAttachmentNote } from "../../prompt/attachment-note.js";
 import { contextShortfall, declaredWindow } from "../../prompt/window/context-budget.js";
 import { applyTrim, promptTrim, trimState, type TurnTrim, type TurnTrimState, turnTrim } from "../../prompt/window/context-trim.js";
@@ -98,7 +98,7 @@ import { compactedSinceLastTurn } from "../../../agents/registry/agents-store.js
 import { contextNoteIfDue } from "../../context/conversation-context.js";
 import { IQ_SEARCH_INSTRUCTION_TITLE, iqSearchInstruction } from "../../prompt/iq-search-instruction.js";
 import { judgeCommand } from "../../tools/command-judge.js";
-import type { CommandGateOptions } from "../../../guard/command-gate.js";
+import type { CommandGuardOptions } from "../../../guard/command-guard.js";
 
 // Decides which runtime serves a turn and assembles what it's handed, replacing what used to be a four-arm if/else in
 // the route. A refusal is a value (`ok: false` + code, as in harness-credentials.ts); the route turns it into the
@@ -208,7 +208,7 @@ export interface TurnContext {
 const watchSeed = (input: AgentTurn): WatcherTurnSeed => seedFields(input);
 
 const judgeFor =
-    (services: Services, policy: string, pins: readonly ModelPin[] | undefined): CommandGateOptions["judge"] =>
+    (services: Services, policy: string, pins: readonly ModelPin[] | undefined): CommandGuardOptions["judge"] =>
     (program, facts, signal) =>
         // An unpinned role reads as an empty list, which the walk answers with its Auto ladder.
         judgeCommand(services, { policy, program, facts, pins: pins ?? [] }, signal);
@@ -375,7 +375,7 @@ export const planTurn = async (services: Services, input: AgentTurn, context: Tu
     // Checked before anything else and above the dispatch, so a box out of memory refuses every provider arm alike, and
     // a refused turn costs no settings read, capability list, dependency probe or persona load. Uncapped sandboxes and
     // cgroup-blind daemons admit unconditionally.
-    const admission = admitTurn(await readMemoryHeadroom(), context.base.unattended === true);
+    const admission = admitTurn(await services.memoryHeadroom(), context.base.unattended === true);
     if (!admission.admit) {
         return { ok: false, code: "sandbox-memory-low", message: admission.message };
     }
@@ -822,7 +822,7 @@ export const planHarnessTurn = async (
     const tools = turnToolsOf(services, granted, input.conversationId);
     // What this turn may reach out of the container: the same host cards peerToolsOf just mounted, plus the one running
     // this sandbox when the held readings already name it. Through Services, since the hosts subsystem reaches back
-    // into this one (host-command-gate.ts) and two subsystems must not import each other's values.
+    // into this one (host-command-guard.ts) and two subsystems must not import each other's values.
     const hostDevices = await services.hostReach(granted);
     const { hashlineEdits, iqSearch, outputCleaners, outputHoldout, rules, subagentsAtOnce, subagentsPerTurn, subagentDepth, actionRules } = settings;
     // Standing, not matching: conditions are read at Stop, once the turn has actually edited something to narrow on.

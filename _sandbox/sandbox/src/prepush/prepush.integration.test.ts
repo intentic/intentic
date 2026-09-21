@@ -11,6 +11,7 @@ import { unstubbed } from "@intentic/testing";
 import type { TerminalRunner } from "../terminal/terminal-run.js";
 import { CHECKS_SESSION } from "../terminal/terminal-session.js";
 import { fingerprintOf } from "../rules/repo-checks.js";
+import { ROOMY_MEMORY } from "../agent/run/turn/turn-plan.testing.js";
 import { createPrepushCheck } from "./prepush.js";
 
 // Fixtures use `unstubbed` so the fake is only what a test touches; nothing persists. Tests state a command and
@@ -84,6 +85,9 @@ const fakeServices = (over: Partial<Knobs> & { visible?: boolean; root?: string;
     let runs = 0;
     const notified: string[] = [];
     const services = unstubbed<Services>("services", {
+        // A box with room: the check waits for headroom before each rule, and the real reading is of live cgroup
+        // files — on a machine that is genuinely full every check here sits out the wait instead of running.
+        memoryHeadroom: ROOMY_MEMORY,
         workspace: unstubbed<Services["workspace"]>("workspace", { root }),
         sandboxSettings: unstubbed<Services["sandboxSettings"]>("sandboxSettings", { get: async () => settings.current }),
         logger: unstubbed<Services["logger"]>("logger", { info: () => {}, warn: () => {}, debug: () => {}, error: () => {} }),

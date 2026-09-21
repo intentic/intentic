@@ -83,6 +83,23 @@ test("a quoted argument is data: naming a heavy command inside one does not queu
     expect(matched(`/usr/bin/zsh -c "pnpm test"`)).toBe("package-script");
 });
 
+// The same regression one layer out, and the one that cost the 18 seconds: a `case` label is a GLOB, so it is neither
+// quoted (nothing to blank) nor a command (nothing runs). Splitting on `|` — which a case label uses as its own
+// alternation — then left the bare word `*vue-tsc*` as a segment, and `\b(tsc|tsgo|vue-tsc)\b` matched it. The line
+// below is the shape of the /proc accounting loop that hit it: it reads memory and runs no tool at all.
+test("a glob is a pattern, not a program: shell syntax naming a tool does not queue the line", () => {
+    const census = `for p in [0-9]*; do case "$c" in *vue-tsc*|*tsc.js*) k=typecheck ;; *vitest*) k=vitest ;; esac; done`;
+    expect(matched(census)).toBeUndefined();
+    // A glob among a real command's arguments is blanked too, and the command still matches on its own words.
+    expect(matched(`vitest run src/**/*.test.ts`)).toBe("vitest");
+    expect(matched(`turbo run build --filter=./packages/*`)).toBe("turbo-fanout");
+    // A comment names a tool for a person, not for a shell.
+    expect(matched(`ps -eo args  # remember to run pnpm test`)).toBeUndefined();
+    // An assignment is a variable, not a command; the one that PRECEDES real work still leaves the work matchable.
+    expect(matched(`role=vitest`)).toBeUndefined();
+    expect(matched(`VITEST_MAX_WORKERS=4 turbo run test`)).toBe("turbo-fanout");
+});
+
 // The regression: a quoted program is ARGUMENT text, and cutting it into fragments matched the rules against lines
 // that never ran. Measured before this: the awk line below waited in the heavy pool behind two repo-wide test runs.
 test("a separator inside quotes belongs to its argument, not to the command line", () => {

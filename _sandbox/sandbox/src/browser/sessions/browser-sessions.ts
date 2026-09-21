@@ -476,6 +476,20 @@ export const runningBrowserOwners = (): string[] => [
     ...new Set([...sessions.values()].flatMap((record) => (record.finishedAt === undefined && record.owner !== undefined ? [record.owner] : []))),
 ];
 
+// Running sessions nobody has driven for `idleMs`, by name — judged on the session's OWN clock rather than its owner's.
+//
+// The reaper's other browser pass closes by owner, which only fires once the conversation has no run in flight: a
+// conversation that keeps working never releases a Chromium it has finished with. Measured: a browser left open 21
+// minutes into a session that had moved on to other things, 25 processes for 2 browsers. `activityAt` is stamped by
+// the PostToolUse hook on every browser call, so "idle" here means no browser tool has run, not that the turn is quiet.
+//
+// A session parked on a help request is never idle: the agent is blocked precisely BECAUSE nobody has driven it, and
+// closing it would answer the owner's pending question by destroying what it was about.
+export const idleBrowserSessionNames = (now: number, idleMs: number): string[] =>
+    [...sessions.values()]
+        .filter((record) => record.finishedAt === undefined && record.help === undefined && record.activityAt <= now - idleMs)
+        .map((record) => record.name);
+
 // Hooks that register or refresh a browser session: PreToolUse fires before Chromium launches, so the session appears
 // at the start of navigation; PostToolUse stamps activity so a long turn keeps reading as active.
 // ports/passkeys are the per-turn owner-to-port and owner-to-passkey-store maps from browser-tools.ts; accounts is the
