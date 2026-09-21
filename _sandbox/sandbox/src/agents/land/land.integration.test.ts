@@ -261,6 +261,38 @@ test("work that reached main by merging the branch advances landedTip as a real 
     expect(again.changed).toBe(false);
 });
 
+// A turn that cuts a branch of its own (a CI branch to push, say) leaves the checkout standing on it. The work is still
+// on agent/<id>, and that is what the review lists — so reading the tip off the checkout's HEAD instead made land apply
+// nothing, report success, and say nothing, while the review went on offering the same files.
+test("a checkout the turn left on a branch of its own still lands what agent/<id> holds", async () => {
+    const { work, worktrees, conversation } = await setup();
+    await writeFile(join(conversation.cwd, "app.ts"), "line one EDITED\nline two\nline three\n");
+    await sh(conversation.cwd, "add", "-A");
+    await sh(conversation.cwd, "-c", "user.name=a", "-c", "user.email=a@a", "commit", "-q", "-m", "agent");
+    const tip = await sh(conversation.cwd, "rev-parse", "HEAD");
+    await sh(conversation.cwd, "checkout", "-q", "-b", "ci/push-me", "HEAD~1");
+    expect(await sh(conversation.cwd, "rev-parse", "HEAD")).not.toBe(tip);
+
+    const result = await landAgent(worktrees, isolatedAgent(conversation.repos));
+
+    expect(result.landed).toBe(true);
+    expect(result.changed).toBe(true);
+    expect(await readFile(join(work, "app.ts"), "utf8")).toBe("line one EDITED\nline two\nline three\n");
+    expect(result.repos[0]?.landedTip).toBe(tip);
+});
+
+// The honest no-op, and the one the wire has to carry: nothing refused, nothing applied. Landed alone cannot say it,
+// which is how a press that did nothing reached the button looking exactly like one that worked.
+test("a branch carrying nothing lands as changed:false rather than as a silent success", async () => {
+    const { worktrees, conversation } = await setup();
+
+    const result = await landAgent(worktrees, isolatedAgent(conversation.repos));
+
+    expect(result.landed).toBe(true);
+    expect(result.changed).toBe(false);
+    expect(result.conflicts).toBeUndefined();
+});
+
 test("a delta half-landed by hand lands its remainder, and reports no conflict for the half already there", async () => {
     const { work, worktrees, conversation } = await setup();
     const recorded = isolatedAgent(conversation.repos);

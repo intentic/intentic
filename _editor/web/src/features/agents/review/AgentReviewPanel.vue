@@ -7,7 +7,6 @@ import {
     explorerColorClass,
     formatDayMonth,
     iconForEntry,
-    Notice,
     ResizeSeam,
     SegmentedControl,
     useDevice,
@@ -592,7 +591,6 @@ const seamWidth = computed<number>({
                 <p class="break-words text-2xs text-muted">{{ changes.error.value }}</p>
             </div>
         </div>
-        <Notice v-if="changes.actionError.value" :of="changes.actionError.value" class="mx-2 mt-2 shrink-0" />
 
         <!-- What a merge land left behind: everything else applied, these files carry markers to finish in the workspace. -->
         <div v-if="resolvingPaths.length > 0" class="mx-2 mt-2 flex shrink-0 flex-col gap-1 rounded-md border border-info/40 bg-info/10 px-2 py-1.5">

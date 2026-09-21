@@ -8,9 +8,12 @@ const stub = vi.hoisted(() => ({
     notice: { value: undefined as string | undefined },
     // The deferred halves of the two calls under test, so a test can leave one out and settle the other.
     asks: [] as ((answer: { sent: boolean; why?: string; settled?: true }) => void)[],
-    lands: [] as ((answer: { landed: boolean }) => void)[],
+    lands: [] as ((answer: { landed: boolean; changed: boolean }) => void)[],
     // The app's one self-retiring receipt lane, so a test can tell an outcome from a failure by which channel it took.
     said: [] as string[],
+    // The shared sentence both land presses take, held here so a test proves they pass the same one rather than each
+    // inventing its own wording.
+    nothingLanded: `Nothing to land: this conversation's branch holds no work your workspace doesn't already have.`,
 }));
 
 vi.mock("../fleet/useAgents", () => ({
@@ -34,6 +37,7 @@ vi.mock("../fleet/agentActions", () => ({
     discardAgent: vi.fn(async () => undefined),
     invalidateAgentAction: vi.fn(async () => undefined),
     stopAgent: vi.fn(async () => undefined),
+    NOTHING_LANDED: stub.nothingLanded,
 }));
 
 const { askAgentToResolve } = await import("../fleet/agentActions");
@@ -105,9 +109,28 @@ it("tells two boxes' cards with the same id apart", async () => {
     expect(pendingOn(`a`)).toBeUndefined();
     expect(pendingOn(`a`, `box-2`)).toBe(`land`);
 
-    stub.lands[0]?.({ landed: true });
+    stub.lands[0]?.({ landed: true, changed: true });
     await there;
     expect(pendingOn(`a`, `box-2`)).toBeUndefined();
+});
+
+// THE THIRD KIND OF "the press didn't do anything", and the one that used to pass for success. Merged-and-nothing-moved
+// refuses nothing, so it takes neither the danger strip nor a throw — and the card carries no trace of it either way, so
+// saying nothing left a press that did nothing looking exactly like one that worked.
+it("gives a land that carried nothing the receipt, not silence and not the danger strip", async () => {
+    const { landNow } = useAgentDrag();
+
+    const carried = landNow(`a`);
+    stub.lands[0]?.({ landed: true, changed: true });
+    await carried;
+    expect(stub.said).toEqual([]);
+    expect(stub.notice.value).toBeUndefined();
+
+    const empty = landNow(`b`);
+    stub.lands[1]?.({ landed: true, changed: false });
+    await empty;
+    expect(stub.said).toEqual([stub.nothingLanded]);
+    expect(stub.notice.value).toBeUndefined();
 });
 
 // Re-entry on one card stays a no-op: the card is dimmed and pointer-inert while its action is out, so a second press

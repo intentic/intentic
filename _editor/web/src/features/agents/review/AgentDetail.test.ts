@@ -104,6 +104,7 @@ vi.mock("./useAgentChanges", async () => {
     return {
         useAgentChanges: () => ({
             actionBusy: ref(false),
+            actionError: ref(undefined),
             pending: ref([]),
             count: ref(0),
             loading: ref(false),

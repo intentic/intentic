@@ -103,6 +103,11 @@ export const landAgent = (
 ): Promise<LandResult> =>
     agentJson<LandResult>(at, `/agents/${encodeURIComponent(id)}/land`, jsonBody(`POST`, { mode, span, force }), { deadline: false });
 
+// What a land that moved nothing says, wherever it was pressed. Landed-with-nothing-to-show is the one outcome neither
+// the board nor the review can see for itself — both list what the BRANCH holds — so saying nothing left a press that
+// did nothing looking exactly like one that worked.
+export const NOTHING_LANDED = `Nothing to land: this conversation's branch holds no work your workspace doesn't already have.`;
+
 // A collaborator's stand-in for a land they can't perform (the daemon floors `land` at maintainer): stamps the ask so
 // every maintainer's board wears it.
 export const requestLandAgent = (id: string, at: AgentReach = undefined): Promise<AgentSummary> =>

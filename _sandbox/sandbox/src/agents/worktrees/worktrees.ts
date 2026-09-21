@@ -36,9 +36,11 @@ export interface AgentWorktrees {
     // The conversation's runtime session store, wherever the fence it was born with puts it (sessions/session-store.ts).
     readonly sessionStore: (entry: StoreOwner | undefined) => string;
     readonly exists: (id: string) => Promise<boolean>;
-    // Is this repo's checkout actually on disk; `archivedAt` cannot answer it since a restored agent's checkout stays
-    // retired until the next ensure().
-    // Diff, fileDiff and land branch on this: the checkout when present, branch refs when not.
+    // Is this repo's checkout on disk AND still on `agent/<id>`; `archivedAt` cannot answer it since a restored agent's
+    // checkout stays retired until the next ensure().
+    // Diff, fileDiff and land branch on this: the checkout when present, branch refs when not. A checkout the turn moved
+    // to a branch of its own counts as retired, or those three would read someone else's tip as this conversation's
+    // work — which is how a land came to apply nothing while the review still listed files.
     readonly attached: (id: string, repo: string) => Promise<boolean>;
     // The current full HEAD of every repository a new conversation would span.
     // A workflow captures this once and hands it to every candidate so a fan-out sees one snapshot, not several moving
@@ -129,22 +131,36 @@ export const createAgentWorktrees = (
     const worktreeDir = (id: string, repo: string): string => (repo === "root" ? conversationDir(id) : join(conversationDir(id), repo));
     const mainDir = (repo: string): string => (repo === "root" ? workspace.root : join(workspace.root, repo));
 
-    // Is there still a repository behind this checkout: a worktree's `.git` file points into
-    // `<main>/.git/worktrees/<name>`, which a deleted, re-cloned or renamed repo takes with it.
-    // Every git command then fails permanently (`fatal: not a git repository`); asked before retire tries to preserve
-    // anything.
-    const repoBehind = async (worktree: string): Promise<boolean> => {
+    // Where a checkout's git admin area stands, or undefined when nothing stands behind it any more: a worktree's `.git`
+    // file points into `<main>/.git/worktrees/<name>`, which a deleted, re-cloned or renamed repo takes with it.
+    const gitDirOf = async (worktree: string): Promise<string | undefined> => {
         const pointer = join(worktree, ".git");
         // A real .git directory is its own repository, never a worktree pointer; needs no resolving.
         const stats = await lstat(pointer).catch(() => undefined);
         if (stats === undefined) {
-            return false;
+            return undefined;
         }
         if (stats.isDirectory()) {
-            return true;
+            return pointer;
         }
-        const gitdir = (await readFile(pointer, "utf8").catch(() => ``)).match(/^gitdir:\s*(.+)$/m)?.[1]?.trim();
-        return gitdir !== undefined && (await pathExists(gitdir));
+        const named = (await readFile(pointer, "utf8").catch(() => ``)).match(/^gitdir:\s*(.+)$/m)?.[1]?.trim();
+        const gitDir = named === undefined || named === `` ? undefined : resolve(worktree, named);
+        return gitDir !== undefined && (await pathExists(gitDir)) ? gitDir : undefined;
+    };
+
+    // Is there still a repository behind this checkout: every git command against one without it fails permanently
+    // (`fatal: not a git repository`); asked before retire tries to preserve anything.
+    const repoBehind = async (worktree: string): Promise<boolean> => (await gitDirOf(worktree)) !== undefined;
+
+    // Which branch a checkout is on, read off the files rather than through git: `attached` asks this once per repo on
+    // every diff read, and a subprocess per ask is a cost the review would pay on every refresh. Undefined for a
+    // detached HEAD, which is not a branch.
+    const checkedOutBranch = async (worktree: string): Promise<string | undefined> => {
+        const gitDir = await gitDirOf(worktree);
+        if (gitDir === undefined) {
+            return undefined;
+        }
+        return (await readFile(join(gitDir, "HEAD"), "utf8").catch(() => ``)).match(/^ref:\s*refs\/heads\/(\S+)$/m)?.[1];
     };
 
     // Per-repo op chains: worktree add/remove and land touch the repo's admin area and, for land, the main index.
@@ -477,7 +493,7 @@ export const createAgentWorktrees = (
         mainDir,
         sessionStore: (entry) => claudeStoreOf(workspace.root, historyRoot, entry),
         exists: (id) => pathExists(conversationDir(id)),
-        attached: (id, repo) => pathExists(join(worktreeDir(id, repo), ".git")),
+        attached: async (id, repo) => (await checkedOutBranch(worktreeDir(id, repo))) === `agent/${id}`,
         snapshot: async () => {
             const repos = await liveRepos();
             const heads = await Promise.all(repos.map(async (repo) => ({ repo, base: await headSha(mainDir(repo)) })));

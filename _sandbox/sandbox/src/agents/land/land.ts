@@ -17,10 +17,9 @@ import type { AgentWorktrees } from "../worktrees/worktrees.js";
 // agent/<id>, then applies each repo's anchor..tip patch working-tree-only once every repo in the composition
 // preflights clean. Content that already reached main another way is never a conflict.
 
-// Wire LandResult plus registry state: `changed` distinguishes no-op from a real outcome, `repos` carries advanced
-// landedTips, `diff` is the cumulative anchor->tip stat the review itself reads.
+// Wire LandResult plus registry state: `repos` carries advanced landedTips, `diff` is the cumulative anchor->tip stat
+// the review itself reads.
 export interface LandOutcome extends LandResult {
-    readonly changed: boolean;
     readonly repos: PersistedAgent["repos"];
     readonly diff: { files: number; insertions: number; deletions: number };
     // False unless a `measure` re-judged a stored refusal; true lets a fresh verdict replace a stale one.

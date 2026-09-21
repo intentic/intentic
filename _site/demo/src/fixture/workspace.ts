@@ -180,11 +180,13 @@ export const agentChanges = (agentId: string): AgentChanges => {
 // instead: nothing applied, same report the panel renders.
 export const landAgentDelta = (agentId: string): LandResult => {
     const conflicts = CONFLICTS[agentId];
+    // `changed` either way: every demo agent carries a delta, so a refusal here is one that judged real work and
+    // declined it, not a press that found the branch empty.
     if (conflicts !== undefined) {
-        return { landed: false, conflicts };
+        return { landed: false, changed: true, conflicts };
     }
     landedAgents.add(agentId);
-    return { landed: true };
+    return { landed: true, changed: true };
 };
 
 /** Root-relative paths a land just wrote, for the `workspaceChanged` refresh frame. */

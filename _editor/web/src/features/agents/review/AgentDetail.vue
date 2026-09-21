@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Avatar, Button, ui, Modal, ResponsiveOverlay, SegmentedControl, useDevice, useLoadingReveal } from "@intentic/ui";
+import { Avatar, Button, ui, Modal, Notice, ResponsiveOverlay, SegmentedControl, useDevice, useLoadingReveal } from "@intentic/ui";
 import { createInlineRename } from "@intentic/ui/inline-rename";
 import { computed, onUnmounted, ref, watch } from "vue";
 import { RouterLink, useRoute, useRouter } from "vue-router";
@@ -507,6 +507,9 @@ const confirmHandOver = async (): Promise<void> => {
             </Button>
         </div>
         <p v-if="edit.error !== undefined" class="border-b border-line px-3 py-1 text-2xs text-danger">{{ edit.error }}</p>
+        <!-- Here rather than inside the review: the presses that raise it are this header's and the session menu's, and
+             the review is not on screen for either a phone reading the chat or a land pressed from the menu over it. -->
+        <Notice v-if="changes.actionError.value" :of="changes.actionError.value" class="mx-2 mt-2 shrink-0" />
         <!-- Chat|Changes gets its own row on a phone: crowding the header left too little width for the title. -->
         <!-- Local-only like the chat below; a remote conversation lives elsewhere, so mobile gets the full review. -->
         <div v-if="mobile && reviewable && localOnly" class="shrink-0 border-b border-line px-2 py-1.5">

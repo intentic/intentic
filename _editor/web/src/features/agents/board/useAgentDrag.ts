@@ -1,6 +1,6 @@
 import { computed, ref } from "vue";
 import { errorMessage } from "@intentic/ui/async";
-import { askAgentToResolve, discardAgent, invalidateAgentAction, landAgent, stopAgent } from "../fleet/agentActions";
+import { askAgentToResolve, discardAgent, invalidateAgentAction, landAgent, NOTHING_LANDED, stopAgent } from "../fleet/agentActions";
 import { refreshAcross } from "../../sandbox/live/fleetAcross";
 import { otherFleet } from "../fleet/fleetScope";
 import { unregistered } from "../fleet/agentStatus";
@@ -96,6 +96,12 @@ const runLand = async (id: string, chosen: PendingAction, at?: string): Promise<
         // Reachable from an errored card's drop or a ready card's button; either way a first refusal with a report to
         // read, not a repeat.
         notice.value = `Landing hit a conflict: open the agent to see what blocked it.`;
+        return;
+    }
+    if (!result.changed) {
+        // Merged with nothing to show for it. The card carries no trace of that either way, so an unsaid one leaves the
+        // press looking like it worked; a receipt, not the danger strip, since nothing was refused.
+        say(NOTHING_LANDED);
     }
 };
 

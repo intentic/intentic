@@ -673,6 +673,13 @@ export type LandConflict = z.infer<typeof LandConflictSchema>;
 // hand.
 export const LandResultSchema = z.object({
     landed: z.boolean().describe("Whether the entire composed change was applied."),
+    // Merged and nothing moved is the one outcome with nothing to show for itself; without this the caller cannot tell
+    // it from a merge that carried work, and a press that did nothing looked exactly like a press that worked.
+    changed: z
+        .boolean()
+        .describe(
+            "Whether anything actually moved. False alongside merged means there was nothing on the branch to apply: the work is already in your tree, or the branch never carried any.",
+        ),
     conflicts: z.array(LandConflictSchema).optional().describe("What stopped the whole composed change, grouped per repository."),
     resolving: z
         .array(

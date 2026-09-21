@@ -669,3 +669,25 @@ test("a commit out of a fenced checkout carries the folders it cannot see", asyn
     expect(await sh(fenced.cwd, "show", "HEAD:support/notes.md")).toBe("support v2");
     expect(await sh(fenced.cwd, "show", "HEAD:finance/notes.md")).toBe("finance v1");
 });
+
+// What `attached` is asked for is never "is there a directory here": diff, fileDiff, land and the handoff note all use
+// it to decide whether the checkout's HEAD may stand in for the conversation's tip. A checkout the turn moved to a
+// branch of its own answers for that branch, so it must read as retired and send those four to the ref instead.
+test("attached follows the branch, not the directory: a checkout moved off agent/<id> reads as retired", async () => {
+    const { worktrees } = await setup();
+    const conversation = await worktrees.ensure("c1", []);
+    expect(await worktrees.attached("c1", "root")).toBe(true);
+    expect(await worktrees.attached("c1", "intent")).toBe(true);
+
+    await sh(conversation.cwd, "checkout", "-q", "-b", "ci/push-me");
+    expect(await worktrees.attached("c1", "root")).toBe(false);
+    // Per repo, not per conversation: only the checkout that moved answers differently.
+    expect(await worktrees.attached("c1", "intent")).toBe(true);
+
+    // A detached HEAD is on no branch at all, so it is not this conversation's either.
+    await sh(conversation.cwd, "checkout", "-q", "--detach");
+    expect(await worktrees.attached("c1", "root")).toBe(false);
+
+    await sh(conversation.cwd, "checkout", "-q", "agent/c1");
+    expect(await worktrees.attached("c1", "root")).toBe(true);
+});

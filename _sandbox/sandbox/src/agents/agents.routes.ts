@@ -592,6 +592,9 @@ export const createAgentsRoutes = (services: Services) => {
                 }
                 return {
                     landed: result.landed,
+                    // Carried, not dropped: a press that found nothing on the branch is the one outcome the review can't
+                    // see for itself, and it used to reach the button as plain success.
+                    changed: result.changed,
                     ...(result.conflicts !== undefined ? { conflicts: result.conflicts } : {}),
                     // A `merge` land's leftover-conflict paths; omitting it blanked the panel's finish-N-files strip.
                     ...(result.resolving !== undefined ? { resolving: result.resolving } : {}),

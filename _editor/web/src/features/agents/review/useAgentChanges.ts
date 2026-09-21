@@ -14,7 +14,7 @@ import { queryClient, UNPERSISTED } from "../../../lib/queryPersistence";
 import { sandboxJson, sandboxJsonAt } from "../../sandbox/client/sandboxClient";
 import { AGENT_DIFF } from "../../../lib/queryKeys";
 import { useSandboxQuery } from "../../sandbox/client/useSandboxQuery";
-import { askAgentToResolve, discardAgent, invalidateAgentAction, landAgent } from "../fleet/agentActions";
+import { askAgentToResolve, discardAgent, invalidateAgentAction, landAgent, NOTHING_LANDED } from "../fleet/agentActions";
 import { landedAway } from "../fleet/agentStatus";
 import { blockersOf } from "./conflictResolution";
 import { useAgents } from "../fleet/useAgents";
@@ -202,8 +202,15 @@ export function useAgentChanges(agentId: Ref<string>, at?: Ref<string | undefine
     const land = (mode: LandMode = `check`, span?: AgentSpan, force = false): Promise<void> =>
         run(async () => {
             const rung: AgentSpan = span ?? (missing.value ? `cumulative` : `outstanding`);
-            resolving.value = (await landAgent(agentId.value, mode, rung, force, reach.value)).resolving;
+            const result = await landAgent(agentId.value, mode, rung, force, reach.value);
+            resolving.value = result.resolving;
             await invalidateAgentAction(agentId.value, reach.value);
+            // A land that carried nothing is an outcome, not a declined mutation: it takes the same floating receipt
+            // askResolve gives a press that found nothing left, rather than this panel's red error line. Said out loud
+            // because the rows below are read off the branch and don't move, so silence here reads as "it worked".
+            if (result.landed && !result.changed) {
+                useNotifications().say(NOTHING_LANDED);
+            }
         }, `Land failed.`);
 
     // This agent's auto-land override (null = inherit the sandbox setting); routed through `run` so a refusal surfaces
