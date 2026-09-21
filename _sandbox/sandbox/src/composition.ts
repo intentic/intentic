@@ -1434,6 +1434,7 @@ export const createServices = (config: Config, logger: Logger): Services => {
     registerDaemonInvariants(invariants, {
         turnJournal,
         agents,
+        agentWorktrees,
         areas,
         members,
         personas,

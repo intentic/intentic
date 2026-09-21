@@ -485,3 +485,38 @@ describe("live", () => {
         }
     });
 });
+
+// The one class whose answer depends on WHOSE checkout would move. A conversation working in a copy of its own may
+// stand wherever it likes — the drift that causes is reported at turn-settled, not refused here — but a turn sharing
+// the owner's tree would move the owner's checkout under them, which is not its call to make.
+describe("git.branch-switch", () => {
+    const shared = (command: string): string[] => classify(command);
+    const own = (command: string): string[] => classify(command, { ownCheckout: true });
+
+    test("catches both spellings of moving a shared checkout", () => {
+        for (const command of ["git checkout main", "git checkout -b ci/extension-admission", "git switch main", "git switch -c feature"]) {
+            expect(shared(command), command).toContain("git.branch-switch");
+        }
+    });
+
+    test("the conversation's own copy is its own to move", () => {
+        for (const command of ["git checkout main", "git switch -c feature"]) {
+            expect(own(command), command).not.toContain("git.branch-switch");
+        }
+    });
+
+    // Absent, not false: a caller that has not been taught the difference must get the guard rather than a hole.
+    test("a caller that cannot say whose checkout it is gets the guard", () => {
+        expect(classify("git checkout main", {})).toContain("git.branch-switch");
+    });
+
+    test("checkout restoring files moves nothing, and is not this", () => {
+        for (const command of ["git checkout -- src/app.ts", "git checkout .", "git checkout HEAD -- package.json"]) {
+            expect(shared(command), command).not.toContain("git.branch-switch");
+        }
+    });
+
+    test("the card points at the verb, not the whole line", () => {
+        expect(marked("cd repo && git switch main && pnpm build", "git.branch-switch")).toEqual(["git switch"]);
+    });
+});

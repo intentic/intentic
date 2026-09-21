@@ -96,6 +96,9 @@ export interface AgentRequest {
     readonly attachments?: readonly string[];
     // Working dir the agent edits, the workspace root; under `isolation` it's the root as seen inside the namespace.
     readonly cwd: string;
+    // Whether that cwd is a copy of this conversation's own, which only an isolated turn has: a main-tree turn edits
+    // the owner's checkout. Absent reads as shared, the fail-safe side for the gate that consumes it.
+    readonly ownCheckout?: boolean;
     // This conversation's runtime session store, where its checklist is read back from; outside the workspace when the
     // conversation was born fenced (sessions/session-store.ts).
     readonly sessionStore?: string;

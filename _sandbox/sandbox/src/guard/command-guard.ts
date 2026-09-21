@@ -45,6 +45,9 @@ export interface CommandGuardOptions {
     readonly signal: AbortSignal;
     // Where the command will run, so a credential-shaped path can be resolved and checked rather than assumed.
     readonly cwd?: string;
+    // Whether that cwd is the conversation's OWN copy, which only an isolated turn has. Absent reads as a tree shared
+    // with the owner, so a caller that doesn't know gets the guard rather than a hole.
+    readonly ownCheckout?: boolean;
     // This turn's outside-content bit (guard/turn-taint.ts), read per command rather than snapshotted.
     readonly taint: TurnTaint;
     // Asks the judge; a rejection means no rung answered. Callback-shaped, so this module knows nothing about accounts
@@ -210,7 +213,11 @@ export const createCommandGuard = (options: CommandGuardOptions): CommandGuard =
     // Judged verdicts this turn, keyed by program; concurrent consults of the same program share one promise.
     const judged = new Map<string, Promise<SafetyVerdict>>();
     // Fact-check for secrets.access; re-read every command since a watched file's contents can change mid-turn.
-    const context: CommandContext = { locus: SANDBOX, holdsSecret: createCredentialOracle(options.cwd) };
+    const context: CommandContext = {
+        locus: SANDBOX,
+        ...(options.ownCheckout === true ? { ownCheckout: true } : {}),
+        holdsSecret: createCredentialOracle(options.cwd),
+    };
 
     const record = (entry: Omit<SafetyLogEntry, "at">, at: number): void => {
         options.log?.({ at, ...entry });

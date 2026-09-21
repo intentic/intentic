@@ -121,6 +121,10 @@ export function useAgentChanges(agentId: Ref<string>, at?: Ref<string | undefine
     // Files the user already committed (no row for them); otherwise an empty list looks like no work happened.
     const absorbed = computed(() => query.data.value?.absorbed ?? 0);
 
+    // Repos whose checkout the conversation left on a branch of its own. What the rows below are read from is then this
+    // conversation's branch as it was last left, not the live checkout, and nothing here says so on its own.
+    const elsewhere = computed(() => query.data.value?.elsewhere ?? []);
+
     // Per-repo package layout from the diff, not /workspace/modules: a new package may exist only in the worktree.
     const modulesByRepo = computed<ReadonlyMap<string, readonly WorkspaceModule[]>>(
         () => new Map(repos.value.map((group) => [group.repo, group.modules])),
@@ -253,6 +257,7 @@ export function useAgentChanges(agentId: Ref<string>, at?: Ref<string | undefine
         files,
         count,
         absorbed,
+        elsewhere,
         pending,
         blocked,
         additions,

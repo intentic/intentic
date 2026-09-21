@@ -22,11 +22,17 @@ import type { Fence } from "@intentic/sandbox-contract";
 export interface ConversationWorktree {
     // The agent's cwd for isolated turns: the root repo's worktree dir.
     readonly cwd: string;
+    // The conversation's OWN ref, always `agent/<id>`: its identity, what a runner syncs and what land reads. Not a
+    // claim about what any checkout currently stands on — `elsewhere` is that.
     readonly branch: string;
     // Each repo's full sha on the main line, updated by the pre-turn rebase (agents/sync.ts); not the start.
     readonly repos: readonly { repo: string; base: string }[];
     // Whether this checkout was cut to a fence; what the turn's namespace must not hand back (isolation.ts).
     readonly fenced: boolean;
+    // Repos whose checkout is standing somewhere other than `branch`, with what it stands on (absent = detached HEAD).
+    // Reported, never corrected: a turn that cut a branch of its own is doing real work, and yanking its checkout back
+    // would take that work's context away. Empty is the ordinary case.
+    readonly elsewhere: readonly { readonly repo: string; readonly branch?: string }[];
 }
 
 export interface AgentWorktrees {
@@ -42,6 +48,9 @@ export interface AgentWorktrees {
     // to a branch of its own counts as retired, or those three would read someone else's tip as this conversation's
     // work — which is how a land came to apply nothing while the review still listed files.
     readonly attached: (id: string, repo: string) => Promise<boolean>;
+    // Which of a conversation's checkouts are standing somewhere other than `agent/<id>`, and on what. One reading for
+    // every caller that reports drift, so the invariant and the review cannot describe the same tree differently.
+    readonly elsewhere: (id: string, repos: readonly { readonly repo: string }[]) => Promise<ConversationWorktree["elsewhere"]>;
     // The current full HEAD of every repository a new conversation would span.
     // A workflow captures this once and hands it to every candidate so a fan-out sees one snapshot, not several moving
     // workspaces.
@@ -152,6 +161,12 @@ export const createAgentWorktrees = (
     // (`fatal: not a git repository`); asked before retire tries to preserve anything.
     const repoBehind = async (worktree: string): Promise<boolean> => (await gitDirOf(worktree)) !== undefined;
 
+    // Which branch an admin area's HEAD names, undefined for a detached HEAD, which is not a branch. Split from the
+    // lookup above so a caller that already has the gitDir (and so already knows a checkout stands here at all) can
+    // tell a detached HEAD from no checkout, which the branch alone cannot say.
+    const headBranchIn = async (gitDir: string): Promise<string | undefined> =>
+        (await readFile(join(gitDir, "HEAD"), "utf8").catch(() => ``)).match(/^ref:\s*refs\/heads\/(\S+)$/m)?.[1];
+
     // Which branch a checkout is on, read off the files rather than through git: `attached` asks this once per repo on
     // every diff read, and a subprocess per ask is a cost the review would pay on every refresh. Undefined for a
     // detached HEAD, which is not a branch.
@@ -206,6 +221,24 @@ export const createAgentWorktrees = (
         } catch {
             return false;
         }
+    };
+
+    // Which of a composition's checkouts are standing off `agent/<id>`, in composition order. Two small file reads per
+    // repo, so a turn's opening pays nothing measurable for an answer it would otherwise never get.
+    const elsewhereIn = async (id: string, repos: readonly { repo: string }[]): Promise<ConversationWorktree["elsewhere"]> => {
+        const own = `agent/${id}`;
+        const standing = await Promise.all(
+            repos.map(async ({ repo }) => {
+                const gitDir = await gitDirOf(worktreeDir(id, repo));
+                // No checkout at all is retired, not strayed: nothing stands anywhere for this to report.
+                if (gitDir === undefined) {
+                    return undefined;
+                }
+                const branch = await headBranchIn(gitDir);
+                return branch === own ? undefined : { repo, ...(branch === undefined ? {} : { branch }) };
+            }),
+        );
+        return standing.filter((entry) => entry !== undefined);
     };
 
     // The repos a new conversation spans: root plus discovered repos; unborn HEAD is skipped in createOne.
@@ -494,6 +527,7 @@ export const createAgentWorktrees = (
         sessionStore: (entry) => claudeStoreOf(workspace.root, historyRoot, entry),
         exists: (id) => pathExists(conversationDir(id)),
         attached: async (id, repo) => (await checkedOutBranch(worktreeDir(id, repo))) === `agent/${id}`,
+        elsewhere: elsewhereIn,
         snapshot: async () => {
             const repos = await liveRepos();
             const heads = await Promise.all(repos.map(async (repo) => ({ repo, base: await headSha(mainDir(repo)) })));
@@ -520,7 +554,8 @@ export const createAgentWorktrees = (
                 const repos = selection === undefined && fence === undefined ? recorded : await reconcile(id, recorded, await wanted());
                 await sparsenComposition(id, repos, fence);
                 await linkComposition(id, repos, namespaced);
-                return { cwd: conversationDir(id), branch, repos, fenced: fence !== undefined };
+                // Asked only on the repair path: a checkout this call just created stands on `branch` by construction.
+                return { cwd: conversationDir(id), branch, repos, fenced: fence !== undefined, elsewhere: await elsewhereIn(id, repos) };
             }
             // Root first: its checkout creates the dir nested worktrees mount into (root excludes each repo dir).
             const live = await wanted();
@@ -539,7 +574,7 @@ export const createAgentWorktrees = (
             // a fenced conversation's folders exist on disk closes before its first turn can run.
             await sparsenComposition(id, repos, fence);
             await linkComposition(id, repos, namespaced);
-            return { cwd: conversationDir(id), branch, repos, fenced: fence !== undefined };
+            return { cwd: conversationDir(id), branch, repos, fenced: fence !== undefined, elsewhere: [] };
         },
         remove: async (id, recorded) => {
             await eachRepo(recorded, "root-last", (repo) =>

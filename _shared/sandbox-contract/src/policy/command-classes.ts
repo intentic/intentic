@@ -28,6 +28,10 @@ export interface CommandContext {
     readonly locus: CommandLocus;
     // true/false/undefined for holding a credential; only false drops a class, undefined still counts as a hit.
     readonly holdsSecret?: (path: string) => boolean | undefined;
+    // Whether this cwd is the conversation's OWN copy, which only an isolated turn has. Absent means the tree is shared
+    // with its owner, the fail-safe reading: a caller that has not been taught the difference gets the guard, not a
+    // hole. Read only by git.branch-switch, whose whole question is whose checkout would move.
+    readonly ownCheckout?: boolean;
 }
 
 // The `g` twin of a table's patterns, built once: the tables stay flag-free since a surviving lastIndex is how a shared
@@ -62,6 +66,10 @@ const GIT_DESTRUCTIVE = [
     /\bgit\s+branch\b[^|;&]*\s(?:-D\b|--delete\s+--force\b|--force\s+--delete\b)/,
     /\bgit\s+filter-branch\b/,
 ];
+
+// `switch` exists only to move HEAD, so every form of it counts. `checkout` is two commands wearing one name: with
+// `-- <path>` or a bare `.` it restores files and moves nothing, and those are the common ones, so they are cut out.
+const GIT_BRANCH_SWITCH = [/\bgit\s+switch\b/, /\bgit\s+checkout\b(?![^|;&]*\s--\s)(?![^|;&]*\s\.(?:\s|$))/];
 
 // The credential is IN the command, not in a file; there is nothing for a filesystem to fact-check here.
 const SECRET_REFERENCES = [/\{\{secret:[A-Za-z0-9_./-]+\}\}/];
@@ -251,6 +259,7 @@ const rootDeletes = (program: string, locus: CommandLocus): CommandSpan[] => [
 
 // The g twins, built once at load: a card is minted per command held, classify runs per command typed.
 const GIT_DESTRUCTIVE_G = globally(GIT_DESTRUCTIVE);
+const GIT_BRANCH_SWITCH_G = globally(GIT_BRANCH_SWITCH);
 const SECRET_REFERENCES_G = globally(SECRET_REFERENCES);
 const CREDENTIAL_PATHS_G = globally(CREDENTIAL_PATHS);
 const PACKAGE_PUBLISH_G = globally(PACKAGE_PUBLISH);
@@ -298,6 +307,8 @@ const credentialReads = (command: string, context: CommandContext): CommandSpan[
 // One function per class; empty means the command is not in it, so membership and evidence are the same walk.
 const MATCHES: Readonly<Record<CommandClass, (command: string, context: CommandContext) => CommandSpan[]>> = {
     "git.destructive": (command) => spansOf(GIT_DESTRUCTIVE_G, command),
+    // The only class that can answer "not here": in its own copy a conversation's checkout is its own to move.
+    "git.branch-switch": (command, context) => (context.ownCheckout === true ? [] : spansOf(GIT_BRANCH_SWITCH_G, command)),
     "files.destructive": (command) => [...recursiveForceRms(command), ...recursiveDeletes(command)],
     "system.destructive": (command, context) => [...spansOf(BLOCK_DEVICE_G, command), ...rootDeletes(command, context.locus)],
     "container.state": (command) => spansOf(CONTAINER_STATE_G, command),
@@ -323,6 +334,7 @@ export const classifyCommand = (command: string, context: CommandContext): Comma
 // What the card says the command would do. The class name is a settings key, not a sentence to show a person.
 export const COMMAND_CLASS_LABELS: Readonly<Record<CommandClass, string>> = {
     "git.destructive": "rewrite or discard git history",
+    "git.branch-switch": "move a checkout you share with this conversation onto another branch",
     "files.destructive": "delete files recursively",
     "system.destructive": "wipe a disk, or delete a whole root directory",
     "container.state": "delete a container volume or the data in it",
@@ -349,6 +361,10 @@ export const COMMAND_CLASS_PATTERNS: Readonly<Record<CommandClass, readonly Comm
         { code: "git clean -f" },
         { code: "git branch -D" },
         { code: "git filter-branch" },
+    ],
+    "git.branch-switch": [
+        { code: "git switch <branch>" },
+        { code: "git checkout <branch>", qualifier: "not `git checkout -- <path>` or `git checkout .`, which restore files and move nothing" },
     ],
     "files.destructive": [
         { code: "rm -rf <path>" },

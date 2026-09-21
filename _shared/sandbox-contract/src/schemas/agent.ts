@@ -78,6 +78,9 @@ export type CommandLocus = z.infer<typeof CommandLocusSchema>;
 export const CommandClassSchema = z.enum([
     // Rewrites or discards committed work: force-push, hard reset, force-delete a branch, clean -f, filter-branch.
     "git.destructive",
+    // Moves a checkout to another branch. Only ever matches in a tree the conversation SHARES with its owner: inside
+    // its own copy a conversation may stand where it likes, and the drift that causes is reported, not refused.
+    "git.branch-switch",
     // Recursive-force deletion (`rm -rf`), and its spelling in a script (`fs.rm(p, { recursive: true })`).
     "files.destructive",
     // State nothing recovers at this locus; which roots count (/, /history in the sandbox) depends on the locus.

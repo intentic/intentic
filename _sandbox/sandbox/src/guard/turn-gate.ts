@@ -27,6 +27,9 @@ export interface TurnGateInput {
     readonly rulebook?: AgentCapabilities["rulebook"];
     // Where this turn's commands run, so the gate can check a credential-shaped path against the real file.
     readonly cwd?: string;
+    // Whether that cwd is a copy of this conversation's own. Absent reads as the owner's shared tree, the fail-safe
+    // side: a runtime that doesn't set it gets the guard rather than a hole.
+    readonly ownCheckout?: boolean;
     readonly signal: AbortSignal;
 }
 
@@ -62,6 +65,7 @@ export const createTurnGate = (turn: TurnGateInput): TurnGate => {
             unattended: turn.unattended === true,
             ...(canParkFor(turn.rulebook) ? {} : { canPark: false }),
             ...(turn.cwd === undefined ? {} : { cwd: turn.cwd }),
+            ...(turn.ownCheckout === true ? { ownCheckout: true } : {}),
             signal: turn.signal,
             taint,
             judge: turn.judge,

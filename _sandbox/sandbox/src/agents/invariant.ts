@@ -1,6 +1,7 @@
 import { liveTurnConversations } from "../agent/run/turn/turn-runs.js";
 import type { InvariantCheck } from "../invariants/invariants.js";
 import type { AgentsRegistry } from "./registry/agents-registry.js";
+import type { AgentWorktrees } from "./worktrees/worktrees.js";
 
 // Two independent records of whether a conversation is running (turn-runs.ts's live-run map, the registry's own
 // `running` map) that must agree. Checks only registry-idle-while-turn-live, the direction a live run's own start time
@@ -11,13 +12,47 @@ const REGISTRY_GRACE_MS = 10_000;
 
 export interface FleetRegistryDeps {
     readonly agents: AgentsRegistry;
+    readonly agentWorktrees: AgentWorktrees;
     readonly live?: () => readonly { readonly conversationId: string; readonly startedAt: number }[];
     readonly now?: () => number;
 }
 
 export const owner = "agents";
 
-export const checks = ({ agents, live = liveTurnConversations, now = Date.now }: FleetRegistryDeps): readonly InvariantCheck[] => [
+export const checks = ({
+    agents,
+    agentWorktrees,
+    live = liveTurnConversations,
+    now = Date.now,
+}: FleetRegistryDeps): readonly InvariantCheck[] => [
+    // A conversation's checkout standing on a branch of its own is invisible from every surface: the turn still writes
+    // there, while review and land read `agent/<id>`, which stopped moving. Asked at turn-settled because a switch
+    // mid-turn is ordinary (an agent reads main and comes back within seconds) and only the state a turn LEAVES is
+    // drift; the sweep catches conversations that will never run again.
+    // Reports and never repairs: the one real case was an agent cutting a CI branch to push, and taking its checkout
+    // back would have taken that work's context with it.
+    {
+        name: "checkouts-stand-on-their-own-branch",
+        on: ["turn-settled", "sweep"],
+        run: async ({ fail }) => {
+            const strayed: string[] = [];
+            for (const id of agents.ids()) {
+                const entry = agents.entry(id);
+                // Non-isolated conversations run in the owner's own tree and have no branch of their own to stand on.
+                if (entry?.branch === undefined) {
+                    continue;
+                }
+                for (const { repo, branch } of await agentWorktrees.elsewhere(id, entry.repos ?? [])) {
+                    strayed.push(`${id}/${repo} on ${branch ?? "a detached HEAD"}`);
+                }
+            }
+            if (strayed.length > 0) {
+                fail(
+                    `${strayed.length} checkout(s) stand off their conversation's own branch, so its turns write there while review and land read agent/<id>: ${strayed.join(", ")}`,
+                );
+            }
+        },
+    },
     {
         name: "live-turns-are-running-on-the-board",
         on: ["sweep", "turn-settled"],

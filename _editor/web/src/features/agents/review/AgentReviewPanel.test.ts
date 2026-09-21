@@ -6,7 +6,7 @@ import type { AgentChangesResponse, AgentHistoryResponse } from "@intentic/api-c
 import type { WorkspaceModule } from "@intentic/sandbox-contract";
 import { VueQueryPlugin } from "@tanstack/vue-query";
 import { afterEach, expect, it, vi } from "vitest";
-import { type App, createApp, h, nextTick, ref } from "vue";
+import { type App, createApp, h, nextTick, ref, type Ref } from "vue";
 import { reasonCopy } from "./conflictResolution";
 import { useAgentChanges } from "./useAgentChanges";
 import { agentHistoryKey } from "../fleet/useAgentHistory";
@@ -467,6 +467,8 @@ const reading = (state: { fetching: boolean; loaded: boolean }): ReturnType<type
         archive: vi.fn(),
         conflicts: ref(undefined),
         resolving: ref(undefined),
+        // Every checkout on its own branch, the state these readings are about.
+        elsewhere: ref([]),
         asked: ref(false),
         actionBusy: ref(false),
         actionError: ref(undefined),
@@ -522,4 +524,31 @@ it(`keeps an answer on screen while the daemon is asked again`, async () => {
     expect(el.textContent).toContain(`hasn't changed any files`);
     expect(el.textContent).not.toContain(`Reading this agent's changes…`);
     expect(el.querySelector(`.skeleton`)).toBeNull();
+});
+
+// The rows this panel lists are read off a BRANCH. When the conversation left its checkout standing somewhere else,
+// they are that branch as it was last left, and everything written since went elsewhere — which no row can show,
+// because a repository whose branch holds nothing produces no row at all. Said here or not at all.
+it(`says when the conversation left a checkout standing on a branch of its own`, async () => {
+    const review = reading({ fetching: false, loaded: true });
+    (review.elsewhere as unknown as Ref<{ repo: string; branch?: string }[]>).value = [
+        { repo: `registry`, branch: `ci/extension-admission` },
+        { repo: `intent` },
+    ];
+    const el = document.createElement(`div`);
+    document.body.append(el);
+    app = createApp({ setup: () => () => h(AgentReviewPanel, { agentId: AGENT, changes: review, streaming: false, writing: false }) });
+    app.component(`Icon`, IconStub);
+    app.directive(`tooltip`, {});
+    app.use(router);
+    app.use(VueQueryPlugin, { queryClient });
+    app.mount(el);
+    await nextTick();
+
+    // Counted, so one stray reads differently from several.
+    expect(el.textContent).toContain(`left 2 copies on branches of their own`);
+    // Each repository beside the branch its copy stands on, since "somewhere else" is not an answer.
+    expect(el.textContent).toContain(`registry → ci/extension-admission`);
+    // Standing on no branch at all has no name to print, and says so rather than printing nothing.
+    expect(el.textContent).toContain(`intent → no branch at all`);
 });

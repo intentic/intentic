@@ -691,3 +691,39 @@ test("attached follows the branch, not the directory: a checkout moved off agent
     await sh(conversation.cwd, "checkout", "-q", "agent/c1");
     expect(await worktrees.attached("c1", "root")).toBe(true);
 });
+
+// What the turn-settled invariant and the review both read. Reports where a checkout STANDS; it never moves one, since
+// a turn that cut a branch of its own is doing real work and taking its checkout back would take that work's context.
+test("elsewhere names the checkouts standing off their own branch, and nothing else", async () => {
+    const { worktrees } = await setup();
+    const conversation = await worktrees.ensure("c1", []);
+    const spans = conversation.repos.map(({ repo }) => ({ repo }));
+    expect(await worktrees.elsewhere("c1", spans)).toEqual([]);
+
+    await sh(join(conversation.cwd, "intent"), "checkout", "-q", "-b", "ci/push-me");
+    expect(await worktrees.elsewhere("c1", spans)).toEqual([{ repo: "intent", branch: "ci/push-me" }]);
+
+    // On no branch at all: named without one, since there is no name to give.
+    await sh(join(conversation.cwd, "intent"), "checkout", "-q", "--detach");
+    expect(await worktrees.elsewhere("c1", spans)).toEqual([{ repo: "intent" }]);
+
+    // A repo with no checkout is retired, not strayed: nothing stands anywhere, so there is nothing to report.
+    await worktrees.reapRepoCheckout("c1", "intent");
+    expect(await worktrees.elsewhere("c1", spans)).toEqual([]);
+});
+
+// ensure() used to state `agent/<id>` whatever the checkout was on, which is the claim every caller downstream trusts.
+test("ensure reports the checkouts it found standing elsewhere, and still leaves them there", async () => {
+    const { worktrees } = await setup();
+    const first = await worktrees.ensure("c1", []);
+    expect(first.elsewhere).toEqual([]);
+    await sh(join(first.cwd, "intent"), "checkout", "-q", "-b", "ci/push-me");
+
+    const again = await worktrees.ensure("c1", first.repos);
+
+    expect(again.elsewhere).toEqual([{ repo: "intent", branch: "ci/push-me" }]);
+    // The conversation's own ref is its identity and does not follow the checkout around.
+    expect(again.branch).toBe("agent/c1");
+    // Reported, not repaired: the checkout is where the turn left it.
+    expect(await sh(join(first.cwd, "intent"), "symbolic-ref", "--short", "HEAD")).toBe("ci/push-me");
+});

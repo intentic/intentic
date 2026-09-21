@@ -761,6 +761,10 @@ const honoured = (
         // this.
         workspacePins: createWorkspacePins(services.workspace.root),
         ...(startPath !== undefined ? { cwd: startPath } : {}),
+        // Travels with the cwd, since it is a fact about that cwd: only an isolated turn works in a copy of its own,
+        // and a main-tree turn's checkout is the owner's. Stated either way rather than omitted when false, since here
+        // it is known; the field is optional for callers that cannot answer it. Read by the command gate.
+        ownCheckout: isolated,
         ...(scope !== undefined ? { personaScope: scope } : {}),
         ...(shellEnv !== undefined && Object.keys(shellEnv).length > 0 ? { cliEnv: shellEnv } : {}),
         ...(jsExecution !== undefined ? { jsExecution } : {}),

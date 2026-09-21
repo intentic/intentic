@@ -394,6 +394,22 @@ export const AgentChangesSchema = z.object({
         .describe(
             "Why the last merge refused, when one did. Carried here as well as in the merge's own answer, because a conflict is found the moment a turn ends and dealt with hours later on this surface, which would otherwise open with nothing to explain what it promised to resolve.",
         ),
+    // On the response, not on a repository's own row: a repository whose branch holds nothing gets no row at all, and
+    // that is exactly the case where the conversation did all of its work on the other branch.
+    elsewhere: z
+        .array(
+            z.object({
+                repo: z.string().describe("Which repository."),
+                branch: z
+                    .string()
+                    .optional()
+                    .describe("The branch its copy is standing on. Absent where it stands on no branch at all, which is a state git allows."),
+            }),
+        )
+        .optional()
+        .describe(
+            "Repositories whose copy the conversation left standing on a different branch of its own. What is listed for them is this conversation's branch as it was last left, not what its copy holds now, and anything it has written since went to the other branch.",
+        ),
 });
 export type AgentChanges = z.infer<typeof AgentChangesSchema>;
 

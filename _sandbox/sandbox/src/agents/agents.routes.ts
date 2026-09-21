@@ -452,8 +452,16 @@ export const createAgentsRoutes = (services: Services) => {
                     : entry.repos.some(({ repo }) => services.agentWorktrees.repoBusy(repo))
                       ? entry.conflicts
                       : await outstandingConflicts(services.agentWorktrees, entry);
+            // Asked of the whole composition, not of the repos that produced rows: a conversation that did all its work
+            // on a branch of its own leaves `agent/<id>` empty, which is the case with no row to hang this on.
+            const elsewhere = await services.agentWorktrees.elsewhere(entry.id, entry.repos);
             // Tells apart an agent that wrote nothing from one whose every file is committed (AgentChangesSchema).
-            return { repos, absorbed, ...(conflicts.length > 0 ? { conflicts } : {}) };
+            return {
+                repos,
+                absorbed,
+                ...(conflicts.length > 0 ? { conflicts } : {}),
+                ...(elsewhere.length > 0 ? { elsewhere: elsewhere.map(({ repo, branch }) => ({ repo, ...(branch === undefined ? {} : { branch }) })) } : {}),
+            };
         }),
         // Reads the same rows `diff` filtered out to absorbed, from the same pass over the tree, so the two routes
         // can't disagree. Span starts at the recorded `landedHead` when it still resolves, else the merge-base anchor.

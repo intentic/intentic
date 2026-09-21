@@ -428,8 +428,10 @@ export const services = (overrides: ServiceOverrides = {}): Services => {
             worktreeDir: (id, repo) => (repo === "root" ? `${HISTORY_ROOT}/worktrees/${id}` : `${HISTORY_ROOT}/worktrees/${id}/${repo}`),
             mainDir: (repo) => (repo === "root" ? ABSENT_MAIN : join(ABSENT_MAIN, repo)),
             exists: async () => false,
-            // Live checkout: routes read the worktree path, the steady state these fakes model.
+            // Live checkout standing on its own branch: routes read the worktree path, the steady state these fakes
+            // model, and nothing has strayed off it.
             attached: async () => true,
+            elsewhere: async () => [],
             snapshot: async () => [{ repo: "root", base: "a".repeat(40) }],
             sessionStore: (entry) => claudeStoreOf(ABSENT_MAIN, HISTORY_ROOT, entry),
             ensure: async (id) => ({
@@ -437,6 +439,7 @@ export const services = (overrides: ServiceOverrides = {}): Services => {
                 branch: `agent/${id}`,
                 repos: [{ repo: "root", base: "a".repeat(40) }],
                 fenced: false,
+                elsewhere: [],
             }),
             remove: async () => {},
             retire: async () => {},

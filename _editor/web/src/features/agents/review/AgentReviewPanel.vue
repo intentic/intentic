@@ -592,6 +592,23 @@ const seamWidth = computed<number>({
             </div>
         </div>
 
+        <!-- The rows below are a branch, not a checkout, and only here can that be said: a repo whose branch holds
+             nothing produces no row to hang it on, which is exactly the conversation that worked entirely elsewhere. -->
+        <div
+            v-if="changes.elsewhere.value.length > 0"
+            class="mx-2 mt-2 flex shrink-0 flex-col gap-1 rounded-md border border-warning/40 bg-warning/10 px-2 py-1.5"
+        >
+            <span class="text-2xs font-medium text-warning">
+                {{ t(`agents.agentReviewPanel.leftCopiesElsewhere`, { count: changes.elsewhere.value.length }, changes.elsewhere.value.length) }}
+            </span>
+            <p class="text-2xs text-muted">{{ t(`agents.agentReviewPanel.leftCopiesElsewhereHint`) }}</p>
+            <ul class="flex flex-col gap-0.5">
+                <li v-for="stray in changes.elsewhere.value" :key="stray.repo" class="truncate font-mono text-2xs text-subtle">
+                    {{ stray.repo }} → {{ stray.branch ?? t(`agents.agentReviewPanel.noBranchAtAll`) }}
+                </li>
+            </ul>
+        </div>
+
         <!-- What a merge land left behind: everything else applied, these files carry markers to finish in the workspace. -->
         <div v-if="resolvingPaths.length > 0" class="mx-2 mt-2 flex shrink-0 flex-col gap-1 rounded-md border border-info/40 bg-info/10 px-2 py-1.5">
             <span class="text-2xs font-medium text-info">{{
