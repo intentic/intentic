@@ -1112,6 +1112,7 @@
             "baseCustom": "Ihr eigener Prompt",
             "baseIntentic": "Der eigene Prompt von Intentic",
             "baseRuntime": "Der eigene Prompt von {runtime}",
+            "baseTrimmed": "Ein kurzer Prompt, für das kleine Fenster dieses Modells",
             "characters": "{count} Zeichen",
             "chip": "Systemprompt",
             "composed": "Aus der zuletzt gesendeten Runde, auf {runtime}, {when}",
@@ -1126,7 +1127,8 @@
             "whenceGuidance": "Von Intentic zu jeder Runde hinzugefügt, die hier läuft.",
             "whenceMemory": "Aus den AGENTS.md-Dateien in Ihrem Workspace.",
             "whenceOpaque": "Diese Laufzeit behält ihren eigenen Prompt und nimmt nur Ergänzungen an, hier gibt es also nichts zu lesen.",
-            "whencePersona": "Gesendet, weil dieser Chat als eine bestimmte Persona handelt."
+            "whencePersona": "Gesendet, weil dieser Chat als eine bestimmte Persona handelt.",
+            "whenceTrimmed": "Anstelle des üblichen Prompts eingesetzt: Das Kontextfenster dieses Modells ist zu klein dafür."
         },
         "chatTabList": {
             "active": "Aktiv",

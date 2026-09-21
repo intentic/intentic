@@ -79,7 +79,7 @@ import { routedEndpointOf } from "../providers/routed-refusal.js";
 import { defaultQuery, promptInput, type QueryFn, streamSdk, type TurnPosture } from "./sdk-stream.js";
 import { checklistCloseHooks } from "./checklist-close.js";
 import { checklistSeedOf } from "./task-store.js";
-import { promptInputOf, sdkSystemPrompt, terminalMounted } from "../prompt/system-prompt.js";
+import { type PromptTrim, promptInputOf, sdkSystemPrompt, terminalMounted } from "../prompt/system-prompt.js";
 import type { HostDeviceReach } from "../../hosts/self-host.js";
 import { noteChildWork } from "../subagents/child-verification.js";
 import { closeSubagents, subagentInParentTree, subagentHooks, type SubagentTurn } from "../subagents/subagents.js";
@@ -227,6 +227,10 @@ export interface AgentRequest {
     readonly systemPromptMode?: SystemPromptMode;
     // Owner's own prompt, used only when mode is 'custom'; then it's the whole prompt, `systemAppend` included.
     readonly systemPrompt?: string;
+    // What the model's declared window would not pay for (agent/prompt/window/context-trim.ts), already applied to the two
+    // fields above. Carried on so the adapter sheds the same guidance the planner did, and the disclosure shows the
+    // prompt that was actually sent.
+    readonly contextTrim?: PromptTrim;
     // Mid-turn steering queue; when present the turn streams input and pushed messages inject between tool calls.
     readonly steering?: SteeringQueue;
     // Rebases onto main when the turn parks for a person; the model isn't told. Absent off-harness or main-tree.

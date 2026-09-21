@@ -1,7 +1,7 @@
 import { type AgentCapabilities, type AgentProvider, endpointIdOf, isTrialProvider } from "@intentic/sandbox-contract";
-import type { Services } from "../../composition.js";
-import { endpointConfigOf } from "../../endpoints/local-model.js";
-import { routedModel } from "../providers/harness-credentials.js";
+import type { Services } from "../../../composition.js";
+import { endpointConfigOf } from "../../../endpoints/local-model.js";
+import { routedModel } from "../../providers/harness-credentials.js";
 
 // Whether a model's context window can hold a turn at all, checked before anything is sent; trimming the prompt cannot
 // fix a window that is fundamentally too small. Deliberately approximate and biased toward letting a turn through: an
@@ -31,14 +31,21 @@ export interface ContextShortfall {
 
 // Carries whether the window came from a card in this app (fixable here) or a user's own server (fixable only there),
 // since the refusal's advice depends on which.
-interface DeclaredWindow {
+export interface DeclaredWindow {
     readonly window: number;
     readonly onACard: boolean;
 }
 
 // Declared window for endpoint providers only: a native subscription publishes none and is always huge, so the common
 // case is one string comparison. The catalog read is cached, so this costs nothing extra.
-const declaredWindow = async (services: Services, provider: AgentProvider, model: string | undefined): Promise<DeclaredWindow | undefined> => {
+// Resolved once per turn by the planner and handed to both readers of it — the trim that decides what to compose
+// (context-trim.ts) and the refusal below — since two reads could disagree across a catalog refresh mid-plan.
+// Two seams: which capability serves the provider, and what its catalog publishes for the resolved model.
+export const declaredWindow = async (
+    services: Pick<Services, "capabilities" | "endpointModels">,
+    provider: AgentProvider,
+    model: string | undefined,
+): Promise<DeclaredWindow | undefined> => {
     const id = endpointIdOf(provider);
     // Trial publishes no window: its model id is synthetic, the real model is picked per message.
     if (id === undefined || isTrialProvider(provider)) {
@@ -58,24 +65,17 @@ const declaredWindow = async (services: Services, provider: AgentProvider, model
 
 // Undefined means send it: either the window is unknown, or it fits the floor plus what was composed. `prompt` is
 // counted as sent, notes and all, not just the user's words.
-export const contextShortfall = async (
-    services: Services,
-    turn: {
-        readonly provider: AgentProvider;
-        readonly runtime: AgentCapabilities["runtime"];
-        readonly model: string | undefined;
-        readonly prompt: string;
-    },
-): Promise<ContextShortfall | undefined> => {
+export const contextShortfall = (turn: {
+    readonly runtime: AgentCapabilities["runtime"];
+    // The window the planner already resolved (declaredWindow), so the check and the trim measure the same number.
+    readonly declared: DeclaredWindow | undefined;
+    readonly prompt: string;
+}): ContextShortfall | undefined => {
     const floor = HARNESS_FLOOR_TOKENS[turn.runtime];
-    if (floor === undefined) {
+    if (floor === undefined || turn.declared === undefined) {
         return undefined;
     }
-    const declared = await declaredWindow(services, turn.provider, turn.model);
-    if (declared === undefined) {
-        return undefined;
-    }
-    const { window, onACard } = declared;
+    const { window, onACard } = turn.declared;
     const promptTokens = Math.ceil(turn.prompt.length / CHARS_PER_TOKEN);
     const needed = floor + OUTPUT_RESERVE_TOKENS + promptTokens;
     if (needed <= window) {

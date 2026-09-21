@@ -1,9 +1,22 @@
+import type { AgentCapabilities, AgentProvider } from "@intentic/sandbox-contract";
 import { expect, test } from "vitest";
-import type { Services } from "../../composition.js";
-import { services } from "../../harness/route-services.testing.js";
-import { contextShortfall } from "./context-budget.js";
+import type { Services } from "../../../composition.js";
+import { services } from "../../../harness/route-services.testing.js";
+import { contextShortfall, declaredWindow } from "./context-budget.js";
 
 // Whether a turn is sent at all, when a model has published how much context it will take.
+
+// The two steps the planner takes, in this order and no other: resolve the window once, then measure what was composed
+// against it. Joined here so each case below reads as the one question a turn asks.
+const shortfallFor = async (
+    sandbox: Services,
+    turn: {
+        readonly provider: AgentProvider;
+        readonly runtime: AgentCapabilities["runtime"];
+        readonly model: string | undefined;
+        readonly prompt: string;
+    },
+) => contextShortfall({ runtime: turn.runtime, declared: await declaredWindow(sandbox, turn.provider, turn.model), prompt: turn.prompt });
 
 // Id as the catalog holds it; its shape (llama-server's own labelling) does not matter here.
 const LOCAL_MODEL = "Llama-3.2-3B-Instruct-Q4_K_M";
@@ -26,7 +39,7 @@ const turnOn = (model: string | undefined, prompt = "Are you there?") =>
 test("a window that cannot hold the loop's own instructions refuses, naming the three numbers", async () => {
     const sandbox = await withEndpoint([{ id: LOCAL_MODEL, label: "Llama-3.2-3B-Instruct-Q4_K_M", contextWindow: 16_384 }]);
 
-    const shortfall = await contextShortfall(sandbox, turnOn(LOCAL_MODEL));
+    const shortfall = await shortfallFor(sandbox, turnOn(LOCAL_MODEL));
 
     expect(shortfall?.window).toBe(16_384);
     // Names all three numbers: what the model takes, what the turn needs, what the loop costs.
@@ -51,7 +64,7 @@ test("a window on somebody else's server points at the server, not at a card", a
         config: { baseUrl: "http://host.docker.internal:11434/v1", protocol: "openai" },
     });
 
-    const shortfall = await contextShortfall(sandbox, {
+    const shortfall = await shortfallFor(sandbox, {
         provider: "endpoint/ollama",
         runtime: "claude-code",
         model: "tiny",
@@ -65,7 +78,7 @@ test("a window on somebody else's server points at the server, not at a card", a
 test("a window with room for the loop is sent, not second-guessed", async () => {
     const sandbox = await withEndpoint([{ id: "qwen3-coder", label: "Qwen3 Coder", contextWindow: 131_072 }]);
 
-    expect(await contextShortfall(sandbox, turnOn("qwen3-coder"))).toBeUndefined();
+    expect(await shortfallFor(sandbox, turnOn("qwen3-coder"))).toBeUndefined();
 });
 
 // Unknown is not small: no published window, no such concept for the provider, or a runtime with no measured floor must
@@ -74,13 +87,13 @@ test("a window with room for the loop is sent, not second-guessed", async () => 
 test("a server that published no window gates nothing", async () => {
     const sandbox = await withEndpoint([{ id: "mystery", label: "mystery" }]);
 
-    expect(await contextShortfall(sandbox, turnOn("mystery"))).toBeUndefined();
+    expect(await shortfallFor(sandbox, turnOn("mystery"))).toBeUndefined();
 });
 
 test("a native provider is never measured against an endpoint's window", async () => {
     const sandbox = await withEndpoint([{ id: LOCAL_MODEL, label: "tiny", contextWindow: 16_384 }]);
 
-    expect(await contextShortfall(sandbox, { provider: "claude", runtime: "claude-code", model: "claude-opus-5", prompt: "hi" })).toBeUndefined();
+    expect(await shortfallFor(sandbox, { provider: "claude", runtime: "claude-code", model: "claude-opus-5", prompt: "hi" })).toBeUndefined();
 });
 
 // `endpointModels` is left unstubbed on purpose: a catalog read here would throw rather than pass quietly.
@@ -92,20 +105,20 @@ test("the free trial is never measured, and never asked", async () => {
         config: { baseUrl: "https://platform.test/trial/v1", protocol: "openai" },
     });
 
-    expect(await contextShortfall(sandbox, { provider: "endpoint/free-trial", runtime: "claude-code", model: "auto", prompt: "hi" })).toBeUndefined();
+    expect(await shortfallFor(sandbox, { provider: "endpoint/free-trial", runtime: "claude-code", model: "auto", prompt: "hi" })).toBeUndefined();
 });
 
 test("a runtime with no measured floor gates nothing, whatever the window says", async () => {
     const sandbox = await withEndpoint([{ id: LOCAL_MODEL, label: "tiny", contextWindow: 16_384 }]);
 
-    expect(await contextShortfall(sandbox, { provider: "endpoint/tiny", runtime: "acp", model: LOCAL_MODEL, prompt: "hi" })).toBeUndefined();
+    expect(await shortfallFor(sandbox, { provider: "endpoint/tiny", runtime: "acp", model: LOCAL_MODEL, prompt: "hi" })).toBeUndefined();
 });
 
 // Falls back to the catalog default (routedModel) rather than the dropped pin's own window.
 test("a stale pin is measured against the model the turn will really run on", async () => {
     const sandbox = await withEndpoint([{ id: "qwen3-coder", label: "Qwen3 Coder", contextWindow: 131_072 }]);
 
-    expect(await contextShortfall(sandbox, turnOn("a-model-this-server-dropped"))).toBeUndefined();
+    expect(await shortfallFor(sandbox, turnOn("a-model-this-server-dropped"))).toBeUndefined();
 });
 
 // The prompt includes the map and retrieved-context capsule, so a short message and a long one can land on different
@@ -113,6 +126,6 @@ test("a stale pin is measured against the model the turn will really run on", as
 test("what was composed counts: a big preamble is what tips a borderline window over", async () => {
     const sandbox = await withEndpoint([{ id: "mid", label: "mid", contextWindow: 24_000 }]);
 
-    expect(await contextShortfall(sandbox, turnOn("mid", "hi"))).toBeUndefined();
-    expect(await contextShortfall(sandbox, turnOn("mid", "x".repeat(12_000)))).toMatchObject({ window: 24_000 });
+    expect(await shortfallFor(sandbox, turnOn("mid", "hi"))).toBeUndefined();
+    expect(await shortfallFor(sandbox, turnOn("mid", "x".repeat(12_000)))).toMatchObject({ window: 24_000 });
 });

@@ -1,6 +1,7 @@
 import { cancelledRequests, settledRequests } from "../policy/request-status.js";
 import type { AgentEvent } from "../events/agent-events.js";
 import { REQUEST_FIELDS, holdsRequest, isAwaitingDecision, type TranscriptRequests, type TranscriptPatch, type TranscriptRow, type TranscriptSubagent, type TranscriptTool } from "../events/transcript.js";
+import { contextTrimLine } from "../schemas/context-trim.js";
 import { mentionedPathTokens } from "./mentions.js";
 import { watchWakeRow } from "../events/watch-wake.js";
 
@@ -29,6 +30,11 @@ const cardOf = (event: Extract<AgentEvent, { kind: "tool_call" }>): TranscriptTo
     ...(event.locations !== undefined ? { locations: event.locations } : {}),
     ...(event.content !== undefined ? { content: event.content } : {}),
 });
+
+// Whether a just-retired prose bubble says exactly what the plan about to be drawn says, so the request can take its
+// place instead of the same markdown appearing twice in a row.
+const restates = (row: TranscriptRow | undefined, text: string): boolean =>
+    row?.role === "assistant" && !holdsRequest(row) && row.text.trim() !== "" && row.text.trim() === text.trim();
 
 // Whether a bubble has any content: text, thinking, tools, todos, usage or a card; empty otherwise.
 const empty = (row: TranscriptRow): boolean =>
@@ -246,6 +252,10 @@ export class TranscriptFold {
             case "preamble":
                 // Collapses the daemon's preamble notes onto the user row; an empty note list is not a disclosure.
                 return event.notes.length === 0 ? [] : this.stampOpener((row) => (row.notes = [...event.notes]));
+            case "context_trim":
+                // A row of its own rather than a stamp on the message: what was left out is not part of what was sent,
+                // and the fold beside the message only ever lists notes that actually rode.
+                return this.pushRow({ role: "notice", text: contextTrimLine(event) });
             case "worktree":
                 return event.sync === undefined ? [] : this.pushRow({ role: "notice", text: syncLine(event.sync) });
             case "landed":
@@ -258,13 +268,8 @@ export class TranscriptFold {
             case "plan": {
                 // Folds a plan into an identical retired prose bubble instead of drawing the same markdown twice.
                 const adjacent = this.rows.at(-1);
-                const consumes =
-                    this.bubble === undefined &&
-                    adjacent?.role === "assistant" &&
-                    !holdsRequest(adjacent) &&
-                    adjacent.text.trim() !== "" &&
-                    adjacent.text.trim() === event.text.trim();
-                if (consumes) {
+                const consumes = this.bubble === undefined && restates(adjacent, event.text);
+                if (consumes && adjacent !== undefined) {
                     adjacent.text = "";
                 }
                 return this.park(

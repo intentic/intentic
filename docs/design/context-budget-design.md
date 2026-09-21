@@ -220,3 +220,64 @@ document's own ladder:
 - **§5's floor is the number that matters most and is still an estimate.** It is now load-bearing in two places
   rather than one: it gates the turn, and it sets a default that costs the owner gigabytes of RAM. Step 3
   (calibrate per runtime and tool set off the first successful turn) got more valuable, not less.
+
+## 11. The ladder, built: what a small window stops paying for (Sep 2026)
+
+§5's ladder and §7's steps 4–5 shipped, with one substitution that is the whole of what is interesting here.
+
+**The floor did not enter the decision, on purpose.** §5 divides an allowance — `window − floor − reserve −
+message` — among the contributors. Every version of that arithmetic inherits the floor's error, and §9 already
+records that the floor is a deliberately low estimate (20k against a measured 49k) chosen to bias the *refusal*
+toward letting turns through. That bias is right for a refusal and exactly wrong for a trim: refusing wrongly
+costs the user their turn, trimming wrongly costs a little orientation. Worse, on the windows this is for, the
+error term is larger than the entire preamble being divided. So `agent/prompt/window/context-trim.ts` decides off the
+one number the product has already measured and priced: the local-model card's window rungs.
+
+- At or above `LOCAL_MODEL_WINDOW_DEFAULT` (64k — the card's own "the smallest rung a full turn fits in"),
+  nothing is trimmed.
+- Below it, **`lean`**: every preamble note a persona card may drop, this product's ~9k-char guidance block, and
+  the field-notes brief.
+- Below the next rung down (32k), **`minimal`**: the base prompt itself is swapped for one paragraph
+  (`SMALL_WINDOW_PROMPT`), on the runtimes whose `instructions` are `replace`.
+- An unknown window trims nothing, on the same rule §9's refusal uses. Unknown is not small, and it covers every
+  native subscription in the product.
+
+Raising the card's default raises all three, because the constants are read from the contract rather than
+transcribed.
+
+**What it may never take** is the set no persona card may drop, which is not a coincidence: the trim is
+expressed over the same `TurnBriefingNoteId` vocabulary the card editor uses, so the six fixtures
+(`TURN_BRIEFING_FIXTURES`) are out of its reach by construction. Where the files live, who the turn is acting
+as, the owner's AGENTS.md rules, and the two notes that explain a missing account all survive at any window,
+including onto the swapped base — those change what a turn is *allowed* to do, and a small window is not a
+reason to become unsafe. The owner's own `custom` prompt is untouched too, at any size.
+
+**Compose first, filter second.** The notes are built with the persona's briefing as though nothing were being
+trimmed, and the window's filter is applied to the finished list. The inverted order would be cheaper by one
+project-map walk per opening turn, and it would make the disclosure unwriteable: what a window *left out* can
+only be named by first building what the turn would otherwise have sent. Everything the notice says is read off
+that diff, so it can never name a note this turn was never owed.
+
+**The disclosure is a notice row, every turn it applies.** A `context_trim` frame carries the window, the
+omitted labels and whether the base was swapped; `contextTrimLine` (in the contract, beside the schema, so a
+reopened conversation renders the same words) turns it into the row. Not once per conversation: a turn forty
+messages down that ran thin with nothing saying so is the failure this exists to stop. Switching to a larger
+model simply stops the line. The closing clause — "your workspace rules, this turn's persona and where its
+files live still rode" — is load-bearing, because without it the row reads as "your AGENTS.md may not have
+arrived".
+
+**Where the two gates meet.** §9's refusal and this trim overlap at the bottom, and the refusal wins there: on the
+Claude Code loop its floor plus the output reserve is ~22k, so a 16k window is still refused outright and the trim
+never gets to help. That is §1's finding holding, not a bug — trimming cannot rescue a window the loop's own fixed
+cost already exceeds. The smallest tier's usable band on that runtime is the stretch between that floor and the 32k
+rung; on a runtime with no measured floor, every band below 64k is the trim's.
+
+Two consequences for the rest of this document:
+
+- **Step 3 (calibrate the floor) is still the most valuable thing left**, and is now the only thing standing
+  between here and §6's real prize: the reduced *tool surface*. §1's finding is unchanged — the preamble was
+  never the expensive part — so what this buys is a few thousand tokens and an honest product, not a fixed
+  16k model.
+- **`turn-context.ts`'s retrieved anchors are not in the ladder**, because they are not in the card's
+  vocabulary and the flag that produces them is off by default. Adding an id for them is a card-editor change,
+  and belongs with whatever re-measures that experiment.

@@ -64,7 +64,10 @@ const baseTitle = (base: NonNullable<ConversationPrompt["prompt"]>): string =>
           ? t(`chat.chatSystemPrompt.baseClaude`)
           : base.base.kind === `custom`
             ? t(`chat.chatSystemPrompt.baseCustom`)
-            : t(`chat.chatSystemPrompt.baseIntentic`);
+            : // Never labelled as anyone's own prompt: nobody wrote it, a small window is why it is there.
+              base.base.kind === `trimmed`
+              ? t(`chat.chatSystemPrompt.baseTrimmed`)
+              : t(`chat.chatSystemPrompt.baseIntentic`);
 
 // The base as the first row, then the additions in the order the model reads them: one list, top to bottom, is the
 // prompt itself.
@@ -76,7 +79,14 @@ const rows = computed((): readonly Row[] => {
     const base: Row = {
         key: `base`,
         title: baseTitle(prompt),
-        whence: prompt.base.kind === `runtime` ? t(`chat.chatSystemPrompt.whenceOpaque`) : t(`chat.chatSystemPrompt.whenceBase`),
+        // A trimmed base gets its own line for the same reason it gets its own title: the usual one says the prompt was
+        // "chosen in your sandbox's agent settings", and this one was chosen by the model's window instead.
+        whence:
+            prompt.base.kind === `runtime`
+                ? t(`chat.chatSystemPrompt.whenceOpaque`)
+                : prompt.base.kind === `trimmed`
+                  ? t(`chat.chatSystemPrompt.whenceTrimmed`)
+                  : t(`chat.chatSystemPrompt.whenceBase`),
         ...(prompt.base.text === undefined ? {} : { text: prompt.base.text }),
     };
     return [

@@ -1112,6 +1112,7 @@
             "baseCustom": "Tu propio prompt",
             "baseIntentic": "El propio prompt de Intentic",
             "baseRuntime": "El propio prompt de {runtime}",
+            "baseTrimmed": "Un prompt corto, para la ventana pequeña de este modelo",
             "characters": "{count} caracteres",
             "chip": "Prompt del sistema",
             "composed": "Del último turno enviado, en {runtime}, {when}",
@@ -1126,7 +1127,8 @@
             "whenceGuidance": "Añadido por Intentic a cada turno que se ejecuta aquí.",
             "whenceMemory": "De los archivos AGENTS.md de tu espacio de trabajo.",
             "whenceOpaque": "Este runtime conserva su propio prompt y solo acepta añadidos, así que aquí no hay nada que leer.",
-            "whencePersona": "Enviado porque este chat actúa como alguien en concreto."
+            "whencePersona": "Enviado porque este chat actúa como alguien en concreto.",
+            "whenceTrimmed": "Puesto en lugar del prompt habitual: la ventana de contexto de este modelo es demasiado pequeña para contenerlo."
         },
         "chatTabList": {
             "active": "Activos",

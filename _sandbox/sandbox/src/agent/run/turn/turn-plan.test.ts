@@ -119,6 +119,61 @@ test("the same endpoint serving a large window is planned normally", async () =>
     expect(plan.ok).toBe(true);
 });
 
+// Between the two above: a window too small for a full turn but large enough to send one. The refusal gate stays
+// silent and the trim does the work (context-trim.ts), which is only observable from here — every piece of it is
+// wired through planning, and a unit test that hands the composer a trim directly proves nothing about the wiring.
+const smallWindow = async (window: number): Promise<ReturnType<typeof planTurn>> => {
+    const card = {
+        id: "tiny",
+        kind: "localmodel" as const,
+        config: { model: "meta-llama/x/Llama-3.2-3B-Instruct-Q4_K_M.gguf", gpu: "off" as const, context: "32768" as const },
+    };
+    const services = servicesWith({
+        logger: unstubbed<Services["logger"]>("logger", { warn: () => {} }),
+        capabilities: unstubbed<Services["capabilities"]>("capabilities", { list: async () => [card], get: async () => card }),
+        endpointModels: {
+            models: async () => ({ models: [{ id: "llama", label: "Llama", contextWindow: window }], default: "llama" }),
+            forget: async () => {},
+        },
+    });
+    return planTurn(services, turn({ agent: "endpoint/tiny", model: "llama" }), context);
+};
+
+test("a window under a full turn trims the guidance and says what it left out", async () => {
+    const plan = await smallWindow(40_000);
+
+    expect(plan.ok).toBe(true);
+    const trimmed = plan as Extract<typeof plan, { ok: true }>;
+    // The composed request carries the decision on, so the adapter sheds the same guidance the planner did.
+    expect(trimmed.request.contextTrim).toEqual({ guidance: true, base: false });
+    // 40k holds the loop's own base, so it keeps it; what goes is everything this product would have added.
+    expect(trimmed.contextTrim?.trim.tier).toBe("lean");
+    expect(trimmed.request.systemPrompt).toBeUndefined();
+});
+
+// 26k, not 16k: below about 22k the refusal gate fires first on this runtime (its floor plus the output reserve), and
+// a trim cannot rescue a window the loop's own fixed cost already exceeds. The smallest tier's usable band on the
+// Claude Code loop is the stretch between that floor and the next rung.
+test("a window under the next rung swaps the base rather than sending none", async () => {
+    const plan = await smallWindow(26_000);
+
+    expect(plan.ok).toBe(true);
+    const trimmed = plan as Extract<typeof plan, { ok: true }>;
+    expect(trimmed.request.contextTrim).toEqual({ guidance: true, base: true });
+    // THE BUG THIS PINS: the swap is composed in planning, and a turn that carried the decision without the text
+    // would reach the model with an empty system prompt instead of a short one.
+    expect(trimmed.request.systemPrompt).toContain("context window is small");
+});
+
+test("a window that holds a full turn is left alone", async () => {
+    const plan = await smallWindow(131_072);
+
+    expect(plan.ok).toBe(true);
+    const full = plan as Extract<typeof plan, { ok: true }>;
+    expect(full.request.contextTrim).toBeUndefined();
+    expect(full.contextTrim).toBeUndefined();
+});
+
 test("a harness refusal rides through with the credential resolver's own code", async () => {
     const message = "Your Claude sign-in expired.";
     credentials.mockResolvedValue({ ok: false, code: "claude-reauth", message });

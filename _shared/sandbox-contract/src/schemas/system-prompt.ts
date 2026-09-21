@@ -19,8 +19,10 @@ export const PromptSectionSchema = z.object({
 export type PromptSection = z.infer<typeof PromptSectionSchema>;
 
 // intentic/claude/custom: a base whose text is knowable here (shipped, readable from the installed CLI, or the owner's
-// own). runtime: a CLI that keeps its own prompt and only takes additions, so there is no text to show.
-export const PromptBaseKindSchema = z.enum(["intentic", "claude", "custom", "runtime"]);
+// own). runtime: a CLI that keeps its own prompt and only takes additions, so there is no text to show. trimmed: the
+// one paragraph a model's window left room for, in place of any of the above (context-trim.ts) — its own kind rather
+// than `custom`, because a reader asking whose words these are must not be told they are theirs.
+export const PromptBaseKindSchema = z.enum(["intentic", "claude", "custom", "runtime", "trimmed"]);
 export type PromptBaseKind = z.infer<typeof PromptBaseKindSchema>;
 
 export const PromptBaseSchema = z.object({

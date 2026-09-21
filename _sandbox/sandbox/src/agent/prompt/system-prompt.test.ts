@@ -440,3 +440,73 @@ test("a runtime with no system seam gets the field notes through the user messag
         { title: "Standing instructions for this workspace", text: MEMORY },
     ]);
 });
+
+// A window too small for a full turn (agent/prompt/window/context-trim.ts decides when) takes this product's own paragraphs
+// and, one rung lower, the base they ride on. Neither trim may reach the two things that are not this product's: who
+// the turn is acting as, and the owner's standing rules.
+
+const LEAN = { guidance: true, base: false } as const;
+const MINIMAL = { guidance: true, base: true } as const;
+
+test("a lean window drops the workspace conventions from the append and keeps everything else", () => {
+    const placement = turnPromptPlacement({
+        capabilities: CODEX,
+        mode: "intentic",
+        systemPrompt: "",
+        stableSystemPrompt: false,
+        personaNote: PERSONA,
+        memoryNote: MEMORY,
+        trim: LEAN,
+    });
+    // The same runtime is told the conventions when nothing is trimmed (see the test above); here it is not.
+    expect(placement.systemAppend).not.toContain("reference shelf");
+    expect(placement.systemAppend).toContain(PERSONA);
+    expect(placement.systemAppend).toContain(MEMORY);
+});
+
+test("a lean window leaves the Claude Code loop its own base", () => {
+    const prompt = sdkSystemPrompt({ ...BASE, mode: "intentic", custom: undefined, trim: LEAN });
+
+    expect(prompt).toContain(INTENTIC_PROMPT);
+    // Every guidance paragraph goes at once, rather than a few of them: half the habits is not half a product, it is
+    // a longer prompt that still does not fit.
+    expect(prompt).not.toContain("ripgrep");
+});
+
+test("the smallest window swaps the base, carrying the persona and the owner's rules onto it", () => {
+    const placement = turnPromptPlacement({
+        capabilities: CLAUDE,
+        mode: "intentic",
+        systemPrompt: "",
+        stableSystemPrompt: false,
+        personaNote: PERSONA,
+        memoryNote: MEMORY,
+        fieldNotesNote: NOTES,
+        trim: MINIMAL,
+    });
+
+    expect(placement.systemPrompt).toContain("context window is small");
+    expect(placement.systemPrompt).toContain(PERSONA);
+    expect(placement.systemPrompt).toContain(MEMORY);
+    expect(placement.systemPrompt).not.toContain(INTENTIC_PROMPT);
+    expect(placement.systemAppend).toBeUndefined();
+
+    // And the adapter sends exactly that, rather than composing the base back underneath it.
+    const sent = sdkSystemPrompt({ ...BASE, mode: "intentic", custom: placement.systemPrompt, trim: MINIMAL });
+    expect(sent).toBe(placement.systemPrompt);
+});
+
+// The owner's own words are not this product's to trim: a custom prompt is sent whole at any window.
+test("a custom prompt is untouched by the smallest window", () => {
+    const placement = turnPromptPlacement({
+        capabilities: CLAUDE,
+        mode: "custom",
+        systemPrompt: CUSTOM,
+        stableSystemPrompt: false,
+        memoryNote: MEMORY,
+        trim: MINIMAL,
+    });
+
+    expect(placement.systemPrompt).toContain(CUSTOM);
+    expect(placement.systemPrompt).not.toContain("context window is small");
+});

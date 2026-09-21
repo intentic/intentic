@@ -76,7 +76,8 @@ import { adapterFor } from "../../providers/adapter-registry.js";
 import { isUnknownSlashCommand } from "../../providers/agent-commands.js";
 import type { SteeringQueue } from "../../anchors/agent-steering.js";
 import { withAttachmentNote } from "../../prompt/attachment-note.js";
-import { contextShortfall } from "../../prompt/context-budget.js";
+import { contextShortfall, declaredWindow } from "../../prompt/window/context-budget.js";
+import { applyTrim, promptTrim, trimState, type TurnTrim, type TurnTrimState, turnTrim } from "../../prompt/window/context-trim.js";
 import { subagentWaitServer } from "../../subagents/subagent-wait.js";
 import { watchServer } from "../../verification/watch-server.js";
 import type { WatcherTurnSeed } from "../../verification/watchers.js";
@@ -146,6 +147,10 @@ export type TurnPlan =
           // Which preamble notes this turn's card still wants. Carried out of planning because two of them (the repo
           // sync advisory, the hand-off state) only exist after it, in the route.
           readonly briefing: TurnBriefing;
+          // What the model's window would not pay for and what it has taken so far, so the route can hold the two
+          // notes it adds after planning to the same window and disclose one list. Absent when nothing was trimmed,
+          // which is every model whose window holds a full turn.
+          readonly contextTrim?: TurnTrimState;
       });
 
 // What the route has already resolved before a provider can be picked: the request every arm builds on, the turn's two
@@ -167,6 +172,9 @@ export interface TurnContext {
     readonly conversationTurns?: number;
     readonly iqSearchEnabled?: boolean;
     readonly iqSearchNote?: string;
+    // What the model's declared window will not pay for (context-trim.ts), resolved once above everything that reads
+    // it. Absent means the window is unknown or large enough, which is every model outside a local one's card.
+    readonly contextTrim?: TurnTrim;
     // The sandbox's own field notes, already narrowed to the owner's budget. Composed in planning rather than at
     // placement so the SAME reading answers both questions the turn has about it — what to send, and which revision to
     // stamp — and a control turn can name the revision it was withheld from without composing anything.
@@ -231,7 +239,15 @@ interface TurnFieldNotes {
 
 // `localCwd` is the tree as the DAEMON reaches it, which for an isolated turn is its worktree and otherwise the
 // workspace root — the same root workspace-memory.ts reads the owner's rules from, so both files travel together.
-const fieldNotesFor = (services: Services, context: TurnContext, settings: SandboxSettings, conversationId: string | undefined): TurnFieldNotes => {
+// A window too small to hold the brief withholds it HERE rather than at placement, so the experiment's own record of
+// what the prompt paid (`notesChars`) stays the truth rather than counting a brief that never left the daemon.
+const fieldNotesFor = (
+    services: Services,
+    context: TurnContext,
+    settings: SandboxSettings,
+    conversationId: string | undefined,
+    trim: TurnTrim | undefined,
+): TurnFieldNotes => {
     const arm = holdoutArm("field-notes", settings.fieldNotes, settings.fieldNotesHoldout, conversationId);
     if (!settings.fieldNotes) {
         return { arm, brief: undefined, note: undefined };
@@ -242,7 +258,41 @@ const fieldNotesFor = (services: Services, context: TurnContext, settings: Sandb
         onUnreadable: (why) => services.logger.warn({ why }, "field notes: the file is there but cannot be sent"),
     });
     // Read on both arms, sent on one. `arm ?? true` because an undefined arm means "not measuring", not "control".
-    return { arm, brief, note: (arm ?? true) ? brief?.text : undefined };
+    const sent = (arm ?? true) && trim?.fieldNotes !== true;
+    return { arm, brief, note: sent ? brief?.text : undefined };
+};
+
+// What the SYSTEM prompt would have carried had the window paid for it: this product's guidance and the field-notes
+// brief this turn read. Neither is a preamble note, so neither can be named by filtering the note list.
+//
+// Two ways the guidance was never riding, and a window cannot take what was not there: a custom prompt has already
+// dropped it, and a runtime with no system seam at all (Pi, ACP) never had anywhere to put it. The field notes reach
+// that runtime through the message instead, so they are still the window's to take.
+const systemPieces = (
+    capabilities: AgentCapabilities,
+    mode: SystemPromptMode,
+    notes: TurnFieldNotes,
+): { readonly guidance: boolean; readonly fieldNotes: boolean } => ({
+    guidance: mode !== "custom" && capabilities.instructions !== "none",
+    fieldNotes: notes.brief !== undefined && (notes.arm ?? true),
+});
+
+// The window's filter applied to what the card already composed. The request carries the two prompt-side decisions on
+// as well, so the adapter sheds the same guidance the planner did; the running state travels out to the route, which
+// adds two more notes after this and must face the same window.
+const trimmed = (
+    trim: TurnTrim | undefined,
+    request: AgentRequest,
+    system: TurnTrimState["system"],
+): { readonly request: AgentRequest; readonly contextTrim?: TurnTrimState } => {
+    if (trim === undefined) {
+        return { request };
+    }
+    const { notes, state } = applyTrim(trimState(trim, system), request.notes ?? []);
+    return {
+        request: { ...request, notes, ...stamp("contextTrim", promptTrim(trim)) },
+        ...(state === undefined ? {} : { contextTrim: state }),
+    };
 };
 
 // One optional field, present only when it has a value. `exactOptionalPropertyTypes` forbids writing `undefined` into
@@ -340,8 +390,18 @@ export const planTurn = async (services: Services, input: AgentTurn, context: Tu
     // history still there".
     const entry = input.conversationId === undefined ? undefined : services.agents.entry(input.conversationId);
     const conversationTurns = entry?.turns ?? 0;
-    // Resolved before dispatch since the composition of this turn's instructions reads it (see `honoured` below).
-    const settings = context.settings ?? (await services.perf.track("turn.plan.settings", {}, () => services.sandboxSettings.get()));
+    // Resolved before dispatch since the composition of this turn's instructions reads it (see `honoured` below),
+    // beside the model's own declared window, which is read once here and answers two questions: what this turn may
+    // compose at all (context-trim.ts), and whether whatever it composed can be sent (context-budget.ts). One read,
+    // because two could disagree across a catalog refresh mid-plan. Native providers publish none and resolve
+    // immediately.
+    const [settings, declared] = await Promise.all([
+        context.settings ?? services.perf.track("turn.plan.settings", {}, () => services.sandboxSettings.get()),
+        services.perf.track("turn.plan.window", { provider }, () => declaredWindow(services, provider, input.model)),
+    ]);
+    // What that window will not pay for. Resolved here, above everything it affects, and `undefined` for every model
+    // whose window is unknown or large enough — which is the whole of the product outside a local model's card.
+    const trim = turnTrim(declared?.window, capabilities.instructions);
     const [installed, setup, cast, areaManifest, skillCatalogNote, contextNote, declaredChecks, turnContext] = await Promise.all([
         // cli/mcp/plugin/browser/agent-kind capabilities the owner installed; not the persona-filtered record, which
         // answers what the runtime can do instead.
@@ -440,7 +500,7 @@ export const planTurn = async (services: Services, input: AgentTurn, context: Tu
               })
             : undefined;
     const iqSearchNote = capabilities.runtime !== "claude-code" && iqSearchEnabled && conversationTurns === 0 ? teaching?.note : undefined;
-    const notes = fieldNotesFor(services, context, settings, input.conversationId);
+    const notes = fieldNotesFor(services, context, settings, input.conversationId, trim);
     // Which prompt this turn runs on, the sandbox's or the persona's own (personaPrompt); the card's own text is read
     // only when it asked for one, so an ordinary turn (`inherit`) pays nothing.
     const prompt = personaPrompt(
@@ -455,6 +515,7 @@ export const planTurn = async (services: Services, input: AgentTurn, context: Tu
         settings: effective,
         conversationTurns,
         iqSearchEnabled,
+        ...stamp("contextTrim", trim),
         ...(iqSearchNote !== undefined ? { iqSearchNote } : {}),
         ...stamp("fieldNotesNote", notes.note),
         ...(skillCatalogNote !== undefined ? { skillCatalogNote } : {}),
@@ -475,16 +536,18 @@ export const planTurn = async (services: Services, input: AgentTurn, context: Tu
     // turn it's already in the session history, but a compaction summarizes that history away. `>=` rather than `===`
     // since a compaction is filed under the turn it happened in, and the following turn is the one that owes the note.
     const turnEndingEligible = (conversationTurns === 0 && input.forkOf === undefined) || compactedSinceLastTurn(entry, conversationTurns);
-    const planned: TurnContext = {
-        ...shared,
-        base: honoured(
+    // Composed with the persona's own briefing first and filtered by the window's second, in that order: what a small
+    // window LEFT OUT can only be named by building what the turn would otherwise have sent.
+    const composed = trimmed(
+        trim,
+        honoured(
             services,
             shared,
             capabilities,
             setupNoticeFor(setup),
             persona,
             // The conversation's own record wins over this turn's request: the folder is latched at the first turn.
-            (input.conversationId === undefined ? undefined : services.agents.entry(input.conversationId)?.startIn) ?? input.startIn,
+            entry?.startIn ?? input.startIn,
             installed,
             prompt,
             {
@@ -494,15 +557,15 @@ export const planTurn = async (services: Services, input: AgentTurn, context: Tu
             { gates, withheld: gatedMounts.withheld },
             briefing,
         ),
-        persona,
-    };
+        systemPieces(capabilities, prompt.mode, notes),
+    );
+    const planned: TurnContext = { ...shared, base: composed.request, persona };
     // The last gate before an arm builds a request, and the only one that reads the composed prompt rather than what's
     // connected (context-budget.ts); run after `planned` since it measures the prompt as it will actually be sent,
-    // notes and all.
-    const shortfall = await contextShortfall(services, {
-        provider,
+    // notes and all — which on a trimmed turn is the trimmed prompt, not the one the trim replaced.
+    const shortfall = contextShortfall({
         runtime: capabilities.runtime,
-        ...(input.model !== undefined ? { model: input.model } : { model: undefined }),
+        declared,
         // The prompt as it will be sent, notes and all: the same serialization dispatch performs.
         prompt: composeWirePrompt(planned.base.notes ?? [], planned.base.prompt),
     });
@@ -523,6 +586,7 @@ export const planTurn = async (services: Services, input: AgentTurn, context: Tu
         ...plan,
         // Travels past the arms so the route can hold the two notes it adds after planning to the same card.
         briefing,
+        ...(composed.contextTrim === undefined ? {} : { contextTrim: composed.contextTrim }),
         ...experimentStamps(
             input.conversationId === undefined ? undefined : conversationTurns,
             { arm: searchArm, cohort: teaching?.cohort },
@@ -597,6 +661,9 @@ const honoured = (
         ...(actingNote === undefined ? {} : { personaNote: actingNote }),
         ...(memoryNote === undefined ? {} : { memoryNote }),
         ...stamp("fieldNotesNote", context.fieldNotesNote),
+        // What the model's window will not pay for: this product's guidance, and on the smallest windows the base
+        // prompt itself. Absent for every model whose window holds a full turn.
+        ...stamp("trim", promptTrim(context.contextTrim)),
     });
     // The project map, sent only on a conversation's opening message, here rather than in the harness arm since it's a
     // filesystem fact true of every runtime. A start folder outside the root is dropped by the escape guard, mapping the

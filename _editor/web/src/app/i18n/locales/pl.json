@@ -1112,6 +1112,7 @@
             "baseCustom": "Twój własny prompt",
             "baseIntentic": "Własny prompt Intentic",
             "baseRuntime": "Własny prompt {runtime}",
+            "baseTrimmed": "Krótki prompt, na małe okno tego modelu",
             "characters": "{count} znaków",
             "chip": "Prompt systemowy",
             "composed": "Z ostatniej wysłanej tury, na {runtime}, {when}",
@@ -1126,7 +1127,8 @@
             "whenceGuidance": "Dokładane przez Intentic do każdej tury, która działa tutaj.",
             "whenceMemory": "Z plików AGENTS.md w Twoim workspace.",
             "whenceOpaque": "Ten runtime trzyma własny prompt i przyjmuje tylko dopiski, więc nie ma tu czego czytać.",
-            "whencePersona": "Wysłane, bo ten czat działa jako konkretna persona."
+            "whencePersona": "Wysłane, bo ten czat działa jako konkretna persona.",
+            "whenceTrimmed": "Wstawiony zamiast zwykłego promptu: okno kontekstowe tego modelu jest za małe, by go pomieścić."
         },
         "chatTabList": {
             "active": "Aktywne",

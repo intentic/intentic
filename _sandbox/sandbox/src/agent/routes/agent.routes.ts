@@ -6,6 +6,7 @@ import {
     type AgentTurn,
     agentContract,
     capabilitiesOf,
+    type ContextTrim,
     type ContextUsage,
     type EditorContext,
     KeyedProviderSchema,
@@ -48,7 +49,9 @@ import { type ChildSupervisor, childSupervisor, isSpawnedChild } from "../subage
 import type { AgentRequest } from "../run/agent.js";
 import { adapterFor } from "../providers/adapter-registry.js";
 import { composeWirePrompt } from "../prompt/turn-preamble.js";
+import { applyTrim, trimFrame, type TurnTrimState } from "../prompt/window/context-trim.js";
 import { promptDisclosure } from "../prompt/prompt-disclosure.js";
+import type { TurnBriefing } from "../prompt/turn-briefing.js";
 import { rewindConversation } from "../anchors/rewind.js";
 import { commandsOf } from "../providers/agent-commands.js";
 import { limitReopensAt } from "../models/limit-reset.js";
@@ -1008,6 +1011,36 @@ const settleRefusals = (services: Services, provider: string, account: string | 
         .catch((error: unknown) => services.logger.warn({ err: error }, "claude account: could not clear the entitlement mark"));
 };
 
+// What the message grew before reaching the model, and what the model's window would not let it grow. Both, together,
+// because they are one disclosure asked from two sides: an empty note list is not one, and a shed note has no message
+// to be drawn beside, so the trim frame is the only place its absence can be said.
+//
+// The trim speaks on every turn it applies rather than once per conversation. A turn forty messages down that ran thin
+// without saying so is the failure this exists to stop, and switching to a larger model simply stops the line.
+function* preambleDisclosure(notes: readonly TurnNote[], trim: ContextTrim | undefined): Generator<AgentEvent> {
+    if (notes.length > 0) {
+        yield { kind: "preamble", notes: [...notes] };
+    }
+    if (trim !== undefined) {
+        yield { kind: "context_trim", ...trim };
+    }
+}
+
+// The message's final note list, and the one frame naming what the window kept out of it. Together, because the two
+// notes assembled here (the repo-sync advisory, the hand-off state) reach the window LAST and must face the same one
+// the rest already did — the hand-off note is the largest of them — and because the reader is owed one list rather
+// than planning's followed by this one's.
+const sentNotes = (
+    assembled: readonly TurnNote[],
+    briefing: TurnBriefing,
+    trim: TurnTrimState | undefined,
+): { readonly notes: TurnNote[]; readonly trim: ContextTrim | undefined } => {
+    // Through the card's briefing once more: these two missed the filter in planning, and the frame below must name
+    // exactly what was sent rather than what was assembled.
+    const { notes, state } = applyTrim(trim, briefing.keep([...assembled]));
+    return { notes, trim: trimFrame(state) };
+};
+
 // One agent turn's body, on the main tree or inside an isolated worktree; the cwd override is the one binding point
 // every adapter and session store follows.
 async function* runTurn(
@@ -1150,12 +1183,8 @@ async function* runTurn(
     }
     // What the message grew before reaching the model, said aloud from the same serialized list.
     // The hand-off's measured state goes last, beside the envelope and the words it describes.
-    // Through the card's briefing once more: these two are composed after planning, so they missed the filter there,
-    // and the disclosure frame below must name exactly what was sent rather than what was assembled.
-    const notes = plan.briefing.keep([...(request.notes ?? []), ...(handoffNote === undefined ? [] : [handoffNote])]);
-    if (notes.length > 0) {
-        yield { kind: "preamble", notes: [...notes] };
-    }
+    const { notes, trim } = sentNotes([...(request.notes ?? []), ...(handoffNote === undefined ? [] : [handoffNote])], plan.briefing, plan.contextTrim);
+    yield* preambleDisclosure(notes, trim);
     // Where typed notes become the wire prompt, right before the adapter; nothing unpacks it again.
     request = { ...request, prompt: composeWirePrompt(notes, request.prompt) };
     recordSystemPrompt(services, input, request);

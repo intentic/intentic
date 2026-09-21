@@ -19,6 +19,10 @@ export const HISTORY_STATE_FILES: readonly StateFile[] = [
     // Armed condition watches; carries safely: the journal holds no credential, only names re-derived on target.
     { path: "watches/", portability: "carry" },
     { path: "transcripts/", portability: "carry" },
+    // What each conversation's last turn was told before its own words (prompt-record.ts), one file per conversation.
+    // Carried with the transcripts it explains: a restored conversation whose prompt record stayed behind can no
+    // longer say whether its AGENTS.md arrived or a small window trimmed it, which is the whole point of keeping it.
+    { path: "system-prompts/", portability: "carry" },
     // One runtime session store per fenced conversation, holding for it what `.intentic/records/sessions/claude/` holds
     // for every other: its own transcripts, plans, backups and checklists, kept off /work so no other conversation's
     // namespace can reach them. Carried for the same reason that one is.

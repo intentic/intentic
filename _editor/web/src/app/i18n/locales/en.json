@@ -1112,6 +1112,7 @@
             "baseCustom": "Your own prompt",
             "baseIntentic": "Intentic's own prompt",
             "baseRuntime": "{runtime}'s own prompt",
+            "baseTrimmed": "A short prompt, for this model's small window",
             "characters": "{count} characters",
             "chip": "System prompt",
             "composed": "From the last turn sent, on {runtime}, {when}",
@@ -1126,6 +1127,7 @@
             "whenceGuidance": "Added by Intentic to every turn that runs here.",
             "whenceMemory": "From the AGENTS.md files in your workspace.",
             "whenceOpaque": "This runtime keeps its own prompt and only takes additions, so there is nothing to read here.",
+            "whenceTrimmed": "Put in place of the usual prompt: this model's context window is too small to hold it.",
             "whencePersona": "Sent because this chat acts as someone in particular."
         },
         "chatTabList": {

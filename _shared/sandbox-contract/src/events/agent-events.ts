@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { PermissionModeSchema } from "../schemas/agent.js";
 import { LandConflictSchema } from "../schemas/agents.js";
+import { ContextTrimSchema } from "../schemas/context-trim.js";
 import { RateLimitInfoSchema } from "../schemas/providers/claude-gate.js";
 import { FastModeStateSchema } from "../schemas/providers/fast-mode.js";
 import { AgentReplySchema, UsageWindowSchema } from "../schemas/providers/plan-limits.js";
@@ -44,6 +45,9 @@ export const AgentEventSchema = z.discriminatedUnion("kind", [
     // Notes the daemon prepends to the user's message before the model reads it, verbatim, one per note. Serialized
     // from the same typed notes the wire prompt uses, so disclosure cannot drift from what the model got.
     z.object({ kind: z.literal("preamble"), notes: z.array(TurnNoteSchema) }),
+    // The other half of `preamble`: what a window too small for a full turn left OUT. A note that never rode has no
+    // message to be drawn beside, so this is the only place the reader can learn the turn ran thin.
+    ContextTrimSchema.extend({ kind: z.literal("context_trim") }),
     // The SDK's init handshake; carries the model it actually resolved for the turn.
     z.object({ kind: z.literal("init"), model: z.string() }),
     // The pre-turn snapshot id, emitted once before the provider stream so the client can offer
