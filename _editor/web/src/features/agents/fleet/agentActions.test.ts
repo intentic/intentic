@@ -8,8 +8,9 @@ const chat = vi.hoisted(() => ({
             conversationId: string;
             isolated: { value: boolean };
             enqueue: (prompt: string) => void;
-            // Only the errand path calls it, so the tabs the other tests build leave it off.
+            // Only the errand path touches these, so the tabs the other tests build leave them off.
             wearModel?: (pin: unknown) => void;
+            account?: { value: string | undefined };
         }[],
     },
     // Every prompt that reached a conversation: the assertion for "a turn was actually spent".
@@ -190,9 +191,13 @@ it("sends the composed prompt when the agent's own rebase could reach it, and fe
 // a history row, or one in a second window, carries the last pick made THERE — and a turn sent on that both spends
 // against a model the user never chose for this agent and relabels the card with it, since the registry describes a
 // conversation by the model its last turn used.
-it("runs the errand on the agent's own model, not on the pick this window's tab happens to hold", async () => {
+// The account is half of that, and the half that cost a turn: left unnamed, the daemon picks by headroom, which reads
+// an account idle BECAUSE it is refusing as the emptiest one — so the errand ran on a seat this very conversation had
+// already been refused by, and retired its session to do it.
+it("runs the errand on the agent's own model and account, not on the picks this window's tab happens to hold", async () => {
     const worn: unknown[] = [];
-    chat.conversations.value = [{ ...tab(`a1`), wearModel: (pin: unknown) => worn.push(pin) }];
+    const account = { value: `left-over-account` };
+    chat.conversations.value = [{ ...tab(`a1`), account, wearModel: (pin: unknown) => worn.push(pin) }];
     registry.value = [
         {
             id: `a1`,
@@ -202,6 +207,7 @@ it("runs the errand on the agent's own model, not on the pick this window's tab 
             model: `claude-opus-5`,
             effort: `xhigh`,
             thinking: true,
+            account: `the-account-that-ran-it`,
             updatedAt: 0,
             attention: { plan: false, question: false, permission: false, capability: false, credential: false, conflict: true },
         },
@@ -211,6 +217,30 @@ it("runs the errand on the agent's own model, not on the pick this window's tab 
     expect(await askAgentToResolve(`a1`)).toEqual({ sent: true });
 
     expect(worn).toEqual([{ provider: `claude`, model: `claude-opus-5`, harness: `native`, effort: `xhigh`, thinking: true }]);
+    expect(account.value).toBe(`the-account-that-ran-it`);
+});
+
+// An agent whose registry entry names no account has never run a turn, so there is nothing better than the tab's own
+// pick to send on; overwriting it with `undefined` would drop a pick the user did make.
+it("leaves the tab's account alone when the registry has no account for the agent", async () => {
+    const account = { value: `the-tab-pick` };
+    chat.conversations.value = [{ ...tab(`a1`), account, wearModel: () => {} }];
+    registry.value = [
+        {
+            id: `a1`,
+            status: `conflict`,
+            provider: `claude`,
+            harness: `native`,
+            model: `claude-opus-5`,
+            updatedAt: 0,
+            attention: { plan: false, question: false, permission: false, capability: false, credential: false, conflict: true },
+        },
+    ];
+    stubConflicts([{ repo: `root`, clean: 0, paths: [{ path: `src/app.ts`, reason: `diverged` }] }]);
+
+    expect(await askAgentToResolve(`a1`)).toEqual({ sent: true });
+
+    expect(account.value).toBe(`the-tab-pick`);
 });
 
 // "New agent" and a composed-task press are one action: a caller must not assemble the three steps itself, or an opened

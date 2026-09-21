@@ -314,6 +314,13 @@ const underRepoChecks = (settings: SandboxSettings, declared: readonly Rule[]): 
 const mapDue = (briefing: TurnBriefing, settings: SandboxSettings, arm: boolean | undefined, input: AgentTurn, conversationTurns: number): boolean =>
     briefing.sends("map") && (arm ?? settings.workspaceMap) && input.forkOf === undefined && conversationTurns === 0;
 
+// A turn that names no account runs where its conversation last ran (the registry's `account`, taken from the session
+// frame); only a conversation that has never run one reaches the resolver's headroom pick. Unlatched, an account idle
+// BECAUSE it is refusing reads there as the emptiest, so a mid-conversation turn could be re-picked onto it — and a
+// session resumes only under the account that minted it, so the warm one is retired to get there.
+const latchedAccount = (input: AgentTurn, entry: { readonly account?: string | undefined } | undefined): AgentTurn =>
+    input.account === undefined && entry?.account !== undefined ? { ...input, account: entry.account } : input;
+
 export const planTurn = async (services: Services, input: AgentTurn, context: TurnContext): Promise<TurnPlan> => {
     // Checked before anything else and above the dispatch, so a box out of memory refuses every provider arm alike, and
     // a refused turn costs no settings read, capability list, dependency probe or persona load. Uncapped sandboxes and
@@ -508,7 +515,7 @@ export const planTurn = async (services: Services, input: AgentTurn, context: Tu
     }
     // Dispatched through the adapter registry rather than an if/else chain, so the set of runtimes has one declaration
     // and the picker's health probe sits beside the arm it predicts.
-    const plan = await adapterFor(provider, harness).preflight(services, input, planned, granted);
+    const plan = await adapterFor(provider, harness).preflight(services, latchedAccount(input, entry), planned, granted);
     if (!plan.ok) {
         return plan;
     }

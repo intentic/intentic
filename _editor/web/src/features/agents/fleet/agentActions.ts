@@ -161,8 +161,9 @@ export const askAgentToResolve = async (id: string): Promise<ResolveAsk> => {
     }
     // The app composed this turn, so it runs as the agent, not on whatever the composer in THIS window happens to hold:
     // a tab minted from a history row or a second window carries the last pick made there, and a turn sent on it both
-    // spends against a model the user never chose for this agent and relabels the card with it afterwards.
-    wearAgentModel(conversation, agent);
+    // spends against a model the user never chose for this agent, relabels the card with it afterwards, and bills an
+    // account this conversation was not running on.
+    wearAgentRun(conversation, agent);
     // Dispatched, not awaited: `enqueue` doesn't settle until the turn does, and awaiting it here would hold the
     // caller's busy flag across a multi-minute rebase.
     void conversation.enqueue(resolvePrompt(conflicts));
@@ -184,19 +185,27 @@ const rejudged = async (id: string): Promise<ResolveAsk> => {
     }
 };
 
-// What the agent's own turns ran on, as the registry recorded them. Absent for an agent that has never run one, which
-// leaves the tab's picks alone — there is nothing better to put there.
-const wearAgentModel = (conversation: Conversation, agent: FleetAgent | undefined): void => {
-    if (agent?.model === undefined || agent.model === ``) {
+// What the agent's own turns ran on, as the registry recorded them: the model AND the account that paid for it. Absent
+// for an agent that has never run one, which leaves the tab's picks alone — there is nothing better to put there.
+const wearAgentRun = (conversation: Conversation, agent: FleetAgent | undefined): void => {
+    if (agent === undefined) {
         return;
     }
-    conversation.wearModel({
-        provider: agent.provider,
-        model: agent.model,
-        harness: agent.harness,
-        ...(agent.effort !== undefined ? { effort: agent.effort } : {}),
-        ...(agent.thinking !== undefined ? { thinking: agent.thinking } : {}),
-    });
+    if (agent.model !== undefined && agent.model !== ``) {
+        conversation.wearModel({
+            provider: agent.provider,
+            model: agent.model,
+            harness: agent.harness,
+            ...(agent.effort !== undefined ? { effort: agent.effort } : {}),
+            ...(agent.thinking !== undefined ? { thinking: agent.thinking } : {}),
+        });
+    }
+    // After wearModel, never before: pointing at a provider re-scopes the account to that provider's remembered one.
+    // Unnamed, the account is the daemon's to pick by headroom, and an account sitting idle BECAUSE it refuses reads
+    // there as the emptiest — so the errand hops off the account the work ran on, retiring its session with it.
+    if (agent.account !== undefined && agent.account !== ``) {
+        conversation.account.value = agent.account;
+    }
 };
 
 // Discard: drop the worktrees, the agent/<id> branches, and the registry entry. Irreversible.

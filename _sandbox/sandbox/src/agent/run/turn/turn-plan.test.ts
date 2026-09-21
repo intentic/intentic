@@ -16,12 +16,13 @@ import { base, codexServices, context, harnessServices, ROOT, servicesWith, turn
 // What a turn is allowed to run on, and what it's handed once it may; session-resume rules live with the route instead
 // (app.integration.test.ts). A refusal is a value (`ok: false` + code), assertable without a stream.
 
-const credentials = vi.fn<() => Promise<Record<string, unknown>>>();
+// Takes the arguments through, since which account an arm asks for is itself under test below.
+const credentials = vi.fn<(...args: unknown[]) => Promise<Record<string, unknown>>>();
 // Only the resolution is faked. The rest of the module stands, because the pre-dispatch context check reads its
 // model-resolution rule (routedModel) and a mock that replaced the whole module left that undefined.
 vi.mock("../../providers/harness-credentials.js", async (importOriginal) => ({
     ...(await importOriginal<typeof import("../../providers/harness-credentials.js")>()),
-    resolveHarnessCredentials: () => credentials(),
+    resolveHarnessCredentials: (...args: unknown[]) => credentials(...args),
 }));
 const browserServers = vi.fn();
 vi.mock("../../../browser/tools/browser-tools.js", () => ({
@@ -297,8 +298,9 @@ const CHECKED_SETTINGS = unstubbed<Services["sandboxSettings"]>("sandboxSettings
             ],
         }),
 });
-// A conversation as the registry has it: turns run, and the turn a compaction happened under (compactedTurn).
-const conversationAt = (fields: { readonly turns: number; readonly compactedTurn?: number }): Services["agents"] =>
+// A conversation as the registry has it: turns run, the turn a compaction happened under (compactedTurn), and the
+// account its last turn actually ran on.
+const conversationAt = (fields: { readonly turns: number; readonly compactedTurn?: number; readonly account?: string }): Services["agents"] =>
     unstubbed<Services["agents"]>("agents", { entry: () => fields as ReturnType<Services["agents"]["entry"]> });
 
 test("the automatic checks are named on a conversation's opening message", async () => {
@@ -331,6 +333,36 @@ test("a compaction three turns back does not earn the note on every turn since",
     const plan = await planTurn(services, turn({ conversationId: "conv-3" }), context);
 
     expect(wire(plan)).not.toContain(TURN_ENDING_NOTE_HEADER);
+});
+
+// A conversation's account is latched at its first turn, like its folder. THE FAILURE THIS PREVENTS: an app-composed
+// turn (the land-conflict errand) names no account, so the resolver re-picked one by headroom mid-conversation — and an
+// account sitting idle BECAUSE it is refusing reads there as the emptiest, so the turn moved onto a seat the same
+// conversation had already been refused by, retiring its warm session to get there.
+test("a turn naming no account runs on the one this conversation last ran on", async () => {
+    const services = harnessServices({ agents: conversationAt({ turns: 3, account: "the-account-that-ran-it" }) });
+
+    await planTurn(services, turn({ conversationId: "conv-account" }), context);
+
+    expect(credentials).toHaveBeenCalledWith(services, expect.objectContaining({ account: "the-account-that-ran-it" }));
+});
+
+// The picker stays the user's: a turn that names an account is a deliberate move, and the record must not undo it.
+test("an account the turn names outranks the conversation's latched one", async () => {
+    const services = harnessServices({ agents: conversationAt({ turns: 3, account: "the-account-that-ran-it" }) });
+
+    await planTurn(services, turn({ conversationId: "conv-account", account: "the-account-the-user-picked" }), context);
+
+    expect(credentials).toHaveBeenCalledWith(services, expect.objectContaining({ account: "the-account-the-user-picked" }));
+});
+
+// A conversation with no turn behind it has nothing to latch, and that is the one case the headroom pick exists for.
+test("a conversation that has never run leaves the account to the resolver's own pick", async () => {
+    const services = harnessServices({ agents: conversationAt({ turns: 0 }) });
+
+    await planTurn(services, turn({ conversationId: "conv-fresh" }), context);
+
+    expect(credentials.mock.calls[0]?.[1]).not.toHaveProperty("account");
 });
 
 test("a holdout assigns one balanced arm deterministically per conversation", () => {
